@@ -749,7 +749,7 @@ def test_ha_addon_index_hides_logout_button(monkeypatch):
     assert 'href="/api/hassio_ingress/ma-token/#/settings/profile"' in html
     assert 'target="_blank"' in html
     assert 'rel="noopener noreferrer"' in html
-    assert 'onclick="return _followLinkInNewTab(event, this)"' in html
+    assert 'data-action="follow-link-new-tab"' in html
     assert 'data-ma-profile-url="/api/hassio_ingress/ma-token/#/settings/profile"' in html
     assert 'id="ha-web-port-indicator"' in html
     assert 'class="config-readonly-input"' in html

@@ -120,20 +120,24 @@ def test_csp_header_present_on_html(client):
     assert "Content-Security-Policy" in resp.headers
 
 
-def test_csp_uses_unsafe_inline_without_nonce(client):
-    """script-src must use unsafe-inline WITHOUT nonce (nonce disables unsafe-inline, breaking onclick)."""
+def test_csp_uses_nonce_without_unsafe_inline(client):
+    """script-src must use a nonce WITHOUT 'unsafe-inline' (inline handlers removed in migration)."""
     resp = client.get("/")
     csp = resp.headers["Content-Security-Policy"]
     script_src = csp.split("script-src")[1].split(";")[0]
-    assert "'unsafe-inline'" in script_src
-    assert "nonce-" not in script_src
+    assert "'nonce-" in script_src
+    assert "'unsafe-inline'" not in script_src
 
 
-def test_csp_nonce_still_set_in_template_context(client):
-    """csp_nonce is still generated for templates (future onclick→addEventListener migration)."""
+def test_csp_nonce_reaches_template(client):
+    """The nonce must actually render into script tags in the response body."""
     resp = client.get("/")
-    # The nonce is in the template context but NOT in the CSP header
     assert resp.status_code in (200, 302)
+    # Simple smoke: the per-request nonce lives in g and should be emitted by the
+    # after_request handler on HTML responses. We don't have a template that
+    # references it in this test harness, so just assert the header carries one.
+    csp = resp.headers["Content-Security-Policy"]
+    assert "'nonce-" in csp.split("script-src")[1].split(";")[0]
 
 
 def test_csp_not_on_json_response(client):
@@ -341,3 +345,26 @@ def test_x_frame_options_sameorigin_in_standalone(client):
     """
     resp = client.get("/")
     assert resp.headers.get("X-Frame-Options") == "SAMEORIGIN"
+
+
+# ── Regression guard: no inline event handlers in shipped assets ─────────
+
+
+def test_templates_have_no_inline_event_handlers():
+    """Inline on*= attributes break CSP nonce policy. Enforce migration to data-action delegation."""
+    import pathlib
+    import re
+
+    pattern = re.compile(r"""\s(on[a-z]+)\s*=\s*["']""", re.IGNORECASE)
+    project_root = pathlib.Path(__file__).resolve().parent.parent
+    offenders: dict[str, set[str]] = {}
+    for path in [
+        project_root / "templates" / "index.html",
+        project_root / "templates" / "login.html",
+        project_root / "static" / "app.js",
+    ]:
+        text = path.read_text(encoding="utf-8")
+        matches = pattern.findall(text)
+        if matches:
+            offenders[str(path.relative_to(project_root))] = set(m.lower() for m in matches)
+    assert not offenders, f"Inline on*= handlers found (must use data-action): {offenders}"

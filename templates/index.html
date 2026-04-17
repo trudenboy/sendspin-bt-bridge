@@ -40,36 +40,36 @@
                            target="_blank" rel="noopener">v{{ DISPLAY_VERSION }}</a>
                         <span id="update-badge">
                             <a id="update-link" href="#" class="update-badge-link" title="Check for updates"
-                               onclick="return _onUpdateBadgeClick(event)">
+                               data-action="update-badge-click">
                                 <span id="update-icon" class="ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span id="update-version">check</span>
                             </a>
                         </span>
                     </div>
                 </div>
             </div>
-            <button type="button" class="header-hamburger" onclick="toggleMobileMenu()" title="Menu" aria-label="Open menu">
+            <button type="button" class="header-hamburger" data-action="toggle-mobile-menu" title="Menu" aria-label="Open menu">
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
             </button>
             <div class="header-actions">
-                <button type="button" class="mobile-menu-close" onclick="closeMobileMenu()" title="Close menu" aria-label="Close menu">
+                <button type="button" class="mobile-menu-close" data-action="close-mobile-menu" title="Close menu" aria-label="Close menu">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
                 <a href="#" class="header-link" id="report-link" title="Submit a bug report"
-                   onclick="return _openBugReport(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle></svg> Report</a>
+                   data-action="open-bug-report"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 3.5 19h17L12 3.5Z"></path><path d="M12 9v4.75"></path><circle cx="12" cy="17.1" r="1" fill="currentColor" stroke="none"></circle></svg> Report</a>
                 <a href="https://trudenboy.github.io/sendspin-bt-bridge/" target="_blank" rel="noopener"
                    class="header-link"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"></path></svg> Docs</a>
                 <a href="https://github.com/trudenboy/sendspin-bt-bridge" target="_blank" rel="noopener"
                    class="header-link"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> GitHub</a>
                 <div class="header-utility-block">
                     <button type="button" class="header-theme-btn" id="theme-toggle-btn"
-                            onclick="toggleThemeMode()" title="Theme: Auto. Click to switch to Light." aria-label="Theme: Auto. Click to switch to Light.">
+                            data-action="toggle-theme-mode" title="Theme: Auto. Click to switch to Light." aria-label="Theme: Auto. Click to switch to Light.">
                         <span id="theme-toggle-icon" class="ui-icon-slot" data-ui-icon="theme-auto" aria-hidden="true"></span>
                     </button>
                 {% if auth_enabled or demo_mode %}
                 {% if auth_enabled and ha_mode and ha_user %}
                     <span class="header-user-name">
                         <span class="header-user-icon ui-icon-slot" data-ui-icon="user" aria-hidden="true"></span>
-                        <a id="header-user-link" href="{{ ma_profile_url or '/profile' }}" target="_blank" rel="noopener noreferrer" data-auth-method="ha" data-ma-profile-url="{{ ma_profile_url or '' }}" onclick="return _followLinkInNewTab(event, this)" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
+                        <a id="header-user-link" href="{{ ma_profile_url or '/profile' }}" target="_blank" rel="noopener noreferrer" data-auth-method="ha" data-ma-profile-url="{{ ma_profile_url or '' }}" data-action="follow-link-new-tab" style="color:inherit;text-decoration:none">{{ ha_user }}</a>
                     </span>
                 {% elif auth_enabled and not ha_mode %}
                     <span class="header-user-name">
@@ -118,7 +118,7 @@
                 <div class="notice-card-text">Authentication is disabled, so anyone on your network can open and change this bridge.</div>
             </div>
             <div class="notice-card-actions">
-                <a href="#" class="notice-card-action notice-card-action--primary" onclick="return openAuthSettings()">Enable authentication</a>
+                <a href="#" class="notice-card-action notice-card-action--primary" data-action="open-auth-settings">Enable authentication</a>
             </div>
         </div>
         {% endif %}
@@ -131,7 +131,7 @@
                 <div class="notice-card-text">Music Assistant was found, but the bridge needs a long-lived token. Open Configuration → Music Assistant to get one.</div>
             </div>
             <div class="notice-card-actions">
-                <a href="#" class="notice-card-action notice-card-action--primary" onclick="return openMaTokenSettings()">Open Music Assistant settings</a>
+                <a href="#" class="notice-card-action notice-card-action--primary" data-action="open-ma-token-settings">Open Music Assistant settings</a>
             </div>
         </div>
         {% endif %}
@@ -143,8 +143,8 @@
                 <div class="notice-card-text">Save to persist updates now, or use Save &amp; Restart for runtime-sensitive changes such as Bluetooth devices, adapters, Music Assistant settings, ports, or latency.</div>
             </div>
             <div class="notice-card-actions">
-                <a href="#" class="notice-card-action notice-card-action--primary" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}));return false;">Save</a>
-                <a href="#" class="notice-card-action" onclick="_openConfigPanel('devices');return false;">Review changes</a>
+                <a href="#" class="notice-card-action notice-card-action--primary" data-action="submit-config-form">Save</a>
+                <a href="#" class="notice-card-action" data-action="open-config-panel" data-arg="devices">Review changes</a>
             </div>
         </div>
 
@@ -155,7 +155,7 @@
                 <div id="ma-integration-banner-text" class="notice-card-text">Music Assistant was found, but the bridge is not connected yet.</div>
             </div>
             <div class="notice-card-actions">
-                <a href="#" class="notice-card-action notice-card-action--primary" onclick="return openMaTokenSettings()">Open Music Assistant settings</a>
+                <a href="#" class="notice-card-action notice-card-action--primary" data-action="open-ma-token-settings">Open Music Assistant settings</a>
             </div>
         </div>
 
@@ -195,13 +195,13 @@
     <div class="toolbar-stack" id="group-controls" style="display:none;">
         <div class="filter-bar">
             <svg class="filter-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
-            <select id="group-filter-sel" onchange="onGroupFilterChange(this.value)" title="Filter by MA sync group">
+            <select id="group-filter-sel" data-action="group-filter-change" data-event="change" title="Filter by MA sync group">
                 <option value="">All groups</option>
             </select>
-            <select id="adapter-filter-sel" onchange="onAdapterFilterChange(this.value)" title="Filter by BT adapter">
+            <select id="adapter-filter-sel" data-action="adapter-filter-change" data-event="change" title="Filter by BT adapter">
                 <option value="">All adapters</option>
             </select>
-            <select id="status-filter-sel" onchange="onStatusFilterChange(this.value)" title="Filter by device status">
+            <select id="status-filter-sel" data-action="status-filter-change" data-event="change" title="Filter by device status">
                 <option value="">All statuses</option>
                 <option value="playing">▶ Playing</option>
                 <option value="idle">⏸ Idle</option>
@@ -212,35 +212,35 @@
                 <option value="error">Error</option>
             </select>
             <div class="view-toggle" style="margin-left:auto">
-                <button type="button" class="view-toggle-btn" id="view-grid-btn" onclick="setViewMode('grid')" title="Grid view">
+                <button type="button" class="view-toggle-btn" id="view-grid-btn" data-action="set-view-mode" data-arg="grid" title="Grid view">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
                 </button>
-                <button type="button" class="view-toggle-btn active" id="view-list-btn" onclick="setViewMode('list')" title="List view">
+                <button type="button" class="view-toggle-btn active" id="view-list-btn" data-action="set-view-mode" data-arg="list" title="List view">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
                 </button>
             </div>
         </div>
         <div class="action-bar" id="group-action-bar">
             <div class="action-bar-group action-bar-group--selection">
-                <input type="checkbox" id="group-select-all" checked onchange="onGroupSelectAll(this)">
+                <input type="checkbox" id="group-select-all" checked data-action="group-select-all" data-event="change">
                 <span class="toolbar-count" id="group-select-info">All players</span>
             </div>
             <div class="vol-wrap action-bar-volume">
                 <span class="toolbar-label">Vol</span>
                 <input type="range" min="0" max="100" value="50" id="group-vol-slider" aria-label="Group volume" title="Group volume"
-                    oninput="onGroupVolumeInput(this.value)">
+                    data-action="group-volume-input" data-event="input">
                 <span class="vol-pct" id="group-vol-pct">50</span>
             </div>
             <div class="action-bar-group action-bar-group--transport">
-                <button type="button" class="media-btn media-btn--toolbar" id="group-mute-btn" onclick="onGroupMute()" title="Mute All">
+                <button type="button" class="media-btn media-btn--toolbar" id="group-mute-btn" data-action="group-mute" title="Mute All">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
                 </button>
-                <button type="button" class="media-btn media-btn--toolbar" id="group-pause-btn" onclick="onPauseAll()" title="Pause All">
+                <button type="button" class="media-btn media-btn--toolbar" id="group-pause-btn" data-action="pause-all" title="Pause All">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                 </button>
             </div>
             <div class="action-bar-group action-bar-group--bulk">
-                <button type="button" class="action-btn accent" onclick="onGroupAction('reconnect')">
+                <button type="button" class="action-btn accent" data-action="group-action" data-arg="reconnect">
                     <span class="action-btn-content">
                         <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M21 12a9 9 0 0 1-15.36 6.36"></path>
@@ -251,7 +251,7 @@
                         <span class="action-btn-label">Reconnect all</span>
                     </span>
                 </button>
-                <button type="button" class="action-btn warn" onclick="onGroupAction('release')">
+                <button type="button" class="action-btn warn" data-action="group-action" data-arg="release">
                     <span class="action-btn-content">
                         <svg class="action-btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                             <path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"></path>
@@ -308,7 +308,7 @@
                                     </label>
                                     <div class="form-inline config-inline-row">
                                         <input type="text" class="config-inline-fill" name="TZ" id="tz-input" placeholder="Australia/Melbourne"
-                                            list="tz-list" autocomplete="off" oninput="updateTzPreview()">
+                                            list="tz-list" autocomplete="off" data-action="update-tz-preview" data-event="input">
                                         <datalist id="tz-list"></datalist>
                                     </div>
                                 </div>
@@ -344,7 +344,7 @@
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
-                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" onchange="return _onHaAreaAssistToggleChange(this.checked)">
+                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" data-action="ha-area-assist-change" data-event="change">
                                         <span class="config-switch-track"></span>
                                     </span>
                                 </span>
@@ -568,7 +568,7 @@
                                     <p class="devices-card-subtitle">Main routing table for daily speaker management. Bluetooth stack tools stay available per row, while paired inventory stays owned by the Bluetooth tab.</p>
                                 </div>
                                 <div class="devices-card-actions">
-                                    <button type="button" id="add-dev-btn" onclick="addBtDeviceRow()" class="btn btn-sm btn-secondary">+ Add device</button>
+                                    <button type="button" id="add-dev-btn" data-action="add-bt-device-row" class="btn btn-sm btn-secondary">+ Add device</button>
                                 </div>
                             </div>
                             <div class="bt-table-wrap">
@@ -601,8 +601,8 @@
                             </div>
                             <div id="adapters-ha-assist-summary" class="ha-assist ha-assist--muted" hidden></div>
                             <div class="bt-toolbar">
-                                <button type="button" class="btn btn-sm btn-secondary" id="add-adapter-btn" onclick="addManualAdapterRow('','','')">+ Add adapter</button>
-                                <button type="button" class="btn btn-sm btn-secondary" onclick="loadBtAdapters()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
+                                <button type="button" class="btn btn-sm btn-secondary" id="add-adapter-btn" data-action="add-manual-adapter-row">+ Add adapter</button>
+                                <button type="button" class="btn btn-sm btn-secondary" data-action="load-bt-adapters"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
                             </div>
                         </div>
 
@@ -616,11 +616,11 @@
                                     <label class="paired-show-all bt-paired-show-all">
                                         <span>Show all</span>
                                         <span class="config-switch compact">
-                                            <input type="checkbox" id="paired-show-all" onchange="loadPairedDevices()">
+                                            <input type="checkbox" id="paired-show-all" data-action="load-paired-devices" data-event="change">
                                             <span class="config-switch-track"></span>
                                         </span>
                                     </label>
-                                    <button type="button" onclick="openBtScanModal()" class="btn btn-sm btn-secondary" id="scan-btn">
+                                    <button type="button" data-action="open-bt-scan-modal" class="btn btn-sm btn-secondary" id="scan-btn">
                                         <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Scan nearby</span>
                                     </button>
                                 </div>
@@ -664,24 +664,24 @@
                                     <span class="ui-modal-title" id="bt-scan-modal-title"><span class="ui-icon-slot" data-ui-icon="bt" aria-hidden="true"></span><span>Scan nearby devices</span></span>
                                     <p class="ui-modal-subtitle" id="bt-scan-modal-description">Choose an adapter, scan for nearby Bluetooth devices, then add speakers to your fleet or pair them before importing them.</p>
                                 </div>
-                                <button type="button" class="bugreport-close bt-scan-modal-close ui-modal-close" title="Close" aria-label="Close scan modal" onclick="closeBtScanModal()">&times;</button>
+                                <button type="button" class="bugreport-close bt-scan-modal-close ui-modal-close" title="Close" aria-label="Close scan modal" data-action="close-bt-scan-modal">&times;</button>
                             </div>
                             <div class="bugreport-body bt-scan-modal-body ui-stack ui-stack--sm">
                                 <div class="bt-scan-toolbar">
                                     <label class="bt-scan-field">
                                         <span class="bt-scan-field-label">Adapter</span>
-                                        <select id="scan-adapter-select" class="bt-scan-select" onchange="_onBtScanOptionChange()">
+                                        <select id="scan-adapter-select" class="bt-scan-select" data-action="bt-scan-option-change" data-event="change">
                                             <option value="">All adapters</option>
                                         </select>
                                     </label>
                                     <label class="bt-scan-toggle">
                                         <span>Audio devices only</span>
                                         <span class="config-switch compact">
-                                            <input type="checkbox" id="scan-audio-only" onchange="_onBtScanOptionChange()" checked>
+                                            <input type="checkbox" id="scan-audio-only" data-action="bt-scan-option-change" data-event="change" checked>
                                             <span class="config-switch-track"></span>
                                         </span>
                                     </label>
-                                    <button type="button" class="btn btn-sm btn-secondary" id="scan-rescan-btn" onclick="startBtScan()">
+                                    <button type="button" class="btn btn-sm btn-secondary" id="scan-rescan-btn" data-action="start-bt-scan">
                                         <span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Rescan</span>
                                     </button>
                                 </div>
@@ -704,7 +704,7 @@
                                 </div>
                             </div>
                             <div class="bugreport-footer bt-scan-modal-footer ui-modal-footer">
-                                <button type="button" class="btn btn-sm btn-secondary ui-modal-footer-action" onclick="closeBtScanModal()">Done</button>
+                                <button type="button" class="btn btn-sm btn-secondary ui-modal-footer-action" data-action="close-bt-scan-modal">Done</button>
                             </div>
                         </div>
                     </div>
@@ -730,7 +730,7 @@
                             <div id="ma-status-bar" class="panel-status panel-status--neutral">
                                 <span id="ma-status-icon" class="panel-status-icon ui-icon-slot" data-ui-icon="status-neutral" aria-hidden="true"></span>
                                 <span id="ma-status-text" class="panel-status-text">Not connected</span>
-                                <button type="button" id="ma-reconfigure" class="btn btn-sm btn-secondary panel-status-action" hidden onclick="return openMaTokenSettings()">Reconfigure</button>
+                                <button type="button" id="ma-reconfigure" class="btn btn-sm btn-secondary panel-status-action" hidden data-action="open-ma-token-settings">Reconfigure</button>
                             </div>
                         </div>
 
@@ -743,7 +743,7 @@
                             <div id="ma-conn-form" class="ma-auth-stack">
                                 <div class="form-inline-actions config-inline-row">
                                     <input type="text" id="ma-login-url" class="config-inline-fill" placeholder="http://homeassistant.local:8095">
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maDiscover()" id="ma-discover-btn"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Discover</span></button>
+                                    <button type="button" class="btn btn-sm btn-secondary" data-action="ma-discover" id="ma-discover-btn"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span><span>Discover</span></button>
                                 </div>
 
                                 <div id="ma-login-creds" class="form-inline-actions config-inline-row">
@@ -752,14 +752,14 @@
                                 </div>
 
                                 <div id="ma-addon-hint" class="ma-addon-hint" hidden>
-                                    <button type="button" class="btn btn-sm btn-primary btn-block" onclick="maHaConnect()" id="ma-ha-login-btn">
+                                    <button type="button" class="btn btn-sm btn-primary btn-block" data-action="ma-ha-connect" id="ma-ha-login-btn">
                                         <span class="btn-icon-slot ui-icon-slot" data-ui-icon="key" aria-hidden="true"></span><span>Get token automatically</span>
                                     </button>
                                     <span id="ma-ha-login-msg" class="inline-status config-status-message config-status-message--center"></span>
                                 </div>
 
                                 <div class="form-inline-actions config-inline-row">
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="maLogin()" id="ma-login-btn"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="key" aria-hidden="true"></span><span>Get token</span></button>
+                                    <button type="button" class="btn btn-sm btn-secondary" data-action="ma-login" id="ma-login-btn"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="key" aria-hidden="true"></span><span>Get token</span></button>
                                     <span id="ma-login-msg" class="inline-status config-status-message"></span>
                                 </div>
                             </div>
@@ -934,7 +934,7 @@
                                            placeholder="New password">
                                     <input type="password" id="new-password-confirm" class="config-inline-fill" autocomplete="new-password"
                                            placeholder="Confirm password">
-                                    <button type="button" onclick="setPassword()" class="btn btn-sm btn-secondary">Set password</button>
+                                    <button type="button" data-action="set-password" class="btn btn-sm btn-secondary">Set password</button>
                                 </div>
                             </div>
                         </div>
@@ -969,21 +969,21 @@
             </div>
             <div class="config-footer-actions">
                 <div class="config-btn-group">
-                    <button type="button" class="btn btn-sm btn-warning config-action-btn" onclick="saveAndRestart()">Save &amp; Restart</button>
-                    <button type="button" class="btn btn-sm btn-primary config-action-btn" onclick="document.getElementById('config-form').dispatchEvent(new Event('submit',{cancelable:true}))">Save</button>
-                    <button type="button" class="btn btn-sm btn-secondary config-action-btn" id="config-cancel-btn" onclick="cancelConfigChanges()" disabled>Cancel</button>
+                    <button type="button" class="btn btn-sm btn-warning config-action-btn" data-action="save-and-restart">Save &amp; Restart</button>
+                    <button type="button" class="btn btn-sm btn-primary config-action-btn" data-action="submit-config-form">Save</button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn" id="config-cancel-btn" data-action="cancel-config-changes" disabled>Cancel</button>
                 </div>
                 <div class="config-btn-group config-btn-group--utility">
-                    <button type="button" class="btn btn-sm btn-secondary config-action-btn btn-download" onclick="window.location.href=API_BASE+'/api/config/download'"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
-                    <button type="button" class="btn btn-sm btn-secondary config-action-btn btn-upload" onclick="document.getElementById('config-upload-input').click()"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="upload" aria-hidden="true"></span><span>Upload</span></button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn btn-download" data-action="download-config"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
+                    <button type="button" class="btn btn-sm btn-secondary config-action-btn btn-upload" data-action="trigger-upload-input"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="upload" aria-hidden="true"></span><span>Upload</span></button>
                 </div>
             </div>
         </div>
-        <input type="file" id="config-upload-input" class="config-hidden-input" accept=".json,application/json" onchange="uploadConfig(this)">
+        <input type="file" id="config-upload-input" class="config-hidden-input" accept=".json,application/json" data-action="upload-config" data-event="change">
     </details>
 
     <!-- Diagnostics (collapsible) -->
-    <details class="diag-section" id="diag-details" ontoggle="onDiagToggle(this)">
+    <details class="diag-section" id="diag-details" data-action="diag-toggle" data-event="toggle">
         <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="info" aria-hidden="true"></span><span>Diagnostics</span></summary>
         <div id="diag-content"></div>
     </details>
@@ -993,8 +993,8 @@
         <summary><span class="summary-title-icon ui-icon-slot" data-ui-icon="notes" aria-hidden="true"></span><span>Logs</span></summary>
         <div class="logs-toolbar">
             <div class="logs-toolbar-left">
-                <button onclick="refreshLogs()" class="btn btn-sm btn-secondary"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
-                <select id="logs-filter-select" class="logs-filter-select" onchange="setLogLevel(this.value)" aria-label="Filter log levels">
+                <button type="button" data-action="refresh-logs" class="btn btn-sm btn-secondary"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Refresh</span></button>
+                <select id="logs-filter-select" class="logs-filter-select" data-action="set-log-level" data-event="change" aria-label="Filter log levels">
                     <option value="all">All</option>
                     <option value="error">Errors</option>
                     <option value="warning">Warnings</option>
@@ -1002,7 +1002,7 @@
                     <option value="debug">Debug</option>
                 </select>
                 <label class="logs-auto-refresh">
-                    <input type="checkbox" id="auto-refresh-toggle" onchange="toggleAutoRefresh(this.checked)">
+                    <input type="checkbox" id="auto-refresh-toggle" data-action="toggle-auto-refresh" data-event="change">
                     Auto-refresh
                 </label>
             </div>
@@ -1013,10 +1013,10 @@
                         <option value="INFO">INFO</option>
                         <option value="DEBUG">DEBUG</option>
                     </select>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="applyLogLevel()">Apply</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="apply-log-level">Apply</button>
                     <span id="log-level-msg" class="inline-status logs-inline-status"></span>
                 </div>
-                <button onclick="downloadLogs()" class="btn btn-sm btn-secondary"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
+                <button type="button" data-action="download-logs" class="btn btn-sm btn-secondary"><span class="btn-icon-slot ui-icon-slot" data-ui-icon="download" aria-hidden="true"></span><span>Download</span></button>
             </div>
         </div>
         <div class="logs-container log-viewer" id="logs"></div>
@@ -1025,19 +1025,19 @@
 </div>
 
 <nav class="bottom-nav" aria-label="Navigation">
-    <button type="button" class="bottom-nav-item active" onclick="_scrollToSection('devices')">
+    <button type="button" class="bottom-nav-item active" data-action="scroll-to-section" data-arg="devices">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 2c.83 0 1.5.67 1.5 1.5S12.83 7 12 7s-1.5-.67-1.5-1.5S11.17 4 12 4zM7 22h10c1.1 0 2-.9 2-2H5c0 1.1.9 2 2 2zm0-7.5h10v-5H7v5z"/></svg>
         <span>Devices</span>
     </button>
-    <button type="button" class="bottom-nav-item" onclick="_scrollToSection('config')">
+    <button type="button" class="bottom-nav-item" data-action="scroll-to-section" data-arg="config">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
         <span>Config</span>
     </button>
-    <button type="button" class="bottom-nav-item" onclick="_scrollToSection('logs')">
+    <button type="button" class="bottom-nav-item" data-action="scroll-to-section" data-arg="logs">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
         <span>Logs</span>
     </button>
-    <button type="button" class="bottom-nav-item" onclick="toggleMobileMenu()">
+    <button type="button" class="bottom-nav-item" data-action="toggle-mobile-menu">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
         <span>Menu</span>
     </button>

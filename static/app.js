@@ -2096,7 +2096,8 @@ function _getGroupBadgeRenderData(dev, i, className) {
             '<span class="group-badge-label meta-badge-label">' + escHtml(meta.displayLabel) + '</span>',
         disabled: !meta.clickable,
         ariaLabel: meta.clickable ? 'Open Music Assistant group settings for ' + meta.label : '',
-        onclick: meta.clickable ? 'event.stopPropagation();openDeviceGroupSettings(' + i + ')' : '',
+        dataAction: meta.clickable ? 'open-device-group-settings' : '',
+        dataArg: meta.clickable ? String(i) : '',
     };
 }
 
@@ -2120,7 +2121,8 @@ function _getAdapterBadgeRenderData(dev, i, className) {
         innerHtml: _renderBadgeIndicatorHtml('bt', stateMeta) +
             '<span class="adapter-badge-label meta-badge-label">' + escHtml(info.label) + '</span>',
         disabled: info.empty,
-        onclick: info.empty ? '' : 'event.stopPropagation();openDeviceAdapterSettings(' + i + ')',
+        dataAction: info.empty ? '' : 'open-device-adapter-settings',
+        dataArg: info.empty ? '' : String(i),
     };
 }
 
@@ -2466,7 +2468,8 @@ function _groupBadgeHtml(dev, i, className) {
         return '<span class="' + renderData.className + '" title="' + escHtmlAttr(renderData.title) + '">' + renderData.innerHtml + '</span>';
     }
     return '<button type="button" class="' + renderData.className + '" title="' +
-        escHtmlAttr(renderData.title) + '" aria-label="' + escHtmlAttr(renderData.ariaLabel) + '" onclick="' + renderData.onclick + '">' +
+        escHtmlAttr(renderData.title) + '" aria-label="' + escHtmlAttr(renderData.ariaLabel) +
+        '" data-action="' + renderData.dataAction + '" data-arg="' + escHtmlAttr(renderData.dataArg) + '">' +
         renderData.innerHtml +
     '</button>';
 }
@@ -2512,7 +2515,7 @@ function _adapterBadgeHtml(dev, i, className) {
         '</span>';
     }
     return '<button type="button" class="' + renderData.className + '" title="' + escHtmlAttr(renderData.title) + '"' +
-        ' onclick="' + renderData.onclick + '">' +
+        ' data-action="' + renderData.dataAction + '" data-arg="' + escHtmlAttr(renderData.dataArg) + '">' +
         renderData.innerHtml +
     '</button>';
 }
@@ -2741,7 +2744,7 @@ function _renderNowPlayingArtworkHtml(i, mediaState, options) {
     var artUrl = _getSafeArtworkUrl((mediaState || {}).artUrl || '');
     var classes = _joinClassNames(['np-art', opts.containerClass, artUrl ? 'has-artwork-preview' : '']);
     var attrs = (artUrl || opts.persistent)
-        ? ' role="button" tabindex="0" aria-expanded="false" onclick="toggleArtworkPreview(event, this)" onkeydown="onArtworkPreviewKeydown(event, this)"'
+        ? ' role="button" tabindex="0" aria-expanded="false" data-action="toggle-artwork-preview" data-keydown-action="artwork-preview-keydown"'
         : '';
     var imageClass = opts.imageClass || 'np-art-image';
     var previewClass = opts.previewClass || 'artwork-preview-popover';
@@ -2868,7 +2871,10 @@ function _getMaQueueTargetId(dev) {
 }
 
 function _renderTransportButtonHtml(button) {
-    return '<button type="button" class="' + button.className + '" id="' + button.id + '" onclick="' + button.onclick + '" title="' +
+    var actionAttr = button.dataAction ? ' data-action="' + escHtmlAttr(button.dataAction) + '"' : '';
+    var argAttr = button.dataArg !== undefined && button.dataArg !== null ? ' data-arg="' + escHtmlAttr(String(button.dataArg)) + '"' : '';
+    var cmdAttr = button.dataMaCmd ? ' data-ma-cmd="' + escHtmlAttr(button.dataMaCmd) + '"' : '';
+    return '<button type="button" class="' + button.className + '" id="' + button.id + '"' + actionAttr + argAttr + cmdAttr + ' title="' +
         escHtmlAttr(button.title) + '"' + (button.disabled ? ' disabled' : '') + (button.hidden ? ' style="display:none"' : '') + '>' +
         button.iconHtml +
     '</button>';
@@ -2905,7 +2911,9 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         buttons.push(_renderTransportButtonHtml({
             className: _joinClassNames([modeClass, state.hasQueueControls ? 'ma-ready' : '', isActive ? 'active' : '', modeStateClass]),
             id: 'dma-' + kind + '-' + i,
-            onclick: kind === 'repeat' ? 'maCycleRepeat(' + i + ')' : 'maQueueCmd(\'' + escHtmlAttr(kind) + '\', undefined, ' + i + ')',
+            dataAction: kind === 'repeat' ? 'ma-cycle-repeat' : 'ma-queue-cmd',
+            dataArg: String(i),
+            dataMaCmd: kind === 'repeat' ? '' : kind,
             title: resolvedTitle,
             iconHtml: iconHtml,
             disabled: (!state.hasQueueControls && !!opts.disableWhenInactive) || (!!state.hasQueueControls && !!state.queueActionPending),
@@ -2918,7 +2926,9 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
         buttons.push(_renderTransportButtonHtml({
             className: baseClass,
             id: 'dma-' + kind + '-' + i,
-            onclick: 'maQueueCmd(\'' + escHtmlAttr(kind === 'prev' ? 'previous' : 'next') + '\', undefined, ' + i + ')',
+            dataAction: 'ma-queue-cmd',
+            dataArg: String(i),
+            dataMaCmd: kind === 'prev' ? 'previous' : 'next',
             title: _buildQueueActionTitle(resolvedTitle, state.queueActionPending, !state.hasQueueControls ? state.queueUnavailableTitle : '', state.pendingSummary),
             iconHtml: iconHtml,
             disabled: (!state.hasQueueControls && !!opts.disableWhenInactive) || (!!state.hasQueueControls && !!state.queueActionPending),
@@ -2932,7 +2942,8 @@ function _renderPlaybackTransportButtonsHtml(i, transportState, options) {
     buttons.push(_renderTransportButtonHtml({
         className: _joinClassNames([primaryClass, state.isPlaying ? '' : 'paused']),
         id: 'dbtn-pause-' + i,
-        onclick: 'onDevicePause(' + i + ')',
+        dataAction: 'device-pause',
+        dataArg: String(i),
         title: state.canTransport
             ? (state.isPlaying ? (opts.pauseTitlePlaying || 'Pause') : (opts.pauseTitlePaused || 'Play'))
             : (state.transportUnavailableTitle || (state.isPlaying ? (opts.pauseTitlePlaying || 'Pause') : (opts.pauseTitlePaused || 'Play'))),
@@ -3065,11 +3076,11 @@ function buildListView(entries, hiddenCount) {
     var dirArrow = listSortState.direction === 'asc' ? '&#9652;' : '&#9662;';
     var header = '<div class="list-header">' +
         '<div></div>' +
-        '<button type="button" class="list-sort-btn ' + (listSortState.column === 'name' ? 'active' : '') + '" onclick="event.stopPropagation();sortListBy(\'name\')">Name ' + (listSortState.column === 'name' ? dirArrow : '') + '</button>' +
-        '<button type="button" class="list-sort-btn list-col-divider-start ' + (listSortState.column === 'status' ? 'active' : '') + '" onclick="event.stopPropagation();sortListBy(\'status\')">Status ' + (listSortState.column === 'status' ? dirArrow : '') + '</button>' +
-        '<button type="button" class="list-sort-btn list-col-divider-mid ' + (listSortState.column === 'adapter' ? 'active' : '') + '" onclick="event.stopPropagation();sortListBy(\'adapter\')">Adapter ' + (listSortState.column === 'adapter' ? dirArrow : '') + '</button>' +
-        '<button type="button" class="list-sort-btn list-col-divider-mid ' + (listSortState.column === 'group' ? 'active' : '') + '" onclick="event.stopPropagation();sortListBy(\'group\')">Group ' + (listSortState.column === 'group' ? dirArrow : '') + '</button>' +
-        '<button type="button" class="list-sort-btn list-col-divider-mid ' + (listSortState.column === 'volume' ? 'active' : '') + '" onclick="event.stopPropagation();sortListBy(\'volume\')">Volume ' + (listSortState.column === 'volume' ? dirArrow : '') + '</button>' +
+        '<button type="button" class="list-sort-btn ' + (listSortState.column === 'name' ? 'active' : '') + '" data-action="sort-list-by" data-arg="name">Name ' + (listSortState.column === 'name' ? dirArrow : '') + '</button>' +
+        '<button type="button" class="list-sort-btn list-col-divider-start ' + (listSortState.column === 'status' ? 'active' : '') + '" data-action="sort-list-by" data-arg="status">Status ' + (listSortState.column === 'status' ? dirArrow : '') + '</button>' +
+        '<button type="button" class="list-sort-btn list-col-divider-mid ' + (listSortState.column === 'adapter' ? 'active' : '') + '" data-action="sort-list-by" data-arg="adapter">Adapter ' + (listSortState.column === 'adapter' ? dirArrow : '') + '</button>' +
+        '<button type="button" class="list-sort-btn list-col-divider-mid ' + (listSortState.column === 'group' ? 'active' : '') + '" data-action="sort-list-by" data-arg="group">Group ' + (listSortState.column === 'group' ? dirArrow : '') + '</button>' +
+        '<button type="button" class="list-sort-btn list-col-divider-mid ' + (listSortState.column === 'volume' ? 'active' : '') + '" data-action="sort-list-by" data-arg="volume">Volume ' + (listSortState.column === 'volume' ? dirArrow : '') + '</button>' +
         '<div class="list-sort-btn list-sort-label list-col-divider-end">Actions</div>' +
     '</div>';
 
@@ -3111,7 +3122,7 @@ function buildListView(entries, hiddenCount) {
         var cardDisabled = _isDeviceDisabled(dev);
         var showDetailTransport = !!transportState.canTransport;
         var detailTransport = showDetailTransport
-            ? '<div class="list-player-transport" onclick="event.stopPropagation()">' +
+            ? '<div class="list-player-transport" data-action="noop">' +
                 _renderPlaybackTransportButtonsHtml(i, transportState, {
                     buttonBaseClass: 'media-btn list-player-transport-btn',
                     primaryButtonClass: 'media-btn list-player-transport-btn is-primary',
@@ -3129,12 +3140,12 @@ function buildListView(entries, hiddenCount) {
         var standbyTitle = isStandby
             ? 'Wake from standby — reconnect Bluetooth and resume audio'
             : 'Enter standby — disconnect Bluetooth to save speaker battery';
-        var detailActions = '<div class="list-detail-actions" onclick="event.stopPropagation()">' +
+        var detailActions = '<div class="list-detail-actions" data-action="noop">' +
             (mgmtEnabled
-                ? '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>'
-                : '<button type="button" class="action-btn list-action-btn success" id="dbtn-release-' + i + '" onclick="btToggleManagement(' + i + ')" title="Resume BT management and auto-reconnect">' + _actionButtonInnerHtml('release', 'Reclaim') + '</button>') +
-            '<button type="button" class="action-btn list-action-btn ' + standbyActionClass + '" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')" title="' + escHtmlAttr(standbyTitle) + '"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml(standbyIcon, standbyLabel) + '</button>' +
-            '<button type="button" class="action-btn list-action-btn danger" onclick="confirmDisableDevice(' + i + ')"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
+                ? '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>'
+                : '<button type="button" class="action-btn list-action-btn success" id="dbtn-release-' + i + '" data-action="bt-toggle-management" data-arg="' + i + '" title="Resume BT management and auto-reconnect">' + _actionButtonInnerHtml('release', 'Reclaim') + '</button>') +
+            '<button type="button" class="action-btn list-action-btn ' + standbyActionClass + '" id="dbtn-standby-' + i + '" data-action="bt-toggle-standby" data-arg="' + i + '" title="' + escHtmlAttr(standbyTitle) + '"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml(standbyIcon, standbyLabel) + '</button>' +
+            '<button type="button" class="action-btn list-action-btn danger" data-action="confirm-disable-device" data-arg="' + i + '"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
         '</div>';
         var detailBlockedHints = _renderBlockedControlHints(_collectDeviceBlockedControlHints(dev, transportState, _lastOperatorGuidance), {compact: true});
         var routeSummary = _getListRoutingSummary(dev);
@@ -3175,12 +3186,12 @@ function buildListView(entries, hiddenCount) {
                 detailMediaLane +
               '</div>'
             : '';
-        var quickActions = '<div class="list-actions" onclick="event.stopPropagation()">' +
-            '<button type="button" class="media-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" onclick="event.stopPropagation();onDevicePause(' + i + ', \'' + rowPauseBtnId + '\')" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + (canTransport ? '' : ' style="display:none"') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
-            '<button type="button" class="media-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" onclick="event.stopPropagation();onMuteClick(' + i + ', \'' + rowMuteBtnId + '\')" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
-            '<button type="button" class="icon-btn list-inline-btn list-settings-btn" onclick="event.stopPropagation();openDeviceSettings(' + i + ')" title="Device settings"' + (cardDisabled ? ' disabled' : '') + '>' + _settingsIconHtml() + '</button>' +
+        var quickActions = '<div class="list-actions" data-action="noop">' +
+            '<button type="button" class="media-btn list-inline-btn' + (dev.playing ? '' : ' paused') + '" id="' + rowPauseBtnId + '" data-action="device-pause" data-arg="' + i + '" data-btn-id="' + escHtmlAttr(rowPauseBtnId) + '" title="' + escHtmlAttr(pauseTitle) + '"' + (canTransport && !cardDisabled ? '' : ' disabled') + (canTransport ? '' : ' style="display:none"') + '>' + _playPauseIconHtml(dev.playing) + '</button>' +
+            '<button type="button" class="media-btn list-inline-btn' + (effectiveMuted ? ' muted' : '') + '" id="' + rowMuteBtnId + '" data-action="mute-click" data-arg="' + i + '" data-btn-id="' + escHtmlAttr(rowMuteBtnId) + '" title="' + escHtmlAttr(muteTitle) + '"' + (canMute && !cardDisabled ? '' : ' disabled') + '>' + _muteIconHtml(effectiveMuted) + '</button>' +
+            '<button type="button" class="icon-btn list-inline-btn list-settings-btn" data-action="open-device-settings" data-arg="' + i + '" title="Device settings"' + (cardDisabled ? ' disabled' : '') + '>' + _settingsIconHtml() + '</button>' +
         '</div>';
-        var expandIndicator = '<span class="card-expand-indicator" title="Show details" onclick="event.stopPropagation()">&#x25BE;</span>';
+        var expandIndicator = '<span class="card-expand-indicator" title="Show details" data-action="noop">&#x25BE;</span>';
         var nameTitleRow = '<span class="list-name-title-row">' +
             '<span class="list-name-title-group">' +
                 '<span class="list-name-title">' + escHtml(dev.player_name || ('Device ' + (i + 1))) + '</span>' +
@@ -3196,8 +3207,8 @@ function buildListView(entries, hiddenCount) {
             ? '<span class="list-name-meta-row' + (expanded ? ' is-controls' : '') + '">' + nameMetaContent + '</span>'
             : '';
         return '<div class="list-row ' + statusMeta.cardStateClass + ' ' + (expanded ? 'expanded' : '') + (cardDisabled ? ' list-row--disabled' : '') + '">' +
-            '<div class="list-row-main" onclick="toggleListRow(\'' + escHtmlAttr(key) + '\')">' +
-                '<div class="list-select-cell"><input type="checkbox" id="dsel-' + i + '" ' + (_groupSelected[i] !== false && !cardDisabled ? 'checked' : '') + (cardDisabled ? ' disabled' : '') + ' onclick="event.stopPropagation()" onchange="onDeviceSelect(' + i + ', this.checked)"></div>' +
+            '<div class="list-row-main" data-action="toggle-list-row" data-arg="' + escHtmlAttr(key) + '">' +
+                '<div class="list-select-cell"><input type="checkbox" id="dsel-' + i + '" ' + (_groupSelected[i] !== false && !cardDisabled ? 'checked' : '') + (cardDisabled ? ' disabled' : '') + ' data-action="device-select" data-event="change" data-dev-idx="' + i + '"></div>' +
                 '<div class="list-cell-name">' +
                     '<span class="list-name-icon ' + statusMeta.iconToneClass + '">' +
                         _uiIconSvg('speaker') +
@@ -3210,8 +3221,8 @@ function buildListView(entries, hiddenCount) {
                 '<div class="list-status-cell">' + _renderDeviceStatusBadgeHtml(dev, 'chip') + '</div>' +
                 '<div class="list-adapter-cell">' + _adapterBadgeHtml(dev, i, 'chip') + '</div>' +
                 '<div class="list-group-cell">' + _groupBadgeHtml(dev, i, 'chip') + '</div>' +
-                '<div class="list-vol-wrap" onclick="event.stopPropagation()">' +
-                    '<input type="range" min="0" max="100" value="' + (dev.volume || 0) + '" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)"' + (cardDisabled ? ' disabled' : '') + '>' +
+                '<div class="list-vol-wrap" data-action="noop">' +
+                    '<input type="range" min="0" max="100" value="' + (dev.volume || 0) + '" id="vslider-' + i + '" data-action="volume-input" data-event="input" data-dev-idx="' + i + '"' + (cardDisabled ? ' disabled' : '') + '>' +
                     '<span class="vol-pct" id="dvol-' + i + '">' + (dev.volume || 0) + '</span>' +
                 '</div>' +
                 quickActions +
@@ -3473,7 +3484,7 @@ function buildDeviceCard(i) {
     card.innerHTML =
         '<div class="card-head">' +
           '<input type="checkbox" class="device-select-cb" id="dsel-' + i + '" checked' +
-            ' onchange="onDeviceSelect(' + i + ', this.checked)">' +
+            ' data-action="device-select" data-event="change" data-dev-idx="' + i + '">' +
           '<div class="card-icon" id="dcard-icon-' + i + '">' + speakerSvg + '</div>' +
           '<div class="card-name-block">' +
             '<div class="card-name">' +
@@ -3507,7 +3518,7 @@ function buildDeviceCard(i) {
               modeFirst: false,
           }) +
           '<div class="vol-wrap">' +
-            '<input type="range" min="0" max="100" value="100" id="vslider-' + i + '" oninput="onVolumeInput(' + i + ', this.value)">' +
+            '<input type="range" min="0" max="100" value="100" id="vslider-' + i + '" data-action="volume-input" data-event="input" data-dev-idx="' + i + '">' +
             '<span class="vol-pct" id="dvol-' + i + '">100</span>' +
           '</div>' +
           '<button type="button" class="media-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
@@ -3537,11 +3548,11 @@ function buildDeviceCard(i) {
         '<div class="card-actions-row">' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
-            '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" onclick="btReconnect(' + i + ')">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
-            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" onclick="wakeDevice(' + i + ')" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
-            '<button type="button" class="action-btn warn" id="dbtn-standby-' + i + '" onclick="btToggleStandby(' + i + ')">' + _actionButtonInnerHtml('standby', 'Standby') + '</button>' +
-            '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" onclick="confirmDisableDevice(' + i + ')">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
-            '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" onclick="openDeviceSettings(' + i + ')" title="Device settings">' + _settingsIconHtml() + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" data-action="wake-device" data-arg="' + i + '" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
+            '<button type="button" class="action-btn warn" id="dbtn-standby-' + i + '" data-action="bt-toggle-standby" data-arg="' + i + '">' + _actionButtonInnerHtml('standby', 'Standby') + '</button>' +
+            '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" data-action="confirm-disable-device" data-arg="' + i + '">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
+            '<button type="button" class="icon-btn device-settings-btn card-corner-settings-btn" data-action="open-device-settings" data-arg="' + i + '" title="Device settings">' + _settingsIconHtml() + '</button>' +
           '</div>' +
         '</div>' +
         '<div class="device-blocked-hints-wrap" id="dblocked-hints-' + i + '" style="display:none"></div>';
@@ -5773,7 +5784,7 @@ function _buildEmptyStateHTML(disabledDevices) {
             copy: 'Re-enable a device in Configuration → Devices to bring it back into the bridge.' +
                 (disabledCount > 1 ? ' (' + disabledCount + ' devices disabled)' : ''),
             center: true,
-            actionsHtml: '<a href="#" class="no-devices-link" onclick="return _runOnboardingAssistantAction(\'open_devices_settings\')">' +
+            actionsHtml: '<a href="#" class="no-devices-link" data-action="run-onboarding-assistant-action" data-arg="open_devices_settings">' +
                 _uiIconSvg('settings', 'no-devices-link-icon') + '<span>Open device settings</span>' +
             '</a>',
         });
@@ -5784,7 +5795,7 @@ function _buildEmptyStateHTML(disabledDevices) {
             title: 'No Bluetooth adapter detected',
             copy: 'Add or map an adapter before scanning for speakers.',
             center: true,
-            actionsHtml: '<a href="#" class="no-devices-link" onclick="_goToAdapters(); return false;">' +
+            actionsHtml: '<a href="#" class="no-devices-link" data-action="go-to-adapters">' +
                 _uiIconSvg('plus', 'no-devices-link-icon') + '<span>Add adapter</span>' +
             '</a>',
         });
@@ -5794,7 +5805,7 @@ function _buildEmptyStateHTML(disabledDevices) {
         title: 'No Bluetooth devices configured',
         copy: 'Scan nearby speakers or add a device manually to start playback.',
         center: true,
-        actionsHtml: '<a href="#" class="no-devices-link" onclick="_goToDevicesAndScan(); return false;">' +
+        actionsHtml: '<a href="#" class="no-devices-link" data-action="go-to-devices-and-scan">' +
             _uiIconSvg('search', 'no-devices-link-icon') + '<span>Scan for devices</span>' +
         '</a>',
     });
@@ -6762,7 +6773,7 @@ async function loadPairedDevices(options) {
                 '<span class="scan-result-name">' + escHtml(displayName) +
                     (adapterBadges ? ' <span class="paired-adapter-badges">' + adapterBadges + '</span>' : '') +
                 '</span>' +
-                '<span class="paired-actions" onclick="event.stopPropagation()">' +
+                '<span class="paired-actions" data-action="noop">' +
                     '<button type="button" class="scan-action-btn paired-info-btn" title="Show Bluetooth device info">' + btInfoIcon + '<span>Info</span></button>' +
                 '<button type="button" class="scan-action-btn paired-release-btn" title="Release or reclaim BT management">Release</button>' +
                 '<button type="button" class="scan-action-btn scan-action-btn--warning paired-reset-btn" title="Remove, re-pair and connect from scratch">Reset & Reconnect</button>' +
@@ -7240,10 +7251,10 @@ function _buildBackendServiceStateHtml(state) {
         ? ' service-state-icon--pulse'
         : ' service-state-icon--spin';
     var actionHtml = action.key === 'refresh_diagnostics'
-        ? '<a href="#" class="no-devices-link" onclick="return _retryBackendStatus()">' +
+        ? '<a href="#" class="no-devices-link" data-action="retry-backend-status">' +
             _uiIconSvg('refresh', 'no-devices-link-icon') + '<span>' + escHtml(action.label || 'Retry now') + '</span>' +
           '</a>'
-        : '<a href="#" class="no-devices-link" onclick="return _runEncodedOperatorGuidanceAction(\'' + _encodeGuidanceAction(action) + '\')">' +
+        : '<a href="#" class="no-devices-link" data-action="run-encoded-operator-guidance-action" data-arg="' + escHtmlAttr(_encodeGuidanceAction(action)) + '">' +
             _uiIconSvg('info', 'no-devices-link-icon') + '<span>' + escHtml(action.label || 'Open diagnostics') + '</span>' +
           '</a>';
     return '<div class="no-devices-icon service-state-icon is-' + escHtml(tone) + iconAnimationClass + '">' +
@@ -7279,7 +7290,7 @@ function _setBackendServiceBanner(state) {
     banner.className = 'notice-card notice-card--' + _backendServiceToneClass(state.tone || 'info');
     titleEl.textContent = state.title || 'Connecting to bridge';
     textEl.textContent = state.summary || 'Waiting for backend status.';
-    actionsEl.innerHTML = '<a href="#" class="notice-card-action notice-card-action--primary" onclick="return _retryBackendStatus()">' +
+    actionsEl.innerHTML = '<a href="#" class="notice-card-action notice-card-action--primary" data-action="retry-backend-status">' +
         escHtml(((state.action && state.action.key === 'refresh_diagnostics') ? state.action.label : 'Retry now') || 'Retry now') +
         '</a>';
     banner.hidden = false;
@@ -7608,9 +7619,9 @@ function _renderGuidanceActionLink(action, options) {
     var classes = ['notice-card-action'];
     if (opts.primary) classes.push('notice-card-action--primary');
     if (opts.menuItem) classes.push('notice-card-action--menu-item', 'ui-action-menu-item');
-    return '<a href="#" class="' + classes.join(' ') + '" onclick="return _runEncodedOperatorGuidanceAction(\'' +
-        _encodeGuidanceAction(action) +
-    '\')">' + escHtml(action.label || 'Open diagnostics') + '</a>';
+    return '<a href="#" class="' + classes.join(' ') + '" data-action="run-encoded-operator-guidance-action" data-arg="' +
+        escHtmlAttr(_encodeGuidanceAction(action)) +
+    '">' + escHtml(action.label || 'Open diagnostics') + '</a>';
 }
 
 function _renderGuidanceActionMenu(actions, dismissHtml) {
@@ -7740,7 +7751,7 @@ function _renderOnboardingAssistantToggle(expanded, options) {
         ' aria-controls="onboarding-assistant-banner"' +
         ' aria-expanded="' + (expanded ? 'true' : 'false') + '"' +
         ' title="' + escHtmlAttr(_onboardingAssistantToggleTitle(expanded)) + '"' +
-        ' onclick="return _toggleOnboardingAssistant()">' +
+        ' data-action="toggle-onboarding-assistant">' +
         escHtml(_onboardingAssistantToggleLabel(expanded)) +
     '</button>';
 }
@@ -7750,7 +7761,7 @@ function _renderOnboardingHeaderToggle(expanded) {
         ' aria-controls="onboarding-assistant-banner"' +
         ' aria-expanded="' + (expanded ? 'true' : 'false') + '"' +
         ' title="' + escHtmlAttr(_onboardingAssistantToggleTitle(expanded)) + '"' +
-        ' onclick="return _toggleOnboardingAssistant()">' +
+        ' data-action="toggle-onboarding-assistant">' +
         '<span class="guidance-health-action-label">' + escHtml(_onboardingAssistantToggleLabel(expanded)) + '</span>' +
         '<span class="guidance-health-action-icon" aria-hidden="true">' +
             _uiIconSvg(expanded ? 'chevron-up' : 'chevron-down', 'ui-icon-svg') +
@@ -8340,9 +8351,9 @@ function _setOnboardingAssistantBanner(card, options) {
     var secondaryActions = card.secondary_actions || [];
     var dismissHtml = '';
     if (card.dismissible && card.preference_key) {
-        dismissHtml = '<a href="#" class="notice-card-action notice-card-action--menu-item" onclick="return _dismissGuidance(\'' +
-            escHtml(card.preference_key) +
-        '\')">Don’t show again</a>';
+        dismissHtml = '<a href="#" class="notice-card-action notice-card-action--menu-item" data-action="dismiss-guidance" data-arg="' +
+            escHtmlAttr(card.preference_key) +
+        '">Don’t show again</a>';
     }
     actionsEl.innerHTML = _renderOnboardingAssistantToggle(isExpanded, {primary: !isExpanded}) +
         _renderGuidanceActionMenu(secondaryActions, dismissHtml);
@@ -8417,9 +8428,9 @@ function _setRecoveryAssistantBanner(guidance) {
     });
     var dismissHtml = '';
     if (notice.dismissible && notice.preference_key) {
-        dismissHtml = '<a href="#" class="notice-card-action notice-card-action--menu-item" onclick="return _dismissGuidance(\'' +
-            escHtml(notice.preference_key) +
-        '\')">Don’t show again</a>';
+        dismissHtml = '<a href="#" class="notice-card-action notice-card-action--menu-item" data-action="dismiss-guidance" data-arg="' +
+            escHtmlAttr(notice.preference_key) +
+        '">Don’t show again</a>';
     }
     var actionsHtml = _renderGuidanceActionLink(primaryAction, {primary: true});
     actionsHtml += _renderGuidanceActionMenu(secondaryActions, dismissHtml);
@@ -10859,12 +10870,12 @@ function _renderRecoveryTimelineControls(timelineView) {
     var view = timelineView.view;
     var sourceOptions = timelineView.sourceOptions || [];
     var controlsHtml = '<details class="diag-timeline-advanced"' + (view.advanced ? ' open' : '') +
-        ' ontoggle="_setRecoveryTimelineAdvanced(this.open)">' +
+        ' data-action="set-recovery-timeline-advanced" data-event="toggle">' +
         '<summary class="diag-timeline-advanced-summary">Advanced timeline view</summary>' +
         '<div class="diag-timeline-controls">' +
             '<label class="diag-timeline-control">' +
                 '<span class="diag-timeline-control-label">Severity</span>' +
-                '<select onchange="return _setRecoveryTimelineLevel(this.value)">' +
+                '<select data-action="set-recovery-timeline-level" data-event="change">' +
                     _renderRecoveryTimelineControlOptions([
                         {value: 'all', label: 'All levels'},
                         {value: 'error', label: 'Errors only'},
@@ -10875,7 +10886,7 @@ function _renderRecoveryTimelineControls(timelineView) {
             '</label>' +
             '<label class="diag-timeline-control">' +
                 '<span class="diag-timeline-control-label">Scope</span>' +
-                '<select onchange="return _setRecoveryTimelineSourceType(this.value)">' +
+                '<select data-action="set-recovery-timeline-source-type" data-event="change">' +
                     _renderRecoveryTimelineControlOptions([
                         {value: 'all', label: 'Bridge + speakers'},
                         {value: 'device', label: 'Speakers only'},
@@ -10885,7 +10896,7 @@ function _renderRecoveryTimelineControls(timelineView) {
             '</label>' +
             '<label class="diag-timeline-control">' +
                 '<span class="diag-timeline-control-label">Window</span>' +
-                '<select onchange="return _setRecoveryTimelineLimit(this.value)">' +
+                '<select data-action="set-recovery-timeline-limit" data-event="change">' +
                     _renderRecoveryTimelineControlOptions([
                         {value: '5', label: 'Latest 5 matches'},
                         {value: '12', label: 'Latest 12 matches'},
@@ -10897,7 +10908,7 @@ function _renderRecoveryTimelineControls(timelineView) {
     if (sourceOptions.length > 1) {
         controlsHtml += '<label class="diag-timeline-control">' +
             '<span class="diag-timeline-control-label">Source</span>' +
-            '<select onchange="return _setRecoveryTimelineSource(this.value)">' +
+            '<select data-action="set-recovery-timeline-source" data-event="change">' +
                 _renderRecoveryTimelineControlOptions(
                     [{value: 'all', label: 'All sources'}].concat(sourceOptions.map(function(option) {
                         return {
@@ -11045,7 +11056,7 @@ function _renderDiagSummaryCard(card) {
     var attrs = '';
     if (card.target) {
         classes.push('diag-summary-card--link');
-        attrs = ' type="button" onclick="return focusDiagnosticsSection(\'' + String(card.target) + '\')"';
+        attrs = ' type="button" data-action="focus-diagnostics-section" data-arg="' + escHtmlAttr(String(card.target)) + '"';
     }
     return '<button class="' + classes.join(' ') + '"' + attrs + '>' +
         '<div class="diag-summary-label">' + escHtml(card.title) + '</div>' +
@@ -11111,8 +11122,8 @@ function openBluetoothSettings() {
 }
 
 function _renderDiagConfigButton(actionKey, buttonLabel) {
-    return '<button type="button" class="btn btn-sm btn-secondary diag-config-btn" onclick="return runDiagnosticsConfigJump(\'' +
-        String(actionKey) + '\')">' + escHtml(buttonLabel || 'Open settings') + '</button>';
+    return '<button type="button" class="btn btn-sm btn-secondary diag-config-btn" data-action="run-diagnostics-config-jump" data-arg="' +
+        escHtmlAttr(String(actionKey)) + '">' + escHtml(buttonLabel || 'Open settings') + '</button>';
 }
 
 function runDiagnosticsConfigJump(actionKey) {
@@ -11124,8 +11135,8 @@ function runDiagnosticsConfigJump(actionKey) {
 }
 
 function _renderDiagCopyButton(sectionId, label, buttonLabel) {
-    return '<button type="button" class="btn btn-sm btn-secondary diag-copy-btn" onclick="return copyDiagnosticsSection(\'' +
-        String(sectionId) + '\', \'' + String(label) + '\')">' + escHtml(buttonLabel || 'Copy') + '</button>';
+    return '<button type="button" class="btn btn-sm btn-secondary diag-copy-btn" data-action="copy-diagnostics-section" data-arg="' +
+        escHtmlAttr(String(sectionId)) + '" data-diag-label="' + escHtmlAttr(String(label)) + '">' + escHtml(buttonLabel || 'Copy') + '</button>';
 }
 
 function copyDiagnosticsSection(sectionId, label) {
@@ -11169,12 +11180,12 @@ function _renderRecoveryActionButton(action, options) {
     var classes = ['btn', 'btn-sm', 'diag-recovery-action'];
     if (opts.primary) classes.push('diag-recovery-action--primary');
     if (opts.menuItem) classes.push('diag-recovery-action--menu-item', 'ui-action-menu-item');
-    return '<button type="button" class="' + classes.join(' ') + '" onclick="return _runEncodedOperatorGuidanceAction(\'' +
-        _encodeGuidanceAction({
+    return '<button type="button" class="' + classes.join(' ') + '" data-action="run-encoded-operator-guidance-action" data-arg="' +
+        escHtmlAttr(_encodeGuidanceAction({
             key: String(action.key || ''),
             device_names: action.device_name ? [String(action.device_name || '')] : (action.device_names || []),
-        }) +
-    '\')">' + escHtml(action.label || 'Open diagnostics') + '</button>';
+        })) +
+    '">' + escHtml(action.label || 'Open diagnostics') + '</button>';
 }
 
 function _renderRecoveryActionMenu(actions) {
@@ -11317,7 +11328,7 @@ function _renderRecoveryTimelineCard(recoveryTimeline) {
         escHtml(metaText) +
         '</div>' +
         _renderRecoveryTimeline(recoveryTimeline) +
-        '<div class="diag-recovery-actions"><button type="button" class="btn btn-sm diag-recovery-action" onclick="return _downloadRecoveryTimeline()">' +
+        '<div class="diag-recovery-actions"><button type="button" class="btn btn-sm diag-recovery-action" data-action="download-recovery-timeline">' +
         _buttonLabelWithIconHtml('download', 'Export timeline CSV') +
         '</button></div></div></div>';
 }
@@ -11328,7 +11339,7 @@ function _renderLatencyPresetButtons(recoveryLatency) {
     return '<div class="diag-recovery-actions diag-recovery-actions--wrap">' + presets.map(function(preset) {
         return '<button type="button" class="btn btn-sm diag-recovery-action' +
             (preset.value === recoveryLatency.recommended_pulse_latency_msec ? ' diag-recovery-action--primary' : '') +
-            '" onclick="return _applyLatencyPreset(' + JSON.stringify(preset.value) + ')">' +
+            '" data-action="apply-latency-preset" data-arg="' + escHtmlAttr(JSON.stringify(preset.value)) + '">' +
             escHtml(preset.label || (String(preset.value) + ' ms')) +
         '</button>';
     }).join('') + '</div>';
@@ -11461,7 +11472,7 @@ function renderDiagnostics(d) {
             var deviceName = dev.name || dev.mac || 'Unknown';
             return '<div class="diag-mini-card">' +
                 '<div class="diag-mini-title">' + dot(deviceTone) + '<span>' + escHtml(deviceName) + '</span>' +
-                    '<button type="button" class="btn btn-sm diag-copy-device-btn" onclick="_copyDeviceSupportInfo(\'' + escHtmlAttr(deviceName) + '\')" title="Copy device info">📋</button>' +
+                    '<button type="button" class="btn btn-sm diag-copy-device-btn" data-action="copy-device-support-info" data-arg="' + escHtmlAttr(deviceName) + '" title="Copy device info">📋</button>' +
                 '</div>' +
                 '<div class="diag-mini-meta">' +
                     _renderDiagMetaRow('Availability', deviceOutcome, {stack: true}) +
@@ -11718,13 +11729,13 @@ function renderDiagnostics(d) {
 
     return '<div class="diag-panel">' +
         '<nav class="diag-nav" id="diag-nav">' +
-            '<button type="button" class="diag-nav-btn is-active" data-target="diag-recovery-center" onclick="return focusDiagnosticsSection(\'diag-recovery-center\')">Issues</button>' +
-            '<button type="button" class="diag-nav-btn" data-target="diag-health-summary" onclick="return focusDiagnosticsSection(\'diag-health-summary\')">Health</button>' +
-            '<button type="button" class="diag-nav-btn" data-target="diag-speaker-states" onclick="return focusDiagnosticsSection(\'diag-speaker-states\')">Speakers</button>' +
-            '<button type="button" class="diag-nav-btn" data-target="diag-routing" onclick="return focusDiagnosticsSection(\'diag-routing\')">Routing</button>' +
-            '<button type="button" class="diag-nav-btn" data-target="diag-ma-groups-card" onclick="return focusDiagnosticsSection(\'diag-ma-groups-card\')">MA</button>' +
-            '<button type="button" class="diag-nav-btn" data-target="diag-advanced-section" onclick="return focusDiagnosticsSection(\'diag-advanced-section\')">Advanced</button>' +
-            '<button type="button" class="diag-mode-toggle" onclick="_toggleDiagMode()" title="Switch between simple and advanced view">' +
+            '<button type="button" class="diag-nav-btn is-active" data-target="diag-recovery-center" data-action="focus-diagnostics-section" data-arg="diag-recovery-center">Issues</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-health-summary" data-action="focus-diagnostics-section" data-arg="diag-health-summary">Health</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-speaker-states" data-action="focus-diagnostics-section" data-arg="diag-speaker-states">Speakers</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-routing" data-action="focus-diagnostics-section" data-arg="diag-routing">Routing</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-ma-groups-card" data-action="focus-diagnostics-section" data-arg="diag-ma-groups-card">MA</button>' +
+            '<button type="button" class="diag-nav-btn" data-target="diag-advanced-section" data-action="focus-diagnostics-section" data-arg="diag-advanced-section">Advanced</button>' +
+            '<button type="button" class="diag-mode-toggle" data-action="toggle-diag-mode" title="Switch between simple and advanced view">' +
                 '<span class="diag-mode-icon">\u26A1</span> ' +
                 (localStorage.getItem('sendspin-diag-mode') === 'advanced' ? 'Simple' : 'Advanced') +
             '</button>' +
@@ -11771,7 +11782,7 @@ function renderDiagnostics(d) {
         '</div>' +
         '<div class="diag-card diag-jump-target diag-simple-hide" id="diag-speaker-states">' +
             '<div class="diag-card-header"><div><div class="diag-card-title">Speaker states</div><div class="diag-card-subtitle">Connection state, sink attachment, and the clearest next hint for each speaker.</div></div><div class="diag-card-header-actions">' + _renderDiagConfigButton('devices', 'Device settings') + _renderDiagCopyButton('diag-speaker-states', 'Speaker states') + '</div></div>' +
-            (devices.length > 3 ? '<input class="diag-filter-input" type="search" placeholder="Filter speakers\u2026" oninput="_filterDiagSpeakers(this.value)">' +
+            (devices.length > 3 ? '<input class="diag-filter-input" type="search" placeholder="Filter speakers\u2026" data-action="filter-diag-speakers" data-event="input">' +
             '<p id="diag-speaker-filter-empty" class="diag-filter-empty" style="display:none">No speakers match your filter.</p>' : '') +
             '<div class="diag-devices">' + deviceCards + '</div>' +
         '</div>' +
@@ -11809,12 +11820,12 @@ function renderDiagnostics(d) {
         '</details>' +
         '<div class="diag-footer">' +
             '<div class="diag-footer-left">' +
-                '<button type="button" class="btn btn-sm btn-secondary" onclick="reloadDiagnostics()">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
-                '<button type="button" class="btn btn-sm btn-secondary" onclick="downloadDiagnostics()">' + _buttonLabelWithIconHtml('download', 'Download') + '</button>' +
-                '<button type="button" class="btn btn-sm diag-footer-btn" onclick="_copyDiagSummary()" title="Copy diagnostics summary to clipboard">📋 Copy</button>' +
+                '<button type="button" class="btn btn-sm btn-secondary" data-action="reload-diagnostics">' + _buttonLabelWithIconHtml('refresh', 'Refresh') + '</button>' +
+                '<button type="button" class="btn btn-sm btn-secondary" data-action="download-diagnostics">' + _buttonLabelWithIconHtml('download', 'Download') + '</button>' +
+                '<button type="button" class="btn btn-sm diag-footer-btn" data-action="copy-diag-summary" title="Copy diagnostics summary to clipboard">📋 Copy</button>' +
             '</div>' +
             '<div class="diag-footer-right">' +
-                '<button type="button" class="btn btn-sm btn-primary" onclick="return _openBugReport(event)">' + _buttonLabelWithIconHtml('report', 'Report issue') + '</button>' +
+                '<button type="button" class="btn btn-sm btn-primary" data-action="open-bug-report">' + _buttonLabelWithIconHtml('report', 'Report issue') + '</button>' +
             '</div>' +
         '</div>' +
     '</div>';
@@ -12133,3 +12144,163 @@ window.addEventListener('beforeunload', function() {
 refreshLogs();
 toggleAutoRefresh(false);
 loadVersionInfo();
+
+// CSP-safe event delegation. Replaces inline on* attributes so script-src can drop 'unsafe-inline'.
+// Map data-action="kebab-name" → function. `data-event` (default "click") picks which listener fires.
+// `data-arg` carries a single literal argument when the original handler took one.
+const _ACTION_REGISTRY = {
+    'update-badge-click':       (_el, ev) => _onUpdateBadgeClick(ev),
+    'toggle-mobile-menu':       toggleMobileMenu,
+    'close-mobile-menu':        closeMobileMenu,
+    'open-bug-report':          (_el, ev) => _openBugReport(ev),
+    'toggle-theme-mode':        toggleThemeMode,
+    'follow-link-new-tab':      (el, ev) => _followLinkInNewTab(ev, el),
+    'open-auth-settings':       () => { openAuthSettings(); return false; },
+    'open-ma-token-settings':   () => { openMaTokenSettings(); return false; },
+    'submit-config-form':       () => { document.getElementById('config-form').dispatchEvent(new Event('submit', {cancelable: true})); return false; },
+    'open-config-panel':        (_el, _ev, arg) => { _openConfigPanel(arg); return false; },
+    'set-view-mode':            (_el, _ev, arg) => setViewMode(arg),
+    'group-mute':               onGroupMute,
+    'pause-all':                onPauseAll,
+    'group-action':             (_el, _ev, arg) => onGroupAction(arg),
+    'add-bt-device-row':        addBtDeviceRow,
+    'add-manual-adapter-row':   () => addManualAdapterRow('', '', ''),
+    'load-bt-adapters':         loadBtAdapters,
+    'open-bt-scan-modal':       openBtScanModal,
+    'close-bt-scan-modal':      closeBtScanModal,
+    'start-bt-scan':            startBtScan,
+    'ma-discover':              maDiscover,
+    'ma-ha-connect':            maHaConnect,
+    'ma-login':                 maLogin,
+    'set-password':             setPassword,
+    'save-and-restart':         saveAndRestart,
+    'cancel-config-changes':    cancelConfigChanges,
+    'download-config':          () => { window.location.href = API_BASE + '/api/config/download'; },
+    'trigger-upload-input':     () => document.getElementById('config-upload-input').click(),
+    'refresh-logs':             refreshLogs,
+    'apply-log-level':          applyLogLevel,
+    'download-logs':            downloadLogs,
+    'scroll-to-section':        (_el, _ev, arg) => _scrollToSection(arg),
+    // change / input handlers (value/checked passed explicitly)
+    'group-filter-change':      (el) => onGroupFilterChange(el.value),
+    'adapter-filter-change':    (el) => onAdapterFilterChange(el.value),
+    'status-filter-change':     (el) => onStatusFilterChange(el.value),
+    'group-select-all':         (el) => onGroupSelectAll(el),
+    'group-volume-input':       (el) => onGroupVolumeInput(el.value),
+    'update-tz-preview':        updateTzPreview,
+    'ha-area-assist-change':    (el) => _onHaAreaAssistToggleChange(el.checked),
+    'load-paired-devices':      loadPairedDevices,
+    'bt-scan-option-change':    _onBtScanOptionChange,
+    'upload-config':            (el) => uploadConfig(el),
+    'set-log-level':            (el) => setLogLevel(el.value),
+    'toggle-auto-refresh':      (el) => toggleAutoRefresh(el.checked),
+    // toggle event (details element)
+    'diag-toggle':              (el) => onDiagToggle(el),
+    // ——— JS-generated HTML inside app.js ———
+    // noop absorbs clicks on container wrappers so inner data-actions still fire
+    // via closest(), but clicks on container dead-space don't bubble to outer row.
+    'noop':                     () => {},
+    'toggle-artwork-preview':   (el, ev) => toggleArtworkPreview(ev, el),
+    'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
+    'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
+    'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'bt-toggle-management':     (_el, _ev, arg) => btToggleManagement(Number(arg)),
+    'bt-toggle-standby':        (_el, _ev, arg) => btToggleStandby(Number(arg)),
+    'confirm-disable-device':   (_el, _ev, arg) => confirmDisableDevice(Number(arg)),
+    'wake-device':              (_el, _ev, arg) => wakeDevice(Number(arg)),
+    'open-device-settings':     (_el, _ev, arg) => openDeviceSettings(Number(arg)),
+    'open-device-group-settings':   (_el, _ev, arg) => openDeviceGroupSettings(Number(arg)),
+    'open-device-adapter-settings': (_el, _ev, arg) => openDeviceAdapterSettings(Number(arg)),
+    'toggle-list-row':          (el, ev, arg) => {
+        // Don't toggle when the click originated on an interactive control inside the row.
+        if (ev.target && ev.target.closest('input, button, a, select, textarea, label, [data-action]:not([data-action="toggle-list-row"])')) return;
+        toggleListRow(arg);
+    },
+    'device-select':            (el) => onDeviceSelect(Number(el.getAttribute('data-dev-idx')), el.checked),
+    'volume-input':             (el) => onVolumeInput(Number(el.getAttribute('data-dev-idx')), el.value),
+    'device-pause':             (el, _ev, arg) => {
+        const btnId = el.getAttribute('data-btn-id') || el.id || undefined;
+        onDevicePause(Number(arg), btnId);
+    },
+    'mute-click':               (el, _ev, arg) => {
+        const btnId = el.getAttribute('data-btn-id') || el.id || undefined;
+        onMuteClick(Number(arg), btnId);
+    },
+    'ma-cycle-repeat':          (_el, _ev, arg) => maCycleRepeat(Number(arg)),
+    'ma-queue-cmd':             (el, _ev, arg) => {
+        const kind = el.getAttribute('data-ma-cmd');
+        maQueueCmd(kind, undefined, Number(arg));
+    },
+    'run-onboarding-assistant-action': (_el, _ev, arg) => { _runOnboardingAssistantAction(arg); return false; },
+    'go-to-adapters':           () => { _goToAdapters(); return false; },
+    'go-to-devices-and-scan':   () => { _goToDevicesAndScan(); return false; },
+    'retry-backend-status':     () => { _retryBackendStatus(); return false; },
+    'run-encoded-operator-guidance-action': (_el, _ev, arg) => { _runEncodedOperatorGuidanceAction(arg); return false; },
+    'toggle-onboarding-assistant': () => { _toggleOnboardingAssistant(); return false; },
+    'dismiss-guidance':         (_el, _ev, arg) => { _dismissGuidance(arg); return false; },
+    'set-recovery-timeline-level':       (el) => { _setRecoveryTimelineLevel(el.value); return false; },
+    'set-recovery-timeline-source-type': (el) => { _setRecoveryTimelineSourceType(el.value); return false; },
+    'set-recovery-timeline-source':      (el) => { _setRecoveryTimelineSource(el.value); return false; },
+    'set-recovery-timeline-limit':       (el) => { _setRecoveryTimelineLimit(el.value); return false; },
+    'set-recovery-timeline-advanced':    (el) => _setRecoveryTimelineAdvanced(el.open),
+    'focus-diagnostics-section': (_el, _ev, arg) => { focusDiagnosticsSection(arg); return false; },
+    'run-diagnostics-config-jump': (_el, _ev, arg) => { runDiagnosticsConfigJump(arg); return false; },
+    'copy-diagnostics-section':  (el, _ev, arg) => { copyDiagnosticsSection(arg, el.getAttribute('data-diag-label') || ''); return false; },
+    'download-recovery-timeline': () => { _downloadRecoveryTimeline(); return false; },
+    'apply-latency-preset':      (_el, _ev, arg) => { _applyLatencyPreset(JSON.parse(arg)); return false; },
+    'copy-device-support-info':  (_el, _ev, arg) => _copyDeviceSupportInfo(arg),
+    'toggle-diag-mode':          _toggleDiagMode,
+    'filter-diag-speakers':      (el) => _filterDiagSpeakers(el.value),
+    'reload-diagnostics':        reloadDiagnostics,
+    'download-diagnostics':      downloadDiagnostics,
+    'copy-diag-summary':         _copyDiagSummary,
+    'open-bug-report-ctx':       (el, ev) => {
+        const ctx = {
+            device: el.getAttribute('data-bug-report-device') || '',
+            issue:  el.getAttribute('data-bug-report-issue') || '',
+        };
+        _openBugReport(ev, ctx);
+        return false;
+    },
+};
+
+function _dispatchAction(eventName) {
+    return function(ev) {
+        const el = ev.target.closest('[data-action]');
+        if (!el) return;
+        const expected = el.getAttribute('data-event') || 'click';
+        if (expected !== eventName) return;
+        const name = el.getAttribute('data-action');
+        const fn = _ACTION_REGISTRY[name];
+        if (!fn) { console.warn('Unknown data-action:', name); return; }
+        const arg = el.getAttribute('data-arg');
+        const result = fn(el, ev, arg);
+        if (result === false) ev.preventDefault();
+    };
+}
+
+document.addEventListener('click',  _dispatchAction('click'));
+document.addEventListener('change', _dispatchAction('change'));
+document.addEventListener('input',  _dispatchAction('input'));
+// Keydown uses a distinct attribute so a single element can have both click and keydown actions.
+document.addEventListener('keydown', function(ev) {
+    const el = ev.target.closest('[data-keydown-action]');
+    if (!el) return;
+    const name = el.getAttribute('data-keydown-action');
+    const fn = _ACTION_REGISTRY[name];
+    if (!fn) { console.warn('Unknown data-keydown-action:', name); return; }
+    fn(el, ev, el.getAttribute('data-arg'));
+});
+// `toggle` doesn't bubble — capture at the document so it works for both
+// statically-rendered and dynamically-inserted elements.
+document.addEventListener('toggle', function(ev) {
+    const el = ev.target;
+    if (!el || !el.getAttribute) return;
+    if (el.getAttribute('data-event') !== 'toggle') return;
+    const name = el.getAttribute('data-action');
+    if (!name) return;
+    const fn = _ACTION_REGISTRY[name];
+    if (!fn) { console.warn('Unknown data-action:', name); return; }
+    const arg = el.getAttribute('data-arg');
+    fn(el, ev, arg);
+}, true);
