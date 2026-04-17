@@ -5433,13 +5433,22 @@ function rebuildAdapterDropdowns() {
 
 function btAdapterOptions(selected) {
     var opts = '<option value="">default</option>';
+    // ``selected`` may be an adapter id (``hci0``) or the controller MAC —
+    // the post-scan "Add & pair" path passes the MAC it learned from
+    // bluetoothctl, while the saved-config path passes ``hciN``. Match
+    // against both so the adapter the device actually paired with is
+    // pre-selected in the new row.
+    var selectedNorm = String(selected || '').trim();
+    var selectedMacNorm = _normalizeDeviceMac(selected);
     btAdapters.forEach(function(a) {
         var primary = a.customName || a.name || a.id;
         var label = primary === a.id
             ? a.id + (a.mac ? ' \u2014 ' + a.mac : '')
             : primary + ' \u2014 ' + a.id + (a.mac ? ' \u00b7 ' + a.mac : '');
+        var isSelected = selectedNorm === a.id ||
+            (selectedMacNorm && a.mac && _normalizeDeviceMac(a.mac) === selectedMacNorm);
         opts += '<option value="' + a.id + '"' +
-            (selected === a.id ? ' selected' : '') + '>' + label + '</option>';
+            (isSelected ? ' selected' : '') + '>' + label + '</option>';
     });
     return opts;
 }

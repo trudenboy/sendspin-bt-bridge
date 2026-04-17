@@ -1100,6 +1100,7 @@ def api_bt_pair_new_result(job_id: str):
 
 def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
     """Run pair + trust via bluetoothctl for a device not yet in config."""
+    adapter = _resolve_adapter_to_mac(adapter)
     try:
         cleanup_cmds: list[str] = []
         if adapter:
