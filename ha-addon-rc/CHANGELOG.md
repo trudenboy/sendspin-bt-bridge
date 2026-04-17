@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0-rc.5] - 2026-04-17
+
+### Fixed
+- **"Add & Pair" now remembers the adapter the scan used** — after a successful post-scan pair, the new fleet row was rendered with `adapter = default` instead of the controller the pairing actually ran against, so the next restart re-pointed the bond at whichever radio BlueZ happened to consider default. Two layered bugs: (a) the frontend `btAdapterOptions` compared the scan-supplied controller MAC against `a.id` (always `hciN`) and never matched, leaving the `<select>` on "default"; (b) the backend `_run_standalone_pair` passed the raw adapter (`hci0`/`hci1` from the scan result) straight to `bluetoothctl select`, which HAOS and LXC reject with `Controller hci1 not available`, so the pair itself silently ran on the default radio. The dropdown now matches against both `a.id` and `a.mac`, and the pair backend resolves `hciN` → MAC via `_resolve_adapter_to_mac` before any `select` — matching the reset/reconnect fix from rc.4
+- **BT Info modal shows only the MAC for devices on the non-default controller** — `/api/bt/info` ran `bluetoothctl info <mac>` with no `select`, so on HAOS / LXC with two adapters (`hci0` + `hci1`) the query went to the BlueZ default. Bonds living on the non-default radio (Yandex mini 2 on `hci1` in prod) returned `Device … not available`, so every field except the MAC was empty in the modal. The helper now accepts an adapter (resolving `hciN` → controller MAC), and both UI call sites forward it — the fleet row reads `.bt-adapter`, the "Already paired" list passes `d.adapters[0]`. When the caller can't supply an adapter, the helper probes every controller in turn and returns the first response with real device fields, so legacy call sites still work
+
 ## [2.58.0-rc.4] - 2026-04-17
 
 ### Fixed
