@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0-rc.4] - 2026-04-17
+
+### Fixed
+- **Reset & Reconnect now honours the adapter the device is bonded with** — the `/api/bt/reset_reconnect` backend has always threaded `select <adapter>` through the `remove`, power-cycle, and `pair`/`trust`/`connect` bluetoothctl sessions, but both UI call sites (the configured-fleet row and the "Already paired" list) were calling `resetAndReconnect` without an adapter. On hosts with more than one controller (e.g. `hci0`+`hci1` on the production HAOS VM) the full reset sequence therefore ran against the BlueZ default controller, so bonds living on a non-default radio could never be rebuilt through the UI. The fleet row now reads the adapter from its `<select>`; the paired list passes `d.adapters[0]`
+- **"Already paired" list no longer lists ghost devices** — interactive `bluetoothctl` interleaves async discovery notifications (`[CHG] Device <mac> RSSI: …`, `[NEW]/[DEL] Device …`, `[CHG] Device <mac> ManufacturerData.*`) into the same stdout we pipe `devices Paired` through, so the parser was picking up every nearby BLE beacon and showing it as "paired" even when `bluetoothctl info` reported `Paired: no`. `_parse_paired_stdout` now strips the bluetoothctl prompt echo and accepts only bare `Device <mac> <name>` lines; anything behind a `[CHG]`/`[NEW]`/`[DEL]` bracket is treated as noise
+
 ## [2.58.0-rc.3] - 2026-04-17
 
 ### Added

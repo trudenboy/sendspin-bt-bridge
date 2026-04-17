@@ -270,13 +270,29 @@ def api_bt_adapters():
 def _parse_paired_stdout(stdout: str) -> "list[tuple[str, str]]":
     """Extract ``(mac, name)`` pairs from bluetoothctl ``devices [Paired]`` output.
 
+    Interactive ``bluetoothctl`` interleaves async discovery notifications
+    (``[CHG] Device <mac> RSSI: …``, ``[NEW]/[DEL] Device …``, ``[CHG]
+    Device <mac> ManufacturerData.*``) on the same stdout we are parsing.
+    Only lines that begin with a bare ``Device <mac> <rest>`` token — after
+    stripping ANSI colour codes and any leading prompt echo — are genuine
+    responses to ``devices Paired``; everything else is noise.  Without
+    this discrimination the Already-Paired list contained ghost rows
+    whose ``bluetoothctl info`` actually reported ``Paired: no``.
+
     Names that look like MAC-as-name (``AA:BB:…`` / ``AA-BB-…``) are normalized
     to an empty string so downstream filters can treat them as unnamed.
     """
     results: list[tuple[str, str]] = []
     for line in stdout.splitlines():
         clean = _ANSI_RE.sub("", line)
-        m = _DEV_PAT.search(clean)
+        # Strip any leading prompt echo like ``[ENEBY20]> ``. Anchored so
+        # bracket-prefixed async notifications (``[CHG] ``/``[NEW] ``/
+        # ``[DEL] ``) survive and fail the ``startswith("Device ")`` check
+        # below.
+        stripped = re.sub(r"^\[[^\]]+\]>\s*", "", clean).lstrip()
+        if not stripped.startswith("Device "):
+            continue
+        m = _DEV_PAT.match(stripped)
         if not m:
             continue
         mac = m.group(1).upper()

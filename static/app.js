@@ -5580,11 +5580,13 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         event.stopPropagation();
         var rowMac = row.querySelector('.bt-mac').value.trim().toUpperCase();
         var rowName = row.querySelector('.bt-name').value.trim();
+        var adapterSel = row.querySelector('.bt-adapter');
+        var rowAdapter = adapterSel ? (adapterSel.value || '').trim() : '';
         if (!rowMac) {
             showToast('Set a device MAC address first', 'error');
             return;
         }
-        resetAndReconnect(rowMac, rowName, this);
+        resetAndReconnect(rowMac, rowName, this, rowAdapter);
     });
     row.querySelector('.bt-device-action-open').addEventListener('click', function(event) {
         event.preventDefault();
@@ -6561,15 +6563,17 @@ async function removePairedDevice(mac, name, rowEl) {
     } catch (_) {}
 }
 
-async function resetAndReconnect(mac, name, btnEl) {
+async function resetAndReconnect(mac, name, btnEl, adapter) {
     if (!confirm('Reset & Reconnect "' + (name || mac) + '"?\n\nThis will:\n1. Remove device from BT stack\n2. Power cycle adapter\n3. Re-pair + trust + connect (~30 s)\n\nPut the device in pairing mode, then click OK.')) return;
     var origText = btnEl.textContent;
     _setScanActionState(btnEl, 'pairing', 'Resetting\u2026');
     try {
+        var body = {mac: mac};
+        if (adapter) body.adapter = adapter;
         var resp = await fetch(API_BASE + '/api/bt/reset_reconnect', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({mac: mac})
+            body: JSON.stringify(body)
         });
         var data = await resp.json();
         if (!data.job_id) throw new Error(data.error || 'No job_id');
@@ -6762,7 +6766,8 @@ async function loadPairedDevices(options) {
             });
             row.querySelector('.paired-reset-btn').addEventListener('click', function(e) {
                 e.stopPropagation();
-                resetAndReconnect(d.mac, d.name, this);
+                var pairedAdapter = Array.isArray(d.adapters) && d.adapters.length ? d.adapters[0] : '';
+                resetAndReconnect(d.mac, d.name, this, pairedAdapter);
             });
             row.querySelector('.paired-info-btn').addEventListener('click', function(e) {
                 e.stopPropagation();
