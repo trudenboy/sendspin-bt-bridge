@@ -33,6 +33,39 @@ def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code
     assert "loginctl enable-linger" in joined_actions
 
 
+def test_onboarding_audio_unreachable_without_refused_error_skips_linger_reason_code():
+    """Regression guard for PR-review concern: if the probe fails with an error
+    that is *not* connection-refused (e.g. permission denied, protocol error),
+    the audio OnboardingCheck must not claim the linger remediation applies.
+    ``reason_code=pa_socket_refused`` is specifically how operator_guidance
+    routes to the "enable-linger" issue group — misrouting other audio
+    failures would send operators down a useless diagnostic path.
+    """
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {
+                "system": "unreachable",
+                "sinks": 0,
+                "socket": "unix:/run/user/1000/pulse/native",
+                "socket_exists": True,
+                "socket_reachable": False,
+                "last_error": "Permission denied",
+            },
+            "bluetooth": {"controller": True, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    audio = next(check for check in snapshot.checks if check.key == "audio")
+    assert audio.status == "error"
+    assert audio.details.get("reason_code") != "pa_socket_refused"
+    joined_actions = " ".join(audio.actions)
+    assert "loginctl enable-linger" not in joined_actions
+
+
 def test_onboarding_assistant_reports_missing_prerequisites():
     snapshot = build_onboarding_assistant_snapshot(
         config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
