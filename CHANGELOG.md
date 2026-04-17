@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0-rc.3] - 2026-04-17
+
+### Added
+- **Targeted "enable-linger" hint for headless PipeWire** — preflight audio probe now distinguishes "socket path not mounted" from "socket mounted but server refused the connection". The latter (classic headless Docker/LXC where the user-session PipeWire stopped once SSH disconnected) surfaces a dedicated operator-guidance issue **"Audio server unreachable — enable user lingering"** with the exact fix (`sudo loginctl enable-linger <user>` + reboot) and a link to the docs. The linger hint is gated by `is_ha_addon_runtime()` so HA add-on users — where Supervisor owns audio — still see the generic guidance (fixes #151)
+
 ## [2.58.0-rc.2] - 2026-04-17
 
 ### Added
