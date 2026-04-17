@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.0] - 2026-04-17
+
+Stable rollup of the rc.1 → rc.2 series. Headline themes: **operational
+resilience** for PulseAudio and port-collision failure modes surfaced on
+Raspberry Pi 4 / pipewire-pulse deployments, and a **CSP nonce-only
+migration** completing the hardening tracked as a known issue in 2.58.0.
+
+### Security
+- **CSP `script-src` is nonce-only** — `'unsafe-inline'` dropped. Every inline
+  `on*=` handler in Jinja templates and HTML strings produced by
+  `static/app.js` migrated to a delegated dispatcher keyed on `data-action` /
+  `data-arg`. Non-bubbling `<details>` toggle events handled via capture-phase
+  listener to cover dynamically inserted DOM. Regression test scans shipped
+  templates and `app.js` so future PRs can't reintroduce inline handlers.
+
+### Added
+- **`services/port_bind_probe.py`** — `is_port_available()` +
+  `find_available_bind_port()` host-side TCP bind probe (SO_REUSEADDR only).
+  `DEFAULT_MAX_ATTEMPTS=10`.
+- **Port auto-shift on EADDRINUSE** — `SendspinClient._start_sendspin_inner`
+  preflights the listen port before spawning the daemon subprocess; on
+  collision auto-shifts within `DEFAULT_MAX_ATTEMPTS` and records
+  `port_collision: True` + `active_listen_port` on device status. After 5
+  consecutive bind failures the restart loop halts (with an `lsof -i :<port>`
+  hint); halt state auto-clears once the daemon is observed alive.
+- **Preflight port-collision warning** at orchestrator startup
+  (`bridge_orchestrator.py`).
+- **EADDRINUSE stderr classifier** — `services/subprocess_stderr.py` detects
+  `errno 98` / `address already in use` / `eaddrinuse` and extracts the port
+  (1–65535) so the surfaced hint names the actual port.
+
+### Fixed
+- **#156 — SinkMonitor log flood**: `services/sink_monitor.py` now diagnoses
+  the PA connection failure (`socket-missing` / `permission-denied` /
+  `server-not-listening` / `protocol-error` / `unknown`) with an actionable
+  hint on the first WARNING, demotes subsequent attempts to DEBUG, and
+  self-disables after 3 consecutive initial failures so callers fall back to
+  daemon-flag idle detection. Post-success transients use exponential backoff
+  5→10→20→40→60s. `start()` resets state so the monitor can be revived after
+  the operator fixes PA.
+- **#157 — daemon crash on port collision**: see "Port auto-shift" above.
+
+### Notes
+- `find_available_bind_port()` is called with `host="0.0.0.0"` (wildcard) to
+  match the daemon's actual bind behaviour — the subprocess receives only
+  `listen_port` (no `listen_host`), so probing a specific interface would miss
+  collisions on other interfaces.
+
 ## [2.59.0-rc.2] - 2026-04-17
 
 Second review round on top of rc.1. Feedback from Copilot on PR #158:
