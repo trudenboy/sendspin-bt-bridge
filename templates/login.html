@@ -318,7 +318,7 @@
                     data-method="ha_via_ma" role="tab"
                     aria-selected="{{ 'true' if auth_methods[0] == 'ha_via_ma' else 'false' }}"
                     aria-controls="method-ha_via_ma" title="Home Assistant via Music Assistant"
-                    onclick="return switchMethod(event, 'ha_via_ma')">HA via MA</button>
+                    data-action="switch-method" data-arg="ha_via_ma">HA via MA</button>
             {% endif %}
             {% if "ma" in auth_methods %}
             <button type="button" id="login-tab-ma"
@@ -326,7 +326,7 @@
                     data-method="ma" role="tab"
                     aria-selected="{{ 'true' if auth_methods[0] == 'ma' else 'false' }}"
                     aria-controls="method-ma"
-                    onclick="return switchMethod(event, 'ma')">Music Assistant</button>
+                    data-action="switch-method" data-arg="ma">Music Assistant</button>
             {% endif %}
             {% if "ha" in auth_methods %}
             <button type="button" id="login-tab-ha"
@@ -334,7 +334,7 @@
                     data-method="ha" role="tab"
                     aria-selected="{{ 'true' if auth_methods[0] == 'ha' else 'false' }}"
                     aria-controls="method-ha"
-                    onclick="return switchMethod(event, 'ha')">Home Assistant</button>
+                    data-action="switch-method" data-arg="ha">Home Assistant</button>
             {% endif %}
             {% if "password" in auth_methods %}
             <button type="button" id="login-tab-password"
@@ -342,7 +342,7 @@
                     data-method="password" role="tab"
                     aria-selected="{{ 'true' if auth_methods[0] == 'password' else 'false' }}"
                     aria-controls="method-password"
-                    onclick="return switchMethod(event, 'password')">Password</button>
+                    data-action="switch-method" data-arg="password">Password</button>
             {% endif %}
         </div>
         {% endif %}
@@ -362,7 +362,7 @@
                 <label>Password</label>
                 <div class="login-password-wrap">
                     <input type="password" name="password" autocomplete="current-password" required>
-                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                    <button type="button" class="login-eye-toggle" data-action="toggle-password-visibility" title="Show password" aria-label="Show password">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
                 </div>
@@ -386,7 +386,7 @@
                 <label>Password</label>
                 <div class="login-password-wrap">
                     <input type="password" name="password" autocomplete="current-password" required>
-                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                    <button type="button" class="login-eye-toggle" data-action="toggle-password-visibility" title="Show password" aria-label="Show password">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
                 </div>
@@ -410,7 +410,7 @@
                 <label>Password</label>
                 <div class="login-password-wrap">
                     <input type="password" name="password" autocomplete="current-password" required>
-                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                    <button type="button" class="login-eye-toggle" data-action="toggle-password-visibility" title="Show password" aria-label="Show password">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
                 </div>
@@ -430,7 +430,7 @@
                 <div class="login-password-wrap">
                     <input type="password" name="password" autocomplete="current-password" required
                     {% if auth_methods[0] == 'password' %}autofocus{% endif %}>
-                    <button type="button" class="login-eye-toggle" onclick="togglePasswordVisibility(this)" title="Show password" aria-label="Show password">
+                    <button type="button" class="login-eye-toggle" data-action="toggle-password-visibility" title="Show password" aria-label="Show password">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
                 </div>
@@ -484,6 +484,16 @@ document.querySelectorAll('.login-form').forEach(function(form) {
         var btn = form.querySelector('.login-submit');
         if (btn) btn.classList.add('loading');
     });
+});
+
+// CSP-safe delegation (login page is self-contained — app.js is not loaded here).
+document.addEventListener('click', function(ev) {
+    var el = ev.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    var arg = el.getAttribute('data-arg');
+    if (action === 'switch-method') { switchMethod(ev, arg); ev.preventDefault(); }
+    else if (action === 'toggle-password-visibility') { togglePasswordVisibility(el); }
 });
 </script>
 </body>

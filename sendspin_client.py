@@ -41,6 +41,7 @@ from services.ipc_protocol import (
 )
 from services.ma_artwork import build_artwork_proxy_url
 from services.playback_health import PlaybackHealthMonitor
+from services.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
 from services.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
 from services.sendspin_port_probe import probe_sendspin_port
 from services.status_event_builder import StatusEventBuilder
@@ -50,6 +51,11 @@ from services.subprocess_stderr import SubprocessStderrService
 from services.subprocess_stop import SubprocessStopService
 
 UTC = timezone.utc
+
+# Maximum consecutive bind failures (all ports in scan range taken) before the
+# restart loop halts. At that point the collision is no longer transient and
+# further attempts only spam logs — user must intervene (`lsof -i :<port>`).
+_MAX_BIND_FAILURES = 5
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -248,6 +254,8 @@ class DeviceStatus:
     bt_waking: bool = False
     bt_power_save: bool = False
     idle_mode: str = "default"
+    port_collision: bool = False
+    active_listen_port: int | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -427,6 +435,8 @@ class SendspinClient:
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
+        self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
+        self._restart_halted: bool = False  # once True, restart loop skips spawning
 
     @property
     def _playing_since(self) -> float | None:
@@ -1036,7 +1046,9 @@ class SendspinClient:
                         self._daemon_proc = None
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
-                        if not self.bt_manager or self.bt_manager.connected:
+                        if self._restart_halted:
+                            await asyncio.sleep(self._restart_delay)
+                        elif not self.bt_manager or self.bt_manager.connected:
                             logger.warning(
                                 "Daemon subprocess died unexpectedly, restarting in %.0fs...",
                                 self._restart_delay,
@@ -1048,8 +1060,12 @@ class SendspinClient:
                             self._restart_delay = 1.0  # reset when BT drives the restart
                             logger.info("Daemon subprocess stopped; waiting for BT to reconnect")
                     else:
-                        # Daemon alive — reset backoff
+                        # Daemon alive — reset backoff + bind-failure state
                         self._restart_delay = 1.0
+                        if self._bind_failures:
+                            self._bind_failures = 0
+                        if self._restart_halted:
+                            self._restart_halted = False
 
                 # Zombie playback watchdog: playing=True but no audio data for too long
                 self._check_zombie_playback()
@@ -1195,6 +1211,53 @@ class SendspinClient:
                 logger.info(
                     "Starting Sendspin player '%s' with auto-discovery (port %s)", self.player_name, self.listen_port
                 )
+
+            # Host-side bind preflight: aiosendspin's ClientListener (aiohttp
+            # TCPSite) does not auto-shift on EADDRINUSE, so a stale process
+            # holding our port would crash the daemon on every restart cycle.
+            # Probe the wildcard interface ("0.0.0.0") because the daemon
+            # subprocess receives only listen_port in params — its listener
+            # binds wildcard by default, so probing a specific listen_host
+            # would miss collisions on other interfaces.
+            requested_port = int(self.listen_port)
+            available_port = find_available_bind_port(requested_port, host="0.0.0.0", max_attempts=DEFAULT_MAX_ATTEMPTS)
+            if available_port is None:
+                self._bind_failures += 1
+                hint = (
+                    f"Cannot bind any port in range "
+                    f"{requested_port}-{requested_port + DEFAULT_MAX_ATTEMPTS - 1}. "
+                    f"Run 'lsof -i :{requested_port}' on the host to find the owner."
+                )
+                logger.error("[%s] %s", self.player_name, hint)
+                self._update_status(
+                    {
+                        "last_error": hint,
+                        "last_error_at": datetime.now(tz=UTC).isoformat(),
+                        "port_collision": True,
+                    }
+                )
+                if self._bind_failures >= _MAX_BIND_FAILURES:
+                    logger.error(
+                        "[%s] %d consecutive bind failures — halting restart loop",
+                        self.player_name,
+                        self._bind_failures,
+                    )
+                    self._restart_halted = True
+                return
+            if available_port != requested_port:
+                logger.info(
+                    "[%s] listen_port %d unavailable — auto-shifted to %d",
+                    self.player_name,
+                    requested_port,
+                    available_port,
+                )
+                self._update_status({"port_collision": True, "active_listen_port": available_port})
+            else:
+                # Clean start — clear any stale collision flag from a prior cycle
+                # so the UI does not show a permanent "port_collision" indicator.
+                if self.status.get("port_collision") or self.status.get("active_listen_port") is not None:
+                    self._update_status({"port_collision": False, "active_listen_port": None})
+            self.listen_port = available_port
 
             params = json.dumps(
                 with_protocol_version(

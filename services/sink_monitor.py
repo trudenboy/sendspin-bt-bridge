@@ -5,16 +5,29 @@ Subscribes to PA sink events via ``pulsectl_asyncio`` and tracks
 Runs in the parent process on the main asyncio event loop — one subscription
 covers all devices.
 
-When pulsectl is unavailable the monitor degrades gracefully: ``start()``
-becomes a no-op and ``available`` stays ``False`` so callers can fall back
-to daemon-flag-based idle detection.
+When pulsectl is unavailable (import-time failure) the monitor degrades
+gracefully: ``start()`` becomes a no-op and ``available`` stays ``False``.
+
+At runtime, if the PA socket cannot be reached (pipewire-pulse without
+compat socket, UID mismatch, missing mount, ...) the monitor logs one
+diagnostic WARNING on the first failure, a second WARNING after
+``_INITIAL_FAILURE_THRESHOLD`` consecutive failures, then self-disables
+by returning from ``_monitor_loop`` — so ``available`` becomes ``False``
+and callers fall back to daemon-flag idle detection. A manual ``start()``
+(typically via bridge restart) is required to retry.
+
+If at least one successful connect occurred, transient disconnects use
+exponential backoff (5 → 10 → 20 → 40 → 60s cap) and demote repeat
+WARNINGs to DEBUG to avoid log flood.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import errno
 import logging
+import os
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -39,7 +52,56 @@ _PA_SINK_SUSPENDED = 2
 # Regex: extract the 17-char underscore-delimited MAC from a bluez sink name.
 _BLUEZ_MAC_RE = re.compile(r"^bluez_(?:sink|output)\.([0-9A-Fa-f]{2}(?:_[0-9A-Fa-f]{2}){5})")
 
-_RECONNECT_DELAY = 5.0  # seconds between PA reconnect attempts
+# Reconnect tuning. Public for tests.
+_INITIAL_FAILURE_THRESHOLD = 3
+_BACKOFF_BASE = 5.0
+_BACKOFF_MAX = 60.0
+_BACKOFF_FACTOR = 2.0
+
+
+def _describe_pa_failure(exc: BaseException) -> tuple[str, str]:
+    """Classify a PA connection failure and produce an actionable hint.
+
+    Returns ``(label, hint)`` where *label* is a short machine-friendly tag
+    and *hint* describes how to fix the most likely root cause.
+    """
+    pulse_server = os.environ.get("PULSE_SERVER") or "<unset>"
+    xdg_runtime = os.environ.get("XDG_RUNTIME_DIR") or "<unset>"
+    uid = os.getuid() if hasattr(os, "getuid") else -1
+
+    if isinstance(exc, FileNotFoundError):
+        return (
+            "socket-missing",
+            f"PulseAudio socket not found (PULSE_SERVER={pulse_server}). "
+            "Check docker-compose volume mounts for /run/user/<uid>/pulse/native "
+            "or the pipewire-pulse socket path.",
+        )
+    if isinstance(exc, PermissionError):
+        return (
+            "permission-denied",
+            f"Cannot access PulseAudio socket (container UID={uid}, "
+            f"PULSE_SERVER={pulse_server}). Set AUDIO_UID in docker-compose.yml "
+            "to match the host audio user, or fix socket permissions.",
+        )
+    if isinstance(exc, ConnectionRefusedError):
+        return (
+            "server-not-listening",
+            f"PulseAudio server refused connection (PULSE_SERVER={pulse_server}, "
+            f"XDG_RUNTIME_DIR={xdg_runtime}). Verify 'pactl info' works from inside "
+            "the container and that the audio backend is running.",
+        )
+    if isinstance(exc, OSError) and exc.errno in (errno.ECONNRESET, errno.EPIPE):
+        return (
+            "protocol-error",
+            f"PulseAudio protocol error (errno={exc.errno}). Likely libpulse / "
+            "pipewire-pulse version mismatch — try upgrading the host audio stack.",
+        )
+    return (
+        "unknown",
+        f"PulseAudio connection failed ({type(exc).__name__}: {exc}). "
+        f"PULSE_SERVER={pulse_server}, XDG_RUNTIME_DIR={xdg_runtime}, UID={uid}. "
+        "Check pactl connectivity from inside the container.",
+    )
 
 
 def extract_mac_from_sink(sink_name: str) -> str | None:
@@ -79,6 +141,9 @@ class SinkMonitor:
         self._sink_states: dict[str, str] = {}  # sink_name → "running"|"idle"|"suspended"
         self._sink_index_to_name: dict[int, str] = {}  # PA index → sink_name
         self._task: asyncio.Task[None] | None = None
+        self._consecutive_connect_failures: int = 0
+        self._ever_connected: bool = False
+        self._transient_warning_logged: bool = False
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -136,6 +201,10 @@ class SinkMonitor:
             return
         if self._task is not None:
             return
+        # Reset initial-failure bookkeeping so a retry after self-disable
+        # gets a fresh window instead of tripping the threshold immediately.
+        self._consecutive_connect_failures = 0
+        self._transient_warning_logged = False
         self._task = asyncio.create_task(self._monitor_loop())
 
     async def stop(self) -> None:
@@ -151,11 +220,17 @@ class SinkMonitor:
     # ── Event loop ────────────────────────────────────────────────────
 
     async def _monitor_loop(self) -> None:
-        """Persistent subscribe loop with automatic reconnect."""
+        """Persistent subscribe loop with diagnose-then-disable on boot failures."""
+        current_backoff = _BACKOFF_BASE
         while True:
             try:
                 async with pulsectl_asyncio.PulseAsync("sendspin-sink-monitor") as pulse:
                     logger.info("SinkMonitor: connected to PulseAudio — subscribing to sink events")
+                    # Reset failure state on a successful connect.
+                    self._ever_connected = True
+                    self._consecutive_connect_failures = 0
+                    self._transient_warning_logged = False
+                    current_backoff = _BACKOFF_BASE
                     # Scan existing sinks to populate _sink_states before
                     # subscribing — avoids stale cache after PA reconnect and
                     # ensures register() dispatches correctly on first call.
@@ -169,13 +244,60 @@ class SinkMonitor:
             except asyncio.CancelledError:
                 return
             except Exception as exc:
-                logger.warning(
-                    "SinkMonitor: PA connection lost (%s) — reconnecting in %.0fs",
-                    exc,
-                    _RECONNECT_DELAY,
-                )
                 self._sink_index_to_name.clear()
-                await asyncio.sleep(_RECONNECT_DELAY)
+                label, hint = _describe_pa_failure(exc)
+
+                if not self._ever_connected:
+                    # Never connected — diagnose first, then self-disable after
+                    # threshold failures so callers fall back via `available`.
+                    self._consecutive_connect_failures += 1
+                    if self._consecutive_connect_failures == 1:
+                        logger.warning(
+                            "SinkMonitor: cannot connect to PulseAudio [%s] — %s",
+                            label,
+                            hint,
+                        )
+                    else:
+                        logger.debug(
+                            "SinkMonitor: connect attempt %d failed [%s]: %s",
+                            self._consecutive_connect_failures,
+                            label,
+                            exc,
+                        )
+                    if self._consecutive_connect_failures >= _INITIAL_FAILURE_THRESHOLD:
+                        logger.warning(
+                            "SinkMonitor disabled after %d connect failures "
+                            "(root cause: %s). Daemon-flag idle detection will "
+                            "be used as fallback. Fix hint: %s",
+                            self._consecutive_connect_failures,
+                            label,
+                            hint,
+                        )
+                        # Clear the handle so a caller can re-invoke start()
+                        # after fixing the underlying PA setup without having
+                        # to reconstruct the SinkMonitor instance.
+                        self._task = None
+                        return
+                    await asyncio.sleep(_BACKOFF_BASE)
+                else:
+                    # Previously-healthy connection dropped — reconnect with
+                    # exponential backoff and demote repeat logs to DEBUG.
+                    if not self._transient_warning_logged:
+                        logger.warning(
+                            "SinkMonitor: PA connection lost [%s] — %s. Reconnecting with exponential backoff.",
+                            label,
+                            hint,
+                        )
+                        self._transient_warning_logged = True
+                    else:
+                        logger.debug(
+                            "SinkMonitor: reconnect attempt failed [%s]: %s (next delay %.0fs)",
+                            label,
+                            exc,
+                            current_backoff,
+                        )
+                    await asyncio.sleep(current_backoff)
+                    current_backoff = min(current_backoff * _BACKOFF_FACTOR, _BACKOFF_MAX)
 
     # ── Event handlers ────────────────────────────────────────────────
 
