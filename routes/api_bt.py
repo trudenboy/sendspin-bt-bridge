@@ -267,33 +267,76 @@ def api_bt_adapters():
         return jsonify({"adapters": [], "error": "Failed to list adapters"}), 500
 
 
+def _parse_paired_stdout(stdout: str) -> "list[tuple[str, str]]":
+    """Extract ``(mac, name)`` pairs from bluetoothctl ``devices [Paired]`` output.
+
+    Names that look like MAC-as-name (``AA:BB:…`` / ``AA-BB-…``) are normalized
+    to an empty string so downstream filters can treat them as unnamed.
+    """
+    results: list[tuple[str, str]] = []
+    for line in stdout.splitlines():
+        clean = _ANSI_RE.sub("", line)
+        m = _DEV_PAT.search(clean)
+        if not m:
+            continue
+        mac = m.group(1).upper()
+        name = m.group(2).strip()
+        if re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
+            name = ""
+        results.append((mac, name))
+    return results
+
+
 @bt_bp.route("/api/bt/paired")
 def api_bt_paired():
-    """Return already-paired Bluetooth devices."""
+    """Return already-paired Bluetooth devices across every known adapter."""
     named_only = request.args.get("filter", "1") != "0"
     try:
-        result = subprocess.run(
-            ["bluetoothctl"],
-            input="devices\n",
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        devices = []
-        seen = set()
-        for line in result.stdout.splitlines():
-            clean = _ANSI_RE.sub("", line)
-            m = _DEV_PAT.search(clean)
-            if m:
-                mac = m.group(1).upper()
-                name = m.group(2).strip()
-                if mac not in seen:
-                    seen.add(mac)
-                    if re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                        name = ""
-                    if named_only and not name:
-                        continue
-                    devices.append({"mac": mac, "name": name or mac})
+        adapter_macs = [str(mac).upper() for mac in list_bt_adapters() if mac]
+        # ``mac -> {"name": str, "adapters": set[str]}`` — keep the first
+        # non-empty name we encounter, but merge adapter memberships.
+        merged: dict[str, dict] = {}
+
+        def _ingest(pairs: "list[tuple[str, str]]", adapter_mac: str = "") -> None:
+            for mac, name in pairs:
+                entry = merged.setdefault(mac, {"name": "", "adapters": set()})
+                if name and not entry["name"]:
+                    entry["name"] = name
+                if adapter_mac:
+                    entry["adapters"].add(adapter_mac)
+
+        if adapter_macs:
+            for adapter in adapter_macs:
+                res = subprocess.run(
+                    ["bluetoothctl"],
+                    input=f"select {adapter}\ndevices Paired\n",
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                _ingest(_parse_paired_stdout(res.stdout), adapter)
+        else:
+            res = subprocess.run(
+                ["bluetoothctl"],
+                input="devices\n",
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            _ingest(_parse_paired_stdout(res.stdout))
+
+        devices: list[dict] = []
+        for mac, entry in merged.items():
+            name = entry["name"]
+            if named_only and not name:
+                continue
+            devices.append(
+                {
+                    "mac": mac,
+                    "name": name or mac,
+                    "adapters": sorted(entry["adapters"]),
+                }
+            )
         # Bridge devices first, then others; alphabetically within each group
         cfg = load_config()
         bridge_macs = {d.get("mac", "").upper() for d in cfg.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
@@ -306,12 +349,30 @@ def api_bt_paired():
 
 @bt_bp.route("/api/bt/remove", methods=["POST"])
 def api_bt_remove():
-    """Remove (unpair) a device from the BlueZ stack."""
+    """Remove (unpair) a device from the BlueZ stack.
+
+    Optional ``adapter_mac`` targets a specific controller; when omitted we
+    iterate every known adapter so bonds living on a non-default controller
+    are cleaned up too.  Falls back to the default controller when no
+    adapters are reported.
+    """
     data = request.get_json(silent=True) or {}
     mac = (data.get("mac") or "").strip().upper()
     if not validate_mac(mac):
         return jsonify({"error": "Invalid MAC address"}), 400
-    _bt_remove_device(mac)
+    adapter_mac_raw = (data.get("adapter_mac") or "").strip().upper()
+    if adapter_mac_raw and not validate_mac(adapter_mac_raw):
+        return jsonify({"error": "Invalid adapter MAC"}), 400
+
+    if adapter_mac_raw:
+        _bt_remove_device(mac, adapter_mac_raw)
+    else:
+        adapters = [str(a).upper() for a in list_bt_adapters() if a]
+        if adapters:
+            for adapter in adapters:
+                _bt_remove_device(mac, adapter)
+        else:
+            _bt_remove_device(mac, "")
     return jsonify({"ok": True, "mac": mac})
 
 

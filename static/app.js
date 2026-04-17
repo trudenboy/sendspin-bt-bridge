@@ -6726,12 +6726,22 @@ async function loadPairedDevices(options) {
         listDiv.innerHTML = devices.map(function(d, idx) {
             var displayName = /^RSSI:/i.test(d.name) ? 'Unknown device' : d.name;
             var btInfoIcon = _bluetoothIconSvg('scan-action-icon');
+            var adaptersList = Array.isArray(d.adapters) ? d.adapters : [];
+            var adapterBadges = adaptersList.map(function(aMac) {
+                var match = (btAdapters || []).find(function(a) {
+                    return _normalizeDeviceMac(a.mac) === _normalizeDeviceMac(aMac);
+                });
+                var label = match ? (match.id || match.name || aMac) : aMac;
+                return '<span class="paired-adapter-badge" title="' + escHtmlAttr(aMac) + '">' + escHtml(label) + '</span>';
+            }).join('');
             return '<div class="scan-result-item paired-result-item" data-paired-idx="' + idx + '" data-paired-mac="' + escHtmlAttr(_normalizeDeviceMac(d.mac)) + '">' +
                 '<span class="scan-result-actions">' +
                 '<button type="button" class="scan-action-btn scan-action-btn--primary paired-add-btn">Add to fleet</button>' +
                 '</span>' +
                 '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
-                '<span class="scan-result-name">' + escHtml(displayName) + '</span>' +
+                '<span class="scan-result-name">' + escHtml(displayName) +
+                    (adapterBadges ? ' <span class="paired-adapter-badges">' + adapterBadges + '</span>' : '') +
+                '</span>' +
                 '<span class="paired-actions" onclick="event.stopPropagation()">' +
                     '<button type="button" class="scan-action-btn paired-info-btn" title="Show Bluetooth device info">' + btInfoIcon + '<span>Info</span></button>' +
                 '<button type="button" class="scan-action-btn paired-release-btn" title="Release or reclaim BT management">Release</button>' +
