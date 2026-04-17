@@ -120,6 +120,39 @@ docker compose pull
 docker compose up -d
 ```
 
+## Bluetooth not working on fresh Raspberry Pi OS Lite
+
+Some fresh Raspberry Pi OS Lite images — Trixie in particular — ship with Bluetooth soft-blocked by `rfkill` or without `bluetoothd` enabled at boot. Symptoms: `bluetoothctl` cannot find an adapter, the web UI shows no scan results, or pairing fails with "No default controller available". Run these once before starting the bridge:
+
+```bash
+sudo rfkill unblock bluetooth
+sudo systemctl enable --now bluetooth
+```
+
+Verify:
+
+```bash
+rfkill list bluetooth          # expect: Soft blocked: no / Hard blocked: no
+systemctl is-active bluetooth  # expect: active
+bluetoothctl show              # expect: Powered: yes
+```
+
+If `bluetoothctl` still misbehaves after that — especially on a just-imaged system with no prior pairings — a full `apt` update and a reinstall of the BlueZ stack sometimes clears stale state:
+
+```bash
+sudo apt update && sudo apt full-upgrade -y
+sudo apt install --reinstall bluez bluez-firmware
+sudo systemctl restart bluetooth
+```
+
+<Aside type="tip">
+  Once the bridge is running you can scan and pair new speakers directly from the web UI (**Add → Scan → Pair**). Running `bluetoothctl pair` on the host by hand is only one option — not a requirement.
+</Aside>
+
+<Aside type="note">
+  Bluetooth A2DP sinks (`bluez_output.*` / `bluez_sink.*`) are created at the moment a speaker actually connects, not at boot. A fresh bridge install with no paired speakers yet is expected to show "no sinks found" until you add one through the UI.
+</Aside>
+
 ## Notes
 
 - `network_mode: host` is required for Bluetooth control and Music Assistant auto-discovery.
