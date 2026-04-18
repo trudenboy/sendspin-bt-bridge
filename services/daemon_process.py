@@ -466,6 +466,11 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     logger.warning("set_static_delay_ms failed: %s", exc)
             else:
                 logger.warning("set_static_delay_ms not supported by current sendspin client — value ignored")
+            # Update the daemon-level cache so a subsequent server reconnect
+            # (which re-creates _client via _create_client(self._static_delay_ms))
+            # uses the new value, not the stale ctor arg.
+            if daemon is not None:
+                daemon._static_delay_ms = delay_ms
         elif cmd.cmd == "transport":
             daemon = daemon_ref[0] if daemon_ref else None
             action = str(cmd.payload.get("action", "")).strip()

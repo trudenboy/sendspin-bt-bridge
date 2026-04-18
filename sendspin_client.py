@@ -1493,12 +1493,18 @@ class SendspinClient:
                 self.keepalive_interval = interval
                 applied.append(key)
             elif key == "keepalive_enabled":
+                # Honour the explicit flag OR'd with the current idle_mode so
+                # enabling keep_alive via either knob has the same effect.
                 self.keepalive_enabled = bool(value) or self.idle_mode == "keep_alive"
                 applied.append(key)
             elif key == "idle_mode":
                 new_mode = str(value or "default")
                 self.idle_mode = new_mode
-                self.keepalive_enabled = new_mode == "keep_alive" or self.keepalive_enabled
+                # idle_mode is the authoritative source for keepalive — switching
+                # away from keep_alive must turn keepalive off (unless the same
+                # payload also sets the legacy keepalive_enabled flag).
+                explicit_keepalive = bool(fields_payload.get("keepalive_enabled", False))
+                self.keepalive_enabled = new_mode == "keep_alive" or explicit_keepalive
                 self._update_status({"idle_mode": new_mode})
                 applied.append(key)
             elif key in self._RECONFIG_PARENT_ONLY_FIELDS:
@@ -1554,6 +1560,14 @@ class SendspinClient:
         for hot_key in self._RECONFIG_PARENT_ONLY_FIELDS:
             if hot_key in device and hasattr(self, hot_key):
                 setattr(self, hot_key, device[hot_key])
+        # Re-derive keepalive_enabled from the new idle_mode + explicit legacy
+        # flag, mirroring SendspinClient.__init__.  Without this, a warm restart
+        # that changes idle_mode away from keep_alive would leave keepalive
+        # permanently on (the setattr loop copies the stale parent-side value).
+        if "idle_mode" in device or "keepalive_enabled" in device:
+            mode_for_keepalive = str(device.get("idle_mode", self.idle_mode) or "default")
+            explicit_flag = bool(device.get("keepalive_enabled", False))
+            self.keepalive_enabled = mode_for_keepalive == "keep_alive" or explicit_flag
         # Refresh status mirror so the UI reflects renames / idle mode change
         # immediately, without waiting for the subprocess to emit.
         self._update_status(

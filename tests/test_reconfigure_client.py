@@ -108,6 +108,33 @@ async def test_apply_hot_config_multiple_fields_in_one_call():
     assert client._command_service.calls == [(client._daemon_proc, {"cmd": "set_static_delay_ms", "value": 200.0})]
 
 
+@pytest.mark.asyncio
+async def test_apply_hot_config_idle_mode_leaving_keep_alive_disables_keepalive():
+    # Regression: before the fix, `new_mode == "keep_alive" or self.keepalive_enabled`
+    # left keepalive permanently on after switching away from keep_alive.
+    client = _make_client(idle_mode="keep_alive", keepalive_enabled=True)
+    assert client.keepalive_enabled is True
+
+    applied = await client.apply_hot_config({"idle_mode": "default"})
+
+    assert applied == ["idle_mode"]
+    assert client.idle_mode == "default"
+    assert client.keepalive_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_apply_hot_config_idle_mode_honors_explicit_keepalive_flag_in_payload():
+    # If the same payload also carries the legacy keepalive_enabled flag, the
+    # flag wins — matches __init__ semantics for migration compatibility.
+    client = _make_client(idle_mode="keep_alive")
+
+    applied = await client.apply_hot_config({"idle_mode": "default", "keepalive_enabled": True})
+
+    assert set(applied) == {"idle_mode", "keepalive_enabled"}
+    assert client.idle_mode == "default"
+    assert client.keepalive_enabled is True
+
+
 # ---------------------------------------------------------------------------
 # warm_restart
 # ---------------------------------------------------------------------------
@@ -208,3 +235,22 @@ async def test_warm_restart_preserves_bridge_suffix_on_rename():
     await client.warm_restart({"player_name": "Kitchen Pro"})
 
     assert client.player_name == "Kitchen Pro @ bridge-main"
+
+
+@pytest.mark.asyncio
+async def test_warm_restart_recomputes_keepalive_enabled_from_new_idle_mode(monkeypatch):
+    # Regression: setattr over _RECONFIG_PARENT_ONLY_FIELDS alone would leave
+    # keepalive_enabled stale after switching idle_mode.
+    client = _make_client(idle_mode="keep_alive", keepalive_enabled=True)
+    client.running = False
+
+    async def _noop(self=client):
+        pass
+
+    monkeypatch.setattr(client, "stop_sendspin", _noop)
+    monkeypatch.setattr(client, "_start_sendspin_inner", _noop)
+
+    await client.warm_restart({"listen_port": 8945, "idle_mode": "default"})
+
+    assert client.idle_mode == "default"
+    assert client.keepalive_enabled is False

@@ -191,11 +191,35 @@ class ReconfigOrchestrator:
         try:
             future.result(timeout=_HOT_APPLY_TIMEOUT_S)
         except Exception as exc:
+            # IPC didn't flush within the HTTP-response window.  Report as an
+            # error so the UI doesn't falsely claim "Applied live", and attach
+            # a completion callback so a late exception is logged rather than
+            # swallowed.  The coroutine keeps running in the background, so
+            # the change may still land — the UI just won't over-promise.
             logger.warning(
-                "Hot-apply for %s timed out or failed: %s — continuing in background",
+                "Hot-apply for %s did not complete within %.1fs: %s — continuing in background",
                 action.label or action.mac,
+                _HOT_APPLY_TIMEOUT_S,
                 exc,
             )
+            late_label = action.label or action.mac
+
+            def _log_late_failure(done_future: Future, _lbl: str | None = late_label) -> None:
+                late_exc = done_future.exception()
+                if late_exc is not None:
+                    logger.warning("Late hot-apply failure for %s: %s", _lbl, late_exc)
+
+            future.add_done_callback(_log_late_failure)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"hot-apply pending ({type(exc).__name__})",
+                }
+            )
+            return
         summary.hot_applied.append(action.to_summary())
 
     def _apply_warm(
@@ -228,13 +252,28 @@ class ReconfigOrchestrator:
         summary: ReconfigSummary,
     ) -> None:
         client = clients_by_mac.get((action.mac or "").upper())
-        if client is None or self._loop is None:
+        if client is None:
             summary.stopped.append(action.to_summary())
             return
-        self._schedule_background(
-            client.stop_sendspin(),
-            description=f"stop_sendspin:{action.label or action.mac}",
-        )
+        # Release BT management so the bt_monitor won't reclaim the adapter
+        # and re-spawn the daemon on the next reconnect.  This is synchronous
+        # and internally schedules ``stop_sendspin`` on the asyncio loop when
+        # one is running, mirroring what the /api/bt/release endpoint does.
+        try:
+            client.set_bt_management_enabled(False)
+        except Exception as exc:
+            logger.warning(
+                "set_bt_management_enabled(False) failed for %s: %s",
+                action.label or action.mac,
+                exc,
+            )
+            # Fall back to stop_sendspin so we at least kill the daemon now;
+            # bt_monitor may still re-spawn but that's better than leaving it.
+            if self._loop is not None:
+                self._schedule_background(
+                    client.stop_sendspin(),
+                    description=f"stop_sendspin:{action.label or action.mac}",
+                )
         summary.stopped.append(action.to_summary())
 
     def _apply_global_broadcast(

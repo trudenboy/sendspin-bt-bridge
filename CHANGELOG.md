@@ -12,21 +12,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer requires a bridge restart for most fields. A new pure diff layer
   (`services/config_diff.py`) compares the previous and new config and emits an
   ordered list of `ReconfigAction`s classified as:
-  - `HOT_APPLY` — applied in-place via IPC or parent-level field update
-    (`static_delay_ms`, `idle_mode`, `idle_disconnect_minutes`,
-    `power_save_delay_minutes`, `keepalive_interval`, `room_id`, `room_name`,
-    `HA_AREA_NAME_ASSIST_ENABLED`, `HA_ADAPTER_AREA_MAP`).
+  - `HOT_APPLY` — applied in-place via IPC or parent-level field update for
+    per-device fields `static_delay_ms`, `idle_mode`, `idle_disconnect_minutes`,
+    `power_save_delay_minutes`, `keepalive_enabled`, `keepalive_interval`,
+    `room_id`, `room_name`.
   - `WARM_RESTART` — single subprocess `stop_sendspin()` + `_start_sendspin_inner()`
     (~3–5 s silence on that speaker only) for `player_name`, `listen_port`,
-    `listen_host`, `preferred_format`, `adapter`.
-  - `GLOBAL_BROADCAST` — fan-out IPC (`LOG_LEVEL`, volume/mute flags).
-  - `GLOBAL_RESTART` — warm-restart every running client
-    (`SENDSPIN_SERVER`/`PORT`, `BRIDGE_NAME`, `BRIDGE_NAME_SUFFIX`,
-    `PULSE_LATENCY_MSEC`, `PREFER_SBC_CODEC`, `BT_CHECK_INTERVAL`,
-    `BT_MAX_RECONNECT_FAILS`, `DISABLE_PA_RESCUE_STREAMS`).
+    `listen_host`, `preferred_format`, `adapter`, `volume_controller`.
+  - `GLOBAL_BROADCAST` — fan-out IPC for `LOG_LEVEL`, `VOLUME_VIA_MA`,
+    `MUTE_VIA_MA`, `MA_API_URL`, `MA_API_TOKEN`, `HA_AREA_NAME_ASSIST_ENABLED`,
+    `HA_ADAPTER_AREA_MAP`, `MA_AUTO_SILENT_AUTH`, `MA_WEBSOCKET_MONITOR`,
+    `DUPLICATE_DEVICE_CHECK`.
+  - `GLOBAL_RESTART` — warm-restart every running client for
+    `SENDSPIN_SERVER`, `SENDSPIN_PORT`, `BRIDGE_NAME`, `PULSE_LATENCY_MSEC`,
+    `PREFER_SBC_CODEC`, `BT_CHECK_INTERVAL`, `BT_MAX_RECONNECT_FAILS`,
+    `BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`, `DISABLE_PA_RESCUE_STREAMS`,
+    `BASE_LISTEN_PORT`.
   - `RESTART_REQUIRED` — Flask-bound fields (`WEB_PORT`, `AUTH_*`,
-    `SECRET_KEY`, brute-force limits) still need a full bridge restart and are
-    surfaced in the response so the UI can prompt.
+    `SECRET_KEY`, `SESSION_TIMEOUT_HOURS`, brute-force limits, `TRUSTED_PROXIES`,
+    `TZ`) still need a full bridge restart and are surfaced in the response
+    so the UI can prompt.
 - **`services/reconfig_orchestrator.py`** — dispatches the action list from the
   Flask request thread onto the asyncio loop via `run_coroutine_threadsafe`.
   Hot-apply waits synchronously (500 ms cap) so the HTTP response returns
