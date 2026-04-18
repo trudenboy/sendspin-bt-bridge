@@ -21,6 +21,11 @@ in #162. Headline themes:
   BT 2.x devices (`LegacyPairing: yes`, e.g. HMDX JAM) and tears down stale
   agent objects before re-pairing so the next attempt actually has an
   authentication agent.
+- **Auto-pair reconnect reliability** — the per-device monitor now applies the
+  same stale-agent + legacy-PIN handling, and breaks out of the
+  `BlueZ has no current device object` reconnect loop (KALLSUP-class) by
+  purging the stale BlueZ entry after several consecutive unknown-state
+  attempts so the next cycle can escalate to a full re-pair.
 
 ### Fixed
 - **#162 — `Failed to register agent object` on consecutive pair attempts** —
@@ -34,6 +39,18 @@ in #162. Headline themes:
   addition to the existing SSP `Confirm passkey` handling. Recovers BT 2.x
   audio sinks (HMDX JAM, IKEA KALLSUP-class) which would otherwise block the
   flow until the 15 s wait deadline.
+- **#162 — Auto-pair reconnect path mirrors the standalone fixes** —
+  `BluetoothManager.pair_device` now performs the same `agent off` +
+  `remove {mac}` cleanup before its bluetoothctl session and auto-answers
+  legacy `Enter PIN code:` / `Enter passkey:` prompts with `0000`. Brings the
+  per-device monitor's auto-pair flow to parity with the UI Add+Pair flow.
+- **#162 — `BlueZ has no current device object` reconnect loop** —
+  `BluetoothManager.connect_device` now tracks consecutive failures where
+  `is_device_paired()` returns `None` (BlueZ cache is missing the device).
+  After three such attempts it forces `bluetoothctl remove {mac}` to clear
+  the stale entry and surfaces an actionable `last_error` so the next
+  reconnect cycle can escalate to `pair_device` instead of looping
+  `Failed to connect (not connected after 5 status checks)` indefinitely.
 
 ### Added
 - **On-line config apply for `POST /api/config`** — saving changes in the web UI
