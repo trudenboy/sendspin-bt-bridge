@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.1] - 2026-04-19
+
+Stable release rolling up the 2.60.0-rc.1 line (on-line config apply, PR #164,
+fixes #161) together with a targeted fix for the standalone pair flow surfaced
+in #162. Headline themes:
+
+- **On-line config apply** — saving device and global settings from the web UI
+  no longer forces a full bridge restart for most fields, so a single delay
+  tweak or idle-mode change costs ~0 s of audio interruption instead of the
+  8–15 s a cold start used to take.
+- **Standalone pair reliability** — the UI's Add+Pair flow now handles legacy
+  BT 2.x devices (`LegacyPairing: yes`, e.g. HMDX JAM) and tears down stale
+  agent objects before re-pairing so the next attempt actually has an
+  authentication agent.
+- **Auto-pair reconnect reliability** — the per-device monitor now applies the
+  same stale-agent + legacy-PIN handling, and breaks out of the
+  `BlueZ has no current device object` reconnect loop (KALLSUP-class) by
+  purging the stale BlueZ entry after several consecutive unknown-state
+  attempts so the next cycle can escalate to a full re-pair.
+
+### Fixed
+- **#162 — `Failed to register agent object` on consecutive pair attempts** —
+  `routes/api_bt.py:_run_standalone_pair` now runs `agent off` as part of the
+  cleanup phase before the next pair attempt. Without this, an agent object
+  lingering on the system bus from a previous bluetoothctl session (or from
+  HA Core's own Bluetooth integration) caused `agent on` to fail and produced
+  `org.bluez.Error.ConnectionAttemptFailed` on the subsequent `pair` call.
+- **#162 — Legacy PIN prompt hangs to timeout** — `_run_standalone_pair` now
+  auto-answers `0000` to `Enter PIN code:` / `Enter passkey:` prompts in
+  addition to the existing SSP `Confirm passkey` handling. Recovers BT 2.x
+  audio sinks (HMDX JAM, IKEA KALLSUP-class) which would otherwise block the
+  flow until the 15 s wait deadline.
+- **#162 — Auto-pair reconnect path mirrors the standalone fixes** —
+  `BluetoothManager.pair_device` now performs the same `agent off` +
+  `remove {mac}` cleanup before its bluetoothctl session and auto-answers
+  legacy `Enter PIN code:` / `Enter passkey:` prompts with `0000`. Brings the
+  per-device monitor's auto-pair flow to parity with the UI Add+Pair flow.
+- **#162 — `BlueZ has no current device object` reconnect loop** —
+  `BluetoothManager.connect_device` now tracks consecutive failures where
+  `is_device_paired()` returns `None` (BlueZ cache is missing the device).
+  After three such attempts it forces `bluetoothctl remove {mac}` to clear
+  the stale entry and surfaces an actionable `last_error` so the next
+  reconnect cycle can escalate to `pair_device` instead of looping
+  `Failed to connect (not connected after 5 status checks)` indefinitely.
+
+### Changed
+- **`static_delay_ms` default for new devices is now 300 ms** —
+  `static/app.js:addBtDeviceRow` pre-fills the delay field with `300` when a
+  device is added via the manual "Add device" button, the scan modal, or the
+  paired-device list. Existing saved configs are not touched: only rows that
+  arrive without an explicit `static_delay_ms` get the new default. Reflects
+  field reports that 300 ms gives noticeably better A/V sync on Ubuntu +
+  PipeWire two-speaker setups than the previous `0` baseline. The dirty-tracking
+  baseline in `_defaultBtDeviceDirtyFields` is updated to match so freshly
+  added rows aren't flagged dirty before the user touches them.
+
+### Added
+- **On-line config apply for `POST /api/config`** — saving changes in the web UI
+  no longer requires a bridge restart for most fields. A new pure diff layer
+  (`services/config_diff.py`) compares the previous and new config and emits an
+  ordered list of `ReconfigAction`s classified as:
+  - `HOT_APPLY` — applied in-place via IPC or parent-level field update for
+    per-device fields `static_delay_ms`, `idle_mode`, `idle_disconnect_minutes`,
+    `power_save_delay_minutes`, `keepalive_enabled`, `keepalive_interval`,
+    `room_id`, `room_name`.
+  - `WARM_RESTART` — single subprocess `stop_sendspin()` + `_start_sendspin_inner()`
+    (~3–5 s silence on that speaker only) for `player_name`, `listen_port`,
+    `listen_host`, `preferred_format`, `adapter`, `volume_controller`.
+  - `GLOBAL_BROADCAST` — fan-out IPC for `LOG_LEVEL`, `VOLUME_VIA_MA`,
+    `MUTE_VIA_MA`, `MA_API_URL`, `MA_API_TOKEN`, `HA_AREA_NAME_ASSIST_ENABLED`,
+    `HA_ADAPTER_AREA_MAP`, `MA_AUTO_SILENT_AUTH`, `MA_WEBSOCKET_MONITOR`,
+    `DUPLICATE_DEVICE_CHECK`.
+  - `GLOBAL_RESTART` — warm-restart every running client for
+    `SENDSPIN_SERVER`, `SENDSPIN_PORT`, `BRIDGE_NAME`, `PULSE_LATENCY_MSEC`,
+    `PREFER_SBC_CODEC`, `BT_CHECK_INTERVAL`, `BT_MAX_RECONNECT_FAILS`,
+    `BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`, `DISABLE_PA_RESCUE_STREAMS`,
+    `BASE_LISTEN_PORT`.
+  - `RESTART_REQUIRED` — Flask-bound fields (`WEB_PORT`, `AUTH_*`,
+    `SECRET_KEY`, `SESSION_TIMEOUT_HOURS`, brute-force limits, `TRUSTED_PROXIES`,
+    `TZ`) still need a full bridge restart and are surfaced in the response
+    so the UI can prompt.
+- **`services/reconfig_orchestrator.py`** — dispatches the action list from the
+  Flask request thread onto the asyncio loop via `run_coroutine_threadsafe`.
+  Hot-apply waits synchronously (500 ms cap) so the HTTP response returns
+  quickly; warm restarts are fire-and-forget.
+- **`SendspinClient.apply_hot_config()` / `warm_restart()`** — parent-side
+  orchestration methods. `warm_restart` flips `status.reloading=True` (exposed
+  over SSE/`/api/status`) and preserves the bridge suffix (`" @ {bridge}"`) when
+  `player_name` changes.
+- **New daemon IPC command `set_static_delay_ms`** in
+  `services/daemon_process.py` — delegates to the already-available
+  `aiosendspin.client.set_static_delay_ms()` so the delay updates mid-stream
+  without a subprocess restart. Fixes #161.
+- **`reconfig` summary in save response** — `POST /api/config` now returns a
+  `reconfig` object (`hot`, `warm_restarting`, `global_broadcast`,
+  `global_restart`, `restart_required`, `bt_removed`, `errors`). The web UI
+  renders a detailed toast (✓ applied, ↻ restarting, ⚠ restart required)
+  instead of the blanket "Configuration saved — restart to apply" banner.
+- **Tests** — `tests/test_config_diff.py` (29 cases covering per-field
+  classification, ordering, and normalization) and
+  `tests/test_reconfigure_client.py` (10 cases covering IPC envelopes, warm
+  restart stop/start order, reloading flag cleanup on failure, and bridge
+  suffix preservation on rename).
+
 ## [2.59.1] - 2026-04-18
 
 Targeted fix for the AKG Y500 / BlueZ 5.82 A2DP profile regression (#159) where
