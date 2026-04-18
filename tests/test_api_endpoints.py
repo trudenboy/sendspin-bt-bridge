@@ -458,17 +458,27 @@ def test_run_standalone_pair_clears_stale_agent_before_pairing(monkeypatch):
     )
 
 
-def test_run_standalone_pair_auto_answers_legacy_pin_prompt(monkeypatch):
+@pytest.mark.parametrize(
+    "prompt_line",
+    [
+        "[agent] Enter PIN code:\n",
+        "[agent] Enter passkey (number in 0-999999):\n",
+    ],
+    ids=["enter_pin_code", "enter_passkey"],
+)
+def test_run_standalone_pair_auto_answers_legacy_pin_prompt(monkeypatch, prompt_line):
     """Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`) prompt for
-    a numeric PIN rather than the BT 2.1+ SSP passkey confirmation. The pair
-    flow must auto-answer `0000` so it doesn't hang to timeout (issue #162).
+    a numeric PIN rather than the BT 2.1+ SSP passkey confirmation. BlueZ may
+    emit either `Enter PIN code:` or `Enter passkey:` depending on the device
+    profile and BlueZ version — both must auto-answer `0000` so the pair flow
+    doesn't hang to timeout (issue #162).
     """
     import routes.api_bt as api_bt_mod
 
     fake_proc = _FakeProc(
         stdout_lines=[
             "Attempting to pair with 13:8F:E8:53:ED:2F\n",
-            "[agent] Enter PIN code:\n",
+            prompt_line,
             "Pairing successful\n",
         ],
         tail="Paired: yes\n",
@@ -486,7 +496,7 @@ def test_run_standalone_pair_auto_answers_legacy_pin_prompt(monkeypatch):
 
     pin_writes = [w for w in fake_proc.stdin.writes if w.strip() == "0000"]
     assert pin_writes, (
-        f"expected '0000' written to stdin in response to legacy PIN prompt, got writes: {fake_proc.stdin.writes!r}"
+        f"expected '0000' written to stdin in response to {prompt_line!r}, got writes: {fake_proc.stdin.writes!r}"
     )
     finish_job.assert_called_once_with("job-pin", {"success": True, "mac": "13:8F:E8:53:ED:2F"})
 

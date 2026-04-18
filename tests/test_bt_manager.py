@@ -703,16 +703,25 @@ def test_connect_device_resets_paired_unknown_count_on_success(bt_manager):
     assert bt_manager._paired_unknown_count == 0
 
 
-def test_pair_device_auto_answers_legacy_pin_prompt(bt_manager):
+@pytest.mark.parametrize(
+    "prompt_line",
+    [
+        "[agent] Enter PIN code:\n",
+        "[agent] Enter passkey (number in 0-999999):\n",
+    ],
+    ids=["enter_pin_code", "enter_passkey"],
+)
+def test_pair_device_auto_answers_legacy_pin_prompt(bt_manager, prompt_line):
     """pair_device must auto-enter `0000` when bluetoothctl asks for a legacy PIN.
 
     Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`) prompt
-    `[agent] Enter PIN code:` instead of an SSP passkey. Without auto-entry,
-    pairing times out (issue #162). Mirrors the fix in routes/api_bt.py.
+    `[agent] Enter PIN code:` or `[agent] Enter passkey:` depending on the
+    device profile and BlueZ version. Both must auto-answer with `0000` so
+    pairing doesn't time out (issue #162). Mirrors the fix in routes/api_bt.py.
     """
     fake_proc = _FakeProc(
         stdout_lines=[
-            "[agent] Enter PIN code:\n",
+            prompt_line,
             "Pairing successful\n",
         ],
         tail="Paired: yes\n",
@@ -727,7 +736,8 @@ def test_pair_device_auto_answers_legacy_pin_prompt(bt_manager):
         assert bt_manager.pair_device() is True
 
     assert "0000\n" in fake_proc.stdin.writes, (
-        f"Expected `0000\\n` to be written to bluetoothctl stdin, got {fake_proc.stdin.writes!r}"
+        f"Expected `0000\\n` to be written to bluetoothctl stdin in response to "
+        f"{prompt_line!r}, got {fake_proc.stdin.writes!r}"
     )
 
 
