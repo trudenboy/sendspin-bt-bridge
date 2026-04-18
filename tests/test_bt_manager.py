@@ -169,6 +169,99 @@ def test_configure_bluetooth_audio_no_sink(bt_manager):
     assert result is False
 
 
+def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
+    """When no sink found but bluez_card exists with non-a2dp profile, switch
+    to a2dp_sink and retry once. Covers AKG Y500 / BlueZ 5.82 regression where
+    the card connects in headset_head_unit profile and no sink is exposed."""
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    card_name = f"bluez_card.{pa_mac}"
+    sink_name = f"bluez_sink.{pa_mac}.a2dp_sink"
+
+    list_sinks_calls = {"count": 0}
+
+    def _list_sinks():
+        list_sinks_calls["count"] += 1
+        # Sink appears only after profile switch
+        if list_sinks_calls["count"] >= bt_audio_retry_threshold():
+            return [{"name": sink_name, "description": "AKG Y500"}]
+        return []
+
+    def _get_sink_volume(name):
+        # Sink only resolvable after profile switch
+        if list_sinks_calls["count"] >= bt_audio_retry_threshold():
+            return 50 if name == sink_name else None
+        return None
+
+    cards_payload = [
+        {
+            "name": card_name,
+            "driver": "module-bluez5-device.c",
+            "active_profile": "headset_head_unit",
+            "profiles": ["off", "a2dp_sink", "headset_head_unit"],
+        }
+    ]
+
+    set_profile_calls = []
+
+    def _set_card_profile(card, profile):
+        set_profile_calls.append((card, profile))
+        return True
+
+    with (
+        patch("bt_audio.list_sinks", side_effect=_list_sinks),
+        patch("bt_audio.get_sink_volume", side_effect=_get_sink_volume),
+        patch("bt_audio.set_sink_mute", return_value=True),
+        patch("bt_audio.set_sink_volume", return_value=True),
+        patch("bt_audio.list_cards", return_value=cards_payload),
+        patch("bt_audio.set_card_profile", side_effect=_set_card_profile),
+        patch("bt_audio._warn_pipewire_session"),
+        patch("time.sleep"),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+    assert set_profile_calls == [(card_name, "a2dp_sink")]
+
+
+def bt_audio_retry_threshold():
+    """Return a call count at which the sink should become visible (after switch)."""
+    import bt_audio
+
+    # After retries exhaust, profile switch triggers one extra list_sinks refresh.
+    return bt_audio._SINK_RETRY_COUNT + 1
+
+
+def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_manager):
+    """If active_profile is already a2dp_sink, do not call set_card_profile."""
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    card_name = f"bluez_card.{pa_mac}"
+
+    cards_payload = [
+        {
+            "name": card_name,
+            "driver": "module-bluez5-device.c",
+            "active_profile": "a2dp_sink",
+            "profiles": ["off", "a2dp_sink", "headset_head_unit"],
+        }
+    ]
+
+    set_profile_calls = []
+
+    with (
+        patch("bt_audio.list_sinks", return_value=[]),
+        patch("bt_audio.get_sink_volume", return_value=None),
+        patch("bt_audio.set_sink_mute", return_value=True),
+        patch("bt_audio.list_cards", return_value=cards_payload),
+        patch("bt_audio.set_card_profile", side_effect=lambda c, p: set_profile_calls.append((c, p)) or True),
+        patch("bt_audio._warn_pipewire_session"),
+        patch("time.sleep"),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is False
+    assert set_profile_calls == []
+
+
 def test_configure_bluetooth_audio_retries_five_times(bt_manager):
     """Default retry count is 5 (env-configurable via SINK_RETRY_COUNT)."""
     import bt_audio

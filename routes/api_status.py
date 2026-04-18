@@ -64,7 +64,7 @@ from services.preflight_status import (
 from services.preflight_status import (
     collection_status_payload as _shared_collection_status_payload,
 )
-from services.pulse import get_server_name, list_sinks
+from services.pulse import get_server_name, list_cards, list_sinks
 from services.recovery_assistant import build_recovery_assistant_snapshot
 from services.recovery_timeline import (
     build_recovery_timeline_csv,
@@ -738,6 +738,17 @@ def api_diagnostics():
                 exc,
                 fallback=[],
                 log_message="Failed to list sinks for diagnostics",
+            )
+
+        try:
+            diag["cards"] = list_cards()
+            _record_success("cards", count=len(diag["cards"]))
+        except Exception as exc:
+            diag["cards"] = _record_failure(
+                "cards",
+                exc,
+                fallback=[],
+                log_message="Failed to list cards for diagnostics",
             )
 
         device_diag = []
@@ -1466,6 +1477,7 @@ def _build_full_text_report(
     subprocs = masked.get("subprocesses", [])
     ma_info = diag.get("ma_integration", {})
     sinks = diag.get("sinks", [])
+    cards = diag.get("cards", [])
     assistant = diag.get("onboarding_assistant", {})
     recovery = diag.get("recovery_assistant", {})
     guidance = diag.get("operator_guidance", {})
@@ -1606,6 +1618,19 @@ def _build_full_text_report(
         full.append("--- PA SINKS ---")
         for s in sinks:
             full.append(f"  {s}")
+        full.append("")
+
+    # PA cards (helpful for diagnosing BT profile issues — card present but no sink
+    # usually means wrong active profile, e.g. headset_head_unit instead of a2dp_sink)
+    if isinstance(cards, list) and cards:
+        full.append("--- PA CARDS ---")
+        for c in cards:
+            name = c.get("name", "?")
+            active = c.get("active_profile") or "—"
+            profiles = ",".join(c.get("profiles", []) or []) or "—"
+            full.append(f"  {name}")
+            full.append(f"    active_profile: {active}")
+            full.append(f"    profiles:       {profiles}")
         full.append("")
 
     # Service status

@@ -3113,6 +3113,18 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         "list_sinks",
         lambda: [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}],
     )
+    monkeypatch.setattr(
+        api_status,
+        "list_cards",
+        lambda: [
+            {
+                "name": "bluez_card.AA_BB_CC_DD_EE_FF",
+                "driver": "module-bluez5-device.c",
+                "active_profile": "a2dp_sink",
+                "profiles": ["off", "a2dp_sink", "headset_head_unit"],
+            }
+        ],
+    )
     monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
     monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])
     monkeypatch.setattr(api_status, "_collect_portaudio_device_diagnostics", lambda: [])
@@ -3180,6 +3192,10 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         assert data["recovery_assistant"]["traces"][0]["label"] == "Bridge startup"
         assert data["operator_guidance"]["mode"] == "healthy"
         assert data["operator_guidance"]["header_status"]["label"] == "1/1 devices ready"
+        assert data["collections_status"]["cards"]["status"] == "ok"
+        assert data["cards"][0]["name"] == "bluez_card.AA_BB_CC_DD_EE_FF"
+        assert data["cards"][0]["active_profile"] == "a2dp_sink"
+        assert "headset_head_unit" in data["cards"][0]["profiles"]
     finally:
         sys.modules.pop("sendspin.audio", None)
         sys.modules.pop("sendspin.audio_devices", None)

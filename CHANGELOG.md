@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.1] - 2026-04-18
+
+Targeted fix for the AKG Y500 / BlueZ 5.82 A2DP profile regression (#159) where
+a headset connects successfully but no `bluez_*` PulseAudio sink is ever
+exposed — root cause is the card landing in `headset_head_unit` profile with
+`a2dp_sink` never activating.
+
+### Added
+- **`pactl list cards` in diagnostics** — `services/pulse.py` gains
+  `list_cards()` / `set_card_profile()` (pulsectl_asyncio fast-path +
+  `pactl` subprocess fallback). `routes/api_status.py:/api/diagnostics`
+  includes a new `cards` array (name, driver, active_profile, profiles)
+  and the bugreport text gains a `--- PA CARDS ---` section so operators
+  can see at a glance whether a BT card is stuck in the wrong profile.
+
+### Fixed
+- **Auto-switch BlueZ card to `a2dp_sink` on sink-discovery failure** —
+  `bt_audio.configure_bluetooth_audio()` now, after the normal retry loop
+  fails, checks `list_cards()` for a `bluez_card.{MAC}` entry with a
+  non-a2dp active profile and `a2dp_sink` available, calls
+  `set_card_profile(card, "a2dp_sink")`, waits one more cycle, and retries
+  sink lookup. Recovers audio automatically for devices affected by the
+  BlueZ 5.82/5.83 A2DP negotiation regression without requiring manual
+  `pactl set-card-profile` intervention.
+
 ## [2.59.0] - 2026-04-17
 
 Stable rollup of the rc.1 → rc.2 series. Headline themes: **operational

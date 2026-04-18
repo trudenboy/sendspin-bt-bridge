@@ -16,7 +16,14 @@ from typing import TYPE_CHECKING
 
 from config import CONFIG_FILE, save_device_sink
 from config import config_lock as config_lock
-from services.pulse import get_sink_volume, list_sinks, set_sink_mute, set_sink_volume
+from services.pulse import (
+    get_sink_volume,
+    list_cards,
+    list_sinks,
+    set_card_profile,
+    set_sink_mute,
+    set_sink_volume,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,6 +36,52 @@ logger = logging.getLogger(__name__)
 _A2DP_PROFILE_DELAY = 3.0
 _SINK_RETRY_DELAY = 3.0
 _SINK_RETRY_COUNT = int(os.environ.get("SINK_RETRY_COUNT", "5"))
+
+
+def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
+    """If a bluez_card for *pa_mac* exists with a non-a2dp active profile and
+    a2dp_sink among its available profiles, switch it to a2dp_sink.
+
+    Returns ``True`` when a switch was performed (caller should retry sink
+    discovery), ``False`` otherwise. Silently ignores all subprocess errors.
+    """
+    try:
+        cards = list_cards() or []
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("list_cards failed during profile auto-switch: %s", exc)
+        return False
+
+    expected = f"bluez_card.{pa_mac}"
+    for card in cards:
+        name = card.get("name", "")
+        if name != expected:
+            continue
+        active = card.get("active_profile") or ""
+        profiles = card.get("profiles") or []
+        if active == "a2dp_sink":
+            return False
+        if "a2dp_sink" not in profiles:
+            logger.warning(
+                "BlueZ card %s has no a2dp_sink profile available (active=%s, profiles=%s)",
+                name,
+                active or "—",
+                ",".join(profiles) or "—",
+            )
+            return False
+        logger.warning(
+            "BlueZ card %s is in profile %s — switching to a2dp_sink to expose audio sink",
+            name,
+            active or "—",
+        )
+        try:
+            if set_card_profile(name, "a2dp_sink"):
+                logger.info("✓ Switched %s to a2dp_sink profile", name)
+                return True
+            logger.warning("Failed to switch %s to a2dp_sink profile", name)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("Profile switch for %s errored: %s", name, exc)
+        return False
+    return False
 
 
 def _force_sbc_codec(pa_mac: str) -> None:
@@ -145,6 +198,22 @@ def configure_bluetooth_audio(
                         return False
                     sinks = list_sinks()
                     known_names = {s["name"] for s in sinks}
+
+            # AKG Y500 / BlueZ 5.82 regression: card connects in headset_head_unit
+            # profile and no bluez_*sink is ever exposed. If a bluez_card for this
+            # MAC exists with a non-a2dp active profile, switch it to a2dp_sink
+            # and try one more sink discovery pass.
+            if not success and _switch_card_profile_to_a2dp(pa_mac):
+                if not wait_with_cancel(_SINK_RETRY_DELAY):
+                    return False
+                sinks = list_sinks()
+                known_names = {s["name"] for s in sinks}
+                for sink_name in sink_names:
+                    if sink_name in known_names or get_sink_volume(sink_name) is not None:
+                        logger.info("✓ Found audio sink after profile switch: %s", sink_name)
+                        configured_sink = sink_name
+                        success = True
+                        break
 
         if success and configured_sink:
             if prefer_sbc:

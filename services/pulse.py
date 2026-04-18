@@ -31,7 +31,9 @@ __all__ = [
     "STANDBY_SINK_NAME",
     "_PULSECTL_AVAILABLE",
     "aensure_null_sink",
+    "alist_cards",
     "amove_pid_sink_inputs",
+    "aset_card_profile",
     "asuspend_sink",
     "ensure_null_sink",
     "get_server_name",
@@ -39,8 +41,10 @@ __all__ = [
     "get_sink_input_ids",
     "get_sink_mute",
     "get_sink_volume",
+    "list_cards",
     "list_sinks",
     "remove_null_sink",
+    "set_card_profile",
     "set_sink_mute",
     "set_sink_volume",
     "suspend_sink",
@@ -291,6 +295,65 @@ async def amove_pid_sink_inputs(pid: int, sink_name: str) -> int:
         return _fallback_move_pid_sink_inputs(pid, sink_name)
 
 
+async def alist_cards() -> list[dict]:
+    """Return all PA cards as dicts with name, driver, active_profile, profiles.
+
+    Used for diagnostics and for the bluez-profile auto-switch path in
+    ``bt_audio.py``: if a BT speaker connects but no ``bluez_*`` sink is
+    ever created, the operator needs to see whether a ``bluez_card.*``
+    exists with a non-``a2dp_sink`` active profile (e.g. ``headset_head_unit``
+    or ``off``) so the bridge can flip it to A2DP.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_list_cards()
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                cards = await pulse.card_list()
+                result: list[dict] = []
+                for c in cards:
+                    active = getattr(c, "profile_active", None)
+                    active_name = getattr(active, "name", None) if active else None
+                    profile_list = getattr(c, "profile_list", []) or []
+                    result.append(
+                        {
+                            "name": c.name,
+                            "driver": getattr(c, "driver", "") or "",
+                            "active_profile": active_name,
+                            "profiles": [getattr(p, "name", "") for p in profile_list if getattr(p, "name", "")],
+                        }
+                    )
+                return result
+    except Exception as exc:
+        logger.debug("alist_cards error: %s — falling back", exc)
+        return _fallback_list_cards()
+
+
+async def aset_card_profile(card_name: str, profile: str) -> bool:
+    """Set *card_name* to *profile* (e.g. ``a2dp_sink``). Returns True on success.
+
+    Used when a Bluetooth device is connected but its card is stuck on a
+    non-audio-sink profile such as ``headset_head_unit``.  Switching to
+    ``a2dp_sink`` causes PulseAudio to publish a ``bluez_sink.*`` sink
+    suitable for A2DP playback.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_set_card_profile(card_name, profile)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                cards = await pulse.card_list()
+                card = next((c for c in cards if c.name == card_name), None)
+                if card is None:
+                    logger.warning("aset_card_profile: card %s not found", card_name)
+                    return False
+                await pulse.card_profile_set(card, profile)
+                return True
+    except Exception as exc:
+        logger.debug("aset_card_profile(%s, %s) error: %s — falling back", card_name, profile, exc)
+        return _fallback_set_card_profile(card_name, profile)
+
+
 async def aget_server_name() -> str:
     """Return PA server name string (for diagnostics)."""
     if not _PULSECTL_AVAILABLE:
@@ -451,6 +514,14 @@ def get_server_name() -> str:
     return _run(aget_server_name())
 
 
+def list_cards() -> list[dict]:
+    return _run(alist_cards())
+
+
+def set_card_profile(card_name: str, profile: str) -> bool:
+    return _run(aset_card_profile(card_name, profile))
+
+
 # ---------------------------------------------------------------------------
 # Subprocess fallbacks (mirror pactl behaviour when pulsectl unavailable)
 # ---------------------------------------------------------------------------
@@ -573,6 +644,74 @@ def _fallback_suspend_sink(sink_name: str, suspend: bool) -> bool:
         logger.warning("pactl suspend-sink failed: %s", r.stderr.strip())
     except Exception as exc:
         logger.debug("suspend-sink fallback failed: %s", exc)
+    return False
+
+
+def _fallback_list_cards() -> list[dict]:
+    """Parse `pactl list cards` output into name/driver/active_profile/profiles dicts."""
+    try:
+        r = subprocess.run(["pactl", "list", "cards"], capture_output=True, text=True, timeout=5)
+    except (subprocess.SubprocessError, OSError):
+        return []
+    if r.returncode != 0:
+        return []
+    cards: list[dict] = []
+    current: dict | None = None
+    in_profiles = False
+    for raw in r.stdout.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if line.startswith("Card #"):
+            if current is not None:
+                cards.append(current)
+            current = {"name": "", "driver": "", "active_profile": None, "profiles": []}
+            in_profiles = False
+            continue
+        if current is None:
+            continue
+        if stripped.startswith("Name:"):
+            current["name"] = stripped.split(":", 1)[1].strip()
+            in_profiles = False
+        elif stripped.startswith("Driver:"):
+            current["driver"] = stripped.split(":", 1)[1].strip()
+            in_profiles = False
+        elif stripped.startswith("Active Profile:"):
+            current["active_profile"] = stripped.split(":", 1)[1].strip()
+            in_profiles = False
+        elif stripped == "Profiles:":
+            in_profiles = True
+        elif in_profiles and ":" in stripped and not stripped.startswith(("Ports", "Sinks", "Sources", "Properties")):
+            # Profile line: "a2dp_sink: High Fidelity Playback (A2DP Sink) (sinks: 1, ...)"
+            prof_name = stripped.split(":", 1)[0].strip()
+            if prof_name:
+                current["profiles"].append(prof_name)
+        elif stripped.startswith(("Ports:", "Sinks:", "Sources:", "Properties:")):
+            in_profiles = False
+    if current is not None:
+        cards.append(current)
+    return cards
+
+
+def _fallback_set_card_profile(card_name: str, profile: str) -> bool:
+    """Set *card_name* profile via `pactl set-card-profile`. Returns True on success."""
+    try:
+        r = subprocess.run(
+            ["pactl", "set-card-profile", card_name, profile],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            logger.info("Set card profile: %s → %s", card_name, profile)
+            return True
+        logger.warning(
+            "pactl set-card-profile %s %s failed: %s",
+            card_name,
+            profile,
+            r.stderr.strip(),
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("_fallback_set_card_profile error: %s", exc)
     return False
 
 
