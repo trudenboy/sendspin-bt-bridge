@@ -1148,6 +1148,12 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
         cleanup_cmds: list[str] = []
         if adapter:
             cleanup_cmds.append(f"select {adapter}")
+        # `agent off` tears down any agent object lingering on the system bus
+        # from a previous bluetoothctl session. Without it, `agent on` below
+        # can return `Failed to register agent object`, leaving the pair
+        # without an authentication agent and producing
+        # `org.bluez.Error.ConnectionAttemptFailed` (issue #162).
+        cleanup_cmds.append("agent off")
         cleanup_cmds.append(f"remove {mac}")
         subprocess.run(
             ["bluetoothctl"],
@@ -1207,6 +1213,13 @@ def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
                     if "confirm passkey" in stripped or "request confirmation" in stripped:
                         logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
                         proc.stdin.write("yes\n")
+                        proc.stdin.flush()
+                    elif "enter pin code" in stripped or "enter passkey" in stripped:
+                        # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
+                        # ask for a numeric PIN. `0000` is the BlueZ-default fallback
+                        # and what most consumer audio sinks accept (issue #162).
+                        logger.info("Legacy PIN prompt — auto-entering 0000: %s", line.strip())
+                        proc.stdin.write("0000\n")
                         proc.stdin.flush()
                     if "pairing successful" in stripped or "already paired" in stripped:
                         paired_ok = True

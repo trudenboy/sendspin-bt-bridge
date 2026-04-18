@@ -44,6 +44,10 @@ _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
 _PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
 _MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
 _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
+# After this many consecutive failed connect attempts where BlueZ has no current
+# device object, force-remove the stale BlueZ entry so the next reconnect cycle
+# can escalate to pair_device (KALLSUP-class loop, #162).
+_PAIRED_UNKNOWN_THRESHOLD = 3
 
 
 class BluetoothManager:
@@ -96,6 +100,12 @@ class BluetoothManager:
         self._cancel_reconnect = threading.Event()
         self._standby_wake_event: asyncio.Event | None = None  # set by _wake_from_standby to unblock monitor
         self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
+        # Counts consecutive connect_device() failures where BlueZ has no
+        # current device object (is_device_paired() returns None). After
+        # _PAIRED_UNKNOWN_THRESHOLD consecutive observations we force-remove
+        # the stale BlueZ entry so the next reconnect can escalate to
+        # pair_device (KALLSUP-class loop, #162).
+        self._paired_unknown_count = 0
         # Guard churn tracking because reconnect decisions can be touched from
         # multiple execution contexts (polling loop, D-Bus reconnect path).
         self._reconnect_lock = threading.Lock()
@@ -368,6 +378,27 @@ class BluetoothManager:
             logger.info("[%s] Pairing skipped because reconnect was cancelled", self.device_name)
             return False
 
+        # Tear down any agent object lingering on the system bus from a previous
+        # bluetoothctl session, and drop any stale BlueZ device cache entry.
+        # Without `agent off`, the next `agent on` returns
+        # `Failed to register agent object`, leaving pairing without an
+        # authentication agent → org.bluez.Error.ConnectionAttemptFailed (#162).
+        cleanup_cmds: list[str] = []
+        if self._adapter_select:
+            cleanup_cmds.append(f"select {self._adapter_select}")
+        cleanup_cmds.append("agent off")
+        cleanup_cmds.append(f"remove {mac}")
+        try:
+            subprocess.run(
+                ["bluetoothctl"],
+                input="\n".join(cleanup_cmds) + "\n",
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug("[%s] Pre-pair cleanup failed (non-fatal): %s", self.device_name, e)
+
         initial_cmds = []
         if self._adapter_select:
             initial_cmds.append(f"select {self._adapter_select}")
@@ -428,9 +459,17 @@ class BluetoothManager:
                     collected.append(line)
                     stripped = line.strip()
                     # SSP passkey confirmation prompt
-                    if "confirm passkey" in stripped.lower() or "request confirmation" in stripped.lower():
+                    lowered = stripped.lower()
+                    if "confirm passkey" in lowered or "request confirmation" in lowered:
                         logger.info("SSP passkey prompt detected — auto-confirming: %s", stripped)
                         proc.stdin.write("yes\n")
+                        proc.stdin.flush()
+                    # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
+                    # ask for a numeric PIN. `0000` is the BlueZ-default fallback
+                    # and what most consumer audio sinks accept (#162).
+                    elif "enter pin code" in lowered or "enter passkey" in lowered:
+                        logger.info("Legacy PIN prompt — auto-entering 0000: %s", stripped)
+                        proc.stdin.write("0000\n")
                         proc.stdin.flush()
                     # Early exit on success
                     if "pairing successful" in stripped.lower() or "already paired" in stripped.lower():
@@ -524,6 +563,7 @@ class BluetoothManager:
             logger.info("Device already connected")
             self.connected = True
             self.paired = self.is_device_paired()
+            self._paired_unknown_count = 0
             if self._abort_connect_if_cancelled():
                 return False
             # Ensure audio is configured
@@ -561,6 +601,7 @@ class BluetoothManager:
                 logger.info("Successfully connected to Bluetooth speaker")
                 self.connected = True
                 self.paired = True
+                self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
                     return False
                 # Configure audio routing
@@ -568,7 +609,56 @@ class BluetoothManager:
                 return not self._abort_connect_if_cancelled()
 
         logger.warning("Failed to connect (not connected after 5 status checks)")
+        if self.paired is None:
+            self._paired_unknown_count += 1
+            if self._paired_unknown_count >= _PAIRED_UNKNOWN_THRESHOLD:
+                self._purge_stale_bluez_entry()
+                self._paired_unknown_count = 0
         return False
+
+    def _purge_stale_bluez_entry(self) -> None:
+        """Force-remove a stale BlueZ device entry so the next reconnect can re-pair.
+
+        Called from connect_device() after _PAIRED_UNKNOWN_THRESHOLD consecutive
+        failed attempts where BlueZ has no current device object. Without this
+        the monitor loop spins on `Failed to connect` forever (#162). Surfacing
+        an actionable status lets the operator know the device must be in
+        pairing mode for the next attempt to succeed.
+        """
+        logger.warning(
+            "[%s] BlueZ has no record of %s after %d failed attempts — purging "
+            "stale cache entry. Put device in pairing mode to re-pair.",
+            self.device_name,
+            self.mac_address,
+            _PAIRED_UNKNOWN_THRESHOLD,
+        )
+        cleanup_cmds: list[str] = []
+        if self._adapter_select:
+            cleanup_cmds.append(f"select {self._adapter_select}")
+        cleanup_cmds.append(f"remove {self.mac_address}")
+        try:
+            subprocess.run(
+                ["bluetoothctl"],
+                input="\n".join(cleanup_cmds) + "\n",
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug("[%s] Stale BlueZ purge failed (non-fatal): %s", self.device_name, e)
+        if self.host:
+            try:
+                self.host.update_status(
+                    {
+                        "last_error": (
+                            "Bluetooth speaker unreachable: BlueZ has no record of this device. "
+                            "Put device in pairing mode and reconnect."
+                        ),
+                        "last_error_at": datetime.now(tz=UTC).isoformat(),
+                    }
+                )
+            except Exception as exc:
+                logger.debug("[%s] Failed to surface purge status: %s", self.device_name, exc)
 
     def disconnect_device(self) -> bool:
         """Disconnect from the Bluetooth device via D-Bus; falls back to bluetoothctl."""

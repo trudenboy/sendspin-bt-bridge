@@ -5473,7 +5473,7 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
 
     var row = document.createElement('div');
     row.className = 'bt-device-row';
-    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 0;
+    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 300;
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
     var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
@@ -8991,7 +8991,7 @@ function _defaultBtDeviceDirtyFields() {
         player_name: '',
         mac: '',
         adapter: '',
-        static_delay_ms: 0,
+        static_delay_ms: 300,
         listen_host: '',
         listen_port: null,
         preferred_format: 'flac:44100:16:2',

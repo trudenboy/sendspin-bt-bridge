@@ -557,6 +557,7 @@ def test_pair_device_trusts_only_after_pair_success(bt_manager):
     )
 
     with (
+        patch("bluetooth_manager.subprocess.run"),
         patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
@@ -594,6 +595,7 @@ def test_pair_device_cancelled_after_popen(bt_manager):
         return fake_proc
 
     with (
+        patch("bluetooth_manager.subprocess.run"),
         patch("bluetooth_manager.subprocess.Popen", side_effect=_set_cancelled),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
     ):
@@ -601,6 +603,142 @@ def test_pair_device_cancelled_after_popen(bt_manager):
 
     # The process should have been terminated (wait sets _returncode)
     assert fake_proc._returncode is not None
+
+
+def test_pair_device_clears_stale_agent_before_pairing(bt_manager):
+    """pair_device must run `agent off` cleanup before the main pair session.
+
+    Without it, a leftover D-Bus agent object from a previous bluetoothctl
+    session causes `Failed to register agent object` and pairing fails with
+    org.bluez.Error.ConnectionAttemptFailed (issue #162 — same root cause as
+    the standalone pair flow). Mirrors the fix in routes/api_bt.py.
+    """
+    fake_proc = _FakeProc(
+        stdout_lines=["Pairing successful\n"],
+        tail="Trusted: yes\nPaired: yes\n",
+    )
+    cleanup_calls = []
+
+    def _capture_run(cmd, **kwargs):
+        cleanup_calls.append({"cmd": cmd, "input": kwargs.get("input", "")})
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        return result
+
+    with (
+        patch("bluetooth_manager.subprocess.run", side_effect=_capture_run),
+        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        assert bt_manager.pair_device() is True
+
+    assert cleanup_calls, "Expected a subprocess.run cleanup call before Popen"
+    cleanup_input = cleanup_calls[0]["input"]
+    assert "agent off\n" in cleanup_input
+    # `agent off` must come before any `remove` so the next `agent on` is clean
+    assert cleanup_input.index("agent off") < cleanup_input.index(f"remove {bt_manager.mac_address}")
+
+
+def test_connect_device_clears_stale_bluez_entry_after_repeated_unknown_pairing(bt_manager):
+    """After K consecutive failed reconnects where BlueZ has no device object,
+    purge the stale cache entry so the next cycle can trigger pair_device.
+
+    KALLSUP-class issue (#162): some speakers leave BlueZ with no current device
+    object after disconnect. is_device_paired() returns None, connect fails,
+    monitor loops forever logging `Failed to connect (not connected after 5
+    status checks)`. Forcing `bluetoothctl remove {mac}` lets the next reconnect
+    see paired==False and escalate to pair_device (which now has #162 cleanups).
+    """
+    run_calls: list[str] = []
+
+    def _capture_run(cmd, **kwargs):
+        run_calls.append(kwargs.get("input", ""))
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        return result
+
+    def _remove_inputs():
+        return [s for s in run_calls if f"remove {bt_manager.mac_address}" in s]
+
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(bt_manager, "is_device_paired", return_value=None),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch("bluetooth_manager.subprocess.run", side_effect=_capture_run),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        for _ in range(2):
+            bt_manager.connect_device()
+
+        assert _remove_inputs() == [], (
+            f"Stale-cache cleanup must not trigger before threshold; got {_remove_inputs()!r}"
+        )
+
+        bt_manager.connect_device()
+
+        assert _remove_inputs(), "Expected `remove {mac}` cleanup once paired-unknown count reached threshold"
+
+
+def test_connect_device_resets_paired_unknown_count_on_success(bt_manager):
+    """A successful connect must reset the paired-unknown counter so a later
+    transient None doesn't trigger spurious cache purges.
+    """
+    bt_manager._paired_unknown_count = 2  # simulate prior history
+
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=True),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        assert bt_manager.connect_device() is True
+
+    assert bt_manager._paired_unknown_count == 0
+
+
+@pytest.mark.parametrize(
+    "prompt_line",
+    [
+        "[agent] Enter PIN code:\n",
+        "[agent] Enter passkey (number in 0-999999):\n",
+    ],
+    ids=["enter_pin_code", "enter_passkey"],
+)
+def test_pair_device_auto_answers_legacy_pin_prompt(bt_manager, prompt_line):
+    """pair_device must auto-enter `0000` when bluetoothctl asks for a legacy PIN.
+
+    Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`) prompt
+    `[agent] Enter PIN code:` or `[agent] Enter passkey:` depending on the
+    device profile and BlueZ version. Both must auto-answer with `0000` so
+    pairing doesn't time out (issue #162). Mirrors the fix in routes/api_bt.py.
+    """
+    fake_proc = _FakeProc(
+        stdout_lines=[
+            prompt_line,
+            "Pairing successful\n",
+        ],
+        tail="Paired: yes\n",
+    )
+
+    with (
+        patch("bluetooth_manager.subprocess.run"),
+        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        assert bt_manager.pair_device() is True
+
+    assert "0000\n" in fake_proc.stdin.writes, (
+        f"Expected `0000\\n` to be written to bluetoothctl stdin in response to "
+        f"{prompt_line!r}, got {fake_proc.stdin.writes!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
