@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.1] - 2026-04-19
+
+Stable release rolling up the 2.60.0-rc.1 line (on-line config apply, PR #164,
+fixes #161) together with a targeted fix for the standalone pair flow surfaced
+in #162. Headline themes:
+
+- **On-line config apply** — saving device and global settings from the web UI
+  no longer forces a full bridge restart for most fields, so a single delay
+  tweak or idle-mode change costs ~0 s of audio interruption instead of the
+  8–15 s a cold start used to take.
+- **Standalone pair reliability** — the UI's Add+Pair flow now handles legacy
+  BT 2.x devices (`LegacyPairing: yes`, e.g. HMDX JAM) and tears down stale
+  agent objects before re-pairing so the next attempt actually has an
+  authentication agent.
+
+### Fixed
+- **#162 — `Failed to register agent object` on consecutive pair attempts** —
+  `routes/api_bt.py:_run_standalone_pair` now runs `agent off` as part of the
+  cleanup phase before the next pair attempt. Without this, an agent object
+  lingering on the system bus from a previous bluetoothctl session (or from
+  HA Core's own Bluetooth integration) caused `agent on` to fail and produced
+  `org.bluez.Error.ConnectionAttemptFailed` on the subsequent `pair` call.
+- **#162 — Legacy PIN prompt hangs to timeout** — `_run_standalone_pair` now
+  auto-answers `0000` to `Enter PIN code:` / `Enter passkey:` prompts in
+  addition to the existing SSP `Confirm passkey` handling. Recovers BT 2.x
+  audio sinks (HMDX JAM, IKEA KALLSUP-class) which would otherwise block the
+  flow until the 15 s wait deadline.
+
 ### Added
 - **On-line config apply for `POST /api/config`** — saving changes in the web UI
   no longer requires a bridge restart for most fields. A new pure diff layer
