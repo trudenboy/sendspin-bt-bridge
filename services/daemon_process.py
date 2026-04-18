@@ -447,6 +447,25 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 logger.warning("Invalid log level requested: %s", level_name)
                 continue
             logging.getLogger().setLevel(getattr(logging, level_name))
+        elif cmd.cmd == "set_static_delay_ms":
+            daemon = daemon_ref[0] if daemon_ref else None
+            raw_value = cmd.payload.get("value")
+            try:
+                delay_ms = float(raw_value)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                logger.warning("Invalid static_delay_ms value: %r", raw_value)
+                continue
+            # Clamp to the same range as config.schema.json.
+            delay_ms = max(0.0, min(5000.0, delay_ms))
+            client = getattr(daemon, "_client", None) if daemon else None
+            setter = getattr(client, "set_static_delay_ms", None) if client else None
+            if callable(setter):
+                try:
+                    setter(delay_ms)
+                except Exception as exc:
+                    logger.warning("set_static_delay_ms failed: %s", exc)
+            else:
+                logger.warning("set_static_delay_ms not supported by current sendspin client — value ignored")
         elif cmd.cmd == "transport":
             daemon = daemon_ref[0] if daemon_ref else None
             action = str(cmd.payload.get("action", "")).strip()
@@ -474,9 +493,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             _background_tasks.add(_task)
             _task.add_done_callback(_background_tasks.discard)
             _task.add_done_callback(
-                lambda t, _a=action: logger.debug("transport %s error: %s", _a, t.exception())
-                if t.exception()
-                else None
+                lambda t, _a=action: (
+                    logger.debug("transport %s error: %s", _a, t.exception()) if t.exception() else None
+                )
             )
         elif cmd.cmd == "set_standby":
             sink = cmd.payload.get("sink")

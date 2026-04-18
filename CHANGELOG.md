@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **On-line config apply for `POST /api/config`** — saving changes in the web UI
+  no longer requires a bridge restart for most fields. A new pure diff layer
+  (`services/config_diff.py`) compares the previous and new config and emits an
+  ordered list of `ReconfigAction`s classified as:
+  - `HOT_APPLY` — applied in-place via IPC or parent-level field update
+    (`static_delay_ms`, `idle_mode`, `idle_disconnect_minutes`,
+    `power_save_delay_minutes`, `keepalive_interval`, `room_id`, `room_name`,
+    `HA_AREA_NAME_ASSIST_ENABLED`, `HA_ADAPTER_AREA_MAP`).
+  - `WARM_RESTART` — single subprocess `stop_sendspin()` + `_start_sendspin_inner()`
+    (~3–5 s silence on that speaker only) for `player_name`, `listen_port`,
+    `listen_host`, `preferred_format`, `adapter`.
+  - `GLOBAL_BROADCAST` — fan-out IPC (`LOG_LEVEL`, volume/mute flags).
+  - `GLOBAL_RESTART` — warm-restart every running client
+    (`SENDSPIN_SERVER`/`PORT`, `BRIDGE_NAME`, `BRIDGE_NAME_SUFFIX`,
+    `PULSE_LATENCY_MSEC`, `PREFER_SBC_CODEC`, `BT_CHECK_INTERVAL`,
+    `BT_MAX_RECONNECT_FAILS`, `DISABLE_PA_RESCUE_STREAMS`).
+  - `RESTART_REQUIRED` — Flask-bound fields (`WEB_PORT`, `AUTH_*`,
+    `SECRET_KEY`, brute-force limits) still need a full bridge restart and are
+    surfaced in the response so the UI can prompt.
+- **`services/reconfig_orchestrator.py`** — dispatches the action list from the
+  Flask request thread onto the asyncio loop via `run_coroutine_threadsafe`.
+  Hot-apply waits synchronously (500 ms cap) so the HTTP response returns
+  quickly; warm restarts are fire-and-forget.
+- **`SendspinClient.apply_hot_config()` / `warm_restart()`** — parent-side
+  orchestration methods. `warm_restart` flips `status.reloading=True` (exposed
+  over SSE/`/api/status`) and preserves the bridge suffix (`" @ {bridge}"`) when
+  `player_name` changes.
+- **New daemon IPC command `set_static_delay_ms`** in
+  `services/daemon_process.py` — delegates to the already-available
+  `aiosendspin.client.set_static_delay_ms()` so the delay updates mid-stream
+  without a subprocess restart. Fixes #161.
+- **`reconfig` summary in save response** — `POST /api/config` now returns a
+  `reconfig` object (`hot`, `warm_restarting`, `global_broadcast`,
+  `global_restart`, `restart_required`, `bt_removed`, `errors`). The web UI
+  renders a detailed toast (✓ applied, ↻ restarting, ⚠ restart required)
+  instead of the blanket "Configuration saved — restart to apply" banner.
+- **Tests** — `tests/test_config_diff.py` (29 cases covering per-field
+  classification, ordering, and normalization) and
+  `tests/test_reconfigure_client.py` (10 cases covering IPC envelopes, warm
+  restart stop/start order, reloading flag cleanup on failure, and bridge
+  suffix preservation on rename).
+
 ## [2.59.1] - 2026-04-18
 
 Targeted fix for the AKG Y500 / BlueZ 5.82 A2DP profile regression (#159) where

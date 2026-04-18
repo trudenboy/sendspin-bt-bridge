@@ -6995,19 +6995,75 @@ async function saveConfig() {
             var errData = await resp.json().catch(function() { return {}; });
             return { ok: false, error: errData.error || 'Save failed (HTTP ' + resp.status + ')' };
         }
+        var saveData = await resp.json().catch(function() { return {}; });
+        var reconfig = saveData && saveData.reconfig;
         if (shouldReloadMaRuntime && config.MA_API_URL && config.MA_API_TOKEN) {
             var maReload = await _reloadMaRuntimeAfterConfigSave();
             return {
                 ok: true,
+                reconfig: reconfig,
                 maReloaded: !!maReload.ok,
                 maReloadError: maReload.error || '',
             };
         }
-        return { ok: true };
+        return { ok: true, reconfig: reconfig };
     } catch (err) {
         console.error('Save config error:', err);
         return { ok: false, error: 'Network error: ' + err.message };
     }
+}
+
+function _formatReconfigSummary(reconfig) {
+    if (!reconfig) return null;
+    var parts = [];
+    var severity = 'success';
+
+    function labelOf(entry) {
+        return entry.label || entry.mac || 'global';
+    }
+    function fieldsOf(entry) {
+        return (entry.fields || []).join(', ');
+    }
+    function summariseGroup(entries) {
+        return entries.map(function(entry) {
+            var fields = fieldsOf(entry);
+            return fields
+                ? labelOf(entry) + ' (' + fields + ')'
+                : labelOf(entry);
+        }).join('; ');
+    }
+
+    if (reconfig.hot && reconfig.hot.length) {
+        parts.push('\u2713 Applied live: ' + summariseGroup(reconfig.hot));
+    }
+    if (reconfig.global_broadcast && reconfig.global_broadcast.length) {
+        parts.push('\u2713 Global: ' + summariseGroup(reconfig.global_broadcast));
+    }
+    if (reconfig.warm_restarting && reconfig.warm_restarting.length) {
+        parts.push('\u21bb Restarting: ' + summariseGroup(reconfig.warm_restarting));
+        severity = 'warning';
+    }
+    if (reconfig.global_restart && reconfig.global_restart.length) {
+        parts.push('\u21bb Restarting all clients: ' + summariseGroup(reconfig.global_restart));
+        severity = 'warning';
+    }
+    if (reconfig.stopped && reconfig.stopped.length) {
+        parts.push('\u25a0 Stopped: ' + summariseGroup(reconfig.stopped));
+        if (severity === 'success') severity = 'warning';
+    }
+    if (reconfig.restart_required && reconfig.restart_required.length) {
+        parts.push('\u26a0 Restart required: ' + summariseGroup(reconfig.restart_required));
+        severity = 'warning';
+    }
+    if (reconfig.errors && reconfig.errors.length) {
+        parts.push('\u2717 Errors: ' + reconfig.errors.map(function(e) {
+            return (e.label || e.mac || '?') + ' (' + (e.error || 'unknown') + ')';
+        }).join('; '));
+        severity = 'error';
+    }
+
+    if (!parts.length) return null;
+    return { message: parts.join(' | '), severity: severity };
 }
 
 function _configShouldReloadMaRuntime(config) {
@@ -8819,12 +8875,15 @@ document.getElementById('config-form').addEventListener('submit', async function
         var result = await saveConfig();
         if (result && result.ok) {
             _markConfigSnapshotClean();
+            var reconfigMsg = _formatReconfigSummary(result.reconfig);
             if (result.maReloaded) {
                 showToast('\u2713 Configuration saved \u2014 Music Assistant reloaded without full restart', 'success');
             } else if (result.maReloadError) {
-                showToast('\u2713 Configuration saved \u2014 MA reload failed, restart to apply: ' + result.maReloadError, 'warning');
+                showToast('\u2713 Configuration saved \u2014 MA reload failed: ' + result.maReloadError, 'warning');
+            } else if (reconfigMsg) {
+                showToast('\u2713 Configuration saved \u2014 ' + reconfigMsg.message, reconfigMsg.severity);
             } else {
-                showToast('\u2713 Configuration saved \u2014 restart to apply', 'success');
+                showToast('\u2713 Configuration saved', 'success');
             }
         } else {
             showToast('\u2717 ' + (result && result.error || 'Failed to save configuration'), 'error');
