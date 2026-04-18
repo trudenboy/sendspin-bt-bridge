@@ -52,6 +52,17 @@ in #162. Headline themes:
   reconnect cycle can escalate to `pair_device` instead of looping
   `Failed to connect (not connected after 5 status checks)` indefinitely.
 
+### Changed
+- **`static_delay_ms` default for new devices is now 300 ms** —
+  `static/app.js:addBtDeviceRow` pre-fills the delay field with `300` when a
+  device is added via the manual "Add device" button, the scan modal, or the
+  paired-device list. Existing saved configs are not touched: only rows that
+  arrive without an explicit `static_delay_ms` get the new default. Reflects
+  field reports that 300 ms gives noticeably better A/V sync on Ubuntu +
+  PipeWire two-speaker setups than the previous `0` baseline. The dirty-tracking
+  baseline in `_defaultBtDeviceDirtyFields` is updated to match so freshly
+  added rows aren't flagged dirty before the user touches them.
+
 ### Added
 - **On-line config apply for `POST /api/config`** — saving changes in the web UI
   no longer requires a bridge restart for most fields. A new pure diff layer
