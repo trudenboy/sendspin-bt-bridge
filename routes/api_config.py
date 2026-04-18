@@ -51,6 +51,7 @@ from services.async_job_state import (
 )
 from services.bluetooth import _MAC_RE
 from services.bridge_runtime_state import get_main_loop
+from services.config_diff import diff_configs
 from services.config_validation import validate_uploaded_config
 from services.device_registry import get_device_registry_snapshot
 from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_info, get_self_delivery_channel
@@ -58,6 +59,7 @@ from services.ha_core_api import HaCoreApiError, fetch_ha_area_catalog
 from services.ipc_protocol import IPC_PROTOCOL_VERSION
 from services.log_analysis import summarize_issue_logs
 from services.ma_client import fetch_all_players_snapshot
+from services.reconfig_orchestrator import ReconfigOrchestrator
 from services.sendspin_compat import get_runtime_dependency_versions
 from services.status_snapshot import build_device_snapshot
 from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
@@ -807,15 +809,29 @@ def api_config():
 
         write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
 
+        # Compute reconfig actions from the on-disk "before" snapshot to the
+        # just-persisted "after" snapshot while the lock is still held.
+        reconfig_actions = diff_configs(existing, config)
+
     # Invalidate adapter name cache so next status poll picks up changes
     refresh_adapter_name_cache()
 
     _reload_volume_via_ma()
     _sync_ha_options(config)
 
+    # Apply on-line reconfiguration: hot-update fields via IPC, warm-restart
+    # subprocesses where needed, record fields that still require a full
+    # bridge restart.
+    reconfig_summary_dict: dict[str, object] = {}
+    if reconfig_actions:
+        orchestrator = ReconfigOrchestrator(get_main_loop(), get_device_registry_snapshot())
+        reconfig_summary_dict = orchestrator.apply(reconfig_actions).to_dict()
+
     payload: dict[str, object] = {"success": True}
     if warnings:
         payload["validation"] = {"warnings": warnings}
+    if reconfig_summary_dict:
+        payload["reconfig"] = reconfig_summary_dict
     return jsonify(payload)
 
 

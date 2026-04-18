@@ -256,6 +256,8 @@ class DeviceStatus:
     idle_mode: str = "default"
     port_collision: bool = False
     active_listen_port: int | None = None
+    reloading: bool = False
+    listen_port: int | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -1446,6 +1448,134 @@ class SendspinClient:
             cmd["value"] = value
         await self._send_subprocess_command(cmd)
         return True
+
+    # ── Reconfigure (hot-apply / warm-restart) ────────────────────────────
+
+    # Parent-only fields that take effect by mutating self.<field> — they do
+    # not require an IPC round-trip nor a subprocess restart.
+    _RECONFIG_PARENT_ONLY_FIELDS: tuple[str, ...] = (
+        "idle_mode",
+        "idle_disconnect_minutes",
+        "power_save_delay_minutes",
+        "keepalive_enabled",
+        "keepalive_interval",
+        "room_id",
+        "room_name",
+    )
+
+    async def apply_hot_config(self, fields_payload: dict[str, object]) -> list[str]:
+        """Apply hot-update fields to this client without restarting the subprocess.
+
+        Returns the list of fields that were actually applied (useful for the
+        UI summary).  Unknown fields are silently ignored — the caller is
+        expected to pass only keys classified as HOT_APPLY by
+        :mod:`services.config_diff`.
+        """
+        applied: list[str] = []
+
+        for key, value in fields_payload.items():
+            if key == "static_delay_ms":
+                try:
+                    delay_ms = float(value) if value is not None else 0.0  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    logger.warning("[%s] Ignoring invalid static_delay_ms: %r", self.player_name, value)
+                    continue
+                self.static_delay_ms = delay_ms
+                if self.is_running():
+                    await self._send_subprocess_command({"cmd": "set_static_delay_ms", "value": delay_ms})
+                applied.append(key)
+            elif key == "keepalive_interval":
+                try:
+                    interval = max(30, int(value) if value is not None else 30)  # type: ignore[call-overload]
+                except (TypeError, ValueError):
+                    logger.warning("[%s] Ignoring invalid keepalive_interval: %r", self.player_name, value)
+                    continue
+                self.keepalive_interval = interval
+                applied.append(key)
+            elif key == "keepalive_enabled":
+                # Honour the explicit flag OR'd with the current idle_mode so
+                # enabling keep_alive via either knob has the same effect.
+                self.keepalive_enabled = bool(value) or self.idle_mode == "keep_alive"
+                applied.append(key)
+            elif key == "idle_mode":
+                new_mode = str(value or "default")
+                self.idle_mode = new_mode
+                # idle_mode is the authoritative source for keepalive — switching
+                # away from keep_alive must turn keepalive off (unless the same
+                # payload also sets the legacy keepalive_enabled flag).
+                explicit_keepalive = bool(fields_payload.get("keepalive_enabled", False))
+                self.keepalive_enabled = new_mode == "keep_alive" or explicit_keepalive
+                self._update_status({"idle_mode": new_mode})
+                applied.append(key)
+            elif key in self._RECONFIG_PARENT_ONLY_FIELDS:
+                if hasattr(self, key):
+                    setattr(self, key, value)
+                    applied.append(key)
+
+        return applied
+
+    async def warm_restart(self, new_device: dict[str, object]) -> None:
+        """Stop the subprocess and re-spawn it with the new device config.
+
+        Updates the parent-side fields (``player_name``, ``listen_port``,
+        ``listen_host``, ``preferred_format``, ``static_delay_ms``,
+        ``idle_mode``, idle timers, etc.) from ``new_device`` before the
+        restart so the fresh subprocess boots with the new parameters.
+        """
+        self._update_status({"reloading": True})
+        try:
+            self._apply_warm_restart_fields(new_device)
+            await self.stop_sendspin()
+            if self.running:
+                await self._start_sendspin_inner()
+        finally:
+            self._update_status({"reloading": False})
+
+    def _apply_warm_restart_fields(self, device: dict[str, object]) -> None:
+        """Mutate self.<field> from the new device config before respawn."""
+        if "player_name" in device:
+            new_name = str(device["player_name"] or self.player_name)
+            # The effective bridge suffix must be preserved on rename.
+            suffix = f" @ {self._effective_bridge}" if self._effective_bridge else ""
+            if suffix and not new_name.endswith(suffix):
+                new_name = f"{new_name}{suffix}"
+            self.player_name = new_name
+        if "listen_port" in device and device["listen_port"] is not None:
+            try:
+                self.listen_port = int(device["listen_port"])  # type: ignore[call-overload]
+            except (TypeError, ValueError):
+                pass
+        if "listen_host" in device:
+            host_val = device.get("listen_host")
+            self.listen_host = str(host_val) if host_val else None
+        if "preferred_format" in device:
+            fmt_val = device.get("preferred_format")
+            self.preferred_format = str(fmt_val) if fmt_val else None
+        if "static_delay_ms" in device:
+            raw = device.get("static_delay_ms")
+            try:
+                self.static_delay_ms = float(raw) if raw is not None else None  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                self.static_delay_ms = None
+        for hot_key in self._RECONFIG_PARENT_ONLY_FIELDS:
+            if hot_key in device and hasattr(self, hot_key):
+                setattr(self, hot_key, device[hot_key])
+        # Re-derive keepalive_enabled from the new idle_mode + explicit legacy
+        # flag, mirroring SendspinClient.__init__.  Without this, a warm restart
+        # that changes idle_mode away from keep_alive would leave keepalive
+        # permanently on (the setattr loop copies the stale parent-side value).
+        if "idle_mode" in device or "keepalive_enabled" in device:
+            mode_for_keepalive = str(device.get("idle_mode", self.idle_mode) or "default")
+            explicit_flag = bool(device.get("keepalive_enabled", False))
+            self.keepalive_enabled = mode_for_keepalive == "keep_alive" or explicit_flag
+        # Refresh status mirror so the UI reflects renames / idle mode change
+        # immediately, without waiting for the subprocess to emit.
+        self._update_status(
+            {
+                "idle_mode": self.idle_mode,
+                "listen_port": self.listen_port,
+            }
+        )
 
     # ── Keepalive ─────────────────────────────────────────────────────────
 

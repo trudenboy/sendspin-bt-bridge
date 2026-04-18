@@ -137,6 +137,8 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `adapter_names.py` — thread-safe cache for Bluetooth adapter MAC→friendly name lookups
 - `async_job_state.py` — manages in-process state for long-running async jobs (MA discovery, scan, updates) with TTL eviction
 - `config_validation.py` — validates and normalizes uploaded config payloads including device MACs, ports, handoff modes
+- `config_diff.py` — pure diff of old vs new config; produces ordered `ReconfigAction` list classified as `HOT_APPLY` / `WARM_RESTART` / `GLOBAL_BROADCAST` / `GLOBAL_RESTART` / `RESTART_REQUIRED` / `BT_REMOVE` / `START_CLIENT` / `STOP_CLIENT`
+- `reconfig_orchestrator.py` — dispatches `ReconfigAction` lists from the Flask thread onto the asyncio loop; hot-apply IPC awaits synchronously (500 ms cap), warm restarts run fire-and-forget; powers on-line `POST /api/config` apply without a bridge restart
 - `duplicate_device_check.py` — cross-bridge duplicate device detection via MA API to prevent disconnect/reconnect loops
 - `event_hooks.py` — runtime-scoped webhook registry with delivery history and host validation
 - `internal_events.py` — lightweight pub/sub for typed internal runtime events (connections, playback, errors)

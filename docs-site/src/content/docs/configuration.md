@@ -139,8 +139,18 @@ Standalone login uses CSRF-protected forms plus a `SameSite=Lax`, `HttpOnly` ses
 
 The footer is shared across tabs:
 
-- **Save** writes `config.json` now.
-- **Save & Restart** saves and restarts immediately. Use this for port changes, auth/session changes, Bluetooth topology changes, or anything else that must be applied at startup.
+- **Save** writes `config.json` now and applies changes on-line where possible.
+  Per-device tuning (`static_delay_ms`, idle mode, room metadata) is hot-applied
+  via IPC to the running daemon subprocess. Fields that bind at spawn time
+  (`listen_port`, `preferred_format`, `adapter`, `player_name`) trigger a
+  warm restart of the single affected subprocess (~3–5 s of silence on that
+  speaker). Global fields that drive every subprocess (`SENDSPIN_SERVER`,
+  `BRIDGE_NAME`, `PULSE_LATENCY_MSEC`, BT tuning) warm-restart every running
+  speaker in parallel. The save response toast shows exactly what was applied,
+  what is restarting, and what still needs a full bridge restart.
+- **Save & Restart** saves and restarts immediately. Use this for Flask-bound
+  fields (`WEB_PORT`, auth/session settings, `SECRET_KEY`, brute-force limits)
+  or when adding a brand-new device MAC that wasn't running before.
 - **Cancel** restores the last saved values in the form.
 - **Download** exports a share-safe timestamped JSON file with secrets such as `MA_API_TOKEN`, password hash, and secret key removed.
 - **Upload** imports a previously exported config and preserves the existing password hash, secret key, and stored MA token on the server.
