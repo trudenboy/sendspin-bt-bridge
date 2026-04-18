@@ -166,3 +166,77 @@ async def test_apply_stop_falls_back_to_stop_sendspin_on_bt_release_failure(monk
     client.set_bt_management_enabled.assert_called_once_with(False)
     assert stop_calls == [None]
     assert len(summary.stopped) == 1
+
+
+def test_apply_hot_closes_coroutine_when_scheduling_fails(monkeypatch):
+    # Regression: if run_coroutine_threadsafe raises (loop shutting down),
+    # the coroutine built by client.apply_hot_config() must be closed so it
+    # doesn't leak / trigger "coroutine was never awaited" warnings.
+    client = MagicMock()
+    created_coros: list = []
+
+    async def _apply_hot_config(payload):
+        return list(payload.keys())
+
+    def _spy(*args, **kwargs):
+        coro = _apply_hot_config(*args, **kwargs)
+        created_coros.append(coro)
+        return coro
+
+    client.apply_hot_config = _spy
+
+    snapshot = _FakeSnapshot({"AA:BB:CC:DD:EE:FF": client})
+    loop = _fake_loop()
+    try:
+        orch = ReconfigOrchestrator(loop, snapshot)  # type: ignore[arg-type]
+
+        def _raise_runtime(coro, _loop):
+            raise RuntimeError("loop is closed")
+
+        monkeypatch.setattr(
+            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            _raise_runtime,
+        )
+
+        action = ReconfigAction(
+            kind=ActionKind.HOT_APPLY,
+            mac="AA:BB:CC:DD:EE:FF",
+            fields=["static_delay_ms"],
+            payload={"static_delay_ms": 250.0},
+            label="Test Speaker",
+        )
+
+        summary = orch.apply([action])
+
+        assert len(created_coros) == 1
+        # Coroutine was closed — cr_frame is None once close() has run.
+        assert created_coros[0].cr_frame is None
+        assert summary.hot_applied == []
+        assert len(summary.errors) == 1
+        assert "schedule failed" in summary.errors[0]["error"]
+    finally:
+        loop.close()
+
+
+def test_build_device_snapshot_includes_keepalive_enabled():
+    # Regression: _apply_warm_restart_fields re-derives keepalive_enabled
+    # whenever idle_mode is in the device payload, and the snapshot always
+    # includes idle_mode. So the snapshot must also carry the current
+    # keepalive_enabled flag, otherwise GLOBAL_RESTART on a legacy config
+    # (idle_mode=default + keepalive_enabled=True) would silently flip it off.
+    client = MagicMock()
+    client.player_name = "Test"
+    client.listen_port = 8928
+    client.listen_host = "0.0.0.0"
+    client.preferred_format = None
+    client.static_delay_ms = 0.0
+    client.idle_mode = "default"
+    client.keepalive_enabled = True  # legacy explicit flag
+    client.keepalive_interval = 30
+    client.idle_disconnect_minutes = 0
+    client.power_save_delay_minutes = 1
+
+    snapshot = ReconfigOrchestrator._build_device_snapshot_from_client(client)
+
+    assert snapshot["idle_mode"] == "default"
+    assert snapshot["keepalive_enabled"] is True

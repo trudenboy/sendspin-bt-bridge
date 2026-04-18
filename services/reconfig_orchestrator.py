@@ -184,10 +184,29 @@ class ReconfigOrchestrator:
             # Device isn't running — values already persisted; nothing to do.
             summary.hot_applied.append(action.to_summary())
             return
-        future = asyncio.run_coroutine_threadsafe(
-            client.apply_hot_config(dict(action.payload)),
-            self._loop,
-        )
+        # Build the coroutine up-front so we can close it if scheduling fails
+        # (e.g., the asyncio loop is shutting down), preventing the
+        # "coroutine was never awaited" RuntimeWarning and the associated leak.
+        coro = client.apply_hot_config(dict(action.payload))
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except RuntimeError as exc:
+            coro.close()
+            logger.warning(
+                "Could not schedule hot-apply for %s: %s",
+                action.label or action.mac,
+                exc,
+            )
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"hot-apply schedule failed ({type(exc).__name__})",
+                }
+            )
+            return
         try:
             future.result(timeout=_HOT_APPLY_TIMEOUT_S)
         except Exception as exc:
@@ -356,6 +375,11 @@ class ReconfigOrchestrator:
             "preferred_format": getattr(client, "preferred_format", None),
             "static_delay_ms": getattr(client, "static_delay_ms", None),
             "idle_mode": getattr(client, "idle_mode", "default"),
+            # Include the current keepalive flag so a GLOBAL_RESTART doesn't
+            # accidentally flip it off: _apply_warm_restart_fields re-derives
+            # keepalive_enabled from (idle_mode, explicit flag) whenever either
+            # key is present, and this snapshot always carries idle_mode.
+            "keepalive_enabled": getattr(client, "keepalive_enabled", False),
             "keepalive_interval": getattr(client, "keepalive_interval", 30),
             "idle_disconnect_minutes": getattr(client, "idle_disconnect_minutes", 0),
             "power_save_delay_minutes": getattr(client, "power_save_delay_minutes", 1),
