@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.60.2-rc.1] - 2026-04-20
+## [2.60.2] - 2026-04-20
 
 Targeted fix for the BlueZ 5.86 dual-role A2DP Sink regression surfaced in #166
 (HMDX Jam, IKEA Kallsup and similar smart/TWS/speakerphone devices pair on
