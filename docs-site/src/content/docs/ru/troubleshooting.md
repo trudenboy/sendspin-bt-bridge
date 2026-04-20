@@ -79,6 +79,34 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 
 На медленных системах помогает увеличение **PulseAudio latency (ms)** и включение **Prefer SBC codec**.
 
+## Колонка спаривается, но аудио-sink не появляется (регрессия BlueZ 5.86)
+
+**Симптом.** Колонка спаривается, `bluetoothctl` показывает `Connected: yes`, но в `pactl list cards short` нет `bluez_card.<MAC>` для неё, а в `pactl list sinks short` отсутствует `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. Через 30–40 секунд колонка сама разрывает связь, и последующие попытки reconnect не работают до питания колонки cycle.
+
+**Корневая причина.** Upstream-регрессия BlueZ, трекается в [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922) (см. также [bluez/bluez#1898](https://github.com/bluez/bluez/issues/1898)): для **dual-role** устройств (колонки с A2DP source или HFP/HSP — двухсторонние спикерфоны, TWS-колонки, smart-колонки) BlueZ 5.86 не регистрирует A2DP Sink профиль во время Connect(). Bridge видит линк на D-Bus, но sink в PulseAudio не создаётся, потому что с её точки зрения ни одна карта с A2DP-sink не появилась.
+
+**Исправлено в upstream** коммитом `066a164` ("a2dp: connect source profile after sink"), вошедшим в `bluez 5.87` и back-portированным в `5.86-4.1` в части дистрибутивов.
+
+**Что bridge делает автоматически.** С v2.60.2 bridge применяет два workaround'а на каждом connect:
+
+1. После успешного generic `Connect()` вызывается явный `Device1.ConnectProfile(A2DP_SINK_UUID)`, заставляя BlueZ предложить sink-профиль. На здоровом стеке это no-op.
+2. Если после retry'ев поиска sink он так и не появился, выполняется одноразовый "танец" disconnect → пауза 2 с → reconnect, которого часто достаточно, чтобы второй Connect() зарегистрировал профиль корректно.
+
+Если эти fallback'и не помогли — вы на подтверждённом 5.86-регрессированном стеке, нужен host-level фикс.
+
+**Host-level workaround: отключить HFP/HSP в BlueZ.** Без HFP/HSP у BlueZ не остаётся выбора, кроме как согласовать A2DP. Отредактируйте на хосте `/etc/bluetooth/main.conf`:
+
+```ini
+[General]
+DisablePlugins=hfp,hsp
+```
+
+Затем перезапустите BlueZ (`systemctl restart bluetooth` на обычном хосте). На HAOS этот файл лежит внутри host-слоя и не редактируется из аддона — нужна host-level SSH сессия, и изменения не переживут HAOS update.
+
+**Host-level workaround: сменить Bluetooth-адаптер.** Некоторые встроенные контроллеры (особенно Intel AX200/AX210) страдают от регрессии 5.86 сильнее, чем простые USB-донглы. Перенос затронутой колонки на CSR8510 или Realtek-based USB-донгл (прокинутый в HAOS VM / LXC) часто обходит проблемный код. Стоит попробовать, если у вас нет возможности быстро обновить host BlueZ.
+
+**Правильный фикс.** Обновите host OS до релиза с `bluez ≥ 5.87` или патченым `5.86-4.1`. На HAOS это происходит автоматически вместе с Supervisor/host update. После этого никаких bridge-side интервенций не нужно.
+
 ## Scan ничего не находит
 
 Если **Scan** не возвращает результатов:

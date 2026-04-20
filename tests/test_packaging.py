@@ -50,6 +50,21 @@ def test_entrypoint_waits_for_cold_boot_dependencies_before_launch():
     assert "_configured_devices_present" in entrypoint
 
 
+def test_entrypoint_reports_component_versions_in_diagnostics_banner():
+    entrypoint = (Path(__file__).resolve().parents[1] / "entrypoint.sh").read_text()
+
+    # Component versions must be captured.
+    assert "bluetoothctl --version" in entrypoint
+    assert "uname -r" in entrypoint
+    assert "python3 --version" in entrypoint
+    assert "Server Name:" in entrypoint
+    assert "Server Version:" in entrypoint
+
+    # And rendered in the diagnostics banner.
+    for label in ("Kernel:", "Python:", "BlueZ:", "Audio Srv:"):
+        assert label in entrypoint, f"missing {label!r} in diagnostics banner"
+
+
 def test_dockerfile_installs_gosu_for_runtime_uid_switch():
     dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
 
