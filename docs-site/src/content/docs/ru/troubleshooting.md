@@ -81,7 +81,7 @@ description: Решение частых проблем Sendspin Bluetooth Bridg
 
 ## Колонка спаривается, но аудио-sink не появляется (регрессия BlueZ 5.86)
 
-**Симптом.** Колонка спаривается, `bluetoothctl` показывает `Connected: yes`, но в `pactl list cards short` нет `bluez_card.<MAC>` для неё, а в `pactl list sinks short` отсутствует `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. Через 30–40 секунд колонка сама разрывает связь, и последующие попытки reconnect не работают до питания колонки cycle.
+**Симптом.** Колонка спаривается, `bluetoothctl` показывает `Connected: yes`, но в `pactl list cards short` нет `bluez_card.<MAC>` для неё, а в `pactl list sinks short` отсутствует `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. Через 30–40 секунд колонка сама разрывает связь, и последующие попытки reconnect не работают до выключения и включения питания колонки.
 
 **Корневая причина.** Upstream-регрессия BlueZ, трекается в [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922) (см. также [bluez/bluez#1898](https://github.com/bluez/bluez/issues/1898)): для **dual-role** устройств (колонки с A2DP source или HFP/HSP — двухсторонние спикерфоны, TWS-колонки, smart-колонки) BlueZ 5.86 не регистрирует A2DP Sink профиль во время Connect(). Bridge видит линк на D-Bus, но sink в PulseAudio не создаётся, потому что с её точки зрения ни одна карта с A2DP-sink не появилась.
 

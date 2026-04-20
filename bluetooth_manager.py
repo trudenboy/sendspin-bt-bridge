@@ -733,9 +733,11 @@ class BluetoothManager:
         """Explicitly tell BlueZ to connect the A2DP Sink profile for this device.
 
         Best-effort workaround for bluez/bluez#1922 (5.86 dual-role regression)
-        where the generic Connect() leaves the sink profile unregistered. Errors
-        are logged at debug level — this is a hint to BlueZ, not a hard
-        requirement for connect to be considered successful.
+        where the generic Connect() leaves the sink profile unregistered.
+        Return value is advisory — this is a hint to BlueZ, not a hard
+        requirement for connect to be considered successful. Benign
+        ``AlreadyConnected`` errors on a healthy stack stay silent; any other
+        failure is logged at info level as a potential bluez/bluez#1922 signal.
         """
         ok, reason = _dbus_connect_profile(self._dbus_device_path, A2DP_SINK_UUID)
         if ok:
