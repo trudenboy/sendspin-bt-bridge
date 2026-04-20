@@ -32,6 +32,10 @@ AUDIO_PROBE_STATUS="not attempted"
 AUDIO_PROBE_ERROR=""
 AUDIO_WARNING=""
 AUDIO_HINT=""
+BLUEZ_VERSION="unknown"
+AUDIO_SERVER_VERSION="unknown"
+KERNEL_VERSION="unknown"
+PYTHON_VERSION="unknown"
 
 _probe_pactl_as_runtime() {
     if ! command -v pactl >/dev/null 2>&1; then
@@ -90,6 +94,12 @@ _refresh_dbus_status() {
 _refresh_bluetooth_status() {
     BT_STATUS="✗ no controller"
     BT_PAIRED=0
+    # Capture BlueZ (bluetoothctl) version — critical for diagnosing upstream
+    # regressions such as bluez/bluez#1922 (5.86 dual-role A2DP sink).
+    if command -v bluetoothctl >/dev/null 2>&1; then
+        BLUEZ_VERSION=$(bluetoothctl --version 2>/dev/null | awk '{print $NF}')
+        [ -z "$BLUEZ_VERSION" ] && BLUEZ_VERSION="unknown"
+    fi
     # Unblock Bluetooth RF-kill switch (common on Raspberry Pi built-in adapters)
     if command -v rfkill >/dev/null 2>&1; then
         rfkill unblock bluetooth 2>/dev/null || true
@@ -101,6 +111,23 @@ _refresh_bluetooth_status() {
         return 0
     fi
     return 1
+}
+
+_refresh_audio_server_version() {
+    AUDIO_SERVER_VERSION="unknown"
+    if [ ! -r /tmp/sendspin-pactl-info.log ]; then
+        return
+    fi
+    local name ver
+    name=$(grep -i "^Server Name:" /tmp/sendspin-pactl-info.log | head -1 | cut -d: -f2- | sed 's/^ *//;s/ *$//')
+    ver=$(grep -i "^Server Version:" /tmp/sendspin-pactl-info.log | head -1 | cut -d: -f2- | sed 's/^ *//;s/ *$//')
+    if [ -n "$name" ] && [ -n "$ver" ]; then
+        AUDIO_SERVER_VERSION="$name $ver"
+    elif [ -n "$name" ]; then
+        AUDIO_SERVER_VERSION="$name"
+    elif [ -n "$ver" ]; then
+        AUDIO_SERVER_VERSION="$ver"
+    fi
 }
 
 _refresh_audio_runtime_detection() {
@@ -198,9 +225,11 @@ _refresh_audio_probe_status() {
 
     if _probe_pactl_as_runtime; then
         AUDIO_PROBE_STATUS="✓ pactl info ok"
+        _refresh_audio_server_version
         return 0
     fi
 
+    _refresh_audio_server_version
     AUDIO_PROBE_STATUS="✗ pactl info failed"
     AUDIO_PROBE_ERROR=$(head -1 /tmp/sendspin-pactl-info.log 2>/dev/null | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
     if [ -z "$AUDIO_PROBE_ERROR" ]; then
@@ -304,6 +333,10 @@ case "$PLATFORM" in
   *)       PLATFORM_LABEL="$PLATFORM" ;;
 esac
 
+KERNEL_VERSION=$(uname -r 2>/dev/null || echo "unknown")
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+[ -z "$PYTHON_VERSION" ] && PYTHON_VERSION="unknown"
+
 # Get version from Python
 VERSION=$(python3 -c "from config import VERSION; print(VERSION)" 2>/dev/null || echo "unknown")
 
@@ -323,13 +356,17 @@ echo "╔═══════════════════════�
 echo "║  Sendspin Bridge v${VERSION} Diagnostics"
 echo "╠══════════════════════════════════════════════════════╣"
 printf "║  Platform:    %-38s ║\n" "$PLATFORM ($PLATFORM_LABEL)"
+printf "║  Kernel:      %-38s ║\n" "$KERNEL_VERSION"
+printf "║  Python:      %-38s ║\n" "$PYTHON_VERSION"
 printf "║  Audio:       %-38s ║\n" "$AUDIO_STATUS"
+printf "║  Audio Srv:   %-38s ║\n" "$AUDIO_SERVER_VERSION"
 printf "║  Init UID:    %-38s ║\n" "$RUNTIME_UID:$RUNTIME_GID ($RUNTIME_USER)"
 printf "║  App UID:     %-38s ║\n" "$APP_RUNTIME_UID:$APP_RUNTIME_GID ($APP_RUNTIME_USER)"
 printf "║  Audio Probe: %-38s ║\n" "$AUDIO_PROBE_STATUS"
 printf "║  Startup Wait:%-38s ║\n" " $STARTUP_WAIT_STATUS"
 printf "║  Sinks:       %-38s ║\n" "$SINK_COUNT available"
 printf "║  Bluetooth:   %-38s ║\n" "$BT_STATUS"
+printf "║  BlueZ:       %-38s ║\n" "$BLUEZ_VERSION"
 printf "║  Paired:      %-38s ║\n" "$BT_PAIRED devices"
 printf "║  D-Bus:       %-38s ║\n" "$DBUS_STATUS"
 printf "║  Config:      %-38s ║\n" "$CONFIG_STATUS"

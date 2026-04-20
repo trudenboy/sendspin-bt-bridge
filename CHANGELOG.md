@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.2-rc.1] - 2026-04-20
+
+Targeted fix for the BlueZ 5.86 dual-role A2DP Sink regression surfaced in #166
+(HMDX Jam, IKEA Kallsup and similar smart/TWS/speakerphone devices pair on
+HAOS hosts running the regressed BlueZ but never expose a `bluez_card` /
+`bluez_sink`, and the link drops ~30 s later). Root cause is tracked upstream
+as [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922) and fixed by
+commit `066a164` shipped in BlueZ 5.87 / back-ported to 5.86-4.1.
+
+### Fixed
+- **#166 — dual-role speakers pair but no audio sink appears (BlueZ 5.86
+  regression)** — `BluetoothManager._connect_device_inner` now issues two
+  bridge-side workarounds on every successful connect:
+  1. After the generic `Connect()` returns, it explicitly calls
+     `Device1.ConnectProfile(A2DP_SINK_UUID)` via the new
+     `bt_dbus._dbus_connect_profile` helper so BlueZ is forced to offer the
+     sink profile. Cheap no-op on a healthy stack (returns
+     `org.bluez.Error.AlreadyConnected`).
+  2. If no sink appears after the normal sink-discovery retry loop,
+     `_a2dp_recovery_dance` performs one `disconnect → 2 s wait → reconnect`
+     cycle; users report the second `Connect()` often registers the profile
+     correctly. A per-connect-cycle credit (`_a2dp_dance_remaining = 1`)
+     prevents loops.
+
+### Added
+- **Startup diagnostics versions** — `entrypoint.sh` now captures and prints
+  `Kernel`, `Python`, `BlueZ`, and `Audio Srv` versions in the pre-launch
+  diagnostics banner so future bug reports carry these in the first screenshot.
+- **Troubleshooting docs (EN + RU)** — new "Speaker pairs but no audio sink
+  appears (BlueZ 5.86 regression)" section documents the regression, the
+  auto-applied workarounds, and two host-level fallbacks when the bridge-side
+  fallbacks are not enough: `DisablePlugins=hfp,hsp` in
+  `/etc/bluetooth/main.conf`, and swapping an affected Intel AX200/AX210
+  controller for a CSR8510 / Realtek USB dongle.
+
 ## [2.60.1] - 2026-04-19
 
 Stable release rolling up the 2.60.0-rc.1 line (on-line config apply, PR #164,

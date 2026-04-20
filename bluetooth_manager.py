@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 import bt_audio
 import bt_monitor
-from bt_dbus import _dbus_call_device_method, _dbus_get_device_property
+from bt_dbus import A2DP_SINK_UUID, _dbus_call_device_method, _dbus_connect_profile, _dbus_get_device_property
 from services.bluetooth import extract_pair_failure_reason
 
 if TYPE_CHECKING:
@@ -106,6 +106,12 @@ class BluetoothManager:
         # the stale BlueZ entry so the next reconnect can escalate to
         # pair_device (KALLSUP-class loop, #162).
         self._paired_unknown_count = 0
+        # Remaining attempts at the A2DP recovery dance (disconnect→connect)
+        # within the current reconnect cycle. Reset to 1 on a fresh cycle;
+        # decremented when the dance runs. Guards against loops when the
+        # upstream BlueZ 5.86 regression (bluez/bluez#1922) leaves no A2DP sink
+        # exposed no matter how many times we retry.
+        self._a2dp_dance_remaining = 1
         # Guard churn tracking because reconnect decisions can be touched from
         # multiple execution contexts (polling loop, D-Bus reconnect path).
         self._reconnect_lock = threading.Lock()
@@ -549,6 +555,8 @@ class BluetoothManager:
             if self._abort_connect_if_cancelled():
                 return False
             return self.is_device_connected()
+        # Fresh top-level connect cycle gets one A2DP recovery dance credit.
+        self._a2dp_dance_remaining = 1
         try:
             return self._connect_device_inner()
         finally:
@@ -604,8 +612,22 @@ class BluetoothManager:
                 self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
                     return False
-                # Configure audio routing
-                self.configure_bluetooth_audio()
+                # Workaround for bluez/bluez#1922 (5.86 dual-role A2DP regression):
+                # after the generic Connect() succeeds, also ask BlueZ explicitly
+                # for A2DP Sink. On an unaffected stack this is a cheap no-op
+                # ("AlreadyConnected"); on the buggy path it can force the sink
+                # profile to register where auto-select failed.
+                self._force_a2dp_sink_profile()
+                if self._abort_connect_if_cancelled():
+                    return False
+                # Configure audio routing. If no sink appears (same regression
+                # class) try one disconnect→reconnect dance before surrendering
+                # — some users report the profile registers on the 2nd connect.
+                sink_ok = self.configure_bluetooth_audio()
+                if not sink_ok and self._a2dp_dance_remaining > 0 and not self._abort_connect_if_cancelled():
+                    self._a2dp_dance_remaining -= 1
+                    if self._a2dp_recovery_dance():
+                        self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
         logger.warning("Failed to connect (not connected after 5 status checks)")
@@ -669,6 +691,66 @@ class BluetoothManager:
         if success:
             self.connected = False
         return success
+
+    def _a2dp_recovery_dance(self) -> bool:
+        """Disconnect → wait → reconnect to nudge BlueZ into registering A2DP Sink.
+
+        Workaround for bluez/bluez#1922 class of issues where the first connect
+        after boot leaves the sink profile unregistered. Multiple upstream
+        reports confirm a second connect often succeeds. Returns ``True`` when
+        the device is re-established as connected; ``False`` otherwise.
+
+        This method deliberately uses the low-level bluetoothctl and D-Bus
+        helpers directly — calling ``connect_device`` would recurse and hit
+        the ``_connect_lock`` we're already holding.
+        """
+        logger.warning(
+            "[%s] No A2DP sink after connect — attempting disconnect/reconnect dance (bluez/bluez#1922 workaround)",
+            self.device_name,
+        )
+        # Disconnect — prefer D-Bus, fall back to bluetoothctl.
+        if not _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
+            self._run_bluetoothctl([f"disconnect {self.mac_address}"])
+        self.connected = False
+        # Short settle period — BlueZ needs a moment to tear down ACL state.
+        if not self._wait_with_cancel(2):
+            return False
+        if self._abort_connect_if_cancelled():
+            return False
+        # Reconnect and re-issue the explicit A2DP Sink profile request.
+        self._run_bluetoothctl([f"connect {self.mac_address}"])
+        for _i in range(_CONNECT_CHECK_RETRIES):
+            if not self._wait_with_cancel(1):
+                return False
+            if self.is_device_connected():
+                self.connected = True
+                self._force_a2dp_sink_profile()
+                return True
+        logger.warning("[%s] A2DP recovery dance did not restore the link", self.device_name)
+        return False
+
+    def _force_a2dp_sink_profile(self) -> bool:
+        """Explicitly tell BlueZ to connect the A2DP Sink profile for this device.
+
+        Best-effort workaround for bluez/bluez#1922 (5.86 dual-role regression)
+        where the generic Connect() leaves the sink profile unregistered.
+        Return value is advisory — this is a hint to BlueZ, not a hard
+        requirement for connect to be considered successful. Benign
+        ``AlreadyConnected`` errors on a healthy stack stay silent; any other
+        failure is logged at info level as a potential bluez/bluez#1922 signal.
+        """
+        ok, reason = _dbus_connect_profile(self._dbus_device_path, A2DP_SINK_UUID)
+        if ok:
+            logger.debug("[%s] A2DP Sink profile explicitly connected", self.device_name)
+            return True
+        # "AlreadyConnected" on a healthy stack is normal — don't alarm the log.
+        if reason and "AlreadyConnected" not in reason:
+            logger.info(
+                "[%s] A2DP Sink ConnectProfile hint failed: %s (may indicate bluez/bluez#1922)",
+                self.device_name,
+                reason,
+            )
+        return False
 
     def _reconnect_delay(self, attempt: int) -> float:
         """Exponential backoff delay after a failed reconnect attempt.

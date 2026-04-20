@@ -66,3 +66,31 @@ def _dbus_call_device_method(device_path: str | None, method_name: str) -> bool:
     except Exception as e:
         logger.debug("D-Bus %s failed: %s", method_name, e)
         return False
+
+
+# A2DP Sink service class (audio output into the peer). Stable across BlueZ.
+A2DP_SINK_UUID = "0000110b-0000-1000-8000-00805f9b34fb"
+
+
+def _dbus_connect_profile(device_path: str | None, uuid: str) -> tuple[bool, str]:
+    """Call BlueZ Device1.ConnectProfile(uuid) explicitly.
+
+    Used as a workaround for bluez/bluez#1922 (5.86 dual-role regression) where
+    the generic Connect() fails to register A2DP Sink. ConnectProfile targets a
+    specific profile UUID, bypassing the broken auto-selection logic.
+
+    Returns ``(True, "")`` on success or ``(False, reason)`` — reason is the
+    D-Bus error name (e.g. ``org.bluez.Error.NotFound``) for caller diagnostics.
+    """
+    if not device_path or dbus is None:
+        return False, "dbus unavailable"
+    try:
+        bus = dbus.SystemBus()
+        device = bus.get_object("org.bluez", device_path)
+        iface = dbus.Interface(device, "org.bluez.Device1")
+        iface.ConnectProfile(uuid)
+        return True, ""
+    except Exception as exc:
+        reason = getattr(exc, "get_dbus_name", lambda: "")() or str(exc) or exc.__class__.__name__
+        logger.debug("D-Bus ConnectProfile(%s) failed: %s", uuid, reason)
+        return False, reason

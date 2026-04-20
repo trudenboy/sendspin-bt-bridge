@@ -94,6 +94,34 @@ If the host-level record itself is broken, use the repair/reset tools from **Con
 
 On slower systems, raise **PulseAudio latency (ms)** and consider **Prefer SBC codec**.
 
+## Speaker pairs but no audio sink appears (BlueZ 5.86 regression)
+
+**Symptom.** The speaker pairs and `bluetoothctl` reports `Connected: yes`, but `pactl list cards short` shows no `bluez_card.<MAC>` for it and `pactl list sinks short` has no `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. After about 30–40 seconds the speaker drops the link on its own, and subsequent reconnect attempts fail until the speaker is power-cycled.
+
+**Root cause.** Upstream BlueZ regression tracked in [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922) (see also [bluez/bluez#1898](https://github.com/bluez/bluez/issues/1898)): for **dual-role** devices (speakers that also expose an A2DP source or HFP/HSP — two-way speakerphones, TWS-capable speakers, smart-assistant devices) BlueZ 5.86 fails to register the A2DP Sink profile during Connect(). The bridge can confirm the link on D-Bus but the sink is never created by PulseAudio, because from its perspective no A2DP-sink-capable card appeared.
+
+**Fixed in upstream** by commit `066a164` ("a2dp: connect source profile after sink"), shipped in `bluez 5.87` and back-ported to `5.86-4.1` in some distributions.
+
+**What the bridge does automatically.** Since v2.60.2 the bridge applies two workarounds on every connect:
+
+1. After a successful generic `Connect()`, it explicitly calls `Device1.ConnectProfile(A2DP_SINK_UUID)` to force BlueZ to offer the sink profile. On a healthy stack this is a no-op.
+2. If no sink appears after the discovery retries, it performs a one-shot disconnect → 2 s wait → reconnect "dance", which is often enough to make the second Connect() register the profile correctly.
+
+If these fallbacks do not help, you are on a confirmed 5.86-regressed stack and need a host-level fix.
+
+**Host-level workaround: disable HFP/HSP in BlueZ.** With no HFP/HSP profile available, BlueZ has no choice but to negotiate A2DP. Edit the host's `/etc/bluetooth/main.conf`:
+
+```ini
+[General]
+DisablePlugins=hfp,hsp
+```
+
+Then restart the BlueZ daemon (`systemctl restart bluetooth` on a regular host). On HAOS this file lives inside the host layer and cannot be edited from inside the addon — you would need a host-level SSH session, and the change does not survive a HAOS upgrade.
+
+**Host-level workaround: swap the Bluetooth adapter.** Some built-in controllers (notably Intel AX200/AX210) are more affected by the 5.86 regression than simpler USB dongles. Moving the affected speaker onto a CSR8510 or Realtek-based USB dongle (passed through to the HAOS VM / LXC) often avoids the code path entirely. This is worth trying when you cannot update the host BlueZ in the short term.
+
+**Proper fix.** Update the host OS to a release that ships `bluez ≥ 5.87` or a patched `5.86-4.1`. On HAOS this happens automatically as part of a Supervisor/host update. Once the patched version is running, no bridge-side intervention is needed.
+
 ## Scan finds nothing
 
 If **Scan nearby** returns no useful results:

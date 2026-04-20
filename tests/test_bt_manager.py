@@ -919,3 +919,202 @@ def test_handle_reconnect_failure_does_not_release_below_threshold(bt_manager):
 
     assert released is False
     assert bt_manager.management_enabled is True
+
+
+# ---------------------------------------------------------------------------
+# bluez/bluez#1922 A2DP Sink workarounds (5.86 dual-role regression)
+# ---------------------------------------------------------------------------
+
+
+def test_force_a2dp_sink_profile_calls_connect_profile_with_sink_uuid(bt_manager):
+    """_force_a2dp_sink_profile invokes _dbus_connect_profile with the A2DP Sink UUID."""
+    from bt_dbus import A2DP_SINK_UUID
+
+    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    with patch("bluetooth_manager._dbus_connect_profile", return_value=(True, "")) as mock_cp:
+        assert bt_manager._force_a2dp_sink_profile() is True
+
+    mock_cp.assert_called_once_with(bt_manager._dbus_device_path, A2DP_SINK_UUID)
+
+
+def test_force_a2dp_sink_profile_returns_false_on_error(bt_manager):
+    """Returns False when ConnectProfile raises a non-AlreadyConnected error."""
+    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    with patch(
+        "bluetooth_manager._dbus_connect_profile",
+        return_value=(False, "org.bluez.Error.NotSupported"),
+    ):
+        assert bt_manager._force_a2dp_sink_profile() is False
+
+
+def test_force_a2dp_sink_profile_treats_already_connected_as_benign(bt_manager):
+    """AlreadyConnected error on a healthy stack must not be logged as a warning."""
+    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    with (
+        patch(
+            "bluetooth_manager._dbus_connect_profile",
+            return_value=(False, "org.bluez.Error.AlreadyConnected"),
+        ),
+        patch("bluetooth_manager.logger.info") as mock_info,
+    ):
+        result = bt_manager._force_a2dp_sink_profile()
+
+    assert result is False
+    assert mock_info.call_count == 0
+
+
+def test_connect_device_force_a2dp_sink_profile_after_successful_connect(bt_manager):
+    """After the generic Connect() succeeds, the A2DP Sink profile hint is issued."""
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        assert bt_manager.connect_device() is True
+
+    mock_force.assert_called_once()
+
+
+def test_connect_device_triggers_a2dp_dance_when_no_sink_appears(bt_manager):
+    """If sink discovery fails, _a2dp_recovery_dance runs once and sink is retried."""
+    configure_calls = []
+
+    def _configure():
+        configure_calls.append(1)
+        # First call (post-connect) → no sink; second call (post-dance) → sink ok
+        return len(configure_calls) > 1
+
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_configure),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+        patch.object(bt_manager, "_a2dp_recovery_dance", return_value=True) as mock_dance,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        assert bt_manager.connect_device() is True
+
+    mock_dance.assert_called_once()
+    # configure_bluetooth_audio runs once before the dance and once after
+    assert len(configure_calls) == 2
+
+
+def test_connect_device_does_not_dance_when_sink_appears_immediately(bt_manager):
+    """Healthy stack: sink found on first try → no dance."""
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+        patch.object(bt_manager, "_a2dp_recovery_dance") as mock_dance,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        assert bt_manager.connect_device() is True
+
+    mock_dance.assert_not_called()
+
+
+def test_connect_device_dance_runs_at_most_once_per_connect_cycle(bt_manager):
+    """The dance counter must block a second dance within the same connect cycle."""
+    # Pre-exhaust the dance credit as if a prior path consumed it.
+    bt_manager._a2dp_dance_remaining = 0
+
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=False),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+        patch.object(bt_manager, "_a2dp_recovery_dance") as mock_dance,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        # connect_device resets the counter on entry, so the dance still runs once.
+        bt_manager.connect_device()
+
+    assert mock_dance.call_count == 1
+    # After the call the credit must be consumed, not negative.
+    assert bt_manager._a2dp_dance_remaining == 0
+
+
+def test_connect_device_resets_dance_credit_on_fresh_cycle(bt_manager):
+    """Each top-level connect_device call must refresh the dance credit to 1."""
+    bt_manager._a2dp_dance_remaining = 0
+
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=True),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=True),
+    ):
+        bt_manager.connect_device()
+
+    # Reset happens at top of connect_device before delegating to _inner.
+    # Even though the inner never consumed it (already-connected short path),
+    # the credit must have been set to 1 at the top.
+    assert bt_manager._a2dp_dance_remaining == 1
+
+
+def test_a2dp_recovery_dance_returns_true_on_successful_reconnect(bt_manager):
+    """Successful dance: disconnect → wait → reconnect establishes the link again."""
+    is_connected_results = iter([False, True])
+
+    with (
+        patch("bluetooth_manager._dbus_call_device_method", return_value=True),
+        patch.object(bt_manager, "is_device_connected", side_effect=lambda: next(is_connected_results)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        result = bt_manager._a2dp_recovery_dance()
+
+    assert result is True
+    assert bt_manager.connected is True
+    # After the reconnect succeeds, the dance re-issues the A2DP Sink hint.
+    mock_force.assert_called_once()
+
+
+def test_a2dp_recovery_dance_returns_false_when_reconnect_never_succeeds(bt_manager):
+    """If the link never comes back up, the dance reports failure."""
+    with (
+        patch("bluetooth_manager._dbus_call_device_method", return_value=True),
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+
+        assert bt_manager._a2dp_recovery_dance() is False
+
+
+# ---------------------------------------------------------------------------
+# bt_dbus._dbus_connect_profile — low-level D-Bus wrapper
+# ---------------------------------------------------------------------------
+
+
+def test_dbus_connect_profile_returns_false_when_dbus_module_missing():
+    """With dbus-python unavailable the helper reports dbus-unavailable reason."""
+    import bt_dbus
+
+    with patch.object(bt_dbus, "dbus", None):
+        ok, reason = bt_dbus._dbus_connect_profile("/org/bluez/hci0/dev_X", "uuid")
+
+    assert ok is False
+    assert "dbus" in reason.lower()
+
+
+def test_dbus_connect_profile_returns_false_for_empty_device_path():
+    """Empty device path short-circuits to False without touching the bus."""
+    import bt_dbus
+
+    ok, reason = bt_dbus._dbus_connect_profile(None, bt_dbus.A2DP_SINK_UUID)
+    assert ok is False
+    assert reason
