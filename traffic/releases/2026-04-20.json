@@ -1,0 +1,2183 @@
+{
+  "total_downloads": 19,
+  "release_count": 195,
+  "latest_release_tag": "v2.60.1",
+  "latest_release_published_at": "2026-04-18T22:18:19Z",
+  "releases": [
+    {
+      "tag_name": "v2.60.1",
+      "name": "v2.60.1",
+      "prerelease": false,
+      "published_at": "2026-04-18T22:18:19Z",
+      "created_at": "2026-04-18T22:16:22Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.60.1",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.60.1.tar.gz",
+          "download_count": 0,
+          "size": 19894642,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-18T22:18:22Z",
+          "updated_at": "2026-04-18T22:18:23Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.59.1",
+      "name": "v2.59.1",
+      "prerelease": false,
+      "published_at": "2026-04-18T08:48:30Z",
+      "created_at": "2026-04-18T08:46:41Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.59.1",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.59.1.tar.gz",
+          "download_count": 1,
+          "size": 19876764,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-18T08:48:33Z",
+          "updated_at": "2026-04-18T08:48:34Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.59.0",
+      "name": "v2.59.0",
+      "prerelease": false,
+      "published_at": "2026-04-17T20:06:34Z",
+      "created_at": "2026-04-17T19:56:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.59.0",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.59.0.tar.gz",
+          "download_count": 0,
+          "size": 19872743,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-17T20:06:38Z",
+          "updated_at": "2026-04-17T20:06:39Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.58.0",
+      "name": "v2.58.0",
+      "prerelease": false,
+      "published_at": "2026-04-17T11:39:08Z",
+      "created_at": "2026-04-17T11:37:15Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.58.0",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.58.0.tar.gz",
+          "download_count": 0,
+          "size": 19865800,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-17T11:39:12Z",
+          "updated_at": "2026-04-17T11:39:13Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.57.1",
+      "name": "v2.57.1",
+      "prerelease": false,
+      "published_at": "2026-04-16T17:14:30Z",
+      "created_at": "2026-04-16T17:12:18Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.57.1",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.57.1.tar.gz",
+          "download_count": 0,
+          "size": 19848475,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-16T17:14:33Z",
+          "updated_at": "2026-04-16T17:14:35Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.57.0",
+      "name": "v2.57.0",
+      "prerelease": false,
+      "published_at": "2026-04-16T16:21:42Z",
+      "created_at": "2026-04-16T16:18:16Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.57.0",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.57.0.tar.gz",
+          "download_count": 0,
+          "size": 19846809,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-16T16:21:46Z",
+          "updated_at": "2026-04-16T16:21:47Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.56.3",
+      "name": "v2.56.3",
+      "prerelease": false,
+      "published_at": "2026-04-14T07:36:54Z",
+      "created_at": "2026-04-14T07:33:29Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.56.3",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.56.3.tar.gz",
+          "download_count": 0,
+          "size": 19844542,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-14T07:36:57Z",
+          "updated_at": "2026-04-14T07:36:58Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.56.1",
+      "name": "v2.56.1",
+      "prerelease": false,
+      "published_at": "2026-04-13T13:31:21Z",
+      "created_at": "2026-04-13T13:29:12Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.56.1",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.56.1.tar.gz",
+          "download_count": 0,
+          "size": 19843676,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-13T13:31:25Z",
+          "updated_at": "2026-04-13T13:31:26Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.56.0",
+      "name": "v2.56.0",
+      "prerelease": false,
+      "published_at": "2026-04-13T13:00:18Z",
+      "created_at": "2026-04-13T12:58:25Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.56.0",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.56.0.tar.gz",
+          "download_count": 0,
+          "size": 19843392,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-13T13:00:21Z",
+          "updated_at": "2026-04-13T13:00:22Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.55.3",
+      "name": "v2.55.3",
+      "prerelease": false,
+      "published_at": "2026-04-09T15:12:31Z",
+      "created_at": "2026-04-09T15:09:46Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.55.3",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.55.3.tar.gz",
+          "download_count": 0,
+          "size": 19841622,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-09T15:12:35Z",
+          "updated_at": "2026-04-09T15:12:36Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.55.1",
+      "name": "v2.55.1",
+      "prerelease": false,
+      "published_at": "2026-04-06T16:26:46Z",
+      "created_at": "2026-04-06T16:24:50Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.55.1",
+      "asset_downloads": 2,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.55.1.tar.gz",
+          "download_count": 2,
+          "size": 19839359,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-06T16:26:49Z",
+          "updated_at": "2026-04-06T16:26:51Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.55.0",
+      "name": "v2.55.0",
+      "prerelease": false,
+      "published_at": "2026-04-06T13:05:37Z",
+      "created_at": "2026-04-06T13:03:48Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.55.0",
+      "asset_downloads": 2,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.55.0.tar.gz",
+          "download_count": 2,
+          "size": 19835639,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-06T13:05:40Z",
+          "updated_at": "2026-04-06T13:05:42Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.54.2",
+      "name": "v2.54.2",
+      "prerelease": false,
+      "published_at": "2026-04-06T09:03:12Z",
+      "created_at": "2026-04-06T09:01:03Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.54.2",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.54.2.tar.gz",
+          "download_count": 1,
+          "size": 19971392,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-06T09:03:15Z",
+          "updated_at": "2026-04-06T09:03:16Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.54.1",
+      "name": "v2.54.1",
+      "prerelease": false,
+      "published_at": "2026-04-04T14:35:59Z",
+      "created_at": "2026-04-04T14:33:58Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.54.1",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.54.1.tar.gz",
+          "download_count": 0,
+          "size": 19963374,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-04T14:36:03Z",
+          "updated_at": "2026-04-04T14:36:04Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.54.0",
+      "name": "v2.54.0",
+      "prerelease": false,
+      "published_at": "2026-04-04T11:01:57Z",
+      "created_at": "2026-04-04T11:00:02Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.54.0",
+      "asset_downloads": 3,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.54.0.tar.gz",
+          "download_count": 3,
+          "size": 19962408,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-04T11:02:00Z",
+          "updated_at": "2026-04-04T11:02:02Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.52.4",
+      "name": "v2.52.4",
+      "prerelease": false,
+      "published_at": "2026-04-02T06:55:18Z",
+      "created_at": "2026-04-02T06:53:12Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.4",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.52.4.tar.gz",
+          "download_count": 0,
+          "size": 842349,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-02T06:55:19Z",
+          "updated_at": "2026-04-02T06:55:19Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.52.3",
+      "name": "v2.52.3",
+      "prerelease": false,
+      "published_at": "2026-04-01T15:19:46Z",
+      "created_at": "2026-04-01T15:17:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.3",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.52.3.tar.gz",
+          "download_count": 0,
+          "size": 841484,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T15:19:47Z",
+          "updated_at": "2026-04-01T15:19:47Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.52.2",
+      "name": "v2.52.2",
+      "prerelease": false,
+      "published_at": "2026-04-01T04:35:48Z",
+      "created_at": "2026-04-01T04:33:57Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.2",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.52.2.tar.gz",
+          "download_count": 1,
+          "size": 840796,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T04:35:49Z",
+          "updated_at": "2026-04-01T04:35:49Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.8",
+      "name": "Vue dist v3.0.0-beta.8",
+      "prerelease": true,
+      "published_at": "2026-04-01T14:23:28Z",
+      "created_at": "2026-04-01T13:55:39Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.8",
+      "asset_downloads": 5,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 5,
+          "size": 128879,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T14:23:27Z",
+          "updated_at": "2026-04-01T14:23:28Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.7",
+      "name": "Vue dist v3.0.0-beta.7",
+      "prerelease": true,
+      "published_at": "2026-04-01T13:53:27Z",
+      "created_at": "2026-04-01T13:38:28Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.7",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 0,
+          "size": 124706,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T13:53:26Z",
+          "updated_at": "2026-04-01T13:53:26Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.14",
+      "name": "Vue dist v3.0.0-beta.14",
+      "prerelease": true,
+      "published_at": "2026-04-01T18:49:58Z",
+      "created_at": "2026-04-01T17:33:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.14",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 1,
+          "size": 149153,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T18:49:57Z",
+          "updated_at": "2026-04-01T18:49:57Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.11",
+      "name": "Vue dist v3.0.0-beta.11",
+      "prerelease": true,
+      "published_at": "2026-04-01T17:31:49Z",
+      "created_at": "2026-04-01T15:19:35Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.11",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 1,
+          "size": 134254,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T17:31:48Z",
+          "updated_at": "2026-04-01T17:31:48Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "vue-dist-v3.0.0-beta.10",
+      "name": "Vue dist v3.0.0-beta.10",
+      "prerelease": true,
+      "published_at": "2026-04-01T14:52:26Z",
+      "created_at": "2026-04-01T14:25:40Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/vue-dist-v3.0.0-beta.10",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "vue-dist.tar.gz",
+          "download_count": 1,
+          "size": 134255,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-04-01T14:52:25Z",
+          "updated_at": "2026-04-01T14:52:25Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.52.1",
+      "name": "v2.52.1",
+      "prerelease": false,
+      "published_at": "2026-03-30T14:15:16Z",
+      "created_at": "2026-03-30T14:12:50Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.1",
+      "asset_downloads": 1,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.52.1.tar.gz",
+          "download_count": 1,
+          "size": 829624,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-03-30T14:15:17Z",
+          "updated_at": "2026-03-30T14:15:17Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.52.0",
+      "name": "v2.52.0",
+      "prerelease": false,
+      "published_at": "2026-03-30T12:29:02Z",
+      "created_at": "2026-03-30T12:26:57Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.52.0",
+      "asset_downloads": 0,
+      "assets": [
+        {
+          "name": "sendspin-bt-bridge-2.52.0.tar.gz",
+          "download_count": 0,
+          "size": 21603491,
+          "content_type": "application/x-gtar",
+          "created_at": "2026-03-30T12:29:04Z",
+          "updated_at": "2026-03-30T12:29:05Z"
+        }
+      ]
+    },
+    {
+      "tag_name": "v2.51.0",
+      "name": "v2.51.0",
+      "prerelease": false,
+      "published_at": "2026-03-29T15:52:15Z",
+      "created_at": "2026-03-29T15:50:20Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.51.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.50.4",
+      "name": "v2.50.4",
+      "prerelease": false,
+      "published_at": "2026-03-27T18:33:59Z",
+      "created_at": "2026-03-27T18:32:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.50.3",
+      "name": "v2.50.3",
+      "prerelease": false,
+      "published_at": "2026-03-27T09:31:42Z",
+      "created_at": "2026-03-27T09:29:08Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.50.2",
+      "name": "v2.50.2",
+      "prerelease": false,
+      "published_at": "2026-03-27T08:44:57Z",
+      "created_at": "2026-03-27T08:43:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.50.1",
+      "name": "v2.50.1",
+      "prerelease": false,
+      "published_at": "2026-03-27T08:25:52Z",
+      "created_at": "2026-03-27T08:23:52Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.49.0",
+      "name": "v2.49.0",
+      "prerelease": false,
+      "published_at": "2026-03-26T16:27:44Z",
+      "created_at": "2026-03-26T16:25:22Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.49.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.48.2",
+      "name": "v2.48.2",
+      "prerelease": false,
+      "published_at": "2026-03-25T19:57:18Z",
+      "created_at": "2026-03-25T19:51:26Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.48.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.48.1",
+      "name": "v2.48.1",
+      "prerelease": false,
+      "published_at": "2026-03-25T19:06:16Z",
+      "created_at": "2026-03-25T18:59:00Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.48.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.48.0",
+      "name": "v2.48.0",
+      "prerelease": false,
+      "published_at": "2026-03-25T13:11:10Z",
+      "created_at": "2026-03-25T13:10:48Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.48.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.47.2",
+      "name": "v2.47.2",
+      "prerelease": false,
+      "published_at": "2026-03-24T18:12:36Z",
+      "created_at": "2026-03-24T18:03:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.47.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.47.1",
+      "name": "v2.47.1",
+      "prerelease": false,
+      "published_at": "2026-03-24T17:43:38Z",
+      "created_at": "2026-03-24T17:33:38Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.47.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.46.0",
+      "name": "v2.46.0",
+      "prerelease": false,
+      "published_at": "2026-03-24T04:11:30Z",
+      "created_at": "2026-03-24T04:11:12Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.46.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.45.0",
+      "name": "v2.45.0",
+      "prerelease": false,
+      "published_at": "2026-03-23T15:15:23Z",
+      "created_at": "2026-03-23T15:14:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.45.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.42.3",
+      "name": "v2.42.3",
+      "prerelease": false,
+      "published_at": "2026-03-22T20:31:32Z",
+      "created_at": "2026-03-22T20:31:20Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.42.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.42.2",
+      "name": "v2.42.2",
+      "prerelease": false,
+      "published_at": "2026-03-22T07:10:20Z",
+      "created_at": "2026-03-22T07:10:07Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.42.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.42.1",
+      "name": "v2.42.1",
+      "prerelease": false,
+      "published_at": "2026-03-20T19:41:49Z",
+      "created_at": "2026-03-20T19:38:39Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.42.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.41.0-rc.1",
+      "name": "v2.41.0-rc.1",
+      "prerelease": true,
+      "published_at": "2026-03-20T05:03:27Z",
+      "created_at": "2026-03-20T05:03:23Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.41.0-rc.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6",
+      "name": "v2.40.6",
+      "prerelease": false,
+      "published_at": "2026-03-19T17:12:00Z",
+      "created_at": "2026-03-19T17:11:44Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6-rc.6",
+      "name": "v2.40.6-rc.6",
+      "prerelease": true,
+      "published_at": "2026-03-19T15:52:48Z",
+      "created_at": "2026-03-19T15:52:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6-rc.5",
+      "name": "v2.40.6-rc.5",
+      "prerelease": true,
+      "published_at": "2026-03-19T15:24:23Z",
+      "created_at": "2026-03-19T15:24:18Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6-rc.4",
+      "name": "v2.40.6-rc.4",
+      "prerelease": true,
+      "published_at": "2026-03-19T13:53:02Z",
+      "created_at": "2026-03-19T13:52:48Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6-rc.3",
+      "name": "v2.40.6-rc.3",
+      "prerelease": true,
+      "published_at": "2026-03-19T08:12:10Z",
+      "created_at": "2026-03-19T08:10:02Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6-rc.2",
+      "name": "v2.40.6-rc.2",
+      "prerelease": true,
+      "published_at": "2026-03-19T07:27:53Z",
+      "created_at": "2026-03-19T07:27:22Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.6-rc.1",
+      "name": "v2.40.6-rc.1",
+      "prerelease": true,
+      "published_at": "2026-03-19T06:43:47Z",
+      "created_at": "2026-03-19T06:43:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.6-rc.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.5",
+      "name": "v2.40.5",
+      "prerelease": false,
+      "published_at": "2026-03-18T20:21:40Z",
+      "created_at": "2026-03-18T20:21:13Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.5-rc.3",
+      "name": "v2.40.5-rc.3",
+      "prerelease": true,
+      "published_at": "2026-03-18T20:02:31Z",
+      "created_at": "2026-03-18T20:01:56Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.5-rc.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.5-rc.2",
+      "name": "v2.40.5-rc.2",
+      "prerelease": true,
+      "published_at": "2026-03-18T19:40:37Z",
+      "created_at": "2026-03-18T19:40:06Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.5-rc.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.5-rc.1",
+      "name": "v2.40.5-rc.1",
+      "prerelease": true,
+      "published_at": "2026-03-18T18:01:58Z",
+      "created_at": "2026-03-18T18:01:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.5-rc.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.5-beta.1",
+      "name": "v2.40.5-beta.1",
+      "prerelease": true,
+      "published_at": "2026-03-18T19:02:17Z",
+      "created_at": "2026-03-18T19:01:09Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.5-beta.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.4",
+      "name": "v2.40.4",
+      "prerelease": false,
+      "published_at": "2026-03-18T17:07:58Z",
+      "created_at": "2026-03-18T17:04:45Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.3",
+      "name": "v2.40.3",
+      "prerelease": false,
+      "published_at": "2026-03-18T15:32:17Z",
+      "created_at": "2026-03-18T15:31:41Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.2",
+      "name": "v2.40.2",
+      "prerelease": false,
+      "published_at": "2026-03-18T15:15:56Z",
+      "created_at": "2026-03-18T15:14:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.40.1",
+      "name": "v2.40.1",
+      "prerelease": false,
+      "published_at": "2026-03-18T14:42:47Z",
+      "created_at": "2026-03-18T14:34:30Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.40.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.12",
+      "name": "v2.32.12",
+      "prerelease": false,
+      "published_at": "2026-03-17T20:32:01Z",
+      "created_at": "2026-03-17T20:23:46Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.12",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.9",
+      "name": "v2.32.9",
+      "prerelease": false,
+      "published_at": "2026-03-17T18:41:39Z",
+      "created_at": "2026-03-17T18:41:35Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.8",
+      "name": "v2.32.8",
+      "prerelease": false,
+      "published_at": "2026-03-17T15:49:41Z",
+      "created_at": "2026-03-17T15:44:51Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.7",
+      "name": "v2.32.7",
+      "prerelease": false,
+      "published_at": "2026-03-16T21:07:28Z",
+      "created_at": "2026-03-16T21:07:24Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.6",
+      "name": "v2.32.6",
+      "prerelease": false,
+      "published_at": "2026-03-16T19:12:18Z",
+      "created_at": "2026-03-16T19:12:11Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.5",
+      "name": "v2.32.5",
+      "prerelease": false,
+      "published_at": "2026-03-16T18:12:14Z",
+      "created_at": "2026-03-16T18:12:07Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.2",
+      "name": "v2.32.2",
+      "prerelease": false,
+      "published_at": "2026-03-16T17:04:56Z",
+      "created_at": "2026-03-16T17:04:52Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.32.0",
+      "name": "v2.32.0",
+      "prerelease": false,
+      "published_at": "2026-03-16T15:01:37Z",
+      "created_at": "2026-03-16T15:00:55Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.32.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.11",
+      "name": "v2.31.11",
+      "prerelease": false,
+      "published_at": "2026-03-16T06:52:04Z",
+      "created_at": "2026-03-16T06:52:01Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.11",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.10",
+      "name": "v2.31.10",
+      "prerelease": false,
+      "published_at": "2026-03-16T06:33:25Z",
+      "created_at": "2026-03-16T06:33:10Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.10",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.9",
+      "name": "v2.31.9",
+      "prerelease": false,
+      "published_at": "2026-03-16T05:41:59Z",
+      "created_at": "2026-03-16T05:41:46Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.8",
+      "name": "v2.31.8",
+      "prerelease": false,
+      "published_at": "2026-03-14T22:26:33Z",
+      "created_at": "2026-03-14T22:26:14Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.7",
+      "name": "v2.31.7",
+      "prerelease": false,
+      "published_at": "2026-03-14T21:09:18Z",
+      "created_at": "2026-03-14T21:09:12Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.6",
+      "name": "v2.31.6",
+      "prerelease": false,
+      "published_at": "2026-03-14T20:31:43Z",
+      "created_at": "2026-03-14T20:31:26Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.31.0",
+      "name": "v2.31.0 — UI Redesign (HA/MA aligned)",
+      "prerelease": false,
+      "published_at": "2026-03-14T07:47:32Z",
+      "created_at": "2026-03-14T07:47:04Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.31.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.30.8",
+      "name": "v2.30.8",
+      "prerelease": false,
+      "published_at": "2026-03-13T20:31:58Z",
+      "created_at": "2026-03-13T20:38:27Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.30.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.30.7",
+      "name": "v2.30.7 — Security Hardening & Code Review Fixes",
+      "prerelease": false,
+      "published_at": "2026-03-13T14:14:22Z",
+      "created_at": "2026-03-13T14:13:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.30.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.30.6",
+      "name": "v2.30.6",
+      "prerelease": false,
+      "published_at": "2026-03-13T13:12:32Z",
+      "created_at": "2026-03-13T13:12:14Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.30.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.30.5",
+      "name": "v2.30.5",
+      "prerelease": false,
+      "published_at": "2026-03-13T11:51:51Z",
+      "created_at": "2026-03-13T11:50:16Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.30.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.30.0",
+      "name": "v2.30.0",
+      "prerelease": false,
+      "published_at": "2026-03-13T07:52:54Z",
+      "created_at": "2026-03-13T07:52:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.30.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.29.0",
+      "name": "v2.29.0",
+      "prerelease": false,
+      "published_at": "2026-03-13T07:04:58Z",
+      "created_at": "2026-03-13T07:04:27Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.29.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.28.2",
+      "name": "v2.28.2",
+      "prerelease": false,
+      "published_at": "2026-03-12T22:28:20Z",
+      "created_at": "2026-03-12T22:28:00Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.28.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.28.1",
+      "name": "v2.28.1 — Update modal redesign, UI polish",
+      "prerelease": false,
+      "published_at": "2026-03-12T21:58:23Z",
+      "created_at": "2026-03-12T21:57:59Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.28.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.28.0",
+      "name": "v2.28.0 — Bug fixes, HA username, device card redesign",
+      "prerelease": false,
+      "published_at": "2026-03-12T21:41:19Z",
+      "created_at": "2026-03-12T21:40:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.28.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.27.1",
+      "name": "v2.27.1 — BT unpair from UI, restart indicator redesign",
+      "prerelease": false,
+      "published_at": "2026-03-12T20:51:09Z",
+      "created_at": "2026-03-12T20:50:55Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.27.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.27.0",
+      "name": "v2.27.0 — Two-tier enabled/disabled, smart health indicators",
+      "prerelease": false,
+      "published_at": "2026-03-12T20:33:54Z",
+      "created_at": "2026-03-12T20:33:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.27.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.26.5",
+      "name": "v2.26.5",
+      "prerelease": false,
+      "published_at": "2026-03-12T19:30:50Z",
+      "created_at": "2026-03-12T19:30:35Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.26.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.26.4",
+      "name": "v2.26.4",
+      "prerelease": false,
+      "published_at": "2026-03-12T18:23:47Z",
+      "created_at": "2026-03-12T18:23:25Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.26.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.26.3",
+      "name": "v2.26.3 — Fix daemon crash on idle timeout",
+      "prerelease": false,
+      "published_at": "2026-03-12T17:44:33Z",
+      "created_at": "2026-03-12T17:44:15Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.26.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.26.2",
+      "name": "v2.26.2 — Fix Ingress username display",
+      "prerelease": false,
+      "published_at": "2026-03-12T17:25:32Z",
+      "created_at": "2026-03-12T17:25:19Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.26.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.26.1",
+      "name": "v2.26.1 — Smooth restart & sink routing cleanup",
+      "prerelease": false,
+      "published_at": "2026-03-12T17:07:24Z",
+      "created_at": "2026-03-12T17:07:02Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.26.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.26.0",
+      "name": "v2.26.0",
+      "prerelease": false,
+      "published_at": "2026-03-12T16:28:11Z",
+      "created_at": "2026-03-12T16:27:50Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.26.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.25.1",
+      "name": "v2.25.1 — LXC deploy scripts hotfix",
+      "prerelease": false,
+      "published_at": "2026-03-12T12:44:12Z",
+      "created_at": "2026-03-12T12:43:57Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.25.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.25.0",
+      "name": "v2.25.0 — Code review hardening",
+      "prerelease": false,
+      "published_at": "2026-03-12T12:35:32Z",
+      "created_at": "2026-03-12T12:35:06Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.25.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.24.4",
+      "name": "v2.24.4",
+      "prerelease": false,
+      "published_at": "2026-03-12T11:11:47Z",
+      "created_at": "2026-03-12T11:11:33Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.24.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.24.3",
+      "name": "v2.24.3",
+      "prerelease": false,
+      "published_at": "2026-03-12T10:54:40Z",
+      "created_at": "2026-03-12T10:54:22Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.24.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.24.0",
+      "name": "v2.24.0 — Observability & UX",
+      "prerelease": false,
+      "published_at": "2026-03-12T09:33:28Z",
+      "created_at": "2026-03-12T09:32:55Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.24.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.23.12",
+      "name": "v2.23.12",
+      "prerelease": false,
+      "published_at": "2026-03-11T22:05:45Z",
+      "created_at": "2026-03-11T22:05:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.23.12",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.23.11",
+      "name": "v2.23.11",
+      "prerelease": false,
+      "published_at": "2026-03-11T21:42:35Z",
+      "created_at": "2026-03-11T21:42:19Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.23.11",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.23.10",
+      "name": "v2.23.10",
+      "prerelease": false,
+      "published_at": "2026-03-11T21:09:58Z",
+      "created_at": "2026-03-11T21:09:32Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.23.10",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.23.9",
+      "name": "v2.23.9 — AppArmor enforce & auth refactoring",
+      "prerelease": false,
+      "published_at": "2026-03-11T20:28:11Z",
+      "created_at": "2026-03-11T20:27:45Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.23.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.23.0",
+      "name": "v2.23.0 — Demo Mode & Update Checker",
+      "prerelease": false,
+      "published_at": "2026-03-11T16:09:45Z",
+      "created_at": "2026-03-11T16:09:04Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.23.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.22.3",
+      "name": "v2.22.3",
+      "prerelease": false,
+      "published_at": "2026-03-11T13:30:36Z",
+      "created_at": "2026-03-11T13:30:16Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.22.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.22.2",
+      "name": "v2.22.2",
+      "prerelease": false,
+      "published_at": "2026-03-11T12:15:27Z",
+      "created_at": "2026-03-11T12:08:29Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.22.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.22.0",
+      "name": "v2.22.0",
+      "prerelease": false,
+      "published_at": "2026-03-11T09:22:49Z",
+      "created_at": "2026-03-11T09:22:27Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.22.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.21.0",
+      "name": "v2.21.0 — Legacy config cleanup",
+      "prerelease": false,
+      "published_at": "2026-03-11T06:46:53Z",
+      "created_at": "2026-03-11T06:46:28Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.21.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.20.5",
+      "name": "v2.20.5",
+      "prerelease": false,
+      "published_at": "2026-03-11T05:15:25Z",
+      "created_at": "2026-03-11T05:15:09Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.20.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.20.4",
+      "name": "v2.20.4",
+      "prerelease": false,
+      "published_at": "2026-03-10T21:50:57Z",
+      "created_at": "2026-03-10T21:50:41Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.20.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.20.3",
+      "name": "v2.20.3 — Code audit: api.py split, security & thread-safety fixes",
+      "prerelease": false,
+      "published_at": "2026-03-10T21:25:13Z",
+      "created_at": "2026-03-10T21:24:43Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.20.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.20.2",
+      "name": "v2.20.2",
+      "prerelease": false,
+      "published_at": "2026-03-10T19:59:36Z",
+      "created_at": "2026-03-10T20:10:51Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.20.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.20.1",
+      "name": "v2.20.1 — Device & adapter layout polish",
+      "prerelease": false,
+      "published_at": "2026-03-10T19:13:59Z",
+      "created_at": "2026-03-10T19:13:44Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.20.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.20.0",
+      "name": "v2.20.0 — Configuration UX polish",
+      "prerelease": false,
+      "published_at": "2026-03-10T18:28:53Z",
+      "created_at": "2026-03-10T18:28:28Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.20.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.19.0",
+      "name": "v2.19.0 — Configuration UI Overhaul",
+      "prerelease": false,
+      "published_at": "2026-03-10T16:48:17Z",
+      "created_at": "2026-03-10T16:47:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.19.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.18.3",
+      "name": "v2.18.3",
+      "prerelease": false,
+      "published_at": "2026-03-10T15:43:35Z",
+      "created_at": "2026-03-10T15:43:25Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.18.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.18.2",
+      "name": "v2.18.2",
+      "prerelease": false,
+      "published_at": "2026-03-10T15:30:15Z",
+      "created_at": "2026-03-10T15:30:04Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.18.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.18.1",
+      "name": "v2.18.1",
+      "prerelease": false,
+      "published_at": "2026-03-10T15:06:45Z",
+      "created_at": "2026-03-10T15:06:33Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.18.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.18.0",
+      "name": "v2.18.0 — Passwordless MA auth via Ingress JSONRPC",
+      "prerelease": false,
+      "published_at": "2026-03-10T14:51:47Z",
+      "created_at": "2026-03-10T14:51:26Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.18.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.12",
+      "name": "v2.17.12",
+      "prerelease": false,
+      "published_at": "2026-03-10T14:02:08Z",
+      "created_at": "2026-03-10T14:01:55Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.12",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.11",
+      "name": "v2.17.11",
+      "prerelease": false,
+      "published_at": "2026-03-10T13:48:54Z",
+      "created_at": "2026-03-10T13:48:42Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.11",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.10",
+      "name": "v2.17.10",
+      "prerelease": false,
+      "published_at": "2026-03-10T13:36:58Z",
+      "created_at": "2026-03-10T13:36:01Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.10",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.9",
+      "name": "v2.17.9",
+      "prerelease": false,
+      "published_at": "2026-03-10T13:07:56Z",
+      "created_at": "2026-03-10T13:07:38Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.8",
+      "name": "v2.17.8",
+      "prerelease": false,
+      "published_at": "2026-03-10T12:43:13Z",
+      "created_at": "2026-03-10T12:42:55Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.7",
+      "name": "v2.17.7",
+      "prerelease": false,
+      "published_at": "2026-03-10T12:19:57Z",
+      "created_at": "2026-03-10T12:19:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.6",
+      "name": "v2.17.6",
+      "prerelease": false,
+      "published_at": "2026-03-10T11:28:02Z",
+      "created_at": "2026-03-10T11:27:39Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.5",
+      "name": "v2.17.5 — Fix addon mode UI detection",
+      "prerelease": false,
+      "published_at": "2026-03-10T11:08:35Z",
+      "created_at": "2026-03-10T11:08:17Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.4",
+      "name": "v2.17.4 — Silent MA auth in Ingress mode",
+      "prerelease": false,
+      "published_at": "2026-03-10T10:52:42Z",
+      "created_at": "2026-03-10T10:52:19Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.3",
+      "name": "v2.17.3 — Sign in with Home Assistant",
+      "prerelease": false,
+      "published_at": "2026-03-10T10:13:40Z",
+      "created_at": "2026-03-10T10:13:19Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.2",
+      "name": "v2.17.2 — Instant MA server discovery",
+      "prerelease": false,
+      "published_at": "2026-03-10T09:38:05Z",
+      "created_at": "2026-03-10T09:37:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.1",
+      "name": "v2.17.1 — Fix MA mDNS discovery",
+      "prerelease": false,
+      "published_at": "2026-03-10T09:27:51Z",
+      "created_at": "2026-03-10T09:27:34Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.17.0",
+      "name": "v2.17.0 — MA auto-discovery & auto-login",
+      "prerelease": false,
+      "published_at": "2026-03-10T08:44:29Z",
+      "created_at": "2026-03-10T08:22:14Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.17.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.16.3",
+      "name": "v2.16.3 — Hadolint CI, HA addon logo, RPi one-liner installer",
+      "prerelease": false,
+      "published_at": "2026-03-10T07:38:04Z",
+      "created_at": "2026-03-10T07:37:14Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.16.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.16.2",
+      "name": "v2.16.2 — Raspberry Pi & Docker UX improvements",
+      "prerelease": false,
+      "published_at": "2026-03-10T06:36:49Z",
+      "created_at": "2026-03-10T06:35:56Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.16.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.16.1",
+      "name": "v2.16.1 — PyAV armv7l compatibility fix",
+      "prerelease": false,
+      "published_at": "2026-03-09T19:24:45Z",
+      "created_at": "2026-03-09T19:24:06Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.16.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.16.0",
+      "name": "v2.16.0 — Security Hardening & Quality",
+      "prerelease": false,
+      "published_at": "2026-03-09T18:41:40Z",
+      "created_at": "2026-03-09T18:40:44Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.16.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.8",
+      "name": "v2.15.8",
+      "prerelease": false,
+      "published_at": "2026-03-09T17:38:18Z",
+      "created_at": "2026-03-09T17:37:52Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.7",
+      "name": "v2.15.7",
+      "prerelease": false,
+      "published_at": "2026-03-09T17:27:13Z",
+      "created_at": "2026-03-09T17:26:42Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.6",
+      "name": "v2.15.6",
+      "prerelease": false,
+      "published_at": "2026-03-09T15:37:59Z",
+      "created_at": "2026-03-09T15:37:35Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.4",
+      "name": "v2.15.4",
+      "prerelease": false,
+      "published_at": "2026-03-09T13:56:30Z",
+      "created_at": "2026-03-09T13:56:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.3",
+      "name": "v2.15.3",
+      "prerelease": false,
+      "published_at": "2026-03-09T13:36:01Z",
+      "created_at": "2026-03-09T13:33:06Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.1",
+      "name": "v2.15.1",
+      "prerelease": false,
+      "published_at": "2026-03-08T21:35:19Z",
+      "created_at": "2026-03-08T21:35:08Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.15.0",
+      "name": "v2.15.0",
+      "prerelease": false,
+      "published_at": "2026-03-08T21:32:11Z",
+      "created_at": "2026-03-08T21:31:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.13.3",
+      "name": "v2.13.3",
+      "prerelease": false,
+      "published_at": "2026-03-08T18:03:14Z",
+      "created_at": "2026-03-08T18:02:54Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.13.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.13.2",
+      "name": "v2.13.2",
+      "prerelease": false,
+      "published_at": "2026-03-08T12:56:14Z",
+      "created_at": "2026-03-08T12:55:56Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.13.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.13.1",
+      "name": "v2.13.1",
+      "prerelease": false,
+      "published_at": "2026-03-08T12:45:45Z",
+      "created_at": "2026-03-08T12:54:37Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.13.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.12.6",
+      "name": "v2.12.6",
+      "prerelease": false,
+      "published_at": "2026-03-07T20:45:50Z",
+      "created_at": "2026-03-07T20:45:03Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.12.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.12.5",
+      "name": "v2.12.5",
+      "prerelease": false,
+      "published_at": "2026-03-07T20:04:20Z",
+      "created_at": "2026-03-07T20:03:10Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.12.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.12.4",
+      "name": "v2.12.4",
+      "prerelease": false,
+      "published_at": "2026-03-07T19:48:20Z",
+      "created_at": "2026-03-07T19:48:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.12.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.12.3",
+      "name": "v2.12.3",
+      "prerelease": false,
+      "published_at": "2026-03-07T19:36:09Z",
+      "created_at": "2026-03-07T19:35:54Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.12.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.12.2",
+      "name": "v2.12.2",
+      "prerelease": false,
+      "published_at": "2026-03-07T13:05:58Z",
+      "created_at": "2026-03-07T13:05:46Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.12.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.15",
+      "name": "v2.10.15",
+      "prerelease": false,
+      "published_at": "2026-03-06T13:42:09Z",
+      "created_at": "2026-03-06T13:41:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.15",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.14",
+      "name": "v2.10.14",
+      "prerelease": false,
+      "published_at": "2026-03-06T13:40:07Z",
+      "created_at": "2026-03-06T13:39:51Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.14",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.13",
+      "name": "v2.10.13",
+      "prerelease": false,
+      "published_at": "2026-03-06T13:24:03Z",
+      "created_at": "2026-03-06T13:23:43Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.13",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.12",
+      "name": "v2.10.12",
+      "prerelease": false,
+      "published_at": "2026-03-06T13:10:56Z",
+      "created_at": "2026-03-06T13:03:50Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.12",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.8",
+      "name": "v2.10.8",
+      "prerelease": false,
+      "published_at": "2026-03-06T10:48:04Z",
+      "created_at": "2026-03-06T10:47:45Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.7",
+      "name": "v2.10.7",
+      "prerelease": false,
+      "published_at": "2026-03-06T10:16:15Z",
+      "created_at": "2026-03-06T10:15:04Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.6",
+      "name": "v2.10.6",
+      "prerelease": false,
+      "published_at": "2026-03-06T04:23:27Z",
+      "created_at": "2026-03-06T04:23:23Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.5",
+      "name": "v2.10.5",
+      "prerelease": false,
+      "published_at": "2026-03-05T22:49:13Z",
+      "created_at": "2026-03-05T22:47:53Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.3",
+      "name": "v2.10.3",
+      "prerelease": false,
+      "published_at": "2026-03-05T22:33:12Z",
+      "created_at": "2026-03-05T22:33:07Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.2",
+      "name": "v2.10.2",
+      "prerelease": false,
+      "published_at": "2026-03-05T22:22:26Z",
+      "created_at": "2026-03-05T22:22:15Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.1",
+      "name": "v2.10.1",
+      "prerelease": false,
+      "published_at": "2026-03-05T22:13:46Z",
+      "created_at": "2026-03-05T22:13:29Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.10.0",
+      "name": "v2.10.0",
+      "prerelease": false,
+      "published_at": "2026-03-05T21:31:24Z",
+      "created_at": "2026-03-05T21:31:06Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.10.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.9.9",
+      "name": "v2.9.9",
+      "prerelease": false,
+      "published_at": "2026-03-05T21:11:50Z",
+      "created_at": "2026-03-05T21:11:34Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.9.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.9.8",
+      "name": "v2.9.8",
+      "prerelease": false,
+      "published_at": "2026-03-05T20:35:07Z",
+      "created_at": "2026-03-05T20:34:47Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.9.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.9.7",
+      "name": "v2.9.7 — UI polish: album art, transport controls, group names",
+      "prerelease": false,
+      "published_at": "2026-03-05T20:17:36Z",
+      "created_at": "2026-03-05T20:17:15Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.9.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.9.6",
+      "name": "v2.9.6 — Hotfix: UI & MA monitor",
+      "prerelease": false,
+      "published_at": "2026-03-05T19:55:56Z",
+      "created_at": "2026-03-05T19:55:39Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.9.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.9.5",
+      "name": "v2.9.5 — MA Monitor & Playback Controls",
+      "prerelease": false,
+      "published_at": "2026-03-05T19:43:09Z",
+      "created_at": "2026-03-05T19:42:44Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.9.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.8.2",
+      "name": "v2.8.2",
+      "prerelease": false,
+      "published_at": "2026-03-05T16:02:15Z",
+      "created_at": "2026-03-05T16:02:01Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.8.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.8.1",
+      "name": "v2.8.1",
+      "prerelease": false,
+      "published_at": "2026-03-05T15:57:27Z",
+      "created_at": "2026-03-05T15:57:14Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.8.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.8.0",
+      "name": "v2.8.0",
+      "prerelease": false,
+      "published_at": "2026-03-05T15:42:09Z",
+      "created_at": "2026-03-05T15:41:36Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.8.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.17",
+      "name": "v2.7.17",
+      "prerelease": false,
+      "published_at": "2026-03-05T15:04:17Z",
+      "created_at": "2026-03-05T15:03:17Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.17",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.16",
+      "name": "v2.7.16",
+      "prerelease": false,
+      "published_at": "2026-03-05T14:12:01Z",
+      "created_at": "2026-03-05T14:11:47Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.16",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.15",
+      "name": "v2.7.15",
+      "prerelease": false,
+      "published_at": "2026-03-05T13:35:54Z",
+      "created_at": "2026-03-05T13:35:41Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.15",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.14",
+      "name": "v2.7.14",
+      "prerelease": false,
+      "published_at": "2026-03-05T13:15:22Z",
+      "created_at": "2026-03-05T13:14:56Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.14",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.13",
+      "name": "v2.7.13",
+      "prerelease": false,
+      "published_at": "2026-03-05T12:43:47Z",
+      "created_at": "2026-03-05T12:43:34Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.13",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.12",
+      "name": "v2.7.12",
+      "prerelease": false,
+      "published_at": "2026-03-05T12:37:39Z",
+      "created_at": "2026-03-05T12:37:26Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.12",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.11",
+      "name": "v2.7.11",
+      "prerelease": false,
+      "published_at": "2026-03-05T12:22:10Z",
+      "created_at": "2026-03-05T12:21:51Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.11",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.10",
+      "name": "v2.7.10",
+      "prerelease": false,
+      "published_at": "2026-03-05T12:07:07Z",
+      "created_at": "2026-03-05T12:06:27Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.10",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.9",
+      "name": "v2.7.9 — fix MFA code submission",
+      "prerelease": false,
+      "published_at": "2026-03-05T11:02:39Z",
+      "created_at": "2026-03-05T11:02:33Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.8",
+      "name": "v2.7.8 — fix HA login flow HTTP 400",
+      "prerelease": false,
+      "published_at": "2026-03-05T10:53:25Z",
+      "created_at": "2026-03-05T10:53:19Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.7",
+      "name": "v2.7.7 — auth debug logging",
+      "prerelease": false,
+      "published_at": "2026-03-05T10:46:24Z",
+      "created_at": "2026-03-05T10:46:05Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.6",
+      "name": "v2.7.6 — 2FA authentication & Keepalive UI",
+      "prerelease": false,
+      "published_at": "2026-03-05T10:28:55Z",
+      "created_at": "2026-03-05T10:28:12Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.5",
+      "name": "v2.7.5",
+      "prerelease": false,
+      "published_at": "2026-03-05T09:34:38Z",
+      "created_at": "2026-03-05T09:34:25Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.4",
+      "name": "v2.7.4 — Configurable log level",
+      "prerelease": false,
+      "published_at": "2026-03-05T09:17:42Z",
+      "created_at": "2026-03-05T09:17:29Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.2",
+      "name": "v2.7.2 — Web UI UX overhaul",
+      "prerelease": false,
+      "published_at": "2026-03-05T08:04:11Z",
+      "created_at": "2026-03-05T08:01:35Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.1",
+      "name": "v2.7.1 — UI bug fixes",
+      "prerelease": false,
+      "published_at": "2026-03-05T07:17:40Z",
+      "created_at": "2026-03-05T07:17:21Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.7.0",
+      "name": "v2.7.0 — Keepalive, Graceful Shutdown & Scalability",
+      "prerelease": false,
+      "published_at": "2026-03-05T06:46:25Z",
+      "created_at": "2026-03-05T06:45:58Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.7.0",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.10",
+      "name": "v2.6.10",
+      "prerelease": false,
+      "published_at": "2026-03-04T14:49:04Z",
+      "created_at": "2026-03-04T14:47:14Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.10",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.9",
+      "name": "v2.6.9",
+      "prerelease": false,
+      "published_at": "2026-03-04T14:13:02Z",
+      "created_at": "2026-03-04T14:12:38Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.9",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.8",
+      "name": "v2.6.8",
+      "prerelease": false,
+      "published_at": "2026-03-04T13:14:55Z",
+      "created_at": "2026-03-04T13:14:41Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.8",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.7",
+      "name": "v2.6.7",
+      "prerelease": false,
+      "published_at": "2026-03-04T12:53:02Z",
+      "created_at": "2026-03-04T12:52:45Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.7",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.6",
+      "name": "v2.6.6",
+      "prerelease": false,
+      "published_at": "2026-03-04T12:27:16Z",
+      "created_at": "2026-03-04T12:25:56Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.6",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.5",
+      "name": "v2.6.5 — UX polish pass",
+      "prerelease": false,
+      "published_at": "2026-03-04T11:42:52Z",
+      "created_at": "2026-03-04T11:42:26Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.5",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.4",
+      "name": "v2.6.4",
+      "prerelease": false,
+      "published_at": "2026-03-04T11:04:09Z",
+      "created_at": "2026-03-04T11:03:16Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.4",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.3",
+      "name": "v2.6.3",
+      "prerelease": false,
+      "published_at": "2026-03-04T10:33:08Z",
+      "created_at": "2026-03-04T10:32:42Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.3",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.2",
+      "name": "v2.6.2 — Sync column display fixes",
+      "prerelease": false,
+      "published_at": "2026-03-04T09:29:35Z",
+      "created_at": "2026-03-04T09:29:16Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.2",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.1",
+      "name": "v2.6.1 — Security & Stability Audit",
+      "prerelease": false,
+      "published_at": "2026-03-04T09:13:24Z",
+      "created_at": "2026-03-04T09:12:55Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.1",
+      "asset_downloads": 0,
+      "assets": []
+    },
+    {
+      "tag_name": "v2.6.0",
+      "name": "v2.6.0 — Performance, Stability & Security",
+      "prerelease": false,
+      "published_at": "2026-03-04T08:15:18Z",
+      "created_at": "2026-03-04T08:10:31Z",
+      "html_url": "https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.6.0",
+      "asset_downloads": 0,
+      "assets": []
+    }
+  ]
+}
