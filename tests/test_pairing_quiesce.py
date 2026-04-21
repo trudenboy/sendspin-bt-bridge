@@ -216,6 +216,36 @@ def test_quiesce_swallows_peer_disconnect_exception(fake_clients_state):
     assert good in paused
     good.bt_manager.allow_reconnect.assert_called_once()
     good.bt_manager.signal_standby_wake.assert_called_once()
-    # Bad peer never made it into the paused list, so no restore for it.
+    # Bad peer never entered the paused list, but since cancel_reconnect
+    # succeeded before disconnect raised, we must roll reconnect back on
+    # the bad peer or it would stay stuck with reconnect disabled.
     assert bad not in paused
-    bad.bt_manager.allow_reconnect.assert_not_called()
+    bad.bt_manager.cancel_reconnect.assert_called_once()
+    bad.bt_manager.allow_reconnect.assert_called_once()
+    # signal_standby_wake is only for the successful-pause path, not rollback.
+    bad.bt_manager.signal_standby_wake.assert_not_called()
+
+
+def test_quiesce_does_not_rollback_when_cancel_reconnect_itself_raises(fake_clients_state):
+    """If cancel_reconnect() raises, there's nothing to roll back.
+
+    allow_reconnect() must not be called in that case — it could flip the
+    peer into a weirder state than we found it in.
+    """
+    from services.pairing_quiesce import quiesce_adapter_peers
+
+    adapter = "AA:BB:CC:DD:EE:01"
+    c = _make_client("11:11:11:11:11:11", adapter)
+    c.bt_manager.cancel_reconnect.side_effect = RuntimeError("boom")
+    fake_clients_state.append(c)
+
+    with (
+        patch("services.pairing_quiesce.time.sleep"),
+        quiesce_adapter_peers(adapter) as paused,
+    ):
+        pass
+
+    assert paused == []
+    c.bt_manager.cancel_reconnect.assert_called_once()
+    c.bt_manager.disconnect_device.assert_not_called()
+    c.bt_manager.allow_reconnect.assert_not_called()

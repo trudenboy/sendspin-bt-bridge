@@ -54,11 +54,23 @@ def quiesce_adapter_peers(
             continue
         if not getattr(mgr, "connected", False):
             continue
+        reconnect_cancelled = False
         try:
             mgr.cancel_reconnect()
+            reconnect_cancelled = True
             mgr.disconnect_device()
         except Exception:
             logger.exception("[pair-quiesce] failed to pause %s", getattr(mgr, "mac_address", "?"))
+            # If cancel_reconnect already succeeded, a failing disconnect would
+            # otherwise leave this peer stuck with reconnect disabled. Roll back.
+            if reconnect_cancelled:
+                try:
+                    mgr.allow_reconnect()
+                except Exception:
+                    logger.exception(
+                        "[pair-quiesce] failed to restore reconnect for %s",
+                        getattr(mgr, "mac_address", "?"),
+                    )
             continue
         paused.append(client)
         logger.info(
