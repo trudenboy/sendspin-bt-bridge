@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.3] - 2026-04-21
+
+Opt-in pair-time adapter quiesce for single-adapter multi-speaker setups.
+Follow-up to v2.60.2: addresses the failure mode where the second speaker
+on the same adapter never makes it into BlueZ at all (issue #168), which
+the v2.60.2 post-`Connect()` workarounds cannot rescue because they only
+fire after a successful connect.
+
+### Added
+- **#168 — optional pair-time adapter quiesce** — new opt-in "Pause other
+  speakers on same adapter" checkbox in the Bluetooth scan modal. When ticked,
+  the bridge temporarily pauses reconnect and disconnects every active peer
+  sharing the target BT adapter for the duration of the pair operation, then
+  restores them automatically (bonds preserved — no unpair). Helps on
+  single-adapter setups where a second speaker refuses to pair while the first
+  is holding an active A2DP ACL (BlueZ 5.78–5.86 multi-A2DP/legacy-pair
+  regression band, Realtek adapter exclusivity quirks). Checkbox is always
+  unticked by default — strict opt-in, default pair flow unchanged.
+
 ## [2.60.2] - 2026-04-20
 
 Targeted fix for the BlueZ 5.86 dual-role A2DP Sink regression surfaced in #166

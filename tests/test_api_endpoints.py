@@ -4228,3 +4228,178 @@ def test_ma_queue_cmd_returns_503_when_queue_unavailable(client):
         assert data["error_code"] == "queue_unavailable"
     finally:
         state.set_ma_connected(False)
+
+
+# ---------------------------------------------------------------------------
+# Pair-time adapter quiesce (issue #168)
+# ---------------------------------------------------------------------------
+
+
+class _QuiesceSentinel:
+    """Stand-in context manager that records whether it was entered."""
+
+    def __init__(self):
+        self.entered = False
+        self.exited = False
+        self.args: tuple = ()
+        self.kwargs: dict = {}
+
+    def __call__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        return self
+
+    def __enter__(self):
+        self.entered = True
+        return []
+
+    def __exit__(self, *exc):
+        self.exited = True
+        return False
+
+
+def _patch_pair_worker_sync(monkeypatch, api_bt_mod):
+    """Run the pair worker synchronously so route assertions can observe it."""
+
+    def _sync_thread(target, **kwargs):
+        class _T:
+            def start(self_inner):
+                target()
+
+        return _T()
+
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", _sync_thread)
+
+
+def test_bt_pair_threads_quiesce_flag(client, monkeypatch):
+    """POST /api/bt/pair with quiesce_adapter=true must wrap pair flow in quiesce CM."""
+    import routes.api_bt as api_bt_mod
+
+    fake_bt = MagicMock()
+    fake_bt.effective_adapter_mac = "AA:BB:CC:DD:EE:01"
+    fake_bt.mac_address = "11:11:11:11:11:11"
+    fake_bt.pair_device = MagicMock()
+    fake_bt.connect_device = MagicMock()
+    fake_client = SimpleNamespace(bt_manager=fake_bt)
+
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+
+    sentinel = _QuiesceSentinel()
+    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post(
+        "/api/bt/pair",
+        json={"player_name": "Test", "quiesce_adapter": True},
+    )
+    assert resp.status_code == 200
+    assert sentinel.entered and sentinel.exited
+    assert sentinel.args == ("AA:BB:CC:DD:EE:01",)
+    assert sentinel.kwargs == {"exclude_mac": "11:11:11:11:11:11"}
+    fake_bt.pair_device.assert_called_once()
+    fake_bt.connect_device.assert_called_once()
+
+
+def test_bt_pair_without_flag_does_not_invoke_quiesce(client, monkeypatch):
+    """Default (no flag) behavior must not touch the quiesce context manager."""
+    import routes.api_bt as api_bt_mod
+
+    fake_bt = MagicMock()
+    fake_bt.effective_adapter_mac = "AA:BB:CC:DD:EE:01"
+    fake_bt.mac_address = "11:11:11:11:11:11"
+    fake_client = SimpleNamespace(bt_manager=fake_bt)
+
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+
+    sentinel = _QuiesceSentinel()
+    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post("/api/bt/pair", json={"player_name": "Test"})
+    assert resp.status_code == 200
+    assert sentinel.entered is False
+    fake_bt.pair_device.assert_called_once()
+
+
+def test_bt_pair_new_threads_quiesce_flag(client, monkeypatch):
+    """POST /api/bt/pair_new with quiesce_adapter=true forwards flag to _run_standalone_pair."""
+    import routes.api_bt as api_bt_mod
+
+    captured: dict = {}
+
+    def _fake_run(job_id, mac, adapter, *, quiesce=False):
+        captured["job_id"] = job_id
+        captured["mac"] = mac
+        captured["adapter"] = adapter
+        captured["quiesce"] = quiesce
+
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
+    monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post(
+        "/api/bt/pair_new",
+        json={"mac": "AA:BB:CC:DD:EE:FF", "quiesce_adapter": True},
+    )
+    assert resp.status_code == 200
+    assert captured["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert captured["quiesce"] is True
+
+
+def test_bt_pair_new_default_has_quiesce_false(client, monkeypatch):
+    """No flag in request → _run_standalone_pair called with quiesce=False."""
+    import routes.api_bt as api_bt_mod
+
+    captured: dict = {}
+
+    def _fake_run(job_id, mac, adapter, *, quiesce=False):
+        captured["quiesce"] = quiesce
+
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
+    monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
+    assert resp.status_code == 200
+    assert captured["quiesce"] is False
+
+
+def test_run_standalone_pair_wraps_inner_in_quiesce_when_flag_set(monkeypatch):
+    """_run_standalone_pair(quiesce=True) must invoke the context manager."""
+    import routes.api_bt as api_bt_mod
+
+    sentinel = _QuiesceSentinel()
+    inner_called = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", inner_called)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+
+    api_bt_mod._run_standalone_pair("job-q", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D", quiesce=True)
+    assert sentinel.entered and sentinel.exited
+    assert sentinel.args == ("C0:FB:F9:62:D6:9D",)
+    assert sentinel.kwargs == {"exclude_mac": "AA:BB:CC:DD:EE:FF"}
+    inner_called.assert_called_once()
+
+
+def test_run_standalone_pair_skips_quiesce_when_flag_absent(monkeypatch):
+    import routes.api_bt as api_bt_mod
+
+    sentinel = _QuiesceSentinel()
+    inner_called = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", inner_called)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+
+    api_bt_mod._run_standalone_pair("job-nq", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+    assert sentinel.entered is False
+    inner_called.assert_called_once()

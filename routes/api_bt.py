@@ -22,6 +22,7 @@ from services.async_job_state import create_scan_job, finish_scan_job, get_scan_
 from services.bluetooth import _AUDIO_UUIDS, extract_pair_failure_reason, list_bt_adapters
 from services.bluetooth import bt_remove_device as _bt_remove_device
 from services.bluetooth import persist_device_released as _persist_device_released
+from services.pairing_quiesce import quiesce_adapter_peers
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +108,19 @@ def api_bt_pair():
         if not _try_acquire_bt_operation():
             return _bt_operation_conflict_response()
 
+        quiesce = bool(data.get("quiesce_adapter"))
+        adapter_mac = getattr(bt, "effective_adapter_mac", "") or ""
+        target_mac = getattr(bt, "mac_address", "") or None
+
         def _do_pair():
             try:
-                bt.pair_device()
-                bt.connect_device()
+                if quiesce and adapter_mac:
+                    with quiesce_adapter_peers(adapter_mac, exclude_mac=target_mac):
+                        bt.pair_device()
+                        bt.connect_device()
+                else:
+                    bt.pair_device()
+                    bt.connect_device()
             except Exception as e:
                 logger.error("Force pair failed: %s", e)
             finally:
@@ -1114,12 +1124,13 @@ def api_bt_pair_new():
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     if not _try_acquire_bt_operation():
         return _bt_operation_conflict_response()
+    quiesce = bool(data.get("quiesce_adapter"))
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
 
     def _run_job():
         try:
-            _run_standalone_pair(job_id, mac, adapter)
+            _run_standalone_pair(job_id, mac, adapter, quiesce=quiesce)
         finally:
             _release_bt_operation()
 
@@ -1141,9 +1152,18 @@ def api_bt_pair_new_result(job_id: str):
     return jsonify(job)
 
 
-def _run_standalone_pair(job_id: str, mac: str, adapter: str) -> None:
+def _run_standalone_pair(job_id: str, mac: str, adapter: str, *, quiesce: bool = False) -> None:
     """Run pair + trust via bluetoothctl for a device not yet in config."""
     adapter = _resolve_adapter_to_mac(adapter)
+    if quiesce and adapter:
+        with quiesce_adapter_peers(adapter, exclude_mac=mac):
+            _run_standalone_pair_inner(job_id, mac, adapter)
+    else:
+        _run_standalone_pair_inner(job_id, mac, adapter)
+
+
+def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
+    """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op."""
     try:
         cleanup_cmds: list[str] = []
         if adapter:

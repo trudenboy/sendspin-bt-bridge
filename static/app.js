@@ -6240,6 +6240,8 @@ function openBtScanModal(options) {
         : document.activeElement;
     _renderBtScanAdapterOptions();
     _syncBtScanControls();
+    var quiesceEl = document.getElementById('pair-quiesce-adapter');
+    if (quiesceEl) quiesceEl.checked = false;
     var overlay = _getBtScanOverlay();
     if (!overlay) return false;
     overlay.hidden = false;
@@ -6516,13 +6518,19 @@ function _setScanActionState(btnEl, state, label) {
 }
 
 async function pairAndAdd(mac, name, adapter, btnEl) {
-    if (!confirm('Put "' + (name || mac) + '" into pairing mode, then click OK.\n\nThis will pair, trust, and add the device (~25 s).')) return;
+    var quiesceEl = document.getElementById('pair-quiesce-adapter');
+    var quiesce = !!(quiesceEl && quiesceEl.checked);
+    var confirmMsg = 'Put "' + (name || mac) + '" into pairing mode, then click OK.\n\nThis will pair, trust, and add the device (~25 s).';
+    if (quiesce) {
+        confirmMsg += '\n\nOther speakers on the same adapter will pause for ~30 s during pairing and auto-reconnect afterwards.';
+    }
+    if (!confirm(confirmMsg)) return;
     _setScanActionState(btnEl, 'pairing', 'Pairing\u2026');
     try {
         var startedPair = await _fetchJsonOrThrow(API_BASE + '/api/bt/pair_new', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({mac: mac, adapter: adapter || autoAdapter()})
+            body: JSON.stringify({mac: mac, adapter: adapter || autoAdapter(), quiesce_adapter: quiesce})
         }, 'Bluetooth pairing failed');
         var data = startedPair.data;
         if (!data.job_id) throw new Error(data.error || 'No job_id');
