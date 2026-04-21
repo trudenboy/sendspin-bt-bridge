@@ -39,8 +39,7 @@ def quiesce_adapter_peers(
     paused: list = []
     target = exclude_mac.upper() if exclude_mac else None
 
-    with state.clients_lock:
-        snapshot = list(state.clients)
+    snapshot = state.get_clients_snapshot()
 
     for client in snapshot:
         mgr = getattr(client, "bt_manager", None)

@@ -37,15 +37,11 @@ class _FakeClient:
 
 @pytest.fixture
 def fake_clients_state(monkeypatch):
-    """Replace ``state.clients`` / ``state.clients_lock`` with an in-test list."""
-    import threading
-
+    """Stub ``state.get_clients_snapshot`` to return an in-test list."""
     import state as _state
 
     fake_clients: list = []
-    fake_lock = threading.Lock()
-    monkeypatch.setattr(_state, "clients", fake_clients, raising=True)
-    monkeypatch.setattr(_state, "clients_lock", fake_lock, raising=True)
+    monkeypatch.setattr(_state, "get_clients_snapshot", lambda: list(fake_clients))
     return fake_clients
 
 
