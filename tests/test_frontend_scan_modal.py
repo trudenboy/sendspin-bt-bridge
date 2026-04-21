@@ -160,6 +160,7 @@ global._hasDetectedAdapter = () => true;
 global._goToAdapters = () => {
   throw new Error('unexpected adapter redirect');
 };
+global._applyExperimentalVisibility = () => {};
 global.showToast = () => {};
 global.startBtScan = () => {
   startCalls += 1;
