@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.4] - 2026-04-21
+
+Dependency bump — pulls in `aiosendspin` 5.1.1 upstream bugfixes. No bridge
+behaviour changes.
+
+### Changed
+- **`aiosendspin[server]` 5.1.0 → 5.1.1** — upstream patch release. Relevant
+  fixes for this bridge:
+  - Audio stutter when the player format requires resampling
+    ([aiosendspin#219](https://github.com/Sendspin/aiosendspin/pull/219)) —
+    matters whenever a BT sink's native rate doesn't match the source.
+  - Timestamp drift after extended playback
+    ([aiosendspin#217](https://github.com/Sendspin/aiosendspin/pull/217)) —
+    matters for multi-hour streaming sessions; helps keep DAC-anchored sync stable.
+  - Avoid spurious reconnect when mDNS re-advertises the same endpoint
+    ([aiosendspin#216](https://github.com/Sendspin/aiosendspin/pull/216)) —
+    reduces churn under `SENDSPIN_SERVER=auto`.
+
 ## [2.60.3] - 2026-04-21
 
 Opt-in pair-time adapter quiesce for single-adapter multi-speaker setups.
