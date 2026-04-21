@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.5-rc.1] - 2026-04-21
+
+Small UX follow-up to v2.60.3: the opt-in pair-time adapter quiesce checkbox is
+now hidden by default behind the experimental-features toggle, since the feature
+only helps a narrow corner case (single-adapter + BlueZ 5.78–5.86 regression).
+
 ### Changed
 - **Pair-time adapter quiesce is now gated behind "Show experimental features"** —
   the "Pause other speakers on same adapter" checkbox in the Bluetooth scan modal
