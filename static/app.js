@@ -6242,6 +6242,7 @@ function openBtScanModal(options) {
     _syncBtScanControls();
     var quiesceEl = document.getElementById('pair-quiesce-adapter');
     if (quiesceEl) quiesceEl.checked = false;
+    _applyExperimentalVisibility();
     var overlay = _getBtScanOverlay();
     if (!overlay) return false;
     overlay.hidden = false;
