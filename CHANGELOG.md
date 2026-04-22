@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.4] - 2026-04-22
+
 ### Added
 - **Experimental adapter auto-recovery ladder (opt-in)** — new
   `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` flag (default off). When the
