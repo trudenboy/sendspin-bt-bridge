@@ -398,6 +398,7 @@ async def acycle_card_profile(card_name: str, target: str, off_wait: float = 1.0
 _LAST_BLUEZ5_RELOAD_TS: float = 0.0
 _BLUEZ5_RELOAD_COOLDOWN: float = 60.0
 _BLUEZ5_RELOAD_LOCK = threading.Lock()
+_BLUEZ5_RELOAD_IN_PROGRESS: bool = False
 
 
 async def areload_bluez5_discover_module() -> bool:
@@ -407,11 +408,20 @@ async def areload_bluez5_discover_module() -> bool:
     successful Bluetooth connect. Disruptive: drops every other active BT
     sink, so it is throttled to at most once per 60 seconds across the
     whole bridge. Returns True only if the reload actually happened.
+
+    Concurrency: an in-progress guard (under ``_BLUEZ5_RELOAD_LOCK``)
+    prevents two callers from both passing the cooldown check while one
+    reload is still running. The cooldown timestamp is updated only on
+    a successful unload+load so a failed attempt doesn't block a later
+    healthy one.
     """
     import time as _time
 
-    global _LAST_BLUEZ5_RELOAD_TS
+    global _LAST_BLUEZ5_RELOAD_TS, _BLUEZ5_RELOAD_IN_PROGRESS
     with _BLUEZ5_RELOAD_LOCK:
+        if _BLUEZ5_RELOAD_IN_PROGRESS:
+            logger.info("module-bluez5-discover reload skipped — another reload in progress")
+            return False
         now = _time.monotonic()
         if now - _LAST_BLUEZ5_RELOAD_TS < _BLUEZ5_RELOAD_COOLDOWN:
             logger.info(
@@ -419,73 +429,78 @@ async def areload_bluez5_discover_module() -> bool:
                 now - _LAST_BLUEZ5_RELOAD_TS,
             )
             return False
+        _BLUEZ5_RELOAD_IN_PROGRESS = True
     try:
-        list_proc = await asyncio.create_subprocess_exec(
-            "pactl",
-            "list",
-            "modules",
-            "short",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await list_proc.communicate()
-    except OSError as exc:
-        logger.warning("areload_bluez5_discover_module list failed: %s", exc)
-        return False
-    if list_proc.returncode != 0:
-        logger.warning("pactl list modules short failed (rc=%s)", list_proc.returncode)
-        return False
-    module_idx: str | None = None
-    for line in stdout.decode(errors="replace").splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 2 and parts[1].strip() == "module-bluez5-discover":
-            module_idx = parts[0].strip()
-            break
-    if module_idx is None:
-        logger.info("module-bluez5-discover not currently loaded; nothing to reload")
-        return False
-    try:
-        unload_proc = await asyncio.create_subprocess_exec(
-            "pactl",
-            "unload-module",
-            module_idx,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, unload_err = await unload_proc.communicate()
-    except OSError as exc:
-        logger.warning("pactl unload-module failed: %s", exc)
-        return False
-    if unload_proc.returncode != 0:
-        logger.warning(
-            "pactl unload-module %s failed: %s",
-            module_idx,
-            unload_err.decode(errors="replace").strip(),
-        )
-        return False
-    await asyncio.sleep(2.0)
-    try:
-        load_proc = await asyncio.create_subprocess_exec(
-            "pactl",
-            "load-module",
-            "module-bluez5-discover",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, load_err = await load_proc.communicate()
-    except OSError as exc:
-        logger.warning("pactl load-module module-bluez5-discover failed: %s", exc)
-        return False
-    if load_proc.returncode != 0:
-        logger.warning(
-            "pactl load-module module-bluez5-discover failed: %s",
-            load_err.decode(errors="replace").strip(),
-        )
-        return False
-    with _BLUEZ5_RELOAD_LOCK:
-        _LAST_BLUEZ5_RELOAD_TS = _time.monotonic()
-    logger.warning("Reloaded module-bluez5-discover as BT sink recovery last resort")
-    return True
+        try:
+            list_proc = await asyncio.create_subprocess_exec(
+                "pactl",
+                "list",
+                "modules",
+                "short",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await list_proc.communicate()
+        except OSError as exc:
+            logger.warning("areload_bluez5_discover_module list failed: %s", exc)
+            return False
+        if list_proc.returncode != 0:
+            logger.warning("pactl list modules short failed (rc=%s)", list_proc.returncode)
+            return False
+        module_idx: str | None = None
+        for line in stdout.decode(errors="replace").splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[1].strip() == "module-bluez5-discover":
+                module_idx = parts[0].strip()
+                break
+        if module_idx is None:
+            logger.info("module-bluez5-discover not currently loaded; nothing to reload")
+            return False
+        try:
+            unload_proc = await asyncio.create_subprocess_exec(
+                "pactl",
+                "unload-module",
+                module_idx,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, unload_err = await unload_proc.communicate()
+        except OSError as exc:
+            logger.warning("pactl unload-module failed: %s", exc)
+            return False
+        if unload_proc.returncode != 0:
+            logger.warning(
+                "pactl unload-module %s failed: %s",
+                module_idx,
+                unload_err.decode(errors="replace").strip(),
+            )
+            return False
+        await asyncio.sleep(2.0)
+        try:
+            load_proc = await asyncio.create_subprocess_exec(
+                "pactl",
+                "load-module",
+                "module-bluez5-discover",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, load_err = await load_proc.communicate()
+        except OSError as exc:
+            logger.warning("pactl load-module module-bluez5-discover failed: %s", exc)
+            return False
+        if load_proc.returncode != 0:
+            logger.warning(
+                "pactl load-module module-bluez5-discover failed: %s",
+                load_err.decode(errors="replace").strip(),
+            )
+            return False
+        with _BLUEZ5_RELOAD_LOCK:
+            _LAST_BLUEZ5_RELOAD_TS = _time.monotonic()
+        logger.warning("Reloaded module-bluez5-discover as BT sink recovery last resort")
+        return True
+    finally:
+        with _BLUEZ5_RELOAD_LOCK:
+            _BLUEZ5_RELOAD_IN_PROGRESS = False
 
 
 async def aget_server_name() -> str:

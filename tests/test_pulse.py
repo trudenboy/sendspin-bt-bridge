@@ -410,6 +410,68 @@ def test_reload_bluez5_discover_module_does_not_burn_cooldown_when_module_absent
     assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
 
 
+def test_reload_bluez5_discover_module_serializes_concurrent_callers():
+    """Two concurrent callers must not both execute unload+load back-to-back.
+
+    The 60s cooldown is set only on success, so without an in-progress guard
+    two callers can both pass the cooldown check before either sets the
+    timestamp, causing two global BT-sink disruptions where the contract
+    promised one. Second concurrent caller must observe "in progress" and
+    return False without issuing its own ``unload-module`` call.
+    """
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    started = asyncio.Event()
+    block = asyncio.Event()
+    call_log: list[tuple[str, ...]] = []
+    unload_seen = 0
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            nonlocal unload_seen
+            call_log.append(args[:2])
+            if args[:3] == ("pactl", "list", "modules"):
+                return (b"25\tmodule-bluez5-discover\t\n", b"")
+            if len(args) >= 2 and args[1] == "unload-module":
+                unload_seen += 1
+                if unload_seen == 1:
+                    # Only the first caller blocks — guarantees the second caller
+                    # can't also stall the test if the in-progress guard is absent.
+                    started.set()
+                    await block.wait()
+            return (b"", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    async def fake_sleep(_delay):
+        return None
+
+    async def runner():
+        with (
+            patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec),
+            patch.object(asyncio, "sleep", side_effect=fake_sleep),
+        ):
+            task1 = asyncio.create_task(areload_bluez5_discover_module())
+            await started.wait()  # first caller is mid-unload, holding in-progress
+            r2 = await areload_bluez5_discover_module()  # should bail out fast
+            block.set()
+            r1 = await task1
+            return r1, r2
+
+    r1, r2 = asyncio.run(runner())
+
+    assert r1 is True, "first caller should complete the reload"
+    assert r2 is False, "second concurrent caller must bail out, not run another reload"
+    unload_count = sum(1 for c in call_log if len(c) >= 2 and c[1] == "unload-module")
+    assert unload_count == 1, f"expected exactly one unload across concurrent callers, got {unload_count}"
+
+
 def test_reload_bluez5_discover_module_burns_cooldown_after_success():
     """On successful unload+load, the cooldown timestamp must be updated."""
     from services.pulse import areload_bluez5_discover_module
