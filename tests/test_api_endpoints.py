@@ -501,6 +501,175 @@ def test_run_standalone_pair_auto_answers_legacy_pin_prompt(monkeypatch, prompt_
     finish_job.assert_called_once_with("job-pin", {"success": True, "mac": "13:8F:E8:53:ED:2F"})
 
 
+def test_run_standalone_pair_logs_full_stdout_on_fail(monkeypatch, caplog):
+    """On FAIL, the debug log must include the *full* bluetoothctl output, not
+    just the last ~800 bytes. The critical passkey/agent prompt and
+    `Attempting to pair...` lines typically appear early and get cut off by
+    a tail-only log (issue #168 — AuthenticationCanceled diagnostic).
+    """
+    import logging
+
+    import routes.api_bt as api_bt_mod
+
+    early_marker = "EARLY_PROMPT_MARKER_shown_before_noise"
+    noise = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: 0xffffffc0 (-64)\n" * 40
+    fake_proc = _FakeProc(
+        stdout_lines=[
+            f"[agent] {early_marker}\n",
+            noise,
+            "Failed to pair: org.bluez.Error.AuthenticationCanceled\n",
+        ],
+        tail="Device AA:BB:CC:DD:EE:FF not available\n",
+    )
+    total_out_len = sum(len(line) for line in fake_proc.stdout._lines) + len(fake_proc._tail)
+    assert total_out_len > 1200, "test is only meaningful when output exceeds the old 800-byte tail"
+
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
+    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
+
+    caplog.set_level(logging.DEBUG, logger=api_bt_mod.logger.name)
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-fail-log", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    debug_records = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.DEBUG and "Standalone pair" in r.getMessage() and "output" in r.getMessage()
+    ]
+    assert debug_records, "expected a debug log entry with the standalone pair output"
+    joined = "\n".join(debug_records)
+    assert early_marker in joined, (
+        f"expected full output to contain {early_marker!r} (truncation drops the crucial early prompt)"
+    )
+
+
+def test_run_standalone_pair_fires_pair_when_device_seen_without_fixed_scan_delay(monkeypatch):
+    """When bluetoothctl emits `[NEW] Device <mac>` during scan, the pair
+    command must be sent *without* waiting the full `_PAIR_SCAN_DURATION`
+    fixed sleep. This shortens the scan window so the speaker is still in
+    pairing mode when `pair` fires (issue #168 — Synergy 65 S).
+    """
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(
+        stdout_lines=[
+            "[NEW] Device AA:BB:CC:DD:EE:FF BoomBox\n",
+            "Pairing successful\n",
+        ],
+        tail="Paired: yes\n",
+    )
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda s: sleep_calls.append(s))
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-fast", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    # Current implementation blindly `time.sleep(_PAIR_SCAN_DURATION)` between
+    # `scan on` and `pair`. Event-driven impl must not burn the full window.
+    assert not any(s >= api_bt_mod._PAIR_SCAN_DURATION for s in sleep_calls), (
+        f"expected no sleep >= _PAIR_SCAN_DURATION ({api_bt_mod._PAIR_SCAN_DURATION}s) "
+        f"once device is visible, got sleeps={sleep_calls}"
+    )
+    # And `pair` must still be sent (second write after the init batch).
+    pair_writes = [w for w in fake_proc.stdin.writes if w.strip() == "pair AA:BB:CC:DD:EE:FF"]
+    assert pair_writes, f"expected `pair` to be written, got writes={fake_proc.stdin.writes!r}"
+
+
+def test_run_standalone_pair_still_pairs_when_device_not_seen_in_scan(monkeypatch):
+    """Fallback: if bluetoothctl never emits `[NEW] Device <mac>` (e.g. device
+    took longer than expected to show up), we must still attempt the pair after
+    the hard cap — regression guard against an infinite event-wait.
+    """
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(
+        stdout_lines=[
+            "[CHG] Controller C0:FB:F9:62:D6:9D Discovering: yes\n",
+            "Failed to pair: org.bluez.Error.AuthenticationCanceled\n",
+        ],
+        tail="Device AA:BB:CC:DD:EE:FF not available\n",
+    )
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
+    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-nodev", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    pair_writes = [w for w in fake_proc.stdin.writes if w.strip() == "pair AA:BB:CC:DD:EE:FF"]
+    assert pair_writes, (
+        "pair must still be attempted as a fallback when `[NEW] Device` is never seen, "
+        f"got writes={fake_proc.stdin.writes!r}"
+    )
+
+
+def test_run_standalone_pair_uses_no_input_no_output_when_just_works_enabled(monkeypatch):
+    """When EXPERIMENTAL_PAIR_JUST_WORKS=True, the bluetoothctl agent must be
+    registered with `NoInputNoOutput` capability. Many consumer audio sinks
+    expect Just-Works SSP and cancel authentication when the default
+    `KeyboardDisplay` agent negotiates passkey exchange (issue #168).
+    """
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(
+        api_bt_mod,
+        "load_config",
+        lambda: {"EXPERIMENTAL_PAIR_JUST_WORKS": True},
+    )
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-jw", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    # The init batch is the first stdin write (a newline-joined block).
+    init_batch = fake_proc.stdin.writes[0]
+    assert "agent NoInputNoOutput\n" in init_batch, (
+        f"expected `agent NoInputNoOutput` when flag set, got init batch: {init_batch!r}"
+    )
+    assert "agent on\n" not in init_batch, (
+        f"`agent on` and `agent NoInputNoOutput` are mutually exclusive — "
+        f"init batch must not contain both, got: {init_batch!r}"
+    )
+
+
+def test_run_standalone_pair_uses_default_agent_when_just_works_disabled(monkeypatch):
+    """Default: flag unset → keep current `agent on` (KeyboardDisplay) behavior."""
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "load_config", lambda: {})
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-default", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    init_batch = fake_proc.stdin.writes[0]
+    assert "agent on\n" in init_batch, f"default path must keep `agent on` (KeyboardDisplay), got: {init_batch!r}"
+    assert "agent NoInputNoOutput\n" not in init_batch
+
+
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     import routes.api_bt as api_bt_mod
 

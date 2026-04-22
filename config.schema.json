@@ -294,6 +294,11 @@
       "type": "boolean",
       "default": false,
       "description": "Experimental: reload PulseAudio module-bluez5-discover as a last resort when bluez_card.* fails to appear. Disrupts all active BT audio on the bridge."
+    },
+    "EXPERIMENTAL_PAIR_JUST_WORKS": {
+      "type": "boolean",
+      "default": false,
+      "description": "Experimental: use `agent NoInputNoOutput` during standalone pair so bluetoothctl negotiates Just-Works SSP instead of the default passkey/confirmation dance. Helps audio sinks that cancel authentication with the KeyboardDisplay agent (issue #168)."
     }
   },
   "$defs": {

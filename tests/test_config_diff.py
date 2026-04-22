@@ -322,6 +322,17 @@ def test_experimental_pa_module_reload_flip_is_restart_required():
     assert act.fields == ["EXPERIMENTAL_PA_MODULE_RELOAD"]
 
 
+def test_experimental_pair_just_works_flip_needs_no_action():
+    """EXPERIMENTAL_PAIR_JUST_WORKS is read via load_config() each time
+    _run_standalone_pair_inner runs, so a toggle takes effect on the next
+    pair attempt with no restart or subprocess reload (issue #168).
+    """
+    old = _config(EXPERIMENTAL_PAIR_JUST_WORKS=False)
+    new = _config(EXPERIMENTAL_PAIR_JUST_WORKS=True)
+
+    assert diff_configs(old, new) == []
+
+
 # ---------------------------------------------------------------------------
 # Ordering guarantees
 # ---------------------------------------------------------------------------

@@ -1207,10 +1207,20 @@ def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
         )
         time.sleep(1)
 
+        # `agent NoInputNoOutput` forces Just-Works SSP (both sides auto-accept
+        # without a passkey exchange). Many consumer BT audio sinks cancel
+        # authentication when the default `KeyboardDisplay` agent negotiates
+        # a passkey; opt-in flag lets affected users work around it (issue #168).
+        try:
+            cfg = load_config()
+        except Exception:
+            cfg = {}
+        agent_cmd = "agent NoInputNoOutput" if cfg.get("EXPERIMENTAL_PAIR_JUST_WORKS") else "agent on"
+
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
-        initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
+        initial_cmds.extend(["power on", agent_cmd, "default-agent", "scan on"])
 
         pair_cmds = [f"pair {mac}"]
 
@@ -1227,24 +1237,38 @@ def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
 
             proc.stdin.write("\n".join(initial_cmds) + "\n")
             proc.stdin.flush()
-            time.sleep(_PAIR_SCAN_DURATION)
-
-            proc.stdin.write("\n".join(pair_cmds) + "\n")
-            proc.stdin.flush()
 
             # Read stdout to auto-confirm SSP passkey
             import selectors
 
             collected: list[str] = []
             paired_ok = False
-            deadline = time.monotonic() + _PAIR_WAIT_DURATION
+            pair_sent = False
+            # Single loop that handles both scan-window observation and pair
+            # outcome parsing. `pair <mac>` fires as soon as `[NEW] Device <mac>`
+            # appears, rather than waiting the full `_PAIR_SCAN_DURATION` fixed
+            # sleep — shaves typical pair-mode window from ~12s to ~1-3s so the
+            # speaker is still accepting when `pair` arrives (issue #168).
+            mac_lower = mac.lower()
+            start = time.monotonic()
+            scan_deadline = start + _PAIR_SCAN_DURATION
+            full_deadline = scan_deadline + _PAIR_WAIT_DURATION
             sel = selectors.DefaultSelector()
             sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
             try:
-                while time.monotonic() < deadline and proc.poll() is None:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
+                while proc.poll() is None:
+                    now = time.monotonic()
+                    # Fire `pair` at scan deadline if device never advertised.
+                    if not pair_sent and now >= scan_deadline:
+                        proc.stdin.write("\n".join(pair_cmds) + "\n")
+                        proc.stdin.flush()
+                        pair_sent = True
+                    if now >= full_deadline:
                         break
+                    end = full_deadline if pair_sent else scan_deadline
+                    remaining = end - now
+                    if remaining <= 0:
+                        continue
                     events = sel.select(timeout=min(remaining, 0.5))
                     if not events:
                         continue
@@ -1252,7 +1276,16 @@ def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
                     if not line:
                         break
                     collected.append(line)
+                    low = line.lower()
                     stripped = line.strip().lower()
+
+                    if not pair_sent and "[new] device" in low and mac_lower in low:
+                        logger.debug("Device %s visible via scan, firing pair early", mac)
+                        proc.stdin.write("\n".join(pair_cmds) + "\n")
+                        proc.stdin.flush()
+                        pair_sent = True
+                        continue
+
                     if "confirm passkey" in stripped or "request confirmation" in stripped:
                         logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
                         proc.stdin.write("yes\n")
@@ -1269,6 +1302,12 @@ def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
                         break
             finally:
                 sel.close()
+
+            # Safety net: ensure `pair` was sent at least once even if the loop
+            # exited via proc.poll() before the scan deadline.
+            if not pair_sent and proc.poll() is None:
+                proc.stdin.write("\n".join(pair_cmds) + "\n")
+                proc.stdin.flush()
 
             if paired_ok:
                 proc.stdin.write(f"trust {mac}\n")
@@ -1290,7 +1329,11 @@ def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
                     extract_pair_failure_reason(out, tail_chars=400) or "no explicit bluetoothctl reason captured"
                 )
                 logger.warning("Standalone pair %s: FAIL (%s)", mac, failure_reason)
-                logger.debug("Standalone pair %s output tail: %s", mac, out[-800:])
+                # Log full captured output (not just a tail) so passkey/agent
+                # prompts near the start of the session are visible in bug
+                # reports. bluetoothctl's SSP dialog is typically <4 KB per
+                # pair attempt (issue #168 diagnostic lost with 800-byte tail).
+                logger.debug("Standalone pair %s output: %s", mac, out)
             finish_scan_job(job_id, {"success": ok, "mac": mac})
         finally:
             try:

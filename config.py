@@ -142,6 +142,7 @@ DEFAULT_CONFIG = {
     "TRUSTED_PROXIES": [],
     "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": False,
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
+    "EXPERIMENTAL_PAIR_JUST_WORKS": False,
 }
 
 logger = logging.getLogger(__name__)
