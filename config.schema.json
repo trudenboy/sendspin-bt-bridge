@@ -299,6 +299,11 @@
       "type": "boolean",
       "default": false,
       "description": "Experimental: use `agent NoInputNoOutput` during standalone pair so bluetoothctl negotiates Just-Works SSP instead of the default passkey/confirmation dance. Helps audio sinks that cancel authentication with the KeyboardDisplay agent (issue #168)."
+    },
+    "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+      "type": "boolean",
+      "default": false,
+      "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the adapter as a last-ditch attempt before auto-releasing BT management. Disruptive: the USB step briefly disconnects every device on that controller, and it requires CAP_NET_ADMIN plus /dev/rfkill and /sys/bus/usb access (Docker privileged or matching capabilities)."
     }
   },
   "$defs": {

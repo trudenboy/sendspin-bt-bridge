@@ -87,6 +87,7 @@ class BluetoothManager:
         churn_window: float = 300.0,
         enable_a2dp_dance: bool = False,
         enable_pa_module_reload: bool = False,
+        enable_adapter_auto_recovery: bool = False,
     ):
         self.mac_address = mac_address
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
@@ -101,6 +102,11 @@ class BluetoothManager:
         # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
+        # EXPERIMENTAL_ADAPTER_AUTO_RECOVERY — gates the last-ditch
+        # bluetooth-auto-recovery ladder call in _handle_reconnect_failure.
+        # Off by default because USB unbind/rebind briefly disconnects
+        # every device on the same controller.
+        self._enable_adapter_auto_recovery = bool(enable_adapter_auto_recovery)
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -943,6 +949,17 @@ class BluetoothManager:
             return True
         if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
             return False
+        # Last-ditch adapter recovery before auto-release. Gated by the
+        # experimental flag because USB unbind/rebind is disruptive.
+        # Needs both the resolved adapter MAC and an hci index to hand to
+        # the bluetooth-auto-recovery library.
+        if self._enable_adapter_auto_recovery and self._try_adapter_auto_recovery():
+            logger.info(
+                "[%s] adapter recovery succeeded after %d failed reconnects — keeping management enabled",
+                self.device_name,
+                attempt,
+            )
+            return False
         logger.warning(
             "[%s] %d consecutive failed reconnects (threshold=%d) — auto-releasing BT management",
             self.device_name,
@@ -968,6 +985,30 @@ class BluetoothManager:
         except Exception as _e:
             logger.debug("persist_device_released failed: %s", _e)
         return True
+
+    def _try_adapter_auto_recovery(self) -> bool:
+        """Run the bluetooth-auto-recovery ladder on this device's
+        adapter. Returns True iff recovery succeeded. Short-circuits
+        when the adapter was never resolved (no MAC, no hci index) —
+        the library needs both to do its job.
+        """
+        if not self._adapter_select or not self.adapter:
+            return False
+        # Parse "hci3" → 3. Anything else (e.g. "default") skips recovery.
+        m = re.match(r"^hci(\d+)$", self.adapter)
+        if not m:
+            return False
+        hci_index = int(m.group(1))
+        try:
+            from services.adapter_recovery import recover_adapter_blocking
+        except Exception as _e:
+            logger.debug("[%s] adapter_recovery module unavailable: %s", self.device_name, _e)
+            return False
+        try:
+            return bool(recover_adapter_blocking(hci_index=hci_index, adapter_mac=self._adapter_select))
+        except Exception as e:
+            logger.warning("[%s] adapter auto-recovery raised: %s", self.device_name, e)
+            return False
 
     def _publish_client_event(
         self,

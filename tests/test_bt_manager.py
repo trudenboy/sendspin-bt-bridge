@@ -932,6 +932,102 @@ def test_handle_reconnect_failure_does_not_release_below_threshold(bt_manager):
 
 
 # ---------------------------------------------------------------------------
+# Adapter auto-recovery ladder (EXPERIMENTAL_ADAPTER_AUTO_RECOVERY) — at
+# threshold, before auto-releasing, try bluetooth-auto-recovery's
+# mgmt-reset/rfkill/USB-bounce ladder one last time. Flag-gated because a
+# USB bounce briefly disconnects every device on the same controller.
+# ---------------------------------------------------------------------------
+
+
+def test_handle_reconnect_failure_skips_adapter_recovery_when_flag_off(bt_manager):
+    """Default behavior (flag off): even at threshold with an adapter MAC
+    configured, the recovery helper must not be called — the USB-bounce
+    step is disruptive enough that users must opt in explicitly."""
+    bt_manager.max_reconnect_fails = 3
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
+    bt_manager._enable_adapter_auto_recovery = False
+    bt_manager._adapter_select = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter = "hci0"
+
+    with (
+        patch("services.bluetooth.persist_device_released"),
+        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+    ):
+        released = bt_manager._handle_reconnect_failure(3)
+
+    mock_rec.assert_not_called()
+    assert released is True
+    assert bt_manager.management_enabled is False
+
+
+def test_handle_reconnect_failure_runs_adapter_recovery_when_flag_on(bt_manager):
+    """Flag on + threshold hit + adapter MAC known: the recovery helper
+    is invoked with the hci index parsed from ``self.adapter`` and the
+    adapter MAC, as a last-ditch before auto-releasing."""
+    bt_manager.max_reconnect_fails = 3
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
+    bt_manager._enable_adapter_auto_recovery = True
+    bt_manager._adapter_select = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter = "hci1"
+
+    with (
+        patch("services.bluetooth.persist_device_released"),
+        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+    ):
+        mock_rec.return_value = False  # recovery failed → still release
+        released = bt_manager._handle_reconnect_failure(3)
+
+    mock_rec.assert_called_once_with(hci_index=1, adapter_mac="C0:FB:F9:62:D6:9D")
+    assert released is True
+    assert bt_manager.management_enabled is False
+
+
+def test_handle_reconnect_failure_keeps_management_when_recovery_succeeds(bt_manager):
+    """If the recovery ladder actually recovers the adapter, do NOT
+    auto-release — give the reconnect loop another chance."""
+    bt_manager.max_reconnect_fails = 3
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
+    bt_manager._enable_adapter_auto_recovery = True
+    bt_manager._adapter_select = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter = "hci0"
+
+    with (
+        patch("services.bluetooth.persist_device_released") as mock_persist,
+        patch("services.adapter_recovery.recover_adapter_blocking", return_value=True),
+    ):
+        released = bt_manager._handle_reconnect_failure(3)
+
+    assert released is False
+    assert bt_manager.management_enabled is True
+    mock_persist.assert_not_called()
+
+
+def test_handle_reconnect_failure_skips_recovery_when_no_adapter_mac(bt_manager):
+    """Recovery needs the adapter MAC (and hci index). If we never
+    resolved the adapter (default controller used, no adapter set),
+    don't call into the library — its netlink/USB paths key on hci
+    index, and we can't safely pick one blindly."""
+    bt_manager.max_reconnect_fails = 3
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
+    bt_manager._enable_adapter_auto_recovery = True
+    bt_manager._adapter_select = ""  # unresolved
+    bt_manager.adapter = ""
+
+    with (
+        patch("services.bluetooth.persist_device_released"),
+        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+    ):
+        released = bt_manager._handle_reconnect_failure(3)
+
+    mock_rec.assert_not_called()
+    assert released is True
+
+
+# ---------------------------------------------------------------------------
 # bluez/bluez#1922 A2DP Sink workarounds (5.86 dual-role regression)
 # ---------------------------------------------------------------------------
 

@@ -10,3 +10,8 @@ websockets==16.0
 zeroconf==0.148.0
 PyJWT>=2.8.0
 cryptography>=3.4.0
+# Optional adapter recovery ladder (mgmt reset → rfkill → USB unbind/rebind).
+# Consumed by services.adapter_recovery behind the
+# EXPERIMENTAL_ADAPTER_AUTO_RECOVERY flag. Linux-only transitively via PyRIC;
+# import failures are caught and the feature fails soft.
+bluetooth-auto-recovery==1.5.3
