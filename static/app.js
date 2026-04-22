@@ -6924,6 +6924,8 @@ function _buildConfigPayload(options) {
     config.BLUETOOTH_DEVICES = collectBtDevices();
     config.PREFER_SBC_CODEC = !!(document.getElementById('prefer-sbc-codec') || {}).checked;
     config.DISABLE_PA_RESCUE_STREAMS = !!(document.getElementById('disable-pa-rescue-streams') || {}).checked;
+    config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
+    config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
@@ -9491,6 +9493,12 @@ async function loadConfig(options) {
         // Populate checkboxes
         var sbcCheck = document.getElementById('prefer-sbc-codec');
         if (sbcCheck) sbcCheck.checked = !!config.PREFER_SBC_CODEC;
+        var disablePaRescueCheck = document.getElementById('disable-pa-rescue-streams');
+        if (disablePaRescueCheck) disablePaRescueCheck.checked = !!config.DISABLE_PA_RESCUE_STREAMS;
+        var expA2dpDanceCheck = document.getElementById('experimental-a2dp-sink-recovery-dance');
+        if (expA2dpDanceCheck) expA2dpDanceCheck.checked = !!config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE;
+        var expPaReloadCheck = document.getElementById('experimental-pa-module-reload');
+        if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

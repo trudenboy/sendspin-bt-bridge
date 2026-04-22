@@ -302,6 +302,26 @@ def test_auth_enabled_flip_is_restart_required():
     assert act.kind is ActionKind.RESTART_REQUIRED
 
 
+def test_experimental_a2dp_dance_flip_is_restart_required():
+    """BluetoothManager reads EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE in __init__ — no hot-reload path."""
+    old = _config(EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE=False)
+    new = _config(EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE=True)
+
+    (act,) = diff_configs(old, new)
+    assert act.kind is ActionKind.RESTART_REQUIRED
+    assert act.fields == ["EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE"]
+
+
+def test_experimental_pa_module_reload_flip_is_restart_required():
+    """EXPERIMENTAL_PA_MODULE_RELOAD is parent-state, plumbed per-instance — restart needed."""
+    old = _config(EXPERIMENTAL_PA_MODULE_RELOAD=False)
+    new = _config(EXPERIMENTAL_PA_MODULE_RELOAD=True)
+
+    (act,) = diff_configs(old, new)
+    assert act.kind is ActionKind.RESTART_REQUIRED
+    assert act.fields == ["EXPERIMENTAL_PA_MODULE_RELOAD"]
+
+
 # ---------------------------------------------------------------------------
 # Ordering guarantees
 # ---------------------------------------------------------------------------

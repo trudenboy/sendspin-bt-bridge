@@ -140,6 +140,8 @@ DEFAULT_CONFIG = {
     "DISABLE_PA_RESCUE_STREAMS": False,
     "DUPLICATE_DEVICE_CHECK": True,
     "TRUSTED_PROXIES": [],
+    "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": False,
+    "EXPERIMENTAL_PA_MODULE_RELOAD": False,
 }
 
 logger = logging.getLogger(__name__)

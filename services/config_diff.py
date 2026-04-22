@@ -91,6 +91,8 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
         "BRUTE_FORCE_LOCKOUT_MINUTES",
         "TRUSTED_PROXIES",
         "TZ",
+        "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
+        "EXPERIMENTAL_PA_MODULE_RELOAD",
     }
 )
 

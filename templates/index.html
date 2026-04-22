@@ -654,6 +654,30 @@
                                     <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
                                 </div>
                             </div>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Last-resort workaround for bluez/bluez#1922. If a sink fails to publish after connect, the bridge disconnects and reconnects the device once per attempt. May cause extra churn — try leaving disabled first.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Experimental: A2DP sink recovery dance</strong>
+                                    <span class="form-hint">Disconnect→reconnect on missing sink. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE" id="experimental-a2dp-sink-recovery-dance">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Last-resort recovery when a BT card never registers in PulseAudio. Reloads module-bluez5-discover — disrupts all Bluetooth audio bridge-wide. Throttled to once per 60 seconds.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Experimental: Reload PulseAudio BT module</strong>
+                                    <span class="form-hint">Last-resort sink recovery. Disrupts all BT audio. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="EXPERIMENTAL_PA_MODULE_RELOAD" id="experimental-pa-module-reload">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
 

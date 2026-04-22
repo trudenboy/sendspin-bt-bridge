@@ -1660,6 +1660,7 @@ def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypa
 
 def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_auth as ma_auth
     import routes.ma_groups as ma_groups
     import services.ma_discovery as ma_discovery
 
@@ -1719,7 +1720,7 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
             "MA_AUTH_PROVIDER": "ha",
         },
     )
-    monkeypatch.setattr(api_ma, "_validate_ma_token", lambda ma_url, token: False)
+    monkeypatch.setattr(ma_auth, "_validate_ma_token", lambda ma_url, token: False)
 
     resp = client.get("/api/ma/discover")
 
@@ -1739,6 +1740,7 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
 
 def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_fails(client, monkeypatch):
     import routes.api_ma as api_ma
+    import routes.ma_auth as ma_auth
     import routes.ma_groups as ma_groups
     import services.ma_discovery as ma_discovery
 
@@ -1789,7 +1791,7 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
             "MA_AUTH_PROVIDER": "ha",
         },
     )
-    monkeypatch.setattr(api_ma, "_validate_ma_token", lambda ma_url, token: False)
+    monkeypatch.setattr(ma_auth, "_validate_ma_token", lambda ma_url, token: False)
 
     resp = client.get("/api/ma/discover")
 

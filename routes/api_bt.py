@@ -882,18 +882,26 @@ def _estimate_scan_duration(adapter_macs: "list[str]") -> int:
     return _SCAN_BASE_DURATION + max(len(adapter_macs) - 1, 0) * _SCAN_ADAPTER_OVERHEAD
 
 
-def _classify_audio_capability(out: str) -> bool:
-    """Return True when bluetoothctl info suggests the device is audio-capable."""
+def _classify_audio_capability(out: str) -> "tuple[bool, str]":
+    """Return ``(is_audio, reason)`` from bluetoothctl info output.
+
+    Reason is a short machine-readable label used for scan-filter diagnostics:
+    ``audio_class_of_device`` / ``non_audio_class_of_device`` / ``audio_uuid``
+    / ``no_audio_class_no_uuid`` / ``no_class_info_defaults_audio``.
+    """
     out_lower = out.lower()
     class_m = re.search(r"\bClass:\s+(0x[0-9A-Fa-f]+)", out)
     if class_m:
         cls = int(class_m.group(1), 16)
-        return ((cls >> 8) & 0x1F) == 4
+        major = (cls >> 8) & 0x1F
+        if major == 4:
+            return True, "audio_class_of_device"
+        return False, "non_audio_class_of_device"
     if any(u in out_lower for u in _AUDIO_UUIDS):
-        return True
+        return True, "audio_uuid"
     if "UUID:" in out:
-        return False
-    return True
+        return False, "no_audio_class_no_uuid"
+    return True, "no_class_info_defaults_audio"
 
 
 def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
@@ -995,10 +1003,15 @@ def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> N
                 names[mac] = name
 
 
-def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = True) -> "dict | None":
-    """Return scan device info, optionally filtering out non-audio rows."""
+def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = True) -> "tuple[dict | None, str | None]":
+    """Return ``(device_info_or_None, drop_reason_or_None)``.
+
+    ``device_info`` is ``None`` when the device was filtered out by
+    ``audio_only``; ``drop_reason`` is populated in that case so the caller
+    can aggregate scan reject stats for support diagnostics.
+    """
     if not validate_mac(mac):
-        return {"mac": mac, "name": mac, "audio_capable": True}
+        return {"mac": mac, "name": mac, "audio_capable": True}, None
     try:
         r = subprocess.run(
             ["bluetoothctl", "info", mac],
@@ -1008,17 +1021,23 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
         )
         out = r.stdout
     except Exception:
-        return {"mac": mac, "name": names.get(mac, mac), "audio_capable": True}
+        return {"mac": mac, "name": names.get(mac, mac), "audio_capable": True}, None
     if mac not in names:
         nm = re.search(r"\bName:\s+(.*)", out)
         if nm:
             n = nm.group(1).strip()
             if n and not re.match(r"^[0-9A-Fa-f]{2}[-:]", n):
                 names[mac] = n
-    audio_capable = _classify_audio_capability(out)
+    audio_capable, reason = _classify_audio_capability(out)
     if audio_only and not audio_capable:
-        return None
-    return {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}
+        logger.info(
+            "BT scan filter dropped %s (name=%s, reason=%s)",
+            mac,
+            names.get(mac, ""),
+            reason,
+        )
+        return None, reason
+    return {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}, None
 
 
 def _annotate_scan_conflicts(devices: list[dict]) -> None:
@@ -1065,13 +1084,16 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
         _resolve_unnamed_devices(all_macs, names)
 
         devices = []
+        dropped_reasons: dict[str, int] = {}
         if all_macs:
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
                 futures = {pool.submit(_enrich_scan_device, mac, names, audio_only): mac for mac in all_macs}
                 for fut in concurrent.futures.as_completed(futures):
-                    result = fut.result()
-                    if result is not None:
-                        devices.append(result)
+                    device, drop_reason = fut.result()
+                    if device is not None:
+                        devices.append(device)
+                    elif drop_reason:
+                        dropped_reasons[drop_reason] = dropped_reasons.get(drop_reason, 0) + 1
 
         for d in devices:
             d["adapter"] = device_adapter.get(d["mac"], "")
@@ -1091,6 +1113,7 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
                     "returned_candidates": len(devices),
                     "audio_candidates": sum(1 for d in devices if d.get("audio_capable", True)),
                     "audio_only": audio_only,
+                    "dropped_reasons": dropped_reasons,
                 },
             },
         )
