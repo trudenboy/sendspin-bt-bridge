@@ -587,9 +587,10 @@ def test_pair_device_issues_explicit_a2dp_sink_profile_on_success(bt_manager):
     before returning to the connect loop. This narrows the window where
     BlueZ 5.86's dual-role auto-negotiation (bluez/bluez#1922) can settle
     on the wrong profile and leave the device with no A2DP sink. On a
-    healthy stack the helper returns AlreadyConnected and is a cheap
-    no-op; the call is best-effort and should not affect the pair
-    success boolean."""
+    healthy stack the underlying D-Bus call may respond with
+    ``org.bluez.Error.AlreadyConnected``, which the helper treats as
+    benign — making the call a cheap no-op. The call is best-effort and
+    must not affect the pair success boolean."""
     fake_proc = _FakeProc(
         stdout_lines=["Pairing successful\n"],
         tail="Trusted: yes\nPaired: yes\n",

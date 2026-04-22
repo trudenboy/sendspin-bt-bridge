@@ -543,7 +543,7 @@ class BluetoothManager:
                 # failing hint here must not flip the pair result to False.
                 try:
                     self._force_a2dp_sink_profile()
-                except Exception as exc:  # pragma: no cover — defensive
+                except Exception as exc:
                     logger.debug("[%s] post-pair A2DP Sink hint raised: %s", self.device_name, exc)
             else:
                 failure_reason = (
