@@ -20,13 +20,29 @@ logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
 
 __all__ = [
+    "COMMON_BT_PAIR_PINS",
     "bt_remove_device",
+    "describe_pair_failure",
     "extract_pair_failure_reason",
     "is_audio_device",
     "list_bt_adapters",
     "persist_device_enabled",
     "persist_device_released",
 ]
+
+# Ordered list of PINs the bridge tries when a device asks for one. `0000`
+# is the BlueZ/consumer default; the rest are the most common fallbacks
+# shipped by BT audio vendors (user guides for Anker, JBL, HMDX, Harman,
+# no-name OEM speakers). Kept short intentionally — every extra attempt
+# adds ~20 s to total pair time because BlueZ auth-fails only surface
+# after a timeout.
+COMMON_BT_PAIR_PINS: tuple[str, ...] = ("0000", "1234", "1111", "8888", "1212", "9999")
+
+_AUTH_FAIL_MARKERS = (
+    "authenticationfailed",
+    "authentication failed",
+    "failed to pair: authentication",
+)
 
 _AUDIO_UUIDS = {
     "0000110b",  # A2DP Sink
@@ -89,6 +105,31 @@ def extract_pair_failure_reason(output: str, *, tail_chars: int = 400) -> str:
             return line
 
     return text[-tail_chars:].strip()
+
+
+def is_pin_rejection(output: str) -> bool:
+    """Return True when bluetoothctl output indicates the device rejected
+    the PIN we supplied (AuthenticationFailed variants). Non-auth failures
+    like ConnectionAttemptFailed or ProtocolError are not PIN-related."""
+    lowered = str(output or "").lower()
+    return any(marker in lowered for marker in _AUTH_FAIL_MARKERS)
+
+
+def describe_pair_failure(output: str, *, pin_attempted: bool = False, pin_used: str = "") -> str:
+    """Return a human-readable pairing failure reason with a PIN hint.
+
+    When ``pin_attempted`` is True and the captured output contains an
+    authentication-failure marker, appends an explicit note that the
+    device rejected the PIN. That way operators see the root cause in
+    the log without grepping for ``AuthenticationFailed``.
+    """
+    base = extract_pair_failure_reason(output)
+    if not pin_attempted or not base:
+        return base
+    if not is_pin_rejection(base):
+        return base
+    pin_label = pin_used or "0000"
+    return f"{base} — device rejected PIN {pin_label}"
 
 
 def bt_remove_device(mac: str, adapter_mac: str = "") -> None:

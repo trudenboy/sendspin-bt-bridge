@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Popular-PIN retry for legacy BT pairing** — when a BT 2.x device asks
+  for a numeric PIN and rejects the bridge's default `0000` with
+  `AuthenticationFailed`, the standalone pair flow
+  (`POST /api/bt/pair_new`) now re-runs with the next popular PIN
+  (`0000, 1234, 1111, 8888, 1212, 9999`) before giving up. Non-PIN
+  failures (connection errors, timeouts) still stop the loop
+  immediately — retrying against an unreachable device wasted ~20s per
+  attempt. The list is intentionally short: each extra attempt adds a
+  BlueZ auth-fail timeout to total pair time.
+
+### Changed
+- **Clearer pairing-failure logs** — both the scan-modal pair flow and
+  the long-running reconnect pair flow now annotate the failure log
+  with the rejected PIN when the device auto-prompted for one and
+  `AuthenticationFailed` was seen (`… — device rejected PIN 0000`). A
+  new `describe_pair_failure()` helper centralises the rule so
+  operators see the root cause without grepping for
+  `AuthenticationFailed`. Non-auth failures are logged verbatim as
+  before.
+
 ## [2.61.0-rc.3] - 2026-04-22
 
 UI follow-up to the `2.61.0-rc.1` experimental flags. No Bluetooth

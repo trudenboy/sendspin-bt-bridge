@@ -19,7 +19,12 @@ from config import CONFIG_FILE, config_lock, load_config
 from routes._helpers import get_client_or_error, validate_adapter, validate_mac
 from services import persist_device_enabled as _persist_device_enabled
 from services.async_job_state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
-from services.bluetooth import _AUDIO_UUIDS, extract_pair_failure_reason, list_bt_adapters
+from services.bluetooth import (
+    _AUDIO_UUIDS,
+    COMMON_BT_PAIR_PINS,
+    describe_pair_failure,
+    list_bt_adapters,
+)
 from services.bluetooth import bt_remove_device as _bt_remove_device
 from services.bluetooth import persist_device_released as _persist_device_released
 from services.pairing_quiesce import quiesce_adapter_peers
@@ -1204,13 +1209,61 @@ def _run_standalone_pair(
     default) means "use whatever config.EXPERIMENTAL_PAIR_JUST_WORKS
     says". A bool explicitly wins over config — the scan-modal toggle is
     the authoritative intent for this pair attempt.
+
+    When the device asks for a legacy PIN and rejects our first guess,
+    the orchestrator retries the whole pair flow with the next PIN from
+    ``COMMON_BT_PAIR_PINS``. Non-PIN failures (connection errors,
+    timeouts) stop the loop — they aren't PIN-related and retrying
+    wastes ~20 s per attempt.
     """
     adapter = _resolve_adapter_to_mac(adapter)
-    if quiesce and adapter:
-        with quiesce_adapter_peers(adapter, exclude_mac=mac):
-            _run_standalone_pair_inner(job_id, mac, adapter, no_input_no_output_agent=no_input_no_output_agent)
-    else:
-        _run_standalone_pair_inner(job_id, mac, adapter, no_input_no_output_agent=no_input_no_output_agent)
+
+    def _attempt(pin: str):
+        if quiesce and adapter:
+            with quiesce_adapter_peers(adapter, exclude_mac=mac):
+                return _run_standalone_pair_inner(
+                    job_id, mac, adapter, pin=pin, no_input_no_output_agent=no_input_no_output_agent
+                )
+        return _run_standalone_pair_inner(
+            job_id, mac, adapter, pin=pin, no_input_no_output_agent=no_input_no_output_agent
+        )
+
+    tried_pins: list[str] = []
+    last_reason = ""
+    for pin in COMMON_BT_PAIR_PINS:
+        tried_pins.append(pin)
+        result = _attempt(pin)
+        last_reason = result.get("reason", "") or last_reason
+        if result.get("success"):
+            logger.info("Standalone pair %s: OK", mac)
+            finish_scan_job(job_id, {"success": True, "mac": mac})
+            return
+        if not result.get("pin_rejected"):
+            logger.warning(
+                "Standalone pair %s: FAIL (%s)",
+                mac,
+                result.get("reason") or "no explicit bluetoothctl reason captured",
+            )
+            finish_scan_job(job_id, {"success": False, "mac": mac})
+            return
+        logger.warning(
+            "Standalone pair %s: PIN %s rejected — retrying with next candidate",
+            mac,
+            pin,
+        )
+
+    # All popular PINs exhausted. The device almost certainly requires a
+    # custom PIN that the bridge can't auto-enter — surface that loud so
+    # the operator doesn't have to grep per-attempt warnings.
+    logger.warning(
+        "Standalone pair %s: FAIL — device rejected all popular PINs (%s). "
+        "Likely requires a custom PIN; the bridge cannot auto-enter non-popular PINs. "
+        "Last bluetoothctl reason: %s",
+        mac,
+        ", ".join(tried_pins),
+        last_reason or "no explicit bluetoothctl reason captured",
+    )
+    finish_scan_job(job_id, {"success": False, "mac": mac})
 
 
 def _run_standalone_pair_inner(
@@ -1218,9 +1271,15 @@ def _run_standalone_pair_inner(
     mac: str,
     adapter: str,
     *,
+    pin: str = "0000",
     no_input_no_output_agent: bool | None = None,
-) -> None:
-    """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op."""
+) -> dict:
+    """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op.
+
+    Returns a dict ``{success, pin_attempted, pin_rejected, reason, output}``
+    so the outer orchestrator can decide whether to retry with a different
+    PIN or surface the failure to the UI.
+    """
     try:
         cleanup_cmds: list[str] = []
         if adapter:
@@ -1283,6 +1342,7 @@ def _run_standalone_pair_inner(
             collected: list[str] = []
             paired_ok = False
             pair_sent = False
+            pin_attempted = False
             # Single loop that handles both scan-window observation and pair
             # outcome parsing. `pair <mac>` fires as soon as `[NEW] Device <mac>`
             # appears, rather than waiting the full `_PAIR_SCAN_DURATION` fixed
@@ -1332,10 +1392,13 @@ def _run_standalone_pair_inner(
                     elif "enter pin code" in stripped or "enter passkey" in stripped:
                         # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
                         # ask for a numeric PIN. `0000` is the BlueZ-default fallback
-                        # and what most consumer audio sinks accept (issue #162).
-                        logger.info("Legacy PIN prompt — auto-entering 0000: %s", line.strip())
-                        proc.stdin.write("0000\n")
+                        # and works for most consumer audio sinks (issue #162). If
+                        # this attempt is a retry, the outer orchestrator supplies
+                        # the next popular PIN from ``COMMON_BT_PAIR_PINS``.
+                        logger.info("Legacy PIN prompt — auto-entering %s: %s", pin, line.strip())
+                        proc.stdin.write(f"{pin}\n")
                         proc.stdin.flush()
+                        pin_attempted = True
                     if "pairing successful" in stripped or "already paired" in stripped:
                         paired_ok = True
                         break
@@ -1361,19 +1424,29 @@ def _run_standalone_pair_inner(
 
             out = "".join(collected)
             ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-            if ok:
-                logger.info("Standalone pair %s: OK", mac)
-            else:
-                failure_reason = (
-                    extract_pair_failure_reason(out, tail_chars=400) or "no explicit bluetoothctl reason captured"
+            reason = ""
+            pin_rejected = False
+            if not ok:
+                reason = (
+                    describe_pair_failure(out, pin_attempted=pin_attempted, pin_used=pin)
+                    or "no explicit bluetoothctl reason captured"
                 )
-                logger.warning("Standalone pair %s: FAIL (%s)", mac, failure_reason)
+                # A PIN rejection means the device asked for a PIN AND the
+                # attempt failed with AuthenticationFailed — the outer
+                # orchestrator will retry with the next popular PIN.
+                pin_rejected = pin_attempted and "rejected PIN" in reason
                 # Log full captured output (not just a tail) so passkey/agent
                 # prompts near the start of the session are visible in bug
                 # reports. bluetoothctl's SSP dialog is typically <4 KB per
                 # pair attempt (issue #168 diagnostic lost with 800-byte tail).
-                logger.debug("Standalone pair %s output: %s", mac, out)
-            finish_scan_job(job_id, {"success": ok, "mac": mac})
+                logger.debug("Standalone pair %s output (pin=%s): %s", mac, pin, out)
+            return {
+                "success": ok,
+                "pin_attempted": pin_attempted,
+                "pin_rejected": pin_rejected,
+                "reason": reason,
+                "output": out,
+            }
         finally:
             try:
                 proc.kill()
@@ -1382,4 +1455,10 @@ def _run_standalone_pair_inner(
                 pass
     except Exception:
         logger.exception("Standalone pair error for %s", mac)
-        finish_scan_job(job_id, {"success": False, "mac": mac, "error": "Pairing failed"})
+        return {
+            "success": False,
+            "pin_attempted": False,
+            "pin_rejected": False,
+            "reason": "Pairing failed",
+            "output": "",
+        }
