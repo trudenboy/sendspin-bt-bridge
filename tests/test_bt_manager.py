@@ -581,6 +581,77 @@ def test_pair_device_trusts_only_after_pair_success(bt_manager):
     assert "trust" not in fake_proc.stdin.writes[1]
 
 
+def test_pair_device_issues_explicit_a2dp_sink_profile_on_success(bt_manager):
+    """Right after bluetoothctl reports `Pairing successful`, pair_device
+    must issue an explicit ``ConnectProfile(A2DP_SINK_UUID)`` via D-Bus —
+    before returning to the connect loop. This narrows the window where
+    BlueZ 5.86's dual-role auto-negotiation (bluez/bluez#1922) can settle
+    on the wrong profile and leave the device with no A2DP sink. On a
+    healthy stack the helper returns AlreadyConnected and is a cheap
+    no-op; the call is best-effort and should not affect the pair
+    success boolean."""
+    fake_proc = _FakeProc(
+        stdout_lines=["Pairing successful\n"],
+        tail="Trusted: yes\nPaired: yes\n",
+    )
+
+    with (
+        patch("bluetooth_manager.subprocess.run"),
+        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile", return_value=True) as mock_force,
+    ):
+        assert bt_manager.pair_device() is True
+
+    mock_force.assert_called_once_with()
+
+
+def test_pair_device_does_not_issue_a2dp_sink_profile_on_failure(bt_manager):
+    """If pair_device fails to reach the `Pairing successful` (or
+    ``Paired: yes``) state, the explicit ConnectProfile call must NOT
+    run — issuing it against a device that isn't paired yet would fail
+    with org.bluez.Error.Failed and just add noise to the logs for a
+    failure we've already reported cleanly."""
+    fake_proc = _FakeProc(
+        stdout_lines=["Failed to pair: org.bluez.Error.AuthenticationFailed\n"],
+        tail="Paired: no\n",
+    )
+
+    with (
+        patch("bluetooth_manager.subprocess.run"),
+        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile", return_value=True) as mock_force,
+    ):
+        assert bt_manager.pair_device() is False
+
+    mock_force.assert_not_called()
+
+
+def test_pair_device_pair_success_value_is_unaffected_by_profile_hint_failure(bt_manager):
+    """The explicit ConnectProfile call is a best-effort hint. If it
+    raises or returns False (e.g. device object gone, D-Bus missing),
+    pair_device must still report ``True`` — pairing itself did succeed,
+    and the later ``_force_a2dp_sink_profile`` call from
+    ``_connect_device_inner`` gets another chance after the generic
+    Connect()."""
+    fake_proc = _FakeProc(
+        stdout_lines=["Pairing successful\n"],
+        tail="Trusted: yes\nPaired: yes\n",
+    )
+
+    with (
+        patch("bluetooth_manager.subprocess.run"),
+        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile", side_effect=RuntimeError("dbus gone")),
+    ):
+        assert bt_manager.pair_device() is True
+
+
 # ---------------------------------------------------------------------------
 # pair_device — cancel-after-spawn race protection
 # ---------------------------------------------------------------------------

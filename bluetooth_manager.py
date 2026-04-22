@@ -535,6 +535,16 @@ class BluetoothManager:
                 logger.info("Pairing successful")
                 logger.debug("Pair output tail: %s", out[-600:])
                 self._check_audio_profiles_after_pair()
+                # Explicit A2DP Sink registration right after pair — narrows
+                # the window where BlueZ 5.86's dual-role auto-negotiation
+                # (bluez/bluez#1922) can settle on the wrong profile before
+                # _connect_device_inner gets its turn. Best-effort: helper
+                # logs AlreadyConnected silently and swallows errors, so a
+                # failing hint here must not flip the pair result to False.
+                try:
+                    self._force_a2dp_sink_profile()
+                except Exception as exc:  # pragma: no cover — defensive
+                    logger.debug("[%s] post-pair A2DP Sink hint raised: %s", self.device_name, exc)
             else:
                 failure_reason = (
                     describe_pair_failure(out, pin_attempted=pin_attempted, pin_used="0000")
