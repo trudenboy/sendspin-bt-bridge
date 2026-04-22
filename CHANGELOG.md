@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.4] - 2026-04-22
+
 ### Added
 - **Popular-PIN retry for legacy BT pairing** — when a BT 2.x device asks
   for a numeric PIN and rejects the bridge's default `0000` with
