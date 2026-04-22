@@ -7,11 +7,16 @@ in 2.61.0-rc.1. They are intentionally coarse string-level assertions: the
 point is to catch a completely missing checkbox or missing wiring, not to
 pin down exact markup.
 
-Two experimental flags live in the Settings page's experimental section
-(they require a restart when flipped, so they belong with global config):
+Three experimental flags live in the Settings page's experimental
+section (they require a restart when flipped, so they belong with
+global config):
 
 - ``EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE``
 - ``EXPERIMENTAL_PA_MODULE_RELOAD``
+- ``EXPERIMENTAL_ADAPTER_AUTO_RECOVERY``
+
+The authoritative list is ``SETTINGS_EXPERIMENTAL_KEYS`` below — keep
+this docstring in sync whenever a key is added or removed.
 
 The NoInputNoOutput pairing-agent toggle lives in the scan modal's
 toolbar instead — it's context-local to a pair attempt (next to the
@@ -32,11 +37,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = REPO_ROOT / "templates" / "index.html"
 APP_JS = REPO_ROOT / "static" / "app.js"
+STYLE_CSS = REPO_ROOT / "static" / "style.css"
 
 
 SETTINGS_EXPERIMENTAL_KEYS = [
     ("EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE", "experimental-a2dp-sink-recovery-dance"),
     ("EXPERIMENTAL_PA_MODULE_RELOAD", "experimental-pa-module-reload"),
+    ("EXPERIMENTAL_ADAPTER_AUTO_RECOVERY", "experimental-adapter-auto-recovery"),
 ]
 
 PAIR_AGENT_TOGGLE_ID = "experimental-no-input-no-output-agent"
@@ -171,6 +178,56 @@ def test_pair_agent_field_is_only_sent_when_checkbox_is_checked() -> None:
         "no_input_no_output_agent is still baked into the body literal next to "
         "quiesce_adapter — it would be sent on every pair (always false when "
         "unchecked), overriding the EXPERIMENTAL_PAIR_JUST_WORKS config fallback"
+    )
+
+
+# --- Visual highlight: red treatment on any [data-experimental] element ---
+
+
+def test_experimental_rows_have_red_visual_treatment() -> None:
+    """Every ``[data-experimental]`` row must get a visible red styling
+    in ``static/style.css`` — mirroring the amber ``.config-field-dirty``
+    pattern that marks unsaved settings, but in red. Without this,
+    experimental toggles look identical to stable settings once the
+    master switch is on, and operators have no at-a-glance signal that
+    a given row is lightly tested / may require a restart / has side
+    effects across devices.
+
+    String-level check: the stylesheet must reference ``[data-experimental]``
+    at least once, and the block touching it must use a red channel
+    (``rgba(239, 68, 68`` or ``#ef4444`` / ``#dc2626`` — the red family
+    used elsewhere for destructive-action hints).
+    """
+    css = STYLE_CSS.read_text(encoding="utf-8")
+    assert "[data-experimental]" in css, (
+        "static/style.css has no rule targeting [data-experimental] — "
+        "experimental rows will look identical to stable settings"
+    )
+    red_family = re.compile(r"rgba\(\s*239\s*,\s*68\s*,\s*68\s*,|#ef4444|#dc2626|#b91c1c", re.IGNORECASE)
+    # Find each rule block that mentions [data-experimental] and verify it uses a red colour.
+    rule_blocks = re.findall(
+        r"[^{}]*\[data-experimental\][^{}]*\{[^{}]*\}",
+        css,
+    )
+    assert rule_blocks, "no CSS rule block found that targets [data-experimental]"
+    combined = "\n".join(rule_blocks)
+    assert red_family.search(combined), (
+        "[data-experimental] rules exist but none use a red colour "
+        "(rgba(239, 68, 68, ...), #ef4444, #dc2626) — the highlight won't be red"
+    )
+
+
+def test_experimental_badge_label_is_present() -> None:
+    """The visual treatment must include a literal ``EXPERIMENTAL`` text
+    marker via a ``content: "EXPERIMENTAL"`` pseudo-element so the
+    signal doesn't rely on colour alone. Colour-blind operators and
+    screenshots in bug reports need the word itself.
+    """
+    css = STYLE_CSS.read_text(encoding="utf-8")
+    has_pseudo_label = bool(re.search(r'content:\s*["\']\s*EXPERIMENTAL\s*["\']', css, re.IGNORECASE))
+    assert has_pseudo_label, (
+        "no ::before { content: 'EXPERIMENTAL' } pseudo-element found in static/style.css — "
+        "add a text marker so the red tint isn't the only signal"
     )
 
 

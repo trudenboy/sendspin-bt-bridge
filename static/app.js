@@ -6941,6 +6941,7 @@ function _buildConfigPayload(options) {
     config.DISABLE_PA_RESCUE_STREAMS = !!(document.getElementById('disable-pa-rescue-streams') || {}).checked;
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
+    config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
     // the Settings form. The config key is still honoured as a fallback for
@@ -9518,6 +9519,8 @@ async function loadConfig(options) {
         if (expA2dpDanceCheck) expA2dpDanceCheck.checked = !!config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE;
         var expPaReloadCheck = document.getElementById('experimental-pa-module-reload');
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
+        var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
+        if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');
