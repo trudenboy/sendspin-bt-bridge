@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.2] - 2026-04-22
+
+Build-hygiene follow-up to `2.61.0-rc.1`. No runtime behaviour changes.
+
+### Changed
+- **Docker build context trimmed** — `.dockerignore` now excludes the
+  `ui/` dev UI source (215 MB of `node_modules`), `sendspin-cli/`,
+  `rnd/`, every `__pycache__/`, `*.pyc`/`*.pyo`, the usual linter/test
+  caches, and the dev-screenshot PNG families that weren't already
+  covered (`stats-*`, `ru-*`, `ghpages-*`, `social-*`, `landing-*`,
+  `config-*`, `mobile-nav-*`). Fresh CI runners no longer pay to ship
+  the UI dev tree into the builder.
+- **Image payload narrowed** — `Dockerfile` replaces the blanket
+  `COPY scripts/ scripts/` with an explicit list of the three scripts
+  that actually run inside the container: `translate_ha_config.py`
+  (called by `entrypoint.sh` in HA addon mode) and
+  `check_sendspin_compat.py` / `check_container_runtime.py` (invoked
+  by `release.yml` post-build smoke tests). Eight dev-only scripts
+  (`rpi-*.sh`, `proxmox-vm-*.sh`, `generate_ha_addon_variants.py`,
+  `release_notes.py`, `translate_landing.py`) are no longer packaged.
+
+### Fixed
+- **`__pycache__` no longer leaks into the image** — `/app/routes/`,
+  `/app/services/`, and `/app/scripts/` previously shipped stale
+  bytecode from the developer's local interpreter runs. Addressed via
+  the `.dockerignore` additions above.
+
 ## [2.61.0-rc.1] - 2026-04-22
 
 Opt-in experimental sink-recovery flags, connect-path hardening, and
