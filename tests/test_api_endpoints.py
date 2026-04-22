@@ -371,7 +371,10 @@ def test_run_standalone_pair_cleans_stale_device_before_trusting(monkeypatch):
     assert "select C0:FB:F9:62:D7:D6\n" in cleanup_input
     assert "remove AA:BB:CC:DD:EE:FF\n" in cleanup_input
     assert fake_proc.stdin.writes[0].startswith("select C0:FB:F9:62:D7:D6\n")
-    assert fake_proc.stdin.writes[0].endswith("scan on\n")
+    # `scan bredr` (not `scan on`) — BlueZ 5.85 supports explicit transport
+    # selection; filtering out LE-only advertisers prevents scan-result
+    # noise during A2DP sink pairing (bluez/bluez#826 workaround).
+    assert fake_proc.stdin.writes[0].endswith("scan bredr\n")
     assert fake_proc.stdin.writes[1] == "pair AA:BB:CC:DD:EE:FF\n"
     assert fake_proc.stdin.writes[2].startswith("trust AA:BB:CC:DD:EE:FF\n")
     finish_job.assert_called_once_with("job-1", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})

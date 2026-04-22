@@ -46,6 +46,80 @@ def test_bt_remove_device_valid_mac():
             assert "AA:BB:CC:DD:EE:FF" in args[1]["input"]
 
 
+def test_bt_remove_device_cleans_bluez_cache_when_adapter_given(tmp_path, monkeypatch):
+    """After ``bluetoothctl remove``, the stale cache file at
+    ``/var/lib/bluetooth/<adapter>/cache/<device>`` must be deleted too —
+    BlueZ's `RemoveDevice` leaves service-record entries there, and the
+    next pair attempt picks up the stale `ServiceRecords`/`Endpoints`,
+    producing ``org.bluez.Error.Failed — Protocol not available`` on
+    A2DP sinks (bluez/bluez#191, #348, #698). Guarding the cleanup
+    behind an injectable base path keeps the test hermetic.
+    """
+    import services.bluetooth as _bt_mod
+
+    adapter_mac = "C0:FB:F9:62:D6:9D"
+    device_mac = "AA:BB:CC:DD:EE:FF"
+    bluez_root = tmp_path / "var_lib_bluetooth"
+    cache_dir = bluez_root / adapter_mac / "cache"
+    cache_dir.mkdir(parents=True)
+    cache_file = cache_dir / device_mac
+    cache_file.write_text("[ServiceRecords] stale junk")
+    assert cache_file.exists()
+
+    monkeypatch.setattr(_bt_mod, "_BLUEZ_LIB_DIR", bluez_root)
+
+    with patch("services.bluetooth.threading.Thread") as mock_thread:
+        bt_remove_device(device_mac, adapter_mac)
+        target_fn = mock_thread.call_args[1]["target"]
+        with patch("services.bluetooth.subprocess.run"):
+            target_fn()
+
+    assert not cache_file.exists(), (
+        "bt_remove_device must delete /var/lib/bluetooth/<adapter>/cache/<device> "
+        "after `bluetoothctl remove` to prevent stale-cache Protocol-not-available "
+        "on the next pair attempt"
+    )
+
+
+def test_bt_remove_device_cache_cleanup_missing_file_does_not_raise(tmp_path, monkeypatch):
+    """If the cache file does not exist (e.g. device never paired, or
+    another process cleaned it first), the cleanup is a no-op — no
+    exception propagates to kill the daemon thread and nothing is
+    logged at warning level for this expected case."""
+    import services.bluetooth as _bt_mod
+
+    bluez_root = tmp_path / "var_lib_bluetooth"
+    (bluez_root / "C0:FB:F9:62:D6:9D" / "cache").mkdir(parents=True)
+    monkeypatch.setattr(_bt_mod, "_BLUEZ_LIB_DIR", bluez_root)
+
+    with patch("services.bluetooth.threading.Thread") as mock_thread:
+        bt_remove_device("AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+        target_fn = mock_thread.call_args[1]["target"]
+        with patch("services.bluetooth.subprocess.run"):
+            target_fn()  # must not raise
+
+
+def test_bt_remove_device_skips_cache_cleanup_without_adapter(tmp_path, monkeypatch):
+    """No adapter MAC → no known cache path → cleanup must not walk the
+    BlueZ tree blindly (could match the wrong device if multiple
+    adapters cached the same peer). Only the bluetoothctl remove runs."""
+    import services.bluetooth as _bt_mod
+
+    bluez_root = tmp_path / "var_lib_bluetooth"
+    bluez_root.mkdir(parents=True)
+    monkeypatch.setattr(_bt_mod, "_BLUEZ_LIB_DIR", bluez_root)
+
+    with patch("services.bluetooth.threading.Thread") as mock_thread:
+        bt_remove_device("AA:BB:CC:DD:EE:FF")  # no adapter_mac
+        target_fn = mock_thread.call_args[1]["target"]
+        with (
+            patch("services.bluetooth.subprocess.run"),
+            patch.object(_bt_mod, "_clean_bluez_cache") as clean_mock,
+        ):
+            target_fn()
+        clean_mock.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # is_audio_device
 # ---------------------------------------------------------------------------

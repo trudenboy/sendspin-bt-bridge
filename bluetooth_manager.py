@@ -421,7 +421,13 @@ class BluetoothManager:
         initial_cmds = []
         if self._adapter_select:
             initial_cmds.append(f"select {self._adapter_select}")
-        initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
+        # `scan bredr` (not `scan on`) narrows discovery to the BR/EDR
+        # transport — A2DP sinks only speak classic BT. Excluding LE-only
+        # advertisers (beacons, BLE wearables) keeps the scan window
+        # responsive and sidesteps BlueZ's occasional LE/BR/EDR result
+        # interleaving that can delay the pair target appearing
+        # (bluez/bluez#826 workaround; safe on bluetoothctl ≥ 5.65).
+        initial_cmds.extend(["power on", "agent on", "default-agent", "scan bredr"])
 
         pair_cmds = [f"pair {mac}"]
 

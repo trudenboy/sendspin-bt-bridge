@@ -27,6 +27,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   operators see the root cause without grepping for
   `AuthenticationFailed`. Non-auth failures are logged verbatim as
   before.
+- **Scan narrowed to BR/EDR during pairing** — `bluetoothctl scan on`
+  replaced with `scan bredr` at all five pair/scan sites (reset &
+  reconnect, standalone pair, background BT scan, runtime pair-device
+  loop). Excluding LE-only advertisers keeps the scan window
+  responsive on adapters shared with BLE traffic and avoids
+  interleaved BR/EDR discovery delays seen on BlueZ 5.85
+  (bluez/bluez#826). Safe on bluetoothctl ≥ 5.65.
+
+### Fixed
+- **Stale BlueZ device cache cleared on remove** — after
+  `bluetoothctl remove`, `bt_remove_device` now also deletes
+  `/var/lib/bluetooth/<adapter>/cache/<device>` when an adapter MAC is
+  known. BlueZ leaves stale `ServiceRecords` / `Endpoints` entries in
+  that file, which on re-pair surface as
+  `org.bluez.Error.Failed — Protocol not available` on A2DP sinks
+  (bluez/bluez#191, #348, #698). Silent if the file is absent; cleanup
+  only runs when the adapter is known to avoid walking the BlueZ tree
+  blindly.
 
 ## [2.61.0-rc.3] - 2026-04-22
 

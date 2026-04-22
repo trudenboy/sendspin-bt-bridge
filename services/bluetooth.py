@@ -56,6 +56,27 @@ _ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
 _MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
 _BLUEZ_ERROR_RE = re.compile(r"org\.bluez\.Error\.[A-Za-z]+")
 
+# BlueZ stores per-adapter device cache files at /var/lib/bluetooth/<adapter>/cache/<device>.
+# `bluetoothctl remove` does NOT delete these; stale ServiceRecords/Endpoints in that file
+# cause org.bluez.Error.Failed "Protocol not available" on the next A2DP pair attempt
+# (bluez/bluez#191, #348, #698). Tests inject a temp path via monkeypatch.
+_BLUEZ_LIB_DIR: Path = Path("/var/lib/bluetooth")
+
+
+def _clean_bluez_cache(adapter_mac: str, device_mac: str) -> None:
+    """Best-effort removal of the stale BlueZ cache file for *device_mac*
+    under *adapter_mac*. Silent on ``FileNotFoundError`` (already gone);
+    warns on other OS errors but never raises — the caller runs in a
+    daemon thread and must not die."""
+    cache_file = _BLUEZ_LIB_DIR / adapter_mac / "cache" / device_mac
+    try:
+        cache_file.unlink()
+        logger.info("BlueZ cache: removed stale %s", cache_file)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning("BlueZ cache cleanup failed for %s: %s", cache_file, e)
+
 
 def is_valid_mac(mac: str) -> bool:
     """Return True if *mac* looks like a valid colon-separated MAC address."""
@@ -158,6 +179,8 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
             logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")
         except Exception as e:
             logger.warning("BT stack cleanup failed for %s: %s", mac, e)
+        if adapter_mac:
+            _clean_bluez_cache(adapter_mac, mac)
 
     threading.Thread(target=_run, daemon=True).start()
 
