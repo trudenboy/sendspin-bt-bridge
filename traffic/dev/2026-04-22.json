@@ -1,0 +1,81 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -15,
+      "total": 14,
+      "owner": 0
+    },
+    {
+      "week_offset": -7,
+      "total": 238,
+      "owner": 231
+    },
+    {
+      "week_offset": -6,
+      "total": 449,
+      "owner": 365
+    },
+    {
+      "week_offset": -5,
+      "total": 276,
+      "owner": 233
+    },
+    {
+      "week_offset": -4,
+      "total": 346,
+      "owner": 277
+    },
+    {
+      "week_offset": -3,
+      "total": 334,
+      "owner": 128
+    },
+    {
+      "week_offset": -2,
+      "total": 184,
+      "owner": 8
+    },
+    {
+      "week_offset": -1,
+      "total": 36,
+      "owner": 0
+    },
+    {
+      "week_offset": 0,
+      "total": 71,
+      "owner": 14
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 78,
+    "ai_ratio": 0.39,
+    "agents": [
+      {
+        "name": "Copilot",
+        "commits": 62
+      },
+      {
+        "name": "Renso",
+        "commits": 11
+      },
+      {
+        "name": "Claude Opus 4.7",
+        "commits": 9
+      },
+      {
+        "name": "dependabot[bot]",
+        "commits": 5
+      },
+      {
+        "name": "Claude Opus 4.6",
+        "commits": 2
+      },
+      {
+        "name": "github-actions[bot]",
+        "commits": 1
+      }
+    ]
+  }
+}
