@@ -1318,14 +1318,18 @@ def test_dbus_connect_profile_returns_false_for_empty_device_path():
 
 
 def test_dbus_wait_services_resolved_returns_true_when_property_already_set():
-    """When ServicesResolved is already True, the helper returns immediately."""
+    """When ServicesResolved is already True, the helper returns immediately.
+
+    ``wait_with_cancel`` contract matches ``BluetoothManager._wait_with_cancel``:
+    True = waited uninterrupted, False = cancelled.
+    """
     import bt_dbus
 
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=True):
         ok = bt_dbus._dbus_wait_services_resolved(
             "/org/bluez/hci0/dev_X",
             is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: False,
+            wait_with_cancel=lambda _: True,
             timeout=1.0,
             poll_interval=0.01,
         )
@@ -1340,7 +1344,7 @@ def test_dbus_wait_services_resolved_bails_out_on_disconnect():
         ok = bt_dbus._dbus_wait_services_resolved(
             "/org/bluez/hci0/dev_X",
             is_connected_check=lambda: False,
-            wait_with_cancel=lambda _: False,
+            wait_with_cancel=lambda _: True,
             timeout=1.0,
             poll_interval=0.01,
         )
@@ -1355,7 +1359,7 @@ def test_dbus_wait_services_resolved_returns_false_on_timeout():
         ok = bt_dbus._dbus_wait_services_resolved(
             "/org/bluez/hci0/dev_X",
             is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: False,
+            wait_with_cancel=lambda _: True,
             timeout=0.0,
             poll_interval=0.01,
         )
@@ -1363,18 +1367,47 @@ def test_dbus_wait_services_resolved_returns_false_on_timeout():
 
 
 def test_dbus_wait_services_resolved_respects_cancellation():
-    """Caller-driven cancellation via wait_with_cancel exits promptly with False."""
+    """Caller-driven cancellation (wait_with_cancel returns False) exits with False."""
     import bt_dbus
 
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
         ok = bt_dbus._dbus_wait_services_resolved(
             "/org/bluez/hci0/dev_X",
             is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: True,
+            wait_with_cancel=lambda _: False,
             timeout=10.0,
             poll_interval=0.01,
         )
     assert ok is False
+
+
+def test_dbus_wait_services_resolved_polls_multiple_times_until_resolved():
+    """Uninterrupted wait (wait_with_cancel returns True) must keep polling.
+
+    Regression test: previously the contract was inverted and the helper exited
+    after the first non-True property read, even when the caller had not
+    cancelled. This verifies the loop actually iterates until ServicesResolved
+    flips to True.
+    """
+    import bt_dbus
+
+    property_calls = {"count": 0}
+
+    def _fake_property(_path, _name, adapter_hci="hci0"):
+        property_calls["count"] += 1
+        # Flip to True on the 3rd read — forcing the loop to iterate twice.
+        return property_calls["count"] >= 3
+
+    with patch.object(bt_dbus, "_dbus_get_device_property", side_effect=_fake_property):
+        ok = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: True,
+            timeout=5.0,
+            poll_interval=0.01,
+        )
+    assert ok is True
+    assert property_calls["count"] >= 3
 
 
 # ---------------------------------------------------------------------------

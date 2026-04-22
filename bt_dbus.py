@@ -106,8 +106,10 @@ def _dbus_wait_services_resolved(
     """Poll ``Device1.ServicesResolved`` until True or timeout.
 
     Bails out early if ``is_connected_check`` reports the device has
-    disconnected. ``wait_with_cancel(sec)`` should return ``True`` when a
-    caller has requested cancellation (e.g. a pending stop).
+    disconnected. ``wait_with_cancel(sec)`` must follow the bridge-wide
+    convention: return ``True`` after waiting ``sec`` seconds uninterrupted,
+    ``False`` if the caller requested cancellation during the wait (e.g.
+    a pending release/stop). This matches ``BluetoothManager._wait_with_cancel``.
 
     Returns ``True`` if ServicesResolved reached True within the timeout,
     ``False`` otherwise (including cancellation / disconnect).
@@ -125,7 +127,7 @@ def _dbus_wait_services_resolved(
         if remaining <= 0:
             return False
         wait_for = min(poll_interval, remaining)
-        if wait_with_cancel(wait_for):
+        if not wait_with_cancel(wait_for):
             return False
 
 
