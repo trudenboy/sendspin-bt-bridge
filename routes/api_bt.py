@@ -23,6 +23,7 @@ from services.bluetooth import (
     _AUDIO_UUIDS,
     COMMON_BT_PAIR_PINS,
     describe_pair_failure,
+    is_pin_rejection,
     list_bt_adapters,
 )
 from services.bluetooth import bt_remove_device as _bt_remove_device
@@ -1432,9 +1433,11 @@ def _run_standalone_pair_inner(
                     or "no explicit bluetoothctl reason captured"
                 )
                 # A PIN rejection means the device asked for a PIN AND the
-                # attempt failed with AuthenticationFailed — the outer
-                # orchestrator will retry with the next popular PIN.
-                pin_rejected = pin_attempted and "rejected PIN" in reason
+                # attempt failed with AuthenticationFailed — derived from
+                # the raw bluetoothctl output so the check is independent
+                # of the human-readable `reason` wording (otherwise a reword
+                # of `describe_pair_failure` would silently break retry).
+                pin_rejected = pin_attempted and is_pin_rejection(out)
                 # Log full captured output (not just a tail) so passkey/agent
                 # prompts near the start of the session are visible in bug
                 # reports. bluetoothctl's SSP dialog is typically <4 KB per

@@ -731,6 +731,56 @@ def test_run_standalone_pair_no_io_agent_override_false_beats_config_true(monkey
     assert "agent NoInputNoOutput\n" not in init_batch
 
 
+def test_run_standalone_pair_inner_pin_rejected_uses_raw_output_not_log_wording(monkeypatch):
+    """Regression: `pin_rejected` must be derived from the raw bluetoothctl
+    output (via `is_pin_rejection`), NOT from substring-matching the
+    human-readable `reason` string. Coupling control flow to log wording
+    means a reword of `describe_pair_failure` silently breaks PIN retry.
+
+    This test monkey-patches `describe_pair_failure` to return a message
+    that does NOT contain the literal phrase "rejected PIN" — the legacy
+    substring check would wrongly report `pin_rejected=False` here.
+    """
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(
+        stdout_lines=[
+            "[agent] Enter PIN code: \n",
+            "Failed to pair: org.bluez.Error.AuthenticationFailed\n",
+        ],
+        tail="Device AA:BB:CC:DD:EE:FF not available\n",
+    )
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
+    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
+    # Force a reason string that lacks the old "rejected PIN" literal —
+    # the legacy substring check would wrongly return pin_rejected=False.
+    monkeypatch.setattr(
+        api_bt_mod,
+        "describe_pair_failure",
+        lambda out, *, pin_attempted, pin_used: "auth broke somewhere (reworded)",
+    )
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        result = api_bt_mod._run_standalone_pair_inner(
+            "job-raw-pin",
+            "AA:BB:CC:DD:EE:FF",
+            "C0:FB:F9:62:D6:9D",
+            pin="0000",
+        )
+
+    assert result["success"] is False
+    assert result["pin_attempted"] is True, "PIN prompt was in the fake output — pin_attempted must be True"
+    assert result["pin_rejected"] is True, (
+        "pin_rejected must be derived from raw AuthenticationFailed in output, "
+        "not from substring-matching the log wording"
+    )
+
+
 # ---------------------------------------------------------------------------
 # PIN retry orchestration
 #
