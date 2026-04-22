@@ -173,7 +173,7 @@ COPY *.py ./
 COPY routes/ routes/
 COPY services/ services/
 # scripts/ is intentionally narrowed to runtime + CI smoke-test entrypoints:
-#   translate_ha_config.py   — called by entrypoint.sh when SUPERVISOR_TOKEN is set
+#   translate_ha_config.py   — called by entrypoint.sh when /data/options.json exists (HA addon mode)
 #   check_sendspin_compat.py — invoked inside the image by release.yml post-build
 #   check_container_runtime.py — invoked inside the image by release.yml post-build
 # Dev tooling (proxmox-vm-*, rpi-*, generate_ha_addon_variants, release_notes,
