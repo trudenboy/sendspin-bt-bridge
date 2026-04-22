@@ -7,11 +7,16 @@ in 2.61.0-rc.1. They are intentionally coarse string-level assertions: the
 point is to catch a completely missing checkbox or missing wiring, not to
 pin down exact markup.
 
-Two experimental flags live in the Settings page's experimental section
-(they require a restart when flipped, so they belong with global config):
+Three experimental flags live in the Settings page's experimental
+section (they require a restart when flipped, so they belong with
+global config):
 
 - ``EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE``
 - ``EXPERIMENTAL_PA_MODULE_RELOAD``
+- ``EXPERIMENTAL_ADAPTER_AUTO_RECOVERY``
+
+The authoritative list is ``SETTINGS_EXPERIMENTAL_KEYS`` below — keep
+this docstring in sync whenever a key is added or removed.
 
 The NoInputNoOutput pairing-agent toggle lives in the scan modal's
 toolbar instead — it's context-local to a pair attempt (next to the
@@ -214,13 +219,11 @@ def test_experimental_rows_have_red_visual_treatment() -> None:
 
 def test_experimental_badge_label_is_present() -> None:
     """The visual treatment must include a literal ``EXPERIMENTAL`` text
-    marker (via ``content: "EXPERIMENTAL"`` pseudo-element or an inline
-    badge) so the signal doesn't rely on colour alone. Colour-blind
-    operators and screenshots in bug reports need the word itself.
+    marker via a ``content: "EXPERIMENTAL"`` pseudo-element so the
+    signal doesn't rely on colour alone. Colour-blind operators and
+    screenshots in bug reports need the word itself.
     """
     css = STYLE_CSS.read_text(encoding="utf-8")
-    # Accept either a ::before content value or an explicit badge class
-    # (e.g. .experimental-badge) defined next to the [data-experimental] rules.
     has_pseudo_label = bool(re.search(r'content:\s*["\']\s*EXPERIMENTAL\s*["\']', css, re.IGNORECASE))
     assert has_pseudo_label, (
         "no ::before { content: 'EXPERIMENTAL' } pseudo-element found in static/style.css — "
