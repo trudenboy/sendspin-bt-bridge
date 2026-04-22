@@ -37,6 +37,7 @@ APP_JS = REPO_ROOT / "static" / "app.js"
 SETTINGS_EXPERIMENTAL_KEYS = [
     ("EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE", "experimental-a2dp-sink-recovery-dance"),
     ("EXPERIMENTAL_PA_MODULE_RELOAD", "experimental-pa-module-reload"),
+    ("EXPERIMENTAL_ADAPTER_AUTO_RECOVERY", "experimental-adapter-auto-recovery"),
 ]
 
 PAIR_AGENT_TOGGLE_ID = "experimental-no-input-no-output-agent"

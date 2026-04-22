@@ -678,6 +678,18 @@
                                     </span>
                                 </span>
                             </label>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Last-ditch adapter recovery: when reconnects fail BT_MAX_RECONNECT_FAILS times, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind). The USB step briefly disconnects every device on that controller — throttled per-adapter to once per 60 seconds. Requires CAP_NET_ADMIN, /dev/rfkill, /sys/bus/usb.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Experimental: Adapter auto-recovery</strong>
+                                    <span class="form-hint">HCI mgmt reset → rfkill → USB rebind before auto-release. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="EXPERIMENTAL_ADAPTER_AUTO_RECOVERY" id="experimental-adapter-auto-recovery">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
 
