@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.6] - 2026-04-22
+
 ### Changed
 - **Explicit A2DP Sink profile request right after pair succeeds** —
   `pair_device` now issues an explicit
