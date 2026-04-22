@@ -12,6 +12,19 @@ patches/
 .wrangler/
 .understand-anything/
 
+# Dev UI source / scratch / sibling CLI — none are runtime deps
+ui/
+sendspin-cli/
+rnd/
+
+# Python bytecode / build artefacts leaking from local runs
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
 # Tests
 tests/
 pytest.ini
@@ -30,6 +43,13 @@ mobile-375-*
 tablet-*
 bugreport-*.png
 github-issue-snapshot*
+stats-*.png
+ru-*.png
+ghpages-*.png
+social-*.png
+landing-*.png
+config-*.png
+mobile-nav-*.png
 
 # Demo
 demo/
