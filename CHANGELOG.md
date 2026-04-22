@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.7] - 2026-04-22
+
+### Added
+- **UI toggle for `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`** — the flag
+  added in rc.5 was only settable by hand-editing `config.json`. The
+  Settings tab now exposes it as a standard experimental row (gated
+  behind the "Show experimental features" master switch) with the full
+  recovery-ladder description in its tooltip.
+
+### Changed
+- **Red visual treatment for experimental toggles** — rows marked
+  `data-experimental` (both `.config-setting-row` in Settings and
+  `.bt-scan-toggle` in the scan modal) now render with a red tinted
+  background, red inset border, and an "EXPERIMENTAL" badge in the
+  top-right corner. Mirrors the amber dirty-row pattern but uses red
+  so unsupported/volatile toggles are distinguishable from merely
+  unsaved settings; the text badge keeps the signal legible for
+  colour-blind and high-contrast users.
+
 ## [2.61.0-rc.6] - 2026-04-22
 
 ### Changed
