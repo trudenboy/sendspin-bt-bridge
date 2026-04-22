@@ -24,7 +24,15 @@ if TYPE_CHECKING:
 
 import bt_audio
 import bt_monitor
-from bt_dbus import A2DP_SINK_UUID, _dbus_call_device_method, _dbus_connect_profile, _dbus_get_device_property
+from bt_dbus import (
+    A2DP_SINK_UUID,
+    AUDIO_SINK_UUIDS,
+    _dbus_call_device_method,
+    _dbus_connect_profile,
+    _dbus_get_device_property,
+    _dbus_get_device_uuids,
+    _dbus_wait_services_resolved,
+)
 from services.bluetooth import extract_pair_failure_reason
 
 if TYPE_CHECKING:
@@ -77,6 +85,8 @@ class BluetoothManager:
         on_sink_found: Callable[[str, int | None], None] | None = None,
         churn_threshold: int = 0,
         churn_window: float = 300.0,
+        enable_a2dp_dance: bool = False,
+        enable_pa_module_reload: bool = False,
     ):
         self.mac_address = mac_address
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
@@ -88,6 +98,9 @@ class BluetoothManager:
         self.last_check: float = 0
         self.check_interval = check_interval
         self.max_reconnect_fails = max_reconnect_fails
+        # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
+        self._enable_a2dp_dance = bool(enable_a2dp_dance)
+        self._enable_pa_module_reload = bool(enable_pa_module_reload)
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -507,6 +520,7 @@ class BluetoothManager:
             if ok:
                 logger.info("Pairing successful")
                 logger.debug("Pair output tail: %s", out[-600:])
+                self._check_audio_profiles_after_pair()
             else:
                 failure_reason = (
                     extract_pair_failure_reason(out, tail_chars=200) or "no explicit bluetoothctl reason captured"
@@ -524,6 +538,41 @@ class BluetoothManager:
                     proc.wait(timeout=3)
                 except Exception as exc:
                     logger.debug("pair_device proc cleanup failed: %s", exc)
+
+    def _check_audio_profiles_after_pair(self) -> None:
+        """Log/surface a warning when a freshly-paired device advertises no audio profiles.
+
+        We still keep the bond (some speakers refuse to be paired twice), but
+        the operator benefits from an explicit status signal: trying to
+        configure audio for a non-audio BLE-only device will always fail and
+        the UI can show a targeted "this device doesn't advertise audio
+        profiles" banner instead of a generic sink-not-found error.
+        """
+        try:
+            uuids = {u.lower() for u in _dbus_get_device_uuids(self._dbus_device_path)}
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.debug("[%s] Post-pair UUID read failed: %s", self.device_name, exc)
+            return
+        if not uuids:
+            # D-Bus unavailable or device object gone — nothing actionable.
+            return
+        if uuids & AUDIO_SINK_UUIDS:
+            return
+        logger.warning(
+            "[%s] Device advertises no audio-sink profiles; A2DP/HFP unavailable. UUIDs=%s",
+            self.device_name,
+            sorted(uuids),
+        )
+        if self.host is not None:
+            try:
+                self.host.update_status(
+                    {
+                        "last_error": "no_audio_profiles_advertised",
+                        "last_error_at": datetime.now(tz=UTC).isoformat(),
+                    }
+                )
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.debug("[%s] Post-pair status update failed: %s", self.device_name, exc)
 
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
@@ -612,6 +661,25 @@ class BluetoothManager:
                 self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
                     return False
+                # Wait (up to 10s) for BlueZ to finish SDP resolution before
+                # poking audio. Prevents all downstream profile/sink work from
+                # racing an uninitialized Device1. Non-blocking: we proceed
+                # even on timeout — this is a timing hint, not a hard gate.
+                resolved = _dbus_wait_services_resolved(
+                    self._dbus_device_path,
+                    is_connected_check=self.is_device_connected,
+                    wait_with_cancel=self._wait_with_cancel,
+                    timeout=10.0,
+                )
+                if resolved is False:
+                    if self._reconnect_cancelled():
+                        return False
+                    logger.warning(
+                        "[%s] ServicesResolved did not reach True within 10s — proceeding anyway",
+                        self.device_name,
+                    )
+                if self._abort_connect_if_cancelled():
+                    return False
                 # Workaround for bluez/bluez#1922 (5.86 dual-role A2DP regression):
                 # after the generic Connect() succeeds, also ask BlueZ explicitly
                 # for A2DP Sink. On an unaffected stack this is a cheap no-op
@@ -623,11 +691,29 @@ class BluetoothManager:
                 # Configure audio routing. If no sink appears (same regression
                 # class) try one disconnect→reconnect dance before surrendering
                 # — some users report the profile registers on the 2nd connect.
+                # The dance is experimental/opt-in because on some headless setups
+                # it hurts more than it helps (see #174 / forum #78).
                 sink_ok = self.configure_bluetooth_audio()
-                if not sink_ok and self._a2dp_dance_remaining > 0 and not self._abort_connect_if_cancelled():
+                if (
+                    not sink_ok
+                    and self._enable_a2dp_dance
+                    and self._a2dp_dance_remaining > 0
+                    and not self._abort_connect_if_cancelled()
+                ):
                     self._a2dp_dance_remaining -= 1
                     if self._a2dp_recovery_dance():
-                        self.configure_bluetooth_audio()
+                        sink_ok = self.configure_bluetooth_audio()
+                # Last resort: reload module-bluez5-discover to force PA to
+                # re-publish the bluez_card/bluez_sink hierarchy. Gated on its
+                # own experimental flag because it briefly drops every other
+                # active BT sink on the bridge.
+                if (
+                    not sink_ok
+                    and self._enable_pa_module_reload
+                    and not self._abort_connect_if_cancelled()
+                    and self._reload_pa_bluez5_module()
+                ):
+                    sink_ok = self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
         logger.warning("Failed to connect (not connected after 5 status checks)")
@@ -728,6 +814,30 @@ class BluetoothManager:
                 return True
         logger.warning("[%s] A2DP recovery dance did not restore the link", self.device_name)
         return False
+
+    def _reload_pa_bluez5_module(self) -> bool:
+        """Reload PulseAudio ``module-bluez5-discover`` as a last-resort sink recovery.
+
+        Only invoked when the experimental flag is on and previous sink
+        recovery attempts have failed. Globally throttled in
+        ``services.pulse.areload_bluez5_discover_module``.
+        """
+        try:
+            from services.pulse import reload_bluez5_discover_module
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.debug("[%s] PA module reload import failed: %s", self.device_name, exc)
+            return False
+        try:
+            reloaded = bool(reload_bluez5_discover_module())
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.debug("[%s] PA module reload errored: %s", self.device_name, exc)
+            return False
+        if reloaded:
+            logger.warning(
+                "[%s] Reloaded module-bluez5-discover as sink-recovery last resort",
+                self.device_name,
+            )
+        return reloaded
 
     def _force_a2dp_sink_profile(self) -> bool:
         """Explicitly tell BlueZ to connect the A2DP Sink profile for this device.

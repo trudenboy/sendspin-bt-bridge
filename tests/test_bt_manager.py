@@ -85,7 +85,12 @@ def _isolated_config(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def bt_manager():
-    """Create a BluetoothManager with reasonable defaults for testing."""
+    """Create a BluetoothManager with reasonable defaults for testing.
+
+    Experimental flags are enabled by default in this fixture so the existing
+    recovery-path tests exercise the full code path. Tests that need to verify
+    the default-off behavior should construct their own manager explicitly.
+    """
     from bluetooth_manager import BluetoothManager
 
     # Mock subprocess calls that happen in __init__ (adapter resolution)
@@ -93,6 +98,8 @@ def bt_manager():
         mgr = BluetoothManager(
             mac_address="AA:BB:CC:DD:EE:FF",
             device_name="TestSpeaker",
+            enable_a2dp_dance=True,
+            enable_pa_module_reload=True,
         )
     return mgr
 
@@ -131,7 +138,7 @@ def test_configure_bluetooth_audio_pipewire_pattern(bt_manager):
         patch("bt_audio.get_sink_volume", return_value=50),
         patch("bt_audio.set_sink_mute", return_value=True),
         patch("bt_audio.set_sink_volume", return_value=True),
-        patch("time.sleep"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
 
@@ -149,7 +156,7 @@ def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
         patch("bt_audio.get_sink_volume", return_value=50),
         patch("bt_audio.set_sink_mute", return_value=True),
         patch("bt_audio.set_sink_volume", return_value=True),
-        patch("time.sleep"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
 
@@ -162,7 +169,7 @@ def test_configure_bluetooth_audio_no_sink(bt_manager):
         patch("bt_audio.list_sinks", return_value=[]),
         patch("bt_audio.get_sink_volume", return_value=None),
         patch("bt_audio.set_sink_mute", return_value=True),
-        patch("time.sleep"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
 
@@ -215,7 +222,7 @@ def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
         patch("bt_audio.list_cards", return_value=cards_payload),
         patch("bt_audio.set_card_profile", side_effect=_set_card_profile),
         patch("bt_audio._warn_pipewire_session"),
-        patch("time.sleep"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
 
@@ -254,7 +261,7 @@ def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_man
         patch("bt_audio.list_cards", return_value=cards_payload),
         patch("bt_audio.set_card_profile", side_effect=lambda c, p: set_profile_calls.append((c, p)) or True),
         patch("bt_audio._warn_pipewire_session"),
-        patch("time.sleep"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
 
@@ -280,7 +287,7 @@ def test_configure_bluetooth_audio_retries_five_times(bt_manager):
         patch("bt_audio.get_sink_volume", return_value=None),
         patch("bt_audio.set_sink_mute", return_value=True),
         patch("bt_audio._warn_pipewire_session"),
-        patch("time.sleep"),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
 
@@ -1096,6 +1103,191 @@ def test_a2dp_recovery_dance_returns_false_when_reconnect_never_succeeds(bt_mana
 
 
 # ---------------------------------------------------------------------------
+# Experimental flag: A2DP recovery dance gating
+# ---------------------------------------------------------------------------
+
+
+def test_a2dp_dance_default_is_disabled_for_new_manager_instance():
+    """New managers created without kwargs must have dance disabled by default."""
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="Default")
+    assert mgr._enable_a2dp_dance is False
+    assert mgr._enable_pa_module_reload is False
+
+
+def test_connect_device_does_not_dance_when_flag_disabled():
+    """With `enable_a2dp_dance=False`, a missing sink must not trigger the dance."""
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="Default",
+            enable_a2dp_dance=False,
+        )
+    with (
+        patch.object(mgr, "is_device_connected", side_effect=[False, True]),
+        patch.object(mgr, "is_device_paired", return_value=True),
+        patch.object(mgr, "configure_bluetooth_audio", return_value=False),
+        patch.object(mgr, "_wait_with_cancel", return_value=True),
+        patch.object(mgr, "_force_a2dp_sink_profile"),
+        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=True),
+        patch.object(mgr, "_a2dp_recovery_dance") as mock_dance,
+    ):
+        mgr._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        mgr.connect_device()
+    mock_dance.assert_not_called()
+
+
+def test_connect_device_does_not_reload_pa_module_when_flag_disabled():
+    """With `enable_pa_module_reload=False`, the last-resort reload must not fire."""
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="Default",
+            enable_a2dp_dance=False,
+            enable_pa_module_reload=False,
+        )
+    with (
+        patch.object(mgr, "is_device_connected", side_effect=[False, True]),
+        patch.object(mgr, "is_device_paired", return_value=True),
+        patch.object(mgr, "configure_bluetooth_audio", return_value=False),
+        patch.object(mgr, "_wait_with_cancel", return_value=True),
+        patch.object(mgr, "_force_a2dp_sink_profile"),
+        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=True),
+        patch.object(mgr, "_reload_pa_bluez5_module") as mock_reload,
+    ):
+        mgr._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        mgr.connect_device()
+    mock_reload.assert_not_called()
+
+
+def test_connect_device_reloads_pa_module_as_last_resort_when_flag_enabled(bt_manager):
+    """Dance failure + flag=True triggers module reload, then reconfigures audio."""
+    configure_calls: list[bool] = []
+
+    def _configure():
+        configure_calls.append(True)
+        # 1st: no sink (post-connect); 2nd: no sink after dance; 3rd: sink ok after reload
+        return len(configure_calls) > 2
+
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_configure),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=True),
+        patch.object(bt_manager, "_a2dp_recovery_dance", return_value=True),
+        patch.object(bt_manager, "_reload_pa_bluez5_module", return_value=True) as mock_reload,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        assert bt_manager.connect_device() is True
+
+    mock_reload.assert_called_once()
+    assert len(configure_calls) == 3
+
+
+# ---------------------------------------------------------------------------
+# ServicesResolved D-Bus gate
+# ---------------------------------------------------------------------------
+
+
+def test_connect_device_waits_for_services_resolved_before_configure_audio(bt_manager):
+    """The gate must be invoked once after Connected=True and before audio configuration."""
+    order: list[str] = []
+
+    def _wait(*_args, **_kwargs):
+        order.append("services_resolved")
+        return True
+
+    def _force():
+        order.append("force_a2dp")
+
+    def _configure():
+        order.append("configure_audio")
+        return True
+
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_configure),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile", side_effect=_force),
+        patch("bluetooth_manager._dbus_wait_services_resolved", side_effect=_wait) as mock_wait,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        assert bt_manager.connect_device() is True
+
+    mock_wait.assert_called_once()
+    assert order.index("services_resolved") < order.index("force_a2dp") < order.index("configure_audio")
+
+
+def test_connect_device_proceeds_when_services_resolved_timeout(bt_manager):
+    """ServicesResolved timeout is a timing hint — connect flow must still continue."""
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=True) as mock_conf,
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
+        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=False),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        assert bt_manager.connect_device() is True
+
+    mock_force.assert_called_once()
+    mock_conf.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Post-pair UUID sanity check
+# ---------------------------------------------------------------------------
+
+
+def test_check_audio_profiles_after_pair_warns_when_no_audio_uuid_advertised(bt_manager):
+    """Non-audio devices surface `last_error=no_audio_profiles_advertised` to host status."""
+    updates: list[dict] = []
+    bt_manager.host = MagicMock()
+    bt_manager.host.update_status.side_effect = lambda d: updates.append(d)
+
+    with patch(
+        "bluetooth_manager._dbus_get_device_uuids",
+        return_value=["0000180f-0000-1000-8000-00805f9b34fb"],
+    ):
+        bt_manager._check_audio_profiles_after_pair()
+
+    assert updates, "expected host.update_status to be called with an error payload"
+    assert updates[0].get("last_error") == "no_audio_profiles_advertised"
+
+
+def test_check_audio_profiles_after_pair_no_warn_for_audio_device(bt_manager):
+    """A2DP-capable peer must not trigger the no-audio warning on status."""
+    from bt_dbus import A2DP_SINK_UUID
+
+    bt_manager.host = MagicMock()
+
+    with patch("bluetooth_manager._dbus_get_device_uuids", return_value=[A2DP_SINK_UUID]):
+        bt_manager._check_audio_profiles_after_pair()
+
+    bt_manager.host.update_status.assert_not_called()
+
+
+def test_check_audio_profiles_after_pair_no_warn_when_uuid_read_empty(bt_manager):
+    """Empty UUID list (D-Bus unavailable) must not trigger warning — nothing actionable."""
+    bt_manager.host = MagicMock()
+
+    with patch("bluetooth_manager._dbus_get_device_uuids", return_value=[]):
+        bt_manager._check_audio_profiles_after_pair()
+
+    bt_manager.host.update_status.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # bt_dbus._dbus_connect_profile — low-level D-Bus wrapper
 # ---------------------------------------------------------------------------
 
@@ -1118,3 +1310,182 @@ def test_dbus_connect_profile_returns_false_for_empty_device_path():
     ok, reason = bt_dbus._dbus_connect_profile(None, bt_dbus.A2DP_SINK_UUID)
     assert ok is False
     assert reason
+
+
+# ---------------------------------------------------------------------------
+# bt_dbus._dbus_wait_services_resolved — ServicesResolved polling helper
+# ---------------------------------------------------------------------------
+
+
+def test_dbus_wait_services_resolved_returns_true_when_property_already_set():
+    """When ServicesResolved is already True, the helper returns immediately.
+
+    ``wait_with_cancel`` contract matches ``BluetoothManager._wait_with_cancel``:
+    True = waited uninterrupted, False = cancelled.
+    """
+    import bt_dbus
+
+    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=True):
+        ok = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: True,
+            timeout=1.0,
+            poll_interval=0.01,
+        )
+    assert ok is True
+
+
+def test_dbus_wait_services_resolved_bails_out_on_disconnect():
+    """If is_connected_check returns False the helper reports failure."""
+    import bt_dbus
+
+    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
+        ok = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: False,
+            wait_with_cancel=lambda _: True,
+            timeout=1.0,
+            poll_interval=0.01,
+        )
+    assert ok is False
+
+
+def test_dbus_wait_services_resolved_returns_false_on_timeout():
+    """With timeout=0 and property not resolved, helper returns False without blocking."""
+    import bt_dbus
+
+    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
+        ok = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: True,
+            timeout=0.0,
+            poll_interval=0.01,
+        )
+    assert ok is False
+
+
+def test_dbus_wait_services_resolved_respects_cancellation():
+    """Caller-driven cancellation (wait_with_cancel returns False) exits with False."""
+    import bt_dbus
+
+    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
+        ok = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: False,
+            timeout=10.0,
+            poll_interval=0.01,
+        )
+    assert ok is False
+
+
+def test_dbus_wait_services_resolved_returns_none_when_dbus_unavailable():
+    """When ``dbus`` module isn't importable, helper must return ``None`` (not False).
+
+    Returning False would look indistinguishable from a real 10s timeout and
+    caused misleading "did not reach True within 10s" warnings on systems
+    without dbus-python. The caller distinguishes "could not check" from
+    "checked and timed out" by the ``None`` sentinel.
+    """
+    import bt_dbus
+
+    with patch.object(bt_dbus, "dbus", None):
+        result = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: True,
+            timeout=1.0,
+            poll_interval=0.01,
+        )
+    assert result is None
+
+
+def test_dbus_wait_services_resolved_returns_none_when_device_path_missing():
+    """Missing device_path is a not-actually-checked case — must be ``None``."""
+    import bt_dbus
+
+    result = bt_dbus._dbus_wait_services_resolved(
+        None,
+        is_connected_check=lambda: True,
+        wait_with_cancel=lambda _: True,
+        timeout=1.0,
+        poll_interval=0.01,
+    )
+    assert result is None
+
+
+def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manager):
+    """If ``_dbus_wait_services_resolved`` reports unchecked (None), no warning.
+
+    Otherwise systems without dbus-python see spurious "did not reach True
+    within 10s" entries on every reconnect.
+    """
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=None),
+        patch("bluetooth_manager.logger") as mock_logger,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        assert bt_manager.connect_device() is True
+
+    warn_msgs = [str(call) for call in mock_logger.warning.call_args_list]
+    assert not any("ServicesResolved" in m for m in warn_msgs), (
+        f"no ServicesResolved warning expected when dbus unavailable; got: {warn_msgs}"
+    )
+
+
+def test_dbus_wait_services_resolved_polls_multiple_times_until_resolved():
+    """Uninterrupted wait (wait_with_cancel returns True) must keep polling.
+
+    Regression test: previously the contract was inverted and the helper exited
+    after the first non-True property read, even when the caller had not
+    cancelled. This verifies the loop actually iterates until ServicesResolved
+    flips to True.
+    """
+    import bt_dbus
+
+    property_calls = {"count": 0}
+
+    def _fake_property(_path, _name, adapter_hci="hci0"):
+        property_calls["count"] += 1
+        # Flip to True on the 3rd read — forcing the loop to iterate twice.
+        return property_calls["count"] >= 3
+
+    with patch.object(bt_dbus, "_dbus_get_device_property", side_effect=_fake_property):
+        ok = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: True,
+            timeout=5.0,
+            poll_interval=0.01,
+        )
+    assert ok is True
+    assert property_calls["count"] >= 3
+
+
+# ---------------------------------------------------------------------------
+# bt_dbus._dbus_get_device_uuids — UUID listing helper
+# ---------------------------------------------------------------------------
+
+
+def test_dbus_get_device_uuids_normalizes_to_lowercase():
+    """UUIDs from BlueZ are lowercased so set intersection with AUDIO_SINK_UUIDS works."""
+    import bt_dbus
+
+    raw = ["0000110B-0000-1000-8000-00805F9B34FB", "0000180F-0000-1000-8000-00805F9B34FB"]
+    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=raw):
+        uuids = bt_dbus._dbus_get_device_uuids("/org/bluez/hci0/dev_X")
+    assert uuids == [u.lower() for u in raw]
+
+
+def test_dbus_get_device_uuids_returns_empty_on_missing_path():
+    """Empty path → empty list; no dbus interaction."""
+    import bt_dbus
+
+    assert bt_dbus._dbus_get_device_uuids(None) == []

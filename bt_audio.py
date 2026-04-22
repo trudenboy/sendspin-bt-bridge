@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from config import CONFIG_FILE, save_device_sink
 from config import config_lock as config_lock
 from services.pulse import (
+    cycle_card_profile,
     get_sink_volume,
     list_cards,
     list_sinks,
@@ -82,6 +83,35 @@ def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
             logger.warning("Profile switch for %s errored: %s", name, exc)
         return False
     return False
+
+
+def _cycle_card_profile_for_mac(pa_mac: str) -> bool:
+    """Cycle the ``bluez_card.{pa_mac}`` profile off → a2dp_sink as a fallback.
+
+    Used when the direct ``set_card_profile`` succeeded but PA still did not
+    publish a ``bluez_sink.*`` for the device (state-confusion after
+    ``module-rescue-streams`` / rapid reconnect). Returns ``True`` only when
+    the off → ``a2dp_sink`` cycle completes successfully, including the final
+    switch back to the target profile.
+    """
+    expected = f"bluez_card.{pa_mac}"
+    try:
+        cards = list_cards() or []
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("list_cards failed during profile cycle: %s", exc)
+        return False
+    card = next((c for c in cards if c.get("name") == expected), None)
+    if card is None:
+        return False
+    profiles = card.get("profiles") or []
+    if "a2dp_sink" not in profiles:
+        return False
+    logger.info("Cycling %s profile off→a2dp_sink to force sink re-publish", expected)
+    try:
+        return bool(cycle_card_profile(expected, "a2dp_sink"))
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("cycle_card_profile(%s) errored: %s", expected, exc)
+        return False
 
 
 def _force_sbc_codec(pa_mac: str) -> None:
@@ -211,6 +241,21 @@ def configure_bluetooth_audio(
                 for sink_name in sink_names:
                     if sink_name in known_names or get_sink_volume(sink_name) is not None:
                         logger.info("✓ Found audio sink after profile switch: %s", sink_name)
+                        configured_sink = sink_name
+                        success = True
+                        break
+
+            # Fallback: direct set_card_profile sometimes leaves the card on
+            # a2dp_sink but PA never re-publishes bluez_sink.*. A cycle
+            # off → wait → a2dp_sink forces the republish in that scenario.
+            if not success and _cycle_card_profile_for_mac(pa_mac):
+                if not wait_with_cancel(_SINK_RETRY_DELAY):
+                    return False
+                sinks = list_sinks()
+                known_names = {s["name"] for s in sinks}
+                for sink_name in sink_names:
+                    if sink_name in known_names or get_sink_volume(sink_name) is not None:
+                        logger.info("✓ Found audio sink after profile cycle: %s", sink_name)
                         configured_sink = sink_name
                         success = True
                         break

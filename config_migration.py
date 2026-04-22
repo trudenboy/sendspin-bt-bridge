@@ -361,6 +361,9 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "SMOOTH_RESTART",
         "AUTO_UPDATE",
         "CHECK_UPDATES",
+        "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
+        "EXPERIMENTAL_PA_MODULE_RELOAD",
+        "EXPERIMENTAL_PAIR_JUST_WORKS",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
 

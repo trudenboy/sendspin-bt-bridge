@@ -9,11 +9,16 @@ unavailable the functions return safe defaults.
 from __future__ import annotations
 
 import logging
+import time
+from typing import TYPE_CHECKING
 
 try:
     import dbus
 except ImportError:
     dbus = None  # type: ignore[assignment]
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +75,65 @@ def _dbus_call_device_method(device_path: str | None, method_name: str) -> bool:
 
 # A2DP Sink service class (audio output into the peer). Stable across BlueZ.
 A2DP_SINK_UUID = "0000110b-0000-1000-8000-00805f9b34fb"
+HANDSFREE_UUID = "0000111e-0000-1000-8000-00805f9b34fb"
+HEADSET_UUID = "00001108-0000-1000-8000-00805f9b34fb"
+
+# Any one of these advertised by the peer is enough to treat it as an audio
+# device worth connecting. Used for the post-pair audio-profile sanity check.
+AUDIO_SINK_UUIDS = frozenset({A2DP_SINK_UUID, HANDSFREE_UUID, HEADSET_UUID})
+
+
+def _dbus_get_device_uuids(device_path: str | None, adapter_hci: str = "hci0") -> list[str]:
+    """Return Device1.UUIDs as a list of lowercase strings, or [] on error."""
+    raw = _dbus_get_device_property(device_path, "UUIDs", adapter_hci=adapter_hci)
+    if raw is None:
+        return []
+    try:
+        return [str(u).lower() for u in raw]
+    except TypeError:
+        logger.debug("Device1.UUIDs had unexpected shape: %r", raw)
+        return []
+
+
+def _dbus_wait_services_resolved(
+    device_path: str | None,
+    *,
+    is_connected_check: Callable[[], bool],
+    wait_with_cancel: Callable[[float], bool],
+    timeout: float = 10.0,
+    poll_interval: float = 0.5,
+) -> bool | None:
+    """Poll ``Device1.ServicesResolved`` until True or timeout.
+
+    Bails out early if ``is_connected_check`` reports the device has
+    disconnected. ``wait_with_cancel(sec)`` must follow the bridge-wide
+    convention: return ``True`` after waiting ``sec`` seconds uninterrupted,
+    ``False`` if the caller requested cancellation during the wait (e.g.
+    a pending release/stop). This matches ``BluetoothManager._wait_with_cancel``.
+
+    Tri-state return:
+    - ``True`` — ServicesResolved reached True within the timeout.
+    - ``False`` — we polled and either timed out, got cancelled, or the
+      device disconnected. Caller may log a "did not reach True" warning.
+    - ``None`` — we could not check at all (dbus-python not installed, or
+      no ``device_path``). Callers MUST treat this as "proceed silently"
+      and skip the misleading-timeout warning.
+    """
+    if not device_path or dbus is None:
+        return None
+    deadline = time.monotonic() + max(0.0, timeout)
+    while True:
+        resolved = _dbus_get_device_property(device_path, "ServicesResolved")
+        if bool(resolved):
+            return True
+        if not is_connected_check():
+            return False
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        wait_for = min(poll_interval, remaining)
+        if not wait_with_cancel(wait_for):
+            return False
 
 
 def _dbus_connect_profile(device_path: str | None, uuid: str) -> tuple[bool, str]:

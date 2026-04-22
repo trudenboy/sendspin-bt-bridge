@@ -206,3 +206,298 @@ def test_fallback_set_card_profile_failure():
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=1, stderr="Failed")
         assert _fallback_set_card_profile("bluez_card.xx", "a2dp_sink") is False
+
+
+# ---------------------------------------------------------------------------
+# _fallback_cycle_card_profile — off → target cycle via pactl
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_cycle_card_profile_sets_off_then_target():
+    """Cycle runs `pactl set-card-profile <card> off`, sleeps, then sets target."""
+    from services.pulse import _fallback_cycle_card_profile
+
+    with (
+        patch.object(_pulse_mod, "subprocess") as mock_sub,
+        patch.object(_pulse_mod, "time", create=True) as mock_time,
+    ):
+        mock_sub.run.return_value = MagicMock(returncode=0)
+        mock_time.sleep = MagicMock()
+        result = _fallback_cycle_card_profile("bluez_card.xx", "a2dp_sink", off_wait=0.0)
+
+    assert result is True
+    cmds = [call.args[0] for call in mock_sub.run.call_args_list]
+    assert ["pactl", "set-card-profile", "bluez_card.xx", "off"] in cmds
+    assert ["pactl", "set-card-profile", "bluez_card.xx", "a2dp_sink"] in cmds
+
+
+def test_fallback_cycle_card_profile_continues_when_off_set_fails():
+    """Cycle does not abort if the `off` step errors — final target still attempted."""
+    import subprocess as _sp
+
+    from services.pulse import _fallback_cycle_card_profile
+
+    call_results = [_sp.SubprocessError("off failed"), MagicMock(returncode=0)]
+
+    def run_side_effect(*_args, **_kwargs):
+        result = call_results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    with patch.object(_pulse_mod, "subprocess") as mock_sub:
+        mock_sub.SubprocessError = _sp.SubprocessError
+        mock_sub.run.side_effect = run_side_effect
+        assert _fallback_cycle_card_profile("bluez_card.xx", "a2dp_sink", off_wait=0.0) is True
+    assert not call_results  # both steps executed
+
+
+# ---------------------------------------------------------------------------
+# areload_bluez5_discover_module — global cooldown + module lookup
+# ---------------------------------------------------------------------------
+
+
+def _reset_bluez5_reload_cooldown():
+    _pulse_mod._LAST_BLUEZ5_RELOAD_TS = 0.0
+
+
+def test_reload_bluez5_discover_module_cooldown_throttles_calls():
+    """Second reload within the 60s window returns False without hitting pactl."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+    _pulse_mod._LAST_BLUEZ5_RELOAD_TS = 1000.0
+
+    with patch("time.monotonic", return_value=1010.0):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is False
+
+
+def test_reload_bluez5_discover_module_returns_false_when_module_not_loaded():
+    """If `pactl list modules short` shows no module-bluez5-discover, return False."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            # stdout has no module-bluez5-discover row
+            return (b"12\tmodule-null-sink\tc=1\n", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is False
+
+
+def test_reload_bluez5_discover_module_unloads_and_loads_when_present():
+    """When module is found, pactl unload + load are issued in order."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    call_log: list[tuple[str, ...]] = []
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        call_log.append(args)
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            if args[:3] == ("pactl", "list", "modules"):
+                return (b"25\tmodule-bluez5-discover\t\n", b"")
+            return (b"", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    async def fake_sleep(_delay):
+        return None
+
+    with (
+        patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec),
+        patch.object(asyncio, "sleep", side_effect=fake_sleep),
+    ):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is True
+    verbs = [args[1] if len(args) > 1 else "" for args in call_log]
+    assert "list" in verbs
+    assert "unload-module" in verbs
+    assert "load-module" in verbs
+
+
+def test_reload_bluez5_discover_module_propagates_cancellation():
+    """``asyncio.CancelledError`` during pactl must NOT be swallowed.
+
+    Suppressing cancellation here can hang shutdown/restart. The function
+    must let the cancel propagate so the outer task can unwind cleanly.
+    """
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        raise asyncio.CancelledError
+
+    async def runner():
+        with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+            await areload_bluez5_discover_module()
+
+    import pytest as _pytest
+
+    with _pytest.raises(asyncio.CancelledError):
+        asyncio.run(runner())
+
+
+def test_reload_bluez5_discover_module_does_not_burn_cooldown_on_trivial_failures():
+    """A failed ``pactl list modules`` call must NOT set the cooldown timestamp.
+
+    If we burn the 60s cooldown before confirming anything happened, a later
+    successful reload attempt is needlessly blocked. Cooldown should only
+    fire after a reload actually completes.
+    """
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 1  # pactl list fails
+
+        async def communicate():
+            return (b"", b"pactl not available")
+
+        proc.communicate = communicate
+        return proc
+
+    with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is False
+    # Cooldown must NOT be burned because nothing actually got reloaded.
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
+
+
+def test_reload_bluez5_discover_module_does_not_burn_cooldown_when_module_absent():
+    """If module-bluez5-discover isn't loaded, cooldown must NOT be burned."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            return (b"12\tmodule-null-sink\tc=1\n", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is False
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
+
+
+def test_reload_bluez5_discover_module_serializes_concurrent_callers():
+    """Two concurrent callers must not both execute unload+load back-to-back.
+
+    The 60s cooldown is set only on success, so without an in-progress guard
+    two callers can both pass the cooldown check before either sets the
+    timestamp, causing two global BT-sink disruptions where the contract
+    promised one. Second concurrent caller must observe "in progress" and
+    return False without issuing its own ``unload-module`` call.
+    """
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    started = asyncio.Event()
+    block = asyncio.Event()
+    call_log: list[tuple[str, ...]] = []
+    unload_seen = 0
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            nonlocal unload_seen
+            call_log.append(args[:2])
+            if args[:3] == ("pactl", "list", "modules"):
+                return (b"25\tmodule-bluez5-discover\t\n", b"")
+            if len(args) >= 2 and args[1] == "unload-module":
+                unload_seen += 1
+                if unload_seen == 1:
+                    # Only the first caller blocks — guarantees the second caller
+                    # can't also stall the test if the in-progress guard is absent.
+                    started.set()
+                    await block.wait()
+            return (b"", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    async def fake_sleep(_delay):
+        return None
+
+    async def runner():
+        with (
+            patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec),
+            patch.object(asyncio, "sleep", side_effect=fake_sleep),
+        ):
+            task1 = asyncio.create_task(areload_bluez5_discover_module())
+            await started.wait()  # first caller is mid-unload, holding in-progress
+            r2 = await areload_bluez5_discover_module()  # should bail out fast
+            block.set()
+            r1 = await task1
+            return r1, r2
+
+    r1, r2 = asyncio.run(runner())
+
+    assert r1 is True, "first caller should complete the reload"
+    assert r2 is False, "second concurrent caller must bail out, not run another reload"
+    unload_count = sum(1 for c in call_log if len(c) >= 2 and c[1] == "unload-module")
+    assert unload_count == 1, f"expected exactly one unload across concurrent callers, got {unload_count}"
+
+
+def test_reload_bluez5_discover_module_burns_cooldown_after_success():
+    """On successful unload+load, the cooldown timestamp must be updated."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            if args[:3] == ("pactl", "list", "modules"):
+                return (b"25\tmodule-bluez5-discover\t\n", b"")
+            return (b"", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    async def fake_sleep(_delay):
+        return None
+
+    with (
+        patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec),
+        patch.object(asyncio, "sleep", side_effect=fake_sleep),
+    ):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is True
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS > 0.0

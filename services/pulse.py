@@ -30,11 +30,14 @@ STANDBY_SINK_NAME = "sendspin_fallback"
 __all__ = [
     "STANDBY_SINK_NAME",
     "_PULSECTL_AVAILABLE",
+    "acycle_card_profile",
     "aensure_null_sink",
     "alist_cards",
     "amove_pid_sink_inputs",
+    "areload_bluez5_discover_module",
     "aset_card_profile",
     "asuspend_sink",
+    "cycle_card_profile",
     "ensure_null_sink",
     "get_server_name",
     "get_sink_description",
@@ -43,6 +46,7 @@ __all__ = [
     "get_sink_volume",
     "list_cards",
     "list_sinks",
+    "reload_bluez5_discover_module",
     "remove_null_sink",
     "set_card_profile",
     "set_sink_mute",
@@ -354,6 +358,151 @@ async def aset_card_profile(card_name: str, profile: str) -> bool:
         return _fallback_set_card_profile(card_name, profile)
 
 
+async def acycle_card_profile(card_name: str, target: str, off_wait: float = 1.0) -> bool:
+    """Set *card_name* profile to ``off``, wait, then switch to *target*.
+
+    Forces PulseAudio to re-publish ``bluez_sink.*`` after ``module-rescue-streams``
+    or other state-confusion scenarios where a direct profile switch leaves
+    the sink missing. Returns True if the final target switch succeeded.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_cycle_card_profile(card_name, target, off_wait)
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                cards = await pulse.card_list()
+                card = next((c for c in cards if c.name == card_name), None)
+                if card is None:
+                    logger.warning("acycle_card_profile: card %s not found", card_name)
+                    return False
+                try:
+                    await pulse.card_profile_set(card, "off")
+                except Exception as exc:
+                    logger.debug("acycle_card_profile: off-set failed: %s", exc)
+                await asyncio.sleep(max(0.0, off_wait))
+                # Re-fetch the card after the off-cycle — its internal ID can change.
+                cards = await pulse.card_list()
+                card = next((c for c in cards if c.name == card_name), None)
+                if card is None:
+                    logger.warning("acycle_card_profile: card %s vanished after off-cycle", card_name)
+                    return False
+                await pulse.card_profile_set(card, target)
+                logger.info("Cycled card profile: %s → off → %s", card_name, target)
+                return True
+    except Exception as exc:
+        logger.debug("acycle_card_profile(%s, %s) error: %s — falling back", card_name, target, exc)
+        return _fallback_cycle_card_profile(card_name, target, off_wait)
+
+
+# Global throttle for module-bluez5-discover reload — it nukes all BT sinks.
+_LAST_BLUEZ5_RELOAD_TS: float = 0.0
+_BLUEZ5_RELOAD_COOLDOWN: float = 60.0
+_BLUEZ5_RELOAD_LOCK = threading.Lock()
+_BLUEZ5_RELOAD_IN_PROGRESS: bool = False
+
+
+async def areload_bluez5_discover_module() -> bool:
+    """Unload and reload ``module-bluez5-discover`` via pactl.
+
+    Last-resort recovery when ``bluez_card.*`` fails to register after a
+    successful Bluetooth connect. Disruptive: drops every other active BT
+    sink, so it is throttled to at most once per 60 seconds across the
+    whole bridge. Returns True only if the reload actually happened.
+
+    Concurrency: an in-progress guard (under ``_BLUEZ5_RELOAD_LOCK``)
+    prevents two callers from both passing the cooldown check while one
+    reload is still running. The cooldown timestamp is updated only on
+    a successful unload+load so a failed attempt doesn't block a later
+    healthy one.
+    """
+    import time as _time
+
+    global _LAST_BLUEZ5_RELOAD_TS, _BLUEZ5_RELOAD_IN_PROGRESS
+    with _BLUEZ5_RELOAD_LOCK:
+        if _BLUEZ5_RELOAD_IN_PROGRESS:
+            logger.info("module-bluez5-discover reload skipped — another reload in progress")
+            return False
+        now = _time.monotonic()
+        if now - _LAST_BLUEZ5_RELOAD_TS < _BLUEZ5_RELOAD_COOLDOWN:
+            logger.info(
+                "module-bluez5-discover reload skipped — cooldown active (%.1fs since last)",
+                now - _LAST_BLUEZ5_RELOAD_TS,
+            )
+            return False
+        _BLUEZ5_RELOAD_IN_PROGRESS = True
+    try:
+        try:
+            list_proc = await asyncio.create_subprocess_exec(
+                "pactl",
+                "list",
+                "modules",
+                "short",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await list_proc.communicate()
+        except OSError as exc:
+            logger.warning("areload_bluez5_discover_module list failed: %s", exc)
+            return False
+        if list_proc.returncode != 0:
+            logger.warning("pactl list modules short failed (rc=%s)", list_proc.returncode)
+            return False
+        module_idx: str | None = None
+        for line in stdout.decode(errors="replace").splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2 and parts[1].strip() == "module-bluez5-discover":
+                module_idx = parts[0].strip()
+                break
+        if module_idx is None:
+            logger.info("module-bluez5-discover not currently loaded; nothing to reload")
+            return False
+        try:
+            unload_proc = await asyncio.create_subprocess_exec(
+                "pactl",
+                "unload-module",
+                module_idx,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, unload_err = await unload_proc.communicate()
+        except OSError as exc:
+            logger.warning("pactl unload-module failed: %s", exc)
+            return False
+        if unload_proc.returncode != 0:
+            logger.warning(
+                "pactl unload-module %s failed: %s",
+                module_idx,
+                unload_err.decode(errors="replace").strip(),
+            )
+            return False
+        await asyncio.sleep(2.0)
+        try:
+            load_proc = await asyncio.create_subprocess_exec(
+                "pactl",
+                "load-module",
+                "module-bluez5-discover",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, load_err = await load_proc.communicate()
+        except OSError as exc:
+            logger.warning("pactl load-module module-bluez5-discover failed: %s", exc)
+            return False
+        if load_proc.returncode != 0:
+            logger.warning(
+                "pactl load-module module-bluez5-discover failed: %s",
+                load_err.decode(errors="replace").strip(),
+            )
+            return False
+        with _BLUEZ5_RELOAD_LOCK:
+            _LAST_BLUEZ5_RELOAD_TS = _time.monotonic()
+        logger.warning("Reloaded module-bluez5-discover as BT sink recovery last resort")
+        return True
+    finally:
+        with _BLUEZ5_RELOAD_LOCK:
+            _BLUEZ5_RELOAD_IN_PROGRESS = False
+
+
 async def aget_server_name() -> str:
     """Return PA server name string (for diagnostics)."""
     if not _PULSECTL_AVAILABLE:
@@ -520,6 +669,14 @@ def list_cards() -> list[dict]:
 
 def set_card_profile(card_name: str, profile: str) -> bool:
     return _run(aset_card_profile(card_name, profile))
+
+
+def cycle_card_profile(card_name: str, target: str, off_wait: float = 1.0) -> bool:
+    return _run(acycle_card_profile(card_name, target, off_wait))
+
+
+def reload_bluez5_discover_module() -> bool:
+    return _run(areload_bluez5_discover_module())
 
 
 # ---------------------------------------------------------------------------
@@ -713,6 +870,25 @@ def _fallback_set_card_profile(card_name: str, profile: str) -> bool:
     except (subprocess.SubprocessError, OSError) as exc:
         logger.debug("_fallback_set_card_profile error: %s", exc)
     return False
+
+
+def _fallback_cycle_card_profile(card_name: str, target: str, off_wait: float = 1.0) -> bool:
+    """Force PA to re-publish the sink via ``pactl set-card-profile`` off→target."""
+    import time as _time
+
+    # off-set is best-effort: if the card is already in "off" state it will
+    # still succeed, and errors here should not block the target switch.
+    try:
+        subprocess.run(
+            ["pactl", "set-card-profile", card_name, "off"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("_fallback_cycle_card_profile off-set error: %s", exc)
+    _time.sleep(max(0.0, off_wait))
+    return _fallback_set_card_profile(card_name, target)
 
 
 def _fallback_server_name() -> str:
