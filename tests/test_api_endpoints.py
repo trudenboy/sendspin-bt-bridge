@@ -670,6 +670,101 @@ def test_run_standalone_pair_uses_default_agent_when_just_works_disabled(monkeyp
     assert "agent NoInputNoOutput\n" not in init_batch
 
 
+def test_run_standalone_pair_no_io_agent_override_true_beats_config_false(monkeypatch):
+    """When the scan-modal toggle passes no_input_no_output_agent=True as
+    a per-request override, NoInputNoOutput must be used even if
+    config.json has the flag unset. The scan-modal toggle is the
+    authoritative intent for this pair attempt."""
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    # Config has the flag UNSET — the override must still win.
+    monkeypatch.setattr(api_bt_mod, "load_config", lambda: {"EXPERIMENTAL_PAIR_JUST_WORKS": False})
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair_inner(
+            "job-override-true",
+            "AA:BB:CC:DD:EE:FF",
+            "C0:FB:F9:62:D6:9D",
+            no_input_no_output_agent=True,
+        )
+
+    init_batch = fake_proc.stdin.writes[0]
+    assert "agent NoInputNoOutput\n" in init_batch, (
+        f"override=True must force NoInputNoOutput despite config=False, got: {init_batch!r}"
+    )
+
+
+def test_run_standalone_pair_no_io_agent_override_false_beats_config_true(monkeypatch):
+    """When the scan-modal toggle passes no_input_no_output_agent=False
+    as a per-request override, `agent on` must be used even if
+    config.json has the flag set. The override is authoritative both
+    ways."""
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    # Config has the flag SET — the override must still win.
+    monkeypatch.setattr(api_bt_mod, "load_config", lambda: {"EXPERIMENTAL_PAIR_JUST_WORKS": True})
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair_inner(
+            "job-override-false",
+            "AA:BB:CC:DD:EE:FF",
+            "C0:FB:F9:62:D6:9D",
+            no_input_no_output_agent=False,
+        )
+
+    init_batch = fake_proc.stdin.writes[0]
+    assert "agent on\n" in init_batch, (
+        f"override=False must force KeyboardDisplay despite config=True, got: {init_batch!r}"
+    )
+    assert "agent NoInputNoOutput\n" not in init_batch
+
+
+def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkeypatch):
+    """POST /api/bt/pair_new must accept a ``no_input_no_output_agent``
+    body field and pass it through to the pair runner as a per-request
+    override."""
+    import routes.api_bt as api_bt_mod
+
+    captured: dict = {}
+
+    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+        captured["job_id"] = job_id
+        captured["mac"] = mac
+        captured["adapter"] = adapter
+        captured["quiesce"] = quiesce
+        captured["no_input_no_output_agent"] = no_input_no_output_agent
+
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
+    monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post(
+        "/api/bt/pair_new",
+        json={
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "adapter": "C0:FB:F9:62:D6:9D",
+            "no_input_no_output_agent": True,
+        },
+    )
+    assert resp.status_code == 200, resp.get_json()
+    assert captured["no_input_no_output_agent"] is True
+    assert captured["mac"] == "AA:BB:CC:DD:EE:FF"
+
+
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     import routes.api_bt as api_bt_mod
 
@@ -4502,7 +4597,7 @@ def test_bt_pair_new_threads_quiesce_flag(client, monkeypatch):
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False):
+    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
         captured["job_id"] = job_id
         captured["mac"] = mac
         captured["adapter"] = adapter
@@ -4529,7 +4624,7 @@ def test_bt_pair_new_default_has_quiesce_false(client, monkeypatch):
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False):
+    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
         captured["quiesce"] = quiesce
 
     monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)

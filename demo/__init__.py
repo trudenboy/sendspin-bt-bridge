@@ -454,11 +454,24 @@ def install() -> None:
             },
         )
 
-    def _demo_run_standalone_pair(job_id: str, mac: str, adapter: str, *, quiesce: bool = False) -> None:
+    def _demo_run_standalone_pair(
+        job_id: str,
+        mac: str,
+        adapter: str,
+        *,
+        quiesce: bool = False,
+        no_input_no_output_agent: bool | None = None,
+    ) -> None:
         if not _demo_enabled():
-            _original_run_standalone_pair(job_id, mac, adapter, quiesce=quiesce)
+            _original_run_standalone_pair(
+                job_id,
+                mac,
+                adapter,
+                quiesce=quiesce,
+                no_input_no_output_agent=no_input_no_output_agent,
+            )
             return
-        del quiesce  # demo mode never applies quiesce
+        del quiesce, no_input_no_output_agent  # demo mode ignores per-pair flags
         from state import finish_scan_job
 
         del adapter

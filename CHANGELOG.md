@@ -9,25 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.61.0-rc.3] - 2026-04-22
 
-UI follow-up to the `2.61.0-rc.1` experimental flags. No backend or
-Bluetooth behaviour changes.
+UI follow-up to the `2.61.0-rc.1` experimental flags. No Bluetooth
+pairing behaviour changes.
 
 ### Added
-- **UI toggle for `EXPERIMENTAL_PAIR_JUST_WORKS`** — the flag shipped in
-  rc.1 with full config/schema/diff support, but the Settings page had
-  no checkbox to flip it, so users had to hand-edit `config.json` or
-  `options.json` to enable Just-Works SSP pairing. A new switch now
-  appears under "Show experimental features" alongside the existing
-  sink-recovery and PA-module-reload toggles. Takes effect on the next
-  pair attempt — no restart needed (matches the no-action
-  classification in `services/config_diff.py`).
+- **Scan-modal toggle for the NoInputNoOutput pair agent** — the
+  `EXPERIMENTAL_PAIR_JUST_WORKS` config flag shipped in rc.1 with full
+  config/schema/diff support, but the UI had no control for it, so
+  users had to hand-edit `config.json` or `options.json` to try
+  Just-Works SSP pairing. A new "NoInputNoOutput pair agent
+  (experimental)" switch now appears in the scan-modal toolbar next to
+  "Pause other speakers on same adapter", guarded by "Show experimental
+  features". Because registering the BlueZ agent is a per-pair runtime
+  decision (not a persisted setting), it lives with scan/pair context
+  rather than under Settings and takes effect on the next pair attempt
+  only.
+- **`no_input_no_output_agent` per-request override in
+  `POST /api/bt/pair_new`** — the scan-modal toggle sends this field on
+  the pair request; when present, it wins over the persisted
+  `EXPERIMENTAL_PAIR_JUST_WORKS` config key. The legacy key is still
+  honoured as a fallback for hand-edited config.
 
 ### Tests
-- `tests/test_ui_experimental_toggles.py` — parametrised regression
-  tests asserting each experimental flag has a template checkbox (under
-  a `data-experimental` container), a `buildConfig` read-line in
-  `app.js`, and a populate-on-load line. Would have caught the rc.1
-  omission immediately.
+- `tests/test_ui_experimental_toggles.py` — regression coverage for the
+  Settings-page experimental toggles (A2DP sink-recovery dance, PA
+  module reload) **and** the scan-modal NoInputNoOutput pair-agent
+  toggle: asserts template checkboxes exist under the right
+  `data-experimental` container, asserts the Settings toggles are
+  wired into `buildConfig` and populate-on-load, and asserts the
+  scan-modal toggle is passed as `no_input_no_output_agent` in the
+  `pair_new` request body instead of being persisted via
+  `buildConfig`. Would have caught the rc.1 omission immediately.
+- `tests/test_api_endpoints.py` — three new tests covering the
+  per-request override precedence (override beats config both ways) and
+  endpoint forwarding of the new body field.
 
 ## [2.61.0-rc.2] - 2026-04-22
 
