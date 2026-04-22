@@ -56,6 +56,27 @@ _ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
 _MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
 _BLUEZ_ERROR_RE = re.compile(r"org\.bluez\.Error\.[A-Za-z]+")
 
+# BlueZ stores per-adapter device cache files at /var/lib/bluetooth/<adapter>/cache/<device>.
+# `bluetoothctl remove` does NOT delete these; stale ServiceRecords/Endpoints in that file
+# cause org.bluez.Error.Failed "Protocol not available" on the next A2DP pair attempt
+# (bluez/bluez#191, #348, #698). Tests inject a temp path via monkeypatch.
+_BLUEZ_LIB_DIR: Path = Path("/var/lib/bluetooth")
+
+
+def _clean_bluez_cache(adapter_mac: str, device_mac: str) -> None:
+    """Best-effort removal of the stale BlueZ cache file for *device_mac*
+    under *adapter_mac*. Silent on ``FileNotFoundError`` (already gone);
+    warns on other OS errors but never raises — the caller runs in a
+    daemon thread and must not die."""
+    cache_file = _BLUEZ_LIB_DIR / adapter_mac / "cache" / device_mac
+    try:
+        cache_file.unlink()
+        logger.info("BlueZ cache: removed stale %s", cache_file)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning("BlueZ cache cleanup failed for %s: %s", cache_file, e)
+
 
 def is_valid_mac(mac: str) -> bool:
     """Return True if *mac* looks like a valid colon-separated MAC address."""
@@ -148,16 +169,35 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
         cmds.append(f"remove {mac}")
         cmd_str = "\n".join(cmds) + "\n"
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["bluetoothctl"],
                 input=cmd_str,
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
-            logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")
+            # `bluetoothctl` returns 0 even when `remove <mac>` fails with
+            # "Device not available" (device not in the BlueZ object tree).
+            # Rely on the stdout marker instead of returncode.
+            out = (result.stdout or "") + (result.stderr or "")
+            if "not available" in out.lower() or "failed to remove" in out.lower():
+                logger.warning(
+                    "BT stack: remove %s reported failure (adapter: %s): %s",
+                    mac,
+                    adapter_mac or "default",
+                    out.strip() or "no output",
+                )
+            else:
+                logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")
         except Exception as e:
             logger.warning("BT stack cleanup failed for %s: %s", mac, e)
+        # Cache cleanup is intentionally independent of the remove outcome:
+        # stale cache files survive even when bluetoothctl reports "not
+        # available" (device already gone from the tree but its
+        # /var/lib/bluetooth/<adapter>/cache/<device> file lingers and
+        # still causes the next-pair Protocol-not-available regression).
+        if adapter_mac:
+            _clean_bluez_cache(adapter_mac, mac)
 
     threading.Thread(target=_run, daemon=True).start()
 

@@ -658,7 +658,7 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
-        initial_cmds.extend(["power on", "agent on", "default-agent", "scan on"])
+        initial_cmds.extend(["power on", "agent on", "default-agent", "scan bredr"])
         pair_cmds = [f"pair {mac}"]
 
         proc = subprocess.Popen(
@@ -928,9 +928,9 @@ def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
         if adapter_macs:
             init_cmds: list[str] = ["agent on", "default-agent"]
             for m in adapter_macs:
-                init_cmds.extend([f"select {m}", "power on", "scan on"])
+                init_cmds.extend([f"select {m}", "power on", "scan bredr"])
         else:
-            init_cmds = ["power on", "agent on", "default-agent", "scan on"]
+            init_cmds = ["power on", "agent on", "default-agent", "scan bredr"]
         if proc.stdin is None:
             raise RuntimeError("bluetoothctl subprocess stdin unavailable")
         proc.stdin.write("\n".join(init_cmds) + "\n")
@@ -1319,7 +1319,7 @@ def _run_standalone_pair_inner(
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
-        initial_cmds.extend(["power on", agent_cmd, "default-agent", "scan on"])
+        initial_cmds.extend(["power on", agent_cmd, "default-agent", "scan bredr"])
 
         pair_cmds = [f"pair {mac}"]
 

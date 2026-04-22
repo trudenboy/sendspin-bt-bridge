@@ -571,7 +571,10 @@ def test_pair_device_trusts_only_after_pair_success(bt_manager):
     ):
         assert bt_manager.pair_device() is True
 
-    assert fake_proc.stdin.writes[0].endswith("scan on\n")
+    # `scan bredr` — constrains discovery to BR/EDR transport for A2DP
+    # sinks; LE-only devices (beacons, BLE wearables) are filtered out
+    # upstream by the kernel so they don't compete in the scan window.
+    assert fake_proc.stdin.writes[0].endswith("scan bredr\n")
     assert fake_proc.stdin.writes[1] == f"pair {bt_manager.mac_address}\n"
     assert fake_proc.stdin.writes[2] == "yes\n"
     assert fake_proc.stdin.writes[3].startswith(f"trust {bt_manager.mac_address}\n")
