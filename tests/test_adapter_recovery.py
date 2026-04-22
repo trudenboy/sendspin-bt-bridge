@@ -5,6 +5,8 @@ threshold on a given HCI adapter."""
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from unittest.mock import AsyncMock, patch
 
 
@@ -112,3 +114,73 @@ def test_recover_adapter_blocking_rejects_invalid_mac():
 
     assert ok is False
     fake_recover.assert_not_awaited()
+
+
+def test_recover_adapter_blocking_works_from_inside_running_event_loop():
+    """Production path calls this sync helper from within a running
+    asyncio loop: ``bt_monitor.monitor_and_reconnect`` → ``await
+    run_in_executor(..., mgr._handle_reconnect_failure)`` is one path,
+    but ``_handle_reconnect_failure`` itself is also invoked directly
+    from coroutine bodies at lines 145 and 410 of bt_monitor.py. In
+    that second path ``asyncio.run()`` raises ``RuntimeError`` (`cannot
+    be called from a running event loop`) and the except-block would
+    silently turn every recovery attempt into a no-op. The wrapper must
+    run the library coroutine on a worker-thread loop so it is safe
+    regardless of caller context."""
+    import services.adapter_recovery as _mod
+
+    _mod._reset_state_for_tests()
+    fake_recover = AsyncMock(return_value=True)
+
+    async def _driver():
+        with patch.object(_mod, "_lib_recover_adapter", fake_recover):
+            return _mod.recover_adapter_blocking(hci_index=2, adapter_mac="AA:BB:CC:DD:EE:FF")
+
+    result = asyncio.run(_driver())
+    assert result is True
+    fake_recover.assert_awaited_once_with(2, "AA:BB:CC:DD:EE:FF")
+
+
+def test_recover_adapter_blocking_cooldown_check_and_mark_are_atomic():
+    """Concurrent callers for the same adapter must not both observe
+    'no cooldown' and proceed. With a two-step check-then-mark, thread
+    A can read the empty slot, thread B reads it too before A marks,
+    and both invoke the library back-to-back. Cooldown check+mark must
+    be a single locked critical section so exactly one caller wins."""
+    import services.adapter_recovery as _mod
+
+    _mod._reset_state_for_tests()
+
+    call_count = 0
+    call_count_lock = threading.Lock()
+
+    async def _slow_recover(hci, mac):
+        nonlocal call_count
+        with call_count_lock:
+            call_count += 1
+        # Hold the library call open so concurrent threads overlap the
+        # check+mark window in recover_adapter_blocking.
+        await asyncio.sleep(0.05)
+        return True
+
+    N = 16
+    barrier = threading.Barrier(N)
+    results: list[bool] = []
+    results_lock = threading.Lock()
+
+    def _worker():
+        barrier.wait()
+        ok = _mod.recover_adapter_blocking(hci_index=0, adapter_mac="AA:BB:CC:DD:EE:FF")
+        with results_lock:
+            results.append(ok)
+
+    with patch.object(_mod, "_lib_recover_adapter", _slow_recover):
+        threads = [threading.Thread(target=_worker) for _ in range(N)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    assert call_count == 1, f"library invoked {call_count} times, expected 1"
+    assert results.count(True) == 1
+    assert results.count(False) == N - 1

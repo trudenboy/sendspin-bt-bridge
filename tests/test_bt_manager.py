@@ -947,8 +947,8 @@ def test_handle_reconnect_failure_skips_adapter_recovery_when_flag_off(bt_manage
     bt_manager.host = MagicMock()
     bt_manager.host.bt_management_enabled = True
     bt_manager._enable_adapter_auto_recovery = False
-    bt_manager._adapter_select = "C0:FB:F9:62:D6:9D"
-    bt_manager.adapter = "hci0"
+    bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter_hci_name = "hci0"
 
     with (
         patch("services.bluetooth.persist_device_released"),
@@ -962,15 +962,15 @@ def test_handle_reconnect_failure_skips_adapter_recovery_when_flag_off(bt_manage
 
 
 def test_handle_reconnect_failure_runs_adapter_recovery_when_flag_on(bt_manager):
-    """Flag on + threshold hit + adapter MAC known: the recovery helper
-    is invoked with the hci index parsed from ``self.adapter`` and the
-    adapter MAC, as a last-ditch before auto-releasing."""
+    """Flag on + threshold hit + adapter resolved: the recovery helper
+    is invoked with the hci index parsed from ``adapter_hci_name`` and
+    the adapter MAC, as a last-ditch before auto-releasing."""
     bt_manager.max_reconnect_fails = 3
     bt_manager.host = MagicMock()
     bt_manager.host.bt_management_enabled = True
     bt_manager._enable_adapter_auto_recovery = True
-    bt_manager._adapter_select = "C0:FB:F9:62:D6:9D"
-    bt_manager.adapter = "hci1"
+    bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter_hci_name = "hci1"
 
     with (
         patch("services.bluetooth.persist_device_released"),
@@ -991,8 +991,8 @@ def test_handle_reconnect_failure_keeps_management_when_recovery_succeeds(bt_man
     bt_manager.host = MagicMock()
     bt_manager.host.bt_management_enabled = True
     bt_manager._enable_adapter_auto_recovery = True
-    bt_manager._adapter_select = "C0:FB:F9:62:D6:9D"
-    bt_manager.adapter = "hci0"
+    bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter_hci_name = "hci0"
 
     with (
         patch("services.bluetooth.persist_device_released") as mock_persist,
@@ -1007,15 +1007,15 @@ def test_handle_reconnect_failure_keeps_management_when_recovery_succeeds(bt_man
 
 def test_handle_reconnect_failure_skips_recovery_when_no_adapter_mac(bt_manager):
     """Recovery needs the adapter MAC (and hci index). If we never
-    resolved the adapter (default controller used, no adapter set),
-    don't call into the library — its netlink/USB paths key on hci
-    index, and we can't safely pick one blindly."""
+    resolved the adapter at all — no default controller detected, no
+    sysfs hit — don't call into the library; its netlink/USB paths key
+    on hci index, and we can't safely pick one blindly."""
     bt_manager.max_reconnect_fails = 3
     bt_manager.host = MagicMock()
     bt_manager.host.bt_management_enabled = True
     bt_manager._enable_adapter_auto_recovery = True
-    bt_manager._adapter_select = ""  # unresolved
-    bt_manager.adapter = ""
+    bt_manager.effective_adapter_mac = ""  # unresolved
+    bt_manager.adapter_hci_name = ""
 
     with (
         patch("services.bluetooth.persist_device_released"),
@@ -1025,6 +1025,34 @@ def test_handle_reconnect_failure_skips_recovery_when_no_adapter_mac(bt_manager)
 
     mock_rec.assert_not_called()
     assert released is True
+
+
+def test_handle_reconnect_failure_runs_adapter_recovery_for_default_adapter_device(bt_manager):
+    """Default-adapter case: the user left ``adapter`` empty so the
+    configured ``self.adapter`` / ``self._adapter_select`` are both
+    blank, but ``effective_adapter_mac`` and ``adapter_hci_name`` were
+    resolved from the controller ``bluetoothctl list`` or sysfs
+    reported. Recovery must still trigger — gating on the raw config
+    fields would skip the (common) default-adapter case entirely."""
+    bt_manager.max_reconnect_fails = 3
+    bt_manager.host = MagicMock()
+    bt_manager.host.bt_management_enabled = True
+    bt_manager._enable_adapter_auto_recovery = True
+    bt_manager.adapter = ""  # user didn't pin an adapter
+    bt_manager._adapter_select = ""  # empty because adapter is empty
+    bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"  # resolved from default controller
+    bt_manager.adapter_hci_name = "hci0"  # resolved via sysfs
+
+    with (
+        patch("services.bluetooth.persist_device_released"),
+        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+    ):
+        mock_rec.return_value = True
+        released = bt_manager._handle_reconnect_failure(3)
+
+    mock_rec.assert_called_once_with(hci_index=0, adapter_mac="C0:FB:F9:62:D6:9D")
+    assert released is False
+    assert bt_manager.management_enabled is True
 
 
 # ---------------------------------------------------------------------------

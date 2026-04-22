@@ -991,11 +991,18 @@ class BluetoothManager:
         adapter. Returns True iff recovery succeeded. Short-circuits
         when the adapter was never resolved (no MAC, no hci index) —
         the library needs both to do its job.
+
+        Uses the *resolved* adapter fields (``effective_adapter_mac``
+        and ``adapter_hci_name``) rather than the raw config values,
+        so devices using the default controller (where the user left
+        ``adapter`` empty) are still covered — __init__ resolves both
+        fields from sysfs / ``bluetoothctl list`` in that case.
         """
-        if not self._adapter_select or not self.adapter:
+        adapter_mac = self.effective_adapter_mac
+        hci_name = self.adapter_hci_name
+        if not adapter_mac or not hci_name:
             return False
-        # Parse "hci3" → 3. Anything else (e.g. "default") skips recovery.
-        m = re.match(r"^hci(\d+)$", self.adapter)
+        m = re.match(r"^hci(\d+)$", hci_name)
         if not m:
             return False
         hci_index = int(m.group(1))
@@ -1005,7 +1012,7 @@ class BluetoothManager:
             logger.debug("[%s] adapter_recovery module unavailable: %s", self.device_name, _e)
             return False
         try:
-            return bool(recover_adapter_blocking(hci_index=hci_index, adapter_mac=self._adapter_select))
+            return bool(recover_adapter_blocking(hci_index=hci_index, adapter_mac=adapter_mac))
         except Exception as e:
             logger.warning("[%s] adapter auto-recovery raised: %s", self.device_name, e)
             return False
