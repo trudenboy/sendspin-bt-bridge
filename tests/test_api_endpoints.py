@@ -731,6 +731,202 @@ def test_run_standalone_pair_no_io_agent_override_false_beats_config_true(monkey
     assert "agent NoInputNoOutput\n" not in init_batch
 
 
+def test_run_standalone_pair_inner_pin_rejected_uses_raw_output_not_log_wording(monkeypatch):
+    """Regression: `pin_rejected` must be derived from the raw bluetoothctl
+    output (via `is_pin_rejection`), NOT from substring-matching the
+    human-readable `reason` string. Coupling control flow to log wording
+    means a reword of `describe_pair_failure` silently breaks PIN retry.
+
+    This test monkey-patches `describe_pair_failure` to return a message
+    that does NOT contain the literal phrase "rejected PIN" — the legacy
+    substring check would wrongly report `pin_rejected=False` here.
+    """
+    import routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(
+        stdout_lines=[
+            "[agent] Enter PIN code: \n",
+            "Failed to pair: org.bluez.Error.AuthenticationFailed\n",
+        ],
+        tail="Device AA:BB:CC:DD:EE:FF not available\n",
+    )
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
+    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
+    # Force a reason string that lacks the old "rejected PIN" literal —
+    # the legacy substring check would wrongly return pin_rejected=False.
+    monkeypatch.setattr(
+        api_bt_mod,
+        "describe_pair_failure",
+        lambda out, *, pin_attempted, pin_used: "auth broke somewhere (reworded)",
+    )
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        result = api_bt_mod._run_standalone_pair_inner(
+            "job-raw-pin",
+            "AA:BB:CC:DD:EE:FF",
+            "C0:FB:F9:62:D6:9D",
+            pin="0000",
+        )
+
+    assert result["success"] is False
+    assert result["pin_attempted"] is True, "PIN prompt was in the fake output — pin_attempted must be True"
+    assert result["pin_rejected"] is True, (
+        "pin_rejected must be derived from raw AuthenticationFailed in output, "
+        "not from substring-matching the log wording"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PIN retry orchestration
+#
+# When a BT audio device asks for a legacy PIN and rejects the bridge's
+# first guess (``0000``), the orchestrator must retry the pair attempt
+# with the next popular PIN from ``COMMON_BT_PAIR_PINS``. Non-PIN failures
+# (connection timeouts, protocol errors) must NOT trigger retries.
+# ---------------------------------------------------------------------------
+
+
+def _make_pin_inner_stub(outcomes_by_pin):
+    """Build a fake ``_run_standalone_pair_inner`` that records each pin
+    the orchestrator tries and returns the mapped outcome dict for that
+    pin. Unmapped pins produce a default "no PIN prompt seen, success"
+    result so stale tests surface loud."""
+    calls: list[str] = []
+
+    def _fake_inner(job_id, mac, adapter, *, pin="0000", no_input_no_output_agent=None):
+        calls.append(pin)
+        default = {
+            "success": True,
+            "pin_attempted": False,
+            "pin_rejected": False,
+            "reason": "",
+            "output": "",
+        }
+        return outcomes_by_pin.get(pin, default)
+
+    return _fake_inner, calls
+
+
+def test_run_standalone_pair_retries_with_next_popular_pin_after_rejection(monkeypatch):
+    """If 0000 is rejected with AuthenticationFailed, the outer runner
+    must re-invoke the inner pair with the next PIN from
+    ``COMMON_BT_PAIR_PINS`` rather than surfacing the first failure."""
+    import routes.api_bt as api_bt_mod
+    from services.bluetooth import COMMON_BT_PAIR_PINS
+
+    first_pin, second_pin = COMMON_BT_PAIR_PINS[0], COMMON_BT_PAIR_PINS[1]
+    fake_inner, calls = _make_pin_inner_stub(
+        {
+            first_pin: {
+                "success": False,
+                "pin_attempted": True,
+                "pin_rejected": True,
+                "reason": f"AuthenticationFailed — device rejected PIN {first_pin}",
+                "output": "",
+            },
+            second_pin: {
+                "success": True,
+                "pin_attempted": True,
+                "pin_rejected": False,
+                "reason": "",
+                "output": "",
+            },
+        }
+    )
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+
+    api_bt_mod._run_standalone_pair("job-retry", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    assert calls[:2] == [first_pin, second_pin], f"expected retry with {second_pin} after {first_pin}, got {calls}"
+    finish_job.assert_called_once_with("job-retry", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+
+
+def test_run_standalone_pair_does_not_retry_on_non_pin_failure(monkeypatch):
+    """Connection / timeout / protocol failures are not PIN-related —
+    retrying with more PINs against an unreachable device wastes ~20 s
+    per attempt. The orchestrator must stop after the first attempt."""
+    import routes.api_bt as api_bt_mod
+
+    fake_inner, calls = _make_pin_inner_stub(
+        {
+            "0000": {
+                "success": False,
+                "pin_attempted": False,
+                "pin_rejected": False,
+                "reason": "Failed to pair: org.bluez.Error.ConnectionAttemptFailed",
+                "output": "",
+            },
+        }
+    )
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+
+    api_bt_mod._run_standalone_pair("job-no-retry", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    assert calls == ["0000"], f"expected exactly one attempt, got {calls}"
+    finish_job.assert_called_once_with("job-no-retry", {"success": False, "mac": "AA:BB:CC:DD:EE:FF"})
+
+
+def test_run_standalone_pair_exhausts_all_pins_and_logs_summary(monkeypatch, caplog):
+    """When every popular PIN is rejected, the warning log must list
+    every PIN tried and flag the "custom PIN required" remediation so
+    the operator doesn't have to grep per-attempt entries."""
+    import logging
+
+    import routes.api_bt as api_bt_mod
+    from services.bluetooth import COMMON_BT_PAIR_PINS
+
+    outcomes = {
+        pin: {
+            "success": False,
+            "pin_attempted": True,
+            "pin_rejected": True,
+            "reason": f"AuthenticationFailed — device rejected PIN {pin}",
+            "output": "",
+        }
+        for pin in COMMON_BT_PAIR_PINS
+    }
+    fake_inner, calls = _make_pin_inner_stub(outcomes)
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+
+    caplog.set_level(logging.WARNING, logger=api_bt_mod.logger.name)
+    api_bt_mod._run_standalone_pair("job-exhaust", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    assert list(calls) == list(COMMON_BT_PAIR_PINS), f"expected each PIN tried once in order, got {calls}"
+    final_msg = "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING)
+    for pin in COMMON_BT_PAIR_PINS:
+        assert pin in final_msg, f"expected PIN {pin} in warning summary, got:\n{final_msg}"
+    assert "custom" in final_msg.lower(), f"expected 'custom PIN' remediation hint in warnings, got:\n{final_msg}"
+    finish_job.assert_called_once_with("job-exhaust", {"success": False, "mac": "AA:BB:CC:DD:EE:FF"})
+
+
+def test_run_standalone_pair_succeeds_on_first_pin_without_extra_attempts(monkeypatch):
+    """SSP pairing (no PIN prompt) must finish with exactly one inner
+    invocation — no unnecessary retries eating a scan window."""
+    import routes.api_bt as api_bt_mod
+    from services.bluetooth import COMMON_BT_PAIR_PINS
+
+    fake_inner, calls = _make_pin_inner_stub({})  # default stub → success, no pin
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+
+    api_bt_mod._run_standalone_pair("job-first", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+
+    assert calls == [COMMON_BT_PAIR_PINS[0]], f"expected a single attempt on success, got {calls}"
+    finish_job.assert_called_once_with("job-first", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+
+
 def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkeypatch):
     """POST /api/bt/pair_new must accept a ``no_input_no_output_agent``
     body field and pass it through to the pair runner as a per-request

@@ -33,7 +33,7 @@ from bt_dbus import (
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
 )
-from services.bluetooth import extract_pair_failure_reason
+from services.bluetooth import describe_pair_failure
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -457,6 +457,7 @@ class BluetoothManager:
             # leave BlueZ with a stale Trusted=yes, Paired=no entry.
             collected: list[str] = []
             paired_ok = False
+            pin_attempted = False
             deadline = time.monotonic() + _PAIRING_WAIT_DURATION
             import selectors
 
@@ -490,6 +491,7 @@ class BluetoothManager:
                         logger.info("Legacy PIN prompt — auto-entering 0000: %s", stripped)
                         proc.stdin.write("0000\n")
                         proc.stdin.flush()
+                        pin_attempted = True
                     # Early exit on success
                     if "pairing successful" in stripped.lower() or "already paired" in stripped.lower():
                         paired_ok = True
@@ -523,7 +525,8 @@ class BluetoothManager:
                 self._check_audio_profiles_after_pair()
             else:
                 failure_reason = (
-                    extract_pair_failure_reason(out, tail_chars=200) or "no explicit bluetoothctl reason captured"
+                    describe_pair_failure(out, pin_attempted=pin_attempted, pin_used="0000")
+                    or "no explicit bluetoothctl reason captured"
                 )
                 logger.warning("Pairing may have failed: %s", failure_reason)
                 logger.debug("Pair output tail: %s", out[-600:])

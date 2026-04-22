@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from services.bluetooth import (
     bt_remove_device,
+    describe_pair_failure,
     extract_pair_failure_reason,
     is_audio_device,
     persist_device_enabled,
@@ -99,6 +100,61 @@ def test_extract_pair_failure_reason_falls_back_to_last_errorish_line():
     """
 
     assert extract_pair_failure_reason(output) == "AuthenticationFailed"
+
+
+# ---------------------------------------------------------------------------
+# describe_pair_failure — annotates PIN rejection cases
+# ---------------------------------------------------------------------------
+
+
+def test_describe_pair_failure_annotates_auth_fail_when_pin_attempted():
+    """When the bridge auto-entered a PIN and pairing failed with an
+    authentication error, the log message must explicitly call out PIN
+    rejection so operators don't have to grep output for the cause.
+    """
+    output = """
+    [agent] Enter PIN code: 0000
+    [CHG] Device AA:BB:CC:DD:EE:FF Connected: no
+    Failed to pair: org.bluez.Error.AuthenticationFailed
+    """
+    reason = describe_pair_failure(output, pin_attempted=True, pin_used="0000")
+    assert "AuthenticationFailed" in reason
+    assert "PIN" in reason
+    assert "0000" in reason
+
+
+def test_describe_pair_failure_does_not_annotate_when_no_pin_attempted():
+    """If no PIN prompt was observed during the attempt, auth failures
+    must not be misattributed to PIN rejection — the device may have
+    cancelled authentication for other reasons (unsupported agent, etc.).
+    """
+    output = """
+    [CHG] Device AA:BB:CC:DD:EE:FF Connected: no
+    Failed to pair: org.bluez.Error.AuthenticationFailed
+    """
+    reason = describe_pair_failure(output, pin_attempted=False)
+    assert reason == "Failed to pair: org.bluez.Error.AuthenticationFailed"
+    assert "PIN" not in reason
+
+
+def test_describe_pair_failure_does_not_annotate_non_auth_failure_even_with_pin():
+    """A PIN was entered but the device failed for a non-auth reason
+    (timeout, connection attempt failed): no PIN hint — PIN wasn't the
+    problem."""
+    output = """
+    [agent] Enter PIN code: 0000
+    Failed to pair: org.bluez.Error.ConnectionAttemptFailed
+    """
+    reason = describe_pair_failure(output, pin_attempted=True, pin_used="0000")
+    assert "ConnectionAttemptFailed" in reason
+    assert "PIN" not in reason
+
+
+def test_describe_pair_failure_empty_output_returns_fallback():
+    """Empty bluetoothctl output shouldn't crash — return an empty-ish
+    string the caller can still log as 'no explicit reason'."""
+    assert describe_pair_failure("", pin_attempted=False) == ""
+    assert describe_pair_failure("", pin_attempted=True, pin_used="0000") == ""
 
 
 # ---------------------------------------------------------------------------
