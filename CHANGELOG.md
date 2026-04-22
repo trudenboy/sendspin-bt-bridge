@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.61.0-rc.4] - 2026-04-22
+## [2.61.0-rc.5] - 2026-04-22
 
 ### Added
 - **Experimental adapter auto-recovery ladder (opt-in)** — new
@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Requires `CAP_NET_ADMIN`, `/dev/rfkill`, and `/sys/bus/usb` access
   (Docker privileged or matching capabilities) — the USB step briefly
   disconnects every device on that controller, hence opt-in.
+
+## [2.61.0-rc.4] - 2026-04-22
+
+### Added
 - **Popular-PIN retry for legacy BT pairing** — when a BT 2.x device asks
   for a numeric PIN and rejects the bridge's default `0000` with
   `AuthenticationFailed`, the standalone pair flow
