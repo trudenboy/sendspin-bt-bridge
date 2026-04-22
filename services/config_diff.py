@@ -93,6 +93,7 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
         "TZ",
         "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
         "EXPERIMENTAL_PA_MODULE_RELOAD",
+        "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
     }
 )
 

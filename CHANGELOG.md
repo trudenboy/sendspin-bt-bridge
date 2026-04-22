@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.5] - 2026-04-22
+
+### Added
+- **Experimental adapter auto-recovery ladder (opt-in)** — new
+  `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` flag (default off). When the
+  reconnect loop hits `BT_MAX_RECONNECT_FAILS` consecutive failures
+  and the flag is on, the bridge now runs the
+  [`bluetooth-auto-recovery`](https://github.com/bluetooth-devices/bluetooth-auto-recovery)
+  ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the
+  adapter as a last-ditch before auto-releasing BT management. If
+  recovery succeeds, management stays enabled and the reconnect loop
+  continues. A per-adapter 60 s cooldown prevents thrashing when
+  multiple devices on the same controller hit the threshold together.
+  Requires `CAP_NET_ADMIN`, `/dev/rfkill`, and `/sys/bus/usb` access
+  (Docker privileged or matching capabilities) — the USB step briefly
+  disconnects every device on that controller, hence opt-in.
+
 ## [2.61.0-rc.4] - 2026-04-22
 
 ### Added

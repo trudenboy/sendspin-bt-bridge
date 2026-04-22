@@ -123,6 +123,7 @@ class RuntimeBootstrap:
     bt_churn_window: float
     enable_a2dp_sink_recovery_dance: bool
     enable_pa_module_reload: bool
+    enable_adapter_auto_recovery: bool
     base_listen_port: int
     web_port: int
     pulse_latency_msec: int
@@ -181,10 +182,15 @@ class BridgeOrchestrator:
             logger.info("BT churn isolation: enabled (threshold=%d in %.0fs)", bt_churn_threshold, bt_churn_window)
         enable_a2dp_sink_recovery_dance = bool(config.get("EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE", False))
         enable_pa_module_reload = bool(config.get("EXPERIMENTAL_PA_MODULE_RELOAD", False))
+        enable_adapter_auto_recovery = bool(config.get("EXPERIMENTAL_ADAPTER_AUTO_RECOVERY", False))
         if enable_a2dp_sink_recovery_dance:
             logger.info("EXPERIMENTAL: A2DP sink recovery dance enabled")
         if enable_pa_module_reload:
             logger.info("EXPERIMENTAL: PulseAudio module-bluez5-discover reload enabled")
+        if enable_adapter_auto_recovery:
+            logger.info(
+                "EXPERIMENTAL: adapter auto-recovery enabled — bluetooth-auto-recovery ladder will run at reconnect-fail threshold",
+            )
 
         tz = os.getenv("TZ", config.get("TZ", "UTC"))
         os.environ["TZ"] = tz
@@ -231,6 +237,7 @@ class BridgeOrchestrator:
             bt_churn_window=bt_churn_window,
             enable_a2dp_sink_recovery_dance=enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=enable_pa_module_reload,
+            enable_adapter_auto_recovery=enable_adapter_auto_recovery,
             base_listen_port=base_listen_port,
             web_port=web_port,
             pulse_latency_msec=pulse_latency_msec,
@@ -509,6 +516,7 @@ class BridgeOrchestrator:
                     churn_window=bootstrap.bt_churn_window,
                     enable_a2dp_dance=bootstrap.enable_a2dp_sink_recovery_dance,
                     enable_pa_module_reload=bootstrap.enable_pa_module_reload,
+                    enable_adapter_auto_recovery=bootstrap.enable_adapter_auto_recovery,
                 )
                 bt_available = bool(bt_mgr.check_bluetooth_available())
                 if not bt_available:
