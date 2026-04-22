@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.1] - 2026-04-22
+
+Opt-in experimental sink-recovery flags, connect-path hardening, and
+reliability improvements for the standalone-pair flow surfaced by the
+Synergy 65 S `AuthenticationCanceled` report (issue #168). Supersedes
+the 2.60.5-rc line.
+
+### Added
+- **`EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`** — opt-in flag gating the
+  disconnect→2 s wait→reconnect dance in `BluetoothManager` when no sink
+  appears after a successful connect. Previously unconditional; the dance
+  helps on some headless PipeWire/BlueZ 5.86 setups but hurts others (see
+  forum #78, related to #174), so it's now opt-in.
+- **`EXPERIMENTAL_PA_MODULE_RELOAD`** — opt-in flag gating the last-resort
+  `pactl unload-module / load-module module-bluez5-discover` escalation
+  when `bluez_card.*` fails to register. Disruptive (drops every other
+  active BT sink), globally throttled to once per 60 s across the bridge,
+  and now serialized so two concurrent callers can never run the reload
+  back-to-back.
+- **`EXPERIMENTAL_PAIR_JUST_WORKS`** — opt-in flag (issue #168) that
+  registers bluetoothctl's agent as `NoInputNoOutput` so Secure Simple
+  Pairing runs Just-Works (no passkey exchange). Workaround for audio
+  sinks that cancel authentication under the default `KeyboardDisplay`
+  agent. Read via `load_config()` on every pair attempt — no restart.
+- **Post-pair audio-profile sanity check** — if a freshly paired device
+  advertises no audio UUIDs (`A2DP`, `HFP`, `Headset`), the bridge now
+  surfaces `last_error = "no_audio_profiles_advertised"` on device
+  status so the UI can show a targeted banner instead of a generic
+  sink-not-found error. Backed by new `bt_dbus._dbus_get_device_uuids`
+  and `AUDIO_SINK_UUIDS` constant.
+- **Scan-filter drop reasons** — `_classify_audio_capability` in
+  `routes/api_bt.py` now returns a machine-readable `reason` label
+  (`audio_class_of_device` / `non_audio_class_of_device` / `audio_uuid`
+  / `no_audio_class_no_uuid` / `no_class_info_defaults_audio`). Scan
+  telemetry aggregates the drop reasons so support can answer "why
+  doesn't my speaker show up" without guessing.
+- **`services.pulse.cycle_card_profile` / `acycle_card_profile`** —
+  helper that cycles `bluez_card.*` `off → a2dp_sink` to force PA to
+  re-publish a missing sink without kicking other active BT streams.
+  Milder than the module reload, no flag needed.
+
+### Fixed
+- **#168 — standalone pair unreliable on slow SSP speakers** — three
+  improvements to `_run_standalone_pair_inner`:
+  - **Event-driven pair trigger**: `pair <mac>` fires as soon as
+    `[NEW] Device <mac>` shows up on scan (typical 1–3 s), replacing
+    the fixed 12 s sleep so the peer is still accepting when `pair`
+    lands. Falls back to the hard cap if the device never advertises.
+  - **Full stdout on FAIL** in debug log (was `out[-800:]`, which
+    routinely cut off the passkey/agent prompt needed to diagnose).
+  - Optional Just-Works SSP agent (see Added).
+- **`_dbus_wait_services_resolved` pre-audio gate** — polls BlueZ
+  `Device1.ServicesResolved` (≤10 s) after `Connect()` returns, so
+  downstream profile/sink work doesn't race an uninitialized Device1.
+  Tri-state return (`True` / `False` / `None`): `None` means "could
+  not check" (dbus-python missing or no device path) and the caller
+  skips the misleading "did not reach True within 10s" warning.
+- **`areload_bluez5_discover_module` — asyncio.CancelledError**
+  propagation: the helper now catches `OSError` only, so task
+  cancellation unwinds cleanly on shutdown/restart (previously
+  suppressed alongside OSError).
+- **`areload_bluez5_discover_module` — cooldown burn on failure**:
+  `_LAST_BLUEZ5_RELOAD_TS` is now written only after a full
+  successful `unload-module` + `load-module`. Trivial failures
+  (pactl unavailable, non-zero rc, module not loaded) no longer
+  block a later healthy attempt.
+- **`areload_bluez5_discover_module` — concurrent caller race**:
+  added `_BLUEZ5_RELOAD_IN_PROGRESS` flag under the existing
+  `threading.Lock` + `try/finally` so two concurrent callers can't
+  both pass the cooldown check and run the reload back-to-back.
+- **`_dbus_wait_services_resolved` wait_with_cancel contract**
+  (03c4d8a0): the helper now treats `wait_with_cancel` returning
+  `True` as "waited uninterrupted" and keeps polling, matching
+  `BluetoothManager._wait_with_cancel`'s convention. Previously
+  the contract was inverted and the helper exited after the first
+  non-True property read.
+
+### Changed
+- `_cycle_card_profile_for_mac` docstring now states True only when
+  the full off → `a2dp_sink` cycle (including the final switch)
+  completes successfully.
+
+### Tests
+965+ → 1452 passing. New coverage: scan-filter reasons
+(`test_api_bt_scan_filter.py`), event-driven pair + Just-Works agent
++ full-stdout-on-fail, tri-state dbus wait, cooldown-on-success-only,
+concurrent reload serialization, cancellation propagation.
+
 ## [2.60.5-rc.1] - 2026-04-21
 
 Small UX follow-up to v2.60.3: the opt-in pair-time adapter quiesce checkbox is
