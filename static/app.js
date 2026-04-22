@@ -6242,6 +6242,8 @@ function openBtScanModal(options) {
     _syncBtScanControls();
     var quiesceEl = document.getElementById('pair-quiesce-adapter');
     if (quiesceEl) quiesceEl.checked = false;
+    var noIoAgentEl = document.getElementById('experimental-no-input-no-output-agent');
+    if (noIoAgentEl) noIoAgentEl.checked = false;
     _applyExperimentalVisibility();
     var overlay = _getBtScanOverlay();
     if (!overlay) return false;
@@ -6521,17 +6523,30 @@ function _setScanActionState(btnEl, state, label) {
 async function pairAndAdd(mac, name, adapter, btnEl) {
     var quiesceEl = document.getElementById('pair-quiesce-adapter');
     var quiesce = !!(quiesceEl && quiesceEl.checked);
+    var noIoAgentEl = document.getElementById('experimental-no-input-no-output-agent');
+    var noIoAgent = !!(noIoAgentEl && noIoAgentEl.checked);
     var confirmMsg = 'Put "' + (name || mac) + '" into pairing mode, then click OK.\n\nThis will pair, trust, and add the device (~25 s).';
     if (quiesce) {
         confirmMsg += '\n\nOther speakers on the same adapter will pause for ~30 s during pairing and auto-reconnect afterwards.';
     }
+    if (noIoAgent) {
+        confirmMsg += '\n\nPairing agent will be registered as NoInputNoOutput (Just-Works SSP) for this attempt.';
+    }
     if (!confirm(confirmMsg)) return;
     _setScanActionState(btnEl, 'pairing', 'Pairing\u2026');
+    // Only include the per-pair override when the user explicitly ticks
+    // the scan-modal toggle. Sending `no_input_no_output_agent: false`
+    // on every pair would override the persisted EXPERIMENTAL_PAIR_JUST_WORKS
+    // config fallback that hand-edited configs rely on.
+    var pairBody = {mac: mac, adapter: adapter || autoAdapter(), quiesce_adapter: quiesce};
+    if (noIoAgent) {
+        pairBody.no_input_no_output_agent = true;
+    }
     try {
         var startedPair = await _fetchJsonOrThrow(API_BASE + '/api/bt/pair_new', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({mac: mac, adapter: adapter || autoAdapter(), quiesce_adapter: quiesce})
+            body: JSON.stringify(pairBody)
         }, 'Bluetooth pairing failed');
         var data = startedPair.data;
         if (!data.job_id) throw new Error(data.error || 'No job_id');
@@ -6926,6 +6941,10 @@ function _buildConfigPayload(options) {
     config.DISABLE_PA_RESCUE_STREAMS = !!(document.getElementById('disable-pa-rescue-streams') || {}).checked;
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
+    // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
+    // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
+    // the Settings form. The config key is still honoured as a fallback for
+    // hand-edited config.json / options.json.
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;

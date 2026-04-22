@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.3] - 2026-04-22
+
+UI follow-up to the `2.61.0-rc.1` experimental flags. No Bluetooth
+pairing behaviour changes.
+
+### Added
+- **Scan-modal toggle for the NoInputNoOutput pair agent** — the
+  `EXPERIMENTAL_PAIR_JUST_WORKS` config flag shipped in rc.1 with full
+  config/schema/diff support, but the UI had no control for it, so
+  users had to hand-edit `config.json` or `options.json` to try
+  Just-Works SSP pairing. A new "NoInputNoOutput pair agent
+  (experimental)" switch now appears in the scan-modal toolbar next to
+  "Pause other speakers on same adapter", guarded by "Show experimental
+  features". Because registering the BlueZ agent is a per-pair runtime
+  decision (not a persisted setting), it lives with scan/pair context
+  rather than under Settings and takes effect on the next pair attempt
+  only. The toggle is only included in the `pair_new` POST body when
+  the user explicitly ticks it — an unchecked toggle falls through to
+  the persisted `EXPERIMENTAL_PAIR_JUST_WORKS` config key, which
+  remains a usable fallback for hand-edited `config.json` /
+  `options.json`.
+- **`no_input_no_output_agent` per-request override in
+  `POST /api/bt/pair_new`** — the scan-modal toggle sends this field on
+  the pair request; when present, it wins over the persisted
+  `EXPERIMENTAL_PAIR_JUST_WORKS` config key. The server accepts only
+  JSON booleans here — non-bool payloads (e.g. the string `"false"`)
+  are ignored rather than being coerced via `bool()`, so they fall
+  through to the config key instead of silently forcing
+  NoInputNoOutput.
+
+### Tests
+- `tests/test_ui_experimental_toggles.py` — regression coverage for the
+  Settings-page experimental toggles (A2DP sink-recovery dance, PA
+  module reload) **and** the scan-modal NoInputNoOutput pair-agent
+  toggle: asserts template checkboxes exist under the right
+  `data-experimental` container, asserts the Settings toggles are
+  wired into `buildConfig` and populate-on-load, and asserts the
+  scan-modal toggle is passed as `no_input_no_output_agent` in the
+  `pair_new` request body only when the checkbox is ticked (i.e. not
+  baked into the body literal unconditionally) and is never persisted
+  via `buildConfig`. Would have caught the rc.1 omission immediately.
+- `tests/test_api_endpoints.py` — five new tests covering the
+  per-request override precedence (override beats config both ways),
+  endpoint forwarding of the new body field, `None`-fallback when the
+  field is omitted, and strict bool validation (non-bool payloads do
+  not get coerced).
+
 ## [2.61.0-rc.2] - 2026-04-22
 
 Build-hygiene follow-up to `2.61.0-rc.1`. No runtime behaviour changes.

@@ -1148,12 +1148,26 @@ def api_bt_pair_new():
     if not _try_acquire_bt_operation():
         return _bt_operation_conflict_response()
     quiesce = bool(data.get("quiesce_adapter"))
+    # Per-pair override for the NoInputNoOutput pairing agent. The scan
+    # modal's experimental toggle sends this explicitly; when absent
+    # (legacy clients, hand-crafted curl) or when the payload supplies a
+    # non-bool value, the pair runner falls back to the persisted config
+    # key. Non-bool coercion (``bool("false") -> True``) would silently
+    # force NoInputNoOutput, so we accept only JSON booleans here.
+    no_io_agent_raw = data.get("no_input_no_output_agent")
+    no_input_no_output_agent: bool | None = no_io_agent_raw if isinstance(no_io_agent_raw, bool) else None
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
 
     def _run_job():
         try:
-            _run_standalone_pair(job_id, mac, adapter, quiesce=quiesce)
+            _run_standalone_pair(
+                job_id,
+                mac,
+                adapter,
+                quiesce=quiesce,
+                no_input_no_output_agent=no_input_no_output_agent,
+            )
         finally:
             _release_bt_operation()
 
@@ -1175,17 +1189,37 @@ def api_bt_pair_new_result(job_id: str):
     return jsonify(job)
 
 
-def _run_standalone_pair(job_id: str, mac: str, adapter: str, *, quiesce: bool = False) -> None:
-    """Run pair + trust via bluetoothctl for a device not yet in config."""
+def _run_standalone_pair(
+    job_id: str,
+    mac: str,
+    adapter: str,
+    *,
+    quiesce: bool = False,
+    no_input_no_output_agent: bool | None = None,
+) -> None:
+    """Run pair + trust via bluetoothctl for a device not yet in config.
+
+    ``no_input_no_output_agent`` is a per-request override for the
+    NoInputNoOutput pairing agent (Just-Works SSP). ``None`` (the
+    default) means "use whatever config.EXPERIMENTAL_PAIR_JUST_WORKS
+    says". A bool explicitly wins over config — the scan-modal toggle is
+    the authoritative intent for this pair attempt.
+    """
     adapter = _resolve_adapter_to_mac(adapter)
     if quiesce and adapter:
         with quiesce_adapter_peers(adapter, exclude_mac=mac):
-            _run_standalone_pair_inner(job_id, mac, adapter)
+            _run_standalone_pair_inner(job_id, mac, adapter, no_input_no_output_agent=no_input_no_output_agent)
     else:
-        _run_standalone_pair_inner(job_id, mac, adapter)
+        _run_standalone_pair_inner(job_id, mac, adapter, no_input_no_output_agent=no_input_no_output_agent)
 
 
-def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
+def _run_standalone_pair_inner(
+    job_id: str,
+    mac: str,
+    adapter: str,
+    *,
+    no_input_no_output_agent: bool | None = None,
+) -> None:
     """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op."""
     try:
         cleanup_cmds: list[str] = []
@@ -1210,12 +1244,17 @@ def _run_standalone_pair_inner(job_id: str, mac: str, adapter: str) -> None:
         # `agent NoInputNoOutput` forces Just-Works SSP (both sides auto-accept
         # without a passkey exchange). Many consumer BT audio sinks cancel
         # authentication when the default `KeyboardDisplay` agent negotiates
-        # a passkey; opt-in flag lets affected users work around it (issue #168).
-        try:
-            cfg = load_config()
-        except Exception:
-            cfg = {}
-        agent_cmd = "agent NoInputNoOutput" if cfg.get("EXPERIMENTAL_PAIR_JUST_WORKS") else "agent on"
+        # a passkey; opt-in toggle lets affected users work around it (issue #168).
+        # Precedence: per-request override (scan modal toggle) > config key.
+        if no_input_no_output_agent is not None:
+            use_no_io_agent = no_input_no_output_agent
+        else:
+            try:
+                cfg = load_config()
+            except Exception:
+                cfg = {}
+            use_no_io_agent = bool(cfg.get("EXPERIMENTAL_PAIR_JUST_WORKS"))
+        agent_cmd = "agent NoInputNoOutput" if use_no_io_agent else "agent on"
 
         initial_cmds: list[str] = []
         if adapter:

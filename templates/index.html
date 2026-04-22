@@ -712,6 +712,13 @@
                                             <span class="config-switch-track"></span>
                                         </span>
                                     </label>
+                                    <label class="bt-scan-toggle" data-experimental style="display:none" title="Experimental (issue #168). Register bluetoothctl's pairing agent as NoInputNoOutput so Secure Simple Pairing runs Just-Works (no passkey exchange). Workaround for audio sinks that cancel authentication under the default KeyboardDisplay agent. Applies to the next pair attempt only.">
+                                        <span>NoInputNoOutput pair agent (experimental)</span>
+                                        <span class="config-switch compact">
+                                            <input type="checkbox" id="experimental-no-input-no-output-agent">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </label>
                                     <button type="button" class="btn btn-sm btn-secondary" id="scan-rescan-btn" data-action="start-bt-scan">
                                         <span class="btn-icon-slot ui-icon-slot" data-ui-icon="refresh" aria-hidden="true"></span><span>Rescan</span>
                                     </button>
