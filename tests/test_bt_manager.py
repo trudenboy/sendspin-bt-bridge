@@ -1381,6 +1381,65 @@ def test_dbus_wait_services_resolved_respects_cancellation():
     assert ok is False
 
 
+def test_dbus_wait_services_resolved_returns_none_when_dbus_unavailable():
+    """When ``dbus`` module isn't importable, helper must return ``None`` (not False).
+
+    Returning False would look indistinguishable from a real 10s timeout and
+    caused misleading "did not reach True within 10s" warnings on systems
+    without dbus-python. The caller distinguishes "could not check" from
+    "checked and timed out" by the ``None`` sentinel.
+    """
+    import bt_dbus
+
+    with patch.object(bt_dbus, "dbus", None):
+        result = bt_dbus._dbus_wait_services_resolved(
+            "/org/bluez/hci0/dev_X",
+            is_connected_check=lambda: True,
+            wait_with_cancel=lambda _: True,
+            timeout=1.0,
+            poll_interval=0.01,
+        )
+    assert result is None
+
+
+def test_dbus_wait_services_resolved_returns_none_when_device_path_missing():
+    """Missing device_path is a not-actually-checked case — must be ``None``."""
+    import bt_dbus
+
+    result = bt_dbus._dbus_wait_services_resolved(
+        None,
+        is_connected_check=lambda: True,
+        wait_with_cancel=lambda _: True,
+        timeout=1.0,
+        poll_interval=0.01,
+    )
+    assert result is None
+
+
+def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manager):
+    """If ``_dbus_wait_services_resolved`` reports unchecked (None), no warning.
+
+    Otherwise systems without dbus-python see spurious "did not reach True
+    within 10s" entries on every reconnect.
+    """
+    with (
+        patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(bt_manager, "_force_a2dp_sink_profile"),
+        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=None),
+        patch("bluetooth_manager.logger") as mock_logger,
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
+        assert bt_manager.connect_device() is True
+
+    warn_msgs = [str(call) for call in mock_logger.warning.call_args_list]
+    assert not any("ServicesResolved" in m for m in warn_msgs), (
+        f"no ServicesResolved warning expected when dbus unavailable; got: {warn_msgs}"
+    )
+
+
 def test_dbus_wait_services_resolved_polls_multiple_times_until_resolved():
     """Uninterrupted wait (wait_with_cancel returns True) must keep polling.
 

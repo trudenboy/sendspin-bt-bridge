@@ -332,3 +332,110 @@ def test_reload_bluez5_discover_module_unloads_and_loads_when_present():
     assert "list" in verbs
     assert "unload-module" in verbs
     assert "load-module" in verbs
+
+
+def test_reload_bluez5_discover_module_propagates_cancellation():
+    """``asyncio.CancelledError`` during pactl must NOT be swallowed.
+
+    Suppressing cancellation here can hang shutdown/restart. The function
+    must let the cancel propagate so the outer task can unwind cleanly.
+    """
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        raise asyncio.CancelledError
+
+    async def runner():
+        with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+            await areload_bluez5_discover_module()
+
+    import pytest as _pytest
+
+    with _pytest.raises(asyncio.CancelledError):
+        asyncio.run(runner())
+
+
+def test_reload_bluez5_discover_module_does_not_burn_cooldown_on_trivial_failures():
+    """A failed ``pactl list modules`` call must NOT set the cooldown timestamp.
+
+    If we burn the 60s cooldown before confirming anything happened, a later
+    successful reload attempt is needlessly blocked. Cooldown should only
+    fire after a reload actually completes.
+    """
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 1  # pactl list fails
+
+        async def communicate():
+            return (b"", b"pactl not available")
+
+        proc.communicate = communicate
+        return proc
+
+    with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is False
+    # Cooldown must NOT be burned because nothing actually got reloaded.
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
+
+
+def test_reload_bluez5_discover_module_does_not_burn_cooldown_when_module_absent():
+    """If module-bluez5-discover isn't loaded, cooldown must NOT be burned."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*_args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            return (b"12\tmodule-null-sink\tc=1\n", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    with patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is False
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
+
+
+def test_reload_bluez5_discover_module_burns_cooldown_after_success():
+    """On successful unload+load, the cooldown timestamp must be updated."""
+    from services.pulse import areload_bluez5_discover_module
+
+    _reset_bluez5_reload_cooldown()
+
+    async def fake_create_subprocess_exec(*args, **_kwargs):
+        proc = MagicMock()
+        proc.returncode = 0
+
+        async def communicate():
+            if args[:3] == ("pactl", "list", "modules"):
+                return (b"25\tmodule-bluez5-discover\t\n", b"")
+            return (b"", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    async def fake_sleep(_delay):
+        return None
+
+    with (
+        patch.object(asyncio, "create_subprocess_exec", side_effect=fake_create_subprocess_exec),
+        patch.object(asyncio, "sleep", side_effect=fake_sleep),
+    ):
+        result = asyncio.run(areload_bluez5_discover_module())
+
+    assert result is True
+    assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS > 0.0

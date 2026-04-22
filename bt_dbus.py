@@ -102,7 +102,7 @@ def _dbus_wait_services_resolved(
     wait_with_cancel: Callable[[float], bool],
     timeout: float = 10.0,
     poll_interval: float = 0.5,
-) -> bool:
+) -> bool | None:
     """Poll ``Device1.ServicesResolved`` until True or timeout.
 
     Bails out early if ``is_connected_check`` reports the device has
@@ -111,11 +111,16 @@ def _dbus_wait_services_resolved(
     ``False`` if the caller requested cancellation during the wait (e.g.
     a pending release/stop). This matches ``BluetoothManager._wait_with_cancel``.
 
-    Returns ``True`` if ServicesResolved reached True within the timeout,
-    ``False`` otherwise (including cancellation / disconnect).
+    Tri-state return:
+    - ``True`` — ServicesResolved reached True within the timeout.
+    - ``False`` — we polled and either timed out, got cancelled, or the
+      device disconnected. Caller may log a "did not reach True" warning.
+    - ``None`` — we could not check at all (dbus-python not installed, or
+      no ``device_path``). Callers MUST treat this as "proceed silently"
+      and skip the misleading-timeout warning.
     """
     if not device_path or dbus is None:
-        return False
+        return None
     deadline = time.monotonic() + max(0.0, timeout)
     while True:
         resolved = _dbus_get_device_property(device_path, "ServicesResolved")

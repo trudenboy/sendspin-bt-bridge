@@ -90,8 +90,9 @@ def _cycle_card_profile_for_mac(pa_mac: str) -> bool:
 
     Used when the direct ``set_card_profile`` succeeded but PA still did not
     publish a ``bluez_sink.*`` for the device (state-confusion after
-    ``module-rescue-streams`` / rapid reconnect). Returns True if the cycle
-    switch was performed.
+    ``module-rescue-streams`` / rapid reconnect). Returns ``True`` only when
+    the off → ``a2dp_sink`` cycle completes successfully, including the final
+    switch back to the target profile.
     """
     expected = f"bluez_card.{pa_mac}"
     try:

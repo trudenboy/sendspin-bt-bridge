@@ -419,7 +419,6 @@ async def areload_bluez5_discover_module() -> bool:
                 now - _LAST_BLUEZ5_RELOAD_TS,
             )
             return False
-        _LAST_BLUEZ5_RELOAD_TS = now
     try:
         list_proc = await asyncio.create_subprocess_exec(
             "pactl",
@@ -430,7 +429,7 @@ async def areload_bluez5_discover_module() -> bool:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await list_proc.communicate()
-    except (OSError, asyncio.CancelledError) as exc:
+    except OSError as exc:
         logger.warning("areload_bluez5_discover_module list failed: %s", exc)
         return False
     if list_proc.returncode != 0:
@@ -454,7 +453,7 @@ async def areload_bluez5_discover_module() -> bool:
             stderr=asyncio.subprocess.PIPE,
         )
         _, unload_err = await unload_proc.communicate()
-    except (OSError, asyncio.CancelledError) as exc:
+    except OSError as exc:
         logger.warning("pactl unload-module failed: %s", exc)
         return False
     if unload_proc.returncode != 0:
@@ -474,7 +473,7 @@ async def areload_bluez5_discover_module() -> bool:
             stderr=asyncio.subprocess.PIPE,
         )
         _, load_err = await load_proc.communicate()
-    except (OSError, asyncio.CancelledError) as exc:
+    except OSError as exc:
         logger.warning("pactl load-module module-bluez5-discover failed: %s", exc)
         return False
     if load_proc.returncode != 0:
@@ -483,6 +482,8 @@ async def areload_bluez5_discover_module() -> bool:
             load_err.decode(errors="replace").strip(),
         )
         return False
+    with _BLUEZ5_RELOAD_LOCK:
+        _LAST_BLUEZ5_RELOAD_TS = _time.monotonic()
     logger.warning("Reloaded module-bluez5-discover as BT sink recovery last resort")
     return True
 

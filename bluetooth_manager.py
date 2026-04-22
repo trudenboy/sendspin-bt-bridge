@@ -665,12 +665,13 @@ class BluetoothManager:
                 # poking audio. Prevents all downstream profile/sink work from
                 # racing an uninitialized Device1. Non-blocking: we proceed
                 # even on timeout — this is a timing hint, not a hard gate.
-                if not _dbus_wait_services_resolved(
+                resolved = _dbus_wait_services_resolved(
                     self._dbus_device_path,
                     is_connected_check=self.is_device_connected,
                     wait_with_cancel=self._wait_with_cancel,
                     timeout=10.0,
-                ):
+                )
+                if resolved is False:
                     if self._reconnect_cancelled():
                         return False
                     logger.warning(
