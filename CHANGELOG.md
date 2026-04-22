@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.3] - 2026-04-22
+
+UI follow-up to the `2.61.0-rc.1` experimental flags. No backend or
+Bluetooth behaviour changes.
+
+### Added
+- **UI toggle for `EXPERIMENTAL_PAIR_JUST_WORKS`** — the flag shipped in
+  rc.1 with full config/schema/diff support, but the Settings page had
+  no checkbox to flip it, so users had to hand-edit `config.json` or
+  `options.json` to enable Just-Works SSP pairing. A new switch now
+  appears under "Show experimental features" alongside the existing
+  sink-recovery and PA-module-reload toggles. Takes effect on the next
+  pair attempt — no restart needed (matches the no-action
+  classification in `services/config_diff.py`).
+
+### Tests
+- `tests/test_ui_experimental_toggles.py` — parametrised regression
+  tests asserting each experimental flag has a template checkbox (under
+  a `data-experimental` container), a `buildConfig` read-line in
+  `app.js`, and a populate-on-load line. Would have caught the rc.1
+  omission immediately.
+
 ## [2.61.0-rc.2] - 2026-04-22
 
 Build-hygiene follow-up to `2.61.0-rc.1`. No runtime behaviour changes.

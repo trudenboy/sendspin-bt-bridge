@@ -678,6 +678,18 @@
                                     </span>
                                 </span>
                             </label>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Workaround for sinks that cancel Secure Simple Pairing under the default KeyboardDisplay agent (issue #168). Registers bluetoothctl's agent as NoInputNoOutput so pairing runs Just-Works (no passkey exchange). Takes effect on the next pair attempt — no restart needed.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Experimental: Just-Works SSP agent</strong>
+                                    <span class="form-hint">Register pairing agent as NoInputNoOutput. Applies on next pair attempt.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="EXPERIMENTAL_PAIR_JUST_WORKS" id="experimental-pair-just-works">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
 
