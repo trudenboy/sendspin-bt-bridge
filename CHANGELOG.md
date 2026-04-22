@@ -7,20 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Scan-modal pair-agent toggle no longer clobbers the config fallback** —
-  `pairAndAdd` used to send `no_input_no_output_agent: false` on every
-  pair when the scan-modal toggle was unchecked, which overrode the
-  persisted `EXPERIMENTAL_PAIR_JUST_WORKS` config key that the rc.3
-  CHANGELOG promised as a fallback for hand-edited configs. The field
-  is now only added to the `pair_new` POST body when the user
-  explicitly ticks the toggle; unchecked means "fall back to config".
-- **`/api/bt/pair_new` validates `no_input_no_output_agent` strictly** —
-  previously coerced via `bool()`, which turned truthy non-booleans
-  (e.g. the string `"false"`) into `True` and silently forced the
-  NoInputNoOutput agent. Non-bool payloads now fall back to the config
-  key instead of being coerced.
-
 ## [2.61.0-rc.3] - 2026-04-22
 
 UI follow-up to the `2.61.0-rc.1` experimental flags. No Bluetooth
@@ -37,12 +23,19 @@ pairing behaviour changes.
   features". Because registering the BlueZ agent is a per-pair runtime
   decision (not a persisted setting), it lives with scan/pair context
   rather than under Settings and takes effect on the next pair attempt
-  only.
+  only. The toggle is only included in the `pair_new` POST body when
+  the user explicitly ticks it — an unchecked toggle falls through to
+  the persisted `EXPERIMENTAL_PAIR_JUST_WORKS` config key, which
+  remains a usable fallback for hand-edited `config.json` /
+  `options.json`.
 - **`no_input_no_output_agent` per-request override in
   `POST /api/bt/pair_new`** — the scan-modal toggle sends this field on
   the pair request; when present, it wins over the persisted
-  `EXPERIMENTAL_PAIR_JUST_WORKS` config key. The legacy key is still
-  honoured as a fallback for hand-edited config.
+  `EXPERIMENTAL_PAIR_JUST_WORKS` config key. The server accepts only
+  JSON booleans here — non-bool payloads (e.g. the string `"false"`)
+  are ignored rather than being coerced via `bool()`, so they fall
+  through to the config key instead of silently forcing
+  NoInputNoOutput.
 
 ### Tests
 - `tests/test_ui_experimental_toggles.py` — regression coverage for the
@@ -52,11 +45,14 @@ pairing behaviour changes.
   `data-experimental` container, asserts the Settings toggles are
   wired into `buildConfig` and populate-on-load, and asserts the
   scan-modal toggle is passed as `no_input_no_output_agent` in the
-  `pair_new` request body instead of being persisted via
-  `buildConfig`. Would have caught the rc.1 omission immediately.
-- `tests/test_api_endpoints.py` — three new tests covering the
-  per-request override precedence (override beats config both ways) and
-  endpoint forwarding of the new body field.
+  `pair_new` request body only when the checkbox is ticked (i.e. not
+  baked into the body literal unconditionally) and is never persisted
+  via `buildConfig`. Would have caught the rc.1 omission immediately.
+- `tests/test_api_endpoints.py` — five new tests covering the
+  per-request override precedence (override beats config both ways),
+  endpoint forwarding of the new body field, `None`-fallback when the
+  field is omitted, and strict bool validation (non-bool payloads do
+  not get coerced).
 
 ## [2.61.0-rc.2] - 2026-04-22
 
