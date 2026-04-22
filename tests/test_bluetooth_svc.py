@@ -120,6 +120,50 @@ def test_bt_remove_device_skips_cache_cleanup_without_adapter(tmp_path, monkeypa
         clean_mock.assert_not_called()
 
 
+def test_bt_remove_device_logs_warning_when_bluetoothctl_reports_failure(caplog):
+    """bluetoothctl returns exit 0 even when `remove <mac>` fails (device
+    not in BlueZ tree, etc.). The "BT stack: removed" info log must not
+    fire in that case — it misrepresents the state and misleads operators
+    reading logs. Instead, a warning with the output detail is logged.
+    """
+    import logging
+
+    with patch("services.bluetooth.threading.Thread") as mock_thread:
+        bt_remove_device("AA:BB:CC:DD:EE:FF")
+        target_fn = mock_thread.call_args[1]["target"]
+        failure_output = "Device AA:BB:CC:DD:EE:FF not available\n"
+        with patch("services.bluetooth.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout=failure_output, stderr="", returncode=0)
+            with caplog.at_level(logging.DEBUG, logger="services.bluetooth"):
+                target_fn()
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("BT stack: removed" in m for m in messages), (
+        "Must not claim success when bluetoothctl reports the device was not available"
+    )
+    assert any("not available" in m for m in messages), (
+        "Expected a warning/log surfacing the bluetoothctl failure detail"
+    )
+
+
+def test_bt_remove_device_logs_removed_only_on_success(caplog):
+    """When bluetoothctl actually removes the device (output contains
+    "Device has been removed"), the success log fires as before."""
+    import logging
+
+    with patch("services.bluetooth.threading.Thread") as mock_thread:
+        bt_remove_device("AA:BB:CC:DD:EE:FF")
+        target_fn = mock_thread.call_args[1]["target"]
+        success_output = "[DEL] Device AA:BB:CC:DD:EE:FF Speaker\nDevice has been removed\n"
+        with patch("services.bluetooth.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout=success_output, stderr="", returncode=0)
+            with caplog.at_level(logging.INFO, logger="services.bluetooth"):
+                target_fn()
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("BT stack: removed" in m for m in messages)
+
+
 # ---------------------------------------------------------------------------
 # is_audio_device
 # ---------------------------------------------------------------------------
