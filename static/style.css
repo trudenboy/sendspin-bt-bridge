@@ -5549,6 +5549,38 @@ body {
             border-color: rgba(245, 158, 11, 0.32);
         }
 
+        /* Experimental feature highlight — mirrors the amber dirty pattern
+           above but in red, so rows revealed by the "Show experimental
+           features" master switch stand out from stable settings. The
+           ::before badge gives a text signal too (not colour-alone). */
+        [data-experimental]:is(.config-setting-row, .bt-scan-toggle) {
+            position: relative;
+            border-radius: 10px;
+            box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.32);
+            background: rgba(239, 68, 68, 0.05);
+            padding-inline-end: 92px;
+        }
+        [data-experimental]:is(.config-setting-row, .bt-scan-toggle)::before {
+            content: "EXPERIMENTAL";
+            position: absolute;
+            top: 6px;
+            right: 10px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            line-height: 1;
+            padding: 3px 6px;
+            border-radius: 4px;
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            pointer-events: none;
+        }
+        [data-experimental] .config-switch-track,
+        [data-experimental] .bt-switch-track {
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16);
+        }
+
         /* Scan spinner */
         @keyframes spin { to { transform: rotate(360deg); } }
         .scan-spinner {

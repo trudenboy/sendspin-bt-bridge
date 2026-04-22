@@ -32,6 +32,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = REPO_ROOT / "templates" / "index.html"
 APP_JS = REPO_ROOT / "static" / "app.js"
+STYLE_CSS = REPO_ROOT / "static" / "style.css"
 
 
 SETTINGS_EXPERIMENTAL_KEYS = [
@@ -172,6 +173,58 @@ def test_pair_agent_field_is_only_sent_when_checkbox_is_checked() -> None:
         "no_input_no_output_agent is still baked into the body literal next to "
         "quiesce_adapter — it would be sent on every pair (always false when "
         "unchecked), overriding the EXPERIMENTAL_PAIR_JUST_WORKS config fallback"
+    )
+
+
+# --- Visual highlight: red treatment on any [data-experimental] element ---
+
+
+def test_experimental_rows_have_red_visual_treatment() -> None:
+    """Every ``[data-experimental]`` row must get a visible red styling
+    in ``static/style.css`` — mirroring the amber ``.config-field-dirty``
+    pattern that marks unsaved settings, but in red. Without this,
+    experimental toggles look identical to stable settings once the
+    master switch is on, and operators have no at-a-glance signal that
+    a given row is lightly tested / may require a restart / has side
+    effects across devices.
+
+    String-level check: the stylesheet must reference ``[data-experimental]``
+    at least once, and the block touching it must use a red channel
+    (``rgba(239, 68, 68`` or ``#ef4444`` / ``#dc2626`` — the red family
+    used elsewhere for destructive-action hints).
+    """
+    css = STYLE_CSS.read_text(encoding="utf-8")
+    assert "[data-experimental]" in css, (
+        "static/style.css has no rule targeting [data-experimental] — "
+        "experimental rows will look identical to stable settings"
+    )
+    red_family = re.compile(r"rgba\(\s*239\s*,\s*68\s*,\s*68\s*,|#ef4444|#dc2626|#b91c1c", re.IGNORECASE)
+    # Find each rule block that mentions [data-experimental] and verify it uses a red colour.
+    rule_blocks = re.findall(
+        r"[^{}]*\[data-experimental\][^{}]*\{[^{}]*\}",
+        css,
+    )
+    assert rule_blocks, "no CSS rule block found that targets [data-experimental]"
+    combined = "\n".join(rule_blocks)
+    assert red_family.search(combined), (
+        "[data-experimental] rules exist but none use a red colour "
+        "(rgba(239, 68, 68, ...), #ef4444, #dc2626) — the highlight won't be red"
+    )
+
+
+def test_experimental_badge_label_is_present() -> None:
+    """The visual treatment must include a literal ``EXPERIMENTAL`` text
+    marker (via ``content: "EXPERIMENTAL"`` pseudo-element or an inline
+    badge) so the signal doesn't rely on colour alone. Colour-blind
+    operators and screenshots in bug reports need the word itself.
+    """
+    css = STYLE_CSS.read_text(encoding="utf-8")
+    # Accept either a ::before content value or an explicit badge class
+    # (e.g. .experimental-badge) defined next to the [data-experimental] rules.
+    has_pseudo_label = bool(re.search(r'content:\s*["\']\s*EXPERIMENTAL\s*["\']', css, re.IGNORECASE))
+    assert has_pseudo_label, (
+        "no ::before { content: 'EXPERIMENTAL' } pseudo-element found in static/style.css — "
+        "add a text marker so the red tint isn't the only signal"
     )
 
 
