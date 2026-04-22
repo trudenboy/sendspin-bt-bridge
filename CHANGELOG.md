@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0-rc.6] - 2026-04-22
+
+### Changed
+- **Explicit A2DP Sink profile request right after pair succeeds** —
+  `pair_device` now issues an explicit
+  `org.bluez.Device1.ConnectProfile(A2DP_SINK_UUID)` via D-Bus
+  immediately after bluetoothctl reports `Pairing successful`, before
+  returning to the connect loop. On BlueZ 5.86 the generic `Connect()`
+  that follows can auto-negotiate the wrong profile under the dual-role
+  regression (bluez/bluez#1922), leaving the device bonded but with no
+  A2DP sink published. Calling ConnectProfile while the device is still
+  fresh from pair narrows that window — on a healthy stack an
+  `org.bluez.Error.AlreadyConnected` response from the underlying D-Bus
+  call is treated as benign, so the helper is effectively a cheap no-op.
+  Best-effort: if the D-Bus call fails, the pair result is still
+  reported as success and `_connect_device_inner` will retry the same
+  hint after its own `Connect()`.
+
 ## [2.61.0-rc.5] - 2026-04-22
 
 ### Added
