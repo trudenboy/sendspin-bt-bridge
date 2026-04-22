@@ -1150,10 +1150,12 @@ def api_bt_pair_new():
     quiesce = bool(data.get("quiesce_adapter"))
     # Per-pair override for the NoInputNoOutput pairing agent. The scan
     # modal's experimental toggle sends this explicitly; when absent
-    # (legacy clients, hand-crafted curl), the pair runner falls back to
-    # the persisted config key.
+    # (legacy clients, hand-crafted curl) or when the payload supplies a
+    # non-bool value, the pair runner falls back to the persisted config
+    # key. Non-bool coercion (``bool("false") -> True``) would silently
+    # force NoInputNoOutput, so we accept only JSON booleans here.
     no_io_agent_raw = data.get("no_input_no_output_agent")
-    no_input_no_output_agent: bool | None = None if no_io_agent_raw is None else bool(no_io_agent_raw)
+    no_input_no_output_agent: bool | None = no_io_agent_raw if isinstance(no_io_agent_raw, bool) else None
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
 

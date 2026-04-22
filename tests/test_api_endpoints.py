@@ -765,6 +765,59 @@ def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkey
     assert captured["mac"] == "AA:BB:CC:DD:EE:FF"
 
 
+def test_bt_pair_new_without_no_io_agent_field_passes_none_to_runner(client, monkeypatch):
+    """When the body omits ``no_input_no_output_agent``, the pair runner
+    must receive ``None`` so the persisted EXPERIMENTAL_PAIR_JUST_WORKS
+    config key is honoured as a fallback. This is the CHANGELOG-promised
+    behaviour for hand-edited config."""
+    import routes.api_bt as api_bt_mod
+
+    captured: dict = {}
+
+    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+        captured["no_input_no_output_agent"] = no_input_no_output_agent
+
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
+    monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
+    assert resp.status_code == 200, resp.get_json()
+    assert captured["no_input_no_output_agent"] is None, (
+        "field omitted from body must yield None (fall back to config), not False"
+    )
+
+
+def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
+    """Non-bool JSON values for ``no_input_no_output_agent`` must not be
+    coerced via ``bool()`` — a string like ``"false"`` is truthy and
+    would silently force NoInputNoOutput. The pair runner must receive
+    ``None`` (fall back to config) instead of the coerced truthy value."""
+    import routes.api_bt as api_bt_mod
+
+    captured: dict = {}
+
+    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+        captured["no_input_no_output_agent"] = no_input_no_output_agent
+
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
+    monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
+    _patch_pair_worker_sync(monkeypatch, api_bt_mod)
+
+    resp = client.post(
+        "/api/bt/pair_new",
+        json={"mac": "AA:BB:CC:DD:EE:FF", "no_input_no_output_agent": "false"},
+    )
+    assert resp.status_code == 200, resp.get_json()
+    assert captured["no_input_no_output_agent"] is None, (
+        'non-bool input "false" must NOT be coerced to True — expected None fallback'
+    )
+
+
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     import routes.api_bt as api_bt_mod
 

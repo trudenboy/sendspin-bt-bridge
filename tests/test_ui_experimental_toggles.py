@@ -48,7 +48,7 @@ def test_settings_experimental_toggle_has_template_checkbox(config_key: str, dom
     guarded by data-experimental so it only renders when the master
     'Show experimental features' switch is on.
     """
-    html = INDEX_HTML.read_text()
+    html = INDEX_HTML.read_text(encoding="utf-8")
     assert f'name="{config_key}"' in html, f'{config_key}: no <input name="{config_key}"> in templates/index.html'
     assert f'id="{dom_id}"' in html, f'{config_key}: no <input id="{dom_id}"> in templates/index.html'
     checkbox_block = _extract_checkbox_label_block(html, dom_id)
@@ -58,7 +58,7 @@ def test_settings_experimental_toggle_has_template_checkbox(config_key: str, dom
 @pytest.mark.parametrize(("config_key", "dom_id"), SETTINGS_EXPERIMENTAL_KEYS)
 def test_settings_experimental_toggle_is_read_by_buildconfig(config_key: str, dom_id: str) -> None:
     """app.js must wire Settings-page experimental checkboxes into POST /api/config."""
-    js = APP_JS.read_text()
+    js = APP_JS.read_text(encoding="utf-8")
     pattern = re.compile(
         rf"config\.{re.escape(config_key)}\s*=.*getElementById\(['\"]{re.escape(dom_id)}['\"]\)",
     )
@@ -70,7 +70,7 @@ def test_settings_experimental_toggle_is_read_by_buildconfig(config_key: str, do
 @pytest.mark.parametrize(("config_key", "dom_id"), SETTINGS_EXPERIMENTAL_KEYS)
 def test_settings_experimental_toggle_is_populated_on_load(config_key: str, dom_id: str) -> None:
     """app.js must populate Settings checkboxes from the fetched config."""
-    js = APP_JS.read_text()
+    js = APP_JS.read_text(encoding="utf-8")
     populate_pattern = re.compile(
         rf"getElementById\(['\"]{re.escape(dom_id)}['\"]\)[\s\S]{{0,200}}?"
         rf"\.checked\s*=\s*!!\s*config\.{re.escape(config_key)}",
@@ -88,7 +88,7 @@ def test_pair_agent_toggle_is_not_in_settings_experimental_section() -> None:
     under Settings → Show experimental features. It belongs in the scan
     modal's toolbar next to pair-quiesce because it's a per-pair context
     option, not a global restart-required setting."""
-    html = INDEX_HTML.read_text()
+    html = INDEX_HTML.read_text(encoding="utf-8")
     block = _extract_checkbox_label_block(html, PAIR_AGENT_TOGGLE_ID)
     assert "config-setting-row" not in block, (
         f"{PAIR_AGENT_TOGGLE_ID} is still living inside a Settings config-setting-row "
@@ -100,7 +100,7 @@ def test_pair_agent_toggle_lives_in_scan_modal_toolbar() -> None:
     """The NoInputNoOutput pair-agent checkbox must sit inside the scan
     modal (alongside pair-quiesce) with bt-scan-toggle styling and be
     guarded by data-experimental."""
-    html = INDEX_HTML.read_text()
+    html = INDEX_HTML.read_text(encoding="utf-8")
     assert f'id="{PAIR_AGENT_TOGGLE_ID}"' in html, f"{PAIR_AGENT_TOGGLE_ID} checkbox missing from templates/index.html"
     scan_modal_start = html.find('id="bt-scan-modal-overlay"')
     scan_modal_end = html.find("</div>", html.find("bt-scan-modal-footer"))
@@ -121,7 +121,7 @@ def test_pair_agent_toggle_is_not_wired_to_buildconfig() -> None:
     NOT be wired into the Settings save path. Neither the old
     ``just_works`` references nor the new ``no_input_no_output_agent``
     id should appear in buildConfig."""
-    js = APP_JS.read_text()
+    js = APP_JS.read_text(encoding="utf-8")
     forbidden = [
         # legacy names — must not resurface in buildConfig
         r"config\.EXPERIMENTAL_PAIR_JUST_WORKS\s*=.*getElementById",
@@ -137,7 +137,7 @@ def test_pair_agent_state_is_passed_in_pair_request_body() -> None:
     """pairAndAdd in app.js must read the scan-modal checkbox and include
     its state as ``no_input_no_output_agent`` in the POST body of
     /api/bt/pair_new so the server uses it as a per-request override."""
-    js = APP_JS.read_text()
+    js = APP_JS.read_text(encoding="utf-8")
     idx = js.find("async function pairAndAdd(")
     assert idx != -1, "pairAndAdd not found in app.js"
     end = js.find("\nasync function ", idx + 1)
@@ -145,6 +145,32 @@ def test_pair_agent_state_is_passed_in_pair_request_body() -> None:
     assert PAIR_AGENT_TOGGLE_ID in fn_body, f"pairAndAdd does not reference the {PAIR_AGENT_TOGGLE_ID} checkbox"
     assert "no_input_no_output_agent" in fn_body, (
         "pairAndAdd does not pass no_input_no_output_agent in the /api/bt/pair_new request body"
+    )
+
+
+def test_pair_agent_field_is_only_sent_when_checkbox_is_checked() -> None:
+    """pairAndAdd must only include ``no_input_no_output_agent`` in the
+    POST body when the user explicitly ticks the scan-modal toggle.
+    Sending it unconditionally (e.g. ``no_input_no_output_agent: false``
+    on every pair) would override the persisted
+    ``EXPERIMENTAL_PAIR_JUST_WORKS`` config key that hand-edited configs
+    rely on as a fallback. The JS must gate the field on the checkbox
+    state, e.g. ``if (noIoAgent) body.no_input_no_output_agent = true``.
+    """
+    js = APP_JS.read_text(encoding="utf-8")
+    idx = js.find("async function pairAndAdd(")
+    assert idx != -1, "pairAndAdd not found in app.js"
+    end = js.find("\nasync function ", idx + 1)
+    fn_body = js[idx : end if end != -1 else len(js)]
+    # Field must not appear as a plain key-in-literal-object next to quiesce_adapter,
+    # which would mean it's sent unconditionally.
+    assert not re.search(
+        r"quiesce_adapter\s*:[^,}]+,\s*no_input_no_output_agent\s*:",
+        fn_body,
+    ), (
+        "no_input_no_output_agent is still baked into the body literal next to "
+        "quiesce_adapter — it would be sent on every pair (always false when "
+        "unchecked), overriding the EXPERIMENTAL_PAIR_JUST_WORKS config fallback"
     )
 
 

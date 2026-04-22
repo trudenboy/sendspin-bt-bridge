@@ -6534,11 +6534,19 @@ async function pairAndAdd(mac, name, adapter, btnEl) {
     }
     if (!confirm(confirmMsg)) return;
     _setScanActionState(btnEl, 'pairing', 'Pairing\u2026');
+    // Only include the per-pair override when the user explicitly ticks
+    // the scan-modal toggle. Sending `no_input_no_output_agent: false`
+    // on every pair would override the persisted EXPERIMENTAL_PAIR_JUST_WORKS
+    // config fallback that hand-edited configs rely on.
+    var pairBody = {mac: mac, adapter: adapter || autoAdapter(), quiesce_adapter: quiesce};
+    if (noIoAgent) {
+        pairBody.no_input_no_output_agent = true;
+    }
     try {
         var startedPair = await _fetchJsonOrThrow(API_BASE + '/api/bt/pair_new', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({mac: mac, adapter: adapter || autoAdapter(), quiesce_adapter: quiesce, no_input_no_output_agent: noIoAgent})
+            body: JSON.stringify(pairBody)
         }, 'Bluetooth pairing failed');
         var data = startedPair.data;
         if (!data.job_id) throw new Error(data.error || 'No job_id');

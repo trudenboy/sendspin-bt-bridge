@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Scan-modal pair-agent toggle no longer clobbers the config fallback** —
+  `pairAndAdd` used to send `no_input_no_output_agent: false` on every
+  pair when the scan-modal toggle was unchecked, which overrode the
+  persisted `EXPERIMENTAL_PAIR_JUST_WORKS` config key that the rc.3
+  CHANGELOG promised as a fallback for hand-edited configs. The field
+  is now only added to the `pair_new` POST body when the user
+  explicitly ticks the toggle; unchecked means "fall back to config".
+- **`/api/bt/pair_new` validates `no_input_no_output_agent` strictly** —
+  previously coerced via `bool()`, which turned truthy non-booleans
+  (e.g. the string `"false"`) into `True` and silently forced the
+  NoInputNoOutput agent. Non-bool payloads now fall back to the config
+  key instead of being coerced.
+
 ## [2.61.0-rc.3] - 2026-04-22
 
 UI follow-up to the `2.61.0-rc.1` experimental flags. No Bluetooth
