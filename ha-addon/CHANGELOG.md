@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0] - 2026-04-22
+
+Promotes the 2.61.0-rc line to stable. No code changes beyond the
+version string — this release is `2.61.0-rc.7` made official. The line
+as a whole covers BlueZ 5.86 pair/connect hardening, opt-in adapter
+recovery, scan/pair UX improvements, and a new experimental-toggle
+visual treatment in the web UI.
+
+### Highlights
+- **BlueZ 5.86 A2DP dual-role hardening** — explicit `ConnectProfile(A2DP_SINK_UUID)`
+  right after pair succeeds (bluez/bluez#1922 workaround).
+- **Opt-in adapter auto-recovery ladder** — new
+  `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` flag runs mgmt reset → rfkill →
+  USB rebind via [`bluetooth-auto-recovery`](https://github.com/bluetooth-devices/bluetooth-auto-recovery)
+  when reconnects hit `BT_MAX_RECONNECT_FAILS`. Per-adapter 60 s cooldown.
+  Settings UI toggle included.
+- **Popular-PIN retry for legacy BT pairing** — `POST /api/bt/pair_new`
+  now re-runs with `0000, 1234, 1111, 8888, 1212, 9999` on
+  `AuthenticationFailed`.
+- **Clearer pair-failure logs** — rejected PIN annotated in error messages
+  via a new `describe_pair_failure()` helper.
+- **BR/EDR-only scan during pairing** — `scan bredr` replaces
+  `scan on` at all five pair/scan sites (bluez/bluez#826).
+- **Stale BlueZ device cache cleared on remove** — `bt_remove_device`
+  now deletes `/var/lib/bluetooth/<adapter>/cache/<device>` to prevent
+  `Protocol not available` on re-pair.
+- **Experimental sink-recovery flags + UI wiring** —
+  `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`,
+  `EXPERIMENTAL_PA_MODULE_RELOAD`,
+  `EXPERIMENTAL_PAIR_JUST_WORKS`, plus scan-modal toggle for the
+  NoInputNoOutput pair agent (`no_input_no_output_agent` per-request
+  override on `/api/bt/pair_new`).
+- **Event-driven standalone pair** — `pair <mac>` fires on
+  `[NEW] Device` instead of a fixed 12 s sleep (issue #168). Full
+  stdout in debug log on FAIL.
+- **Tri-state `_dbus_wait_services_resolved`** — `True` / `False` /
+  `None` (can't check), with corrected `wait_with_cancel` contract
+  handling.
+- **Post-pair audio-profile sanity check** — surfaces
+  `last_error = "no_audio_profiles_advertised"` when a freshly paired
+  device advertises no audio UUIDs.
+- **Scan-filter drop reasons** — machine-readable `reason` labels on
+  dropped scan results; telemetry aggregated for support triage.
+- **`cycle_card_profile` helper** — forces PA to re-publish a missing
+  sink without kicking other active BT streams (milder than the
+  PA module reload).
+- **Red visual treatment for experimental UI toggles** — `data-experimental`
+  rows now render with red tint + "EXPERIMENTAL" text badge so
+  unsupported/volatile toggles are distinguishable from merely unsaved
+  settings.
+- **Docker build hygiene** — `.dockerignore` trims the UI dev tree,
+  `__pycache__`, and dev screenshots from the build context;
+  `Dockerfile` narrows the scripts copy to the three runtime helpers.
+
+See the `2.61.0-rc.1` through `2.61.0-rc.7` entries below for
+per-change detail.
+
 ## [2.60.4] - 2026-04-21
 
 Dependency bump — pulls in `aiosendspin` 5.1.1 upstream bugfixes. No bridge
