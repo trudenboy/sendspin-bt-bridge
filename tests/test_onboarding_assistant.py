@@ -33,6 +33,71 @@ def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code
     assert "loginctl enable-linger" in joined_actions
 
 
+def test_onboarding_bluetooth_step_cross_references_audio_when_both_fail():
+    """When BT preflight fails (no controller) AND the user-scoped audio socket is
+    mounted but unreachable, both symptoms usually share one root cause: the
+    container's effective UID does not match the host session owner (rootless
+    Docker, or AUDIO_UID mismatch). Operators like harryfine on the HA forum
+    got stuck on "step 2 of preflight: No Bluetooth controller detected" without
+    ever being pointed at the audio/UID angle. The bluetooth OnboardingCheck's
+    `actions` list should surface that cross-reference when the two failures
+    co-occur.
+    """
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {
+                "system": "unreachable",
+                "sinks": 0,
+                "socket": "unix:/run/user/1000/pulse/native",
+                "socket_exists": True,
+                "socket_reachable": False,
+                "last_error": "Permission denied",
+            },
+            "bluetooth": {"controller": False, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    bluetooth = next(check for check in snapshot.checks if check.key == "bluetooth")
+    assert bluetooth.status == "error"
+    joined_actions = " ".join(bluetooth.actions).lower()
+    assert "audio_uid" in joined_actions or "audio socket" in joined_actions, (
+        f"expected BT step to cross-reference audio/UID root cause, got: {bluetooth.actions}"
+    )
+
+
+def test_onboarding_bluetooth_step_skips_audio_hint_when_audio_healthy():
+    """Regression guard: when the BT step fails on its own (audio is fine),
+    we must not muddy the BT remediation with a misleading audio/UID hint.
+    """
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {
+                "system": "pipewire",
+                "sinks": 2,
+                "socket": "unix:/run/user/1000/pulse/native",
+                "socket_exists": True,
+                "socket_reachable": True,
+                "last_error": None,
+            },
+            "bluetooth": {"controller": False, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    bluetooth = next(check for check in snapshot.checks if check.key == "bluetooth")
+    assert bluetooth.status == "error"
+    joined_actions = " ".join(bluetooth.actions).lower()
+    assert "audio_uid" not in joined_actions
+    assert "audio socket" not in joined_actions
+
+
 def test_onboarding_audio_unreachable_without_refused_error_skips_linger_reason_code():
     """Regression guard for PR-review concern: if the probe fails with an error
     that is *not* connection-refused (e.g. permission denied, protocol error),

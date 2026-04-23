@@ -165,6 +165,65 @@ sudo systemctl restart bluetooth
   Bluetooth A2DP sinks (`bluez_output.*` / `bluez_sink.*`) are created at the moment a speaker actually connects, not at boot. A fresh bridge install with no paired speakers yet is expected to show "no sinks found" until you add one through the UI.
 </Aside>
 
+## Preflight blocks on step 2: "No Bluetooth controller detected"
+
+You get through install, the speaker pairs and connects fine on the host (`bluetoothctl show` works, your speaker shows `Paired: yes, Connected: yes`), but the web UI onboarding stalls at **step 2 — Check Bluetooth access** with *"No Bluetooth controller detected by preflight checks."* Updating to the latest release and power-cycling the adapter doesn't change anything.
+
+**On Raspberry Pi OS specifically, this is almost always a UID / session-owner mismatch**, not a Bluetooth problem. The Bluetooth step and the audio step share one root cause — the container process runs as a UID that is not the owner of your user-session PipeWire/PulseAudio socket at `/run/user/<uid>/pulse/native`, and in the same breath it can lose access to the host Bluetooth D-Bus services. Fix the UID, and both symptoms clear together.
+
+### Diagnose
+
+On the host:
+
+```bash
+id -u                          # your host audio user's UID (usually 1000)
+docker info 2>/dev/null | grep -iE 'rootless|effective'
+grep AUDIO_UID ~/sendspin-bt-bridge/.env
+```
+
+Inside the container:
+
+```bash
+docker exec sendspin-client id
+docker exec sendspin-client pactl info 2>&1 | head -3
+```
+
+Red flags:
+
+- `docker info` says `rootless` is enabled, or *"Effective UID: 1000"*
+- `AUDIO_UID` is missing from `.env`, or differs from `id -u` on the host
+- `docker exec … id` shows `uid=0(root)` while the host audio user is `uid=1000`
+- `pactl info` inside the container prints `Connection refused` or `Access denied`
+
+### Fix 1 — make `AUDIO_UID` match the host
+
+This is the intended path on rootful Docker. The bridge's entrypoint reads `AUDIO_UID`, and auto-drops the bridge process to that UID via `gosu` so it can reach the user-scoped PipeWire/PulseAudio socket.
+
+```bash
+echo "AUDIO_UID=$(id -u)" >> ~/sendspin-bt-bridge/.env
+docker compose -f ~/sendspin-bt-bridge/docker-compose.yml up -d --force-recreate
+```
+
+Then re-run the web UI onboarding.
+
+### Fix 2 — rootless Docker: add a global `user:` override
+
+Under Docker rootless mode the auto-drop inside the container is not enough, because the container already runs in a user namespace whose "root" maps to a subordinate UID on the host. Override the compose `user:` so the container process runs as your host UID directly:
+
+```yaml
+services:
+  sendspin-client:
+    user: "${AUDIO_UID:-1000}:${AUDIO_UID:-1000}"
+```
+
+Recreate the container and the onboarding checklist should unblock on the Bluetooth step and the audio step at the same time.
+
+<Aside type="note">
+  The `user:` override is the intended workaround specifically for rootless Docker, and is also a useful diagnostic on older bridge images that predate the automatic `AUDIO_UID` privilege drop. On a standard rootful Docker install, `AUDIO_UID` in `.env` is enough — you should not need `user:` in compose.
+</Aside>
+
+See also the Docker install guide's [troubleshooting user-scoped PipeWire / PulseAudio](/installation/docker/#troubleshooting-user-scoped-pipewire--pulseaudio) section for a broader checklist.
+
 ## Notes
 
 - `network_mode: host` is required for Bluetooth control and Music Assistant auto-discovery.

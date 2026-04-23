@@ -503,16 +503,27 @@ def build_onboarding_assistant_snapshot(
         )
 
     if not controller_present:
+        bluetooth_actions = [
+            "Open Bluetooth settings and press Refresh adapters.",
+            "If no adapter appears, verify Bluetooth passthrough or host access, then add the adapter manually.",
+        ]
+        audio_socket_mounted_but_unreachable = (
+            bool(audio.get("socket_exists")) and audio.get("socket_reachable") is False
+        )
+        if audio_socket_mounted_but_unreachable:
+            bluetooth_actions.append(
+                "The audio socket is mounted but unreachable — a UID mismatch between the container "
+                "and the host session owner often breaks both Bluetooth and audio access at once. "
+                "Check that AUDIO_UID in .env matches `id -u` of the host audio user, and on rootless "
+                'Docker consider adding `user: "<uid>:<gid>"` to docker-compose.yml.'
+            )
         checks.append(
             OnboardingCheck(
                 key="bluetooth",
                 status="error",
                 summary="No Bluetooth controller detected by preflight checks.",
                 details={"paired_devices": paired_devices},
-                actions=[
-                    "Open Bluetooth settings and press Refresh adapters.",
-                    "If no adapter appears, verify Bluetooth passthrough or host access, then add the adapter manually.",
-                ],
+                actions=bluetooth_actions,
             )
         )
     elif configured_count > 0 and paired_devices == 0:

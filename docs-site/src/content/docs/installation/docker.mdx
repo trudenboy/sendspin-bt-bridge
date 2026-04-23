@@ -186,6 +186,8 @@ environment:
 
 ## Troubleshooting user-scoped PipeWire / PulseAudio
 
+A UID / session-owner mismatch for the user-scoped audio socket typically surfaces as *"Connection refused"* from `pactl` inside the container, but on some hosts it also shows up as the onboarding stalling on step 2 — **"No Bluetooth controller detected"** — because the same misalignment can sever host D-Bus access for Bluetooth. If both symptoms appear on a Raspberry Pi, see [Preflight blocks on step 2](/installation/raspberry-pi/#preflight-blocks-on-step-2-no-bluetooth-controller-detected) in the Raspberry Pi guide for the concrete fix sequence.
+
 If the host audio stack is healthy but the container still shows `Connection refused` or cannot reach `pactl`, check:
 
 ```bash
