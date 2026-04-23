@@ -99,6 +99,8 @@ fi
 
 step "3. Docker"
 DOCKER_INSTALLED=false
+DOCKER_ROOTLESS=false
+DOCKER_MODE="unknown"
 if command -v docker &>/dev/null; then
   DOCKER_VER=$(docker --version 2>/dev/null | head -1)
   ok "Docker installed: $DOCKER_VER"
@@ -106,6 +108,20 @@ if command -v docker &>/dev/null; then
 
   if docker info &>/dev/null; then
     ok "Docker daemon is running"
+    # Rootless Docker remaps container UIDs via /etc/subuid, so the entrypoint's
+    # gosu drop to AUDIO_UID cannot reach the host session owner's real UID.
+    # Warn here so users see it up-front instead of hitting the BT+audio
+    # co-failure pattern on first start.
+    if docker info 2>/dev/null | grep -qiE 'rootless|name=rootlesskit'; then
+      DOCKER_ROOTLESS=true
+      DOCKER_MODE="rootless"
+      skip "Docker is running in rootless mode"
+      info "Rootless remaps UIDs via /etc/subuid, which can break user-scoped PipeWire/PulseAudio"
+      info "  and Bluetooth D-Bus access. If the onboarding stalls on step 2, see:"
+      info "  https://trudenboy.github.io/sendspin-bt-bridge/installation/raspberry-pi/#preflight-blocks-on-step-2-no-bluetooth-controller-detected"
+    else
+      DOCKER_MODE="rootful"
+    fi
   else
     bad "Docker daemon is not running or current user has no access"
     info "Try: sudo systemctl start docker && sudo usermod -aG docker \$USER"
@@ -187,6 +203,7 @@ fi
 
 step "5. Audio System"
 DETECTED_UID=$(id -u)
+AUDIO_SUMMARY="unknown"
 
 if command -v pw-cli &>/dev/null && pw-cli info 0 &>/dev/null; then
   ok "PipeWire is running"
@@ -198,8 +215,10 @@ if command -v pactl &>/dev/null && pactl info &>/dev/null 2>&1; then
   PA_SERVER=$(pactl info 2>/dev/null | grep "Server Name" | cut -d: -f2- | xargs)
   if echo "$PA_SERVER" | grep -qi pipewire; then
     ok "PulseAudio API available (via PipeWire): $PA_SERVER"
+    AUDIO_SUMMARY="PipeWire (PulseAudio API)"
   else
     ok "PulseAudio is running: $PA_SERVER"
+    AUDIO_SUMMARY="PulseAudio"
   fi
 else
   skip "No audio system detected — install PipeWire or PulseAudio"
@@ -209,8 +228,10 @@ PULSE_SOCK="/run/user/${DETECTED_UID}/pulse/native"
 PW_SOCK="/run/user/${DETECTED_UID}/pipewire-0"
 if [ -S "$PULSE_SOCK" ]; then
   ok "PulseAudio socket found: $PULSE_SOCK"
+  [ "$AUDIO_SUMMARY" = "unknown" ] && AUDIO_SUMMARY="PulseAudio socket at $PULSE_SOCK"
 elif [ -S "$PW_SOCK" ]; then
   ok "PipeWire socket found: $PW_SOCK"
+  [ "$AUDIO_SUMMARY" = "unknown" ] && AUDIO_SUMMARY="PipeWire socket at $PW_SOCK"
 else
   skip "No audio socket found at /run/user/${DETECTED_UID}/"
 fi
@@ -457,17 +478,126 @@ cd "$PROJECT_DIR"
 docker compose pull
 docker compose up -d
 
-# ── 10. Success ──────────────────────────────────────────────────────────────
+# Extract WEB_PORT early — used by the preflight probe below and the final banner.
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "localhost")
 WEB_PORT=$(grep '^WEB_PORT=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "8080")
 WEB_PORT="${WEB_PORT:-8080}"
 
+# ── 10. Post-start Preflight Probe ──────────────────────────────────────────
+# After `docker compose up -d` the CLI reports success as long as the container
+# was created, but the bridge itself may come up degraded (e.g. BT controller
+# not visible from inside the container, or the user-scoped audio socket
+# unreachable). Probe /api/preflight and surface the exact remediation for the
+# most common co-failure pattern instead of leaving the user to discover it
+# via the web UI onboarding check.
+step "14. Verify runtime health"
+PROBE_URL="http://localhost:${WEB_PORT}/api/preflight"
+info "Waiting for bridge API at ${PROBE_URL} ..."
+PROBE_JSON=""
+PROBE_ATTEMPTS=30
+for _ in $(seq 1 "$PROBE_ATTEMPTS"); do
+  if PROBE_JSON=$(curl -fsS --max-time 2 "$PROBE_URL" 2>/dev/null); then
+    break
+  fi
+  sleep 1
+done
+
+RUNTIME_HEALTHY=false
+PROBE_BT_CONTROLLER=""
+PROBE_AUDIO_REACHABLE=""
+PROBE_STATUS=""
+if [ -z "$PROBE_JSON" ]; then
+  skip "Bridge API did not respond within ${PROBE_ATTEMPTS}s — check: docker logs sendspin-client"
+else
+  read -r PROBE_STATUS PROBE_BT_CONTROLLER PROBE_AUDIO_REACHABLE <<<"$(printf '%s' "$PROBE_JSON" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("parse_error False None")
+    sys.exit(0)
+bt = d.get("bluetooth") or {}
+au = d.get("audio") or {}
+print(
+    d.get("status") or "unknown",
+    bool(bt.get("controller")),
+    au.get("socket_reachable"),
+)
+' 2>/dev/null || echo "parse_error False None")"
+
+  case "$PROBE_STATUS" in
+    ok)
+      ok "Runtime preflight passed (status=ok)"
+      RUNTIME_HEALTHY=true
+      ;;
+    parse_error)
+      skip "Bridge responded but preflight JSON could not be parsed — check: docker logs sendspin-client"
+      ;;
+    *)
+      skip "Runtime preflight reports status=${PROBE_STATUS}"
+      ;;
+  esac
+
+  # Surface targeted remediation for the harryfine-pattern: BT controller and
+  # audio socket both fail together → almost always a UID / session-owner
+  # mismatch. See docs-site/src/content/docs/installation/raspberry-pi.mdx.
+  if [ "$PROBE_BT_CONTROLLER" = "False" ] && [ "$PROBE_AUDIO_REACHABLE" = "False" ]; then
+    echo ""
+    echo -e "  ${YELLOW}${BOLD}Both the Bluetooth and audio checks are failing.${NC}"
+    echo "  This combination almost always means the container UID does not match the"
+    echo "  host audio user, so the user-scoped PipeWire/PulseAudio socket and the"
+    echo "  Bluetooth D-Bus access are both blocked at once."
+    echo ""
+    echo "  Current values:"
+    echo "    Host UID:          ${DETECTED_UID} ($(whoami))"
+    echo "    AUDIO_UID (.env):  $(grep '^AUDIO_UID=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2 || echo unset)"
+    echo "    Docker mode:       ${DOCKER_MODE}"
+    echo ""
+    if $DOCKER_ROOTLESS; then
+      echo "  Rootless Docker is in use — the entrypoint's automatic UID drop is ineffective."
+      echo "  Add to ${PROJECT_DIR}/docker-compose.override.yml:"
+      echo ""
+      echo "    services:"
+      echo "      sendspin-client:"
+      echo "        user: \"${DETECTED_UID}:${DETECTED_UID}\""
+      echo ""
+      echo "  Then recreate the container:"
+      echo "    cd ${PROJECT_DIR} && docker compose up -d --force-recreate"
+    else
+      echo "  Confirm AUDIO_UID in ${PROJECT_DIR}/.env matches 'id -u' on the host,"
+      echo "  then recreate the container:"
+      echo "    cd ${PROJECT_DIR} && docker compose up -d --force-recreate"
+    fi
+    echo ""
+    echo "  Docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/raspberry-pi/#preflight-blocks-on-step-2-no-bluetooth-controller-detected"
+  elif [ "$PROBE_BT_CONTROLLER" = "False" ]; then
+    info "Bluetooth controller not visible from inside the container."
+    info "  Confirm USB passthrough and 'privileged: true' in docker-compose.yml,"
+    info "  and that the host 'bluetoothctl list' shows at least one Controller."
+  elif [ "$PROBE_AUDIO_REACHABLE" = "False" ]; then
+    info "Audio socket is mounted but unreachable from the container."
+    info "  If the bridge log mentions 'Connection refused', the host audio server"
+    info "  likely needs linger enabled so PipeWire/PulseAudio survives without a login:"
+    info "    sudo loginctl enable-linger \$(id -un)"
+    info "  Docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot"
+  fi
+fi
+
+# ── 11. Success ──────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}═══════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}  ✅ Sendspin Bluetooth Bridge is running!${NC}"
+if $RUNTIME_HEALTHY; then
+  echo -e "${GREEN}${BOLD}  ✅ Sendspin Bluetooth Bridge is running!${NC}"
+else
+  echo -e "${YELLOW}${BOLD}  ⚠  Sendspin Bluetooth Bridge started, but preflight is degraded${NC}"
+fi
 echo -e "${BOLD}═══════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "  ${BOLD}Web UI:${NC}       http://${HOSTNAME_VAL}:${WEB_PORT}"
+echo -e "  ${BOLD}Host UID:${NC}     ${DETECTED_UID} ($(whoami))"
+echo -e "  ${BOLD}AUDIO_UID:${NC}    $(grep '^AUDIO_UID=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2 || echo unset)"
+echo -e "  ${BOLD}Audio:${NC}        ${AUDIO_SUMMARY}"
+echo -e "  ${BOLD}Docker mode:${NC}  ${DOCKER_MODE}"
 echo -e "  ${BOLD}Logs:${NC}         docker logs -f sendspin-client"
 echo -e "  ${BOLD}Preflight:${NC}    curl http://localhost:${WEB_PORT}/api/preflight"
 echo -e "  ${BOLD}Project dir:${NC}  $PROJECT_DIR"
