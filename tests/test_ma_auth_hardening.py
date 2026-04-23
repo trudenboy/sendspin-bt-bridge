@@ -122,3 +122,76 @@ class TestHaAuthPageNoScriptBreakout:
         assert "</script><script>" not in body
         # The escaped form should be present
         assert "<\\/script>" in body
+
+
+class TestHaAuthPageCspCompliance:
+    """bug: popup inline script was blocked by per-request CSP ``script-src``
+    nonce — the Sign-in form fell back to the browser's default GET submit,
+    re-opened the popup URL without ``ma_url``, and the user saw their
+    credentials silently "swallowed".
+    """
+
+    def test_popup_inline_script_has_csp_nonce(self, app, client, monkeypatch):
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
+
+        # Mirror the real app's per-request nonce lifecycle from web_interface.
+        from flask import g
+
+        @app.before_request
+        def _seed_nonce():
+            g.csp_nonce = "TESTNONCE123"
+
+        resp = client.get(
+            "/api/ma/ha-auth-page",
+            query_string={"ma_url": "http://a.example"},
+        )
+        assert resp.status_code == 200
+        body = resp.data.decode("utf-8")
+
+        # The popup's inline <script> must carry the per-request nonce so
+        # that production CSP `script-src 'self' 'nonce-<value>'` does not
+        # block it.
+        assert 'nonce="TESTNONCE123"' in body
+
+    def test_popup_has_no_inline_event_handlers(self, client, monkeypatch):
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
+
+        resp = client.get(
+            "/api/ma/ha-auth-page",
+            query_string={"ma_url": "http://a.example"},
+        )
+        body = resp.data.decode("utf-8")
+
+        # Inline event-handler attributes (``onsubmit=``, ``onclick=``, …)
+        # are blocked by a CSP that uses a nonce without ``'unsafe-inline'``.
+        # The popup must wire handlers via addEventListener instead.
+        import re
+
+        inline_handlers = re.findall(
+            r"""\son[a-z]+\s*=\s*["']""",
+            body,
+            flags=re.IGNORECASE,
+        )
+        assert not inline_handlers, f"Popup still has inline event handlers: {inline_handlers}"
+
+    def test_popup_placeholder_is_substituted(self, app, client, monkeypatch):
+        """Regression guard: the raw ``__CSP_NONCE__`` token must never leak
+        into the rendered HTML."""
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
+
+        from flask import g
+
+        @app.before_request
+        def _seed_nonce():
+            g.csp_nonce = "abcDEF"
+
+        resp = client.get(
+            "/api/ma/ha-auth-page",
+            query_string={"ma_url": "http://a.example"},
+        )
+        body = resp.data.decode("utf-8")
+
+        assert "__CSP_NONCE__" not in body

@@ -17,7 +17,7 @@ import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
 
-from flask import Response, jsonify, request, session
+from flask import Response, g, jsonify, request, session
 
 from config import load_config, update_config
 from routes.api_ma import (
@@ -994,7 +994,7 @@ input.mfa-code{text-align:center;font-size:24px;letter-spacing:8px;
     <div class="logo">🏠</div>
     <h2>Home Assistant</h2>
     <div class="sub">Sign in to connect Music Assistant</div>
-    <form id="creds-form" onsubmit="submitCreds(event)">
+    <form id="creds-form">
       <label for="username">Username</label>
       <input type="text" id="username" autocomplete="username" autofocus required>
       <label for="password">Password</label>
@@ -1009,7 +1009,7 @@ input.mfa-code{text-align:center;font-size:24px;letter-spacing:8px;
     <div class="logo">🔐</div>
     <h2>Two-factor authentication</h2>
     <div class="sub" id="mfa-label">Enter code from your authenticator app</div>
-    <form id="mfa-form" onsubmit="submitMfa(event)">
+    <form id="mfa-form">
       <input type="text" id="mfa-code" class="mfa-code" inputmode="numeric"
              maxlength="6" autocomplete="one-time-code" autofocus required
              placeholder="------">
@@ -1026,7 +1026,7 @@ input.mfa-code{text-align:center;font-size:24px;letter-spacing:8px;
   </div>
 </div>
 
-<script>
+<script nonce="__CSP_NONCE__">
 var API_BASE = window.location.origin;
 var MA_URL = __MA_URL__;
 var haState = {};
@@ -1126,6 +1126,9 @@ function onSuccess(data) {
     setTimeout(function() { window.close(); }, 1500);
   }
 }
+
+document.getElementById('creds-form').addEventListener('submit', submitCreds);
+document.getElementById('mfa-form').addEventListener('submit', submitMfa);
 </script>
 </body>
 </html>
@@ -1297,10 +1300,12 @@ def api_ma_ha_auth_page():
     # <script> block and land in the HTML context → reflected XSS.
     # Escape the slash after ``<`` to neutralise script-boundary attacks.
     safe_ma_url = json.dumps(ma_url).replace("</", "<\\/")
-    return Response(
-        _HA_AUTH_PAGE_HTML.replace("__MA_URL__", safe_ma_url),
-        content_type="text/html; charset=utf-8",
-    )
+    # Per-request CSP nonce — without it the page's inline <script> is
+    # blocked by ``script-src 'self' 'nonce-<value>'`` and the Sign-in
+    # form silently falls back to a default GET submit.
+    nonce = getattr(g, "csp_nonce", "")
+    body = _HA_AUTH_PAGE_HTML.replace("__CSP_NONCE__", nonce).replace("__MA_URL__", safe_ma_url)
+    return Response(body, content_type="text/html; charset=utf-8")
 
 
 @ma_bp.route("/api/ma/ha-silent-auth", methods=["POST"])
