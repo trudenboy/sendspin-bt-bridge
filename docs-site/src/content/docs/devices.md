@@ -169,10 +169,35 @@ If a speaker keeps flapping, the bridge may protect the rest of the group by aut
 
 Use these per-device fields when tuning difficult speakers:
 
-- **`static_delay_ms`** — compensates for Bluetooth latency differences in grouped playback.
+- **`static_delay_ms`** — additional forward delay (0–5 000 ms) applied on top of sendspin 7.0+'s DAC-anchored sync. The daemon auto-compensates for most of the audio-pipeline latency on its own; `static_delay_ms` is a fine-tune on top. The web UI pre-fills **300 ms** for every newly added device because field reports showed that is a noticeably better baseline than `0` for A/V sync in two-speaker groups, especially on Ubuntu / PipeWire hosts. Raise the value for speakers that consistently play **ahead** of the rest of a group (audible as the others echoing them); leave it at the default when sync already feels right. Negative values are not accepted — sendspin 7.0+ rejects them, and any legacy negative value in an imported config is clamped to `0` at migration time.
 - **`keepalive_interval`** — periodically sends silence so some speakers do not fall asleep between tracks.
 - **`keepalive_silence`** — legacy boolean from older addon configs; keepalive is now effectively controlled by `keepalive_interval > 0`.
 - **`preferred_format`** — can reduce resampling or CPU load depending on your MA output settings.
+
+### Measuring per-speaker latency with MassDroid
+
+For stubborn multi-speaker groups, guessing `static_delay_ms` purely by ear is slow. A practical shortcut is to measure the actual acoustic round-trip time (RTT) of each speaker with [MassDroid](https://github.com/sfortis/massdroid_native) — a third-party native Android client for Music Assistant that ships with a built-in acoustic calibration tool. Use it as a **diagnostic**, not as a direct source of `static_delay_ms` values.
+
+**What MassDroid actually measures.** With phone calibrated first as a baseline, MassDroid plays six 1 kHz tone bursts through the paired BT speaker and records them back via the phone microphone. A native C++ DSP pipeline detects tone onsets via bandpass filtering and envelope SNR, averages them, and reports:
+
+- **`BT delay`** — absolute round-trip in milliseconds (playback sample → DAC → transport → air → mic). Typical BT speakers land between ~150 ms and ~400 ms.
+- **`+X ms over phone`** — how much of that is pure BT pipeline contribution vs. the phone's own baseline.
+- **Quality** — `GOOD`, `MARGINAL`, or `FAILED` (based on tone count, variance across tones, and SNR).
+
+**Why the raw number does not transfer 1 : 1.** On the bridge side, sendspin 7.0+'s DAC-anchored sync already absorbs most of the absolute pipeline latency automatically. If you entered MassDroid's full RTT as `static_delay_ms`, you would double-count it and end up far out of sync. What is transferable is the **ranking** and the **deltas** between speakers: in a group, the speaker with the **lowest** measured RTT is the "early" one, and the others follow behind.
+
+**Suggested workflow:**
+
+1. Install MassDroid on an Android 8.0+ phone and point it at the same Music Assistant server.
+2. In MassDroid, open the Sendspin (local) player → 3-dot menu → **Player Settings** → run **Phone speaker calibration** first (required baseline with Bluetooth disconnected, media volume 50–70 %, quiet room).
+3. Pair the phone directly with each BT speaker in the problem group in turn, and run **Bluetooth device calibration**. Only accept results graded `GOOD`; retry with the phone closer to the speaker and the room quieter if you see `MARGINAL` or `FAILED`.
+4. Note each speaker's reported BT delay. The speaker with the **lowest** value is the early one.
+5. As a starting point, increase `static_delay_ms` on the early speakers by roughly `max_rtt − this_rtt` on top of the bridge default. For example, if one speaker measures 180 ms and another 260 ms, try raising the 180 ms one by around 80 ms above whatever `static_delay_ms` already sits on the other.
+6. Fine-tune by ear in a grouped playback scenario. Changes take effect mid-stream via the `set_static_delay_ms` IPC command — no daemon restart needed.
+
+:::note
+MassDroid is an independent third-party project (MIT-licensed) and is not required to run this bridge. It is only recommended as a per-speaker diagnostic when tuning grouped BT playback gets tedious.
+:::
 
 ## Standby & Wake-on-play
 

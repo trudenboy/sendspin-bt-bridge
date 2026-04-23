@@ -30,7 +30,7 @@ graph TB
                 T_DBUS["D-Bus system bus<br/>bind-mount с хоста"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
-                T_SBB["SBB v2.49.0<br/>Python 3.12.3<br/>aiosendspin 4.3.2"]
+                T_SBB["SBB v2.61.0<br/>Python 3.12.3<br/>aiosendspin 5.1.1"]
                 T_WEB["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 T_DBUS --> T_BLUEZ
                 T_DBUS --> T_PA
@@ -51,7 +51,7 @@ graph TB
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 ГБ ОЗУ / 64 ГБ диск"]
                 P_HAOS["Home Assistant OS<br/>haos.my.lan"]
-                P_ADDON["SBB v2.49.0 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 устройства / группа синхронизации"]
+                P_ADDON["SBB v2.61.0 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 устройства / группа синхронизации"]
                 P_HAOS --> P_ADDON
             end
 
@@ -59,7 +59,7 @@ graph TB
                 P_DBUS["D-Bus system bus"]
                 P_PA["PulseAudio 16.1"]
                 P_BLUEZ2["BlueZ 5.72"]
-                P_SBB["SBB v2.49.0<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
+                P_SBB["SBB v2.61.0<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
                 P_WEB2["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 P_DBUS --> P_BLUEZ2
                 P_DBUS --> P_PA
@@ -113,11 +113,11 @@ graph LR
         T_MA["MA :9000"] -->|FLAC 44100/16/2| T_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.20_74_CF_61_FB_D8<br/>.a2dp_sink"]
     end
 
-    H_D1 -->|"A2DP / -600ms"| S1["ENEBY20<br/>58%"]
-    H_D2 -->|"A2DP / -400ms"| S2["Yandex mini<br/>52%"]
-    H_D3 -->|"A2DP / -600ms"| S3["Lenco LS-500<br/>52%"]
-    P_D1 -->|"A2DP / -900ms"| S4["ENEBY Portable<br/>59%"]
-    T_D1 -->|"A2DP / -500ms"| S5["AfterShokz<br/>67%"]
+    H_D1 -->|"A2DP / 0ms"| S1["ENEBY20<br/>58%"]
+    H_D2 -->|"A2DP / 0ms"| S2["Yandex mini<br/>52%"]
+    H_D3 -->|"A2DP / 0ms"| S3["Lenco LS-500<br/>52%"]
+    P_D1 -->|"A2DP / 0ms"| S4["ENEBY Portable<br/>59%"]
+    T_D1 -->|"A2DP / 0ms"| S5["AfterShokz<br/>67%"]
 
     style haos_bridge fill:#2a2a1a,stroke:#aa4
     style proxmox_bridge fill:#1a2a2a,stroke:#4aa
@@ -165,7 +165,7 @@ graph TB
 
 ## Кратко о стратегии портов
 
-Текущая матрица развёртываний отражает модель портов после `2.49.0`:
+Текущая матрица развёртываний отражает модель портов после `2.49.x` (на всех хостах мосты обновляются до последнего stable-релиза):
 
 - stable HA add-on сохраняет стандартный HA ingress на `8080`, а порты устройств по умолчанию начинаются с `8928`
 - prerelease-варианты HA add-on, если они установлены, используют собственные значения по каналам (`8081` / `9028` для RC, `8082` / `9128` для beta)
@@ -183,7 +183,7 @@ graph TB
 | **Платформа** | Home Assistant OS |
 | **Трек поставки** | `stable` (`85b1ecde_sendspin_bt_bridge`) |
 | **Имя хоста** | `85b1ecde-sendspin-bt-bridge` |
-| **Версия моста** | 2.49.0 |
+| **Версия моста** | 2.61.0 |
 | **BT адаптеры** | Два CSR8510 A10 через passthrough (маппинги Audio + BLE доступны runtime аддона) |
 | **Аудио** | PulseAudio 17.0, A2DP sinks |
 | **Порты** | Ingress `8080`, базовый порт плееров `8928` |
@@ -193,9 +193,9 @@ graph TB
 
 | Плеер | BT MAC | Порт Sendspin | PA sink | Громкость | Задержка |
 |-------|--------|---------------|---------|-----------|----------|
-| ENEBY20 @ HAOS | `FC:58:FA:EB:08:6C` | 8928 | `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink` | 58% | −600 мс |
-| Yandex mini @ HAOS | `2C:D2:6B:B8:EC:5B` | 8929 | `bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink` | 52% | −400 мс |
-| Lenco LS-500 @ HAOS | `30:21:0E:0A:AE:5A` | 8932 | `bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink` | 52% | −600 мс |
+| ENEBY20 @ HAOS | `FC:58:FA:EB:08:6C` | 8928 | `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink` | 58% | 0 мс |
+| Yandex mini @ HAOS | `2C:D2:6B:B8:EC:5B` | 8929 | `bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink` | 52% | 0 мс |
+| Lenco LS-500 @ HAOS | `30:21:0E:0A:AE:5A` | 8932 | `bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink` | 52% | 0 мс |
 
 Все 3 устройства объединены в группу синхронизации MA `b55d7f67-acc2-4cba-b37e-9fbd3eb3b410` для мультирум-воспроизведения. Интеграция MA API активна (двусторонняя синхронизация громкости и управления).
 
@@ -212,11 +212,11 @@ graph TB
 | **Хост** | Proxmox VE 8.4.16, CT 101, 2 ядра, 1 ГБ ОЗУ, 4 ГБ диск |
 | **ОС** | Ubuntu 24.04 LTS (Noble Numbat), x86_64 |
 | **Имя хоста** | `sendspin` |
-| **Версия моста** | 2.49.0 |
+| **Версия моста** | 2.61.0 |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
-| **aiosendspin** | 4.3.2 |
+| **aiosendspin** | 5.1.1 |
 | **Flask** | 3.1.3, Waitress 3.0.2 |
 | **BT адаптер** | CSR8510 A10 (`00:15:83:FF:8F:2B`, hci0) |
 | **Сервер MA** | auto:9000 (mDNS) |
@@ -225,7 +225,7 @@ graph TB
 
 | Плеер | BT MAC | Порт Sendspin | PA sink | Громкость | Задержка |
 |-------|--------|---------------|---------|-----------|----------|
-| ENEBY Portable @ LXC | `6C:5C:3D:35:17:99` | 8928 | `bluez_sink.6C_5C_3D_35_17_99.a2dp_sink` | 59% | −900 мс |
+| ENEBY Portable @ LXC | `6C:5C:3D:35:17:99` | 8928 | `bluez_sink.6C_5C_3D_35_17_99.a2dp_sink` | 59% | 0 мс |
 
 Интеграция MA API активна.
 
@@ -238,11 +238,11 @@ graph TB
 | **Хост** | Turris Omnia, TurrisOS 9.0.4 (OpenWrt), Marvell Armada 385 ARMv7, 2 ГБ ОЗУ, 8 ГБ eMMC |
 | **ОС** | Ubuntu 24.04.4 LTS (Noble Numbat), armv7l |
 | **Имя хоста** | `ubuntu` |
-| **Версия моста** | 2.49.0 |
+| **Версия моста** | 2.61.0 |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
-| **aiosendspin** | 4.3.2 |
+| **aiosendspin** | 5.1.1 |
 | **Flask** | 3.1.3, Waitress 3.0.2 |
 | **BT адаптер** | CSR8510 A10 USB (`C0:FB:F9:62:D7:D6`, hci0) |
 | **Сервер MA** | auto:9000 (mDNS) |
@@ -251,7 +251,7 @@ graph TB
 
 | Плеер | BT MAC | Порт Sendspin | PA sink | Громкость | Задержка |
 |-------|--------|---------------|---------|-----------|----------|
-| AfterShokz @ OpenWRT | `20:74:CF:61:FB:D8` | 8928 | `bluez_sink.20_74_CF_61_FB_D8.a2dp_sink` | 67% | −500 мс |
+| AfterShokz @ OpenWRT | `20:74:CF:61:FB:D8` | 8928 | `bluez_sink.20_74_CF_61_FB_D8.a2dp_sink` | 67% | 0 мс |
 
 :::note[Особенности OpenWrt]
 На хосте требуется пользователь `pulse` (uid 109) в `/etc/passwd` для аутентификации D-Bus EXTERNAL.
@@ -314,11 +314,11 @@ graph TB
 
 | Компонент | Версия |
 |-----------|--------|
-| **Sendspin BT Bridge** | 2.49.0 |
+| **Sendspin BT Bridge** | 2.61.0 |
 | **Ubuntu** | 24.04 LTS |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
-| **aiosendspin** | 4.3.2 |
+| **aiosendspin** | 5.1.1 |
 | **Flask** | 3.1.3 |
 | **Waitress** | 3.0.2 |

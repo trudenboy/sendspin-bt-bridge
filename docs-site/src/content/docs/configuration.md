@@ -59,7 +59,7 @@ Each device row can store:
 | **MAC** | Speaker Bluetooth address |
 | **Adapter** | Specific adapter binding, if needed |
 | **Port** | Optional custom `listen_port`; otherwise the bridge uses `BASE_LISTEN_PORT + device index` |
-| **Delay** | `static_delay_ms` latency compensation |
+| **Delay** | `static_delay_ms` additional forward delay (0–5 000 ms, default 300 for new devices) |
 | **Live** | Runtime badge such as Playing, Connected, Released, or Not seen |
 | **Actions** | Remove the row or act on the saved configuration |
 
@@ -275,7 +275,7 @@ The following keys are written by the bridge at runtime and should not normally 
 | Key | Type | Description |
 |---|---|---|
 | `CONFIG_SCHEMA_VERSION` | integer | Internal schema version for config migrations |
-| `AUTH_PASSWORD_HASH` | string | Bcrypt hash of the web UI password |
+| `AUTH_PASSWORD_HASH` | string | PBKDF2-SHA256 hash of the web UI password |
 | `SECRET_KEY` | string | Flask session encryption key; auto-generated on first run |
 | `LAST_VOLUMES` | object | Per-device persisted volume (`MAC → integer`) |
 | `LAST_SINKS` | object | Per-device persisted PulseAudio sink name (`MAC → string`) |
@@ -297,7 +297,7 @@ The following keys are written by the bridge at runtime and should not normally 
       "mac": "AA:BB:CC:DD:EE:FF",
       "player_name": "Living Room Speaker",
       "adapter": "hci0",
-      "static_delay_ms": -500,
+      "static_delay_ms": 300,
       "listen_host": "0.0.0.0",
       "listen_port": 8928,
       "preferred_format": "flac:44100:16:2",
@@ -313,7 +313,7 @@ The following keys are written by the bridge at runtime and should not normally 
 | `mac` | Speaker Bluetooth MAC |
 | `player_name` | Display name in Music Assistant |
 | `adapter` | Adapter ID or MAC |
-| `static_delay_ms` | Fixed sync compensation |
+| `static_delay_ms` | Additional forward delay in ms (0–5 000) on top of sendspin 7.0+ DAC-anchored sync. Default for new devices is `300`. See [Delay tuning and keepalive](/devices/#delay-tuning-and-keepalive) for when to raise it and [Measuring per-speaker latency with MassDroid](/devices/#measuring-per-speaker-latency-with-massdroid) for an objective way to tune multi-speaker groups. |
 | `listen_host` | Advertised host override for this device listener |
 | `listen_port` | Custom sendspin listener port; if missing, runtime uses `BASE_LISTEN_PORT + device index` |
 | `preferred_format` | Preferred output format |
@@ -372,7 +372,7 @@ These are the most commonly used overrides. `CONFIG_DIR` always determines where
 | `WEB_THREADS` | `8` | Waitress HTTP worker thread count; increase to `16` for 20+ devices |
 | `DEMO_MODE` | *(unset)* | Set to `1`, `true`, or `yes` to run in demo/simulation mode without real Bluetooth hardware |
 | `SENDSPIN_NAME` | `Sendspin-{hostname}` | Override the default player name prefix |
-| `SENDSPIN_STATIC_DELAY_MS` | `-300` | Global static audio delay override in milliseconds (can be negative) |
+| `SENDSPIN_STATIC_DELAY_MS` | `0` | Global static audio delay override in milliseconds (0–5 000). Values outside the range are clamped; legacy negative defaults are no longer accepted by sendspin 7.0+. |
 
 ### Container internals
 

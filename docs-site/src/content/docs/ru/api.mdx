@@ -239,6 +239,14 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
 
+### `POST /api/unmute_sink`
+
+Recovery-действие: принудительно снять mute с PulseAudio sink-а устройства в обход MA-маршрутизации. Нужно, когда PA-sink оказался замьючен на системном уровне (например, после краша или рестарта), хотя application-level mute уже выключен — иначе колонка продолжает молчать.
+
+**Body:** `{ "player_name": "Колонка в гостиной" }`
+
+Возвращает `404`, если устройство не найдено; `400`, если у него не сконфигурирован audio-sink; `500`, если `pactl` не смог снять mute.
+
 ## Управление транспортом
 
 ### `POST /api/transport/cmd`
@@ -612,6 +620,25 @@ CORS preflight эндпоинт. Возвращает `204 No Content` с соо
 - `report` — замаскированный structured payload с диагностикой
 
 Поле `suggested_description` предназначено для bug-report dialog в web UI. Оно кратко суммирует recent issue-worthy logs, состояние Bluetooth/устройств, здоровье subprocess/daemon, D-Bus/bluetoothd и статус MA connectivity без раскрытия секретов.
+
+### `GET /api/bugreport/proxy-available`
+
+Возвращает `{"available": true|false}` — настроен ли на этом мосту GitHub-App прокси для отправки issue. Web UI использует этот флаг, чтобы решить, показывать ли кнопку «Отправить отчёт» пользователям без учётки GitHub.
+
+### `POST /api/bugreport/submit`
+
+Создаёт GitHub issue через App-прокси от имени пользователя без учётки GitHub. Требует настроенный прокси (см. `/api/bugreport/proxy-available`), иначе возвращает `503`.
+
+**Тело запроса (JSON):**
+
+| Поле | Описание |
+|---|---|
+| `title` | Заголовок issue (5–200 символов) |
+| `description` | Описание (10–5000 символов) |
+| `email` | Контактный email (должен содержать `@`) |
+| `diagnostics_text` | Опционально: замаскированный текст диагностики (обрезается до лимита GitHub в 65 536 символов) |
+
+Прокси применяет rate limit по IP клиента. Типовые ошибки: `400` (валидация), `429` (rate limit), `503` (прокси не настроен).
 
 ## Сервис
 

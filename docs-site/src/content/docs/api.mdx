@@ -180,6 +180,25 @@ Builds a GitHub-issue-friendly bug-report bundle from masked diagnostics.
 
 `suggested_description` is intentionally operator-editable. It is seeded from recent issue logs, Bluetooth connection health, device `last_error` fields, subprocess health, D-Bus / `bluetoothd` state, MA connectivity, and the top recovery-guidance issue.
 
+### `GET /api/bugreport/proxy-available`
+
+Returns `{"available": true|false}` indicating whether the GitHub-App issue-submission proxy is configured on this bridge. The web UI uses this to decide whether to offer in-UI "Report a problem" submissions for users without GitHub accounts.
+
+### `POST /api/bugreport/submit`
+
+Creates a GitHub issue through the App proxy on behalf of a user who does not have a GitHub account. Requires the proxy to be configured (see `/api/bugreport/proxy-available`); otherwise returns `503`.
+
+**Request body (JSON):**
+
+| Field | Description |
+|---|---|
+| `title` | Issue title (5–200 characters) |
+| `description` | Issue description (10–5000 characters) |
+| `email` | Contact email, must contain `@` |
+| `diagnostics_text` | Optional masked diagnostics text to attach (truncated to fit GitHub's 65 536-char limit) |
+
+Rate-limited per client IP by the proxy. Typical error responses: `400` (validation), `429` (rate limit), `503` (proxy not configured).
+
 ### `GET /api/diagnostics/download`
 
 Downloads the masked diagnostics report as a **plain-text attachment** (`diagnostics-<timestamp>.txt`).
@@ -366,6 +385,14 @@ Pause or resume a single player. Sends the command via IPC to the target daemon 
 Toggle mute on a device. When `MUTE_VIA_MA` is enabled and MA is connected, the mute command is routed through the MA API. Otherwise, mute is applied directly via PulseAudio.
 
 **Body:** `{ "mac": "AA:BB:CC:DD:EE:FF", "muted": true }`
+
+### `POST /api/unmute_sink`
+
+Recovery action: force-unmute the PulseAudio sink for a device, bypassing MA routing. Intended for situations where the PA sink is muted at the system level (for example after a crash or restart) while the application-level mute is already off, which would otherwise leave the speaker silent.
+
+**Body:** `{ "player_name": "Living Room Speaker" }`
+
+Returns `404` if no matching device is found, `400` if the device has no configured audio sink, or `500` if `pactl` reports the sink could not be unmuted.
 
 ## Transport Control
 

@@ -30,7 +30,7 @@ graph TB
                 T_DBUS["D-Bus system bus<br/>bind-mount from host"]
                 T_PA["PulseAudio 16.1 --system<br/>user pulse uid=109"]
                 T_BLUEZ["BlueZ 5.72<br/>bluetoothctl"]
-                T_SBB["SBB v2.57.0<br/>Python 3.12.3<br/>aiosendspin 5.1.0"]
+                T_SBB["SBB v2.61.0<br/>Python 3.12.3<br/>aiosendspin 5.1.1"]
                 T_WEB["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 T_DBUS --> T_BLUEZ
                 T_DBUS --> T_PA
@@ -51,7 +51,7 @@ graph TB
 
             subgraph P_VM["VM 104 haos — QEMU/KVM — 2 vCPU / 6 GB RAM / 64 GB disk"]
                 P_HAOS["Home Assistant OS<br/>haos.my.lan"]
-                P_ADDON["SBB v2.49.0 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
+                P_ADDON["SBB v2.61.0 addon<br/>85b1ecde-sendspin-bt-bridge<br/>3 devices / sync group"]
                 P_HAOS --> P_ADDON
             end
 
@@ -59,7 +59,7 @@ graph TB
                 P_DBUS["D-Bus system bus"]
                 P_PA["PulseAudio 16.1"]
                 P_BLUEZ2["BlueZ 5.72"]
-                P_SBB["SBB v2.49.0<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
+                P_SBB["SBB v2.61.0<br/>Ubuntu 24.04 x86_64<br/>Python 3.12.3"]
                 P_WEB2["Flask 3.1.3 + Waitress 3.0.2<br/>:8080"]
                 P_DBUS --> P_BLUEZ2
                 P_DBUS --> P_PA
@@ -113,11 +113,11 @@ graph LR
         T_MA["MA :9000"] -->|FLAC 44100/16/2| T_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.20_74_CF_61_FB_D8<br/>.a2dp_sink"]
     end
 
-    H_D1 -->|"A2DP / -600ms"| S1["ENEBY20<br/>58%"]
-    H_D2 -->|"A2DP / -400ms"| S2["Yandex mini<br/>52%"]
-    H_D3 -->|"A2DP / -600ms"| S3["Lenco LS-500<br/>52%"]
-    P_D1 -->|"A2DP / -900ms"| S4["ENEBY Portable<br/>59%"]
-    T_D1 -->|"A2DP / -500ms"| S5["AfterShokz<br/>67%"]
+    H_D1 -->|"A2DP / 0ms"| S1["ENEBY20<br/>58%"]
+    H_D2 -->|"A2DP / 0ms"| S2["Yandex mini<br/>52%"]
+    H_D3 -->|"A2DP / 0ms"| S3["Lenco LS-500<br/>52%"]
+    P_D1 -->|"A2DP / 0ms"| S4["ENEBY Portable<br/>59%"]
+    T_D1 -->|"A2DP / 0ms"| S5["AfterShokz<br/>67%"]
 
     style haos_bridge fill:#2a2a1a,stroke:#aa4
     style proxmox_bridge fill:#1a2a2a,stroke:#4aa
@@ -165,7 +165,7 @@ graph TB
 
 ## Port strategy snapshot
 
-The current deployment matrix reflects the post-`2.49.x` port model:
+The current deployment matrix reflects the post-`2.49.x` port model (bridges on all hosts are kept aligned with the latest stable release):
 
 - stable HA addon keeps the standard HA ingress listener on `8080` and defaults device listeners from `8928` upward
 - prerelease HA addon variants, when installed, use their own channel defaults (`8081` / `9028` for RC, `8082` / `9128` for beta)
@@ -183,7 +183,7 @@ Runs as the stable Home Assistant add-on track inside the HAOS VM on Proxmox.
 | **Platform** | Home Assistant OS |
 | **Delivery track** | `stable` (`85b1ecde_sendspin_bt_bridge`) |
 | **Hostname** | `85b1ecde-sendspin-bt-bridge` |
-| **Bridge version** | 2.49.0 |
+| **Bridge version** | 2.61.0 |
 | **BT adapters** | Dual CSR8510 A10 passthrough (Audio + BLE mappings exposed to the addon runtime) |
 | **Audio** | PulseAudio 17.0, A2DP sinks |
 | **Ports** | Ingress `8080`, player base `8928` |
@@ -193,9 +193,9 @@ Runs as the stable Home Assistant add-on track inside the HAOS VM on Proxmox.
 
 | Player | BT MAC | Sendspin port | PA sink | Volume | Delay |
 |--------|--------|---------------|---------|--------|-------|
-| ENEBY20 @ HAOS | `FC:58:FA:EB:08:6C` | 8928 | `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink` | 58% | −600 ms |
-| Yandex mini @ HAOS | `2C:D2:6B:B8:EC:5B` | 8929 | `bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink` | 52% | −400 ms |
-| Lenco LS-500 @ HAOS | `30:21:0E:0A:AE:5A` | 8932 | `bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink` | 52% | −600 ms |
+| ENEBY20 @ HAOS | `FC:58:FA:EB:08:6C` | 8928 | `bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink` | 58% | 0 ms |
+| Yandex mini @ HAOS | `2C:D2:6B:B8:EC:5B` | 8929 | `bluez_sink.2C_D2_6B_B8_EC_5B.a2dp_sink` | 52% | 0 ms |
+| Lenco LS-500 @ HAOS | `30:21:0E:0A:AE:5A` | 8932 | `bluez_sink.30_21_0E_0A_AE_5A.a2dp_sink` | 52% | 0 ms |
 
 All 3 devices share MA sync group `b55d7f67-acc2-4cba-b37e-9fbd3eb3b410` for multiroom playback. MA API integration is active (bi-directional volume/transport sync).
 
@@ -212,11 +212,11 @@ Runs as a systemd service inside an unprivileged LXC container on Proxmox.
 | **Host** | Proxmox VE 8.4.16, CT 101, 2 cores, 1 GB RAM, 4 GB disk |
 | **OS** | Ubuntu 24.04 LTS (Noble Numbat), x86_64 |
 | **Hostname** | `sendspin` |
-| **Bridge version** | 2.49.0 |
+| **Bridge version** | 2.61.0 |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
-| **aiosendspin** | 4.3.2 |
+| **aiosendspin** | 5.1.1 |
 | **Flask** | 3.1.3, Waitress 3.0.2 |
 | **BT adapter** | CSR8510 A10 (`00:15:83:FF:8F:2B`, hci0) |
 | **MA server** | auto:9000 (mDNS) |
@@ -225,7 +225,7 @@ Runs as a systemd service inside an unprivileged LXC container on Proxmox.
 
 | Player | BT MAC | Sendspin port | PA sink | Volume | Delay |
 |--------|--------|---------------|---------|--------|-------|
-| ENEBY Portable @ LXC | `6C:5C:3D:35:17:99` | 8928 | `bluez_sink.6C_5C_3D_35_17_99.a2dp_sink` | 59% | −900 ms |
+| ENEBY Portable @ LXC | `6C:5C:3D:35:17:99` | 8928 | `bluez_sink.6C_5C_3D_35_17_99.a2dp_sink` | 59% | 0 ms |
 
 MA API integration active.
 
@@ -238,11 +238,11 @@ Runs as a systemd service inside an LXC container on Turris Omnia router (OpenWr
 | **Host** | Turris Omnia, TurrisOS 9.0.4 (OpenWrt), Marvell Armada 385 ARMv7, 2 GB RAM, 8 GB eMMC |
 | **OS** | Ubuntu 24.04.4 LTS (Noble Numbat), armv7l |
 | **Hostname** | `ubuntu` |
-| **Bridge version** | 2.49.0 |
+| **Bridge version** | 2.61.0 |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
-| **aiosendspin** | 4.3.2 |
+| **aiosendspin** | 5.1.1 |
 | **Flask** | 3.1.3, Waitress 3.0.2 |
 | **BT adapter** | CSR8510 A10 USB (`C0:FB:F9:62:D7:D6`, hci0) |
 | **MA server** | auto:9000 (mDNS) |
@@ -251,7 +251,7 @@ Runs as a systemd service inside an LXC container on Turris Omnia router (OpenWr
 
 | Player | BT MAC | Sendspin port | PA sink | Volume | Delay |
 |--------|--------|---------------|---------|--------|-------|
-| AfterShokz @ OpenWRT | `20:74:CF:61:FB:D8` | 8928 | `bluez_sink.20_74_CF_61_FB_D8.a2dp_sink` | 67% | −500 ms |
+| AfterShokz @ OpenWRT | `20:74:CF:61:FB:D8` | 8928 | `bluez_sink.20_74_CF_61_FB_D8.a2dp_sink` | 67% | 0 ms |
 
 :::note[OpenWrt specifics]
 The host requires a `pulse` user (uid 109) in `/etc/passwd` for D-Bus EXTERNAL authentication.
@@ -314,11 +314,11 @@ All LXC bridge instances share the same software stack:
 
 | Component | Version |
 |-----------|---------|
-| **Sendspin BT Bridge** | 2.49.0 |
+| **Sendspin BT Bridge** | 2.61.0 |
 | **Ubuntu** | 24.04 LTS |
 | **Python** | 3.12.3 |
 | **BlueZ** | 5.72 |
 | **PulseAudio** | 16.1 |
-| **aiosendspin** | 4.3.2 |
+| **aiosendspin** | 5.1.1 |
 | **Flask** | 3.1.3 |
 | **Waitress** | 3.0.2 |

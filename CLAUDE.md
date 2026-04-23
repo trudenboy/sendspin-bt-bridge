@@ -51,7 +51,7 @@ Use **red/green TDD** for all new features and bug fixes:
 - After sending `kill`, verify that the exact PID you targeted is actually gone before starting a replacement.
 - Account for OS-specific command syntax and behavior when managing the demo process, especially on macOS.
 
-## Architecture (v2.50.0)
+## Architecture (v2.61.0)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -62,7 +62,7 @@ main process (Flask API, BT manager, web UI)
     └── ...
 ```
 
-IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `set_mute`, `stop`, `reconnect`, `set_log_level`, `transport`, `set_standby`).
+IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `set_mute`, `stop`, `pause`, `play`, `reconnect`, `set_log_level`, `set_static_delay_ms`, `transport`, `set_standby`).
 
 **`sendspin_client.py`** — core orchestration per device:
 - `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
@@ -87,14 +87,17 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `ensure_bridge_name()` — auto-populates BRIDGE_NAME from hostname on first startup
 - `ensure_secret_key()` — generates and persists SECRET_KEY if absent
 - `get_runtime_version()` — returns version from `.release-ref` file or falls back to `VERSION`
-- `VERSION = "2.50.0"`, `BUILD_DATE = "2025-07-18"` — set by CI from `VERSION` file
+- `VERSION = "2.61.0"`, `BUILD_DATE = "2026-04-22"` — set by CI from `VERSION` file
 - Re-exports from `config_auth.py` (password hashing), `config_migration.py` (schema migration, normalization), `config_network.py` (port resolution, HA addon detection)
 
 **`services/` module (core):**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
-- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. IPC commands: `set_volume`, `set_mute`, `stop`, `reconnect`, `set_log_level`, `transport`, `set_standby`. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting; startup unmute timeout is 15 s.
+- `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. IPC commands: `set_volume`, `set_mute`, `stop`, `pause`, `play`, `reconnect`, `set_log_level`, `set_static_delay_ms`, `transport`, `set_standby`. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting; startup unmute timeout is 15 s.
 - `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync to config.json + options.json), `is_audio_device()`, `_match_player_name()`
+- `adapter_recovery.py` — progressive BT adapter recovery ladder (HCI mgmt reset → rfkill unblock → USB unbind/rebind) via `bluetooth-auto-recovery`; fails soft on non-Linux or without required capabilities
+- `pairing_quiesce.py` — opt-in peer-quiesce context manager for single-adapter multi-speaker setups that can't pair a second device while another A2DP ACL is active (BlueZ 5.78→5.86 regression band)
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
+- `sink_monitor.py` — parent-process PulseAudio sink-state monitor (via `pulsectl_asyncio`); tracks `running ↔ idle/suspended` transitions for registered BT sinks to drive idle disconnect
 - `pa_volume_controller.py` — PulseAudio/PipeWire volume controller implementing the sendspin VolumeController protocol
 
 **`services/` module (IPC & subprocess):**
@@ -145,6 +148,10 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `ha_addon.py` — Home Assistant Supervisor integration for addon detection, delivery channels, and MA discovery candidates
 - `ha_core_api.py` — WebSocket client for fetching HA device/area registry data and deriving adapter→area suggestions
 - `sendspin_compat.py` — runtime dependency version inspection and sendspin audio API compatibility analysis
+- `port_bind_probe.py` — host-side TCP bind probe to find a free inbound port before spawning a daemon subprocess
+- `sendspin_port_probe.py` — outbound Sendspin WebSocket port probe; when `SENDSPIN_PORT=9000` fails, tries common alternates
+- `github_issue_proxy.py` — GitHub App proxy that lets users submit bug reports without having their own GitHub account
+- `url_safety.py` — SSRF-style safety checks for server-side fetches, with carve-outs for RFC1918/localhost MA/HA targets
 - `_helpers.py` — shared helpers for device state extraction and ISO-8601 timestamp parsing
 
 **`routes/` module (Flask blueprints):**
@@ -254,12 +261,14 @@ On BT reconnect: PulseAudio's `module-rescue-streams` may move streams to the de
 
 | Player name | MAC | Adapter | Port | Delay | Enabled |
 |-------------|-----|---------|------|-------|---------|
-| ENEBY20 | FC:58:FA:EB:08:6C | hci0 | 8928 | −600 ms | ✅ |
-| Yandex mini 2 007 a | 2C:D2:6B:B8:EC:5B | hci1 | 8929 | −400 ms | ✅ |
-| WH-1000XM4 | 80:99:E7:C2:0B:D3 | hci0 | 8931 | −600 ms | ❌ |
-| Lenco LS-500 | 30:21:0E:0A:AE:5A | hci1 | 8932 | −600 ms | ✅ |
-| OpenMove AfterShokz | 20:74:CF:61:FB:D8 | hci0 | 8933 | −600 ms | ❌ |
-| ENEBY Portable | 6C:5C:3D:35:17:99 | hci1 | 8933 | −600 ms | ❌ |
+| ENEBY20 | FC:58:FA:EB:08:6C | hci0 | 8928 | 0 ms | ✅ |
+| Yandex mini 2 007 a | 2C:D2:6B:B8:EC:5B | hci1 | 8929 | 0 ms | ✅ |
+| WH-1000XM4 | 80:99:E7:C2:0B:D3 | hci0 | 8931 | 0 ms | ❌ |
+| Lenco LS-500 | 30:21:0E:0A:AE:5A | hci1 | 8932 | 0 ms | ✅ |
+| OpenMove AfterShokz | 20:74:CF:61:FB:D8 | hci0 | 8933 | 0 ms | ❌ |
+| ENEBY Portable | 6C:5C:3D:35:17:99 | hci1 | 8933 | 0 ms | ❌ |
+
+Delay column reflects sendspin 7.0+ semantics: `static_delay_ms` is an additional forward delay (0–5 000 ms) on top of DAC-anchored sync. Negative values aren't accepted; legacy negative values are clamped to `0` at migration time.
 
 ### Production addon settings
 
