@@ -19,6 +19,7 @@ from services.config_diff import ActionKind, ReconfigAction
 if TYPE_CHECKING:
     from concurrent.futures import Future
 
+    from services.device_activation import DeviceActivationContext
     from services.device_registry import DeviceRegistrySnapshot
 
 logger = logging.getLogger(__name__)
@@ -108,9 +109,14 @@ class ReconfigOrchestrator:
         self,
         loop: asyncio.AbstractEventLoop | None,
         snapshot: DeviceRegistrySnapshot,
+        *,
+        activation_context: DeviceActivationContext | None = None,
     ) -> None:
         self._loop = loop
         self._snapshot = snapshot
+        # Optional so unit tests that don't exercise START_CLIENT can
+        # continue to instantiate the orchestrator with just (loop, snapshot).
+        self._activation_context = activation_context
 
     # -- public API ------------------------------------------------------
 
@@ -160,10 +166,7 @@ class ReconfigOrchestrator:
         elif kind is ActionKind.STOP_CLIENT:
             self._apply_stop(action, clients_by_mac, summary)
         elif kind is ActionKind.START_CLIENT:
-            # v1 scope: brand-new devices require a bridge restart because we
-            # need to wire up BT managers, MA listeners, etc.  Surface this to
-            # the UI so the user knows to click "restart bridge".
-            summary.restart_required.append(action.to_summary())
+            self._apply_start_client(action, clients_by_mac, summary)
         elif kind is ActionKind.GLOBAL_BROADCAST:
             self._apply_global_broadcast(action, clients_by_mac, summary)
         elif kind is ActionKind.GLOBAL_RESTART:
@@ -294,6 +297,146 @@ class ReconfigOrchestrator:
                     description=f"stop_sendspin:{action.label or action.mac}",
                 )
         summary.stopped.append(action.to_summary())
+
+    def _apply_start_client(
+        self,
+        action: ReconfigAction,
+        clients_by_mac: dict[str, Any],
+        summary: ReconfigSummary,
+    ) -> None:
+        """Materialize a brand-new SendspinClient for a just-added device.
+
+        Falls back to ``summary.restart_required`` (the legacy behaviour)
+        when the activation context or main loop isn't available — typically
+        in unit tests that instantiate the orchestrator directly without
+        going through :mod:`bridge_orchestrator`.
+        """
+        context = self._activation_context
+        if context is None or self._loop is None:
+            summary.restart_required.append(action.to_summary())
+            return
+
+        mac_key = (action.mac or "").upper()
+        if mac_key and mac_key in clients_by_mac:
+            # Race guard: two POST /api/config calls with the same new MAC.
+            # The first one won; second one no-ops loudly instead of
+            # duplicating the client and confusing the registry.
+            logger.warning(
+                "START_CLIENT for %s ignored — a client for this MAC is already registered",
+                action.label or action.mac,
+            )
+            return
+
+        device_payload = action.payload.get("device") or {}
+        if not isinstance(device_payload, dict):
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": "START_CLIENT payload missing 'device' dict",
+                }
+            )
+            return
+
+        existing_clients = list(self._snapshot.active_clients)
+        try:
+            from services.device_activation import activate_device
+
+            result = activate_device(
+                device_payload,
+                index=len(existing_clients),
+                context=context,
+                default_player_name=str(device_payload.get("player_name") or "Sendspin"),
+            )
+        except Exception as exc:
+            logger.exception("START_CLIENT activation failed for %s", action.label or action.mac)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"activation failed: {exc}",
+                }
+            )
+            return
+
+        new_clients = [*existing_clients, result.client]
+        try:
+            import state as _state
+
+            _state.set_clients(new_clients)
+        except Exception as exc:
+            logger.exception("START_CLIENT registry update failed for %s", action.label or action.mac)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"registry update failed: {exc}",
+                }
+            )
+            return
+
+        # Kick the main-loop coroutine that spawns the daemon subprocess and
+        # starts the BT monitor.  Fire-and-forget with a rollback callback
+        # so a startup exception doesn't leave a zombie registry entry.
+        coro = result.client.run()
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except RuntimeError as exc:
+            coro.close()
+            # Loop stopped mid-request — roll the registry back.
+            try:
+                _state.set_clients(existing_clients)
+            except Exception as revert_exc:  # pragma: no cover — best effort
+                logger.debug("registry rollback after schedule failure: %s", revert_exc)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"run schedule failed ({type(exc).__name__})",
+                }
+            )
+            return
+
+        label = action.label or action.mac or "new client"
+
+        def _on_run_done(done_future: Future, _mac: str = mac_key, _label: str = label) -> None:
+            try:
+                done_future.result()
+            except Exception as run_exc:
+                logger.warning("client.run() for %s exited with error: %s", _label, run_exc)
+                self._rollback_started_client(_mac)
+
+        future.add_done_callback(_on_run_done)
+        summary.started.append(action.to_summary())
+
+    def _rollback_started_client(self, mac_key: str) -> None:
+        """Remove a client that failed its ``run()`` bootstrap from the registry."""
+        try:
+            import state as _state
+        except Exception:  # pragma: no cover — import must succeed in practice
+            return
+        try:
+            current = list(_state.get_clients_snapshot())
+        except Exception:
+            return
+        surviving = [
+            c for c in current if (getattr(getattr(c, "bt_manager", None), "mac_address", "") or "").upper() != mac_key
+        ]
+        if len(surviving) == len(current):
+            return
+        try:
+            _state.set_clients(surviving)
+            _state.notify_status_changed()
+        except Exception as exc:  # pragma: no cover
+            logger.debug("rollback set_clients failed: %s", exc)
 
     def _apply_global_broadcast(
         self,

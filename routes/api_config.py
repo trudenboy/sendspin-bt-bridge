@@ -50,7 +50,7 @@ from services.async_job_state import (
     set_update_available,
 )
 from services.bluetooth import _MAC_RE
-from services.bridge_runtime_state import get_main_loop
+from services.bridge_runtime_state import get_activation_context, get_main_loop
 from services.config_diff import diff_configs
 from services.config_validation import validate_uploaded_config
 from services.device_registry import get_device_registry_snapshot
@@ -824,7 +824,11 @@ def api_config():
     # bridge restart.
     reconfig_summary_dict: dict[str, object] = {}
     if reconfig_actions:
-        orchestrator = ReconfigOrchestrator(get_main_loop(), get_device_registry_snapshot())
+        orchestrator = ReconfigOrchestrator(
+            get_main_loop(),
+            get_device_registry_snapshot(),
+            activation_context=get_activation_context(),
+        )
         reconfig_summary_dict = orchestrator.apply(reconfig_actions).to_dict()
 
     payload: dict[str, object] = {"success": True}

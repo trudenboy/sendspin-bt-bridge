@@ -9,12 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.62.0-rc.1] - 2026-04-24
 
-Follow-ups to the Synergy 65 S pair failure tracked in issue #168 and a
-UX polish for the device-list editor. This rc replaces the stdin-``yes``
-race in the standalone pair flow with a native BlueZ auth agent — the
-same call shape a human gets from interactive ``bluetoothctl``, which
-reached ``Bonded: yes`` on the Synergy in the issue reproduction where
-the bridge's automated flow cancelled.
+Follow-ups to the Synergy 65 S pair failure tracked in issue #168,
+a UX polish for the device-list editor, and the big one for multi-room
+ops: **adding a new speaker from the scan modal no longer forces a
+bridge restart** — new devices now start live.
 
 ### Added
 - **Native BlueZ authentication agent** (`services/pairing_agent.py`) —
@@ -28,6 +26,22 @@ the bridge's automated flow cancelled.
   ``bluetoothctl`` advertises (the path that reached ``Bonded: yes``
   in the #168 reproduction). ``EXPERIMENTAL_PAIR_JUST_WORKS`` still
   forces ``NoInputNoOutput`` for Just-Works callers.
+- **Online activation of newly-added devices** — saving a config with
+  a just-added ``BLUETOOTH_DEVICES`` entry now wires up the
+  ``SendspinClient`` + ``BluetoothManager`` pair, registers it in the
+  device registry, and schedules ``client.run()`` on the main loop
+  without a bridge restart. ``ReconfigSummary.started`` is surfaced in
+  the UI as a green "Live added: <name>" toast; ``restart_required``
+  stays empty for the add-device case.
+- **`services/device_activation.py`** — reusable factory
+  (``DeviceActivationContext`` + ``activate_device``) shared between
+  ``bridge_orchestrator.initialize_devices`` and the new
+  ``ReconfigOrchestrator._apply_start_client`` path, so both entry
+  points apply the same port math, keepalive clamps, sink-monitor
+  wiring, and volume restore semantics.
+- **`services/bridge_runtime_state.set_activation_context` /
+  `get_activation_context`** — cross-thread handoff so Flask request
+  threads can reach the startup-captured factories.
 
 ### Changed
 - **`_run_standalone_pair_inner` uses the native agent by default** —
@@ -37,6 +51,16 @@ the bridge's automated flow cancelled.
   fails, the pair flow logs a warning and falls back to the legacy
   bluetoothctl stdin-agent path unchanged — the patch is safe on
   hosts without a reachable SystemBus.
+- **`ReconfigOrchestrator.__init__` accepts an optional
+  `activation_context`** — needed to materialize new clients online.
+  Old callers (unit tests, dev scripts) can keep passing just
+  ``(loop, snapshot)``; START_CLIENT actions then fall back to the
+  legacy ``restart_required`` behaviour.
+- **`bridge_orchestrator.initialize_devices` now delegates per-device
+  wiring to `services.device_activation.activate_device`** and
+  publishes the factory context via `set_activation_context` so the
+  reconfig path can reuse it. Behaviour-preserving refactor — all
+  existing `test_bridge_orchestrator` assertions hold.
 
 ### Fixed
 - **Scan-add no longer creates silent duplicate device rows** — the
@@ -58,9 +82,13 @@ the bridge's automated flow cancelled.
   pair) and ``routes/api_bt.py:_run_reset_reconnect`` (Reset & Reconnect
   button) still use the legacy stdin-agent. They'll move to the native
   agent in a follow-up once production confirms behaviour.
+- Online activation covers the **add-device** case only. Re-enabling a
+  previously-disabled device, changing the adapter on an existing one,
+  and all other edits that already had hot/warm paths keep the paths
+  they had before.
 
 ### Tests
-1494 → 1500 passing. New coverage:
+1494 → 1516 passing. New coverage:
 
 - ``tests/test_pairing_agent.py`` — capability validation, PIN plumbing,
   ``RequestConfirmation`` / ``Cancel`` state capture, full register →
@@ -71,6 +99,16 @@ the bridge's automated flow cancelled.
   per-index ``BLUETOOTH_DEVICES[N].mac`` field path for 3+ duplicate
   MACs so the UI's conflict-row highlighter keeps parsing backend
   errors correctly as the validator evolves.
+- ``tests/test_device_activation.py`` (10 cases) — factory covers
+  BT-manager wiring, sink-monitor callback, missing-MAC/disabled-
+  adapter degradation, volume restore, explicit vs fallback listen
+  port, effective-bridge suffix, released-state restore, keepalive
+  clamping, and context immutability.
+- ``tests/test_reconfig_orchestrator_start_client.py`` (6 cases) —
+  registry append + run-task schedule, fallback to ``restart_required``
+  when context or loop absent, factory-exception error surface, MAC
+  idempotency guard, and registry rollback when the scheduled
+  ``run()`` exits with an exception.
 
 ## [2.61.0] - 2026-04-22
 

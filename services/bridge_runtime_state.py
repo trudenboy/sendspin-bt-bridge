@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import asyncio
 
+    from services.device_activation import DeviceActivationContext
+
 UTC = timezone.utc
 
 bridge_start_time: datetime = datetime.now(tz=UTC)
@@ -206,6 +208,27 @@ def set_main_loop(loop: asyncio.AbstractEventLoop | None) -> None:
 def get_main_loop() -> asyncio.AbstractEventLoop | None:
     """Return the main asyncio event loop, or None if not yet set."""
     return _main_loop
+
+
+_activation_context: DeviceActivationContext | None = None
+
+
+def set_activation_context(context: DeviceActivationContext | None) -> None:
+    """Publish the device-activation context captured at bridge startup.
+
+    Needed so :class:`~services.reconfig_orchestrator.ReconfigOrchestrator`
+    can materialize a new ``SendspinClient`` from a Flask request thread
+    when the user adds a device via ``POST /api/config``. ``None`` clears
+    the context (used in tests and on shutdown).
+    """
+    global _activation_context
+    _activation_context = context
+
+
+def get_activation_context() -> DeviceActivationContext | None:
+    """Return the captured device-activation context, or ``None`` if the
+    bridge hasn't finished its startup sequence yet."""
+    return _activation_context
 
 
 def notify_status_changed() -> None:

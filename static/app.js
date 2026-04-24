@@ -7134,6 +7134,9 @@ function _formatReconfigSummary(reconfig) {
     if (reconfig.hot && reconfig.hot.length) {
         parts.push('\u2713 Applied live: ' + summariseGroup(reconfig.hot));
     }
+    if (reconfig.started && reconfig.started.length) {
+        parts.push('\u2713 Live added: ' + summariseGroup(reconfig.started));
+    }
     if (reconfig.global_broadcast && reconfig.global_broadcast.length) {
         parts.push('\u2713 Global: ' + summariseGroup(reconfig.global_broadcast));
     }
