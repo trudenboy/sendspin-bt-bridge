@@ -168,11 +168,13 @@ def test_start_client_handles_factory_exception(monkeypatch):
         loop.close()
 
 
-def test_start_client_idempotent_when_mac_already_registered(monkeypatch):
+def test_start_client_idempotent_when_mac_already_active(monkeypatch):
     loop = asyncio.new_event_loop()
     try:
         existing = SimpleNamespace(
+            bt_management_enabled=True,
             bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+            set_bt_management_enabled=MagicMock(),
         )
         orch = ReconfigOrchestrator(
             loop,
@@ -185,9 +187,69 @@ def test_start_client_idempotent_when_mac_already_registered(monkeypatch):
         summary = orch.apply([_make_new_device_action()])
 
         activate_mock.assert_not_called()
+        existing.set_bt_management_enabled.assert_not_called()
         assert summary.started == []
         assert summary.errors == []
         assert summary.restart_required == []
+    finally:
+        loop.close()
+
+
+def test_start_client_reclaims_bt_management_for_live_disabled_client(monkeypatch):
+    # When the user toggles ``enabled: false`` at runtime we keep the client
+    # in the registry with ``bt_management_enabled=False``.  A later
+    # ``enabled: true`` flip emits START_CLIENT — but we must NOT build a
+    # fresh SendspinClient (that would leak the disabled one and cause two
+    # clients to fight for the same adapter).  Reclaim the existing one
+    # instead by flipping BT management back on.
+    loop = asyncio.new_event_loop()
+    try:
+        released = SimpleNamespace(
+            bt_management_enabled=False,
+            bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+            set_bt_management_enabled=MagicMock(),
+        )
+        orch = ReconfigOrchestrator(
+            loop,
+            _FakeSnapshot([released]),
+            activation_context=_make_context(),
+        )
+        activate_mock = MagicMock()
+        monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
+
+        summary = orch.apply([_make_new_device_action()])
+
+        released.set_bt_management_enabled.assert_called_once_with(True)
+        activate_mock.assert_not_called()  # no new client constructed
+        assert len(summary.started) == 1
+        assert summary.started[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+        assert summary.errors == []
+    finally:
+        loop.close()
+
+
+def test_start_client_reports_error_when_reclaim_raises(monkeypatch):
+    loop = asyncio.new_event_loop()
+    try:
+        released = SimpleNamespace(
+            bt_management_enabled=False,
+            bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+            set_bt_management_enabled=MagicMock(side_effect=RuntimeError("adapter busy")),
+        )
+        orch = ReconfigOrchestrator(
+            loop,
+            _FakeSnapshot([released]),
+            activation_context=_make_context(),
+        )
+        activate_mock = MagicMock()
+        monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
+
+        summary = orch.apply([_make_new_device_action()])
+
+        activate_mock.assert_not_called()
+        assert summary.started == []
+        assert len(summary.errors) == 1
+        assert "re-enable failed" in summary.errors[0]["error"]
     finally:
         loop.close()
 

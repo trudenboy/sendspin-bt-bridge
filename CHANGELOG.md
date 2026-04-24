@@ -33,6 +33,16 @@ bridge restart** — new devices now start live.
   without a bridge restart. ``ReconfigSummary.started`` is surfaced in
   the UI as a green "Live added: <name>" toast; ``restart_required``
   stays empty for the add-device case.
+- **Live re-enable of disabled devices** — toggling a device's
+  ``enabled`` flag back to ``true`` at runtime now reclaims BT
+  management on the existing client instead of trying to construct a
+  duplicate one. ``config_diff`` emits ``START_CLIENT`` for the
+  ``false → true`` transition; ``_apply_start_client`` detects the
+  existing released client by MAC and calls
+  ``set_bt_management_enabled(True)`` — same path the
+  ``/api/bt/management`` route uses — instead of running the factory.
+  Without this the UI's re-enable toggle silently no-op'd after the
+  online-activation patch.
 - **`services/device_activation.py`** — reusable factory
   (``DeviceActivationContext`` + ``activate_device``) shared between
   ``bridge_orchestrator.initialize_devices`` and the new
@@ -88,7 +98,7 @@ bridge restart** — new devices now start live.
   they had before.
 
 ### Tests
-1494 → 1516 passing. New coverage:
+1494 → 1518 passing. New coverage:
 
 - ``tests/test_pairing_agent.py`` — capability validation, PIN plumbing,
   ``RequestConfirmation`` / ``Cancel`` state capture, full register →
@@ -104,11 +114,13 @@ bridge restart** — new devices now start live.
   adapter degradation, volume restore, explicit vs fallback listen
   port, effective-bridge suffix, released-state restore, keepalive
   clamping, and context immutability.
-- ``tests/test_reconfig_orchestrator_start_client.py`` (6 cases) —
+- ``tests/test_reconfig_orchestrator_start_client.py`` (8 cases) —
   registry append + run-task schedule, fallback to ``restart_required``
   when context or loop absent, factory-exception error surface, MAC
-  idempotency guard, and registry rollback when the scheduled
-  ``run()`` exits with an exception.
+  idempotency guard for already-active clients, **live re-enable of a
+  released client and error surfacing when the reclaim call fails**,
+  and registry rollback when the scheduled ``run()`` exits with an
+  exception.
 
 ## [2.61.0] - 2026-04-22
 

@@ -317,12 +317,39 @@ class ReconfigOrchestrator:
             return
 
         mac_key = (action.mac or "").upper()
-        if mac_key and mac_key in clients_by_mac:
+        existing_client = clients_by_mac.get(mac_key) if mac_key else None
+        if existing_client is not None:
+            # Re-enable path: a client whose BT management was released at
+            # runtime (``enabled: false`` flipped via UI → STOP_CLIENT) keeps
+            # its entry in the registry with ``bt_management_enabled=False``.
+            # Flipping ``enabled`` back to ``true`` at save time emits a fresh
+            # START_CLIENT — don't build a new client, just reclaim management
+            # on the existing one. ``set_bt_management_enabled(True)`` is the
+            # same call the ``/api/bt/management`` route uses and it's safe
+            # from the Flask request thread.
+            bt_management = bool(getattr(existing_client, "bt_management_enabled", True))
+            if not bt_management:
+                try:
+                    existing_client.set_bt_management_enabled(True)
+                except Exception as exc:
+                    logger.exception("re-enable via START_CLIENT failed for %s", action.label or action.mac)
+                    summary.errors.append(
+                        {
+                            "kind": action.kind.value,
+                            "mac": action.mac,
+                            "label": action.label,
+                            "fields": list(action.fields),
+                            "error": f"re-enable failed: {exc}",
+                        }
+                    )
+                    return
+                summary.started.append(action.to_summary())
+                return
             # Race guard: two POST /api/config calls with the same new MAC.
             # The first one won; second one no-ops loudly instead of
             # duplicating the client and confusing the registry.
             logger.warning(
-                "START_CLIENT for %s ignored — a client for this MAC is already registered",
+                "START_CLIENT for %s ignored — a client for this MAC is already active",
                 action.label or action.mac,
             )
             return
