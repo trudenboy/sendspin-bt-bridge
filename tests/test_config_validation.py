@@ -35,6 +35,24 @@ def test_validate_uploaded_config_reports_duplicate_device_macs():
     assert result.errors[0].message == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"
 
 
+def test_validate_uploaded_config_reports_every_extra_duplicate_mac():
+    # The frontend highlight relies on the per-index field path stable across
+    # all extra duplicates so it can mark every offending row, not just one.
+    result = validate_uploaded_config(
+        {
+            "CONFIG_SCHEMA_VERSION": 1,
+            "BLUETOOTH_DEVICES": [
+                {"mac": "AA:BB:CC:DD:EE:FF"},
+                {"mac": "AA:BB:CC:DD:EE:FF"},
+                {"mac": "AA:BB:CC:DD:EE:FF"},
+            ],
+        }
+    )
+
+    dup_fields = [issue.field for issue in result.errors if "Duplicate MAC" in issue.message]
+    assert dup_fields == ["BLUETOOTH_DEVICES[1].mac", "BLUETOOTH_DEVICES[2].mac"]
+
+
 def test_validate_uploaded_config_normalizes_device_listen_port_and_keepalive_interval():
     result = validate_uploaded_config(
         {
