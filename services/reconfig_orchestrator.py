@@ -19,6 +19,7 @@ from services.config_diff import ActionKind, ReconfigAction
 if TYPE_CHECKING:
     from concurrent.futures import Future
 
+    from services.device_activation import DeviceActivationContext
     from services.device_registry import DeviceRegistrySnapshot
 
 logger = logging.getLogger(__name__)
@@ -108,9 +109,14 @@ class ReconfigOrchestrator:
         self,
         loop: asyncio.AbstractEventLoop | None,
         snapshot: DeviceRegistrySnapshot,
+        *,
+        activation_context: DeviceActivationContext | None = None,
     ) -> None:
         self._loop = loop
         self._snapshot = snapshot
+        # Optional so unit tests that don't exercise START_CLIENT can
+        # continue to instantiate the orchestrator with just (loop, snapshot).
+        self._activation_context = activation_context
 
     # -- public API ------------------------------------------------------
 
@@ -160,10 +166,7 @@ class ReconfigOrchestrator:
         elif kind is ActionKind.STOP_CLIENT:
             self._apply_stop(action, clients_by_mac, summary)
         elif kind is ActionKind.START_CLIENT:
-            # v1 scope: brand-new devices require a bridge restart because we
-            # need to wire up BT managers, MA listeners, etc.  Surface this to
-            # the UI so the user knows to click "restart bridge".
-            summary.restart_required.append(action.to_summary())
+            self._apply_start_client(action, clients_by_mac, summary)
         elif kind is ActionKind.GLOBAL_BROADCAST:
             self._apply_global_broadcast(action, clients_by_mac, summary)
         elif kind is ActionKind.GLOBAL_RESTART:
@@ -294,6 +297,259 @@ class ReconfigOrchestrator:
                     description=f"stop_sendspin:{action.label or action.mac}",
                 )
         summary.stopped.append(action.to_summary())
+
+    def _apply_start_client(
+        self,
+        action: ReconfigAction,
+        clients_by_mac: dict[str, Any],
+        summary: ReconfigSummary,
+    ) -> None:
+        """Materialize a brand-new SendspinClient for a just-added device.
+
+        Falls back to ``summary.restart_required`` (the legacy behaviour)
+        when the activation context or main loop isn't available — typically
+        in unit tests that instantiate the orchestrator directly without
+        going through :mod:`bridge_orchestrator`.
+        """
+        context = self._activation_context
+        if context is None or self._loop is None:
+            summary.restart_required.append(action.to_summary())
+            return
+
+        mac_key = (action.mac or "").upper()
+        existing_client = clients_by_mac.get(mac_key) if mac_key else None
+        if existing_client is not None:
+            # Re-enable path: a client whose BT management was released at
+            # runtime (``enabled: false`` flipped via UI → STOP_CLIENT) keeps
+            # its entry in the registry with ``bt_management_enabled=False``.
+            # Flipping ``enabled`` back to ``true`` at save time emits a fresh
+            # START_CLIENT — don't build a new client, just reclaim management
+            # on the existing one. ``set_bt_management_enabled(True)`` is the
+            # same call the ``/api/bt/management`` route uses and it's safe
+            # from the Flask request thread.
+            bt_management = bool(getattr(existing_client, "bt_management_enabled", True))
+            if not bt_management:
+                try:
+                    existing_client.set_bt_management_enabled(True)
+                except Exception as exc:
+                    logger.exception("re-enable via START_CLIENT failed for %s", action.label or action.mac)
+                    summary.errors.append(
+                        {
+                            "kind": action.kind.value,
+                            "mac": action.mac,
+                            "label": action.label,
+                            "fields": list(action.fields),
+                            "error": f"re-enable failed: {exc}",
+                        }
+                    )
+                    return
+                summary.started.append(action.to_summary())
+                return
+            # Race guard: two POST /api/config calls with the same new MAC.
+            # The first one won; second one no-ops loudly instead of
+            # duplicating the client and confusing the registry.
+            logger.warning(
+                "START_CLIENT for %s ignored — a client for this MAC is already active",
+                action.label or action.mac,
+            )
+            return
+
+        device_payload = action.payload.get("device") or {}
+        if not isinstance(device_payload, dict):
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": "START_CLIENT payload missing 'device' dict",
+                }
+            )
+            return
+
+        # Read the live registry to compute the device_index fallback.  The
+        # actual append happens inside ``mutate_active_clients`` below, which
+        # re-reads the list under the registry lock to avoid the
+        # read-modify-write race against concurrent ``POST /api/config``
+        # request threads (Waitress runs requests in parallel).
+        import state as _state
+        from services.device_registry import mutate_active_clients
+
+        try:
+            existing_clients = list(_state.get_clients_snapshot())
+        except Exception as exc:
+            logger.exception("START_CLIENT registry read failed for %s", action.label or action.mac)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"registry read failed: {exc}",
+                }
+            )
+            return
+
+        # Prefer the explicit ``device_index`` the diff computed over
+        # ``len(existing_clients)``.  Position in BLUETOOTH_DEVICES is what
+        # the startup path uses for the ``base_listen_port + index`` fallback
+        # when a device didn't pin its own ``listen_port``; falling back to
+        # the live-clients length would assign a different port (and risk
+        # collision with a disabled device's implicit port).
+        payload_index = action.payload.get("device_index")
+        device_index = (
+            int(payload_index) if isinstance(payload_index, int) and payload_index >= 0 else len(existing_clients)
+        )
+
+        try:
+            from services.device_activation import activate_device
+
+            # Fall through to the context's default player name (the
+            # startup path captured ``Sendspin-<hostname>`` / ``$SENDSPIN_NAME``
+            # / ``client_factory`` override there) — not a hardcoded
+            # "Sendspin" — so online-activation names match what a bridge
+            # restart would produce, keeping MA/UI identity stable across
+            # restarts when ``player_name`` is absent from the config entry.
+            resolved_default_name = str(device_payload.get("player_name") or context.default_player_name)
+            result = activate_device(
+                device_payload,
+                index=device_index,
+                context=context,
+                default_player_name=resolved_default_name,
+            )
+        except Exception as exc:
+            logger.exception("START_CLIENT activation failed for %s", action.label or action.mac)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"activation failed: {exc}",
+                }
+            )
+            return
+
+        # Atomic append under the registry lock — re-reads the live list
+        # inside ``mutate_active_clients`` so a peer ``POST /api/config``
+        # request that appended its own client between our snapshot read
+        # and our write doesn't get clobbered.
+        def _append_new_client(current: list[Any]) -> list[Any]:
+            # Race guard: a parallel request may have already added a client
+            # for the same MAC. If so, drop our just-built duplicate to avoid
+            # two clients fighting for the same adapter.
+            if mac_key:
+                for existing in current:
+                    existing_mac = (getattr(getattr(existing, "bt_manager", None), "mac_address", "") or "").upper()
+                    if existing_mac == mac_key:
+                        logger.warning(
+                            "START_CLIENT for %s lost the append race — peer request already created a client; dropping duplicate",
+                            action.label or action.mac,
+                        )
+                        return current
+            return [*current, result.client]
+
+        try:
+            updated_snapshot = mutate_active_clients(_append_new_client)
+        except Exception as exc:
+            logger.exception("START_CLIENT registry update failed for %s", action.label or action.mac)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"registry update failed: {exc}",
+                }
+            )
+            return
+
+        # If the race-guard inside the mutator dropped our client, abort
+        # before scheduling its run() — there's another active client for
+        # this MAC already, and double-running ``client.run()`` against
+        # the same BT adapter would race the daemon spawn.
+        if not any(c is result.client for c in updated_snapshot.active_clients):
+            return
+
+        # Kick the main-loop coroutine that spawns the daemon subprocess and
+        # starts the BT monitor.  Fire-and-forget with a rollback callback
+        # so a startup exception doesn't leave a zombie registry entry.
+        coro = result.client.run()
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except RuntimeError as exc:
+            coro.close()
+            # Loop stopped mid-request — roll our just-appended client back
+            # out of the registry.  Atomic remove-by-identity so we don't
+            # clobber peer appends made by other concurrent request threads.
+            try:
+
+                def _rollback_pop(current: list[Any]) -> list[Any]:
+                    return [c for c in current if c is not result.client]
+
+                mutate_active_clients(_rollback_pop)
+            except Exception as revert_exc:  # pragma: no cover — best effort
+                logger.debug("registry rollback after schedule failure: %s", revert_exc)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"run schedule failed ({type(exc).__name__})",
+                }
+            )
+            return
+
+        label = action.label or action.mac or "new client"
+
+        def _on_run_done(done_future: Future, _mac: str = mac_key, _label: str = label) -> None:
+            try:
+                done_future.result()
+            except Exception as run_exc:
+                logger.warning("client.run() for %s exited with error: %s", _label, run_exc)
+                self._rollback_started_client(_mac)
+
+        future.add_done_callback(_on_run_done)
+        # Keep the dispatch-time MAC index consistent with the live
+        # registry so a subsequent action for the same MAC within this
+        # apply() call (e.g. a second duplicate START_CLIENT, or an
+        # immediate HOT_APPLY added alongside the START_CLIENT) sees the
+        # fresh client instead of re-running activate_device.
+        if mac_key:
+            clients_by_mac[mac_key] = result.client
+        summary.started.append(action.to_summary())
+
+    def _rollback_started_client(self, mac_key: str) -> None:
+        """Remove a client that failed its ``run()`` bootstrap from the registry."""
+        try:
+            import state as _state
+            from services.device_registry import mutate_active_clients
+        except Exception:  # pragma: no cover — imports must succeed in practice
+            return
+
+        removed: list[bool] = [False]
+
+        def _drop_by_mac(current: list[Any]) -> list[Any]:
+            surviving = [
+                c
+                for c in current
+                if (getattr(getattr(c, "bt_manager", None), "mac_address", "") or "").upper() != mac_key
+            ]
+            if len(surviving) != len(current):
+                removed[0] = True
+            return surviving
+
+        try:
+            mutate_active_clients(_drop_by_mac)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("rollback mutate_active_clients failed: %s", exc)
+            return
+        if removed[0]:
+            try:
+                _state.notify_status_changed()
+            except Exception as exc:  # pragma: no cover
+                logger.debug("rollback notify_status_changed failed: %s", exc)
 
     def _apply_global_broadcast(
         self,

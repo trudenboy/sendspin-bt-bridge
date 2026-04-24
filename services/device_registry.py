@@ -85,6 +85,27 @@ class DeviceRegistry:
                 disabled_devices=list(self._disabled_devices),
             )
 
+    def mutate_active_clients(
+        self,
+        mutator: Callable[[list[Any]], list[Any]],
+    ) -> DeviceRegistrySnapshot:
+        """Atomically transform the active client list under the registry lock.
+
+        ``mutator`` receives a copy of the current list and must return the
+        new list (or the same list to no-op).  Used by callers that need
+        read-modify-write semantics — e.g. appending a newly-started client
+        from one of several parallel ``POST /api/config`` request threads
+        without losing peer appends to a stale snapshot.
+        """
+        with self._lock:
+            current = list(self._active_clients)
+            new_clients = list(mutator(current))
+            self._active_clients = new_clients
+            return DeviceRegistrySnapshot(
+                active_clients=list(self._active_clients),
+                disabled_devices=list(self._disabled_devices),
+            )
+
     def set_disabled_devices(self, disabled_devices: list[dict[str, Any]] | None) -> DeviceRegistrySnapshot:
         """Replace the disabled-device inventory and return the updated snapshot."""
         with self._lock:
@@ -124,6 +145,15 @@ def _notify_registry_listeners(snapshot: DeviceRegistrySnapshot) -> None:
 def set_active_clients(active_clients: list[Any] | None) -> DeviceRegistrySnapshot:
     """Replace the active client inventory and notify listeners."""
     snapshot = _device_registry.set_active_clients(active_clients)
+    _notify_registry_listeners(snapshot)
+    return snapshot
+
+
+def mutate_active_clients(
+    mutator: Callable[[list[Any]], list[Any]],
+) -> DeviceRegistrySnapshot:
+    """Atomically transform the active client list and notify listeners."""
+    snapshot = _device_registry.mutate_active_clients(mutator)
     _notify_registry_listeners(snapshot)
     return snapshot
 

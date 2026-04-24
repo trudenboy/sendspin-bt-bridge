@@ -182,6 +182,26 @@ def _devices_by_mac(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _device_index_in(config: dict[str, Any], mac: str) -> int | None:
+    """Return the position of ``mac`` inside ``BLUETOOTH_DEVICES``.
+
+    This is the index the startup path (``bridge_orchestrator``) would use
+    when computing the ``base_listen_port + index`` fallback for a device
+    that didn't pin an explicit ``listen_port``.  START_CLIENT needs the
+    same index so online-activation picks the same port a bridge restart
+    would — otherwise multiple newly-added devices collide on the base
+    listen port.
+    """
+    mac_upper = mac.upper()
+    for idx, dev in enumerate(config.get("BLUETOOTH_DEVICES", []) or []):
+        if not isinstance(dev, dict):
+            continue
+        dev_mac = dev.get("mac")
+        if isinstance(dev_mac, str) and dev_mac.upper() == mac_upper:
+            return idx
+    return None
+
+
 def _normalize_scalar(value: Any) -> Any:
     """Canonical form for comparing config values.
 
@@ -208,6 +228,8 @@ def _diff_device(
     mac: str,
     old_dev: dict[str, Any] | None,
     new_dev: dict[str, Any] | None,
+    *,
+    device_index: int | None = None,
 ) -> list[ReconfigAction]:
     """Compute actions for a single device MAC's config change."""
     actions: list[ReconfigAction] = []
@@ -231,12 +253,15 @@ def _diff_device(
     # Newly added device.
     if new_dev and not old_dev:
         if new_enabled:
+            payload: dict[str, Any] = {"device": dict(new_dev)}
+            if device_index is not None:
+                payload["device_index"] = device_index
             actions.append(
                 ReconfigAction(
                     kind=ActionKind.START_CLIENT,
                     mac=mac,
                     fields=["added"],
-                    payload={"device": dict(new_dev)},
+                    payload=payload,
                     label=_label_for_device(new_dev),
                 )
             )
@@ -256,12 +281,15 @@ def _diff_device(
         )
         return actions
     if not old_enabled and new_enabled:
+        payload_reenable: dict[str, Any] = {"device": dict(new_dev)}
+        if device_index is not None:
+            payload_reenable["device_index"] = device_index
         actions.append(
             ReconfigAction(
                 kind=ActionKind.START_CLIENT,
                 mac=mac,
                 fields=["enabled"],
-                payload={"device": dict(new_dev)},
+                payload=payload_reenable,
                 label=_label_for_device(new_dev),
             )
         )
@@ -392,7 +420,14 @@ def diff_configs(old: dict[str, Any] | None, new: dict[str, Any] | None) -> list
             ordered_macs.append(mac)
 
     for mac in ordered_macs:
-        actions.extend(_diff_device(mac, old_devices.get(mac), new_devices.get(mac)))
+        actions.extend(
+            _diff_device(
+                mac,
+                old_devices.get(mac),
+                new_devices.get(mac),
+                device_index=_device_index_in(new, mac),
+            )
+        )
 
     actions.extend(_diff_global(old, new))
 

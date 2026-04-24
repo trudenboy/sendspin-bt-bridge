@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
 from config import detect_ha_addon_channel, ensure_bridge_name, load_config, resolve_base_listen_port, resolve_web_port
+from services.bridge_runtime_state import set_activation_context
+from services.device_activation import DeviceActivationContext, activate_device
 from services.device_registry import get_device_registry_snapshot
 from services.lifecycle_state import BridgeLifecycleState
 from services.ma_integration_service import BridgeMaIntegrationService
@@ -438,12 +440,37 @@ class BridgeOrchestrator:
         clients: list[Any] = []
         disabled_list: list[dict[str, Any]] = []
 
+        activation_context = DeviceActivationContext(
+            server_host=bootstrap.server_host,
+            server_port=bootstrap.server_port,
+            effective_bridge=bootstrap.effective_bridge,
+            prefer_sbc=bootstrap.prefer_sbc,
+            bt_check_interval=bootstrap.bt_check_interval,
+            bt_max_reconnect_fails=bootstrap.bt_max_reconnect_fails,
+            bt_churn_threshold=bootstrap.bt_churn_threshold,
+            bt_churn_window=bootstrap.bt_churn_window,
+            enable_a2dp_sink_recovery_dance=bootstrap.enable_a2dp_sink_recovery_dance,
+            enable_pa_module_reload=bootstrap.enable_pa_module_reload,
+            enable_adapter_auto_recovery=bootstrap.enable_adapter_auto_recovery,
+            base_listen_port=base_listen_port,
+            client_factory=client_factory,
+            bt_manager_factory=bt_manager_factory,
+            default_player_name=resolved_default_name,
+            load_saved_volume_fn=load_saved_volume_fn,
+            persist_enabled_fn=persist_enabled_fn,
+        )
+        # Published so reconfig_orchestrator._apply_start_client() can reach
+        # the same factories from a Flask request thread when the user adds a
+        # device via POST /api/config (online activation path).
+        set_activation_context(activation_context)
+
         for index, device in enumerate(bt_devices):
             mac = str(device.get("mac") or "")
             adapter = str(device.get("adapter") or "")
-            player_name = str(device.get("player_name") or resolved_default_name)
-            if bootstrap.effective_bridge:
-                player_name = f"{player_name} @ {bootstrap.effective_bridge}"
+            player_name_raw = str(device.get("player_name") or resolved_default_name)
+            player_name = (
+                f"{player_name_raw} @ {bootstrap.effective_bridge}" if bootstrap.effective_bridge else player_name_raw
+            )
 
             if not device.get("enabled", True):
                 disabled_list.append(
@@ -457,81 +484,13 @@ class BridgeOrchestrator:
                 logger.info("  Player '%s': globally disabled — skipping", player_name)
                 continue
 
-            listen_port = int(device.get("listen_port") or base_listen_port + index)
-            listen_host = device.get("listen_host")
-            static_delay_ms = device.get("static_delay_ms")
-            if static_delay_ms is not None:
-                static_delay_ms = float(static_delay_ms)
-            preferred_format = device.get("preferred_format", "flac:44100:16:2")
-            keepalive_interval = int(device.get("keepalive_interval") or 0)
-            keepalive_enabled = keepalive_interval > 0
-            keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
-            idle_disconnect_minutes = int(device.get("idle_disconnect_minutes") or 0)
-            idle_mode = str(device.get("idle_mode") or "default")
-            power_save_delay_minutes = int(device.get("power_save_delay_minutes") or 1)
-
-            client = client_factory(
-                player_name,
-                bootstrap.server_host,
-                bootstrap.server_port,
-                None,
-                listen_port=listen_port,
-                static_delay_ms=static_delay_ms,
-                listen_host=listen_host,
-                effective_bridge=bootstrap.effective_bridge,
-                preferred_format=preferred_format or None,
-                keepalive_enabled=keepalive_enabled,
-                keepalive_interval=keepalive_interval,
-                idle_disconnect_minutes=idle_disconnect_minutes,
-                idle_mode=idle_mode,
-                power_save_delay_minutes=power_save_delay_minutes,
+            result = activate_device(
+                device,
+                index=index,
+                context=activation_context,
+                default_player_name=resolved_default_name,
             )
-            if mac:
-
-                def _on_sink_found(
-                    sink_name: str,
-                    restored_volume: int | None = None,
-                    _client=client,
-                    _mac=mac,
-                ) -> None:
-                    _client.bluetooth_sink_name = sink_name
-                    logger.info("Stored Bluetooth sink for volume sync: %s", sink_name)
-                    if restored_volume is not None:
-                        _client._update_status({"volume": restored_volume})
-                    # Register with PA sink monitor for idle detection
-                    sm = getattr(_client, "_sink_monitor", None)
-                    if sm is not None and _mac:
-                        sm.register(_mac, sink_name, _client._on_sink_active, _client._on_sink_idle)
-
-                bt_mgr = bt_manager_factory(
-                    mac,
-                    adapter=adapter,
-                    device_name=player_name,
-                    host=client,
-                    prefer_sbc=bootstrap.prefer_sbc,
-                    check_interval=bootstrap.bt_check_interval,
-                    max_reconnect_fails=bootstrap.bt_max_reconnect_fails,
-                    on_sink_found=_on_sink_found,
-                    churn_threshold=bootstrap.bt_churn_threshold,
-                    churn_window=bootstrap.bt_churn_window,
-                    enable_a2dp_dance=bootstrap.enable_a2dp_sink_recovery_dance,
-                    enable_pa_module_reload=bootstrap.enable_pa_module_reload,
-                    enable_adapter_auto_recovery=bootstrap.enable_adapter_auto_recovery,
-                )
-                bt_available = bool(bt_mgr.check_bluetooth_available())
-                if not bt_available:
-                    logger.warning("BT adapter '%s' not available for %s", adapter or "default", player_name)
-                client.bt_manager = bt_mgr
-                client._update_status({"bluetooth_available": bt_available})
-                if load_saved_volume_fn is not None:
-                    saved_volume = load_saved_volume_fn(mac)
-                    if saved_volume is not None and 0 <= saved_volume <= 100:
-                        client._update_status({"volume": saved_volume})
-
-            clients.append(client)
-            if device.get("released", False):
-                client.set_bt_management_enabled(False)
-                logger.info("  Player '%s': restored released state", player_name)
+            clients.append(result.client)
             logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 
         logger.info("Client instance(s) registered")

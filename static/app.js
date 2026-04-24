@@ -1765,6 +1765,46 @@ function _highlightBtConfigWrap(wrap) {
     }, 2600);
 }
 
+var _btDuplicateHighlightTimer = null;
+
+function _highlightBtDeviceConflictsFromErrors(errors) {
+    if (!Array.isArray(errors) || errors.length === 0) return;
+    var fieldRe = /^BLUETOOTH_DEVICES\[(\d+)\]\.mac$/;
+    var macRe = /Duplicate MAC address:\s*([0-9A-Fa-f:]+)/;
+    var dupMacs = new Set();
+    errors.forEach(function(e) {
+        if (!e || typeof e.field !== 'string') return;
+        if (!fieldRe.test(e.field)) return;
+        var m = macRe.exec(String(e.message || ''));
+        if (m) dupMacs.add(_normalizeDeviceMac(m[1]));
+    });
+    if (dupMacs.size === 0) return;
+    document.querySelectorAll('#bt-devices-table .bt-device-wrap.duplicate-conflict').forEach(function(node) {
+        node.classList.remove('duplicate-conflict');
+    });
+    if (_btDuplicateHighlightTimer) {
+        clearTimeout(_btDuplicateHighlightTimer);
+        _btDuplicateHighlightTimer = null;
+    }
+    var firstWrap = null;
+    document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
+        var macInput = wrap.querySelector('.bt-mac');
+        if (!macInput) return;
+        if (!dupMacs.has(_normalizeDeviceMac(macInput.value))) return;
+        wrap.classList.add('duplicate-conflict');
+        if (!firstWrap) firstWrap = wrap;
+    });
+    if (firstWrap) {
+        _openConfigPanel('devices', 'config-panel-devices', 'start');
+        firstWrap.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+    _btDuplicateHighlightTimer = setTimeout(function() {
+        document.querySelectorAll('#bt-devices-table .bt-device-wrap.duplicate-conflict').forEach(function(node) {
+            node.classList.remove('duplicate-conflict');
+        });
+    }, 6000);
+}
+
 function _closeBtDeviceActionMenu(node) {
     var menu = node && node.closest ? node.closest('.bt-device-action-menu') : null;
     if (menu) menu.open = false;
@@ -6576,7 +6616,26 @@ function autoAdapter() {
     return (btAdapters.length === 1) ? btAdapters[0].id : '';
 }
 
+function _existingBtConfigWrapForMac(mac) {
+    var targetMac = _normalizeDeviceMac(mac);
+    if (!targetMac) return null;
+    return _findBtConfigWrapByIdentity(null, targetMac);
+}
+
+function _toastAlreadyInFleet(name, mac) {
+    var label = name || mac || 'device';
+    showToast('Already in device list: ' + label, 'warning');
+}
+
 function addFromScan(mac, name, adapter) {
+    var existing = _existingBtConfigWrapForMac(mac);
+    if (existing) {
+        closeBtScanModal();
+        _openConfigPanel('devices', 'config-panel-devices', 'start');
+        _toastAlreadyInFleet(name, mac);
+        _highlightBtConfigWrap(existing);
+        return;
+    }
     addBtDeviceRow(name, mac, adapter || autoAdapter());
     _applyExperimentalVisibility();
     var box = document.getElementById('scan-results-box');
@@ -6588,6 +6647,13 @@ function addFromScan(mac, name, adapter) {
 }
 
 function addFromPaired(mac, name) {
+    var existing = _existingBtConfigWrapForMac(mac);
+    if (existing) {
+        _openConfigPanel('devices', 'config-panel-devices', 'start');
+        _toastAlreadyInFleet(name, mac);
+        _highlightBtConfigWrap(existing);
+        return;
+    }
     addBtDeviceRow(name, mac, autoAdapter());
     _applyExperimentalVisibility();
     _afterBluetoothAddToFleet(name, mac);
@@ -7024,6 +7090,7 @@ async function saveConfig() {
         });
         if (!resp.ok) {
             var errData = await resp.json().catch(function() { return {}; });
+            _highlightBtDeviceConflictsFromErrors(errData.errors);
             return { ok: false, error: errData.error || 'Save failed (HTTP ' + resp.status + ')' };
         }
         var saveData = await resp.json().catch(function() { return {}; });
@@ -7066,6 +7133,9 @@ function _formatReconfigSummary(reconfig) {
 
     if (reconfig.hot && reconfig.hot.length) {
         parts.push('\u2713 Applied live: ' + summariseGroup(reconfig.hot));
+    }
+    if (reconfig.started && reconfig.started.length) {
+        parts.push('\u2713 Live added: ' + summariseGroup(reconfig.started));
     }
     if (reconfig.global_broadcast && reconfig.global_broadcast.length) {
         parts.push('\u2713 Global: ' + summariseGroup(reconfig.global_broadcast));

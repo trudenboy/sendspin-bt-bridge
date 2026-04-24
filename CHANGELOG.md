@@ -7,6 +7,283 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.4] - 2026-04-24
+
+Third pass of Copilot review feedback — three concurrency / cleanup
+correctness fixes.
+
+### Fixed
+- **Race in ``PairingAgent.__enter__`` error path** — when
+  ``_register()`` raised, ``__enter__`` called ``_force_stop()`` which
+  ran ``loop.stop()`` while the agent thread was already inside its
+  ``finally`` running ``loop.run_until_complete(_unregister())``.  The
+  stop interrupted the cleanup with "Event loop stopped before Future
+  completed", leaking the SystemBus connection and the exported agent
+  object.  Now ``_force_stop`` only calls ``loop.stop()`` while the
+  thread is in ``run_forever()`` (tracked via a new
+  ``_running_forever`` flag), and the ``__enter__`` error path waits
+  on ``self._thread.join()`` to let cleanup finish naturally instead
+  of forcing a stop.
+- **Read-modify-write race on the active-clients registry** —
+  ``_apply_start_client`` snapshotted ``state.get_clients_snapshot()``
+  then ``state.set_clients([*snapshot, new])``.  Two parallel
+  ``POST /api/config`` request threads (Waitress runs ``WEB_THREADS=8``
+  by default) could each diff a different new device and clobber
+  each other's append.  Replaced with a new
+  ``services.device_registry.mutate_active_clients(fn)`` that takes
+  the registry lock and runs the mutator atomically.  ``rollback``
+  paths use the same primitive — atomic remove-by-identity instead
+  of overwriting with a stale snapshot.
+- **Cross-request duplicate guard** — even with the atomic mutate,
+  two parallel saves could both target the same MAC.  The mutator
+  now also checks for an existing client with the same MAC inside
+  the lock and drops the just-built duplicate so the registry
+  never holds two clients fighting for one adapter.  The dropped
+  attempt skips ``client.run()`` scheduling so the daemon-spawn
+  race is avoided too.
+
+### Tests
+1530 → 1531 passing.  New coverage:
+- ``tests/test_reconfig_orchestrator_start_client.py`` — concurrent
+  peer-request append wins; our duplicate is dropped inside the
+  atomic mutate and ``client.run()`` is not scheduled.
+- Existing tests refactored onto a shared ``_patch_registry``
+  helper so the live-list assertions exercise the new
+  ``mutate_active_clients`` path.
+
+## [2.62.0-rc.3] - 2026-04-24
+
+Two more follow-ups from Copilot's second pass on the PR.
+
+### Fixed
+- **Default-player-name inconsistency between startup and online
+  activation** — when a ``BLUETOOTH_DEVICES`` entry omitted
+  ``player_name``, the startup path defaulted to
+  ``Sendspin-<hostname>`` (or ``$SENDSPIN_NAME`` / caller-override),
+  but online activation hardcoded ``"Sendspin"``.  The client would
+  rename itself on the next bridge restart, breaking the MA/UI
+  identity mapping for that device.  ``DeviceActivationContext`` now
+  carries ``default_player_name`` captured at startup, and
+  ``_apply_start_client`` uses it — so live-add and restart produce
+  the same name.
+- **``PairingAgent.RequestPasskey`` ignored the configured PIN** —
+  method used to return a hardcoded ``0`` and never mark
+  ``pin_attempted``.  The legacy bluetoothctl path already handled
+  both "enter pin code" and "enter passkey" prompts by writing the
+  configured PIN, so devices that drove ``RequestPasskey`` instead
+  of ``RequestPinCode`` failed under the native agent where the
+  legacy path succeeded.  Agent now parses ``self.pin`` as an int,
+  validates the 0–999999 range BlueZ requires, and returns it (or
+  falls back to ``0`` with a warning if the PIN is non-numeric /
+  out of range).  ``pin_attempted`` is marked either way so
+  ``_run_standalone_pair_inner``'s popular-PIN retry loop still
+  kicks in.
+
+### Tests
+1527 → 1530 passing.  New coverage:
+- ``tests/test_pairing_agent.py`` — ``RequestPasskey`` marks the
+  attempt and still falls back cleanly on an invalid (non-numeric)
+  PIN.
+- ``tests/test_reconfig_orchestrator_start_client.py`` —
+  ``_apply_start_client`` falls through to
+  ``context.default_player_name`` (not a hardcoded ``"Sendspin"``)
+  when the device payload has no ``player_name``.
+
+## [2.62.0-rc.2] - 2026-04-24
+
+Follow-up fixes from Copilot's review of the 2.62.0-rc.1 PR.  No new
+features — six bug / correctness fixes plus targeted tests.
+
+### Fixed
+- **Multi-device START_CLIENT data loss** — when the config diff
+  produced several ``START_CLIENT`` actions in a single ``POST /api/config``
+  (user adds three speakers at once), each call read ``existing_clients``
+  from the snapshot captured at the top of ``apply()`` and wrote
+  ``set_clients([*snapshot, new])`` — silently overwriting any clients
+  appended by earlier iterations. Orchestrator now re-reads the live
+  registry on every iteration and keeps ``clients_by_mac`` in sync,
+  so all added devices land.
+- **Start-client ``base_listen_port + index`` mismatch** — the fallback
+  used ``len(existing_clients)`` as the device index, which could
+  differ from the device's position in ``BLUETOOTH_DEVICES`` when
+  disabled devices sit in front of the new one. Fixed by passing
+  ``device_index`` through the action payload from ``config_diff``
+  and preferring it over the live-registry length. Avoids port
+  collisions on setups with disabled devices.
+- **PairingAgent cleanup on registration failure** — ``_thread_main``
+  exited early when ``_register()`` raised (e.g. ``AgentManager1.RegisterAgent``
+  refused because another agent held the default), leaking the
+  SystemBus connection and asyncio loop per failed attempt. Now
+  always runs through a ``try/finally`` that closes the loop and
+  best-effort unregisters if ``_bus`` was set.
+- **Agent leak when ``bluetoothctl`` subprocess fails to launch** —
+  in both ``_run_standalone_pair_inner`` and ``_run_reset_reconnect``
+  the native-agent cleanup lived inside a ``finally`` that only ran
+  after ``subprocess.Popen`` succeeded. ``PairingAgent.__exit__`` is
+  now in an outer ``finally`` that always runs, guaranteeing the
+  agent thread / SystemBus socket is torn down even when bluetoothctl
+  can't start.
+- **Stale activation context at shutdown** — ``publish_shutdown_complete``
+  now calls ``set_activation_context(None)`` alongside the existing
+  ``set_main_loop(None)`` so Flask threads that outlive the bridge
+  process in tests / graceful shutdown can't materialize new clients
+  against torn-down factories.
+- **Empty assertion in ``test_activate_device_honours_effective_bridge_suffix``** —
+  the test's comment promised "verify the suffix was applied" but
+  didn't actually assert anything. Added the explicit
+  ``captured["device_name"] == "Kitchen @ Home"`` check so the suffix
+  wiring is properly regression-tested.
+
+### Tests
+1524 → 1527 passing. New coverage:
+- ``tests/test_reconfig_orchestrator_start_client.py`` — three-device
+  ``apply()`` call appends all three (regression for multi-device
+  data-loss) and ``device_index`` from payload overrides the live
+  registry length.
+- ``tests/test_config_diff.py`` — ``device_index`` is attached to
+  START_CLIENT payload; reflects position in ``BLUETOOTH_DEVICES``
+  even when disabled devices precede the added one.
+
+## [2.62.0-rc.1] - 2026-04-24
+
+Follow-ups to the Synergy 65 S pair failure tracked in issue #168,
+a UX polish for the device-list editor, and the big one for multi-room
+ops: **adding a new speaker from the scan modal no longer forces a
+bridge restart** — new devices now start live.
+
+### Added
+- **Native BlueZ authentication agent** (`services/pairing_agent.py`) —
+  a ``PairingAgent`` context manager that exports ``org.bluez.Agent1``
+  on the system bus via ``dbus-fast``. All 8 Agent1 methods are
+  implemented; ``RequestConfirmation`` auto-confirms SSP Numeric
+  Comparison passkeys directly from the BlueZ callback, eliminating
+  the bluetoothctl-stdout parse/answer race that lost to BlueZ's
+  internal agent timeout on slow-advertising speakers.
+- **DisplayYesNo default capability** — matches what manual
+  ``bluetoothctl`` advertises (the path that reached ``Bonded: yes``
+  in the #168 reproduction). ``EXPERIMENTAL_PAIR_JUST_WORKS`` still
+  forces ``NoInputNoOutput`` for Just-Works callers.
+- **Native agent now wired into every pair path** — the scope-guard
+  that left ``bluetooth_manager.pair_device`` (monitor-loop re-pair
+  after bond loss) and ``routes/api_bt._run_reset_reconnect``
+  (Reset & Reconnect button) on the legacy stdin-``yes`` agent is
+  gone. All three pair sites now construct a ``PairingAgent`` with
+  ``DisplayYesNo`` capability before spawning ``bluetoothctl``, fall
+  back to the legacy agent on hosts where ``dbus-fast`` / SystemBus
+  isn't reachable, and expose the same telemetry shape.
+- **Pair-agent telemetry** — ``PairingAgent.telemetry`` property
+  returns a stable-keys snapshot (capability, ordered method-call
+  list, last passkey shown, authorized/rejected service UUIDs,
+  peer-cancel flag). Each pair site logs a structured one-liner with
+  this data and attaches it to the scan-job result payload so future
+  support-triage can answer "which IO capability won on this
+  device?" without a DEBUG log. Foundation for the roadmap's full
+  pair-trace timeline (see ``ROADMAP.bluez-agent.md`` #10).
+- **AuthorizeService scope** — the agent's ``AuthorizeService``
+  callback used to auto-authorize any UUID the peer asked for.
+  Now it accepts only audio profiles (A2DP Source/Sink, AVRCP
+  Controller/Target, HSP, HFP, their AG counterparts) plus
+  universally-advertised accessory services (GAP, GATT, Device
+  Information, Battery) and raises ``org.bluez.Error.Rejected`` on
+  everything else. Rejected UUIDs are logged and surfaced via the
+  telemetry channel. Expands device support for multi-profile peers
+  (some DSPs preferred HFP over A2DP when both were blanket-
+  authorized); adds a small security scope-guard against unexpected
+  service binds.
+- **Online activation of newly-added devices** — saving a config with
+  a just-added ``BLUETOOTH_DEVICES`` entry now wires up the
+  ``SendspinClient`` + ``BluetoothManager`` pair, registers it in the
+  device registry, and schedules ``client.run()`` on the main loop
+  without a bridge restart. ``ReconfigSummary.started`` is surfaced in
+  the UI as a green "Live added: <name>" toast; ``restart_required``
+  stays empty for the add-device case.
+- **Live re-enable of disabled devices** — toggling a device's
+  ``enabled`` flag back to ``true`` at runtime now reclaims BT
+  management on the existing client instead of trying to construct a
+  duplicate one. ``config_diff`` emits ``START_CLIENT`` for the
+  ``false → true`` transition; ``_apply_start_client`` detects the
+  existing released client by MAC and calls
+  ``set_bt_management_enabled(True)`` — same path the
+  ``/api/bt/management`` route uses — instead of running the factory.
+  Without this the UI's re-enable toggle silently no-op'd after the
+  online-activation patch.
+- **`services/device_activation.py`** — reusable factory
+  (``DeviceActivationContext`` + ``activate_device``) shared between
+  ``bridge_orchestrator.initialize_devices`` and the new
+  ``ReconfigOrchestrator._apply_start_client`` path, so both entry
+  points apply the same port math, keepalive clamps, sink-monitor
+  wiring, and volume restore semantics.
+- **`services/bridge_runtime_state.set_activation_context` /
+  `get_activation_context`** — cross-thread handoff so Flask request
+  threads can reach the startup-captured factories.
+
+### Changed
+- **`_run_standalone_pair_inner` uses the native agent by default** —
+  when the D-Bus agent registers successfully, ``agent on`` /
+  ``default-agent`` are no longer sent to bluetoothctl (avoids two
+  competing agents). If ``dbus-fast`` is missing or ``RegisterAgent``
+  fails, the pair flow logs a warning and falls back to the legacy
+  bluetoothctl stdin-agent path unchanged — the patch is safe on
+  hosts without a reachable SystemBus.
+- **`ReconfigOrchestrator.__init__` accepts an optional
+  `activation_context`** — needed to materialize new clients online.
+  Old callers (unit tests, dev scripts) can keep passing just
+  ``(loop, snapshot)``; START_CLIENT actions then fall back to the
+  legacy ``restart_required`` behaviour.
+- **`bridge_orchestrator.initialize_devices` now delegates per-device
+  wiring to `services.device_activation.activate_device`** and
+  publishes the factory context via `set_activation_context` so the
+  reconfig path can reuse it. Behaviour-preserving refactor — all
+  existing `test_bridge_orchestrator` assertions hold.
+
+### Fixed
+- **Scan-add no longer creates silent duplicate device rows** — the
+  backend validator correctly rejected ``POST /api/config`` when two
+  ``BLUETOOTH_DEVICES`` entries shared a MAC, but the UI only showed a
+  single toast with no visual cue to which rows collided. Now:
+  - ``addFromScan`` / ``addFromPaired`` short-circuit when a row for
+    the MAC already exists: the scan modal closes, the existing row
+    is highlighted, and a warning toast reports
+    ``Already in device list: <name>``.
+  - On a ``Duplicate MAC address: ...`` validation error at save time
+    the client parses the ``errors[]`` payload and applies a red
+    ``duplicate-conflict`` pulse to **every** matching row (not just
+    the first), then scrolls the first offender into view.
+
+### Scope guard
+- Online activation covers the **add-device** case only. Re-enabling a
+  previously-disabled device, changing the adapter on an existing one,
+  and all other edits that already had hot/warm paths keep the paths
+  they had before.
+- Further BlueZ-agent work (UI passkey modal, per-device capability
+  override, full D-Bus pair pipeline replacing ``bluetoothctl``, LE
+  Audio) is tracked in ``ROADMAP.bluez-agent.md`` for 2.63+.
+
+### Tests
+1494 → 1524 passing. New coverage:
+
+- ``tests/test_pairing_agent.py`` — capability validation, PIN plumbing,
+  ``RequestConfirmation`` / ``Cancel`` state capture, full register →
+  request_default_agent → unregister lifecycle against a mocked
+  ``MessageBus``, and ``__enter__`` error propagation when SystemBus
+  connect fails.
+- ``tests/test_config_validation.py`` — additional case pinning the
+  per-index ``BLUETOOTH_DEVICES[N].mac`` field path for 3+ duplicate
+  MACs so the UI's conflict-row highlighter keeps parsing backend
+  errors correctly as the validator evolves.
+- ``tests/test_device_activation.py`` (10 cases) — factory covers
+  BT-manager wiring, sink-monitor callback, missing-MAC/disabled-
+  adapter degradation, volume restore, explicit vs fallback listen
+  port, effective-bridge suffix, released-state restore, keepalive
+  clamping, and context immutability.
+- ``tests/test_reconfig_orchestrator_start_client.py`` (8 cases) —
+  registry append + run-task schedule, fallback to ``restart_required``
+  when context or loop absent, factory-exception error surface, MAC
+  idempotency guard for already-active clients, **live re-enable of a
+  released client and error surfacing when the reclaim call fails**,
+  and registry rollback when the scheduled ``run()`` exits with an
+  exception.
+
 ## [2.61.0] - 2026-04-22
 
 Promotes the 2.61.0-rc line to stable. No code changes beyond the

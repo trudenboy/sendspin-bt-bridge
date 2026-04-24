@@ -168,7 +168,14 @@ class BridgeLifecycleState:
 
     def publish_shutdown_complete(self, *, stopped_clients: int) -> None:
         """Mark bridge shutdown as complete and clear loop publication."""
+        from services.bridge_runtime_state import set_activation_context
+
         _state.set_main_loop(None)
+        # Clear the activation context the startup path published so Flask
+        # threads that outlive the bridge process (e.g. in-test graceful
+        # shutdown) can't accidentally materialize a new client against
+        # torn-down factories.  Matches the set_main_loop(None) semantic.
+        set_activation_context(None)
         _state.update_startup_progress(
             "shutdown",
             "Shutdown complete",

@@ -197,6 +197,37 @@ def test_device_added_emits_start_client():
     (act,) = diff_configs(old, new)
     assert act.kind is ActionKind.START_CLIENT
     assert act.mac == mac
+    # device_index must be present in the payload so the online-activation
+    # path can use the same base_listen_port+index fallback as startup
+    # (otherwise adding a device behind disabled entries in the config can
+    # land on a wrong port).
+    assert act.payload.get("device_index") == 0
+
+
+def test_start_client_device_index_reflects_bluetooth_devices_position():
+    # Three devices in config: first two disabled, third enabled-and-new.
+    # The new device is at BLUETOOTH_DEVICES index 2 — the START_CLIENT
+    # action payload must carry that, not the length of ``active_clients``.
+    mac_new = "CC:CC:CC:CC:CC:03"
+    old = _config(
+        [
+            _device("AA:AA:AA:AA:AA:01", enabled=False),
+            _device("BB:BB:BB:BB:BB:02", enabled=False),
+        ]
+    )
+    new = _config(
+        [
+            _device("AA:AA:AA:AA:AA:01", enabled=False),
+            _device("BB:BB:BB:BB:BB:02", enabled=False),
+            _device(mac_new),
+        ]
+    )
+
+    actions = diff_configs(old, new)
+    start_actions = [a for a in actions if a.kind is ActionKind.START_CLIENT]
+    assert len(start_actions) == 1
+    assert start_actions[0].mac == mac_new
+    assert start_actions[0].payload.get("device_index") == 2
 
 
 def test_both_sides_disabled_no_action():
