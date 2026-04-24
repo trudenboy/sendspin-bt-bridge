@@ -28,6 +28,7 @@ from services.bluetooth import (
 )
 from services.bluetooth import bt_remove_device as _bt_remove_device
 from services.bluetooth import persist_device_released as _persist_device_released
+from services.pairing_agent import PairingAgent
 from services.pairing_quiesce import quiesce_adapter_peers
 
 logger = logging.getLogger(__name__)
@@ -1316,10 +1317,38 @@ def _run_standalone_pair_inner(
             use_no_io_agent = bool(cfg.get("EXPERIMENTAL_PAIR_JUST_WORKS"))
         agent_cmd = "agent NoInputNoOutput" if use_no_io_agent else "agent on"
 
+        # Native D-Bus agent: exports org.bluez.Agent1 directly so BlueZ calls
+        # RequestConfirmation / RequestPinCode on us without the bluetoothctl
+        # stdin-``yes`` race that loses to SSP agent timeouts on some speakers
+        # (issue #168, Synergy 65 S). Default capability is DisplayYesNo — the
+        # same one manual ``bluetoothctl`` uses, which reached ``Bonded: yes``
+        # in the issue reproduction. Falls back to bluetoothctl's built-in
+        # agent if dbus-fast / SystemBus are unavailable.
+        native_capability = "NoInputNoOutput" if use_no_io_agent else "DisplayYesNo"
+        native_agent: PairingAgent | None = None
+        try:
+            native_agent = PairingAgent(capability=native_capability, pin=pin).__enter__()
+            logger.info(
+                "Standalone pair %s: native agent active (cap=%s)",
+                mac,
+                native_capability,
+            )
+        except Exception as exc:
+            native_agent = None
+            logger.warning(
+                "Standalone pair %s: native pairing agent unavailable (%s) — falling back to bluetoothctl stdin agent",
+                mac,
+                exc,
+            )
+
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
-        initial_cmds.extend(["power on", agent_cmd, "default-agent", "scan bredr"])
+        initial_cmds.append("power on")
+        if native_agent is None:
+            # No native agent → rely on bluetoothctl's built-in agent as before.
+            initial_cmds.extend([agent_cmd, "default-agent"])
+        initial_cmds.append("scan bredr")
 
         pair_cmds = [f"pair {mac}"]
 
@@ -1456,6 +1485,15 @@ def _run_standalone_pair_inner(
                 proc.wait(timeout=3)
             except Exception:
                 pass
+            if native_agent is not None:
+                try:
+                    native_agent.__exit__(None, None, None)
+                except Exception as exc:
+                    logger.debug(
+                        "Standalone pair %s: native agent cleanup error (non-fatal): %s",
+                        mac,
+                        exc,
+                    )
     except Exception:
         logger.exception("Standalone pair error for %s", mac)
         return {
