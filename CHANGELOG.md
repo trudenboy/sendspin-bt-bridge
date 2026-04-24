@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.1] - 2026-04-24
+
+Follow-ups to the Synergy 65 S pair failure tracked in issue #168 and a
+UX polish for the device-list editor. This rc replaces the stdin-``yes``
+race in the standalone pair flow with a native BlueZ auth agent — the
+same call shape a human gets from interactive ``bluetoothctl``, which
+reached ``Bonded: yes`` on the Synergy in the issue reproduction where
+the bridge's automated flow cancelled.
+
+### Added
+- **Native BlueZ authentication agent** (`services/pairing_agent.py`) —
+  a ``PairingAgent`` context manager that exports ``org.bluez.Agent1``
+  on the system bus via ``dbus-fast``. All 8 Agent1 methods are
+  implemented; ``RequestConfirmation`` auto-confirms SSP Numeric
+  Comparison passkeys directly from the BlueZ callback, eliminating
+  the bluetoothctl-stdout parse/answer race that lost to BlueZ's
+  internal agent timeout on slow-advertising speakers.
+- **DisplayYesNo default capability** — matches what manual
+  ``bluetoothctl`` advertises (the path that reached ``Bonded: yes``
+  in the #168 reproduction). ``EXPERIMENTAL_PAIR_JUST_WORKS`` still
+  forces ``NoInputNoOutput`` for Just-Works callers.
+
+### Changed
+- **`_run_standalone_pair_inner` uses the native agent by default** —
+  when the D-Bus agent registers successfully, ``agent on`` /
+  ``default-agent`` are no longer sent to bluetoothctl (avoids two
+  competing agents). If ``dbus-fast`` is missing or ``RegisterAgent``
+  fails, the pair flow logs a warning and falls back to the legacy
+  bluetoothctl stdin-agent path unchanged — the patch is safe on
+  hosts without a reachable SystemBus.
+
+### Fixed
+- **Scan-add no longer creates silent duplicate device rows** — the
+  backend validator correctly rejected ``POST /api/config`` when two
+  ``BLUETOOTH_DEVICES`` entries shared a MAC, but the UI only showed a
+  single toast with no visual cue to which rows collided. Now:
+  - ``addFromScan`` / ``addFromPaired`` short-circuit when a row for
+    the MAC already exists: the scan modal closes, the existing row
+    is highlighted, and a warning toast reports
+    ``Already in device list: <name>``.
+  - On a ``Duplicate MAC address: ...`` validation error at save time
+    the client parses the ``errors[]`` payload and applies a red
+    ``duplicate-conflict`` pulse to **every** matching row (not just
+    the first), then scrolls the first offender into view.
+
+### Scope guard
+- The native agent is wired into the scan-modal "Add & pair" path only.
+  ``bluetooth_manager.py:_connect_bluetoothctl`` (monitor-loop reconnect
+  pair) and ``routes/api_bt.py:_run_reset_reconnect`` (Reset & Reconnect
+  button) still use the legacy stdin-agent. They'll move to the native
+  agent in a follow-up once production confirms behaviour.
+
+### Tests
+1494 → 1500 passing. New coverage:
+
+- ``tests/test_pairing_agent.py`` — capability validation, PIN plumbing,
+  ``RequestConfirmation`` / ``Cancel`` state capture, full register →
+  request_default_agent → unregister lifecycle against a mocked
+  ``MessageBus``, and ``__enter__`` error propagation when SystemBus
+  connect fails.
+- ``tests/test_config_validation.py`` — additional case pinning the
+  per-index ``BLUETOOTH_DEVICES[N].mac`` field path for 3+ duplicate
+  MACs so the UI's conflict-row highlighter keeps parsing backend
+  errors correctly as the validator evolves.
+
 ## [2.61.0] - 2026-04-22
 
 Promotes the 2.61.0-rc line to stable. No code changes beyond the
