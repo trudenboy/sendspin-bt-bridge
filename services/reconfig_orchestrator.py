@@ -367,13 +367,13 @@ class ReconfigOrchestrator:
             )
             return
 
-        # Always read the live registry here instead of reusing the snapshot
-        # captured at the top of apply() — when the diff produces several
-        # START_CLIENT actions in one save (e.g. user adds three speakers at
-        # once) each subsequent call must see the clients the previous calls
-        # have already appended, otherwise set_clients([*old, latest]) would
-        # silently drop the intermediate ones.
+        # Read the live registry to compute the device_index fallback.  The
+        # actual append happens inside ``mutate_active_clients`` below, which
+        # re-reads the list under the registry lock to avoid the
+        # read-modify-write race against concurrent ``POST /api/config``
+        # request threads (Waitress runs requests in parallel).
         import state as _state
+        from services.device_registry import mutate_active_clients
 
         try:
             existing_clients = list(_state.get_clients_snapshot())
@@ -430,9 +430,27 @@ class ReconfigOrchestrator:
             )
             return
 
-        new_clients = [*existing_clients, result.client]
+        # Atomic append under the registry lock — re-reads the live list
+        # inside ``mutate_active_clients`` so a peer ``POST /api/config``
+        # request that appended its own client between our snapshot read
+        # and our write doesn't get clobbered.
+        def _append_new_client(current: list[Any]) -> list[Any]:
+            # Race guard: a parallel request may have already added a client
+            # for the same MAC. If so, drop our just-built duplicate to avoid
+            # two clients fighting for the same adapter.
+            if mac_key:
+                for existing in current:
+                    existing_mac = (getattr(getattr(existing, "bt_manager", None), "mac_address", "") or "").upper()
+                    if existing_mac == mac_key:
+                        logger.warning(
+                            "START_CLIENT for %s lost the append race — peer request already created a client; dropping duplicate",
+                            action.label or action.mac,
+                        )
+                        return current
+            return [*current, result.client]
+
         try:
-            _state.set_clients(new_clients)
+            updated_snapshot = mutate_active_clients(_append_new_client)
         except Exception as exc:
             logger.exception("START_CLIENT registry update failed for %s", action.label or action.mac)
             summary.errors.append(
@@ -446,6 +464,13 @@ class ReconfigOrchestrator:
             )
             return
 
+        # If the race-guard inside the mutator dropped our client, abort
+        # before scheduling its run() — there's another active client for
+        # this MAC already, and double-running ``client.run()`` against
+        # the same BT adapter would race the daemon spawn.
+        if not any(c is result.client for c in updated_snapshot.active_clients):
+            return
+
         # Kick the main-loop coroutine that spawns the daemon subprocess and
         # starts the BT monitor.  Fire-and-forget with a rollback callback
         # so a startup exception doesn't leave a zombie registry entry.
@@ -454,9 +479,15 @@ class ReconfigOrchestrator:
             future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         except RuntimeError as exc:
             coro.close()
-            # Loop stopped mid-request — roll the registry back.
+            # Loop stopped mid-request — roll our just-appended client back
+            # out of the registry.  Atomic remove-by-identity so we don't
+            # clobber peer appends made by other concurrent request threads.
             try:
-                _state.set_clients(existing_clients)
+
+                def _rollback_pop(current: list[Any]) -> list[Any]:
+                    return [c for c in current if c is not result.client]
+
+                mutate_active_clients(_rollback_pop)
             except Exception as revert_exc:  # pragma: no cover — best effort
                 logger.debug("registry rollback after schedule failure: %s", revert_exc)
             summary.errors.append(
@@ -493,22 +524,32 @@ class ReconfigOrchestrator:
         """Remove a client that failed its ``run()`` bootstrap from the registry."""
         try:
             import state as _state
-        except Exception:  # pragma: no cover — import must succeed in practice
+            from services.device_registry import mutate_active_clients
+        except Exception:  # pragma: no cover — imports must succeed in practice
             return
+
+        removed: list[bool] = [False]
+
+        def _drop_by_mac(current: list[Any]) -> list[Any]:
+            surviving = [
+                c
+                for c in current
+                if (getattr(getattr(c, "bt_manager", None), "mac_address", "") or "").upper() != mac_key
+            ]
+            if len(surviving) != len(current):
+                removed[0] = True
+            return surviving
+
         try:
-            current = list(_state.get_clients_snapshot())
-        except Exception:
-            return
-        surviving = [
-            c for c in current if (getattr(getattr(c, "bt_manager", None), "mac_address", "") or "").upper() != mac_key
-        ]
-        if len(surviving) == len(current):
-            return
-        try:
-            _state.set_clients(surviving)
-            _state.notify_status_changed()
+            mutate_active_clients(_drop_by_mac)
         except Exception as exc:  # pragma: no cover
-            logger.debug("rollback set_clients failed: %s", exc)
+            logger.debug("rollback mutate_active_clients failed: %s", exc)
+            return
+        if removed[0]:
+            try:
+                _state.notify_status_changed()
+            except Exception as exc:  # pragma: no cover
+                logger.debug("rollback notify_status_changed failed: %s", exc)
 
     def _apply_global_broadcast(
         self,

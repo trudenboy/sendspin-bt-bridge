@@ -231,6 +231,13 @@ class PairingAgent:
         self._iface: Any = None
         self._ready = threading.Event()
         self._start_error: BaseException | None = None
+        # ``True`` only while the agent thread is in ``loop.run_forever()``.
+        # Used by ``_force_stop`` to decide whether ``loop.stop()`` is safe:
+        # if registration failed the thread is already in its ``finally``
+        # running ``loop.run_until_complete(_unregister())`` and stopping
+        # the loop there interrupts cleanup (leaks the SystemBus connection
+        # and the exported agent object).
+        self._running_forever = False
 
     @property
     def capability(self) -> str:
@@ -277,11 +284,20 @@ class PairingAgent:
         self._thread = threading.Thread(target=self._thread_main, name="pair-agent", daemon=True)
         self._thread.start()
         if not self._ready.wait(timeout=5.0):
+            # Registration is hung — the thread isn't in its finally yet,
+            # there's no graceful path. Accept the leak risk and force stop.
             self._force_stop()
             raise RuntimeError("PairingAgent did not register within 5s")
         if self._start_error is not None:
+            # Registration raised. The thread is already in ``finally`` running
+            # ``loop.run_until_complete(_unregister())`` to release whatever
+            # ``_register`` managed to acquire (typically a connected
+            # SystemBus). Don't ``_force_stop`` here — it would call
+            # ``loop.stop()`` and interrupt that cleanup. Just wait for the
+            # thread to finish naturally.
             err = self._start_error
-            self._force_stop()
+            if self._thread is not None:
+                self._thread.join(timeout=5.0)
             raise RuntimeError(f"PairingAgent start failed: {err}") from err
         return self
 
@@ -290,7 +306,10 @@ class PairingAgent:
 
     def _force_stop(self) -> None:
         loop = self._loop
-        if loop is not None:
+        if loop is not None and self._running_forever:
+            # Only stop the loop while the thread is in ``run_forever`` —
+            # otherwise we could interrupt a ``run_until_complete`` already
+            # running cleanup inside the thread's ``finally`` block.
             try:
                 loop.call_soon_threadsafe(loop.stop)
             except RuntimeError:
@@ -316,7 +335,11 @@ class PairingAgent:
                 self._ready.set()
                 return
             self._ready.set()
-            loop.run_forever()
+            self._running_forever = True
+            try:
+                loop.run_forever()
+            finally:
+                self._running_forever = False
         finally:
             if loop is not None:
                 try:

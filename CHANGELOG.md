@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.4] - 2026-04-24
+
+Third pass of Copilot review feedback — three concurrency / cleanup
+correctness fixes.
+
+### Fixed
+- **Race in ``PairingAgent.__enter__`` error path** — when
+  ``_register()`` raised, ``__enter__`` called ``_force_stop()`` which
+  ran ``loop.stop()`` while the agent thread was already inside its
+  ``finally`` running ``loop.run_until_complete(_unregister())``.  The
+  stop interrupted the cleanup with "Event loop stopped before Future
+  completed", leaking the SystemBus connection and the exported agent
+  object.  Now ``_force_stop`` only calls ``loop.stop()`` while the
+  thread is in ``run_forever()`` (tracked via a new
+  ``_running_forever`` flag), and the ``__enter__`` error path waits
+  on ``self._thread.join()`` to let cleanup finish naturally instead
+  of forcing a stop.
+- **Read-modify-write race on the active-clients registry** —
+  ``_apply_start_client`` snapshotted ``state.get_clients_snapshot()``
+  then ``state.set_clients([*snapshot, new])``.  Two parallel
+  ``POST /api/config`` request threads (Waitress runs ``WEB_THREADS=8``
+  by default) could each diff a different new device and clobber
+  each other's append.  Replaced with a new
+  ``services.device_registry.mutate_active_clients(fn)`` that takes
+  the registry lock and runs the mutator atomically.  ``rollback``
+  paths use the same primitive — atomic remove-by-identity instead
+  of overwriting with a stale snapshot.
+- **Cross-request duplicate guard** — even with the atomic mutate,
+  two parallel saves could both target the same MAC.  The mutator
+  now also checks for an existing client with the same MAC inside
+  the lock and drops the just-built duplicate so the registry
+  never holds two clients fighting for one adapter.  The dropped
+  attempt skips ``client.run()`` scheduling so the daemon-spawn
+  race is avoided too.
+
+### Tests
+1530 → 1531 passing.  New coverage:
+- ``tests/test_reconfig_orchestrator_start_client.py`` — concurrent
+  peer-request append wins; our duplicate is dropped inside the
+  atomic mutate and ``client.run()`` is not scheduled.
+- Existing tests refactored onto a shared ``_patch_registry``
+  helper so the live-list assertions exercise the new
+  ``mutate_active_clients`` path.
+
 ## [2.62.0-rc.3] - 2026-04-24
 
 Two more follow-ups from Copilot's second pass on the PR.

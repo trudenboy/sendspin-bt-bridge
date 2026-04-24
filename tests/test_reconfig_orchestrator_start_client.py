@@ -49,6 +49,33 @@ def _make_context(**overrides) -> DeviceActivationContext:
     return replace(base, **overrides)
 
 
+def _patch_registry(monkeypatch, initial: list | None = None) -> list:
+    """Install a fake live registry that satisfies the orchestrator contract.
+
+    Returns the underlying list — tests can read it after ``apply()`` to
+    see what was appended / removed.  Patches ``state.set_clients``,
+    ``state.get_clients_snapshot``, and the atomic
+    ``services.device_registry.mutate_active_clients`` the orchestrator
+    now goes through to avoid the read-modify-write race.
+    """
+    live: list = list(initial or [])
+
+    def _set_clients(clients):
+        live[:] = list(clients)
+
+    def _get_snapshot():
+        return list(live)
+
+    def _mutate(mutator):
+        live[:] = list(mutator(list(live)))
+        return SimpleNamespace(active_clients=list(live), disabled_devices=[])
+
+    monkeypatch.setattr("state.set_clients", _set_clients)
+    monkeypatch.setattr("state.get_clients_snapshot", _get_snapshot)
+    monkeypatch.setattr("services.device_registry.mutate_active_clients", _mutate)
+    return live
+
+
 def _make_new_device_action(
     mac: str = "AA:BB:CC:DD:EE:FF",
     *,
@@ -84,12 +111,7 @@ def test_start_client_activates_via_factory_and_appends_to_registry(monkeypatch)
             )
         )
         monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
-
-        set_clients_calls: list[list[object]] = []
-        monkeypatch.setattr(
-            "state.set_clients",
-            lambda clients: set_clients_calls.append(list(clients)),
-        )
+        live = _patch_registry(monkeypatch)
 
         schedule_calls: list[object] = []
 
@@ -112,8 +134,7 @@ def test_start_client_activates_via_factory_and_appends_to_registry(monkeypatch)
         summary = orch.apply([_make_new_device_action()])
 
         activate_mock.assert_called_once()
-        assert len(set_clients_calls) == 1
-        assert set_clients_calls[0] == [fake_client]
+        assert live == [fake_client]
         assert len(schedule_calls) == 1
         assert len(summary.started) == 1
         assert summary.started[0]["mac"] == "AA:BB:CC:DD:EE:FF"
@@ -155,15 +176,14 @@ def test_start_client_handles_factory_exception(monkeypatch):
             raise RuntimeError("adapter missing")
 
         monkeypatch.setattr("services.device_activation.activate_device", _raising)
-        registry_touched: list[object] = []
-        monkeypatch.setattr("state.set_clients", lambda c: registry_touched.append(c))
+        live = _patch_registry(monkeypatch)
 
         summary = orch.apply([_make_new_device_action()])
 
         assert summary.started == []
         assert len(summary.errors) == 1
         assert "adapter missing" in summary.errors[0]["error"]
-        assert registry_touched == []  # registry not mutated on factory failure
+        assert live == []  # registry not mutated on factory failure
     finally:
         loop.close()
 
@@ -260,22 +280,14 @@ def test_start_client_accumulates_multiple_devices_in_single_apply(monkeypatch):
     # ``set_clients([*captured, new])`` every iteration — so a diff with 3
     # added devices ended up with only the last one in the registry because
     # each call overwrote the previous append.  Fix reads the live registry
-    # snapshot on every call.
+    # snapshot on every call (and now uses an atomic mutate to avoid the
+    # cross-request race too).
     loop = asyncio.new_event_loop()
     try:
         snapshot = _FakeSnapshot([])
         orch = ReconfigOrchestrator(loop, snapshot, activation_context=_make_context())
 
-        live_registry: list[object] = []
-
-        def _set_clients(clients):
-            live_registry[:] = list(clients)
-
-        def _get_snapshot():
-            return list(live_registry)
-
-        monkeypatch.setattr("state.set_clients", _set_clients)
-        monkeypatch.setattr("state.get_clients_snapshot", _get_snapshot)
+        live_registry = _patch_registry(monkeypatch)
 
         def _make_fake_client(mac: str) -> SimpleNamespace:
             return SimpleNamespace(
@@ -351,8 +363,7 @@ def test_start_client_uses_context_default_player_name_when_device_has_none(monk
             )
 
         monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
-        monkeypatch.setattr("state.set_clients", lambda clients: None)
-        monkeypatch.setattr("state.get_clients_snapshot", list)
+        _patch_registry(monkeypatch)
 
         class _StubFuture:
             def add_done_callback(self, cb):
@@ -403,8 +414,7 @@ def test_start_client_uses_device_index_from_payload(monkeypatch):
             )
 
         monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
-        monkeypatch.setattr("state.set_clients", lambda clients: None)
-        monkeypatch.setattr("state.get_clients_snapshot", list)
+        _patch_registry(monkeypatch)
 
         class _StubFuture:
             def add_done_callback(self, cb):
@@ -448,12 +458,7 @@ def test_start_client_rollback_on_run_task_failure(monkeypatch):
             ),
         )
 
-        clients_history: list[list[object]] = []
-        monkeypatch.setattr("state.set_clients", lambda c: clients_history.append(list(c)))
-        monkeypatch.setattr(
-            "state.get_clients_snapshot",
-            lambda: clients_history[-1] if clients_history else [],
-        )
+        live = _patch_registry(monkeypatch)
         notify_calls: list[int] = []
         monkeypatch.setattr("state.notify_status_changed", lambda: notify_calls.append(1))
 
@@ -478,14 +483,77 @@ def test_start_client_rollback_on_run_task_failure(monkeypatch):
         summary = orch.apply([_make_new_device_action()])
 
         assert len(summary.started) == 1  # reported at schedule time
-        assert clients_history == [[fake_client]]  # original append only
+        assert live == [fake_client]  # appended atomically
 
         # Simulate run() exiting with an exception; rollback should prune
-        # the client from the registry.
+        # the client from the registry via the same atomic mutate path.
         fut_cb = captured_cb["cb"]
         fut_cb(_StubFuture())  # invoke done callback with a future whose .result() raises
-        assert clients_history[-1] == []
+        assert live == []
         assert notify_calls  # rollback broadcasted SSE update
+    finally:
+        loop.close()
+
+
+def test_start_client_atomic_mutate_drops_duplicate_when_peer_request_won_race(monkeypatch):
+    # Concurrency regression: two parallel POST /api/config request threads
+    # (Waitress runs WEB_THREADS=8 by default) can both diff the same MAC
+    # as a new device.  The atomic mutate_active_clients now sees the peer
+    # append inside the registry lock and our race-guard drops the
+    # duplicate so the registry never holds two clients for one adapter.
+    loop = asyncio.new_event_loop()
+    try:
+        ctx = _make_context()
+        orch = ReconfigOrchestrator(loop, _FakeSnapshot([]), activation_context=ctx)
+
+        peer_client = SimpleNamespace(
+            run=lambda: _empty_coro(),
+            bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+        )
+        # Live registry already contains the peer-appended client by the
+        # time our mutate runs (simulates the peer winning the race).
+        live = _patch_registry(monkeypatch, initial=[peer_client])
+
+        our_client = SimpleNamespace(
+            run=lambda: _empty_coro(),
+            bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+        )
+        # The orchestrator's clients_by_mac lookup uses the snapshot taken
+        # at apply() entry — ours was empty.  But by the time we hit the
+        # mutator, the live registry already has the peer's client.
+        monkeypatch.setattr(
+            "services.device_activation.activate_device",
+            lambda *a, **k: ActivationResult(
+                client=our_client,
+                bt_manager=our_client.bt_manager,
+                bt_available=True,
+                listen_port=8928,
+            ),
+        )
+
+        schedule_calls: list[object] = []
+
+        class _StubFuture:
+            def add_done_callback(self, cb):
+                pass
+
+        def _fake_schedule(coro, _loop):
+            coro.close()
+            schedule_calls.append(_StubFuture())
+            return schedule_calls[-1]
+
+        monkeypatch.setattr(
+            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            _fake_schedule,
+        )
+
+        orch.apply([_make_new_device_action()])
+
+        # Live registry still has only the peer's client — ours got dropped.
+        assert live == [peer_client]
+        # And our client.run() must NOT have been scheduled, because two
+        # daemons fighting for the same adapter is the bug we're guarding.
+        assert schedule_calls == []
     finally:
         loop.close()
 
