@@ -26,6 +26,33 @@ bridge restart** — new devices now start live.
   ``bluetoothctl`` advertises (the path that reached ``Bonded: yes``
   in the #168 reproduction). ``EXPERIMENTAL_PAIR_JUST_WORKS`` still
   forces ``NoInputNoOutput`` for Just-Works callers.
+- **Native agent now wired into every pair path** — the scope-guard
+  that left ``bluetooth_manager.pair_device`` (monitor-loop re-pair
+  after bond loss) and ``routes/api_bt._run_reset_reconnect``
+  (Reset & Reconnect button) on the legacy stdin-``yes`` agent is
+  gone. All three pair sites now construct a ``PairingAgent`` with
+  ``DisplayYesNo`` capability before spawning ``bluetoothctl``, fall
+  back to the legacy agent on hosts where ``dbus-fast`` / SystemBus
+  isn't reachable, and expose the same telemetry shape.
+- **Pair-agent telemetry** — ``PairingAgent.telemetry`` property
+  returns a stable-keys snapshot (capability, ordered method-call
+  list, last passkey shown, authorized/rejected service UUIDs,
+  peer-cancel flag). Each pair site logs a structured one-liner with
+  this data and attaches it to the scan-job result payload so future
+  support-triage can answer "which IO capability won on this
+  device?" without a DEBUG log. Foundation for the roadmap's full
+  pair-trace timeline (see ``ROADMAP.bluez-agent.md`` #10).
+- **AuthorizeService scope** — the agent's ``AuthorizeService``
+  callback used to auto-authorize any UUID the peer asked for.
+  Now it accepts only audio profiles (A2DP Source/Sink, AVRCP
+  Controller/Target, HSP, HFP, their AG counterparts) plus
+  universally-advertised accessory services (GAP, GATT, Device
+  Information, Battery) and raises ``org.bluez.Error.Rejected`` on
+  everything else. Rejected UUIDs are logged and surfaced via the
+  telemetry channel. Expands device support for multi-profile peers
+  (some DSPs preferred HFP over A2DP when both were blanket-
+  authorized); adds a small security scope-guard against unexpected
+  service binds.
 - **Online activation of newly-added devices** — saving a config with
   a just-added ``BLUETOOTH_DEVICES`` entry now wires up the
   ``SendspinClient`` + ``BluetoothManager`` pair, registers it in the
@@ -87,18 +114,16 @@ bridge restart** — new devices now start live.
     the first), then scrolls the first offender into view.
 
 ### Scope guard
-- The native agent is wired into the scan-modal "Add & pair" path only.
-  ``bluetooth_manager.py:_connect_bluetoothctl`` (monitor-loop reconnect
-  pair) and ``routes/api_bt.py:_run_reset_reconnect`` (Reset & Reconnect
-  button) still use the legacy stdin-agent. They'll move to the native
-  agent in a follow-up once production confirms behaviour.
 - Online activation covers the **add-device** case only. Re-enabling a
   previously-disabled device, changing the adapter on an existing one,
   and all other edits that already had hot/warm paths keep the paths
   they had before.
+- Further BlueZ-agent work (UI passkey modal, per-device capability
+  override, full D-Bus pair pipeline replacing ``bluetoothctl``, LE
+  Audio) is tracked in ``ROADMAP.bluez-agent.md`` for 2.63+.
 
 ### Tests
-1494 → 1518 passing. New coverage:
+1494 → 1524 passing. New coverage:
 
 - ``tests/test_pairing_agent.py`` — capability validation, PIN plumbing,
   ``RequestConfirmation`` / ``Cancel`` state capture, full register →

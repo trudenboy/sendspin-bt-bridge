@@ -34,6 +34,7 @@ from bt_dbus import (
     _dbus_wait_services_resolved,
 )
 from services.bluetooth import describe_pair_failure
+from services.pairing_agent import PairingAgent
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -424,16 +425,35 @@ class BluetoothManager:
         except (OSError, subprocess.SubprocessError) as e:
             logger.debug("[%s] Pre-pair cleanup failed (non-fatal): %s", self.device_name, e)
 
+        # Native BlueZ agent mirrors _run_standalone_pair_inner so monitor-
+        # loop re-pair after bond loss benefits from the same SSP Numeric
+        # Comparison fix (#168). Falls back to bluetoothctl's built-in
+        # agent on hosts that can't reach dbus-fast / SystemBus.
+        native_agent: PairingAgent | None = None
+        try:
+            native_agent = PairingAgent(capability="DisplayYesNo", pin="0000").__enter__()
+            logger.info("[%s] Pair: native agent active", self.device_name)
+        except Exception as exc:
+            native_agent = None
+            logger.warning(
+                "[%s] Pair: native agent unavailable (%s) — falling back to bluetoothctl agent",
+                self.device_name,
+                exc,
+            )
+
         initial_cmds = []
         if self._adapter_select:
             initial_cmds.append(f"select {self._adapter_select}")
-        # `scan bredr` (not `scan on`) narrows discovery to the BR/EDR
-        # transport — A2DP sinks only speak classic BT. Excluding LE-only
-        # advertisers (beacons, BLE wearables) keeps the scan window
-        # responsive and sidesteps BlueZ's occasional LE/BR/EDR result
-        # interleaving that can delay the pair target appearing
-        # (bluez/bluez#826 workaround; safe on bluetoothctl ≥ 5.65).
-        initial_cmds.extend(["power on", "agent on", "default-agent", "scan bredr"])
+        initial_cmds.append("power on")
+        if native_agent is None:
+            # `scan bredr` (not `scan on`) narrows discovery to the BR/EDR
+            # transport — A2DP sinks only speak classic BT. Excluding LE-only
+            # advertisers (beacons, BLE wearables) keeps the scan window
+            # responsive and sidesteps BlueZ's occasional LE/BR/EDR result
+            # interleaving that can delay the pair target appearing
+            # (bluez/bluez#826 workaround; safe on bluetoothctl ≥ 5.65).
+            initial_cmds.extend(["agent on", "default-agent"])
+        initial_cmds.append("scan bredr")
 
         pair_cmds = [f"pair {mac}"]
 
@@ -531,6 +551,22 @@ class BluetoothManager:
                 or "paired: yes" in out.lower()
             )
             self.paired = ok
+            if native_agent is not None:
+                try:
+                    telemetry = native_agent.telemetry
+                    logger.info(
+                        "[%s] Pair agent telemetry: outcome=%s capability=%s methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
+                        self.device_name,
+                        "success" if ok else "fail",
+                        telemetry.get("capability"),
+                        telemetry.get("method_calls"),
+                        telemetry.get("last_passkey"),
+                        telemetry.get("peer_cancelled"),
+                        telemetry.get("authorized_services"),
+                        telemetry.get("rejected_services"),
+                    )
+                except Exception as exc:
+                    logger.debug("[%s] pair telemetry read failed: %s", self.device_name, exc)
             if ok:
                 logger.info("Pairing successful")
                 logger.debug("Pair output tail: %s", out[-600:])
@@ -563,6 +599,11 @@ class BluetoothManager:
                     proc.wait(timeout=3)
                 except Exception as exc:
                     logger.debug("pair_device proc cleanup failed: %s", exc)
+            if native_agent is not None:
+                try:
+                    native_agent.__exit__(None, None, None)
+                except Exception as exc:
+                    logger.debug("pair_device agent cleanup failed: %s", exc)
 
     def _check_audio_profiles_after_pair(self) -> None:
         """Log/surface a warning when a freshly-paired device advertises no audio profiles.

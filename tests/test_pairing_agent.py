@@ -46,6 +46,75 @@ def test_agent_cancel_sets_flag():
     assert agent.cancelled is True
 
 
+def test_agent_authorize_service_accepts_audio_uuid():
+    agent = _build_agent_iface(pin="0000")
+    # A2DP Sink (full 128-bit lowercase with dashes)
+    agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", "0000110b-0000-1000-8000-00805f9b34fb")
+    assert agent.authorized_services == ["0000110b-0000-1000-8000-00805f9b34fb"]
+    assert agent.rejected_services == []
+
+
+def test_agent_authorize_service_accepts_short_uuid_form():
+    agent = _build_agent_iface(pin="0000")
+    # BlueZ can pass 16-bit short form for well-known services.
+    agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", "110E")
+    # AVRCP Controller — normalized and authorized
+    assert agent.authorized_services == ["0000110e-0000-1000-8000-00805f9b34fb"]
+
+
+def test_agent_authorize_service_rejects_unknown_uuid():
+    from dbus_fast import DBusError
+
+    agent = _build_agent_iface(pin="0000")
+    # HID-over-GATT — intentionally outside the audio allow-list.
+    with pytest.raises(DBusError) as exc_info:
+        agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", "00001812-0000-1000-8000-00805f9b34fb")
+
+    assert "not in sendspin-bridge audio allow-list" in str(exc_info.value)
+    assert agent.authorized_services == []
+    assert agent.rejected_services == ["00001812-0000-1000-8000-00805f9b34fb"]
+
+
+def test_agent_authorize_service_accepts_universal_services():
+    agent = _build_agent_iface(pin="0000")
+    # Device Information Service, Battery Service, Generic Access, Generic Attribute.
+    for short_uuid in ("180A", "180F", "1800", "1801"):
+        agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", short_uuid)
+    assert len(agent.authorized_services) == 4
+    assert agent.rejected_services == []
+
+
+def test_agent_telemetry_snapshot_matches_calls():
+    agent = _build_agent_iface(pin="0000")
+    agent.RequestConfirmation("/org/bluez/hci0/dev_AA_BB", 941189)
+    agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", "0000110b-0000-1000-8000-00805f9b34fb")
+
+    assert agent.method_calls == ["RequestConfirmation", "AuthorizeService"]
+    assert agent.last_passkey == 941189
+    assert agent.authorized_services == ["0000110b-0000-1000-8000-00805f9b34fb"]
+    assert agent.cancelled is False
+
+
+def test_pairing_agent_telemetry_property_returns_stable_keys():
+    # Even before __enter__ is called, telemetry should return a usable
+    # empty snapshot with all documented keys — downstream parsers rely
+    # on the dict shape being stable.
+    agent = PairingAgent(capability="DisplayYesNo", pin="0000")
+    snapshot = agent.telemetry
+    assert set(snapshot.keys()) == {
+        "capability",
+        "method_calls",
+        "last_passkey",
+        "pin_attempted",
+        "peer_cancelled",
+        "authorized_services",
+        "rejected_services",
+    }
+    assert snapshot["capability"] == "DisplayYesNo"
+    assert snapshot["method_calls"] == []
+    assert snapshot["last_passkey"] is None
+
+
 def test_context_manager_registers_and_unregisters_with_mocked_bus():
     # A full end-to-end check without a real SystemBus: patch dbus_fast
     # MessageBus to a stub that records register_agent / request_default_agent

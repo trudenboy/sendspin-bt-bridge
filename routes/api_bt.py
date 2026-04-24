@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import uuid
+from typing import Any
 
 from flask import Blueprint, jsonify, request
 
@@ -656,10 +657,29 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
 
         # Step 3: Pair from scratch (power on + scan + pair, trust only after success)
         logger.info("Reset & Reconnect %s: pairing…", mac)
+
+        # Native BlueZ agent first — same contract as _run_standalone_pair_inner.
+        # DisplayYesNo is the default because it reached Bonded: yes on Synergy
+        # 65 S in the #168 reproduction where the stdin-yes race kept losing.
+        native_agent: PairingAgent | None = None
+        try:
+            native_agent = PairingAgent(capability="DisplayYesNo", pin="0000").__enter__()
+            logger.info("Reset & Reconnect %s: native agent active", mac)
+        except Exception as exc:
+            native_agent = None
+            logger.warning(
+                "Reset & Reconnect %s: native agent unavailable (%s) — falling back to bluetoothctl agent",
+                mac,
+                exc,
+            )
+
         initial_cmds: list[str] = []
         if adapter:
             initial_cmds.append(f"select {adapter}")
-        initial_cmds.extend(["power on", "agent on", "default-agent", "scan bredr"])
+        initial_cmds.append("power on")
+        if native_agent is None:
+            initial_cmds.extend(["agent on", "default-agent"])
+        initial_cmds.append("scan bredr")
         pair_cmds = [f"pair {mac}"]
 
         proc = subprocess.Popen(
@@ -727,20 +747,40 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
             out = "".join(collected)
             ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
             connected = "connection successful" in out.lower() or "connected: yes" in out.lower()
+            agent_telemetry: dict[str, Any] | None = None
+            if native_agent is not None:
+                try:
+                    agent_telemetry = native_agent.telemetry
+                except Exception as exc:
+                    logger.debug("Reset & Reconnect %s: telemetry read failed: %s", mac, exc)
             logger.info(
-                "Reset & Reconnect %s: paired=%s connected=%s (last 400: %s)",
+                "Reset & Reconnect %s: paired=%s connected=%s agent=%s (last 400: %s)",
                 mac,
                 ok,
                 connected,
+                agent_telemetry,
                 out[-400:],
             )
-            finish_scan_job(job_id, {"success": ok, "connected": connected, "mac": mac})
+            finish_scan_job(
+                job_id,
+                {
+                    "success": ok,
+                    "connected": connected,
+                    "mac": mac,
+                    "agent_telemetry": agent_telemetry,
+                },
+            )
         finally:
             try:
                 proc.kill()
                 proc.wait(timeout=3)
             except Exception:
                 pass
+            if native_agent is not None:
+                try:
+                    native_agent.__exit__(None, None, None)
+                except Exception as exc:
+                    logger.debug("Reset & Reconnect %s: agent cleanup error: %s", mac, exc)
     except Exception:
         logger.exception("Reset & Reconnect error for %s", mac)
         finish_scan_job(job_id, {"success": False, "mac": mac, "error": "Reset & reconnect failed"})
@@ -1472,12 +1512,35 @@ def _run_standalone_pair_inner(
                 # reports. bluetoothctl's SSP dialog is typically <4 KB per
                 # pair attempt (issue #168 diagnostic lost with 800-byte tail).
                 logger.debug("Standalone pair %s output (pin=%s): %s", mac, pin, out)
+            # Structured pair-agent telemetry: what BlueZ asked us, passkey
+            # shown, authorized/rejected services.  Emitted regardless of
+            # outcome so success telemetry (e.g. "which capability worked")
+            # stays visible alongside failure triage.
+            agent_telemetry: dict[str, Any] | None = None
+            if native_agent is not None:
+                try:
+                    agent_telemetry = native_agent.telemetry
+                    logger.info(
+                        "Standalone pair %s agent telemetry: outcome=%s capability=%s "
+                        "methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
+                        mac,
+                        "success" if ok else "fail",
+                        agent_telemetry.get("capability"),
+                        agent_telemetry.get("method_calls"),
+                        agent_telemetry.get("last_passkey"),
+                        agent_telemetry.get("peer_cancelled"),
+                        agent_telemetry.get("authorized_services"),
+                        agent_telemetry.get("rejected_services"),
+                    )
+                except Exception as exc:
+                    logger.debug("Standalone pair %s: telemetry read failed: %s", mac, exc)
             return {
                 "success": ok,
                 "pin_attempted": pin_attempted,
                 "pin_rejected": pin_rejected,
                 "reason": reason,
                 "output": out,
+                "agent_telemetry": agent_telemetry,
             }
         finally:
             try:
