@@ -324,6 +324,61 @@ def test_start_client_accumulates_multiple_devices_in_single_apply(monkeypatch):
         loop.close()
 
 
+def test_start_client_uses_context_default_player_name_when_device_has_none(monkeypatch):
+    # Regression for a restart-vs-live-add inconsistency: when the added
+    # device omits ``player_name``, online activation must use the same
+    # default the startup path captured (``Sendspin-<hostname>`` or the
+    # ``$SENDSPIN_NAME`` override) — otherwise naming drifts between a
+    # live save and the next bridge restart, breaking MA/UI identity
+    # mapping for the affected client.
+    loop = asyncio.new_event_loop()
+    try:
+        ctx = _make_context(default_player_name="Sendspin-homelab")
+        orch = ReconfigOrchestrator(loop, _FakeSnapshot([]), activation_context=ctx)
+
+        captured_default: dict[str, str] = {}
+
+        def _fake_activate(device, *, index, context, default_player_name):
+            captured_default["name"] = default_player_name
+            return ActivationResult(
+                client=SimpleNamespace(
+                    run=lambda: _empty_coro(),
+                    bt_manager=SimpleNamespace(mac_address=device["mac"].upper()),
+                ),
+                bt_manager=None,
+                bt_available=True,
+                listen_port=8928,
+            )
+
+        monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
+        monkeypatch.setattr("state.set_clients", lambda clients: None)
+        monkeypatch.setattr("state.get_clients_snapshot", list)
+
+        class _StubFuture:
+            def add_done_callback(self, cb):
+                pass
+
+        monkeypatch.setattr(
+            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            lambda coro, _loop: (coro.close(), _StubFuture())[1],
+        )
+
+        # Build an action whose device dict has no player_name.
+        action = ReconfigAction(
+            kind=ActionKind.START_CLIENT,
+            mac="AA:BB:CC:DD:EE:FF",
+            fields=["added"],
+            payload={"device": {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0"}},
+            label="",
+        )
+
+        orch.apply([action])
+
+        assert captured_default["name"] == "Sendspin-homelab"
+    finally:
+        loop.close()
+
+
 def test_start_client_uses_device_index_from_payload(monkeypatch):
     # device_index in the action payload is the position the device occupies
     # in BLUETOOTH_DEVICES on disk.  Preferring it over len(existing_clients)

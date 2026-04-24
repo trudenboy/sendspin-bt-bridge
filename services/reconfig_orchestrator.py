@@ -404,11 +404,18 @@ class ReconfigOrchestrator:
         try:
             from services.device_activation import activate_device
 
+            # Fall through to the context's default player name (the
+            # startup path captured ``Sendspin-<hostname>`` / ``$SENDSPIN_NAME``
+            # / ``client_factory`` override there) — not a hardcoded
+            # "Sendspin" — so online-activation names match what a bridge
+            # restart would produce, keeping MA/UI identity stable across
+            # restarts when ``player_name`` is absent from the config entry.
+            resolved_default_name = str(device_payload.get("player_name") or context.default_player_name)
             result = activate_device(
                 device_payload,
                 index=device_index,
                 context=context,
-                default_player_name=str(device_payload.get("player_name") or "Sendspin"),
+                default_player_name=resolved_default_name,
             )
         except Exception as exc:
             logger.exception("START_CLIENT activation failed for %s", action.label or action.mac)

@@ -132,9 +132,34 @@ def _build_agent_iface(pin: str):
 
         @method()
         def RequestPasskey(self, device: "o") -> "u":  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
-            logger.info("Agent.RequestPasskey(%s) → 0", device)
+            # Mirrors the legacy bluetoothctl flow which handles both
+            # "enter pin code" (RequestPinCode) and "enter passkey"
+            # (RequestPasskey) by supplying the configured PIN.  BlueZ
+            # requires a 0..999999 numeric passkey here; if the PIN is
+            # non-numeric (e.g. a 4-digit string with leading zeros like
+            # "0000" is fine, but an alphanumeric override wouldn't be)
+            # fall back to 0 and log so the operator can see the bad
+            # configuration.
+            self.pin_attempted = True
             self.method_calls.append("RequestPasskey")
-            return 0
+            try:
+                passkey = int(self.pin)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Agent.RequestPasskey(%s): configured pin %r is not numeric — returning 0",
+                    device,
+                    self.pin,
+                )
+                return 0
+            if not 0 <= passkey <= 999999:
+                logger.warning(
+                    "Agent.RequestPasskey(%s): configured pin %r out of range 0-999999 — returning 0",
+                    device,
+                    self.pin,
+                )
+                return 0
+            logger.info("Agent.RequestPasskey(%s) → %06d", device, passkey)
+            return passkey
 
         @method()
         def DisplayPasskey(self, device: "o", passkey: "u", entered: "q"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037

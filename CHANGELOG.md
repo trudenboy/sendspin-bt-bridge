@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.3] - 2026-04-24
+
+Two more follow-ups from Copilot's second pass on the PR.
+
+### Fixed
+- **Default-player-name inconsistency between startup and online
+  activation** — when a ``BLUETOOTH_DEVICES`` entry omitted
+  ``player_name``, the startup path defaulted to
+  ``Sendspin-<hostname>`` (or ``$SENDSPIN_NAME`` / caller-override),
+  but online activation hardcoded ``"Sendspin"``.  The client would
+  rename itself on the next bridge restart, breaking the MA/UI
+  identity mapping for that device.  ``DeviceActivationContext`` now
+  carries ``default_player_name`` captured at startup, and
+  ``_apply_start_client`` uses it — so live-add and restart produce
+  the same name.
+- **``PairingAgent.RequestPasskey`` ignored the configured PIN** —
+  method used to return a hardcoded ``0`` and never mark
+  ``pin_attempted``.  The legacy bluetoothctl path already handled
+  both "enter pin code" and "enter passkey" prompts by writing the
+  configured PIN, so devices that drove ``RequestPasskey`` instead
+  of ``RequestPinCode`` failed under the native agent where the
+  legacy path succeeded.  Agent now parses ``self.pin`` as an int,
+  validates the 0–999999 range BlueZ requires, and returns it (or
+  falls back to ``0`` with a warning if the PIN is non-numeric /
+  out of range).  ``pin_attempted`` is marked either way so
+  ``_run_standalone_pair_inner``'s popular-PIN retry loop still
+  kicks in.
+
+### Tests
+1527 → 1530 passing.  New coverage:
+- ``tests/test_pairing_agent.py`` — ``RequestPasskey`` marks the
+  attempt and still falls back cleanly on an invalid (non-numeric)
+  PIN.
+- ``tests/test_reconfig_orchestrator_start_client.py`` —
+  ``_apply_start_client`` falls through to
+  ``context.default_player_name`` (not a hardcoded ``"Sendspin"``)
+  when the device payload has no ``player_name``.
+
 ## [2.62.0-rc.2] - 2026-04-24
 
 Follow-up fixes from Copilot's review of the 2.62.0-rc.1 PR.  No new

@@ -45,6 +45,12 @@ class DeviceActivationContext:
     base_listen_port: int
     client_factory: Callable[..., Any]
     bt_manager_factory: Callable[..., Any]
+    # ``Sendspin-<hostname>`` by default, with ``SENDSPIN_NAME`` / caller
+    # override applied at startup.  Captured here so online-activation
+    # reuses the exact same default when a new device omits ``player_name``
+    # — otherwise the restart-vs-live-add paths diverge on naming and
+    # downstream identity mapping (MA, UI) breaks across a restart.
+    default_player_name: str = "Sendspin"
     load_saved_volume_fn: Callable[[str], int | None] | None = None
     persist_enabled_fn: Callable[[str, bool], None] | None = None
 

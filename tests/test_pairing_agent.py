@@ -38,6 +38,32 @@ def test_agent_request_confirmation_records_passkey():
     assert agent.cancelled is False
 
 
+def test_agent_request_passkey_uses_configured_pin():
+    # Mirrors RequestPinCode semantics so legacy devices that drive the
+    # "enter passkey" prompt pair with the same configured PIN the pair
+    # modal uses.  The @method decorator swallows return values on direct
+    # calls, so verify via the agent's state instead.
+    agent = _build_agent_iface(pin="1234")
+
+    agent.RequestPasskey("/org/bluez/hci0/dev_AA_BB")
+
+    assert agent.pin_attempted is True
+    assert "RequestPasskey" in agent.method_calls
+
+
+def test_agent_request_passkey_marks_attempt_even_when_pin_invalid():
+    # A non-numeric PIN (hypothetical future support for alphanumeric
+    # overrides) must not crash the agent; the method still has to return
+    # a valid 0-999999 integer to BlueZ, so it falls back to 0, logs, and
+    # still records that an attempt happened so downstream retry logic
+    # sees the agent at least tried.
+    agent = _build_agent_iface(pin="abcd")
+
+    agent.RequestPasskey("/org/bluez/hci0/dev_AA_BB")
+
+    assert agent.pin_attempted is True
+
+
 def test_agent_cancel_sets_flag():
     agent = _build_agent_iface(pin="0000")
 

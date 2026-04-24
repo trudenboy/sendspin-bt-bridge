@@ -455,6 +455,7 @@ class BridgeOrchestrator:
             base_listen_port=base_listen_port,
             client_factory=client_factory,
             bt_manager_factory=bt_manager_factory,
+            default_player_name=resolved_default_name,
             load_saved_volume_fn=load_saved_volume_fn,
             persist_enabled_fn=persist_enabled_fn,
         )
