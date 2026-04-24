@@ -673,109 +673,115 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
                 exc,
             )
 
-        initial_cmds: list[str] = []
-        if adapter:
-            initial_cmds.append(f"select {adapter}")
-        initial_cmds.append("power on")
-        if native_agent is None:
-            initial_cmds.extend(["agent on", "default-agent"])
-        initial_cmds.append("scan bredr")
-        pair_cmds = [f"pair {mac}"]
-
-        proc = subprocess.Popen(
-            ["bluetoothctl"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        # Outer try/finally guarantees native_agent cleanup even when
+        # ``subprocess.Popen(["bluetoothctl"])`` below raises before the
+        # inner proc-scoped finally has a chance to run.  Otherwise the
+        # agent thread / SystemBus connection leaks per failed attempt.
         try:
-            if proc.stdin is None:
-                raise RuntimeError("bluetoothctl stdin unavailable")
+            initial_cmds = []
+            if adapter:
+                initial_cmds.append(f"select {adapter}")
+            initial_cmds.append("power on")
+            if native_agent is None:
+                initial_cmds.extend(["agent on", "default-agent"])
+            initial_cmds.append("scan bredr")
+            pair_cmds = [f"pair {mac}"]
 
-            proc.stdin.write("\n".join(initial_cmds) + "\n")
-            proc.stdin.flush()
-            time.sleep(_PAIR_SCAN_DURATION)
-
-            proc.stdin.write("\n".join(pair_cmds) + "\n")
-            proc.stdin.flush()
-
-            import selectors
-
-            collected: list[str] = []
-            paired_ok = False
-            deadline = time.monotonic() + _PAIR_WAIT_DURATION
-            sel = selectors.DefaultSelector()
-            sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
+            proc = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
             try:
-                while time.monotonic() < deadline and proc.poll() is None:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        break
-                    events = sel.select(timeout=min(remaining, 0.5))
-                    if not events:
-                        continue
-                    line = proc.stdout.readline()  # type: ignore[union-attr]
-                    if not line:
-                        break
-                    collected.append(line)
-                    stripped = line.strip().lower()
-                    if "confirm passkey" in stripped or "request confirmation" in stripped:
-                        logger.info("SSP passkey prompt — auto-confirming")
-                        proc.stdin.write("yes\n")
-                        proc.stdin.flush()
-                    if "pairing successful" in stripped or "already paired" in stripped:
-                        paired_ok = True
-                        time.sleep(1)
-                        break
-            finally:
-                sel.close()
+                if proc.stdin is None:
+                    raise RuntimeError("bluetoothctl stdin unavailable")
 
-            if paired_ok:
-                proc.stdin.write(f"trust {mac}\nconnect {mac}\n")
-            proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-            proc.stdin.flush()
-            if paired_ok:
-                time.sleep(5)
+                proc.stdin.write("\n".join(initial_cmds) + "\n")
+                proc.stdin.flush()
+                time.sleep(_PAIR_SCAN_DURATION)
 
-            try:
-                tail, _ = proc.communicate(timeout=3)
-                collected.append(tail)
-            except subprocess.TimeoutExpired:
-                pass
+                proc.stdin.write("\n".join(pair_cmds) + "\n")
+                proc.stdin.flush()
 
-            out = "".join(collected)
-            ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-            connected = "connection successful" in out.lower() or "connected: yes" in out.lower()
-            agent_telemetry: dict[str, Any] | None = None
-            if native_agent is not None:
+                import selectors
+
+                collected: list[str] = []
+                paired_ok = False
+                deadline = time.monotonic() + _PAIR_WAIT_DURATION
+                sel = selectors.DefaultSelector()
+                sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
                 try:
-                    agent_telemetry = native_agent.telemetry
-                except Exception as exc:
-                    logger.debug("Reset & Reconnect %s: telemetry read failed: %s", mac, exc)
-            logger.info(
-                "Reset & Reconnect %s: paired=%s connected=%s agent=%s (last 400: %s)",
-                mac,
-                ok,
-                connected,
-                agent_telemetry,
-                out[-400:],
-            )
-            finish_scan_job(
-                job_id,
-                {
-                    "success": ok,
-                    "connected": connected,
-                    "mac": mac,
-                    "agent_telemetry": agent_telemetry,
-                },
-            )
+                    while time.monotonic() < deadline and proc.poll() is None:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        events = sel.select(timeout=min(remaining, 0.5))
+                        if not events:
+                            continue
+                        line = proc.stdout.readline()  # type: ignore[union-attr]
+                        if not line:
+                            break
+                        collected.append(line)
+                        stripped = line.strip().lower()
+                        if "confirm passkey" in stripped or "request confirmation" in stripped:
+                            logger.info("SSP passkey prompt — auto-confirming")
+                            proc.stdin.write("yes\n")
+                            proc.stdin.flush()
+                        if "pairing successful" in stripped or "already paired" in stripped:
+                            paired_ok = True
+                            time.sleep(1)
+                            break
+                finally:
+                    sel.close()
+
+                if paired_ok:
+                    proc.stdin.write(f"trust {mac}\nconnect {mac}\n")
+                proc.stdin.write(f"info {mac}\nscan off\nquit\n")
+                proc.stdin.flush()
+                if paired_ok:
+                    time.sleep(5)
+
+                try:
+                    tail, _ = proc.communicate(timeout=3)
+                    collected.append(tail)
+                except subprocess.TimeoutExpired:
+                    pass
+
+                out = "".join(collected)
+                ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
+                connected = "connection successful" in out.lower() or "connected: yes" in out.lower()
+                agent_telemetry: dict[str, Any] | None = None
+                if native_agent is not None:
+                    try:
+                        agent_telemetry = native_agent.telemetry
+                    except Exception as exc:
+                        logger.debug("Reset & Reconnect %s: telemetry read failed: %s", mac, exc)
+                logger.info(
+                    "Reset & Reconnect %s: paired=%s connected=%s agent=%s (last 400: %s)",
+                    mac,
+                    ok,
+                    connected,
+                    agent_telemetry,
+                    out[-400:],
+                )
+                finish_scan_job(
+                    job_id,
+                    {
+                        "success": ok,
+                        "connected": connected,
+                        "mac": mac,
+                        "agent_telemetry": agent_telemetry,
+                    },
+                )
+            finally:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=3)
+                except Exception:
+                    pass
         finally:
-            try:
-                proc.kill()
-                proc.wait(timeout=3)
-            except Exception:
-                pass
             if native_agent is not None:
                 try:
                     native_agent.__exit__(None, None, None)
@@ -1381,173 +1387,178 @@ def _run_standalone_pair_inner(
                 exc,
             )
 
-        initial_cmds: list[str] = []
-        if adapter:
-            initial_cmds.append(f"select {adapter}")
-        initial_cmds.append("power on")
-        if native_agent is None:
-            # No native agent → rely on bluetoothctl's built-in agent as before.
-            initial_cmds.extend([agent_cmd, "default-agent"])
-        initial_cmds.append("scan bredr")
-
-        pair_cmds = [f"pair {mac}"]
-
-        proc = subprocess.Popen(
-            ["bluetoothctl"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        # Outer try/finally guarantees native_agent cleanup even if the
+        # bluetoothctl subprocess fails to launch before the inner
+        # proc-scoped finally has a chance to run.
         try:
-            if proc.stdin is None:
-                raise RuntimeError("bluetoothctl stdin unavailable")
+            initial_cmds: list[str] = []
+            if adapter:
+                initial_cmds.append(f"select {adapter}")
+            initial_cmds.append("power on")
+            if native_agent is None:
+                # No native agent → rely on bluetoothctl's built-in agent as before.
+                initial_cmds.extend([agent_cmd, "default-agent"])
+            initial_cmds.append("scan bredr")
 
-            proc.stdin.write("\n".join(initial_cmds) + "\n")
-            proc.stdin.flush()
+            pair_cmds = [f"pair {mac}"]
 
-            # Read stdout to auto-confirm SSP passkey
-            import selectors
-
-            collected: list[str] = []
-            paired_ok = False
-            pair_sent = False
-            pin_attempted = False
-            # Single loop that handles both scan-window observation and pair
-            # outcome parsing. `pair <mac>` fires as soon as `[NEW] Device <mac>`
-            # appears, rather than waiting the full `_PAIR_SCAN_DURATION` fixed
-            # sleep — shaves typical pair-mode window from ~12s to ~1-3s so the
-            # speaker is still accepting when `pair` arrives (issue #168).
-            mac_lower = mac.lower()
-            start = time.monotonic()
-            scan_deadline = start + _PAIR_SCAN_DURATION
-            full_deadline = scan_deadline + _PAIR_WAIT_DURATION
-            sel = selectors.DefaultSelector()
-            sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
+            proc = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
             try:
-                while proc.poll() is None:
-                    now = time.monotonic()
-                    # Fire `pair` at scan deadline if device never advertised.
-                    if not pair_sent and now >= scan_deadline:
-                        proc.stdin.write("\n".join(pair_cmds) + "\n")
-                        proc.stdin.flush()
-                        pair_sent = True
-                    if now >= full_deadline:
-                        break
-                    end = full_deadline if pair_sent else scan_deadline
-                    remaining = end - now
-                    if remaining <= 0:
-                        continue
-                    events = sel.select(timeout=min(remaining, 0.5))
-                    if not events:
-                        continue
-                    line = proc.stdout.readline()  # type: ignore[union-attr]
-                    if not line:
-                        break
-                    collected.append(line)
-                    low = line.lower()
-                    stripped = line.strip().lower()
+                if proc.stdin is None:
+                    raise RuntimeError("bluetoothctl stdin unavailable")
 
-                    if not pair_sent and "[new] device" in low and mac_lower in low:
-                        logger.debug("Device %s visible via scan, firing pair early", mac)
-                        proc.stdin.write("\n".join(pair_cmds) + "\n")
-                        proc.stdin.flush()
-                        pair_sent = True
-                        continue
-
-                    if "confirm passkey" in stripped or "request confirmation" in stripped:
-                        logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
-                        proc.stdin.write("yes\n")
-                        proc.stdin.flush()
-                    elif "enter pin code" in stripped or "enter passkey" in stripped:
-                        # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
-                        # ask for a numeric PIN. `0000` is the BlueZ-default fallback
-                        # and works for most consumer audio sinks (issue #162). If
-                        # this attempt is a retry, the outer orchestrator supplies
-                        # the next popular PIN from ``COMMON_BT_PAIR_PINS``.
-                        logger.info("Legacy PIN prompt — auto-entering %s: %s", pin, line.strip())
-                        proc.stdin.write(f"{pin}\n")
-                        proc.stdin.flush()
-                        pin_attempted = True
-                    if "pairing successful" in stripped or "already paired" in stripped:
-                        paired_ok = True
-                        break
-            finally:
-                sel.close()
-
-            # Safety net: ensure `pair` was sent at least once even if the loop
-            # exited via proc.poll() before the scan deadline.
-            if not pair_sent and proc.poll() is None:
-                proc.stdin.write("\n".join(pair_cmds) + "\n")
+                proc.stdin.write("\n".join(initial_cmds) + "\n")
                 proc.stdin.flush()
 
-            if paired_ok:
-                proc.stdin.write(f"trust {mac}\n")
-            proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-            proc.stdin.flush()
+                # Read stdout to auto-confirm SSP passkey
+                import selectors
 
-            try:
-                tail, _ = proc.communicate(timeout=3)
-                collected.append(tail)
-            except subprocess.TimeoutExpired:
-                pass
-
-            out = "".join(collected)
-            ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-            reason = ""
-            pin_rejected = False
-            if not ok:
-                reason = (
-                    describe_pair_failure(out, pin_attempted=pin_attempted, pin_used=pin)
-                    or "no explicit bluetoothctl reason captured"
-                )
-                # A PIN rejection means the device asked for a PIN AND the
-                # attempt failed with AuthenticationFailed — derived from
-                # the raw bluetoothctl output so the check is independent
-                # of the human-readable `reason` wording (otherwise a reword
-                # of `describe_pair_failure` would silently break retry).
-                pin_rejected = pin_attempted and is_pin_rejection(out)
-                # Log full captured output (not just a tail) so passkey/agent
-                # prompts near the start of the session are visible in bug
-                # reports. bluetoothctl's SSP dialog is typically <4 KB per
-                # pair attempt (issue #168 diagnostic lost with 800-byte tail).
-                logger.debug("Standalone pair %s output (pin=%s): %s", mac, pin, out)
-            # Structured pair-agent telemetry: what BlueZ asked us, passkey
-            # shown, authorized/rejected services.  Emitted regardless of
-            # outcome so success telemetry (e.g. "which capability worked")
-            # stays visible alongside failure triage.
-            agent_telemetry: dict[str, Any] | None = None
-            if native_agent is not None:
+                collected: list[str] = []
+                paired_ok = False
+                pair_sent = False
+                pin_attempted = False
+                # Single loop that handles both scan-window observation and pair
+                # outcome parsing. `pair <mac>` fires as soon as `[NEW] Device <mac>`
+                # appears, rather than waiting the full `_PAIR_SCAN_DURATION` fixed
+                # sleep — shaves typical pair-mode window from ~12s to ~1-3s so the
+                # speaker is still accepting when `pair` arrives (issue #168).
+                mac_lower = mac.lower()
+                start = time.monotonic()
+                scan_deadline = start + _PAIR_SCAN_DURATION
+                full_deadline = scan_deadline + _PAIR_WAIT_DURATION
+                sel = selectors.DefaultSelector()
+                sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
                 try:
-                    agent_telemetry = native_agent.telemetry
-                    logger.info(
-                        "Standalone pair %s agent telemetry: outcome=%s capability=%s "
-                        "methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
-                        mac,
-                        "success" if ok else "fail",
-                        agent_telemetry.get("capability"),
-                        agent_telemetry.get("method_calls"),
-                        agent_telemetry.get("last_passkey"),
-                        agent_telemetry.get("peer_cancelled"),
-                        agent_telemetry.get("authorized_services"),
-                        agent_telemetry.get("rejected_services"),
+                    while proc.poll() is None:
+                        now = time.monotonic()
+                        # Fire `pair` at scan deadline if device never advertised.
+                        if not pair_sent and now >= scan_deadline:
+                            proc.stdin.write("\n".join(pair_cmds) + "\n")
+                            proc.stdin.flush()
+                            pair_sent = True
+                        if now >= full_deadline:
+                            break
+                        end = full_deadline if pair_sent else scan_deadline
+                        remaining = end - now
+                        if remaining <= 0:
+                            continue
+                        events = sel.select(timeout=min(remaining, 0.5))
+                        if not events:
+                            continue
+                        line = proc.stdout.readline()  # type: ignore[union-attr]
+                        if not line:
+                            break
+                        collected.append(line)
+                        low = line.lower()
+                        stripped = line.strip().lower()
+
+                        if not pair_sent and "[new] device" in low and mac_lower in low:
+                            logger.debug("Device %s visible via scan, firing pair early", mac)
+                            proc.stdin.write("\n".join(pair_cmds) + "\n")
+                            proc.stdin.flush()
+                            pair_sent = True
+                            continue
+
+                        if "confirm passkey" in stripped or "request confirmation" in stripped:
+                            logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
+                            proc.stdin.write("yes\n")
+                            proc.stdin.flush()
+                        elif "enter pin code" in stripped or "enter passkey" in stripped:
+                            # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
+                            # ask for a numeric PIN. `0000` is the BlueZ-default fallback
+                            # and works for most consumer audio sinks (issue #162). If
+                            # this attempt is a retry, the outer orchestrator supplies
+                            # the next popular PIN from ``COMMON_BT_PAIR_PINS``.
+                            logger.info("Legacy PIN prompt — auto-entering %s: %s", pin, line.strip())
+                            proc.stdin.write(f"{pin}\n")
+                            proc.stdin.flush()
+                            pin_attempted = True
+                        if "pairing successful" in stripped or "already paired" in stripped:
+                            paired_ok = True
+                            break
+                finally:
+                    sel.close()
+
+                # Safety net: ensure `pair` was sent at least once even if the loop
+                # exited via proc.poll() before the scan deadline.
+                if not pair_sent and proc.poll() is None:
+                    proc.stdin.write("\n".join(pair_cmds) + "\n")
+                    proc.stdin.flush()
+
+                if paired_ok:
+                    proc.stdin.write(f"trust {mac}\n")
+                proc.stdin.write(f"info {mac}\nscan off\nquit\n")
+                proc.stdin.flush()
+
+                try:
+                    tail, _ = proc.communicate(timeout=3)
+                    collected.append(tail)
+                except subprocess.TimeoutExpired:
+                    pass
+
+                out = "".join(collected)
+                ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
+                reason = ""
+                pin_rejected = False
+                if not ok:
+                    reason = (
+                        describe_pair_failure(out, pin_attempted=pin_attempted, pin_used=pin)
+                        or "no explicit bluetoothctl reason captured"
                     )
-                except Exception as exc:
-                    logger.debug("Standalone pair %s: telemetry read failed: %s", mac, exc)
-            return {
-                "success": ok,
-                "pin_attempted": pin_attempted,
-                "pin_rejected": pin_rejected,
-                "reason": reason,
-                "output": out,
-                "agent_telemetry": agent_telemetry,
-            }
+                    # A PIN rejection means the device asked for a PIN AND the
+                    # attempt failed with AuthenticationFailed — derived from
+                    # the raw bluetoothctl output so the check is independent
+                    # of the human-readable `reason` wording (otherwise a reword
+                    # of `describe_pair_failure` would silently break retry).
+                    pin_rejected = pin_attempted and is_pin_rejection(out)
+                    # Log full captured output (not just a tail) so passkey/agent
+                    # prompts near the start of the session are visible in bug
+                    # reports. bluetoothctl's SSP dialog is typically <4 KB per
+                    # pair attempt (issue #168 diagnostic lost with 800-byte tail).
+                    logger.debug("Standalone pair %s output (pin=%s): %s", mac, pin, out)
+                # Structured pair-agent telemetry: what BlueZ asked us, passkey
+                # shown, authorized/rejected services.  Emitted regardless of
+                # outcome so success telemetry (e.g. "which capability worked")
+                # stays visible alongside failure triage.
+                agent_telemetry: dict[str, Any] | None = None
+                if native_agent is not None:
+                    try:
+                        agent_telemetry = native_agent.telemetry
+                        logger.info(
+                            "Standalone pair %s agent telemetry: outcome=%s capability=%s "
+                            "methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
+                            mac,
+                            "success" if ok else "fail",
+                            agent_telemetry.get("capability"),
+                            agent_telemetry.get("method_calls"),
+                            agent_telemetry.get("last_passkey"),
+                            agent_telemetry.get("peer_cancelled"),
+                            agent_telemetry.get("authorized_services"),
+                            agent_telemetry.get("rejected_services"),
+                        )
+                    except Exception as exc:
+                        logger.debug("Standalone pair %s: telemetry read failed: %s", mac, exc)
+                return {
+                    "success": ok,
+                    "pin_attempted": pin_attempted,
+                    "pin_rejected": pin_rejected,
+                    "reason": reason,
+                    "output": out,
+                    "agent_telemetry": agent_telemetry,
+                }
+            finally:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=3)
+                except Exception:
+                    pass
         finally:
-            try:
-                proc.kill()
-                proc.wait(timeout=3)
-            except Exception:
-                pass
             if native_agent is not None:
                 try:
                     native_agent.__exit__(None, None, None)

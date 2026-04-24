@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.2] - 2026-04-24
+
+Follow-up fixes from Copilot's review of the 2.62.0-rc.1 PR.  No new
+features — six bug / correctness fixes plus targeted tests.
+
+### Fixed
+- **Multi-device START_CLIENT data loss** — when the config diff
+  produced several ``START_CLIENT`` actions in a single ``POST /api/config``
+  (user adds three speakers at once), each call read ``existing_clients``
+  from the snapshot captured at the top of ``apply()`` and wrote
+  ``set_clients([*snapshot, new])`` — silently overwriting any clients
+  appended by earlier iterations. Orchestrator now re-reads the live
+  registry on every iteration and keeps ``clients_by_mac`` in sync,
+  so all added devices land.
+- **Start-client ``base_listen_port + index`` mismatch** — the fallback
+  used ``len(existing_clients)`` as the device index, which could
+  differ from the device's position in ``BLUETOOTH_DEVICES`` when
+  disabled devices sit in front of the new one. Fixed by passing
+  ``device_index`` through the action payload from ``config_diff``
+  and preferring it over the live-registry length. Avoids port
+  collisions on setups with disabled devices.
+- **PairingAgent cleanup on registration failure** — ``_thread_main``
+  exited early when ``_register()`` raised (e.g. ``AgentManager1.RegisterAgent``
+  refused because another agent held the default), leaking the
+  SystemBus connection and asyncio loop per failed attempt. Now
+  always runs through a ``try/finally`` that closes the loop and
+  best-effort unregisters if ``_bus`` was set.
+- **Agent leak when ``bluetoothctl`` subprocess fails to launch** —
+  in both ``_run_standalone_pair_inner`` and ``_run_reset_reconnect``
+  the native-agent cleanup lived inside a ``finally`` that only ran
+  after ``subprocess.Popen`` succeeded. ``PairingAgent.__exit__`` is
+  now in an outer ``finally`` that always runs, guaranteeing the
+  agent thread / SystemBus socket is torn down even when bluetoothctl
+  can't start.
+- **Stale activation context at shutdown** — ``publish_shutdown_complete``
+  now calls ``set_activation_context(None)`` alongside the existing
+  ``set_main_loop(None)`` so Flask threads that outlive the bridge
+  process in tests / graceful shutdown can't materialize new clients
+  against torn-down factories.
+- **Empty assertion in ``test_activate_device_honours_effective_bridge_suffix``** —
+  the test's comment promised "verify the suffix was applied" but
+  didn't actually assert anything. Added the explicit
+  ``captured["device_name"] == "Kitchen @ Home"`` check so the suffix
+  wiring is properly regression-tested.
+
+### Tests
+1524 → 1527 passing. New coverage:
+- ``tests/test_reconfig_orchestrator_start_client.py`` — three-device
+  ``apply()`` call appends all three (regression for multi-device
+  data-loss) and ``device_index`` from payload overrides the live
+  registry length.
+- ``tests/test_config_diff.py`` — ``device_index`` is attached to
+  START_CLIENT payload; reflects position in ``BLUETOOTH_DEVICES``
+  even when disabled devices precede the added one.
+
 ## [2.62.0-rc.1] - 2026-04-24
 
 Follow-ups to the Synergy 65 S pair failure tracked in issue #168,

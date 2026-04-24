@@ -155,13 +155,15 @@ def test_activate_device_falls_back_to_base_port_plus_index():
 
 
 def test_activate_device_honours_effective_bridge_suffix():
-    ctx, _ = _make_context(effective_bridge="Home")
+    ctx, captured = _make_context(effective_bridge="Home")
     device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
 
     activate_device(device, index=0, context=ctx, default_player_name="Fallback")
-    # player_name is uppercase-passed into client_factory; verify effective_bridge
-    # suffix was applied via the bt_manager_factory's device_name arg
-    # (captured["device_name"] from the BT factory).
+
+    # Verify the effective_bridge suffix is applied to device_name passed into
+    # the BT manager factory (so the BT manager logs and sink lookups stay
+    # consistent with what the client uses as its player_name).
+    assert captured["device_name"] == "Kitchen @ Home"
 
 
 def test_activate_device_restores_released_state_when_flagged():

@@ -254,6 +254,124 @@ def test_start_client_reports_error_when_reclaim_raises(monkeypatch):
         loop.close()
 
 
+def test_start_client_accumulates_multiple_devices_in_single_apply(monkeypatch):
+    # Regression test for a data-loss bug: the original _apply_start_client
+    # captured ``existing_clients`` from the initial snapshot and did
+    # ``set_clients([*captured, new])`` every iteration — so a diff with 3
+    # added devices ended up with only the last one in the registry because
+    # each call overwrote the previous append.  Fix reads the live registry
+    # snapshot on every call.
+    loop = asyncio.new_event_loop()
+    try:
+        snapshot = _FakeSnapshot([])
+        orch = ReconfigOrchestrator(loop, snapshot, activation_context=_make_context())
+
+        live_registry: list[object] = []
+
+        def _set_clients(clients):
+            live_registry[:] = list(clients)
+
+        def _get_snapshot():
+            return list(live_registry)
+
+        monkeypatch.setattr("state.set_clients", _set_clients)
+        monkeypatch.setattr("state.get_clients_snapshot", _get_snapshot)
+
+        def _make_fake_client(mac: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                run=lambda: _empty_coro(),
+                bt_manager=SimpleNamespace(mac_address=mac),
+            )
+
+        activation_index = [0]
+
+        def _fake_activate(device, *, index, context, default_player_name):
+            mac = device["mac"].upper()
+            activation_index[0] += 1
+            return ActivationResult(
+                client=_make_fake_client(mac),
+                bt_manager=None,
+                bt_available=True,
+                listen_port=8928 + index,
+            )
+
+        monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
+
+        class _StubFuture:
+            def add_done_callback(self, cb):
+                pass
+
+        monkeypatch.setattr(
+            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            lambda coro, _loop: (coro.close(), _StubFuture())[1],
+        )
+
+        actions = [
+            _make_new_device_action(mac="AA:AA:AA:AA:AA:01", label="Kitchen"),
+            _make_new_device_action(mac="BB:BB:BB:BB:BB:02", label="Bedroom"),
+            _make_new_device_action(mac="CC:CC:CC:CC:CC:03", label="Garage"),
+        ]
+
+        summary = orch.apply(actions)
+
+        assert len(summary.started) == 3
+        assert [c.bt_manager.mac_address for c in live_registry] == [
+            "AA:AA:AA:AA:AA:01",
+            "BB:BB:BB:BB:BB:02",
+            "CC:CC:CC:CC:CC:03",
+        ]
+    finally:
+        loop.close()
+
+
+def test_start_client_uses_device_index_from_payload(monkeypatch):
+    # device_index in the action payload is the position the device occupies
+    # in BLUETOOTH_DEVICES on disk.  Preferring it over len(existing_clients)
+    # matches the startup-path listen_port computation (base_listen_port +
+    # index) even when the config has disabled devices before it.
+    loop = asyncio.new_event_loop()
+    try:
+        orch = ReconfigOrchestrator(loop, _FakeSnapshot([]), activation_context=_make_context())
+
+        captured_index: dict[str, int] = {}
+
+        def _fake_activate(device, *, index, context, default_player_name):
+            captured_index["index"] = index
+            return ActivationResult(
+                client=SimpleNamespace(
+                    run=lambda: _empty_coro(),
+                    bt_manager=SimpleNamespace(mac_address=device["mac"].upper()),
+                ),
+                bt_manager=None,
+                bt_available=True,
+                listen_port=8928 + index,
+            )
+
+        monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
+        monkeypatch.setattr("state.set_clients", lambda clients: None)
+        monkeypatch.setattr("state.get_clients_snapshot", list)
+
+        class _StubFuture:
+            def add_done_callback(self, cb):
+                pass
+
+        monkeypatch.setattr(
+            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            lambda coro, _loop: (coro.close(), _StubFuture())[1],
+        )
+
+        action = _make_new_device_action()
+        # Simulate diff_configs attaching the config index (device is 4th in
+        # BLUETOOTH_DEVICES with 3 disabled entries before it).
+        action.payload["device_index"] = 3
+
+        orch.apply([action])
+
+        assert captured_index["index"] == 3
+    finally:
+        loop.close()
+
+
 def test_start_client_rollback_on_run_task_failure(monkeypatch):
     loop = asyncio.new_event_loop()
     try:

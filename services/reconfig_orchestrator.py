@@ -367,13 +367,46 @@ class ReconfigOrchestrator:
             )
             return
 
-        existing_clients = list(self._snapshot.active_clients)
+        # Always read the live registry here instead of reusing the snapshot
+        # captured at the top of apply() — when the diff produces several
+        # START_CLIENT actions in one save (e.g. user adds three speakers at
+        # once) each subsequent call must see the clients the previous calls
+        # have already appended, otherwise set_clients([*old, latest]) would
+        # silently drop the intermediate ones.
+        import state as _state
+
+        try:
+            existing_clients = list(_state.get_clients_snapshot())
+        except Exception as exc:
+            logger.exception("START_CLIENT registry read failed for %s", action.label or action.mac)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"registry read failed: {exc}",
+                }
+            )
+            return
+
+        # Prefer the explicit ``device_index`` the diff computed over
+        # ``len(existing_clients)``.  Position in BLUETOOTH_DEVICES is what
+        # the startup path uses for the ``base_listen_port + index`` fallback
+        # when a device didn't pin its own ``listen_port``; falling back to
+        # the live-clients length would assign a different port (and risk
+        # collision with a disabled device's implicit port).
+        payload_index = action.payload.get("device_index")
+        device_index = (
+            int(payload_index) if isinstance(payload_index, int) and payload_index >= 0 else len(existing_clients)
+        )
+
         try:
             from services.device_activation import activate_device
 
             result = activate_device(
                 device_payload,
-                index=len(existing_clients),
+                index=device_index,
                 context=context,
                 default_player_name=str(device_payload.get("player_name") or "Sendspin"),
             )
@@ -392,8 +425,6 @@ class ReconfigOrchestrator:
 
         new_clients = [*existing_clients, result.client]
         try:
-            import state as _state
-
             _state.set_clients(new_clients)
         except Exception as exc:
             logger.exception("START_CLIENT registry update failed for %s", action.label or action.mac)
@@ -442,6 +473,13 @@ class ReconfigOrchestrator:
                 self._rollback_started_client(_mac)
 
         future.add_done_callback(_on_run_done)
+        # Keep the dispatch-time MAC index consistent with the live
+        # registry so a subsequent action for the same MAC within this
+        # apply() call (e.g. a second duplicate START_CLIENT, or an
+        # immediate HOT_APPLY added alongside the START_CLIENT) sees the
+        # fresh client instead of re-running activate_device.
+        if mac_key:
+            clients_by_mac[mac_key] = result.client
         summary.started.append(action.to_summary())
 
     def _rollback_started_client(self, mac_key: str) -> None:

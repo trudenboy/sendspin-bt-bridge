@@ -274,24 +274,35 @@ class PairingAgent:
             self._thread.join(timeout=3.0)
 
     def _thread_main(self) -> None:
+        loop: asyncio.AbstractEventLoop | None = None
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             self._loop = loop
-            loop.run_until_complete(self._register())
-        except BaseException as exc:
-            self._start_error = exc
+            try:
+                loop.run_until_complete(self._register())
+            except BaseException as exc:
+                # _register may raise AFTER MessageBus.connect() succeeded —
+                # e.g. AgentManager1.RegisterAgent refuses because another
+                # agent holds the default. We still need to unwind the bus
+                # connection and close the loop so we don't leak a SystemBus
+                # socket / event loop for every failed pair attempt.
+                self._start_error = exc
+                self._ready.set()
+                return
             self._ready.set()
-            return
-        self._ready.set()
-        try:
             loop.run_forever()
         finally:
-            try:
-                loop.run_until_complete(self._unregister())
-            except Exception as exc:
-                logger.debug("PairingAgent unregister failed (non-fatal): %s", exc)
-            loop.close()
+            if loop is not None:
+                try:
+                    if self._bus is not None:
+                        loop.run_until_complete(self._unregister())
+                except Exception as exc:
+                    logger.debug("PairingAgent unregister failed (non-fatal): %s", exc)
+                try:
+                    loop.close()
+                except Exception as exc:  # pragma: no cover — best-effort
+                    logger.debug("PairingAgent loop close failed: %s", exc)
             self._loop = None
 
     async def _register(self) -> None:
