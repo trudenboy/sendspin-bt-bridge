@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.4] - 2026-04-25
+
+Pivot rc — rolls back the rc.3 WebSocket migration; ships the
+correct fix for the original HA Supervisor SSE corruption.
+
+### Why
+
+Manual validation of rc.3 on VM 105 surfaced
+``RuntimeError: Cannot obtain socket from WSGI environment.`` on
+every WS connect.  ``flask-sock`` / ``simple-websocket`` need
+raw-socket access from the WSGI env; ``waitress`` doesn't expose
+it.  Alternatives (gunicorn+gevent monkey-patch, embedded
+``gevent.pywsgi``, ASGI migration) all carry asyncio-orchestrator
+risk or scope beyond v2.63.0.
+
+### Fixed
+
+- ``routes/api_status.py`` — set ``Cache-Control: no-transform``
+  (RFC 7234 §5.2.2.4) + ``Content-Encoding: identity`` on the SSE
+  response so HA Supervisor ingress no longer applies deflate
+  compression that corrupts ``text/event-stream`` payloads.
+
+### Reverted from rc.3
+
+- ``web_interface.py`` — drop ``Sock(app)`` + ``register_ws_routes``;
+  ``flask-sock`` dropped from ``requirements.txt``.
+- ``static/app.js`` — UI back to SSE-only for status, polling-only
+  for logs.
+
+### Kept
+
+- ``services/bt_operation_lock.py`` shared lock + RSSI background
+  refresh + ``_RingLogHandler.subscribe_with_snapshot`` API.  All
+  work without WS and stay tested.  ``routes/api_ws.py`` generators
+  kept as dormant contracts for a future ASGI revival.
+
 ## [2.63.0-rc.3] - 2026-04-25
 
 Transport-layer rc: replaces SSE with WebSocket for the status stream
