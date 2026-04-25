@@ -1,6 +1,13 @@
 sendspin==7.0.0
 aiosendspin[server]==5.1.1
 flask==3.1.3
+# WebSocket support for /api/status/ws and /api/logs/stream (v2.63.0-rc.3+).
+# flask-sock pulls in simple-websocket / wsproto / h11; works with waitress
+# in sync mode (each WS connection occupies one waitress thread, so total WS
+# fan-out is bounded by WEB_THREADS — fine for the bridge's typical 1-2 UI
+# tabs + log panel use case).  Guards a parallel migration off SSE which
+# breaks under HA Supervisor's deflate compression on text/event-stream.
+flask-sock>=0.7.0,<1.0
 waitress==3.0.2
 dbus-python==1.4.0
 dbus-fast==4.0.4

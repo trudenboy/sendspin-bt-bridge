@@ -14,9 +14,7 @@ APP_RUNTIME_GID="$RUNTIME_GID"
 APP_RUNTIME_USER="$RUNTIME_USER"
 APP_RUNTIME_SPEC=""
 APP_RUNTIME_HOME=""
-AUDIO_SOCKET_UID=""
 AUDIO_SOCKET_GID=""
-AUDIO_WAIT_STATUS=""
 STARTUP_WAIT_STATUS="not needed"
 STARTUP_WAIT_ERROR=""
 CONFIG_PATH=""
@@ -136,14 +134,12 @@ _refresh_audio_runtime_detection() {
     APP_RUNTIME_USER="$RUNTIME_USER"
     APP_RUNTIME_SPEC=""
     APP_RUNTIME_HOME=""
-    AUDIO_SOCKET_UID=""
     AUDIO_SOCKET_GID=""
     AUDIO_SOCKET_OWNER=""
     AUDIO_PROBE_STATUS="not attempted"
     AUDIO_PROBE_ERROR=""
     AUDIO_WARNING=""
     AUDIO_HINT=""
-    AUDIO_WAIT_STATUS=""
     AUDIO_STATUS="✗ no socket found"
     AUDIO_SOCKET_PATH=""
 
@@ -178,9 +174,6 @@ _refresh_audio_runtime_detection() {
         SOCKET_UID=$(stat -c '%u' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
         SOCKET_GID=$(stat -c '%g' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
         SOCKET_MODE=$(stat -c '%a' "$AUDIO_SOCKET_PATH" 2>/dev/null || echo "?")
-        if [ "$SOCKET_UID" != "?" ]; then
-            AUDIO_SOCKET_UID="$SOCKET_UID"
-        fi
         if [ "$SOCKET_GID" != "?" ]; then
             AUDIO_SOCKET_GID="$SOCKET_GID"
         fi
@@ -196,6 +189,7 @@ _refresh_audio_runtime_detection() {
                 APP_RUNTIME_USER="audio-runtime-${APP_RUNTIME_UID}"
                 APP_RUNTIME_SPEC="${APP_RUNTIME_UID}:${APP_RUNTIME_GID}"
                 AUDIO_WARNING="User-scoped audio socket targets UID ${APP_RUNTIME_UID}; container init stays root but the bridge process will drop to UID ${APP_RUNTIME_UID}"
+                # shellcheck disable=SC2016  # backticks are intentional markdown-style code in the operator-facing hint
                 AUDIO_HINT='Recent images auto-run the bridge process as AUDIO_UID for user-scoped audio sockets; a global Docker Compose `user:` override should only be a temporary diagnostic step on older images'
             elif [ -n "$SOCKET_RUNTIME_UID" ] && [ "$SOCKET_RUNTIME_UID" != "$RUNTIME_UID" ]; then
                 AUDIO_WARNING="User-scoped audio socket targets UID ${SOCKET_RUNTIME_UID}, but container runs as UID ${RUNTIME_UID}"
@@ -236,6 +230,7 @@ _refresh_audio_probe_status() {
         AUDIO_PROBE_ERROR="No response from PulseAudio/PipeWire server"
     fi
     if [ -z "$AUDIO_HINT" ] && { [ -n "$AUDIO_SOCKET_PATH" ] || [ -n "${PULSE_SERVER:-}" ]; }; then
+        # shellcheck disable=SC2016  # backticks are intentional markdown-style code in the operator-facing hint
         AUDIO_HINT='Check the bridge process UID, mounted audio socket path, and `PULSE_SERVER`/`XDG_RUNTIME_DIR` values'
     fi
     return 1
