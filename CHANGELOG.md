@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.7] - 2026-04-25
+
+### Fixed
+- **MA shows bridge players as muted even though audio is playing**
+  (user-report on the HA community thread).  The daemon mutes its
+  PulseAudio sink during startup to hide format-probe and routing
+  glitches (``services/daemon_process.py:685``).  MA's first
+  ``volume_controller.get_state()`` poll happens during that ~15-second
+  window, reads ``(100, True)``, and records ``player.volume_muted=True``
+  in its state.  When the startup-unmute watcher later releases the
+  PA sink mute, the bridge's local ``status["muted"]`` flag is — and
+  always was — ``False``, so the existing post-spawn unmute sync
+  short-circuited at "already in sync" and never pushed the unmute
+  back to MA.  Result: HA's MA UI kept the volume slider greyed out
+  and the player labelled muted forever (until the user manually
+  clicked Unmute), while audio continued playing normally.
+
+  Fix: ``_sync_unmute_to_ma`` now accepts ``force=True``.  The
+  post-spawn caller in ``_read_subprocess_output`` passes it because
+  it knows the local ``status["muted"]`` doesn't reflect MA's view
+  at that point (MA polled while we were startup-muted; we never
+  intended to be muted ourselves).  The non-force code path keeps
+  the original safety guard against double-unmuting after explicit
+  user mute (#155).
+
+### Tests
+1567 → 1568 passing.  ``test_sink_unmute_skipped_when_already_in_sync``
+renamed and rewritten to ``test_sink_unmute_force_pushes_to_ma_even_when_local_status_says_unmuted``
+covering the regression directly, plus a new
+``test_sync_unmute_to_ma_without_force_skips_when_already_unmuted``
+that pins the original ``force=False`` early-exit behaviour so the
+#155 protection isn't lost.
+
 ## [2.62.0-rc.6] - 2026-04-24
 
 ### Fixed

@@ -662,8 +662,22 @@ async def test_sink_unmute_skipped_when_ma_not_connected():
 
 
 @pytest.mark.asyncio
-async def test_sink_unmute_skipped_when_already_in_sync():
-    """When muted is already False, no MA call is needed (no desync)."""
+async def test_sink_unmute_force_pushes_to_ma_even_when_local_status_says_unmuted():
+    # Regression for the #user-report mute-mismatch bug: the daemon
+    # mutes its PA sink during startup to hide format-probe noise; MA's
+    # initial ``volume_controller.get_state()`` poll happens during that
+    # window and reads ``(100, True)`` so MA records ``muted=True``.
+    # ~15 s later the startup-unmute watcher releases the PA sink, and
+    # the parent observes ``sink_muted=False`` while
+    # ``_pending_reconnect_unmute_sync`` is still set from spawn.
+    #
+    # The daemon's local ``status["muted"]`` was *always* ``False`` —
+    # it doesn't reflect MA's view of the player.  The pre-fix early-
+    # exit would treat this as "already in sync" and never push the
+    # unmute, leaving HA's MA UI with the volume slider greyed out
+    # forever (until the user manually clicked Unmute).
+    #
+    # ``force=True`` on the post-spawn sync bypasses that early-exit.
     client = SendspinClient("Test Player", "localhost", 9000)
     client.player_id = "sendspin-test-player"
     client._update_status({"muted": False, "sink_muted": True})
@@ -691,6 +705,32 @@ async def test_sink_unmute_skipped_when_already_in_sync():
         patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
         await client._read_subprocess_output()
+
+    mock_cmd.assert_awaited_once_with(
+        "players/cmd/volume_mute",
+        {"player_id": "sendspin-test-player", "muted": False},
+    )
+    assert client._pending_reconnect_unmute_sync is False
+
+
+@pytest.mark.asyncio
+async def test_sync_unmute_to_ma_without_force_skips_when_already_unmuted():
+    # Direct call to ``_sync_unmute_to_ma()`` *without* the post-spawn
+    # context still honours the original safety guard: if the bridge's
+    # local view says we're not muted, don't push to MA.  This protects
+    # against double-unmuting after the user has explicitly muted
+    # (#155 regression).
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "sendspin-test-player"
+    client._update_status({"muted": False})
+
+    with (
+        patch("sendspin_client._state.notify_status_changed"),
+        patch("routes.api_config.get_mute_via_ma", return_value=True),
+        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._sync_unmute_to_ma()  # default force=False
 
     mock_cmd.assert_not_awaited()
 

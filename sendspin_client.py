@@ -1367,29 +1367,56 @@ class SendspinClient:
                     _mac = self.bt_manager.mac_address if self.bt_manager else None
                     if isinstance(new_volume, int) and _mac:
                         save_device_volume(_mac, new_volume)
-                    # Sync unmute to MA after reconnect (#132):
-                    # daemon unmutes PA sink but MA still thinks device is muted.
-                    # Only sync once after subprocess (re)start to avoid
-                    # overriding explicit user mute commands (#155).
+                    # Sync unmute to MA after reconnect (#132) and after
+                    # initial spawn (the daemon mutes the PA sink during
+                    # startup to hide format-probe noise; MA polls
+                    # volume_controller.get_state() in that window and
+                    # records volume_muted=True even though the bridge
+                    # never *intended* to be muted).  ``force=True``
+                    # bypasses the "local status says unmuted" early-exit
+                    # because that local flag doesn't reflect MA's view
+                    # at this point.  Only fires once per (re)spawn so
+                    # explicit user mute commands aren't overridden (#155).
                     if updates.get("sink_muted") is False and self._pending_reconnect_unmute_sync:
                         self._pending_reconnect_unmute_sync = False
-                        await self._sync_unmute_to_ma()
+                        await self._sync_unmute_to_ma(force=True)
             else:
                 self._ipc_service.handle_message(msg)
 
-    async def _sync_unmute_to_ma(self) -> None:
-        """Sync PA sink unmute to MA after BT reconnect (#132).
+    async def _sync_unmute_to_ma(self, *, force: bool = False) -> None:
+        """Sync PA sink unmute to MA after the daemon's startup-mute window.
 
-        When the daemon unmutes the PulseAudio sink after reconnect,
-        MA may still hold muted=True from the previous session.
-        Forward the unmute so the two stay in sync.
+        Two related cases:
+
+        1. **BT reconnect (#132)** — daemon unmutes the PA sink after a
+           reconnect; MA may still hold muted=True from the previous
+           session. Forward the unmute so the two stay in sync.
+        2. **Initial daemon spawn (#user-report)** — daemon mutes the PA
+           sink during startup to hide format-probe and routing glitches
+           (``services/daemon_process.py:685``). MA's first
+           ``volume_controller.get_state()`` poll happens during that
+           window and reads ``(100, True)``, so MA records
+           ``player.volume_muted=True`` in its state.  ~15 s later the
+           startup-unmute watcher releases the PA sink mute, but the
+           daemon's local ``status["muted"]`` was always ``False`` —
+           hence the early-exit below would treat it as "already in sync"
+           and never push the unmute back to MA.  HA's MA UI then keeps
+           the volume slider greyed out and the player labelled muted
+           even though audio is playing normally.
+
+        The ``force=True`` path is for case #2: caller (the
+        ``_pending_reconnect_unmute_sync`` branch in
+        ``_read_subprocess_output``) knows we just observed the daemon
+        going from sink-muted to sink-unmuted on initial spawn — push
+        unconditionally because the local ``status["muted"]`` flag does
+        not reflect MA's view at that moment.
         """
         from routes.api_config import get_mute_via_ma
         from services.ma_runtime_state import is_ma_connected
 
         if not get_mute_via_ma() or not is_ma_connected():
             return
-        if not self.status.get("muted"):
+        if not force and not self.status.get("muted"):
             return  # already in sync
         pid = self.player_id
         if not pid:
@@ -1399,7 +1426,7 @@ class SendspinClient:
 
             ok = await send_player_cmd("players/cmd/volume_mute", {"player_id": pid, "muted": False})
             if ok:
-                logger.info("[%s] Synced unmute to MA after reconnect", self.player_name)
+                logger.info("[%s] Synced unmute to MA after startup/reconnect", self.player_name)
                 self._update_status({"muted": False})
         except Exception:
             logger.debug("[%s] Failed to sync unmute to MA", self.player_name, exc_info=True)
