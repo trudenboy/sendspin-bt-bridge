@@ -1915,16 +1915,6 @@ class SendspinClient:
 
             mon_task.add_done_callback(_on_monitor_done)
             tasks.append(mon_task)
-            # v2.63.0-rc.3 — periodic RSSI refresh so connected device cards
-            # render an up-to-date dBm badge without requiring a user scan.
-            rssi_task = asyncio.create_task(self.bt_manager.run_rssi_refresh_loop())
-
-            def _on_rssi_loop_done(t):
-                if not t.cancelled() and t.exception():
-                    logger.warning("[%s] RSSI refresh loop ended: %s", self.player_name, t.exception())
-
-            rssi_task.add_done_callback(_on_rssi_loop_done)
-            tasks.append(rssi_task)
 
         try:
             # Keep running

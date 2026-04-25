@@ -25,39 +25,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# MPRIS clients (BlueZ' MPRIS forwarder, playerctl, GNOME / KDE MPRIS
-# applets) discover players by walking well-known bus names beginning
-# with ``org.mpris.MediaPlayer2.`` and reading the standard
-# ``/org/mpris/MediaPlayer2`` object path on each.  Exporting on a
-# non-standard object path or skipping the well-known name request makes
-# the player invisible to those clients — including BlueZ's AVRCP
-# bridge, which silently drops button events with nowhere to forward.
-_MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
-_MPRIS_NAME_PREFIX = "org.mpris.MediaPlayer2.sendspin_"
+# BlueZ AVRCP forwarding architecture (v2.63.0-rc.6+):
+#
+# When a BR/EDR speaker presses Play/Pause, BlueZ on the bridge side
+# receives the AVRCP passthrough command and forwards it to a player
+# REGISTERED via ``org.bluez.Media1.RegisterPlayer(path, properties)``
+# on the corresponding adapter (``/org/bluez/<hciN>``).  The registered
+# player object implements ``org.mpris.MediaPlayer2.Player`` — BlueZ
+# calls our ``Play`` / ``Pause`` / ``Next`` / etc methods directly.
+#
+# Earlier rcs only ``bus.export``-ed the player path and tried to claim
+# a well-known ``org.mpris.MediaPlayer2.sendspin_*`` bus name.  Neither
+# step is what BlueZ uses for AVRCP forwarding — system-bus name
+# requests are blocked by default ACL anyway, and BlueZ doesn't scan
+# bus names; it only routes to paths handed to it via Media1.
+_MPRIS_PATH_PREFIX = "/org/sendspin/players/"
 
 
 def _mpris_dbus_path(mac: str) -> str:
-    """Canonical MPRIS object path — same for every per-device export.
+    """Per-device MPRIS object path on the system bus.
 
-    Per-device differentiation lives in the well-known *bus name* (see
-    ``_mpris_well_known_name``); the *object path* under that name is
-    always the standard ``/org/mpris/MediaPlayer2`` so MPRIS-spec
-    consumers (BlueZ AVRCP bridge, playerctl, GNOME/KDE applets) find
-    the iface where they expect.
+    BlueZ's ``Media1.RegisterPlayer`` expects a unique path per
+    registration on a given adapter — multiple speakers on the same
+    adapter must each get a distinct player object.  MAC colons map
+    to ``_`` because D-Bus paths must be ``[A-Za-z0-9_/]``.
     """
-    del mac  # accepted for call-site symmetry; canonical path is global
-    return _MPRIS_OBJECT_PATH
+    return _MPRIS_PATH_PREFIX + mac.upper().replace(":", "_")
 
 
-def _mpris_well_known_name(mac: str) -> str:
-    """Per-device well-known bus name.
+def _bluez_adapter_path(bt_manager: Any) -> str | None:
+    """Return ``/org/bluez/<hciN>`` for the adapter this device is on.
 
-    MPRIS spec requires every player to claim a name beginning with
-    ``org.mpris.MediaPlayer2.``.  We append a MAC-derived suffix so each
-    BT speaker gets its own discoverable player.  Bus names disallow ``:``
-    and require alphanumerics + underscores, so colons map to ``_``.
+    ``BluetoothManager.adapter_hci_name`` is resolved at startup from
+    sysfs (``/sys/class/bluetooth/<hciN>``); when empty we can't tell
+    which adapter to register against and the caller skips the
+    Media1.RegisterPlayer step.
     """
-    return _MPRIS_NAME_PREFIX + mac.upper().replace(":", "_")
+    hci = getattr(bt_manager, "adapter_hci_name", "") or ""
+    if not hci.startswith("hci"):
+        return None
+    return f"/org/bluez/{hci}"
 
 
 def _build_mpris_transport_callback(client: Any) -> Callable[[str, str], Any]:
@@ -148,38 +155,84 @@ def _make_mpris_connected_hook(
             try:
                 from dbus_fast import BusType  # type: ignore[import-untyped]
                 from dbus_fast.aio import MessageBus  # type: ignore[import-untyped]
+                from dbus_fast.signature import Variant  # type: ignore[import-untyped]
             except Exception as exc:
                 logger.debug("dbus_fast unavailable, skipping MPRIS export for %s: %s", mac, exc)
                 return
+            path = _mpris_dbus_path(mac)
+            adapter_path = _bluez_adapter_path(client.bt_manager) if client.bt_manager else None
             try:
                 iface = _build_player_iface(player)
                 bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-                bus.export(_mpris_dbus_path(mac), iface)
-                # Claim the well-known org.mpris.MediaPlayer2.* name so
-                # BlueZ's MPRIS bridge (and any spec-conformant client)
-                # actually discovers us; without this we live only on the
-                # unique bus name (:1.NNN) where MPRIS consumers don't look.
-                well_known = _mpris_well_known_name(mac)
-                try:
-                    await bus.request_name(well_known)
-                except Exception as name_exc:
-                    logger.warning(
-                        "MPRIS request_name(%s) failed for %s: %s",
-                        well_known,
-                        mac,
-                        name_exc,
-                    )
-                # Pin the bus + iface + claimed name on the player so the
-                # disconnect hook can release them in symmetry.
+                bus.export(path, iface)
                 player._dbus_bus = bus  # type: ignore[attr-defined]
                 player._dbus_iface = iface  # type: ignore[attr-defined]
-                player._dbus_well_known = well_known  # type: ignore[attr-defined]
-                logger.info(
-                    "MPRIS player exported on D-Bus for %s as %s at %s",
-                    mac,
-                    well_known,
-                    _mpris_dbus_path(mac),
-                )
+                player._dbus_adapter_path = adapter_path  # type: ignore[attr-defined]
+                if adapter_path is None:
+                    logger.warning(
+                        "MPRIS player for %s exported at %s but adapter unknown — AVRCP forwarding inactive",
+                        mac,
+                        path,
+                    )
+                    return
+                # Register with BlueZ Media1 so AVRCP passthrough commands
+                # from the speaker (Play / Pause / Next / Previous / volume)
+                # are routed to our exported player object.  Properties are
+                # the minimum AVRCP advertisement; the speaker reads them
+                # via ``org.bluez.MediaPlayer1`` from BlueZ.
+                props = {
+                    "PlaybackStatus": Variant("s", "Stopped"),
+                    "LoopStatus": Variant("s", "None"),
+                    "Rate": Variant("d", 1.0),
+                    "Shuffle": Variant("b", False),
+                    "Volume": Variant("d", 1.0),
+                    "Position": Variant("x", 0),
+                    "MinimumRate": Variant("d", 1.0),
+                    "MaximumRate": Variant("d", 1.0),
+                    "CanGoNext": Variant("b", True),
+                    "CanGoPrevious": Variant("b", True),
+                    "CanPlay": Variant("b", True),
+                    "CanPause": Variant("b", True),
+                    "CanSeek": Variant("b", False),
+                    "CanControl": Variant("b", True),
+                    "Metadata": Variant(
+                        "a{sv}",
+                        {
+                            "xesam:title": Variant("s", "Sendspin Bridge"),
+                            "xesam:artist": Variant("as", [""]),
+                            "mpris:length": Variant("x", 0),
+                        },
+                    ),
+                }
+                introspect = await bus.introspect("org.bluez", adapter_path)
+                proxy = bus.get_proxy_object("org.bluez", adapter_path, introspect)
+                try:
+                    media = proxy.get_interface("org.bluez.Media1")
+                except Exception as exc:
+                    logger.warning(
+                        "MPRIS register: org.bluez.Media1 not on %s for %s: %s",
+                        adapter_path,
+                        mac,
+                        exc,
+                    )
+                    return
+                try:
+                    await media.call_register_player(path, props)
+                    player._dbus_registered = True  # type: ignore[attr-defined]
+                    logger.info(
+                        "MPRIS player registered with BlueZ Media1 for %s at %s on %s",
+                        mac,
+                        path,
+                        adapter_path,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "MPRIS register: Media1.RegisterPlayer(%s) on %s failed for %s: %s",
+                        path,
+                        adapter_path,
+                        mac,
+                        exc,
+                    )
             except Exception as exc:
                 logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
 
@@ -213,15 +266,22 @@ def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
         path = _mpris_dbus_path(mac)
         if bus is None:
             return
-
-        well_known = getattr(player, "_dbus_well_known", None)
+        adapter_path = getattr(player, "_dbus_adapter_path", None)
+        was_registered = getattr(player, "_dbus_registered", False)
 
         async def _unexport() -> None:
-            if well_known:
+            # Tell BlueZ to drop the AVRCP forwarding registration
+            # before we unexport the path — otherwise BlueZ keeps the
+            # cached pointer and the next forwarded command races a
+            # gone object.
+            if was_registered and adapter_path is not None:
                 try:
-                    await bus.release_name(well_known)
+                    introspect = await bus.introspect("org.bluez", adapter_path)
+                    proxy = bus.get_proxy_object("org.bluez", adapter_path, introspect)
+                    media = proxy.get_interface("org.bluez.Media1")
+                    await media.call_unregister_player(path)
                 except Exception as exc:
-                    logger.debug("MPRIS release_name(%s) failed: %s", well_known, exc)
+                    logger.debug("MPRIS Media1.UnregisterPlayer(%s) failed: %s", path, exc)
             try:
                 bus.unexport(path)
             except Exception as exc:
