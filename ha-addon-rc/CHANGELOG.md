@@ -7,6 +7,143 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.3] - 2026-04-25
+
+Transport-layer rc: replaces SSE with WebSocket for the status stream
+(closes the long-standing HA Supervisor deflate-compression failure
+mode), adds a real-time log panel over WebSocket, and turns on the
+periodic RSSI refresh deferred from rc.2 so connected device cards
+finally render an up-to-date dBm badge without waiting for a manual
+scan.
+
+### Added — WebSocket status stream
+
+- ``routes/api_ws.py:status_ws_iter`` — pure generator yielding the
+  initial snapshot, then per-change snapshots, then heartbeats on idle
+  ticks; matches the SSE 30-min lifetime cap.
+- ``routes/api_ws.py:register_ws_routes`` registers
+  ``/api/status/ws`` on a ``flask-sock`` ``Sock(app)`` instance wired
+  in ``web_interface.py`` (best-effort: SSE keeps serving on dev
+  hosts without the dep).
+- ``static/app.js`` — UI prefers WS first, falls back to the existing
+  SSE handler then 2 s polling, with capped retry / backoff.
+- ``requirements.txt`` — new ``flask-sock>=0.7.0,<1.0`` (pulls
+  ``simple-websocket`` / ``wsproto`` / ``h11``).
+
+### Added — Live log stream
+
+- ``sendspin_client._RingLogHandler.subscribe`` /
+  ``unsubscribe`` /  ``snapshot`` — the in-process ring buffer now
+  fans out per-emit lines to subscribed queues so the WS endpoint can
+  push new log lines without polling.
+- ``routes/api_ws.py:log_stream_iter`` — yields a ``snapshot`` frame
+  on connect (full ring contents), then ``append`` frames per emit;
+  unsubscribes via ``finally`` so closed clients can't leak fan-out
+  work.
+- ``routes/api_ws.py`` registers ``/api/logs/stream``.
+- ``static/app.js:startLogsWebsocket`` /  ``stopLogsWebsocket`` —
+  Auto-Refresh toggle now drives a WS subscription for real-time
+  appends and falls back to a 5 s safety-net poll (was 2 s) only if
+  WS connect fails.
+
+### Added — Periodic RSSI refresh (rc.2 follow-up)
+
+- ``bluetooth_manager.py:_parse_own_rssi_from_burst`` — pure parser
+  for the most-recent ``[CHG] Device <MAC> RSSI: <dB>`` event in a
+  ``bluetoothctl`` burst window (handles modern decimal + legacy
+  parenthesised hex formats).
+- ``bluetooth_manager.BluetoothManager.run_rssi_refresh`` runs a 5 s
+  ``scan bredr`` burst, parses our MAC's most recent RSSI, pushes
+  ``rssi_dbm`` + ``rssi_at_ts`` onto host status.  Skips when a
+  user-triggered scan owns BlueZ discovery (via
+  ``services.async_job_state.is_scan_running``).
+- ``run_rssi_refresh_loop`` is the async wrapper, spawned alongside
+  ``monitor_and_reconnect`` from ``sendspin_client._run_async`` so
+  the interval ticks every 60 s for every connected speaker.
+
+### Tests
+
+- ``tests/test_status_ws.py`` — 11 new tests covering the
+  ``status_ws_iter`` and ``log_stream_iter`` generators (initial
+  snapshot, change pushes, heartbeats, max iterations / lifetime,
+  subscriber cleanup, atomic subscribe-with-snapshot, bounded queue).
+- ``tests/test_ring_log_handler_subscribe.py`` — 10 new tests for the
+  ring buffer subscribe/unsubscribe/snapshot API + multi-subscriber
+  fan-out + bad-subscriber isolation + concurrent snapshot/emit
+  stress + atomicity of ``subscribe_with_snapshot``.
+- ``tests/test_bt_rssi_refresh.py`` — 9 new tests for the parser and
+  the ``run_rssi_refresh`` orchestration (push on hit, no-op on miss,
+  skip on user scan, swallow burst failures).
+
+### Fixes from initial review (PR #197)
+
+- ``sendspin_client._RingLogHandler`` — single ``self._lock`` now
+  guards both ``records`` and ``_subscribers`` so ``snapshot()`` no
+  longer races ``emit()`` (Copilot flagged the deque-iteration
+  hazard).  New ``subscribe_with_snapshot()`` exposes an atomic
+  take-snapshot-then-register pair so the WS log stream cannot drop
+  lines emitted in the gap between the two ops.
+- ``routes/api_ws.log_stream_iter`` — uses
+  ``subscribe_with_snapshot`` (no race), bounds the per-client queue
+  at ``LOG_STREAM_QUEUE_MAXSIZE`` (newest line drops at the
+  ``put_nowait`` step when a stalled browser tab fills the queue;
+  the ring buffer covers the gap on the client's next reconnect).
+- ``routes/api_ws._api_logs_stream`` — explicit ``stream.close()`` in
+  ``finally`` so the generator's unsubscribe hook always runs even
+  when ``ws.send`` raises on client disconnect (no leaked
+  subscribers).
+- ``web_interface.py`` — narrow the WS-import soft-fallback to
+  ``ImportError``/``ModuleNotFoundError``; any other exception now
+  surfaces via ``logger.exception`` and re-raise so real bugs in
+  ``routes/api_ws`` aren't silently swallowed.
+- ``static/app.js`` — single ``beforeunload`` handler (was added on
+  every reconnect, leaking duplicate listeners); status WS
+  ``session_expired`` now closes the current socket and lets
+  ``onclose`` drive reconnect (no overlapping sockets); logs WS
+  tracks its reconnect timer id and clears it in
+  ``stopLogsWebsocket`` so toggling Auto-Refresh off can't reconnect
+  later.
+
+### Second-round review fixes (PR #197)
+
+- ``routes/api_ws.py`` — both WS handlers now catch
+  ``simple_websocket.ConnectionClosed`` explicitly (debug-logged) and
+  route any other exception through ``logger.exception`` so real bugs
+  (JSON encoding errors, payload build errors) surface in production
+  instead of being silently swallowed.  ``LOG_STREAM_QUEUE_MAXSIZE``
+  comment rewritten to describe the actual drop-newest-at-producer
+  policy (the previous wording mistakenly described drop-oldest).
+- ``web_interface.py`` — drop redundant ``ModuleNotFoundError`` from
+  the WS-import except clause (it's a subclass of ``ImportError``).
+- ``tests/test_status_ws.py`` — fixture ``_reset_status_version``
+  now waits for ``notify_status_changed``'s 100 ms debounce timer to
+  flush before yielding so the heartbeat-vs-change tests don't race
+  the timer under load.  Renamed
+  ``test_log_stream_iter_queue_is_bounded_drops_oldest_on_overflow``
+  → ``..._drops_newest_when_full`` to match the actual implementation.
+
+### Third-round review fixes (PR #197)
+
+- ``routes/api_ws.py:status_ws_iter`` — capture
+  ``get_status_version`` BEFORE building the initial snapshot.  The
+  previous order let a status change landing between snapshot build
+  and version capture silently slip through: ``last_version`` would
+  already record the post-change number, so ``wait_for_status_change``
+  never fired for it and clients silently saw stale state until the
+  next change.  Regression test injects a notify during snapshot
+  construction and asserts the next yield is a change frame.
+- ``services/bt_operation_lock.py`` (new) — extracts the
+  ``_bt_operation_lock`` previously private to ``routes/api_bt.py``
+  into a shared module so background callers can also acquire it.
+  ``BluetoothManager.run_rssi_refresh`` now acquires it non-blocking
+  and skips the burst when held — its 60 s cadence makes a missed
+  tick cheap, and it can no longer corrupt a parallel pair / reset
+  / standalone-scan session by sharing BlueZ's discovery state.
+- ``static/app.js`` — reset ``_logsWsRetries`` in both
+  ``startLogsWebsocket`` and ``stopLogsWebsocket`` so a previous
+  exhausted retry budget can't silently block reconnect when the
+  user toggles Auto-Refresh off then back on.
+
 ## [2.63.0-rc.2] - 2026-04-25
 
 UX polish on top of rc.1: signal-strength visibility, safer default
