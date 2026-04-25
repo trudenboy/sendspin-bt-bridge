@@ -58,6 +58,7 @@ def _make_context(
     persist_enabled_fn=None,
     base_listen_port: int = 8928,
     effective_bridge: str = "",
+    enable_rssi_badge: bool = False,
 ) -> tuple[DeviceActivationContext, dict[str, object]]:
     bt_factory, captured = _fake_bt_manager_factory(bt_available=bt_available)
     ctx = DeviceActivationContext(
@@ -77,6 +78,7 @@ def _make_context(
         bt_manager_factory=bt_factory,
         load_saved_volume_fn=load_saved_volume_fn,
         persist_enabled_fn=persist_enabled_fn,
+        enable_rssi_badge=enable_rssi_badge,
     )
     return ctx, captured
 
@@ -195,6 +197,39 @@ def test_activate_device_clamps_tiny_keepalive_interval_up_to_30():
 
     assert captured_client_kwargs["keepalive_enabled"] is True
     assert captured_client_kwargs["keepalive_interval"] == 30
+
+
+def test_activate_device_leaves_rssi_callback_unset_when_flag_off():
+    """``EXPERIMENTAL_RSSI_BADGE`` defaults to False — the BT manager
+    must not receive an ``on_rssi_update`` callback in that case so
+    the periodic refresh tick short-circuits before it ever touches
+    the BT operation lock or the kernel mgmt socket.  Pinning this
+    keeps the no-op default-off path truly free of overhead."""
+    ctx, captured = _make_context(enable_rssi_badge=False)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    assert captured.get("on_rssi_update") is None
+
+
+def test_activate_device_wires_rssi_callback_when_flag_on():
+    """When the operator opts in, the callback must reach the BT
+    manager so periodic refresh ticks can forward fresh RSSI into
+    the client status pipeline."""
+    ctx, captured = _make_context(enable_rssi_badge=True)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    cb = captured.get("on_rssi_update")
+    assert callable(cb)
+
+    # And the callback writes through to the client's status dict
+    # (rssi_dbm + rssi_at_ts) so SSE consumers see the value.
+    cb(-55)
+    assert result.client.status.get("rssi_dbm") == -55
+    assert isinstance(result.client.status.get("rssi_at_ts"), float)
 
 
 def test_activate_context_is_frozen():

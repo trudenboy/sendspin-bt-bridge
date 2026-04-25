@@ -2377,6 +2377,14 @@ function _getListCollapsedBadgesHtml(dev, i) {
     badges.push(_renderSyncBadgeHtml(dev, i, 'chip list-inline-badge list-sync-chip'));
     badges.push(_renderSyncDetailBadgeHtml(dev, i, 'chip list-inline-badge list-sync-detail-chip'));
     badges.push(_renderBatteryBadgeHtml(dev.battery_level, 'chip list-inline-badge list-battery-chip'));
+    // RSSI chip — list mode parity with the device card (grid).  The
+    // render-data helper short-circuits to null when ``rssi_dbm`` is
+    // absent (experimental refresh disabled, or no fresh value yet),
+    // so the array entry collapses to '' and the badge stays hidden.
+    var rssiTs = dev && dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
+    var rssiStale = rssiTs ? (Date.now() / 1000 - rssiTs > 90) : false;
+    var rssiHtml = _renderRssiBadgeHtml(dev && dev.rssi_dbm, rssiStale, 'chip list-inline-badge list-rssi-chip');
+    if (rssiHtml) badges.push(rssiHtml);
 
     return badges.length ? '<span class="list-inline-badges">' + badges.join('') + '</span>' : '';
 }
@@ -7163,6 +7171,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
+    config.EXPERIMENTAL_RSSI_BADGE = !!(document.getElementById('experimental-rssi-badge') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
     // the Settings form. The config key is still honoured as a fallback for
@@ -9744,6 +9753,8 @@ async function loadConfig(options) {
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
+        var expRssiBadgeCheck = document.getElementById('experimental-rssi-badge');
+        if (expRssiBadgeCheck) expRssiBadgeCheck.checked = !!config.EXPERIMENTAL_RSSI_BADGE;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

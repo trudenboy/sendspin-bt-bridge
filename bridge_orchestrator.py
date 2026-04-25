@@ -126,6 +126,7 @@ class RuntimeBootstrap:
     enable_a2dp_sink_recovery_dance: bool
     enable_pa_module_reload: bool
     enable_adapter_auto_recovery: bool
+    enable_rssi_badge: bool
     base_listen_port: int
     web_port: int
     pulse_latency_msec: int
@@ -185,10 +186,13 @@ class BridgeOrchestrator:
         enable_a2dp_sink_recovery_dance = bool(config.get("EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE", False))
         enable_pa_module_reload = bool(config.get("EXPERIMENTAL_PA_MODULE_RELOAD", False))
         enable_adapter_auto_recovery = bool(config.get("EXPERIMENTAL_ADAPTER_AUTO_RECOVERY", False))
+        enable_rssi_badge = bool(config.get("EXPERIMENTAL_RSSI_BADGE", False))
         if enable_a2dp_sink_recovery_dance:
             logger.info("EXPERIMENTAL: A2DP sink recovery dance enabled")
         if enable_pa_module_reload:
             logger.info("EXPERIMENTAL: PulseAudio module-bluez5-discover reload enabled")
+        if enable_rssi_badge:
+            logger.info("EXPERIMENTAL: live RSSI refresh enabled — every 30 s via mgmt opcode 0x0031")
         if enable_adapter_auto_recovery:
             logger.info(
                 "EXPERIMENTAL: adapter auto-recovery enabled — bluetooth-auto-recovery ladder will run at reconnect-fail threshold",
@@ -240,6 +244,7 @@ class BridgeOrchestrator:
             enable_a2dp_sink_recovery_dance=enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=enable_pa_module_reload,
             enable_adapter_auto_recovery=enable_adapter_auto_recovery,
+            enable_rssi_badge=enable_rssi_badge,
             base_listen_port=base_listen_port,
             web_port=web_port,
             pulse_latency_msec=pulse_latency_msec,
@@ -452,6 +457,7 @@ class BridgeOrchestrator:
             enable_a2dp_sink_recovery_dance=bootstrap.enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=bootstrap.enable_pa_module_reload,
             enable_adapter_auto_recovery=bootstrap.enable_adapter_auto_recovery,
+            enable_rssi_badge=bootstrap.enable_rssi_badge,
             base_listen_port=base_listen_port,
             client_factory=client_factory,
             bt_manager_factory=bt_manager_factory,

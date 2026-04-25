@@ -142,6 +142,13 @@ DEFAULT_CONFIG = {
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
     "EXPERIMENTAL_PAIR_JUST_WORKS": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
+    # Periodic live-RSSI refresh for connected speakers (mgmt opcode 0x0031).
+    # Off by default in v2.63.0-rc.8 — feature works end-to-end but the
+    # value semantics are platform-specific (BR/EDR returns delta from
+    # the controller's Golden Receive Power Range, LE returns absolute
+    # dBm), and the refresh tick adds one mgmt round-trip per connected
+    # device every 30 s gated by the shared bt_operation_lock.
+    "EXPERIMENTAL_RSSI_BADGE": False,
     # v2.63.0-rc.2: HSP/HFP profiles are blocked at AuthorizeService time
     # by default. Some headphones (Bose QC, AKG Y500) prefer HFP over A2DP
     # when both are accepted, dropping the speaker to an 8 kHz mono call

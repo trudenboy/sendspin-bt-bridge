@@ -363,6 +363,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "EXPERIMENTAL_PA_MODULE_RELOAD",
         "EXPERIMENTAL_PAIR_JUST_WORKS",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
+        "EXPERIMENTAL_RSSI_BADGE",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
 
