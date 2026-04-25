@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.5] - 2026-04-24
+
+Bugfix RC for #193 — adapter listing in the web UI surfaced the wrong
+``Alias:`` per MAC and the ``hciN`` label tracked BlueZ's internal
+registration order instead of the kernel.
+
+### Fixed
+- **Adapter alias swap on multi-adapter hosts** (#193) — the
+  ``GET /api/bt/adapters`` endpoint pieced together ``bluetoothctl
+  select <MAC>; show`` per adapter and grabbed the **first** ``Alias:``
+  line it found in the combined stdout.  In piped-stdin mode
+  ``bluetoothctl`` interleaves the **default** controller's info ahead
+  of the freshly-selected block, so the parser surfaced the wrong
+  controller's alias for every non-default adapter.  Two-adapter
+  systems (e.g. Pi built-in BT + USB BT500 stick) saw the alias of
+  one adapter shown next to the MAC of the other.
+
+  Replaced with the explicit ``show <MAC>`` form via the new
+  ``services.bluetooth.get_adapter_alias`` helper — one targeted
+  bluetoothctl invocation per MAC, no ``select``, no default-vs-
+  selected ambiguity.
+
+- **``hciN`` labels track BlueZ list order, not the kernel** (#193) —
+  ``api_bt_adapters`` previously labelled adapters as
+  ``f"hci{enumerate-index}"`` against the order returned by
+  ``bluetoothctl list``.  That order is BlueZ's registration order
+  and disagrees with the kernel ``hciN`` numbering when adapters
+  hot-plug (very visible after attaching a USB stick to a Pi that
+  has built-in BT).
+
+  New ``services.bluetooth.resolve_hci_for_mac`` reads
+  ``/sys/class/bluetooth/hciN/address`` (the canonical kernel mapping
+  BlueZ honours) and returns the real ``hciN`` per MAC.  Endpoint
+  uses it; falls back to the synthetic index label only when sysfs
+  isn't mounted (non-Linux dev box, container without ``/sys``).
+
+### Refactor
+- ``scripts/translate_ha_config.py:_mac_to_hci`` is now a thin wrapper
+  around ``services.bluetooth.resolve_hci_for_mac`` so HA-addon config
+  translation and the live adapter endpoint share the same sysfs
+  walker (DRY).
+
+### Tests
+1531 → 1542 passing.  New coverage in ``tests/test_bluetooth_svc.py``
+(sysfs lookup + ``show <MAC>`` parsing, including the noisy-stdout
+case that surfaced the wrong adapter's alias) plus a new
+``tests/test_api_bt_adapters.py`` end-to-end module asserting:
+- the endpoint labels adapters by their kernel ``hciN`` even when
+  ``bluetoothctl list`` returns the USB stick first,
+- each adapter's alias is the alias of its actual MAC (not the
+  default controller's), and
+- the bluetoothctl input is the explicit ``show <MAC>\n`` form —
+  never ``select <MAC>; show``.
+
 ## [2.62.0-rc.4] - 2026-04-24
 
 Third pass of Copilot review feedback — three concurrency / cleanup
