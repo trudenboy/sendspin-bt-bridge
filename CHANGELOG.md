@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.11] - 2026-04-25
+
+Dependency hygiene pass — five Dependabot PRs (#185, #186, #187,
+#188, #189) merged sequentially.  No behaviour changes; floors raised
+to current upstream releases, ``cryptography`` floor bumped to address
+historical CVEs in the 3.4.x line.
+
+### Changed
+- ``cryptography`` floor in ``requirements.txt``: ``>=3.4.0`` →
+  ``>=46.0.7``.  Production dependency, transitively used by PyJWT
+  (HA login_flow / TOTP) and ``music-assistant-client``.  The 3.4.x
+  series (2021) carries multiple known CVEs (e.g. CVE-2023-50782,
+  CVE-2024-26130); raising the floor forces fresh installs onto a
+  patched version while keeping the upper bound open.  armv7
+  compatibility verified: ``cryptography==46.0.7`` ships
+  ``manylinux_2_31_armv7l`` wheels which install cleanly on the
+  bridge's ``python:3.12-slim`` (Debian Bookworm, glibc 2.36) base
+  used for both the standalone Docker image and the HA addon armv7
+  build.
+- ``pytest`` floor: ``>=8.0.0`` → ``>=9.0.3`` (dev only).
+- ``pytest-asyncio`` floor: ``>=0.23.0`` → ``>=1.3.0`` (dev only;
+  major-version bump through the 1.0 break, fully validated by the
+  existing 1547-test suite that has been green on ``1.3.0`` locally
+  for the rc cycle).
+- ``mypy`` floor: ``>=1.20.1`` → ``>=1.20.2`` (dev only).
+- ``ruff`` exact pin in ``pyproject.toml``: ``==0.15.10`` →
+  ``==0.15.12`` (Dependabot picked the freshest patch during the
+  rebase window).
+
 ## [2.62.0-rc.10] - 2026-04-25
 
 Copilot review pass on the rc.9 PR (#194).  No behaviour changes —
