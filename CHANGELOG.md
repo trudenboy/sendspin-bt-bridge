@@ -13,7 +13,7 @@ UX polish on top of rc.1: signal-strength visibility, safer default
 codec selection, and an opt-in keepalive payload for the few speakers
 that misbehave on the 2 Hz infrasound burst.
 
-### Added — RSSI / signal strength badge (scyto-plan item 3)
+### Added — RSSI / signal strength badge (plan item 3)
 
 - ``routes/api_bt.py`` — ``_parse_scan_output`` now returns a
   ``rssi_by_mac: dict[str, int]`` alongside the existing tuple, capturing
@@ -31,7 +31,7 @@ that misbehave on the 2 Hz infrasound burst.
   ``static/style.css`` — matching ``rssi-good`` / ``rssi-fair`` /
   ``rssi-bad`` / ``rssi-stale`` palette.
 
-### Added — Block HSP/HFP profiles by default (scyto-plan item 7)
+### Added — Block HSP/HFP profiles by default (plan item 7)
 
 - ``services/pairing_agent.py`` — split out a new ``_HFP_SERVICE_UUIDS``
   frozenset (HSP Headset / HSP AG / HFP Hands-Free / HFP AG) and gate
@@ -46,7 +46,7 @@ that misbehave on the 2 Hz infrasound burst.
   ``PairingAgent(...)`` construction reads the live config flag and
   threads it into the agent.
 
-### Added — keep_alive_method enum (scyto-plan item 8 polish)
+### Added — keep_alive_method enum (plan item 8 polish)
 
 - ``sendspin_client.py:_generate_keepalive_buffer(method)`` selects the
   PCM payload for the keepalive burst:
