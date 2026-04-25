@@ -67,6 +67,19 @@ def test_treats_sentinel_127_as_unavailable(monkeypatch):
     assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") is None
 
 
+def test_does_not_drop_minus_128_as_unavailable(monkeypatch):
+    """mgmt-api.txt names ONLY 127 as the "RSSI not available"
+    sentinel — never -128.  The unsigned wire byte 0x80 (decimal 128)
+    folds to a signed -128 dBm reading: a real, very weak signal
+    (e.g. a speaker at the edge of range under heavy interference).
+    Conflating it with the unavailable sentinel would silently grey
+    out the UI chip for legitimate weak-link conditions."""
+    send = MagicMock(return_value=_fake_response(rssi=128))
+    _install_fake_btmgmt(monkeypatch, send)
+
+    assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") == -128
+
+
 def test_returns_none_when_status_not_success(monkeypatch):
     """A Failed/InvalidParameters response carries no useful rssi; the
     cmd_response_frame is unspecified and must not be trusted."""

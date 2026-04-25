@@ -178,6 +178,45 @@ async def test_tick_releases_lock_even_when_read_raises():
 
 
 @pytest.mark.asyncio
+async def test_tick_skips_lock_and_executor_when_no_callback_registered():
+    """If ``on_rssi_update`` was never wired (e.g. test harness
+    constructed the manager directly, or a future bridge mode disables
+    the chip), the mgmt round-trip and threadpool task are pure waste
+    — the result has nowhere to land.  Short-circuit BEFORE acquiring
+    the BT operation lock so a concurrent pair attempt is never even
+    briefly contended."""
+    mgr = _make_manager()
+    mgr.connected = True
+    mgr.on_rssi_update = None  # no consumer
+
+    with patch("services.bt_rssi_mgmt.read_conn_info") as read:
+        await mgr._rssi_refresh_tick()
+
+    read.assert_not_called()
+    # Lock must remain free — verify by acquiring without contention.
+    assert bt_operation_lock.try_acquire_bt_operation()
+
+
+@pytest.mark.asyncio
+async def test_tick_skips_lock_and_executor_when_adapter_index_unresolvable():
+    """When ``adapter_hci_name`` is empty (LXC without sysfs, mid-recovery),
+    ``read_conn_info`` would short-circuit on its own and return ``None``
+    — but only after we've already acquired the BT lock and dispatched a
+    threadpool task.  Skip both upfront so the every-30-s tick is a true
+    no-op for unresolved adapters."""
+    mgr = _make_manager(adapter_hci_name="")  # forces _resolve_adapter_index() -> -1
+    mgr.connected = True
+    mgr.on_rssi_update = MagicMock()
+
+    with patch("services.bt_rssi_mgmt.read_conn_info") as read:
+        await mgr._rssi_refresh_tick()
+
+    read.assert_not_called()
+    mgr.on_rssi_update.assert_not_called()
+    assert bt_operation_lock.try_acquire_bt_operation()
+
+
+@pytest.mark.asyncio
 async def test_tick_swallows_callback_exceptions():
     """The callback runs on the asyncio loop thread; an unhandled
     exception there would tear down the entire refresh task and we'd

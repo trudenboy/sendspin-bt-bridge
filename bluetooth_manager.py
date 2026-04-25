@@ -1232,10 +1232,18 @@ class BluetoothManager:
         """
         if not self.connected:
             return
+        # Skip the lock acquire + executor dispatch when the result has
+        # nowhere to land or the wrapper would short-circuit anyway —
+        # avoids brief contention with concurrent pair / scan attempts
+        # every 30 s for nothing.
+        if self.on_rssi_update is None:
+            return
+        adapter_index = self._resolve_adapter_index()
+        if adapter_index < 0:
+            return
         if not _bt_op_lock.try_acquire_bt_operation():
             return
         try:
-            adapter_index = self._resolve_adapter_index()
             mac = self.mac_address
             loop = asyncio.get_running_loop()
             try:
@@ -1246,7 +1254,7 @@ class BluetoothManager:
         finally:
             _bt_op_lock.release_bt_operation()
 
-        if rssi is None or self.on_rssi_update is None:
+        if rssi is None:
             return
         try:
             self.on_rssi_update(rssi)

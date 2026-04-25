@@ -90,9 +90,12 @@ def read_conn_info(adapter_index: int, mac: str) -> int | None:
     if raw is None:
         return None
 
+    # mgmt-api.txt names ONLY the raw wire value 127 as "RSSI not
+    # available" — check it BEFORE folding so the signed -128 reading
+    # (raw byte 0x80, a real very-weak signal) is preserved.
+    if raw == _RSSI_UNAVAILABLE_SENTINEL:
+        return None
     # btsocket reports the wire byte unsigned; mgmt-api.txt declares it signed.
     if raw > 127:
         raw -= 256
-    if raw == _RSSI_UNAVAILABLE_SENTINEL or raw == -_RSSI_UNAVAILABLE_SENTINEL - 1:
-        return None
     return int(raw)
