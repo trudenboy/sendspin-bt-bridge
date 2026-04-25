@@ -334,6 +334,49 @@ class TestKeepaliveInfrasound:
         assert crossings == 2, f"Expected 2 zero-crossings (2 Hz), got {crossings}"
 
 
+# ── keep_alive_method enum (v2.63.0-rc.2) ────────────────────────────────
+
+
+class TestKeepaliveMethodEnum:
+    """``keep_alive_method`` per-device option selects how the keepalive
+    burst payload is generated.  Three modes:
+
+      * ``infrasound`` (default) — 2 Hz subsonic stereo, the existing
+        wake-keeping burst.
+      * ``silence``  — same length, all-zero PCM; suitable for speakers
+        whose firmware treats *any* non-empty A2DP frame as activity but
+        misbehaves on the periodic 2 Hz tone (rare, but reported on a
+        couple of older Yandex / JBL units).
+      * ``none``     — return empty bytes; callers must skip the burst.
+        Use when the operator wants the speaker to time out naturally.
+    """
+
+    def test_infrasound_method_uses_existing_burst(self):
+        from sendspin_client import _generate_infrasound_burst, _generate_keepalive_buffer
+
+        assert _generate_keepalive_buffer("infrasound") == _generate_infrasound_burst()
+
+    def test_silence_method_is_all_zeros_with_same_length(self):
+        from sendspin_client import _generate_infrasound_burst, _generate_keepalive_buffer
+
+        ref_len = len(_generate_infrasound_burst())
+        buf = _generate_keepalive_buffer("silence")
+        assert len(buf) == ref_len
+        assert buf == b"\x00" * ref_len
+
+    def test_none_method_returns_empty_bytes(self):
+        from sendspin_client import _generate_keepalive_buffer
+
+        assert _generate_keepalive_buffer("none") == b""
+
+    def test_unknown_method_falls_back_to_infrasound(self):
+        """Defensive fallback so a bad config value can't disable keepalive
+        silently — the original infrasound default is returned."""
+        from sendspin_client import _generate_infrasound_burst, _generate_keepalive_buffer
+
+        assert _generate_keepalive_buffer("bogus") == _generate_infrasound_burst()
+
+
 # ── Keepalive suppression during standby ─────────────────────────────────
 
 

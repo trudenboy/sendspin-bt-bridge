@@ -45,6 +45,20 @@ _VALID_CAPABILITIES = {
 # bond as, for example, a HID keyboard alongside the requested audio profile
 # — undesirable both for compatibility (some DSPs prefer HFP over A2DP when
 # both are offered and accepted) and for security (unexpected service binds).
+# HSP/HFP UUIDs — gated behind ``ALLOW_HFP_PROFILE`` (v2.63.0-rc.2).
+# Some DSPs (Bose QC, AKG Y500) prefer HFP over A2DP when both are
+# offered, leaving the speaker on an 8 kHz mono call codec instead of
+# the A2DP stereo we just configured.  Default-block to keep the audio
+# path lossless; operators with HFP-only headphones can opt in.
+_HFP_SERVICE_UUIDS: frozenset[str] = frozenset(
+    {
+        "00001108-0000-1000-8000-00805f9b34fb",  # Headset (HSP)
+        "00001112-0000-1000-8000-00805f9b34fb",  # Headset AG
+        "0000111e-0000-1000-8000-00805f9b34fb",  # Hands-Free (HFP)
+        "0000111f-0000-1000-8000-00805f9b34fb",  # Hands-Free AG
+    }
+)
+
 _AUTHORIZED_SERVICE_UUIDS: frozenset[str] = frozenset(
     {
         # Audio profiles
@@ -54,10 +68,6 @@ _AUTHORIZED_SERVICE_UUIDS: frozenset[str] = frozenset(
         "0000110d-0000-1000-8000-00805f9b34fb",  # Advanced Audio Distribution (generic)
         "0000110e-0000-1000-8000-00805f9b34fb",  # AVRCP Controller
         "0000110f-0000-1000-8000-00805f9b34fb",  # AVRCP (legacy)
-        "00001108-0000-1000-8000-00805f9b34fb",  # Headset (HSP)
-        "00001112-0000-1000-8000-00805f9b34fb",  # Headset AG
-        "0000111e-0000-1000-8000-00805f9b34fb",  # Hands-Free (HFP)
-        "0000111f-0000-1000-8000-00805f9b34fb",  # Hands-Free AG
         # Universally-advertised accessory services (safe to authorize;
         # authorize-all-or-reject-all behaviour on these leaks nothing an
         # already-bonded peer couldn't read anyway).
@@ -93,12 +103,17 @@ def _normalize_service_uuid(raw: str) -> str:
     return f"{compact[0:8]}-{compact[8:12]}-{compact[12:16]}-{compact[16:20]}-{compact[20:32]}"
 
 
-def _build_agent_iface(pin: str):
+def _build_agent_iface(pin: str, allow_hfp: bool = False):
     """Build the org.bluez.Agent1 service interface object.
 
     Constructed lazily so ``import services.pairing_agent`` stays cheap
     (and importable) on systems without ``dbus_fast``.
+
+    ``allow_hfp`` (default False) controls whether HSP/HFP service
+    UUIDs are accepted in ``AuthorizeService``.  See ``_HFP_SERVICE_UUIDS``
+    for the gate's rationale.
     """
+    authorized_uuids = _AUTHORIZED_SERVICE_UUIDS | (_HFP_SERVICE_UUIDS if allow_hfp else frozenset())
     from dbus_fast import DBusError  # type: ignore
     from dbus_fast.service import ServiceInterface, method  # type: ignore
 
@@ -191,7 +206,7 @@ def _build_agent_iface(pin: str):
         def AuthorizeService(self, device: "o", uuid: "s"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
             self.method_calls.append("AuthorizeService")
             normalized = _normalize_service_uuid(uuid)
-            if normalized in _AUTHORIZED_SERVICE_UUIDS:
+            if normalized in authorized_uuids:
                 logger.info("Agent.AuthorizeService(%s, %s): authorized", device, uuid)
                 self.authorized_services.append(normalized)
                 return
@@ -218,11 +233,18 @@ def _build_agent_iface(pin: str):
 class PairingAgent:
     """Context manager that hosts a BlueZ auth agent for a single pair."""
 
-    def __init__(self, *, capability: str = "DisplayYesNo", pin: str = "0000") -> None:
+    def __init__(
+        self,
+        *,
+        capability: str = "DisplayYesNo",
+        pin: str = "0000",
+        allow_hfp: bool = False,
+    ) -> None:
         if capability not in _VALID_CAPABILITIES:
             raise ValueError(f"Invalid agent capability: {capability}")
         self._capability = capability
         self._pin = pin
+        self._allow_hfp = bool(allow_hfp)
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         # Typed as Any so mypy doesn't require an eager dbus_fast import at
@@ -357,7 +379,7 @@ class PairingAgent:
         from dbus_fast import BusType  # type: ignore
         from dbus_fast.aio import MessageBus  # type: ignore
 
-        self._iface = _build_agent_iface(self._pin)
+        self._iface = _build_agent_iface(self._pin, allow_hfp=self._allow_hfp)
         self._bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         self._bus.export(AGENT_PATH, self._iface)
         introspect = await self._bus.introspect(_BLUEZ_BUS, _AGENT_MANAGER_PATH)

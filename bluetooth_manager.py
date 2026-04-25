@@ -36,6 +36,19 @@ from bt_dbus import (
 from services.bluetooth import describe_pair_failure
 from services.pairing_agent import PairingAgent
 
+
+def _load_allow_hfp() -> bool:
+    """Read the runtime ``ALLOW_HFP_PROFILE`` flag without forcing a config
+    import at module load — keeps test fixtures cheap and lets late config
+    edits take effect on the next pair attempt."""
+    try:
+        from config import load_config
+
+        return bool(load_config().get("ALLOW_HFP_PROFILE", False))
+    except Exception:
+        return False
+
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -442,7 +455,11 @@ class BluetoothManager:
         # agent on hosts that can't reach dbus-fast / SystemBus.
         native_agent: PairingAgent | None = None
         try:
-            native_agent = PairingAgent(capability="DisplayYesNo", pin="0000").__enter__()
+            native_agent = PairingAgent(
+                capability="DisplayYesNo",
+                pin="0000",
+                allow_hfp=_load_allow_hfp(),
+            ).__enter__()
             logger.info("[%s] Pair: native agent active", self.device_name)
         except Exception as exc:
             native_agent = None

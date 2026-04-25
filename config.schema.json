@@ -378,6 +378,12 @@
           "default": 1,
           "description": "Minutes after sink idle before suspending PA sink in power_save mode."
         },
+        "keep_alive_method": {
+          "type": "string",
+          "enum": ["infrasound", "silence", "none"],
+          "default": "infrasound",
+          "description": "Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally)."
+        },
         "room_id": {
           "type": "string",
           "description": "Home Assistant area/room ID for this device."

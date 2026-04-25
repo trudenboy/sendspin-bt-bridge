@@ -803,6 +803,7 @@ def test_initialize_devices_builds_clients_and_registers_disabled_devices():
             idle_disconnect_minutes=0,
             idle_mode="default",
             power_save_delay_minutes=30,
+            keep_alive_method="infrasound",
         ):
             self.player_name = player_name
             self.server_host = server_host

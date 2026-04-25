@@ -3546,6 +3546,7 @@ function buildDeviceCard(i) {
           '<span id="dsync-' + i + '" style="display:none"></span>' +
           '<span id="dsync-detail-' + i + '" style="display:none"></span>' +
           '<span id="dbattery-' + i + '" style="display:none"></span>' +
+          '<span id="drssi-' + i + '" style="display:none"></span>' +
         '</div>' +
         '<div class="card-controls">' +
           _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
@@ -3652,6 +3653,22 @@ function populateDeviceCard(i, dev) {
             batteryEl.innerHTML = '';
             batteryEl.title = '';
             batteryEl.style.display = 'none';
+        }
+    }
+
+    var rssiEl = document.getElementById('drssi-' + i);
+    if (rssiEl) {
+        var rssiVal = (dev.rssi_dbm === null || dev.rssi_dbm === undefined) ? null : Number(dev.rssi_dbm);
+        var rssiTs = dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
+        var nowSec = Date.now() / 1000;
+        var isStale = rssiTs ? (nowSec - rssiTs > 90) : false;
+        var chipHtml = _renderRssiChip(rssiVal, isStale);
+        if (chipHtml) {
+            rssiEl.innerHTML = chipHtml;
+            rssiEl.style.display = '';
+        } else {
+            rssiEl.innerHTML = '';
+            rssiEl.style.display = 'none';
         }
     }
 
@@ -6396,6 +6413,30 @@ function openConfigAndAddDevice(options) {
     }
 }
 
+// v2.63.0-rc.2: RSSI badge with colour-coded signal strength.
+// Thresholds align with the WiFi-style buckets most operators expect:
+//   green  ≥ -65 dB  (excellent / next-room range)
+//   yellow -75…-65   (workable but lossy retransmits start)
+//   red    ≤ -75     (audible drops likely)
+//   grey   stale     (rssi_at_ts older than 90 s — value not trustworthy)
+function _renderRssiChip(rssiDbm, isStale) {
+    if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(rssiDbm)) {
+        return '';
+    }
+    var n = Number(rssiDbm);
+    var cls = 'rssi-bad';
+    if (isStale) {
+        cls = 'rssi-stale';
+    } else if (n >= -65) {
+        cls = 'rssi-good';
+    } else if (n >= -75) {
+        cls = 'rssi-fair';
+    }
+    var title = isStale ? 'Last RSSI ' + n + ' dB (stale)' : 'Signal strength ' + n + ' dB';
+    return '<span class="scan-result-chip ' + cls + '" title="' + escHtmlAttr(title) + '">📶 ' + n + ' dB</span>';
+}
+
+
 function _renderBtScanResults(devices) {
     var box = document.getElementById('scan-results-box');
     var listDiv = document.getElementById('scan-results-list');
@@ -6409,6 +6450,10 @@ function _renderBtScanResults(devices) {
         ];
         if (d.adapter) {
             chips.push('<span class="scan-result-chip">' + escHtml(_getBtScanAdapterLabel(d.adapter)) + '</span>');
+        }
+        var rssiChip = _renderRssiChip(d.rssi_dbm);
+        if (rssiChip) {
+            chips.push(rssiChip);
         }
         if (d.warning) {
             chips.push('<span class="scan-result-chip is-warning" title="' + escHtmlAttr(d.warning) + '">⚠ Another bridge</span>');

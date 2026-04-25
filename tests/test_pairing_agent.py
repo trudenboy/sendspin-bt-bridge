@@ -110,6 +110,57 @@ def test_agent_authorize_service_accepts_universal_services():
     assert agent.rejected_services == []
 
 
+@pytest.mark.parametrize(
+    "hfp_uuid",
+    [
+        "00001108-0000-1000-8000-00805f9b34fb",  # HSP Headset
+        "00001112-0000-1000-8000-00805f9b34fb",  # HSP AG
+        "0000111e-0000-1000-8000-00805f9b34fb",  # HFP Hands-Free
+        "0000111f-0000-1000-8000-00805f9b34fb",  # HFP AG
+    ],
+)
+def test_agent_authorize_service_rejects_hfp_by_default(hfp_uuid):
+    """v2.63.0-rc.2: HSP/HFP profiles are blocked by default.
+
+    Some DSPs (Bose QC headphones, AKG Y500) prefer HFP over A2DP when both
+    are accepted, leaving the speaker on a low-quality 8 kHz mono call codec
+    instead of the A2DP stereo we just configured.  Block by default; let
+    operators with HFP-only headphones opt in via ``ALLOW_HFP_PROFILE``.
+    """
+    from dbus_fast import DBusError
+
+    agent = _build_agent_iface(pin="0000")
+    with pytest.raises(DBusError):
+        agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", hfp_uuid)
+    assert agent.authorized_services == []
+    assert hfp_uuid in agent.rejected_services
+
+
+@pytest.mark.parametrize(
+    "hfp_uuid",
+    [
+        "00001108-0000-1000-8000-00805f9b34fb",
+        "0000111e-0000-1000-8000-00805f9b34fb",
+    ],
+)
+def test_agent_authorize_service_accepts_hfp_when_flag_enabled(hfp_uuid):
+    """``ALLOW_HFP_PROFILE=true`` (passed through ``allow_hfp=True``) restores
+    the pre-rc.2 behaviour for HFP-only headphones (rare edge case)."""
+    agent = _build_agent_iface(pin="0000", allow_hfp=True)
+    agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", hfp_uuid)
+    assert agent.authorized_services == [hfp_uuid]
+    assert agent.rejected_services == []
+
+
+def test_agent_authorize_service_a2dp_unaffected_by_hfp_flag():
+    """The HFP gate must not regress A2DP authorisation either way."""
+    a2dp_sink = "0000110b-0000-1000-8000-00805f9b34fb"
+    for flag in (False, True):
+        agent = _build_agent_iface(pin="0000", allow_hfp=flag)
+        agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", a2dp_sink)
+        assert agent.authorized_services == [a2dp_sink], f"allow_hfp={flag}"
+
+
 def test_agent_telemetry_snapshot_matches_calls():
     agent = _build_agent_iface(pin="0000")
     agent.RequestConfirmation("/org/bluez/hci0/dev_AA_BB", 941189)
