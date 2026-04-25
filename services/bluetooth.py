@@ -22,6 +22,7 @@ _OPTIONS_FILE = Path("/data/options.json")
 __all__ = [
     "COMMON_BT_PAIR_PINS",
     "bt_remove_device",
+    "build_hci_map",
     "describe_pair_failure",
     "extract_pair_failure_reason",
     "get_adapter_alias",
@@ -89,6 +90,37 @@ def is_valid_mac(mac: str) -> bool:
     return bool(_MAC_RE.match(mac))
 
 
+def build_hci_map() -> dict[str, str]:
+    """Return a ``{normalised_mac: hciN}`` map by scanning sysfs once.
+
+    Use this instead of calling :func:`resolve_hci_for_mac` in a loop —
+    one sysfs walk per request keeps the endpoint O(n) in the number of
+    adapters and avoids redundant filesystem I/O on hosts with several
+    BT controllers.
+
+    Keys are uppercase, colon-stripped MACs (matching what
+    ``resolve_hci_for_mac`` compares internally).  Returns an empty dict
+    when sysfs is unreadable.
+    """
+    mapping: dict[str, str] = {}
+    try:
+        entries = sorted(_BT_SYSFS_DIR.iterdir())
+    except OSError as exc:
+        logger.debug("sysfs adapter lookup failed: %s", exc)
+        return mapping
+    for hci in entries:
+        addr_file = hci / "address"
+        if not addr_file.exists():
+            continue
+        try:
+            addr = addr_file.read_text().strip().upper().replace(":", "")
+        except OSError:
+            continue
+        if addr:
+            mapping[addr] = hci.name
+    return mapping
+
+
 def resolve_hci_for_mac(mac: str) -> str:
     """Return the kernel ``hciN`` interface name for a BT adapter MAC.
 
@@ -103,24 +135,14 @@ def resolve_hci_for_mac(mac: str) -> str:
     Returns an empty string when sysfs is unreadable (non-Linux dev box
     or container without ``/sys`` mounted) so callers can fall back to
     a synthetic ``hci{i}`` label.
+
+    For multi-MAC lookups in the same request, prefer :func:`build_hci_map`
+    + dict access to avoid an O(n²) sysfs scan.
     """
     if not mac:
         return ""
     target = mac.upper().replace(":", "")
-    try:
-        for hci in sorted(_BT_SYSFS_DIR.iterdir()):
-            addr_file = hci / "address"
-            if not addr_file.exists():
-                continue
-            try:
-                addr = addr_file.read_text().strip().upper().replace(":", "")
-            except OSError:
-                continue
-            if addr == target:
-                return hci.name
-    except OSError as exc:
-        logger.debug("sysfs adapter lookup failed: %s", exc)
-    return ""
+    return build_hci_map().get(target, "")
 
 
 def get_adapter_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:

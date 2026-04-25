@@ -7,7 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.62.0-rc.9] - 2026-04-24
+## [2.62.0-rc.10] - 2026-04-25
+
+Copilot review pass on the rc.9 PR (#194).  No behaviour changes —
+performance / robustness polish on top of the rc.8 + rc.9 cleanup.
+
+### Changed
+- ``GET /api/bt/adapters`` no longer walks ``/sys/class/bluetooth``
+  once per adapter.  New ``services.bluetooth.build_hci_map()`` scans
+  sysfs once per request and returns a ``{normalised_mac: hciN}``
+  map, dropping the endpoint from O(n²) to O(n) in the number of
+  adapters.  ``resolve_hci_for_mac`` now thinly wraps the same
+  helper so its single-MAC use cases (``scripts/translate_ha_config.py``)
+  stay backward-compatible.
+- ``services.pa_volume_controller._handle_sink_event`` now takes the
+  already-open ``PulseAsync`` connection from the subscribe loop and
+  reads sink state via the new ``services.pulse.aread_sink_state``
+  helper.  Each PA sink event used to spawn a fresh ``PulseAsync``
+  client through the one-shot ``aget_sink_volume`` /
+  ``aget_sink_mute`` helpers — under frequent updates that meant
+  noticeable connection churn against the PA daemon.  The subscribe
+  loop's own connection now serves both the event stream and the
+  per-event read.
+- ``PulseVolumeController.stop_monitoring`` no longer swallows every
+  exception when awaiting the cancelled monitor task.  ``CancelledError``
+  is still treated as the expected outcome; any other exception is
+  logged at DEBUG so a subscribe-loop crash during shutdown leaves a
+  trace instead of disappearing silently.
+
+### Fixed
+- ``CHANGELOG.md`` rc.9 section dated ``2026-04-24`` while rc.8 was
+  dated ``2026-04-25`` — corrected to ``2026-04-25``.
+
+## [2.62.0-rc.9] - 2026-04-25
 
 Continuation of the rc.8 simplification work: with sendspin's
 ``PulseVolumeController`` doing real two-way state sync, the bridge

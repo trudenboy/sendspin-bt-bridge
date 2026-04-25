@@ -23,11 +23,11 @@ from services.async_job_state import create_scan_job, finish_scan_job, get_scan_
 from services.bluetooth import (
     _AUDIO_UUIDS,
     COMMON_BT_PAIR_PINS,
+    build_hci_map,
     describe_pair_failure,
     get_adapter_alias,
     is_pin_rejection,
     list_bt_adapters,
-    resolve_hci_for_mac,
 )
 from services.bluetooth import bt_remove_device as _bt_remove_device
 from services.bluetooth import persist_device_released as _persist_device_released
@@ -266,6 +266,10 @@ def api_bt_adapters():
     """List available Bluetooth adapters."""
     try:
         macs = list_bt_adapters()
+        # Scan sysfs once per request — keeps the endpoint O(n) in the
+        # number of adapters (vs. O(n²) when calling resolve_hci_for_mac
+        # in the loop, which re-walks /sys/class/bluetooth on every call).
+        hci_map = build_hci_map()
         adapters = []
         for i, mac in enumerate(macs):
             # Resolve the kernel hciN via sysfs so the UI label matches what
@@ -275,7 +279,7 @@ def api_bt_adapters():
             # after a USB stick hotplug.  Falls back to the synthetic
             # ``hci{i}`` label only when /sys/class/bluetooth isn't mounted
             # (non-Linux dev box, container missing /sys).
-            kernel_hci = resolve_hci_for_mac(mac) or f"hci{i}"
+            kernel_hci = hci_map.get(mac.upper().replace(":", "")) or f"hci{i}"
             # Use ``show <MAC>`` instead of ``select <MAC>; show`` — the
             # latter is unreliable in piped-stdin mode and surfaced the wrong
             # adapter's alias when default and selected differed (issue #193).

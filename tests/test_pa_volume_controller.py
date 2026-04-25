@@ -85,11 +85,9 @@ async def test_handle_sink_event_fires_callback_on_external_change(controller):
     controller._volume = 100
     controller._muted = False
 
-    with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=42),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=True),
-    ):
-        await controller._handle_sink_event()
+    pulse = object()  # opaque sentinel — aread_sink_state is mocked
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(42, True)):
+        await controller._handle_sink_event(pulse)
 
     assert received == [(42, True)]
     # Cache updated so subsequent identical events don't re-fire.
@@ -109,30 +107,26 @@ async def test_handle_sink_event_suppresses_echo_from_set_state(controller):
     controller._volume = 75
     controller._muted = False
 
-    with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=75),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=False),
-    ):
-        await controller._handle_sink_event()
+    pulse = object()
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(75, False)):
+        await controller._handle_sink_event(pulse)
 
     assert received == []  # echo suppressed
 
 
 @pytest.mark.asyncio
 async def test_handle_sink_event_skips_when_sink_unreachable(controller):
-    # Sink missing (BT disconnect, PA restart): aget_sink_* returns None.
-    # The handler must not push (None, None) to the callback nor poison
-    # the cache with a phantom 0/False reading.
+    # Sink missing (BT disconnect, PA restart): aread_sink_state returns
+    # (None, None).  The handler must not push (None, None) to the
+    # callback nor poison the cache with a phantom 0/False reading.
     received: list[tuple[int, bool]] = []
     controller._callback = lambda v, m: received.append((v, m))
     controller._volume = 80
     controller._muted = False
 
-    with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=None),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=None),
-    ):
-        await controller._handle_sink_event()
+    pulse = object()
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(None, None)):
+        await controller._handle_sink_event(pulse)
 
     assert received == []
     assert controller._volume == 80  # cache untouched
@@ -148,12 +142,10 @@ async def test_handle_sink_event_swallows_callback_exception(controller):
     controller._volume = 50
     controller._muted = False
 
-    with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=60),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=False),
-    ):
+    pulse = object()
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(60, False)):
         # Must not raise.
-        await controller._handle_sink_event()
+        await controller._handle_sink_event(pulse)
 
     assert controller._volume == 60  # cache still updated despite callback raising
 
@@ -167,11 +159,9 @@ async def test_handle_sink_event_no_callback_still_updates_cache(controller):
     controller._volume = 30
     controller._muted = True
 
-    with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=80),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=False),
-    ):
-        await controller._handle_sink_event()
+    pulse = object()
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(80, False)):
+        await controller._handle_sink_event(pulse)
 
     assert controller._volume == 80
     assert controller._muted is False

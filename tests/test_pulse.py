@@ -501,3 +501,47 @@ def test_reload_bluez5_discover_module_burns_cooldown_after_success():
 
     assert result is True
     assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS > 0.0
+
+
+# ---------------------------------------------------------------------------
+# aread_sink_state — single-connection sink state read used by
+# pa_volume_controller's subscribe loop (avoids per-event PA churn).
+# ---------------------------------------------------------------------------
+
+
+def test_aread_sink_state_returns_volume_and_mute_for_existing_sink():
+    """When the sink is found, aread_sink_state returns (vol_pct, muted)."""
+
+    class _FakeSink:
+        name = "bluez_sink.AA_BB.a2dp_sink"
+
+        class volume:
+            value_flat = 0.42  # 42%
+
+        mute = 1  # truthy non-bool to confirm coercion
+
+    async def _fake_sink_list():
+        return [_FakeSink()]
+
+    pulse = MagicMock()
+    pulse.sink_list = _fake_sink_list
+
+    vol, muted = asyncio.run(_pulse_mod.aread_sink_state(pulse, "bluez_sink.AA_BB.a2dp_sink"))
+
+    assert vol == 42
+    assert muted is True
+
+
+def test_aread_sink_state_returns_none_when_sink_absent():
+    """Sink not present (BT disconnect, PA restart) → (None, None)."""
+
+    async def _empty_sink_list():
+        return []
+
+    pulse = MagicMock()
+    pulse.sink_list = _empty_sink_list
+
+    vol, muted = asyncio.run(_pulse_mod.aread_sink_state(pulse, "bluez_sink.MISSING.a2dp_sink"))
+
+    assert vol is None
+    assert muted is None

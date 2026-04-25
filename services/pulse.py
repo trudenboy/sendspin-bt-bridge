@@ -86,6 +86,24 @@ async def _aget_sink(pulse, sink_name: str) -> Any | None:
         return None
 
 
+async def aread_sink_state(pulse, sink_name: str) -> tuple[int | None, bool | None]:
+    """Read ``(volume_pct, muted)`` for *sink_name* via an already-open *pulse* connection.
+
+    Returns ``(None, None)`` when the sink is gone or the lookup raises —
+    callers in subscribe loops then no-op until the next event.
+
+    Lets callers that already hold a long-lived ``PulseAsync`` (e.g.
+    ``services.pa_volume_controller._subscribe_loop``) avoid spinning
+    up a fresh client per sink event the way ``aget_sink_volume`` /
+    ``aget_sink_mute`` do for one-shot use.
+    """
+    sink = await _aget_sink(pulse, sink_name)
+    if sink is None:
+        return None, None
+    vol = max(0, min(100, int(round(sink.volume.value_flat * 100))))
+    return vol, bool(sink.mute)
+
+
 # ---------------------------------------------------------------------------
 # Async public API
 # ---------------------------------------------------------------------------

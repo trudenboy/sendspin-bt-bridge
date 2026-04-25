@@ -11,7 +11,13 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from services.pulse import aget_sink_mute, aget_sink_volume, aset_sink_mute, aset_sink_volume
+from services.pulse import (
+    aget_sink_mute,
+    aget_sink_volume,
+    aread_sink_state,
+    aset_sink_mute,
+    aset_sink_volume,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -93,8 +99,17 @@ class PulseVolumeController:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
+            except Exception as exc:
+                # Subscribe-loop crash during shutdown shouldn't block teardown,
+                # but it shouldn't be silent either — log so the post-mortem
+                # has something to go on.
+                logger.debug(
+                    "PA volume monitor: task for %s exited with %s during stop",
+                    self._sink_name,
+                    exc,
+                )
 
     async def _subscribe_loop(self) -> None:
         """Run the pulsectl_asyncio sink-event subscription.
@@ -137,7 +152,10 @@ class PulseVolumeController:
                             continue
                         # Event index addresses A sink — we read state by NAME
                         # to stay robust to PA index renumbering on BT reconnect.
-                        await self._handle_sink_event()
+                        # Reuse the already-open ``pulse`` connection so the
+                        # subscribe loop doesn't spawn a fresh PulseAsync per
+                        # event under frequent sink updates.
+                        await self._handle_sink_event(pulse)
             except asyncio.CancelledError:
                 logger.debug("PA volume monitor: cancelled for %s", self._sink_name)
                 raise
@@ -152,11 +170,18 @@ class PulseVolumeController:
                 )
                 await asyncio.sleep(2.0)
 
-    async def _handle_sink_event(self) -> None:
-        """Read sink state and fire the callback when it diverges from cache."""
+    async def _handle_sink_event(self, pulse) -> None:
+        """Read sink state via *pulse* and fire the callback when it diverges from cache.
+
+        *pulse* is the already-open ``PulseAsync`` instance from
+        :meth:`_subscribe_loop` — we reuse it instead of opening a fresh
+        connection per event (the one-shot ``aget_sink_volume`` /
+        ``aget_sink_mute`` helpers each open + close their own
+        ``PulseAsync``, which would cause noticeable connection churn
+        under frequent sink events).
+        """
         try:
-            new_vol = await aget_sink_volume(self._sink_name)
-            new_muted = await aget_sink_mute(self._sink_name)
+            new_vol, new_muted = await aread_sink_state(pulse, self._sink_name)
         except Exception as exc:
             logger.debug("PA volume monitor: get_state failed (%s)", exc)
             return
