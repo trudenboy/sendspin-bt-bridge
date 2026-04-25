@@ -580,10 +580,18 @@ def install() -> None:
 
         @staticmethod
         def _adapter_output(input_text: str) -> _real_subprocess.CompletedProcess:  # type: ignore[type-arg]
+            # Match both the legacy ``select <MAC>; show`` recipe and the
+            # new ``show <MAC>`` form ``services.bluetooth.get_adapter_alias``
+            # uses (issue #193 fix).  Falling back to the first DEMO_ADAPTER
+            # would re-introduce the alias-swap bug under demo mode.
             selected = ""
             for line in str(input_text).splitlines():
-                if line.startswith("select "):
-                    selected = line.split(" ", 1)[1].strip()
+                stripped = line.strip()
+                if stripped.startswith("select "):
+                    selected = stripped.split(" ", 1)[1].strip()
+                    break
+                if stripped.startswith("show "):
+                    selected = stripped.split(" ", 1)[1].strip()
                     break
             adapter_info = get_demo_adapter(selected)
             mac = str(adapter_info["mac"])
@@ -653,6 +661,12 @@ def install() -> None:
 
     _demo_subprocess = _DemoSubprocess()
     _abt.subprocess = _demo_subprocess  # type: ignore[assignment]
+    # services.bluetooth.get_adapter_alias (added in #193 fix) is now the
+    # path the /api/bt/adapters route uses, so the demo intercept must
+    # also patch services.bluetooth.subprocess — otherwise the helper
+    # falls back to a real bluetoothctl invocation that doesn't exist
+    # in the test runner and the endpoint returns hci-prefixed labels.
+    _sbt.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_status_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
     _original_api_detect_runtime = _api_mod._detect_runtime
