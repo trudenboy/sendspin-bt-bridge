@@ -8,6 +8,7 @@ via PropertiesChanged signals; falls back to bluetoothctl polling if unavailable
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -18,9 +19,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import asyncio
 
 import bt_audio
 import bt_monitor
@@ -33,6 +31,7 @@ from bt_dbus import (
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
 )
+from services.async_job_state import is_scan_running
 from services.bluetooth import describe_pair_failure
 from services.pairing_agent import PairingAgent
 
@@ -47,6 +46,43 @@ def _load_allow_hfp() -> bool:
         return bool(load_config().get("ALLOW_HFP_PROFILE", False))
     except Exception:
         return False
+
+
+# v2.63.0-rc.3 — RSSI background refresh.  Periodically run a brief
+# bluetoothctl burst, parse the most recent RSSI event for our MAC,
+# push the value into host status so the device card renders an
+# up-to-date dBm badge instead of waiting for a user-triggered scan.
+_RSSI_REFRESH_INTERVAL_S = 60.0
+_RSSI_BURST_DURATION_S = 5
+# Modern bluetoothctl: ``[CHG] Device <MAC> RSSI: -43``.
+# Legacy form          : ``[CHG] Device <MAC> RSSI: 0xff... (-43)``.
+_RSSI_LINE_RE = re.compile(
+    r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
+    r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
+)
+
+
+def _parse_own_rssi_from_burst(stdout: str, target_mac: str) -> int | None:
+    """Return the most recent RSSI dBm for *target_mac* in *stdout*.
+
+    Returns ``None`` when the burst window did not see any RSSI event
+    for that MAC — caller must NOT clear the cached value, only update
+    it on success.  The staleness check on the UI side
+    (``rssi_at_ts > 90 s``) handles the "no signal at all" case.
+    """
+    if not stdout or not target_mac:
+        return None
+    target = target_mac.upper()
+    most_recent: int | None = None
+    for match in _RSSI_LINE_RE.finditer(stdout):
+        if match.group(1).upper() != target:
+            continue
+        value = match.group(2) or match.group(3)
+        try:
+            most_recent = int(value)
+        except (TypeError, ValueError):
+            continue
+    return most_recent
 
 
 if TYPE_CHECKING:
@@ -1156,3 +1192,86 @@ class BluetoothManager:
         Delegates to ``bt_monitor.monitor_and_reconnect()``.
         """
         await bt_monitor.monitor_and_reconnect(self)
+
+    def _run_rssi_burst(self, duration_s: int = _RSSI_BURST_DURATION_S) -> str:
+        """Run a brief bluetoothctl ``scan bredr`` burst and return raw stdout.
+
+        Pattern mirrors ``routes/api_bt._run_bluetoothctl_scan`` (Popen
+        + stdin pipe + sleep + scan off) because plain
+        ``_run_bluetoothctl`` is one-shot and can't keep the discovery
+        window open for ``duration_s`` seconds.  Returns the captured
+        stdout (combined stdout+stderr) for the caller to parse.
+        """
+        init_cmds: list[str] = []
+        if self._adapter_select:
+            init_cmds.append(f"select {self._adapter_select}")
+        init_cmds.append("scan bredr")
+        proc = subprocess.Popen(
+            ["bluetoothctl"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        try:
+            if proc.stdin is None:
+                raise RuntimeError("bluetoothctl subprocess stdin unavailable")
+            proc.stdin.write("\n".join(init_cmds) + "\n")
+            proc.stdin.flush()
+            time.sleep(duration_s)
+            proc.stdin.write("scan off\n")
+            proc.stdin.flush()
+            output, _ = proc.communicate(timeout=duration_s + 4)
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
+        return output
+
+    def run_rssi_refresh(self) -> None:
+        """Run a single RSSI refresh tick — synchronous on a worker thread.
+
+        Skips when a user-triggered scan owns BlueZ discovery
+        (otherwise the two would corrupt each other's output).  On a
+        successful burst, parses the most recent RSSI dBm for our MAC
+        and pushes it onto the host status dict via
+        ``host.update_status``.  No-ops on parse miss so we don't spam
+        the SSE / WS notify path with empty updates.
+        """
+        if is_scan_running():
+            return
+        if self.host is None:
+            return
+        try:
+            output = self._run_rssi_burst()
+        except Exception as exc:
+            logger.debug("[%s] RSSI refresh burst failed: %s", self.device_name, exc)
+            return
+        rssi = _parse_own_rssi_from_burst(output, self.mac_address)
+        if rssi is None:
+            return
+        try:
+            self.host.update_status({"rssi_dbm": rssi, "rssi_at_ts": time.time()})
+        except Exception as exc:
+            logger.debug("[%s] RSSI host status push failed: %s", self.device_name, exc)
+
+    async def run_rssi_refresh_loop(self, interval_s: float = _RSSI_REFRESH_INTERVAL_S) -> None:
+        """Async loop calling :meth:`run_rssi_refresh` every *interval_s*.
+
+        Spawned alongside ``monitor_and_reconnect`` from the main async
+        runtime.  The blocking burst itself runs on the BT executor
+        pool so the asyncio event loop stays responsive.
+        """
+        loop = asyncio.get_running_loop()
+        while self._running:
+            try:
+                await asyncio.sleep(interval_s)
+                if not self._running:
+                    return
+                if not self.connected:
+                    continue  # no point burning a discovery window with no link
+                await loop.run_in_executor(_bt_executor, self.run_rssi_refresh)
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                logger.debug("[%s] RSSI refresh loop tick failed: %s", self.device_name, exc)

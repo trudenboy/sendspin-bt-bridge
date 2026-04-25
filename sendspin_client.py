@@ -19,7 +19,7 @@ import threading
 import time
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import concurrent.futures
@@ -67,17 +67,64 @@ from collections import deque as _deque  # noqa: E402
 
 
 class _RingLogHandler(logging.Handler):
-    """Keeps the last *maxlen* formatted log records in a deque."""
+    """Keeps the last *maxlen* formatted log records in a deque, and
+    fans out each new record to subscribed queues for the live log
+    stream WebSocket (``/api/logs/stream``).
+
+    The ring + fan-out design lets the WS endpoint deliver an immediate
+    snapshot frame on connect (``snapshot()``) followed by per-emit
+    append frames pushed through the subscribed queue — replacing the
+    pre-rc.3 polling cadence (``GET /api/logs?lines=150`` every 2 s).
+    """
 
     def __init__(self, maxlen: int = 2000) -> None:
         super().__init__()
         self.records: _deque[str] = _deque(maxlen=maxlen)
+        # Subscribers are anything with ``put_nowait(line: str)`` —
+        # plain stdlib queue.Queue, asyncio.Queue.put_nowait, etc.
+        # The list is guarded by a lock because emit() runs on whatever
+        # thread originated the log (logging is intentionally global) and
+        # subscribe / unsubscribe land on Flask request threads when WS
+        # clients connect or disconnect.
+        self._subscribers: list[Any] = []
+        self._subscribers_lock = threading.Lock()
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            self.records.append(self.format(record))
+            line = self.format(record)
         except Exception:
-            pass
+            return
+        self.records.append(line)
+        # Snapshot the subscribers list under the lock so a concurrent
+        # subscribe / unsubscribe can't race the iteration.  Failures in
+        # one subscriber must not block others — a stuck WS client must
+        # not stall the global log stream.
+        with self._subscribers_lock:
+            subscribers = list(self._subscribers)
+        for sub in subscribers:
+            try:
+                sub.put_nowait(line)
+            except Exception:
+                pass
+
+    def subscribe(self, q: Any) -> None:
+        """Register a queue-like object to receive every subsequent emit."""
+        with self._subscribers_lock:
+            self._subscribers.append(q)
+
+    def unsubscribe(self, q: Any) -> None:
+        """Drop *q* from the subscriber list; silent no-op if absent."""
+        with self._subscribers_lock:
+            try:
+                self._subscribers.remove(q)
+            except ValueError:
+                pass
+
+    def snapshot(self) -> list[str]:
+        """Return a list copy of the current ring contents.  The WS
+        endpoint sends this on connect so subscribers see historical
+        context before the first new line lands."""
+        return list(self.records)
 
 
 _ring_log_handler = _RingLogHandler(maxlen=2000)
@@ -1837,6 +1884,16 @@ class SendspinClient:
 
             mon_task.add_done_callback(_on_monitor_done)
             tasks.append(mon_task)
+            # v2.63.0-rc.3 — periodic RSSI refresh so connected device cards
+            # render an up-to-date dBm badge without requiring a user scan.
+            rssi_task = asyncio.create_task(self.bt_manager.run_rssi_refresh_loop())
+
+            def _on_rssi_loop_done(t):
+                if not t.cancelled() and t.exception():
+                    logger.warning("[%s] RSSI refresh loop ended: %s", self.player_name, t.exception())
+
+            rssi_task.add_done_callback(_on_rssi_loop_done)
+            tasks.append(rssi_task)
 
         try:
             # Keep running

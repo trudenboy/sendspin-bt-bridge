@@ -1,0 +1,188 @@
+"""Tests for the WebSocket status stream (v2.63.0-rc.3).
+
+Migration target replacing ``/api/status/stream`` (SSE).  The SSE path
+breaks under HA Supervisor's deflate compression on
+``text/event-stream``; WebSocket frames are not transformed by ingress
+proxies, eliminating the garbled-payload class of bug.
+
+The streaming logic lives in a pure ``status_ws_iter`` generator so it
+can be exercised without spinning up a real WebSocket connection — the
+``flask-sock`` route handler is a thin wrapper that drives the
+generator and forwards each item to ``ws.send()``.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+
+import pytest
+
+import state as _state
+from routes.api_ws import status_ws_iter
+
+
+@pytest.fixture(autouse=True)
+def _reset_status_version():
+    """Each test starts from a known status-version baseline."""
+    _state.notify_status_changed()  # bump once so the snapshot version is stable
+    yield
+
+
+def test_status_ws_iter_emits_initial_snapshot_first():
+    """The first item yielded is always the current status snapshot, so
+    clients render immediately without waiting for the first change event
+    (matches the SSE behaviour and is critical under HA ingress where
+    polling is otherwise the only fallback)."""
+    gen = status_ws_iter(max_iterations=0, change_timeout=0.01)
+    initial = next(gen)
+    assert isinstance(initial, dict)
+    # Must NOT be a heartbeat — initial snapshot is the real payload.
+    assert initial.get("event") != "heartbeat"
+
+
+def test_status_ws_iter_emits_change_after_notify():
+    """When ``notify_status_changed`` fires, the next iteration yields
+    a fresh snapshot (not a heartbeat)."""
+    gen = status_ws_iter(max_iterations=2, change_timeout=2.0)
+    next(gen)  # initial snapshot
+
+    # Trigger a change from a worker thread so the wait inside the
+    # generator wakes up cleanly (mirrors the production path where
+    # state mutations come from BT manager / asyncio threads).
+    def _bump() -> None:
+        time.sleep(0.05)
+        _state.notify_status_changed()
+
+    threading.Thread(target=_bump, daemon=True).start()
+    msg = next(gen)
+    assert isinstance(msg, dict)
+    assert msg.get("event") != "heartbeat", msg
+
+
+def test_status_ws_iter_emits_heartbeat_on_idle_timeout():
+    """When no change lands within ``change_timeout``, the generator
+    yields a heartbeat so proxies (and the browser) keep the connection
+    open instead of timing it out as dead."""
+    gen = status_ws_iter(max_iterations=2, change_timeout=0.05)
+    next(gen)  # initial
+    msg = next(gen)
+    assert msg == {"event": "heartbeat"}
+
+
+def test_status_ws_iter_stops_at_max_iterations():
+    """``max_iterations`` is a test-only safety knob — the generator
+    must stop iterating after that many post-snapshot loops, not loop
+    forever."""
+    gen = status_ws_iter(max_iterations=1, change_timeout=0.01)
+    items = list(gen)
+    # 1 initial snapshot + 1 heartbeat (max_iterations=1)
+    assert len(items) == 2
+
+
+def test_status_ws_iter_yields_session_expired_then_stops():
+    """When ``max_lifetime`` elapses the generator emits a final
+    sentinel and stops, mirroring the SSE 30-min cap.  Without it,
+    abandoned connections accumulate indefinitely under waitress."""
+    gen = status_ws_iter(max_iterations=10, change_timeout=0.01, max_lifetime=0.0)
+    items = list(gen)
+    # Initial snapshot + at least one expiry sentinel.
+    assert items[-1] == {"event": "session_expired"}
+
+
+# ── Live log stream (/api/logs/stream) ──────────────────────────────────
+
+
+def _emit_log_line(handler, message: str) -> None:
+    import logging as _logging
+
+    record = _logging.LogRecord(
+        name="test",
+        level=_logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg=message,
+        args=(),
+        exc_info=None,
+    )
+    handler.emit(record)
+
+
+def test_log_stream_iter_first_frame_is_snapshot_with_history():
+    """The WS handler's first frame must carry the full ring buffer so
+    a freshly-opened browser tab renders historical context without a
+    second polling round-trip."""
+    import logging as _logging
+
+    from routes.api_ws import log_stream_iter
+    from sendspin_client import _RingLogHandler
+
+    h = _RingLogHandler(maxlen=10)
+    h.setFormatter(_logging.Formatter("%(message)s"))
+    _emit_log_line(h, "old1")
+    _emit_log_line(h, "old2")
+
+    gen = log_stream_iter(h, max_iterations=0, idle_timeout=0.01)
+    first = next(gen)
+    assert first == {"type": "snapshot", "lines": ["old1", "old2"]}
+
+
+def test_log_stream_iter_emits_append_per_new_line():
+    """After the snapshot, each new emit must arrive as a single
+    ``{type: append, line: ...}`` frame in order."""
+    import logging as _logging
+    import threading as _threading
+    import time as _time
+
+    from routes.api_ws import log_stream_iter
+    from sendspin_client import _RingLogHandler
+
+    h = _RingLogHandler(maxlen=10)
+    h.setFormatter(_logging.Formatter("%(message)s"))
+
+    gen = log_stream_iter(h, max_iterations=2, idle_timeout=2.0)
+    snap = next(gen)
+    assert snap["type"] == "snapshot"
+
+    def _emit_after_delay() -> None:
+        _time.sleep(0.05)
+        _emit_log_line(h, "fresh-line")
+
+    _threading.Thread(target=_emit_after_delay, daemon=True).start()
+    msg = next(gen)
+    assert msg == {"type": "append", "line": "fresh-line"}
+
+
+def test_log_stream_iter_emits_heartbeat_on_idle_timeout():
+    """Without a new line within ``idle_timeout``, a heartbeat keeps
+    the WS connection warm against ingress / browser idle close."""
+    import logging as _logging
+
+    from routes.api_ws import log_stream_iter
+    from sendspin_client import _RingLogHandler
+
+    h = _RingLogHandler(maxlen=10)
+    h.setFormatter(_logging.Formatter("%(message)s"))
+
+    gen = log_stream_iter(h, max_iterations=1, idle_timeout=0.05)
+    next(gen)  # snapshot
+    msg = next(gen)
+    assert msg == {"type": "heartbeat"}
+
+
+def test_log_stream_iter_unsubscribes_on_completion():
+    """When the generator returns, the handler's subscriber list must
+    not retain a stale queue — otherwise emit() leaks fan-out work
+    forever for closed clients."""
+    import logging as _logging
+
+    from routes.api_ws import log_stream_iter
+    from sendspin_client import _RingLogHandler
+
+    h = _RingLogHandler(maxlen=10)
+    h.setFormatter(_logging.Formatter("%(message)s"))
+    initial_subs = len(h._subscribers)
+
+    list(log_stream_iter(h, max_iterations=1, idle_timeout=0.01))
+
+    assert len(h._subscribers) == initial_subs

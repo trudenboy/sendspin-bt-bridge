@@ -121,6 +121,22 @@ app.register_blueprint(status_bp)
 app.register_blueprint(transport_bp)
 app.register_blueprint(auth_bp)
 
+# WebSocket endpoints (v2.63.0-rc.3+).  flask-sock attaches WS routes
+# to the same Flask app so they share session cookies + auth middleware
+# but bypass blueprint registration (sock owns its own route table).
+# Importing fails soft on dev hosts without flask-sock installed —
+# the SSE endpoints continue serving in that case.
+try:
+    from flask_sock import Sock
+
+    from routes.api_ws import register_ws_routes
+
+    sock = Sock(app)
+    register_ws_routes(sock)
+    logger.info("WebSocket endpoints registered (/api/status/ws, /api/logs/stream)")
+except Exception as _ws_exc:  # pragma: no cover — dev-host fallback
+    logger.warning("WebSocket endpoints unavailable: %s — SSE will keep serving", _ws_exc)
+
 
 @app.before_request
 def _generate_csp_nonce():

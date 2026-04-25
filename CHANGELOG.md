@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.3] - 2026-04-25
+
+Transport-layer rc: replaces SSE with WebSocket for the status stream
+(closes the long-standing HA Supervisor deflate-compression failure
+mode), adds a real-time log panel over WebSocket, and turns on the
+periodic RSSI refresh deferred from rc.2 so connected device cards
+finally render an up-to-date dBm badge without waiting for a manual
+scan.
+
+### Added — WebSocket status stream
+
+- ``routes/api_ws.py:status_ws_iter`` — pure generator yielding the
+  initial snapshot, then per-change snapshots, then heartbeats on idle
+  ticks; matches the SSE 30-min lifetime cap.
+- ``routes/api_ws.py:register_ws_routes`` registers
+  ``/api/status/ws`` on a ``flask-sock`` ``Sock(app)`` instance wired
+  in ``web_interface.py`` (best-effort: SSE keeps serving on dev
+  hosts without the dep).
+- ``static/app.js`` — UI prefers WS first, falls back to the existing
+  SSE handler then 2 s polling, with capped retry / backoff.
+- ``requirements.txt`` — new ``flask-sock>=0.7.0,<1.0`` (pulls
+  ``simple-websocket`` / ``wsproto`` / ``h11``).
+
+### Added — Live log stream
+
+- ``sendspin_client._RingLogHandler.subscribe`` /
+  ``unsubscribe`` /  ``snapshot`` — the in-process ring buffer now
+  fans out per-emit lines to subscribed queues so the WS endpoint can
+  push new log lines without polling.
+- ``routes/api_ws.py:log_stream_iter`` — yields a ``snapshot`` frame
+  on connect (full ring contents), then ``append`` frames per emit;
+  unsubscribes via ``finally`` so closed clients can't leak fan-out
+  work.
+- ``routes/api_ws.py`` registers ``/api/logs/stream``.
+- ``static/app.js:startLogsWebsocket`` /  ``stopLogsWebsocket`` —
+  Auto-Refresh toggle now drives a WS subscription for real-time
+  appends and falls back to a 5 s safety-net poll (was 2 s) only if
+  WS connect fails.
+
+### Added — Periodic RSSI refresh (rc.2 follow-up)
+
+- ``bluetooth_manager.py:_parse_own_rssi_from_burst`` — pure parser
+  for the most-recent ``[CHG] Device <MAC> RSSI: <dB>`` event in a
+  ``bluetoothctl`` burst window (handles modern decimal + legacy
+  parenthesised hex formats).
+- ``bluetooth_manager.BluetoothManager.run_rssi_refresh`` runs a 5 s
+  ``scan bredr`` burst, parses our MAC's most recent RSSI, pushes
+  ``rssi_dbm`` + ``rssi_at_ts`` onto host status.  Skips when a
+  user-triggered scan owns BlueZ discovery (via
+  ``services.async_job_state.is_scan_running``).
+- ``run_rssi_refresh_loop`` is the async wrapper, spawned alongside
+  ``monitor_and_reconnect`` from ``sendspin_client._run_async`` so
+  the interval ticks every 60 s for every connected speaker.
+
+### Tests
+
+- ``tests/test_status_ws.py`` — 9 new tests covering the
+  ``status_ws_iter`` and ``log_stream_iter`` generators (initial
+  snapshot, change pushes, heartbeats, max iterations / lifetime,
+  subscriber cleanup).
+- ``tests/test_ring_log_handler_subscribe.py`` — 7 new tests for the
+  ring buffer subscribe/unsubscribe/snapshot API + multi-subscriber
+  fan-out + bad-subscriber isolation.
+- ``tests/test_bt_rssi_refresh.py`` — 9 new tests for the parser and
+  the ``run_rssi_refresh`` orchestration (push on hit, no-op on miss,
+  skip on user scan, swallow burst failures).
+
 ## [2.63.0-rc.2] - 2026-04-25
 
 UX polish on top of rc.1: signal-strength visibility, safer default

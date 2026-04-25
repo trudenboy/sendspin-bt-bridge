@@ -4172,6 +4172,73 @@ async function refreshLogs() {
     }
 }
 
+// v2.63.0-rc.3: live log stream over WebSocket — replaces the 2 s
+// polling cadence of refreshLogs while the panel is open.  The
+// WebSocket subscribes to the same in-process ring buffer that
+// refreshLogs() snapshots over HTTP, so opening the panel now feels
+// instantaneous and trailing log lines append in real time.  Falls back
+// silently to the existing auto-refresh interval if the WS endpoint is
+// unreachable (rc.2 deployments, browsers without WebSocket).
+var _logsWs = null;
+var _logsWsRetries = 0;
+var _LOGS_WS_MAX_LINES = 2000;
+
+function _trimLogsBuffer() {
+    if (allLogs.length > _LOGS_WS_MAX_LINES) {
+        allLogs = allLogs.slice(-_LOGS_WS_MAX_LINES);
+    }
+}
+
+function startLogsWebsocket() {
+    if (typeof WebSocket === 'undefined') return;
+    if (_logsWs && _logsWs.readyState <= 1) return;  // already connecting / open
+    try {
+        _logsWs = new WebSocket(_wsUrlFor('/api/logs/stream'));
+    } catch (err) {
+        console.warn('Logs WS construct failed:', err);
+        return;
+    }
+    _logsWs.onopen = function() { _logsWsRetries = 0; };
+    _logsWs.onmessage = function(e) {
+        try {
+            var frame = JSON.parse(e.data);
+            if (frame.type === 'snapshot') {
+                allLogs = (frame.lines || []).slice();
+                _trimLogsBuffer();
+                renderLogs();
+            } else if (frame.type === 'append') {
+                if (typeof frame.line === 'string') {
+                    allLogs.push(frame.line);
+                    _trimLogsBuffer();
+                    renderLogs();
+                }
+            } else if (frame.type === 'session_expired') {
+                // Server-side rotation: reconnect immediately.
+                try { _logsWs.close(); } catch (_e) { /* ignore */ }
+            }
+            // type === 'heartbeat' — keepalive, no UI work.
+        } catch (err) { console.error('Logs WS parse error:', err); }
+    };
+    _logsWs.onclose = function() {
+        _logsWsRetries++;
+        var delay = Math.min(1000 * Math.pow(2, _logsWsRetries - 1), 16000);
+        if (_logsWsRetries <= 5) {
+            setTimeout(startLogsWebsocket, delay);
+        }
+    };
+    _logsWs.onerror = function() { /* close handler does the retry */ };
+    window.addEventListener('beforeunload', function() {
+        try { if (_logsWs) _logsWs.close(); } catch (_e) { /* ignore */ }
+    });
+}
+
+function stopLogsWebsocket() {
+    if (_logsWs) {
+        try { _logsWs.close(); } catch (_e) { /* ignore */ }
+        _logsWs = null;
+    }
+}
+
 async function downloadLogs() {
     try {
         var resp = await fetch(API_BASE + '/api/logs/download');
@@ -4888,7 +4955,12 @@ function toggleAutoRefresh(forceState) {
             btn.classList.add('auto-on');
         }
         clearInterval(autoRefreshInterval);
-        autoRefreshInterval = setInterval(refreshLogs, 2000);
+        // v2.63.0-rc.3: prefer WS push over polling.  Polling stays as
+        // a 5 s safety net in case WS connect fails silently — the
+        // interval is double the rc.2- cadence because the WS handles
+        // the real-time path, polling only catches a stuck WS.
+        startLogsWebsocket();
+        autoRefreshInterval = setInterval(refreshLogs, 5000);
         refreshLogs();
     } else {
         if (btn) {
@@ -4896,6 +4968,7 @@ function toggleAutoRefresh(forceState) {
             btn.classList.remove('auto-on');
         }
         clearInterval(autoRefreshInterval);
+        stopLogsWebsocket();
     }
 }
 
@@ -12456,52 +12529,102 @@ _showSkeletonCards(3);
     }, {passive: true});
 })();
 
-// Use SSE for real-time status push; fall back to polling if not supported
+// v2.63.0-rc.3: prefer WebSocket transport; fall back to SSE then polling.
+// HA Supervisor's ingress proxy applies deflate compression to text/event-
+// stream which breaks SSE; WS frames are not transformed by ingress so the
+// WS path is the long-term transport.  Existing SSE handler stays as the
+// safety net for older deployments still on rc.2- (no WS endpoint there).
 var _statusInterval = null;
+
+function _wsUrlFor(path) {
+    var loc = window.location;
+    var proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + loc.host + (API_BASE || '') + path;
+}
+
 (function _initStatusStream() {
-    if (typeof EventSource === 'undefined') {
-        _statusInterval = setInterval(updateStatus, 2000);
-        return;
+    var _wsRetries = 0;
+    var _wsMaxRetries = 3;
+    var _ws = null;
+    var _sseStarted = false;
+
+    function startSSEFallback() {
+        if (_sseStarted) return;
+        _sseStarted = true;
+        if (typeof EventSource === 'undefined') {
+            _statusInterval = setInterval(updateStatus, 2000);
+            return;
+        }
+        var _sseRetries = 0;
+        var _maxRetries = 5;
+        function connectSSE() {
+            var es = new EventSource(API_BASE + '/api/status/stream');
+            es.onopen = function() {
+                _sseRetries = 0;
+                if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
+            };
+            es.onmessage = function(e) {
+                try { renderStatusPayload(JSON.parse(e.data)); }
+                catch (err) { console.error('SSE parse error:', err); }
+            };
+            es.onerror = function() {
+                es.close();
+                _sseRetries++;
+                if (_sseRetries <= _maxRetries) {
+                    var delay = Math.min(1000 * Math.pow(2, _sseRetries - 1), 16000);
+                    if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
+                    setTimeout(connectSSE, delay);
+                } else {
+                    if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
+                }
+            };
+            window.addEventListener('beforeunload', function() { es.close(); });
+        }
+        connectSSE();
     }
 
-    var _sseRetries = 0;
-    var _maxRetries = 5;
-
-    function connectSSE() {
-        var es = new EventSource(API_BASE + '/api/status/stream');
-
-        es.onopen = function() {
-            _sseRetries = 0;
-            // SSE connected — stop polling fallback
+    function connectWS() {
+        if (typeof WebSocket === 'undefined') { startSSEFallback(); return; }
+        try {
+            _ws = new WebSocket(_wsUrlFor('/api/status/ws'));
+        } catch (err) {
+            console.warn('Status WS construct failed, falling back to SSE:', err);
+            startSSEFallback();
+            return;
+        }
+        _ws.onopen = function() {
+            _wsRetries = 0;
             if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
         };
-
-        es.onmessage = function(e) {
+        _ws.onmessage = function(e) {
             try {
-                renderStatusPayload(JSON.parse(e.data));
-            } catch (err) { console.error('SSE parse error:', err); }
+                var payload = JSON.parse(e.data);
+                if (payload && payload.event === 'heartbeat') return;
+                if (payload && payload.event === 'session_expired') {
+                    // Server forced rotation; reconnect immediately.
+                    setTimeout(connectWS, 100);
+                    return;
+                }
+                renderStatusPayload(payload);
+            } catch (err) { console.error('Status WS parse error:', err); }
         };
-
-        es.onerror = function() {
-            es.close();
-            _sseRetries++;
-            if (_sseRetries <= _maxRetries) {
-                // Exponential backoff: 1s, 2s, 4s, 8s, 16s
-                var delay = Math.min(1000 * Math.pow(2, _sseRetries - 1), 16000);
-                console.warn('SSE error, reconnecting in ' + delay + 'ms (attempt ' + _sseRetries + '/' + _maxRetries + ')');
-                // Start polling while waiting to reconnect
-                if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
-                setTimeout(connectSSE, delay);
+        _ws.onclose = function() {
+            _wsRetries++;
+            if (_wsRetries <= _wsMaxRetries) {
+                var delay = Math.min(1000 * Math.pow(2, _wsRetries - 1), 8000);
+                setTimeout(connectWS, delay);
             } else {
-                console.warn('SSE failed after ' + _maxRetries + ' retries, using polling');
-                if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
+                console.warn('Status WS unavailable after ' + _wsMaxRetries + ' retries, switching to SSE');
+                startSSEFallback();
             }
         };
-
-        window.addEventListener('beforeunload', function() { es.close(); });
+        _ws.onerror = function() { /* close handler does the retry/fallback */ };
+        window.addEventListener('beforeunload', function() {
+            try { if (_ws) _ws.close(); } catch (_e) { /* ignore */ }
+        });
     }
 
-    connectSSE();
+    connectWS();
 })();
 
 window.addEventListener('beforeunload', function() {
