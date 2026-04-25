@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.6] - 2026-04-24
+
+### Fixed
+- **HA addon: ``Disable PA rescue-streams`` toggle silently reset on
+  every restart** (user report).  ``routes.api_config._sync_ha_options``
+  POSTs ``disable_pa_rescue_streams`` to Supervisor on every config
+  save, but the option was missing from all three
+  ``ha-addon*/config.yaml`` schemas.  Supervisor strips unknown options,
+  so on the next addon restart ``scripts/translate_ha_config.py`` read
+  the missing key as ``False`` and the bridge re-enabled
+  ``module-rescue-streams``.  Added the option (default ``false``) and
+  its schema type (``bool?``) to ``ha-addon/``, ``ha-addon-rc/``, and
+  ``ha-addon-beta/`` ``config.yaml``.
+
+### Tests
+1542 → 1551 passing.  New ``tests/test_ha_addon_schema_sync.py``
+parametrised across all three addon configs:
+- every key ``_sync_ha_options`` POSTs is present in both ``options:``
+  defaults and the ``schema:`` block, so the same kind of silent-reset
+  regression can't slip in again,
+- intentionally-unmapped keys (``auth_enabled`` — HA mode hardcodes
+  auth on, no round-trip) stay out of the schema, with the exemption
+  list documented in-test for review.
+
 ## [2.62.0-rc.5] - 2026-04-24
 
 Bugfix RC for #193 — adapter listing in the web UI surfaced the wrong
