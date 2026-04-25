@@ -125,7 +125,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fi \
     && rm -rf /var/lib/apt/lists/*
 
-# Strip unused Python stdlib modules
+# Strip unused Python stdlib modules + runtime cruft.
+# - pip: builder stage strips it from /install, but the python:3.12-slim base
+#   image ships its own pip in /usr/local — the COPY --from=builder /install
+#   merges over that, leaving the base image's pip behind.  Remove it here.
+# - /usr/lib/udev/hwdb.{bin,d}: 22 MB of hardware database for udev — we do
+#   not run udevd inside the container (BlueZ/PulseAudio talk to the host's
+#   udev via D-Bus), so the local copy never gets queried.
+# - /usr/lib/systemd: ~5 MB of systemd unit files / utilities — s6-overlay
+#   handles PID 1 / signal forwarding, systemd is unreachable inside the
+#   container.
+# - /usr/share/doc, /usr/share/man, /usr/share/info: package documentation
+#   pulled in by apt-installed runtime deps; no consumer at runtime.
+# - tests/ inside pulled wheels: qrcode and pulsectl ship test suites.
 RUN rm -rf /usr/local/lib/python3.12/ensurepip \
            /usr/local/lib/python3.12/idlelib \
            /usr/local/lib/python3.12/lib2to3 \
@@ -133,6 +145,16 @@ RUN rm -rf /usr/local/lib/python3.12/ensurepip \
            /usr/local/lib/python3.12/turtledemo \
            /usr/local/lib/python3.12/turtle.py \
            /usr/local/lib/python3.12/test \
+           /usr/local/lib/python3.12/site-packages/pip \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 \
+           /usr/lib/udev/hwdb.bin /usr/lib/udev/hwdb.d \
+           /usr/lib/systemd \
+           /usr/local/lib/python3.12/site-packages/pulsectl/tests \
+           /usr/local/lib/python3.12/site-packages/qrcode/tests \
+           /usr/local/lib/python3.12/site-packages/numpy/doc \
+    && find /usr/share/doc -mindepth 1 -delete 2>/dev/null \
+    && find /usr/share/man -mindepth 1 -delete 2>/dev/null \
+    && find /usr/share/info -mindepth 1 -delete 2>/dev/null \
     && find /usr/local/lib/python3.12 -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 
 # Install S6 overlay (multi-arch aware)
