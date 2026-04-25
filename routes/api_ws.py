@@ -94,8 +94,10 @@ _LOG_STREAM_MAX_LIFETIME_SECONDS = 1800  # 30 minutes — match status WS
 # JS) would otherwise grow the queue without bound under busy logging
 # and blow the bridge's memory budget.  Cap matches the ring buffer's
 # default size so even under sustained back-pressure the queue holds
-# at most one buffer's worth of lines; older lines fall off via the
-# drop-oldest path in ``log_stream_iter`` below.
+# at most one buffer's worth of lines.  When the queue is full, the
+# *producer* drops the new line: ``_RingLogHandler.emit`` swallows the
+# ``queue.Full`` raised by ``put_nowait``.  The ring buffer covers the
+# resulting gap on the client's next reconnect (``snapshot`` frame).
 LOG_STREAM_QUEUE_MAXSIZE = 2000
 
 
@@ -158,6 +160,15 @@ def register_ws_routes(sock: Sock) -> None:
     routes share Flask's request context but live behind the WS
     upgrade handshake.
     """
+    # ``simple_websocket.ConnectionClosed`` is the expected exception
+    # when the browser tab closes — log at debug to avoid log spam.
+    # Anything else is a real bug (JSON encoding error, payload build
+    # error, etc.) and surfaces via ``logger.exception`` so it shows
+    # up in the bug report instead of being swallowed.
+    try:
+        from simple_websocket import ConnectionClosed as _WsClosed
+    except ImportError:  # pragma: no cover — fallback for older deps
+        _WsClosed = ()  # type: ignore[assignment]
 
     @sock.route("/api/status/ws")
     def _api_status_ws(ws):  # type: ignore[no-untyped-def]
@@ -166,11 +177,10 @@ def register_ws_routes(sock: Sock) -> None:
                 ws.send(json.dumps(payload))
                 if payload.get("event") == "session_expired":
                     return
-        except Exception as exc:
-            # Common: client closed the tab → simple_websocket raises
-            # ConnectionClosed.  Log at debug; an info log per close
-            # spams the log panel itself once it goes live.
-            logger.debug("/api/status/ws session ended: %s", exc)
+        except _WsClosed as exc:
+            logger.debug("/api/status/ws client disconnected: %s", exc)
+        except Exception:
+            logger.exception("/api/status/ws session ended unexpectedly")
 
     @sock.route("/api/logs/stream")
     def _api_logs_stream(ws):  # type: ignore[no-untyped-def]
@@ -180,7 +190,7 @@ def register_ws_routes(sock: Sock) -> None:
         # ``sys.path`` (test rigs, lint tooling).
         try:
             from sendspin_client import _ring_log_handler
-        except Exception as exc:
+        except ImportError as exc:
             logger.warning("/api/logs/stream unavailable — ring handler missing: %s", exc)
             return
         # Hold an explicit handle on the generator so we can ``.close()``
@@ -194,7 +204,9 @@ def register_ws_routes(sock: Sock) -> None:
                 ws.send(json.dumps(frame))
                 if frame.get("type") == "session_expired":
                     return
-        except Exception as exc:
-            logger.debug("/api/logs/stream session ended: %s", exc)
+        except _WsClosed as exc:
+            logger.debug("/api/logs/stream client disconnected: %s", exc)
+        except Exception:
+            logger.exception("/api/logs/stream session ended unexpectedly")
         finally:
             stream.close()

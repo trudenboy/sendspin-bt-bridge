@@ -136,7 +136,7 @@ try:
     sock = Sock(app)
     register_ws_routes(sock)
     logger.info("WebSocket endpoints registered (/api/status/ws, /api/logs/stream)")
-except (ImportError, ModuleNotFoundError) as _ws_exc:  # pragma: no cover — dev-host fallback
+except ImportError as _ws_exc:  # pragma: no cover — dev-host fallback
     logger.warning("WebSocket endpoints unavailable: %s — SSE will keep serving", _ws_exc)
 except Exception:
     logger.exception("WebSocket endpoint registration failed")

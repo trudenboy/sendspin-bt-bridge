@@ -24,8 +24,21 @@ from routes.api_ws import status_ws_iter
 
 @pytest.fixture(autouse=True)
 def _reset_status_version():
-    """Each test starts from a known status-version baseline."""
-    _state.notify_status_changed()  # bump once so the snapshot version is stable
+    """Each test starts from a known status-version baseline.
+
+    ``notify_status_changed`` is debounced via a 100 ms timer (see
+    ``services.bridge_runtime_state``), so a bare bump doesn't
+    guarantee the version counter has actually advanced by the time
+    the test runs — under heavy load that race can land a version
+    bump mid-test and turn an expected heartbeat into a payload
+    frame.  We force a flush by waiting for the version to advance
+    plus a small slack for the debounce timer to finish before the
+    test starts asserting on heartbeat / change semantics.
+    """
+    previous_version = _state.get_status_version()
+    _state.notify_status_changed()
+    _state.wait_for_status_change(previous_version, timeout=1.0)
+    time.sleep(0.15)  # let the debounce timer fully retire
     yield
 
 
@@ -212,11 +225,14 @@ def test_log_stream_iter_uses_atomic_subscribe_snapshot():
     list(gen)  # drain to trigger unsubscribe in finally
 
 
-def test_log_stream_iter_queue_is_bounded_drops_oldest_on_overflow():
+def test_log_stream_iter_queue_is_bounded_drops_newest_when_full():
     """Per-client queue must be bounded so a stalled browser tab can't
-    leak unbounded memory.  When the cap is exceeded, the oldest queued
-    line is dropped to make room for the newest — replicates the
-    bounded-channel pattern used elsewhere in the bridge.
+    leak unbounded memory.  When the queue is full, the producer side
+    (``_RingLogHandler.emit``) drops the *new* line by swallowing
+    ``queue.Full``; the ring buffer covers the gap on the client's
+    next reconnect.  This is intentionally drop-newest rather than
+    drop-oldest so a flapping client can't push a steady stream of
+    new messages out of view of every other connected client.
     """
     import logging as _logging
 

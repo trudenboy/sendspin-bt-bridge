@@ -104,6 +104,24 @@ scan.
   ``stopLogsWebsocket`` so toggling Auto-Refresh off can't reconnect
   later.
 
+### Second-round review fixes (PR #197)
+
+- ``routes/api_ws.py`` — both WS handlers now catch
+  ``simple_websocket.ConnectionClosed`` explicitly (debug-logged) and
+  route any other exception through ``logger.exception`` so real bugs
+  (JSON encoding errors, payload build errors) surface in production
+  instead of being silently swallowed.  ``LOG_STREAM_QUEUE_MAXSIZE``
+  comment rewritten to describe the actual drop-newest-at-producer
+  policy (the previous wording mistakenly described drop-oldest).
+- ``web_interface.py`` — drop redundant ``ModuleNotFoundError`` from
+  the WS-import except clause (it's a subclass of ``ImportError``).
+- ``tests/test_status_ws.py`` — fixture ``_reset_status_version``
+  now waits for ``notify_status_changed``'s 100 ms debounce timer to
+  flush before yielding so the heartbeat-vs-change tests don't race
+  the timer under load.  Renamed
+  ``test_log_stream_iter_queue_is_bounded_drops_oldest_on_overflow``
+  → ``..._drops_newest_when_full`` to match the actual implementation.
+
 ## [2.63.0-rc.2] - 2026-04-25
 
 UX polish on top of rc.1: signal-strength visibility, safer default
