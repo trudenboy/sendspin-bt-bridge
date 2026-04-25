@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.5] - 2026-04-25
+
+Two latent bugs surfaced during VM 105 manual validation of rc.4 —
+both pre-existing (rc.1 and rc.3) but only observable end-to-end now.
+
+### Fixed
+
+- **MPRIS ``on_connected`` hook never fired** (rc.1 regression).
+  ``bluetooth_manager.py`` and ``bt_monitor.py`` mutated
+  ``self.connected`` / ``mgr.connected`` directly in ~10 sites
+  (D-Bus PropertiesChanged path, reconnect loop, dance recovery,
+  ``_connect_device_inner``), bypassing
+  ``_fire_connection_transition``.  The on_connected callback —
+  the path that registers the per-device MprisPlayer — silently
+  never ran on the primary D-Bus connect signal, so physical
+  AVRCP buttons on connected speakers had no effect in production.
+
+  Fix: introduce ``BluetoothManager._apply_connected_state(value)``
+  as the single setter that bookkeeps both the cached state and the
+  transition fire.  Replaced every direct assignment with a call to
+  this helper.  Regression test
+  ``test_apply_connected_state_called_by_dbus_props_changed_path``
+  parses ``bt_monitor.py`` source and asserts no remaining direct
+  ``mgr.connected = X`` sites — kills this whole class of drift in
+  future patches.
+
+- **RSSI background refresh always returned ``None``** (rc.3
+  design flaw).  ``_run_rssi_burst`` ran ``bluetoothctl scan bredr``
+  for 5 s then parsed ``[CHG] Device <MAC> RSSI:`` events.  Already-
+  connected BR/EDR peers stop advertising after the ACL link is
+  established, so the burst window saw zero events for our MAC and
+  the parser returned ``None`` every tick — connected device cards
+  never showed an RSSI badge despite the loop running every 60 s.
+
+  Fix: read RSSI from ``bluetoothctl info <MAC>`` instead, which
+  exposes the live ACL link RSSI from BlueZ's connection cache.
+  New parser ``_parse_rssi_from_info`` handles both bluetoothctl
+  formats (decimal + parenthesised hex).  ``_run_rssi_burst``
+  removed (was dead code after the switch).  The kernel mgmt-socket
+  ``MGMT_OP_GET_CONN_INFO`` would be the cleanest source long-term
+  but adds raw-socket complexity not justified for this rc.
+
+### Changed
+
+- ``bluetooth_manager._run_rssi_burst`` removed.  External callers
+  inside the project: none.
+
+### Tests
+
+- ``tests/test_bt_manager.py`` — 3 new tests for
+  ``_apply_connected_state`` (transition fire, thread-safety stress,
+  AST-based ``bt_monitor`` source audit).
+- ``tests/test_bt_rssi_refresh.py`` — 4 tests rewired to mock
+  ``_run_bluetoothctl`` for the new info-query path; 1 new test
+  asserting ``info <MAC>`` is the actual command issued.
+
+### Fixes from initial review (PR #199)
+
+- ``bluetooth_manager._apply_connected_state`` — guard the
+  check-then-set sequence with ``self._connected_state_lock`` so
+  the asyncio D-Bus monitor thread and the BT executor thread
+  cannot both observe ``self.connected==False``, both pass the
+  check, and both fire ``on_connected`` (would surface as duplicate
+  MprisPlayer D-Bus exports).  Callback runs OUTSIDE the lock so a
+  slow callback can't block a concurrent disconnect handler.
+- ``bluetooth_manager.py`` — rewrite the misleading
+  ``_RSSI_LINE_RE`` doc-comment that referenced
+  ``routes/api_bt.py`` (which keeps its own near-identical regex
+  rather than importing this one).
+- ``tests/test_bt_manager.py`` — replace the substring-based
+  ``bt_monitor`` source-audit with an ``ast``-based walk that
+  catches ``Assign`` / ``AugAssign`` / ``AnnAssign`` nodes
+  targeting ``mgr.connected``; immune to false positives in
+  docstrings / log strings and to false negatives from non-standard
+  whitespace.
+
 ## [2.63.0-rc.4] - 2026-04-25
 
 Pivot rc — rolls back the rc.3 WebSocket migration; ships the

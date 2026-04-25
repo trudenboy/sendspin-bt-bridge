@@ -73,12 +73,19 @@ def bt_manager():
 def test_run_rssi_refresh_pushes_value_to_host_status(bt_manager):
     """A successful refresh must push ``rssi_dbm`` + ``rssi_at_ts``
     onto the host's status dict (the same dict surfaced via
-    ``GET /api/status``)."""
+    ``GET /api/status``).
+
+    v2.63.0-rc.5: refresh now reads RSSI from ``bluetoothctl info``
+    instead of ``scan bredr``.  Already-connected BR/EDR peers stop
+    advertising so the scan window never produces RSSI events for
+    them; ``info <MAC>`` returns the live RSSI of the active link
+    instead.
+    """
     host = MagicMock()
     bt_manager.host = host
 
-    burst_out = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: -58\n"
-    with patch.object(bt_manager, "_run_rssi_burst", return_value=burst_out):
+    info_out = "Name: ENEBY20\nConnected: yes\nRSSI: -58\n"
+    with patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, info_out)):
         bt_manager.run_rssi_refresh()
 
     host.update_status.assert_called_once()
@@ -89,14 +96,14 @@ def test_run_rssi_refresh_pushes_value_to_host_status(bt_manager):
 
 
 def test_run_rssi_refresh_no_value_does_not_touch_status(bt_manager):
-    """If the burst window saw no RSSI event for our MAC, leave the
-    cached value alone — the UI's stale check will eventually flip to
-    grey, but transient burst gaps shouldn't.  Also avoids spamming
-    the SSE / WS notify path with no-op updates."""
+    """If ``bluetoothctl info`` returns no RSSI line (some adapters /
+    BlueZ versions omit it for slow links), leave the cached value
+    alone so the UI's 90 s stale check governs the fade to grey
+    rather than sporadic gaps."""
     host = MagicMock()
     bt_manager.host = host
 
-    with patch.object(bt_manager, "_run_rssi_burst", return_value=""):
+    with patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, "Name: x\nConnected: yes\n")):
         bt_manager.run_rssi_refresh()
 
     host.update_status.assert_not_called()
@@ -105,32 +112,48 @@ def test_run_rssi_refresh_no_value_does_not_touch_status(bt_manager):
 def test_run_rssi_refresh_skips_when_user_scan_active(bt_manager):
     """User-triggered scans (``POST /api/bt/scan``) own the BlueZ
     discovery state machine for their duration.  The background
-    refresh must skip its tick rather than fight them, otherwise we'd
-    cancel the user scan mid-flight or get garbled output."""
+    refresh must skip its tick rather than fight them."""
     host = MagicMock()
     bt_manager.host = host
 
     with (
         patch("bluetooth_manager.is_scan_running", return_value=True),
-        patch.object(bt_manager, "_run_rssi_burst") as run_burst,
+        patch.object(bt_manager, "_run_bluetoothctl") as run_bt,
     ):
         bt_manager.run_rssi_refresh()
 
-    run_burst.assert_not_called()
+    run_bt.assert_not_called()
     host.update_status.assert_not_called()
 
 
-def test_run_rssi_refresh_swallows_burst_failure(bt_manager):
-    """A failing burst must not propagate — the loop runs every 60 s,
-    one bad tick should just be retried later."""
+def test_run_rssi_refresh_swallows_subprocess_failure(bt_manager):
+    """A failing bluetoothctl call must not propagate — the loop
+    runs every 60 s, one bad tick should just be retried later."""
     host = MagicMock()
     bt_manager.host = host
 
-    with patch.object(bt_manager, "_run_rssi_burst", side_effect=RuntimeError("boom")):
+    with patch.object(bt_manager, "_run_bluetoothctl", side_effect=RuntimeError("boom")):
         # Must not raise.
         bt_manager.run_rssi_refresh()
 
     host.update_status.assert_not_called()
+
+
+def test_run_rssi_refresh_calls_bluetoothctl_info_with_target_mac(bt_manager):
+    """Regression for v2.63.0-rc.5: the refresh must specifically run
+    ``bluetoothctl info <MAC>`` for the manager's MAC, not the legacy
+    ``scan bredr`` path that yields no events for connected peers."""
+    host = MagicMock()
+    bt_manager.host = host
+
+    with patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, "RSSI: -42\n")) as run_bt:
+        bt_manager.run_rssi_refresh()
+
+    # The first call in the chain must be ``info <MAC>``.  We accept
+    # either ["info AA:..."] or a list whose last command starts with "info".
+    call_cmds = run_bt.call_args.args[0]
+    joined = " ".join(call_cmds) if isinstance(call_cmds, list) else str(call_cmds)
+    assert "info AA:BB:CC:DD:EE:FF" in joined or "info aa:bb:cc:dd:ee:ff" in joined.lower()
 
 
 def test_run_rssi_refresh_skips_when_bt_operation_lock_held(bt_manager):
@@ -148,15 +171,15 @@ def test_run_rssi_refresh_skips_when_bt_operation_lock_held(bt_manager):
 
     assert try_acquire_bt_operation() is True
     try:
-        with patch.object(bt_manager, "_run_rssi_burst") as run_burst:
+        with patch.object(bt_manager, "_run_bluetoothctl") as run_bt:
             bt_manager.run_rssi_refresh()
-        run_burst.assert_not_called()
+        run_bt.assert_not_called()
         host.update_status.assert_not_called()
     finally:
         release_bt_operation()
 
 
-def test_run_rssi_refresh_releases_bt_operation_lock_after_burst(bt_manager):
+def test_run_rssi_refresh_releases_bt_operation_lock_after_call(bt_manager):
     """After a successful (or failed) refresh the shared lock must be
     released — otherwise a single RSSI tick could permanently block all
     subsequent pair / reconnect attempts on the bridge."""
@@ -165,8 +188,8 @@ def test_run_rssi_refresh_releases_bt_operation_lock_after_burst(bt_manager):
     host = MagicMock()
     bt_manager.host = host
 
-    burst_out = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: -60\n"
-    with patch.object(bt_manager, "_run_rssi_burst", return_value=burst_out):
+    info_out = "Connected: yes\nRSSI: -60\n"
+    with patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, info_out)):
         bt_manager.run_rssi_refresh()
 
     # Lock must be free now.

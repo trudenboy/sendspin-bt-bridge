@@ -1827,3 +1827,115 @@ def test_transition_callbacks_optional_when_unset():
     with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
         mgr.is_device_connected()
     # No exception → pass.
+
+
+def test_apply_connected_state_fires_transition_on_change():
+    """Regression for v2.63.0-rc.5: ``_apply_connected_state`` is the
+    single setter that bookkeeps both ``self.connected`` and the
+    transition callbacks.  Direct ``mgr.connected = X`` assignments
+    in ``bt_monitor.py`` and ``_connect_device_inner`` previously
+    bypassed the callback fire, leaving MprisPlayer unregistered
+    when the D-Bus PropertiesChanged path drove the connect
+    (production case on VM 105).
+    """
+    fired_up: list[str] = []
+    fired_down: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_connected=lambda: fired_up.append("up"),
+        on_disconnected=lambda: fired_down.append("down"),
+    )
+
+    mgr._apply_connected_state(True)
+    mgr._apply_connected_state(True)  # idempotent
+    mgr._apply_connected_state(False)
+    mgr._apply_connected_state(False)  # idempotent
+    mgr._apply_connected_state(True)
+
+    assert fired_up == ["up", "up"]
+    assert fired_down == ["down"]
+    assert mgr.connected is True
+
+
+def test_apply_connected_state_thread_safe_under_concurrent_calls():
+    """Regression for Copilot review on PR #199: ``_apply_connected_state``
+    is invoked from both the asyncio D-Bus monitor thread and the BT
+    executor thread (running blocking ``connect_device`` /
+    ``is_device_connected`` work).  Without serialisation the
+    check-then-set window opens a race where two threads both observe
+    ``self.connected==False``, both pass the check, and both fire
+    ``on_connected`` — violating the ``exactly once per transition``
+    guarantee MprisPlayer registration relies on (would surface as
+    duplicate D-Bus exports / ``BadAddress`` from BlueZ).
+
+    Stress: 8 threads racing to flip the state to True simultaneously
+    must result in exactly one ``on_connected`` fire.  Without the
+    lock this fails non-deterministically under load.
+    """
+    import threading as _t
+
+    fired: list[str] = []
+    fire_lock = _t.Lock()
+
+    def _on_up() -> None:
+        with fire_lock:
+            fired.append("up")
+
+    mgr = _make_bt_manager_with_transition_callbacks(on_connected=_on_up)
+    barrier = _t.Barrier(8)
+
+    def _hit() -> None:
+        barrier.wait()
+        mgr._apply_connected_state(True)
+
+    threads = [_t.Thread(target=_hit) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5.0)
+
+    assert fired == ["up"], f"on_connected fired {len(fired)} times under concurrent flips: {fired}"
+    assert mgr.connected is True
+
+
+def test_apply_connected_state_called_by_dbus_props_changed_path():
+    """``bt_monitor`` D-Bus PropertiesChanged path must route
+    ``connected`` mutations through ``_apply_connected_state`` so the
+    on_connected hook fires when the device connects via D-Bus signal
+    (the primary connect path on Linux hosts).
+
+    Source-audit uses an AST walk (not a substring search) so docstrings
+    or string literals containing the phrase ``mgr.connected = X``
+    cannot create false positives, and assignments with non-standard
+    spacing cannot create false negatives.  Catches ``Assign`` /
+    ``AugAssign`` / ``AnnAssign`` nodes targeting ``mgr.connected``.
+    """
+    import ast
+    from pathlib import Path
+
+    import bt_monitor
+
+    tree = ast.parse(Path(bt_monitor.__file__).read_text())
+
+    def _is_mgr_connected_target(node: ast.expr) -> bool:
+        return (
+            isinstance(node, ast.Attribute)
+            and node.attr == "connected"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "mgr"
+        )
+
+    direct: list[str] = []
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+            targets = [node.target]
+        for t in targets:
+            if _is_mgr_connected_target(t):
+                direct.append(f"line {node.lineno}: {ast.dump(node)[:120]}")
+
+    assert direct == [], f"bt_monitor still has direct mgr.connected assignments: {direct}"
+    assert "_apply_connected_state" in Path(bt_monitor.__file__).read_text(), (
+        "bt_monitor must call _apply_connected_state for the on_connected hook to fire"
+    )
