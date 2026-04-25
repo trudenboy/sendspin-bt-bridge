@@ -73,13 +73,54 @@ def get_ma_api_credentials() -> tuple[str, str]:
         return _ma_api_url, _ma_api_token
 
 
+_ACTIVE_MA_STATES = frozenset({"playing", "paused", "buffering"})
+
+
 def get_ma_group_for_player_id(player_id: str) -> dict[str, Any] | None:
-    """Return MA syncgroup info for the given bridge player_id."""
+    """Return the most-relevant MA syncgroup for *player_id*.
+
+    A bridge player can be a member of more than one MA syncgroup
+    simultaneously (the operator may have added it to several rooms in
+    the MA UI).  When that happens, ``_refresh_groups_via_ws`` records
+    only the first-iterated group in ``_ma_groups`` (first-write-wins),
+    which leaves the device card showing the wrong group label and
+    pulling now-playing from the wrong queue (often an idle one) —
+    while audio is actually streaming from a different syncgroup.
+
+    To pick the right syncgroup at lookup time we walk
+    ``_ma_all_groups`` to enumerate every group containing the player,
+    then prefer whichever has an active now-playing state
+    (``playing`` / ``paused`` / ``buffering``).  When none are active
+    we fall back to the first-write-wins entry from ``_ma_groups`` so
+    the legacy single-group contract is preserved.
+    """
     if not player_id:
         return None
     with _ma_groups_lock:
-        group = _ma_groups.get(player_id)
-        return copy.deepcopy(group) if group else None
+        cached = _ma_groups.get(player_id)
+        candidates: list[dict[str, Any]] = []
+        for group in _ma_all_groups:
+            members = group.get("members") or []
+            if any(member.get("id") == player_id for member in members if isinstance(member, dict)):
+                candidates.append(copy.deepcopy(group))
+        cached_copy = copy.deepcopy(cached) if cached else None
+    if not candidates:
+        return cached_copy
+    if len(candidates) == 1:
+        return candidates[0]
+    with _ma_now_playing_lock:
+        active_states = {sg_id: (data.get("state") or "").lower() for sg_id, data in _ma_now_playing.items()}
+    for cand in candidates:
+        if active_states.get(cand["id"]) in _ACTIVE_MA_STATES:
+            return cand
+    if cached_copy is not None:
+        # Honour the legacy mapping when no candidate is currently active —
+        # keeps behaviour stable for the no-state case so existing UIs that
+        # remember a "default" group don't flip-flop on every poll.
+        for cand in candidates:
+            if cand["id"] == cached_copy["id"]:
+                return cand
+    return candidates[0]
 
 
 def get_ma_group_for_player(player_id: str) -> dict[str, Any] | None:

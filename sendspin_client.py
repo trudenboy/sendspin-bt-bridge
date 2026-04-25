@@ -178,6 +178,30 @@ def _generate_infrasound_burst() -> bytes:
     return _infrasound_cache
 
 
+_KEEPALIVE_METHODS = ("infrasound", "silence", "none")
+
+
+def _generate_keepalive_buffer(method: str) -> bytes:
+    """Return the PCM payload for the configured ``keep_alive_method``.
+
+    * ``infrasound`` (default) — the existing 2 Hz subsonic stereo burst.
+    * ``silence``  — a same-length all-zero buffer; some speaker firmwares
+      treat any non-empty A2DP frame as activity but misbehave on the
+      periodic 2 Hz tone (rare; reported on a few older Yandex / JBL units).
+    * ``none``     — empty bytes.  ``_send_keepalive_burst`` skips the
+      burst entirely; the speaker is allowed to time out naturally.
+
+    Unknown values silently fall back to ``infrasound`` so a typo in the
+    per-device config can't disable keepalive without an audible signal.
+    """
+    if method == "silence":
+        ref = _generate_infrasound_burst()
+        return b"\x00" * len(ref)
+    if method == "none":
+        return b""
+    return _generate_infrasound_burst()
+
+
 @dataclass
 class DeviceStatus:
     """Typed status container for a single Sendspin device.
@@ -253,6 +277,19 @@ class DeviceStatus:
     bt_standby_since: str | None = None
     bt_waking: bool = False
     bt_power_save: bool = False
+    # v2.63.0-rc.2 — last observed BT signal strength (dBm) + capture
+    # timestamp.  Currently populated only via the user-triggered scan
+    # path (``routes/api_bt.py:_extract_rssi_from_info`` /
+    # ``_parse_scan_output``) — the periodic background refresh task that
+    # keeps these warm for connected device cards is deferred to
+    # v2.63.0-rc.3.  The ``static/app.js:_renderRssiChip`` helper already
+    # honours ``rssi_at_ts`` staleness (>90 s → grey) so wiring the
+    # background path later is a drop-in: keep these fields, no UI
+    # changes required.  ``None`` for both means no reading has been
+    # captured yet (or the device is fundamentally headless to RSSI on
+    # this adapter / BlueZ build).
+    rssi_dbm: int | None = None
+    rssi_at_ts: float | None = None
     idle_mode: str = "default"
     port_collision: bool = False
     active_listen_port: int | None = None
@@ -367,6 +404,7 @@ class SendspinClient:
         idle_disconnect_minutes: int = 0,
         idle_mode: str = "default",
         power_save_delay_minutes: int = 1,
+        keep_alive_method: str = "infrasound",
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -380,6 +418,8 @@ class SendspinClient:
         self.idle_mode = idle_mode  # default | power_save | auto_disconnect | keep_alive
         self.keepalive_enabled = idle_mode == "keep_alive" or keepalive_enabled
         self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
+        # v2.63.0-rc.2 — payload selector: "infrasound" (default) | "silence" | "none"
+        self.keep_alive_method = keep_alive_method if keep_alive_method in _KEEPALIVE_METHODS else "infrasound"
         self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
         self.power_save_delay_minutes = max(0, power_save_delay_minutes)
 
@@ -1625,8 +1665,15 @@ class SendspinClient:
             return
 
     async def _send_keepalive_burst(self) -> None:
-        """Write 1 s of 2 Hz infrasound to the BT PulseAudio sink via paplay."""
-        buf = _generate_infrasound_burst()
+        """Write the configured keepalive payload to the BT PulseAudio sink via paplay.
+
+        Payload selection follows ``self.keep_alive_method``:
+        ``infrasound`` (default 2 Hz subsonic), ``silence`` (zero PCM,
+        same length), or ``none`` (skip).  See :func:`_generate_keepalive_buffer`.
+        """
+        buf = _generate_keepalive_buffer(self.keep_alive_method)
+        if not buf:
+            return  # method == "none" — let the speaker time out naturally
         try:
             proc = await asyncio.create_subprocess_exec(
                 "paplay",

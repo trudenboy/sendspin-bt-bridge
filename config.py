@@ -142,6 +142,11 @@ DEFAULT_CONFIG = {
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
     "EXPERIMENTAL_PAIR_JUST_WORKS": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
+    # v2.63.0-rc.2: HSP/HFP profiles are blocked at AuthorizeService time
+    # by default. Some headphones (Bose QC, AKG Y500) prefer HFP over A2DP
+    # when both are accepted, dropping the speaker to an 8 kHz mono call
+    # codec. Enable only for HFP-only headsets that A2DP-block at the peer.
+    "ALLOW_HFP_PROFILE": False,
 }
 
 logger = logging.getLogger(__name__)

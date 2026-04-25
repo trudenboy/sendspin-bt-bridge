@@ -304,6 +304,11 @@
       "type": "boolean",
       "default": false,
       "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the adapter as a last-ditch attempt before auto-releasing BT management. Disruptive: the USB step briefly disconnects every device on that controller, and it requires CAP_NET_ADMIN plus /dev/rfkill and /sys/bus/usb access (Docker privileged or matching capabilities)."
+    },
+    "ALLOW_HFP_PROFILE": {
+      "type": "boolean",
+      "default": false,
+      "description": "Permit HSP/HFP service UUIDs in the pairing agent. Default false — most DSPs (Bose QC, AKG Y500) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Set true only for HFP-only headsets that A2DP-block at the peer."
     }
   },
   "$defs": {
@@ -377,6 +382,12 @@
           "maximum": 60,
           "default": 1,
           "description": "Minutes after sink idle before suspending PA sink in power_save mode."
+        },
+        "keep_alive_method": {
+          "type": "string",
+          "enum": ["infrasound", "silence", "none"],
+          "default": "infrasound",
+          "description": "Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally)."
         },
         "room_id": {
           "type": "string",

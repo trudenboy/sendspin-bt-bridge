@@ -323,6 +323,7 @@ def activate_device(
     idle_disconnect_minutes = int(device.get("idle_disconnect_minutes") or 0)
     idle_mode = str(device.get("idle_mode") or "default")
     power_save_delay_minutes = int(device.get("power_save_delay_minutes") or 1)
+    keep_alive_method = str(device.get("keep_alive_method") or "infrasound")
 
     client = context.client_factory(
         player_name,
@@ -339,6 +340,7 @@ def activate_device(
         idle_disconnect_minutes=idle_disconnect_minutes,
         idle_mode=idle_mode,
         power_save_delay_minutes=power_save_delay_minutes,
+        keep_alive_method=keep_alive_method,
     )
 
     bt_mgr: Any | None = None

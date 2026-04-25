@@ -47,6 +47,19 @@ _DEV_PAT = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
 _NEW_DEV_PAT = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
 _CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
 _CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
+# v2.63.0-rc.2: capture the dB value as well so device cards can render
+# signal strength.  bluetoothctl emits two formats — modern decimal
+# (``RSSI: -43``) and legacy parenthesised hex (``RSSI: 0xffffffd5 (-43)``).
+# The parenthesised decimal takes priority; otherwise the trailing signed
+# integer is the value.
+_CHG_RSSI_VALUE_PAT = re.compile(
+    r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
+    r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
+)
+_INFO_RSSI_PAT = re.compile(
+    r"^\s*RSSI:\s*(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))",
+    re.MULTILINE,
+)
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _bt_operation_lock = threading.Lock()
@@ -745,7 +758,11 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
         # 65 S in the #168 reproduction where the stdin-yes race kept losing.
         native_agent: PairingAgent | None = None
         try:
-            native_agent = PairingAgent(capability="DisplayYesNo", pin="0000").__enter__()
+            native_agent = PairingAgent(
+                capability="DisplayYesNo",
+                pin="0000",
+                allow_hfp=bool(load_config().get("ALLOW_HFP_PROFILE", False)),
+            ).__enter__()
             logger.info("Reset & Reconnect %s: native agent active", mac)
         except Exception as exc:
             native_agent = None
@@ -1076,12 +1093,41 @@ def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
     return result_stdout
 
 
-def _parse_scan_output(stdout: str) -> "tuple[set[str], dict[str, str], dict[str, str], set[str]]":
-    """Parse bluetoothctl scan output into (seen_macs, names, device_adapter, active_macs)."""
+def _extract_rssi_from_info(info_text: str) -> "int | None":
+    """Pull the ``RSSI: <dB>`` value from ``bluetoothctl info <MAC>`` output.
+
+    Returns the signed dBm integer or ``None`` when the line is absent
+    or the value is unparseable.  Tolerates both the modern decimal
+    (``RSSI: -43``) and legacy parenthesised hex (``RSSI: 0xff... (-43)``)
+    formats — the same two formats handled in the scan-stream regex.
+    """
+    if not info_text:
+        return None
+    m = _INFO_RSSI_PAT.search(info_text)
+    if not m:
+        return None
+    value = m.group(1) or m.group(2)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_scan_output(
+    stdout: str,
+) -> "tuple[set[str], dict[str, str], dict[str, str], set[str], dict[str, int]]":
+    """Parse bluetoothctl scan output.
+
+    Returns ``(seen_macs, names, device_adapter, active_macs, rssi_by_mac)``
+    where ``rssi_by_mac`` maps MAC → most-recent dBm seen during the scan
+    window.  ``active_macs`` keeps the legacy contract (every MAC that
+    emitted ``[CHG] ... RSSI:`` regardless of value parseability).
+    """
     seen: set[str] = set()
     names: dict[str, str] = {}
     device_adapter: dict[str, str] = {}
     active_macs: set[str] = set()
+    rssi_by_mac: dict[str, int] = {}
     current_show_adapter: str = ""
     for line in stdout.splitlines():
         clean = _ANSI_RE.sub("", line).strip()
@@ -1112,8 +1158,16 @@ def _parse_scan_output(stdout: str) -> "tuple[set[str], dict[str, str], dict[str
             continue
         chg_r = _CHG_RSSI_PAT.search(clean)
         if chg_r:
-            active_macs.add(chg_r.group(1).upper())
-    return seen, names, device_adapter, active_macs
+            mac = chg_r.group(1).upper()
+            active_macs.add(mac)
+            chg_v = _CHG_RSSI_VALUE_PAT.search(clean)
+            if chg_v:
+                value = chg_v.group(2) or chg_v.group(3)
+                try:
+                    rssi_by_mac[mac] = int(value)
+                except (TypeError, ValueError):
+                    pass
+    return seen, names, device_adapter, active_macs, rssi_by_mac
 
 
 def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> None:
@@ -1172,7 +1226,11 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
             reason,
         )
         return None, reason
-    return {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}, None
+    info_rssi = _extract_rssi_from_info(out)
+    device_info: dict = {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}
+    if info_rssi is not None:
+        device_info["rssi_dbm"] = info_rssi
+    return device_info, None
 
 
 def _annotate_scan_conflicts(devices: list[dict]) -> None:
@@ -1209,7 +1267,7 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
         adapter_macs = _resolve_scan_adapter_macs(adapter)
 
         result_stdout = _run_bluetoothctl_scan(adapter_macs)
-        seen, names, device_adapter, active_macs = _parse_scan_output(result_stdout)
+        seen, names, device_adapter, active_macs, rssi_by_mac = _parse_scan_output(result_stdout)
         all_macs = seen | active_macs
 
         if len(all_macs) > _MAX_SCAN_RESULTS:
@@ -1234,6 +1292,14 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
             d["adapter"] = device_adapter.get(d["mac"], "")
             d["supports_import"] = bool(d.get("audio_capable", True))
             d["kind"] = "audio" if d.get("audio_capable", True) else "other"
+            # v2.63.0-rc.2 — surface RSSI captured during the scan window
+            # (and merged with whatever ``_enrich_scan_device`` pulled from
+            # ``bluetoothctl info`` for already-connected peers).
+            scan_rssi = rssi_by_mac.get(d["mac"])
+            if scan_rssi is not None:
+                d["rssi_dbm"] = scan_rssi
+            elif d.get("rssi_dbm") is None:
+                d["rssi_dbm"] = None
 
         # Annotate with cross-bridge conflict warnings
         _annotate_scan_conflicts(devices)
@@ -1455,7 +1521,11 @@ def _run_standalone_pair_inner(
         native_capability = "NoInputNoOutput" if use_no_io_agent else "DisplayYesNo"
         native_agent: PairingAgent | None = None
         try:
-            native_agent = PairingAgent(capability=native_capability, pin=pin).__enter__()
+            native_agent = PairingAgent(
+                capability=native_capability,
+                pin=pin,
+                allow_hfp=bool(load_config().get("ALLOW_HFP_PROFILE", False)),
+            ).__enter__()
             logger.info(
                 "Standalone pair %s: native agent active (cap=%s)",
                 mac,
