@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.1] - 2026-04-25
+
+Headline feature: **MPRIS Speaker Hardware Integration**.  Per-device
+MPRIS Player exports on the system D-Bus enable bidirectional bridging
+between the bridge and AVRCP-capable speakers (Bose, Sony WH-1000XM,
+Yandex mini, etc.):
+
+- **Speaker buttons → bridge.**  Physical Play/Pause/Next/Previous /
+  absolute-volume controls on the speaker reach the daemon subprocess
+  via BlueZ's MPRIS forwarding and dispatch through the same path
+  ``POST /api/transport/cmd`` uses — no MA REST round-trip in the hot
+  path.  See ``services/mpris_player.py`` for the per-device
+  ``MprisPlayer`` and ``services/device_activation.py`` for the wiring
+  hooks attached to ``BluetoothManager.on_connected`` /
+  ``on_disconnected``.
+
+- **MA playback state → speaker display.**  Now-playing snapshots from
+  the MA WebSocket monitor flow into ``MprisPlayer.set_playback_status``
+  / ``set_metadata``; ``PropertiesChanged`` is emitted on the bus and
+  BlueZ forwards via AVRCP so speakers with displays render the current
+  track / artist / album / cover art without any polling
+  (``services/ma_monitor.py:push_now_playing_to_mpris``).
+
+- **Claim Audio button.**  New ``POST /api/bt/claim/<mac>`` endpoint and
+  per-device card button push ``PlaybackStatus = "Playing"`` through
+  the speaker's MprisPlayer to assert the bridge as the active MPRIS
+  source on multipoint speakers paired to multiple hosts.
+
+Volume echoes from speakers (BlueZ → AVRCP → MPRIS Volume write) are
+suppressed via a one-shot ``_volume_echo_pending`` guard on
+``MprisPlayer`` so outbound volume sets do not loop back to MA.
+
+### Changed
+
+- ``BluetoothManager`` gains ``on_connected`` / ``on_disconnected``
+  transition callbacks (false→true, true→false) which fire exactly once
+  per transition; existing callers without these kwargs keep working
+  unchanged.
+
+### Tests
+
+- ``tests/test_bt_manager.py`` — 8 new tests covering connect /
+  disconnect transition fires, idempotency, and exception isolation.
+- ``tests/test_mpris_player.py`` — 7 new tests for ``MprisRegistry``
+  (lookup, MAC-case normalisation, replace semantics) + 1 Variant
+  wrapping regression + 1 concurrent register/iterate stress test.
+- ``tests/test_ma_monitor_mpris_bridge.py`` — solo + syncgroup → MPRIS
+  bridging, idle→Stopped state mapping, MA→xesam metadata translation.
+- ``tests/test_api_bt_claim.py`` — Claim Audio endpoint contract
+  (success, no-player → 404, malformed MAC → 400, MAC-case tolerance,
+  dash / no-separator MAC normalisation).
+- ``tests/test_device_activation.py`` — 2 new tests fixing the MPRIS
+  object path to the canonical ``/org/mpris/MediaPlayer2`` and
+  asserting per-device well-known bus names.
+
+### Fixes from initial review (PR #195)
+
+- **``services/mpris_player.py``** — wrap MPRIS ``Metadata`` values in
+  ``Variant`` before ``emit_properties_changed``; previous code
+  forwarded a flat dict and would have crashed dbus_fast on the
+  ``a{sv}`` signature.
+- **``services/mpris_player.py``** — guard ``MprisRegistry`` with a
+  ``threading.Lock`` and iterate over snapshots; the singleton is
+  touched by BT manager threads, Flask request threads, and the asyncio
+  loop simultaneously.
+- **``routes/api_bt.py``** — canonicalise MAC before validation in
+  ``POST /api/bt/claim/<mac>`` so dash-separated and compact (no
+  separator) forms match the registry's normalisation.
+- **``services/device_activation.py``** — claim a per-device well-known
+  ``org.mpris.MediaPlayer2.sendspin_<MAC>`` bus name and export at the
+  canonical ``/org/mpris/MediaPlayer2`` object path; without the
+  well-known name BlueZ' MPRIS bridge and other MPRIS clients can't
+  discover the player.
+
 ## [2.62.0-rc.13] - 2026-04-25
 
 Image size audit — five safe cleanups bundled together remove
