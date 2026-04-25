@@ -125,29 +125,35 @@ class MprisPlayer:
     # ── Inbound AVRCP method dispatch (called by D-Bus iface) ──────
 
     async def _on_play(self) -> None:
+        logger.info("MprisPlayer[%s]: AVRCP Play", self.mac)
         await self._dispatch_transport("play", post_status="Playing")
 
     async def _on_pause(self) -> None:
+        logger.info("MprisPlayer[%s]: AVRCP Pause", self.mac)
         await self._dispatch_transport("pause", post_status="Paused")
 
     async def _on_play_pause(self) -> None:
         # MPRIS PlayPause: toggle.  Mirror PlaybackStatus to decide which
         # transport command to send.  Status mutation done by the chosen
         # branch via _dispatch_transport.
+        logger.info("MprisPlayer[%s]: AVRCP PlayPause (current=%s)", self.mac, self._state.status)
         if self._state.status == "Playing":
             await self._on_pause()
         else:
             await self._on_play()
 
     async def _on_stop(self) -> None:
+        logger.info("MprisPlayer[%s]: AVRCP Stop", self.mac)
         await self._dispatch_transport("stop", post_status="Stopped")
 
     async def _on_next(self) -> None:
         # Track-change commands don't mutate PlaybackStatus locally —
         # MA's player_updated event will push the new status back.
+        logger.info("MprisPlayer[%s]: AVRCP Next", self.mac)
         await self._dispatch_transport("next", post_status=None)
 
     async def _on_previous(self) -> None:
+        logger.info("MprisPlayer[%s]: AVRCP Previous", self.mac)
         await self._dispatch_transport("previous", post_status=None)
 
     async def _on_volume_set(self, mpris_double: float) -> None:

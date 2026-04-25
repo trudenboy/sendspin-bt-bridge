@@ -208,30 +208,42 @@ def test_activate_context_is_frozen():
         ctx.server_host = "tamper"  # type: ignore[misc]
 
 
-# ── MPRIS export contract — bus-name + canonical object path ────────────
+# ── MPRIS export contract — per-device path + adapter resolution ────────
 
 
-def test_mpris_object_path_is_canonical_for_every_device():
-    """Regression test for Copilot review on PR #195: the original
-    implementation exported on a per-device object path
-    (``/org/mpris/MediaPlayer2/sendspin_<MAC>``).  MPRIS-spec consumers
-    (BlueZ AVRCP bridge, playerctl) only look at the canonical path
-    ``/org/mpris/MediaPlayer2``; per-device differentiation must live in
-    the *bus name*, not the object path."""
+def test_mpris_object_path_is_per_device_unique_for_bluez_register_player():
+    """v2.63.0-rc.6: each device must have a UNIQUE D-Bus object path
+    because multiple speakers on the same adapter all register via
+    ``org.bluez.Media1.RegisterPlayer(path, props)`` — one shared path
+    would clash on the second registration.  MAC colons map to ``_``
+    because D-Bus paths must be ``[A-Za-z0-9_/]``.
+
+    Earlier rcs (1-5) tried the canonical ``/org/mpris/MediaPlayer2``
+    path + a per-device well-known bus name, but BlueZ's AVRCP
+    forwarder doesn't scan bus names — it only routes to paths handed
+    to it via Media1.RegisterPlayer, and system-bus name requests are
+    ACL-blocked by default anyway.  See CHANGELOG rc.6 entry.
+    """
     from services.device_activation import _mpris_dbus_path
 
-    assert _mpris_dbus_path("AA:BB:CC:DD:EE:FF") == "/org/mpris/MediaPlayer2"
-    assert _mpris_dbus_path("11:22:33:44:55:66") == "/org/mpris/MediaPlayer2"
+    a = _mpris_dbus_path("AA:BB:CC:DD:EE:FF")
+    b = _mpris_dbus_path("11:22:33:44:55:66")
+    assert a != b, "MAC-derived path must differ per device"
+    assert a.startswith("/org/sendspin/players/")
+    assert ":" not in a  # D-Bus path constraint
+    assert a.endswith("AA_BB_CC_DD_EE_FF")
 
 
-def test_mpris_well_known_name_uses_org_mpris_prefix_and_mac_suffix():
-    """Each per-device export must claim a well-known name beginning with
-    ``org.mpris.MediaPlayer2.``; without it, MPRIS clients (and BlueZ)
-    walk past the player.  MAC colons map to ``_`` because D-Bus names
-    only allow ``[A-Za-z0-9_]`` between dots."""
-    from services.device_activation import _mpris_well_known_name
+def test_bluez_adapter_path_returns_org_bluez_hci_form():
+    """``Media1.RegisterPlayer`` must be called on the adapter where the
+    device is connected, not arbitrarily on hci0.  The helper resolves
+    ``BluetoothManager.adapter_hci_name`` (sysfs-derived at startup)
+    into the BlueZ object-path form."""
+    from types import SimpleNamespace
 
-    name = _mpris_well_known_name("aa:bb:cc:dd:ee:ff")
-    assert name.startswith("org.mpris.MediaPlayer2.")
-    assert ":" not in name
-    assert name.endswith("AA_BB_CC_DD_EE_FF")
+    from services.device_activation import _bluez_adapter_path
+
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci0")) == "/org/bluez/hci0"
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci1")) == "/org/bluez/hci1"
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="")) is None
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="bogus")) is None

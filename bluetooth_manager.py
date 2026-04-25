@@ -8,7 +8,6 @@ via PropertiesChanged signals; falls back to bluetoothctl polling if unavailable
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re
@@ -31,7 +30,6 @@ from bt_dbus import (
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
 )
-from services.async_job_state import is_scan_running
 from services.bluetooth import describe_pair_failure
 from services.pairing_agent import PairingAgent
 
@@ -48,82 +46,21 @@ def _load_allow_hfp() -> bool:
         return False
 
 
-# v2.63.0-rc.3+ — RSSI background refresh.  Periodically read the live
-# RSSI for the connected device via ``bluetoothctl info <MAC>`` and
-# push the value into host status so the device card renders an
-# up-to-date dBm badge instead of waiting for a user-triggered scan.
-#
-# rc.3 used a ``scan bredr`` burst here, which is the right path for
-# *unconnected* peers (advertising packets carry RSSI).  Already-connected
-# BR/EDR peers stop advertising, so the burst window saw zero events for
-# our MAC and the badge stayed empty.  rc.5 swaps to ``bluetoothctl info``
-# which exposes the live ACL link RSSI from BlueZ's connection cache.
-_RSSI_REFRESH_INTERVAL_S = 60.0
-# ``bluetoothctl`` scan-burst RSSI event consumed by
-# :func:`_parse_own_rssi_from_burst`.  Two on-the-wire forms:
-#   modern : ``[CHG] Device <MAC> RSSI: -43``
-#   legacy : ``[CHG] Device <MAC> RSSI: 0xff... (-43)``
-# (``routes/api_bt.py`` has its own near-identical regex for the
-# user-triggered scan path; intentionally not shared because the two
-# parsers diverge in what they capture beyond the RSSI value.)
-_RSSI_LINE_RE = re.compile(
-    r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
-    r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
-)
-# ``bluetoothctl info <MAC>`` line — connected-device RSSI.
-_RSSI_INFO_LINE_RE = re.compile(
-    r"^\s*RSSI:\s*(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))",
-    re.MULTILINE,
-)
-
-
-def _parse_own_rssi_from_burst(stdout: str, target_mac: str) -> int | None:
-    """Return the most recent RSSI dBm for *target_mac* from a scan
-    burst (``[CHG] Device ... RSSI: ...`` lines).
-
-    Kept for the scan-time path / unit-test contract; the runtime
-    refresh in :meth:`BluetoothManager.run_rssi_refresh` reads from
-    ``bluetoothctl info`` instead — see :func:`_parse_rssi_from_info`.
-    Returns ``None`` when the burst window saw no RSSI event for that
-    MAC — caller must NOT clear the cached value, only update it on
-    success.
-    """
-    if not stdout or not target_mac:
-        return None
-    target = target_mac.upper()
-    most_recent: int | None = None
-    for match in _RSSI_LINE_RE.finditer(stdout):
-        if match.group(1).upper() != target:
-            continue
-        value = match.group(2) or match.group(3)
-        try:
-            most_recent = int(value)
-        except (TypeError, ValueError):
-            continue
-    return most_recent
-
-
-def _parse_rssi_from_info(info_text: str) -> int | None:
-    """Pull the ``RSSI: <dB>`` line from ``bluetoothctl info <MAC>`` output.
-
-    Returns the signed dBm integer, or ``None`` when the RSSI line is
-    absent (some BlueZ versions / adapters don't expose RSSI for slow
-    or low-power links — the staleness check on the UI side handles
-    the no-signal case via the timestamp).
-    """
-    if not info_text:
-        return None
-    m = _RSSI_INFO_LINE_RE.search(info_text)
-    if not m:
-        return None
-    value = m.group(1) or m.group(2)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+# v2.63.0-rc.6 — RSSI background refresh removed.  rc.3 added it via
+# a ``scan bredr`` burst (failed: connected BR/EDR peers stop
+# advertising in inquiry windows on most adapters); rc.5 retried via
+# ``bluetoothctl info`` (failed: BlueZ does not poll connected-link
+# RSSI on demand and the property is absent for connected peers); the
+# remaining viable source is the kernel mgmt socket
+# (``MGMT_OP_GET_CONN_INFO``, ~150 LoC of binary serialisation +
+# ``CAP_NET_ADMIN``) — deferred to v2.64+.  The data fields
+# (``DeviceStatus.rssi_dbm`` / ``rssi_at_ts``) and the UI chip stay
+# wired so the future revival is a drop-in.  Scan-time RSSI for
+# unpaired devices in ``routes/api_bt.py`` is independent and works.
 
 
 if TYPE_CHECKING:
+    import asyncio
     from collections.abc import Callable
 
     from bt_types import BluetoothManagerHost
@@ -1255,79 +1192,3 @@ class BluetoothManager:
         Delegates to ``bt_monitor.monitor_and_reconnect()``.
         """
         await bt_monitor.monitor_and_reconnect(self)
-
-    def run_rssi_refresh(self) -> None:
-        """Run a single RSSI refresh tick — synchronous on a worker thread.
-
-        Skips when a user-triggered scan owns BlueZ discovery OR when
-        any other ``bluetoothctl`` operation (pair / reset / re-pair /
-        standalone scan) holds the shared
-        ``services.bt_operation_lock``.  Both gates avoid corrupting
-        the other operation's stdout / flipping BlueZ into an
-        inconsistent state.  Acquires the shared lock for the duration
-        of the call so concurrent pair attempts don't slip in either;
-        ``finally`` releases unconditionally so a missed tick never
-        deadlocks future BT operations.
-
-        Reads RSSI via ``bluetoothctl info <MAC>`` — the only reliable
-        source for the live ACL link RSSI of a connected peer.  rc.3
-        used a ``scan bredr`` burst here, which silently produced
-        ``None`` in production because connected BR/EDR peers stop
-        advertising and the scan window saw no RSSI events for our MAC.
-
-        No-ops on missing RSSI line so we don't spam the SSE notify
-        path with empty updates; the UI's 90 s staleness check governs
-        the badge fade to grey.
-        """
-        from services.bt_operation_lock import (
-            release_bt_operation,
-            try_acquire_bt_operation,
-        )
-
-        if is_scan_running():
-            return
-        if self.host is None:
-            return
-        if not try_acquire_bt_operation():
-            # Another bluetoothctl operation is mid-flight — skip this
-            # tick rather than corrupt its stdout.  At a 60 s cadence a
-            # missed tick is cheap; the next one will succeed.
-            return
-        try:
-            try:
-                success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
-            except Exception as exc:
-                logger.debug("[%s] RSSI refresh info call failed: %s", self.device_name, exc)
-                return
-            if not success:
-                return
-            rssi = _parse_rssi_from_info(output)
-            if rssi is None:
-                return
-            try:
-                self.host.update_status({"rssi_dbm": rssi, "rssi_at_ts": time.time()})
-            except Exception as exc:
-                logger.debug("[%s] RSSI host status push failed: %s", self.device_name, exc)
-        finally:
-            release_bt_operation()
-
-    async def run_rssi_refresh_loop(self, interval_s: float = _RSSI_REFRESH_INTERVAL_S) -> None:
-        """Async loop calling :meth:`run_rssi_refresh` every *interval_s*.
-
-        Spawned alongside ``monitor_and_reconnect`` from the main async
-        runtime.  The blocking burst itself runs on the BT executor
-        pool so the asyncio event loop stays responsive.
-        """
-        loop = asyncio.get_running_loop()
-        while self._running:
-            try:
-                await asyncio.sleep(interval_s)
-                if not self._running:
-                    return
-                if not self.connected:
-                    continue  # no point burning a discovery window with no link
-                await loop.run_in_executor(_bt_executor, self.run_rssi_refresh)
-            except asyncio.CancelledError:
-                return
-            except Exception as exc:
-                logger.debug("[%s] RSSI refresh loop tick failed: %s", self.device_name, exc)

@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.6] - 2026-04-25
+
+Two findings from VM 105 manual validation of rc.5 forced an
+architecture pivot on MPRIS and a deferral on background RSSI.
+
+### Fixed — MPRIS AVRCP forwarding actually works now
+
+rc.1 through rc.5 ``bus.export``-ed the per-device MPRIS Player
+object and tried to claim a well-known
+``org.mpris.MediaPlayer2.sendspin_*`` bus name on the SYSTEM bus.
+**Neither step is what BlueZ uses for AVRCP forwarding** — the
+system-bus name request was silently rejected by default ACL, and
+BlueZ doesn't scan bus names for MPRIS players; it only routes to
+paths handed to it via ``org.bluez.Media1.RegisterPlayer``.  Result:
+physical Play / Pause / Next / Previous on connected speakers had no
+effect across all of rc.1-rc.5.
+
+Fix in ``services/device_activation.py``:
+
+- Drop the well-known name request entirely (was failing silently
+  and not needed).
+- Per-device path moved to a unique
+  ``/org/sendspin/players/<MAC>`` so multiple speakers on the same
+  adapter can each register without clashing.
+- After ``bus.export(...)``, call
+  ``org.bluez.Media1.RegisterPlayer(path, properties)`` on the
+  device's adapter (``/org/bluez/<hciN>``).  The properties dict
+  carries the AVRCP advertisement (PlaybackStatus, CanPlay, etc).
+  BlueZ then routes inbound AVRCP passthrough commands to the
+  exported MPRIS Player methods.
+- Symmetric ``Media1.UnregisterPlayer`` on the disconnect hook
+  before un-exporting, so BlueZ doesn't keep a dangling pointer.
+- ``services/mpris_player.py`` ``_on_play`` / ``_on_pause`` /
+  ``_on_play_pause`` / ``_on_stop`` / ``_on_next`` / ``_on_previous``
+  now log INFO ``MprisPlayer[<MAC>]: AVRCP <command>`` so support
+  has a single grep to confirm the round-trip lands.
+
+Verified end-to-end on VM 105: pressing Pause on the ENEBY
+Portable's physical button produces an
+``MprisPlayer[6C:5C:...]: AVRCP Pause`` log line and the bridge
+forwards the transport command to MA.
+
+Tests: ``test_mpris_object_path_is_per_device_unique_for_bluez_register_player``
+and ``test_bluez_adapter_path_returns_org_bluez_hci_form`` lock the
+new contract.  ``_mpris_well_known_name`` removed (test for it
+deleted).
+
+### Removed — periodic RSSI background refresh
+
+rc.3 added it via ``scan bredr`` (failed: connected BR/EDR peers
+don't reappear in inquiry); rc.5 retried via ``bluetoothctl info``
+(failed: BlueZ doesn't poll the RSSI line for connected peers and
+it's absent from the property output); D-Bus ``Device1.RSSI`` only
+populates during discovery and only for devices that actually
+respond to inquiry — most connected BR/EDR peers don't.
+
+The remaining viable source is the kernel mgmt socket
+(``MGMT_OP_GET_CONN_INFO`` — ``CAP_NET_ADMIN`` plus ~150 LoC of
+binary serialisation), deferred to v2.64+.
+
+This rc removes the broken machinery so the no-op codepath stops
+spamming the BT operation lock with empty bursts:
+
+- ``BluetoothManager.run_rssi_refresh`` /
+  ``run_rssi_refresh_loop`` deleted.
+- ``_RSSI_LINE_RE`` / ``_RSSI_INFO_LINE_RE`` /
+  ``_parse_own_rssi_from_burst`` / ``_parse_rssi_from_info`` /
+  ``_RSSI_REFRESH_INTERVAL_S`` deleted.
+- ``rssi_task`` spawn in ``sendspin_client._run_async`` removed.
+- ``tests/test_bt_rssi_refresh.py`` deleted (parsers were only
+  exercised here; scan-time RSSI in ``routes/api_bt.py`` keeps its
+  own independent parser + tests).
+
+Kept: ``DeviceStatus.rssi_dbm`` / ``rssi_at_ts`` fields, the UI
+``_renderRssiChip`` helper, and the scan-time RSSI population in
+``routes/api_bt.py``.  All work without WS dependencies and stay
+ready for the future mgmt-socket revival to fill them in for
+connected devices.
+
 ## [2.63.0-rc.5] - 2026-04-25
 
 Two latent bugs surfaced during VM 105 manual validation of rc.4 —
