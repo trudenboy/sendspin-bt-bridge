@@ -6414,11 +6414,14 @@ function openConfigAndAddDevice(options) {
 }
 
 // v2.63.0-rc.2: RSSI badge with colour-coded signal strength.
-// Thresholds align with the WiFi-style buckets most operators expect:
-//   green  ≥ -65 dB  (excellent / next-room range)
-//   yellow -75…-65   (workable but lossy retransmits start)
-//   red    ≤ -75     (audible drops likely)
-//   grey   stale     (rssi_at_ts older than 90 s — value not trustworthy)
+// Thresholds align with the WiFi-style buckets most operators expect.
+// Bluetooth RSSI is reported in dBm (signed dB relative to 1 mW); we
+// surface the unit in the chip text so it lines up with what btmgmt /
+// hcidump / wireshark display.
+//   green  ≥ -65 dBm  (excellent / next-room range)
+//   yellow -75…-65    (workable but lossy retransmits start)
+//   red    ≤ -75      (audible drops likely)
+//   grey   stale      (rssi_at_ts older than 90 s — value not trustworthy)
 function _renderRssiChip(rssiDbm, isStale) {
     if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(rssiDbm)) {
         return '';
@@ -6432,8 +6435,8 @@ function _renderRssiChip(rssiDbm, isStale) {
     } else if (n >= -75) {
         cls = 'rssi-fair';
     }
-    var title = isStale ? 'Last RSSI ' + n + ' dB (stale)' : 'Signal strength ' + n + ' dB';
-    return '<span class="scan-result-chip ' + cls + '" title="' + escHtmlAttr(title) + '">📶 ' + n + ' dB</span>';
+    var title = isStale ? 'Last RSSI ' + n + ' dBm (stale)' : 'Signal strength ' + n + ' dBm';
+    return '<span class="scan-result-chip ' + cls + '" title="' + escHtmlAttr(title) + '">📶 ' + n + ' dBm</span>';
 }
 
 

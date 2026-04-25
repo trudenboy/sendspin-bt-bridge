@@ -28,6 +28,33 @@ def test_load_defaults_when_no_file():
     assert cfg["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
 
 
+def test_default_config_keys_present_in_json_schema():
+    """``config.schema.json`` is the machine-readable surface external
+    tooling validates user configs against.  Every top-level
+    ``DEFAULT_CONFIG`` key must be declared in the schema's
+    ``properties`` block, otherwise the schema and the runtime drift
+    silently — operators editing config.json get no validation hint
+    for the missing key.
+
+    Regression test for Copilot review on PR #196 (``ALLOW_HFP_PROFILE``
+    landed in ``DEFAULT_CONFIG`` but was missing from the schema).
+    """
+    from pathlib import Path
+
+    from config import DEFAULT_CONFIG
+
+    schema_path = Path(__file__).resolve().parents[1] / "config.schema.json"
+    schema = json.loads(schema_path.read_text())
+    schema_props = set((schema.get("properties") or {}).keys())
+
+    # ``CONFIG_SCHEMA_VERSION`` is internal bookkeeping (carries the
+    # migration version, not a user-tunable knob) — schema does not
+    # need to advertise it.
+    runtime_keys = set(DEFAULT_CONFIG) - {"CONFIG_SCHEMA_VERSION"}
+    missing = sorted(runtime_keys - schema_props)
+    assert not missing, f"DEFAULT_CONFIG keys missing from config.schema.json: {missing}"
+
+
 def test_load_known_keys(tmp_path):
     _write_config(tmp_path, {"SENDSPIN_SERVER": "10.0.0.1", "SENDSPIN_PORT": 1234})
     from config import load_config

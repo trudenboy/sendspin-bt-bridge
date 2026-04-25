@@ -277,12 +277,17 @@ class DeviceStatus:
     bt_standby_since: str | None = None
     bt_waking: bool = False
     bt_power_save: bool = False
-    # v2.63.0-rc.2 — last observed BT signal strength + capture timestamp.
-    # Background discovery refresh updates these on a fixed cadence; the
-    # API surfaces the values + a stale flag (``rssi_at_ts`` older than 90 s
-    # → render as grey badge).  ``None`` for both means we have never had
-    # a reading or the device is fundamentally headless to RSSI on this
-    # adapter / BlueZ build.
+    # v2.63.0-rc.2 — last observed BT signal strength (dBm) + capture
+    # timestamp.  Currently populated only via the user-triggered scan
+    # path (``routes/api_bt.py:_extract_rssi_from_info`` /
+    # ``_parse_scan_output``) — the periodic background refresh task that
+    # keeps these warm for connected device cards is deferred to
+    # v2.63.0-rc.3.  The ``static/app.js:_renderRssiChip`` helper already
+    # honours ``rssi_at_ts`` staleness (>90 s → grey) so wiring the
+    # background path later is a drop-in: keep these fields, no UI
+    # changes required.  ``None`` for both means no reading has been
+    # captured yet (or the device is fundamentally headless to RSSI on
+    # this adapter / BlueZ build).
     rssi_dbm: int | None = None
     rssi_at_ts: float | None = None
     idle_mode: str = "default"

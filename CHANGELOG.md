@@ -73,6 +73,22 @@ that misbehave on the 2 Hz infrasound burst.
   BT" with no track metadata even while the speaker was actively
   streaming as part of the "Sendspin RC" syncgroup.
 
+### Fixes from initial review (PR #196)
+
+- ``static/app.js:_renderRssiChip`` — relabel chip + tooltip to
+  ``dBm`` (Bluetooth RSSI is dBm by spec, was rendering as ``dB``).
+- ``sendspin_client.py:DeviceStatus`` — rewrite the ``rssi_dbm`` /
+  ``rssi_at_ts`` field comment to reflect that scan-path population
+  is the only writer in rc.2; the periodic background refresh that
+  keeps connected device cards warm is deferred to rc.3.  Behaviour
+  unchanged.
+- ``config.schema.json`` — declare top-level ``ALLOW_HFP_PROFILE``
+  boolean so the schema documents the runtime config key added in
+  this rc.  ``tests/test_config.py`` gains a regression test that
+  asserts every ``DEFAULT_CONFIG`` key (other than the internal
+  ``CONFIG_SCHEMA_VERSION``) is declared in ``config.schema.json``,
+  catching this whole class of drift in future rcs.
+
 ### Tests
 
 - ``tests/test_bt_scan_rssi.py`` — 8 new tests covering both
