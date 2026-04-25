@@ -1,58 +1,40 @@
-"""Tests for ``services.bt_rssi_mgmt`` — the kernel mgmt-socket wrapper
+"""Tests for ``services.bt_rssi_mgmt`` — the kernel mgmt-socket reader
 that asks BlueZ for the live RSSI of a connected BR/EDR peer.
 
-The real ``btsocket`` library opens an ``AF_BLUETOOTH`` mgmt socket and
-issues opcode 0x0031 (``MGMT_OP_GET_CONN_INFO``).  We can't open that
-socket in CI, so every test here monkey-patches the indirection seam
-``_get_btmgmt_sync`` to return a fake module whose ``send`` we control.
+The real implementation opens an ``AF_BLUETOOTH`` raw socket, sends a
+mgmt opcode 0x0031 packet, and parses the ``CommandComplete`` event.
+We can't open that socket in CI, so the tests target two seams:
 
-Each test exercises one branch of the wrapper's failure-mode contract
-so that ``None`` truly means "no fresh value, keep last known" — never
-a stale or made-up integer.
+- ``read_conn_info`` is the public API — sentinel/sign handling.  We
+  monkey-patch ``_query_rssi_byte`` to feed it specific raw bytes.
+- ``_query_rssi_byte`` is the syscall layer — we monkey-patch
+  ``_open_mgmt_socket`` with a fake socket that returns a
+  pre-baked CommandComplete blob, exercising the wire-format parser
+  and the event-skipping loop.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+import struct
 from unittest.mock import MagicMock
-
-import pytest  # noqa: TC002 — runtime-used (monkeypatch fixture type-hint)
 
 from services import bt_rssi_mgmt
 
-
-def _fake_response(*, status: str = "Success", rssi: int | None = -62) -> SimpleNamespace:
-    """Mimic the shape of ``btmgmt_sync.send()``'s ``Response`` dataclass.
-
-    Real shape per btsocket:
-        Response(header=..., event_frame=<status=...>, cmd_response_frame=<rssi=...>)
-    """
-    return SimpleNamespace(
-        header=SimpleNamespace(),
-        event_frame=SimpleNamespace(status=status),
-        cmd_response_frame=SimpleNamespace(rssi=rssi),
-    )
-
-
-def _install_fake_btmgmt(monkeypatch: pytest.MonkeyPatch, send: MagicMock) -> None:
-    fake_module = SimpleNamespace(send=send)
-    monkeypatch.setattr(bt_rssi_mgmt, "_get_btmgmt_sync", lambda: fake_module)
+# ── public API: read_conn_info → int | None ─────────────────────────
 
 
 def test_returns_signed_dbm_on_success(monkeypatch):
-    send = MagicMock(return_value=_fake_response(rssi=-62))
-    _install_fake_btmgmt(monkeypatch, send)
+    """Wire byte 194 (= 0xC2) folds to -62 dBm — a typical
+    in-the-same-room RSSI."""
+    monkeypatch.setattr(bt_rssi_mgmt, "_query_rssi_byte", lambda *_: 194)
 
     assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") == -62
 
 
 def test_converts_unsigned_byte_to_signed_int8(monkeypatch):
-    """btsocket reports the wire byte unsigned (0–255); mgmt-api.txt §
-    GetConnectionInformation says rssi is **signed int8**.  The wrapper
-    must do the >127 → -256 fold so ``200`` becomes ``-56`` dBm
-    (typical for a speaker on the next floor)."""
-    send = MagicMock(return_value=_fake_response(rssi=200))
-    _install_fake_btmgmt(monkeypatch, send)
+    """The mgmt API field is declared signed int8 but socket bytes
+    arrive unsigned; ``200`` (= 0xC8) must fold to ``-56``."""
+    monkeypatch.setattr(bt_rssi_mgmt, "_query_rssi_byte", lambda *_: 200)
 
     assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") == -56
 
@@ -61,83 +43,201 @@ def test_treats_sentinel_127_as_unavailable(monkeypatch):
     """mgmt-api.txt: ``If the RSSI is not available a value of 127
     will be returned``.  Surfacing 127 dBm in the UI would be wildly
     wrong (Bluetooth tops out around +20 dBm); collapse to ``None``."""
-    send = MagicMock(return_value=_fake_response(rssi=127))
-    _install_fake_btmgmt(monkeypatch, send)
+    monkeypatch.setattr(bt_rssi_mgmt, "_query_rssi_byte", lambda *_: 127)
 
     assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") is None
 
 
 def test_does_not_drop_minus_128_as_unavailable(monkeypatch):
-    """mgmt-api.txt names ONLY 127 as the "RSSI not available"
-    sentinel — never -128.  The unsigned wire byte 0x80 (decimal 128)
-    folds to a signed -128 dBm reading: a real, very weak signal
-    (e.g. a speaker at the edge of range under heavy interference).
-    Conflating it with the unavailable sentinel would silently grey
-    out the UI chip for legitimate weak-link conditions."""
-    send = MagicMock(return_value=_fake_response(rssi=128))
-    _install_fake_btmgmt(monkeypatch, send)
+    """mgmt-api.txt names ONLY 127 as the "unavailable" sentinel —
+    never -128.  Wire byte 128 (0x80) folds to a signed -128 dBm: a
+    real, very weak signal.  Conflating it with the sentinel would
+    silently grey out the UI chip for legitimate edge-of-range links."""
+    monkeypatch.setattr(bt_rssi_mgmt, "_query_rssi_byte", lambda *_: 128)
 
     assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") == -128
 
 
-def test_returns_none_when_status_not_success(monkeypatch):
-    """A Failed/InvalidParameters response carries no useful rssi; the
-    cmd_response_frame is unspecified and must not be trusted."""
-    send = MagicMock(return_value=_fake_response(status="Failed", rssi=-50))
-    _install_fake_btmgmt(monkeypatch, send)
-
-    assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") is None
-
-
-def test_returns_none_when_send_raises(monkeypatch):
-    """Mgmt socket can EPERM (no CAP_NET_ADMIN), ENODEV (adapter
-    detached), or btsocket can throw a parse error on a malformed
-    response — none of these should propagate up into the asyncio loop
-    that drives the periodic refresh."""
-    send = MagicMock(side_effect=PermissionError("CAP_NET_ADMIN required"))
-    _install_fake_btmgmt(monkeypatch, send)
-
-    assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") is None
-
-
-def test_returns_none_when_btsocket_unavailable(monkeypatch):
-    """On non-Linux dev machines (and any container without the dep
-    installed) btsocket raises ImportError at module load.  The
-    wrapper degrades silently so the rest of the bridge still runs."""
-
-    def _raise():
-        raise ImportError("No module named 'btsocket'")
-
-    monkeypatch.setattr(bt_rssi_mgmt, "_get_btmgmt_sync", _raise)
+def test_returns_none_when_query_returns_none(monkeypatch):
+    """``_query_rssi_byte`` collapses every syscall failure (EPERM,
+    timeout, parse error, peer not connected, btsocket import error)
+    into ``None``.  ``read_conn_info`` must propagate that ``None``
+    upward, not raise and not synthesise a number."""
+    monkeypatch.setattr(bt_rssi_mgmt, "_query_rssi_byte", lambda *_: None)
 
     assert bt_rssi_mgmt.read_conn_info(0, "AA:BB:CC:DD:EE:FF") is None
 
 
 def test_returns_none_for_negative_adapter_index(monkeypatch):
     """``BluetoothManager._resolve_adapter_index`` returns -1 when
-    sysfs lookup failed at startup; the wrapper short-circuits so
-    btsocket isn't asked to address controller 0xFFFF and emit a
-    confusing error in the logs."""
-    send = MagicMock()
-    _install_fake_btmgmt(monkeypatch, send)
+    sysfs lookup failed at startup; short-circuit before any syscall."""
+    query = MagicMock()
+    monkeypatch.setattr(bt_rssi_mgmt, "_query_rssi_byte", query)
 
     assert bt_rssi_mgmt.read_conn_info(-1, "AA:BB:CC:DD:EE:FF") is None
-    send.assert_not_called()
+    query.assert_not_called()
 
 
-def test_passes_adapter_index_and_mac_through(monkeypatch):
-    """The wrapper must forward the integer adapter index and the
-    MAC string positionally to ``btmgmt_sync.send`` — the mgmt
-    response addresses the correct controller and peer.  BR/EDR
-    address type (0) is hard-coded; we don't currently support LE."""
-    send = MagicMock(return_value=_fake_response(rssi=-40))
-    _install_fake_btmgmt(monkeypatch, send)
+# ── syscall layer: _query_rssi_byte → unsigned wire byte | None ─────
 
-    bt_rssi_mgmt.read_conn_info(1, "11:22:33:44:55:66")
 
-    send.assert_called_once()
-    args = send.call_args.args
-    assert args[0] == "GetConnectionInformation"
-    assert args[1] == 1
-    assert args[2] == "11:22:33:44:55:66"
-    assert args[3] == 0  # BR/EDR address type
+def _build_cmd_complete(*, status: int = 0, mac: str = "AA:BB:CC:DD:EE:FF", rssi_byte: int = 200) -> bytes:
+    """Build the on-the-wire bytes BlueZ would emit for a successful
+    GetConnectionInformation.  Used to feed the parser through a
+    fake socket without going near a real kernel mgmt channel.
+
+    Layout: header (event_code u16, idx u16, paramlen u16) + payload
+    (cmd_opcode u16, status u8, addr 6 bytes LE, addr_type u8,
+    rssi u8, tx_power u8, max_tx_power u8).
+    """
+    addr = bytes(int(b, 16) for b in reversed(mac.split(":")))
+    payload = (
+        struct.pack("<HB", bt_rssi_mgmt._MGMT_OP_GET_CONN_INFO, status)
+        + addr
+        + bytes([bt_rssi_mgmt._ADDR_TYPE_BREDR, rssi_byte, 0, 0])
+    )
+    header = struct.pack("<HHH", bt_rssi_mgmt._MGMT_EV_CMD_COMPLETE, 0, len(payload))
+    return header + payload
+
+
+class _FakeMgmtSocket:
+    """Records ``send`` payloads and replays a queue of ``recv`` blobs."""
+
+    def __init__(self, recv_queue: list[bytes]):
+        self._recv_queue = list(recv_queue)
+        self.sent: list[bytes] = []
+        self.timeouts: list[float] = []
+        self.closed = False
+
+    def settimeout(self, t):
+        self.timeouts.append(t)
+
+    def send(self, data):
+        self.sent.append(bytes(data))
+        return len(data)
+
+    def recv(self, _bufsize):
+        if not self._recv_queue:
+            raise TimeoutError("no more pre-baked recv blobs")
+        return self._recv_queue.pop(0)
+
+
+def test_query_parses_rssi_byte_from_command_complete(monkeypatch):
+    """End-to-end through the real parser: a well-formed
+    CommandComplete with rssi byte 200 yields 200 (the unsigned wire
+    value); the public ``read_conn_info`` is what folds to signed dBm."""
+    fake = _FakeMgmtSocket([_build_cmd_complete(rssi_byte=200)])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") == 200
+
+
+def test_query_sends_correct_opcode_index_addr_type(monkeypatch):
+    """The crash that prompted this rewrite was a wire-format bug —
+    pin the exact bytes emitted so we'd notice if a future refactor
+    flipped endianness, swapped addr type, or used the bitmask
+    encoding btsocket got wrong."""
+    fake = _FakeMgmtSocket([_build_cmd_complete()])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    bt_rssi_mgmt._query_rssi_byte(2, "11:22:33:44:55:66")
+
+    assert len(fake.sent) == 1
+    pkt = fake.sent[0]
+    op, idx, plen = struct.unpack_from("<HHH", pkt, 0)
+    assert op == bt_rssi_mgmt._MGMT_OP_GET_CONN_INFO
+    assert idx == 2
+    assert plen == 7  # 6 addr + 1 addr_type
+    # MAC bytes follow header in *little-endian* order
+    assert pkt[6:12] == bytes([0x66, 0x55, 0x44, 0x33, 0x22, 0x11])
+    # And the discriminator byte for BR/EDR — the bug we're guarding
+    # against was btsocket emitting 0x01 (bitmask LSB-set) here.
+    assert pkt[12] == 0x00
+
+
+def test_query_skips_unrelated_events_until_match(monkeypatch):
+    """Bluetoothd shares the control channel; a stray
+    ``IndexAdded`` or ``CommandComplete`` for someone else's command
+    will land in our ``recv`` first.  The reader must skip them and
+    keep going until our matching opcode echoes back."""
+    # Fake 1: CmdComplete for a different opcode (0x0006 = ReadInfo)
+    other = struct.pack("<HHH", bt_rssi_mgmt._MGMT_EV_CMD_COMPLETE, 0, 3) + struct.pack("<HB", 0x0006, 0)
+    # Fake 2: IndexAdded event (0x0004) — no payload
+    index_added = struct.pack("<HHH", 0x0004, 0xFFFF, 0)
+    # Fake 3: our actual reply
+    ours = _build_cmd_complete(rssi_byte=180)
+
+    fake = _FakeMgmtSocket([other, index_added, ours])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") == 180
+
+
+def test_query_returns_none_on_command_status_failure(monkeypatch):
+    """``CommandStatus`` (event 0x0002) is BlueZ's "couldn't even
+    start" response — most commonly emitted when the peer isn't
+    actually connected, which will happen every refresh tick during
+    the few seconds between an ACL drop and our state catching up."""
+    cmd_status = struct.pack("<HHH", bt_rssi_mgmt._MGMT_EV_CMD_STATUS, 0, 3) + struct.pack(
+        "<HB",
+        bt_rssi_mgmt._MGMT_OP_GET_CONN_INFO,
+        0x0E,  # NotConnected
+    )
+    fake = _FakeMgmtSocket([cmd_status])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
+
+
+def test_query_returns_none_on_command_complete_nonzero_status(monkeypatch):
+    """If the kernel responds with CommandComplete but a non-zero
+    status (e.g. InvalidParameters because we asked for the wrong
+    address type), the rssi field is unspecified and must be dropped."""
+    fake = _FakeMgmtSocket([_build_cmd_complete(status=0x05)])  # AuthenticationFailed
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
+
+
+def test_query_returns_none_when_open_raises_import(monkeypatch):
+    """On non-Linux dev machines (and any container without btsocket
+    installed) the open helper raises ``ImportError`` — degrade
+    silently so the rest of the bridge still runs and the refresh
+    loop just emits no values."""
+
+    def _raise():
+        raise ImportError("No module named 'btsocket'")
+
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", _raise)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
+
+
+def test_query_returns_none_when_open_raises_other(monkeypatch):
+    """Mgmt socket open can EPERM (no CAP_NET_ADMIN), ENODEV
+    (kernel module not loaded), or fail with various ctypes errors —
+    none of these should propagate up into the asyncio refresh loop."""
+
+    def _raise():
+        raise PermissionError("CAP_NET_ADMIN required")
+
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", _raise)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
+
+
+def test_query_returns_none_on_malformed_mac(monkeypatch):
+    """Defensive: a MAC string from a wonky config (extra colon, hex
+    typo) must not crash the refresh loop with ValueError."""
+    fake = _FakeMgmtSocket([])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "not-a-mac") is None
+    # And we never sent anything to the kernel.
+    assert fake.sent == []

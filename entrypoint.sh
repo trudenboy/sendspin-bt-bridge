@@ -282,11 +282,38 @@ _wait_for_startup_dependencies() {
 }
 
 _exec_sendspin_client() {
-    if [ -n "$APP_RUNTIME_SPEC" ] && command -v gosu >/dev/null 2>&1; then
+    if [ -n "$APP_RUNTIME_SPEC" ]; then
         export HOME="${APP_RUNTIME_HOME:-/tmp/sendspin-runtime-${APP_RUNTIME_UID}}"
         export USER="$APP_RUNTIME_USER"
-        echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID}..."
-        exec gosu "$APP_RUNTIME_SPEC" env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
+        # v2.63.0-rc.8: replace ``gosu`` with ``setpriv`` so we can carry
+        # CAP_NET_ADMIN across the UID drop via the *ambient* capability
+        # set.  Needed by ``services/bt_rssi_mgmt`` to query connected-
+        # peer RSSI through the kernel mgmt socket — gosu drops every
+        # cap when changing UID, which fails the kernel's ``capable()``
+        # check at HCI bind time and the kernel never marks the socket
+        # ``HCI_SOCK_TRUSTED``, after which every mgmt command for an
+        # established link returns ``MGMT_STATUS_PERMISSION_DENIED``.
+        #
+        # ``--ambient-caps`` survives both ``execve`` and the ``setresuid``
+        # that ``--reuid`` performs, so the resulting Python process
+        # has CapEff=cap_net_admin without inheriting any other cap.
+        # Falls back to plain ``gosu`` (no caps) if setpriv is missing
+        # — older base images may not have it.  RSSI then degrades to
+        # the existing fail-soft "no fresh value, keep last known".
+        if command -v setpriv >/dev/null 2>&1; then
+            echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID} (cap_net_admin retained)..."
+            exec setpriv \
+                --reuid="$APP_RUNTIME_UID" \
+                --regid="$APP_RUNTIME_GID" \
+                --clear-groups \
+                --inh-caps=+net_admin \
+                --ambient-caps=+net_admin \
+                env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
+        fi
+        if command -v gosu >/dev/null 2>&1; then
+            echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID} (setpriv missing — RSSI will be unavailable)..."
+            exec gosu "$APP_RUNTIME_SPEC" env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
+        fi
     fi
 
     echo "Starting Sendspin client with web interface..."
