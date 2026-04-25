@@ -60,6 +60,19 @@ that misbehave on the 2 Hz infrasound burst.
 - ``config.schema.json`` — new ``keep_alive_method`` device option
   with the three-value enum.
 
+### Fixed
+
+- ``services/ma_runtime_state.py:get_ma_group_for_player_id`` — when a
+  bridge player is a member of multiple MA syncgroups simultaneously,
+  the lookup now walks ``_ma_all_groups`` and prefers whichever
+  syncgroup has an active now-playing state (``playing`` / ``paused`` /
+  ``buffering``) over an idle sibling.  Falls back to the
+  first-write-wins ``_ma_groups`` mapping when none are active.
+  Symptom on VM 105: ENEBY Portable @ DOCKER (member of both
+  "Sendspin BT" and "Sendspin RC") was permanently labelled "Sendspin
+  BT" with no track metadata even while the speaker was actively
+  streaming as part of the "Sendspin RC" syncgroup.
+
 ### Tests
 
 - ``tests/test_bt_scan_rssi.py`` — 8 new tests covering both
@@ -72,6 +85,10 @@ that misbehave on the 2 Hz infrasound burst.
 - ``tests/test_standby_daemon.py`` — 4 new tests for
   ``_generate_keepalive_buffer`` (infrasound parity, silence is zeros,
   none is empty, unknown falls back).
+- ``tests/test_ma_runtime_state.py`` — 5 new tests covering the
+  multi-syncgroup lookup contract (active-state preference, paused
+  preferred over idle, all-idle falls back to cached mapping,
+  single-group case unchanged, unknown player returns ``None``).
 
 ## [2.63.0-rc.1] - 2026-04-25
 
