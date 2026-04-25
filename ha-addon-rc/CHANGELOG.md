@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.13] - 2026-04-25
+
+Image size audit — five safe cleanups bundled together remove
+~38 MB of cruft that was either left over by mistake (pip) or
+unreachable at runtime (udev hwdb, systemd units, package docs).
+Smoke-tested live inside a running container: all critical imports
+(config, sendspin_client, services.*, routes.*, qrcode, av, PIL,
+cryptography) succeed, ``/api/health`` returns ``{"ok": true}``.
+
+### Removed (Dockerfile runtime stage)
+- ``/usr/local/lib/python3.12/site-packages/pip`` and
+  ``/usr/local/bin/pip*`` (6.6 MB).  The builder stage strips pip
+  from ``/install``, but the runtime ``python:3.12-slim`` base ships
+  its own pip in ``/usr/local`` which the ``COPY --from=builder``
+  merges over without removing — leftover pip then survived into
+  the final image.
+- ``/usr/lib/udev/hwdb.bin`` and ``/usr/lib/udev/hwdb.d`` (22 MB).
+  No ``udevd`` runs inside the container — BlueZ and PulseAudio
+  consume udev events from the host via D-Bus, so the in-container
+  hardware database is never queried.
+- ``/usr/lib/systemd`` (5.6 MB).  s6-overlay handles PID 1 / signal
+  forwarding; systemd unit files and helpers are unreachable.
+- ``/usr/share/doc/*``, ``/usr/share/man/*``, ``/usr/share/info/*``
+  (~4.4 MB).  Standard slim-image practice — package documentation
+  pulled in by apt-installed runtime deps has no consumer.
+- ``pulsectl/tests``, ``qrcode/tests``, ``numpy/doc`` inside
+  ``site-packages`` (~80 KB).  Test suites and module docs from
+  installed wheels.
+
 ## [2.62.0-rc.12] - 2026-04-25
 
 UI fix: the "Update Available" modal's release-notes pane was
