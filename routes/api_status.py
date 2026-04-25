@@ -611,7 +611,19 @@ def api_status_stream():
         _generate(),
         mimetype="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            # ``no-cache`` keeps browsers from caching SSE chunks.
+            # ``no-transform`` (RFC 7234 §5.2.2.4) instructs every
+            # intermediary — explicitly including the HA Supervisor
+            # ingress proxy — NOT to apply deflate / gzip compression
+            # on the response body.  Without this, ingress compresses
+            # the SSE chunks and the browser receives garbled
+            # event-stream frames (was the root cause behind the
+            # rc.3 WebSocket migration attempt; see CHANGELOG rc.4).
+            "Cache-Control": "no-cache, no-transform",
+            # Force-set the encoding so the compression middleware
+            # in aiohttp / nginx / cloudflare doesn't try to wrap us.
+            "Content-Encoding": "identity",
+            # nginx-style hint to flush each chunk immediately.
             "X-Accel-Buffering": "no",
         },
     )
