@@ -8,6 +8,7 @@ via PropertiesChanged signals; falls back to bluetoothctl polling if unavailable
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -30,6 +31,8 @@ from bt_dbus import (
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
 )
+from services import bt_operation_lock as _bt_op_lock
+from services import bt_rssi_mgmt
 from services.bluetooth import describe_pair_failure
 from services.pairing_agent import PairingAgent
 
@@ -46,21 +49,19 @@ def _load_allow_hfp() -> bool:
         return False
 
 
-# v2.63.0-rc.6 — RSSI background refresh removed.  rc.3 added it via
-# a ``scan bredr`` burst (failed: connected BR/EDR peers stop
-# advertising in inquiry windows on most adapters); rc.5 retried via
-# ``bluetoothctl info`` (failed: BlueZ does not poll connected-link
-# RSSI on demand and the property is absent for connected peers); the
-# remaining viable source is the kernel mgmt socket
-# (``MGMT_OP_GET_CONN_INFO``, ~150 LoC of binary serialisation +
-# ``CAP_NET_ADMIN``) — deferred to v2.64+.  The data fields
-# (``DeviceStatus.rssi_dbm`` / ``rssi_at_ts``) and the UI chip stay
-# wired so the future revival is a drop-in.  Scan-time RSSI for
-# unpaired devices in ``routes/api_bt.py`` is independent and works.
+# v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
+# socket (``MGMT_OP_GET_CONN_INFO`` opcode 0x0031), wrapped in
+# ``services/bt_rssi_mgmt.py`` using the ``btsocket`` library so we
+# don't hand-roll the binary protocol.  rc.3 tried ``scan bredr``
+# bursts (no events for connected peers); rc.5 tried ``bluetoothctl
+# info`` (no RSSI line for connected peers); both deleted in rc.6.
+# This is the only source on Linux that exposes RSSI for an
+# established ACL link.  Refresh runs every ``_RSSI_REFRESH_INTERVAL_S``
+# seconds via ``run_rssi_refresh_loop``, gated by the shared
+# ``bt_operation_lock`` so a pair / scan / reconnect can never starve.
 
 
 if TYPE_CHECKING:
-    import asyncio
     from collections.abc import Callable
 
     from bt_types import BluetoothManagerHost
@@ -77,6 +78,11 @@ _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
 _PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
 _MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
 _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
+# Cadence for live-RSSI refresh via kernel mgmt opcode 0x0031.  Picked
+# to align with the UI chip's 90 s staleness threshold (3x safety
+# margin) and to keep mgmt traffic per controller well under what a
+# concurrent pair attempt would tolerate.
+_RSSI_REFRESH_INTERVAL_S = 30.0
 # After this many consecutive failed connect attempts where BlueZ has no current
 # device object, force-remove the stale BlueZ entry so the next reconnect cycle
 # can escalate to pair_device (KALLSUP-class loop, #162).
@@ -110,6 +116,7 @@ class BluetoothManager:
         on_sink_found: Callable[[str, int | None], None] | None = None,
         on_connected: Callable[[], None] | None = None,
         on_disconnected: Callable[[], None] | None = None,
+        on_rssi_update: Callable[[int], None] | None = None,
         churn_threshold: int = 0,
         churn_window: float = 300.0,
         enable_a2dp_dance: bool = False,
@@ -129,6 +136,13 @@ class BluetoothManager:
         # swallowed (must not destabilise the BT state machine).
         self.on_connected = on_connected
         self.on_disconnected = on_disconnected
+        # Fired once per successful periodic RSSI refresh tick with the
+        # signed dBm value.  Owner (services/device_activation.py) wires
+        # this to ``SendspinClient._update_status`` so the value flows
+        # into ``DeviceStatus.rssi_dbm`` and out via SSE.  ``None`` from
+        # the wrapper short-circuits before this fires — callback only
+        # ever sees fresh ints.
+        self.on_rssi_update = on_rssi_update
         self.prefer_sbc = prefer_sbc
         self.connected = False  # GIL-atomic bool; safe for cross-thread reads without lock
         # Serialises ``_apply_connected_state`` so the ``check ==``
@@ -1185,6 +1199,84 @@ class BluetoothManager:
             message=message,
             details=details,
         )
+
+    def _resolve_adapter_index(self) -> int:
+        """Return the integer controller index the kernel mgmt socket uses.
+
+        ``hci0`` → 0, ``hci3`` → 3.  Returns ``-1`` for any unresolved
+        or non-conforming ``adapter_hci_name`` (LXC without
+        /sys/class/bluetooth, partial recovery, garbage from the
+        bluetoothctl-list fallback).  Callers must treat -1 as "skip
+        the mgmt read" — addressing controller 0xFFFF would emit a
+        confusing ENODEV in the logs every refresh tick.
+        """
+        if not self.adapter_hci_name:
+            return -1
+        m = re.match(r"^hci(\d+)$", self.adapter_hci_name)
+        if not m:
+            return -1
+        return int(m.group(1))
+
+    async def _rssi_refresh_tick(self) -> None:
+        """One iteration of the periodic RSSI refresh.
+
+        Short-circuits if the link is down or another BT operation is
+        in flight; otherwise issues ``MGMT_OP_GET_CONN_INFO`` in the
+        BT executor (the syscall blocks while bluetoothd round-trips
+        to the controller) and forwards a fresh int to
+        ``on_rssi_update``.  ``None`` from the wrapper means "no fresh
+        value, keep last known" — never propagated upward.
+
+        Exceptions from the wrapper or callback are caught here so a
+        single bad tick can't tear down the long-lived refresh task.
+        """
+        if not self.connected:
+            return
+        # Skip the lock acquire + executor dispatch when the result has
+        # nowhere to land or the wrapper would short-circuit anyway —
+        # avoids brief contention with concurrent pair / scan attempts
+        # every 30 s for nothing.
+        if self.on_rssi_update is None:
+            return
+        adapter_index = self._resolve_adapter_index()
+        if adapter_index < 0:
+            return
+        if not _bt_op_lock.try_acquire_bt_operation():
+            return
+        try:
+            mac = self.mac_address
+            loop = asyncio.get_running_loop()
+            try:
+                rssi = await loop.run_in_executor(_bt_executor, bt_rssi_mgmt.read_conn_info, adapter_index, mac)
+            except Exception:
+                logger.exception("[%s] RSSI mgmt read raised unexpectedly", self.device_name)
+                rssi = None
+        finally:
+            _bt_op_lock.release_bt_operation()
+
+        if rssi is None:
+            return
+        try:
+            self.on_rssi_update(rssi)
+        except Exception:
+            logger.exception("[%s] on_rssi_update callback raised", self.device_name)
+
+    async def run_rssi_refresh_loop(self, interval: float = _RSSI_REFRESH_INTERVAL_S) -> None:
+        """Drive ``_rssi_refresh_tick`` on a fixed cadence until shutdown.
+
+        Owner spawns this as a background asyncio task per active
+        ``BluetoothManager`` from ``services/device_activation.py``.
+        Exits cleanly when ``self._running`` flips false (shutdown
+        path) or the task is cancelled.
+        """
+        try:
+            while self._running:
+                await asyncio.sleep(interval)
+                if not self._running:
+                    return
+                await self._rssi_refresh_tick()
+        except asyncio.CancelledError:
+            raise
 
     async def monitor_and_reconnect(self):
         """Continuously monitor BT connection and reconnect if needed.

@@ -1916,6 +1916,25 @@ class SendspinClient:
             mon_task.add_done_callback(_on_monitor_done)
             tasks.append(mon_task)
 
+            # v2.63.0-rc.7: live RSSI for connected BR/EDR peers via the
+            # kernel mgmt socket.  Spawned alongside monitor_and_reconnect
+            # so the same shutdown cancel() loop tears it down.  Failures
+            # in the wrapper are swallowed inside the tick — the
+            # done-callback only fires for surprises (e.g. an asyncio
+            # internal error) so we know to investigate.
+            rssi_task = asyncio.create_task(self.bt_manager.run_rssi_refresh_loop())
+
+            def _on_rssi_done(t):
+                if not t.cancelled() and t.exception():
+                    logger.error(
+                        "[%s] run_rssi_refresh_loop task DIED: %s",
+                        self.player_name,
+                        t.exception(),
+                    )
+
+            rssi_task.add_done_callback(_on_rssi_done)
+            tasks.append(rssi_task)
+
         try:
             # Keep running
             while self.running:

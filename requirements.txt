@@ -15,3 +15,9 @@ cryptography>=46.0.7
 # EXPERIMENTAL_ADAPTER_AUTO_RECOVERY flag. Linux-only transitively via PyRIC;
 # import failures are caught and the feature fails soft.
 bluetooth-auto-recovery==1.5.3
+
+# Live RSSI for connected BR/EDR peers via BlueZ kernel mgmt socket
+# (MGMT_OP_GET_CONN_INFO opcode 0x0031). Pure-Python wrapper so we don't
+# hand-roll struct.pack of the request/response packets. Linux-only;
+# services.bt_rssi_mgmt catches ImportError and returns None on non-Linux.
+btsocket==0.3.0
