@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -421,6 +422,13 @@ def activate_device(
             if sm is not None and _mac:
                 sm.register(_mac, sink_name, _client._on_sink_active, _client._on_sink_idle)
 
+        def _on_rssi_update(rssi_dbm: int, _client: Any = client) -> None:
+            """Forward a fresh RSSI reading from the BT manager's
+            periodic refresh into the client's status pipeline.  The
+            timestamp lets the UI grey out the chip when the value
+            ages past 90 s (e.g. mgmt socket starts returning EBUSY)."""
+            _client._update_status({"rssi_dbm": int(rssi_dbm), "rssi_at_ts": time.time()})
+
         bt_mgr = context.bt_manager_factory(
             mac,
             adapter=adapter,
@@ -432,6 +440,7 @@ def activate_device(
             on_sink_found=_on_sink_found,
             on_connected=_make_mpris_connected_hook(client, mac),
             on_disconnected=_make_mpris_disconnected_hook(mac),
+            on_rssi_update=_on_rssi_update,
             churn_threshold=context.bt_churn_threshold,
             churn_window=context.bt_churn_window,
             enable_a2dp_dance=context.enable_a2dp_sink_recovery_dance,
