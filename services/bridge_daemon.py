@@ -12,7 +12,6 @@ so audio routes to the correct BT sink from the first sample.
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 import socket
 from datetime import datetime, timezone
@@ -29,13 +28,10 @@ from aiosendspin.models.core import (
     ServerCommandPayload,
     ServerStatePayload,
 )
-from aiosendspin.models.types import BinaryMessageType, PlayerCommand, UndefinedField
+from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 
 from config import VERSION as _BRIDGE_VERSION
-from services.pulse import (
-    aset_sink_volume,
-)
 
 UTC = timezone.utc
 
@@ -49,8 +45,6 @@ class BridgeDaemon(SendspinDaemon):
         args: Standard DaemonArgs for SendspinDaemon.
         status: Shared status dict owned by SendspinClient (updated in-place).
         bluetooth_sink_name: PulseAudio/PipeWire sink name for volume sync.
-        on_volume_save: Optional callback(volume_int) called after volume changes
-                        to persist the value to config.
         on_status_change: Optional callback() called whenever status is mutated.
                           Used by daemon_process.py to flush status to parent.
     """
@@ -60,15 +54,12 @@ class BridgeDaemon(SendspinDaemon):
         args: DaemonArgs,
         status: dict,
         bluetooth_sink_name: str | None,
-        on_volume_save: Callable[[int], None] | None = None,
         on_status_change: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(args)
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
-        self._on_volume_save = on_volume_save
         self._on_status_change = on_status_change
-        self._background_tasks: set = set()
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -109,31 +100,13 @@ class BridgeDaemon(SendspinDaemon):
 
         from aiosendspin.client import SendspinClient as _AioSendspinClient
 
-        # Build optional role support objects (gracefully skip if imports fail).
-        # Do not advertise the draft visualizer role yet: newer aiosendspin
-        # builds expose `visualizer@_draft_r1`, which current Music Assistant
-        # releases reject during ClientHello parsing.
-        artwork_support = None
-
-        try:
-            from aiosendspin.models.artwork import ArtworkChannel, ClientHelloArtworkSupport
-            from aiosendspin.models.types import ArtworkSource, PictureFormat
-
-            artwork_support = ClientHelloArtworkSupport(
-                channels=[
-                    ArtworkChannel(
-                        source=ArtworkSource.ALBUM,
-                        format=PictureFormat.JPEG,
-                        media_width=500,
-                        media_height=500,
-                    )
-                ]
-            )
-            client_roles.append(Roles.ARTWORK)
-        except Exception:
-            logger.debug("Artwork role not available in this aiosendspin version")
-
-        # Use filter_supported_call_kwargs to handle version differences
+        # Use filter_supported_call_kwargs to handle aiosendspin version
+        # differences in the constructor surface.  Artwork support / binary
+        # frame relay was dropped in 2.62.0-rc.9: bridge UI sources artwork
+        # exclusively from MA's ``image_url`` via the existing
+        # ``/api/ma/artwork`` HMAC-signed proxy, which removes the
+        # monkey-patched ``_handle_binary_message`` (fragile across
+        # aiosendspin upgrades) and saves an IPC roundtrip per track.
         client_kwargs = filter_supported_call_kwargs(
             _AioSendspinClient,
             {
@@ -146,25 +119,13 @@ class BridgeDaemon(SendspinDaemon):
                     buffer_capacity=32_000_000,
                     supported_commands=[PlayerCommand.VOLUME, PlayerCommand.MUTE],
                 ),
-                "artwork_support": artwork_support,
                 "static_delay_ms": static_delay_ms,
                 "initial_volume": self._audio_handler.volume,
                 "initial_muted": self._audio_handler.muted,
             },
         )
-        # Remove role-specific support kwargs if the roles were dropped
-        if "artwork_support" in client_kwargs and Roles.ARTWORK not in client_roles:
-            client_kwargs.pop("artwork_support", None)
-        # Remove None support kwargs (avoids validation errors when role is present but support is None)
-        if client_kwargs.get("artwork_support") is None:
-            client_kwargs.pop("artwork_support", None)
-            client_roles = [r for r in client_roles if r != Roles.ARTWORK]
-            client_kwargs["roles"] = client_roles
 
         client = _AioSendspinClient(**client_kwargs)
-
-        # Monkey-patch binary message handler to support artwork frames
-        self._patch_artwork_handler(client)
 
         client.add_group_update_listener(self._on_group_update)
         client.add_metadata_listener(self._on_metadata_update)
@@ -176,31 +137,6 @@ class BridgeDaemon(SendspinDaemon):
             client.add_visualizer_listener(self._on_visualizer_frames)
 
         return client
-
-    def _patch_artwork_handler(self, client) -> None:
-        """Monkey-patch the client's binary message handler to forward artwork frames."""
-        if not hasattr(client, "_handle_binary_message"):
-            logger.warning("aiosendspin API changed: _handle_binary_message not found; artwork relay disabled")
-            return
-        original_handler = client._handle_binary_message
-        artwork_types = {
-            BinaryMessageType.ARTWORK_CHANNEL_0.value,
-            BinaryMessageType.ARTWORK_CHANNEL_1.value,
-            BinaryMessageType.ARTWORK_CHANNEL_2.value,
-            BinaryMessageType.ARTWORK_CHANNEL_3.value,
-        }
-
-        def _patched_handler(payload: bytes) -> None:
-            if len(payload) >= 1 and payload[0] in artwork_types:
-                channel = payload[0] - BinaryMessageType.ARTWORK_CHANNEL_0.value
-                # Artwork binary: [type:1][timestamp:8][image_data...]
-                image_data = payload[9:] if len(payload) > 9 else b""
-                if image_data:
-                    self._on_artwork_frame(channel, image_data)
-                return
-            original_handler(payload)
-
-        client._handle_binary_message = _patched_handler
 
     # ── Connection lifecycle ─────────────────────────────────────────────────
 
@@ -421,45 +357,24 @@ class BridgeDaemon(SendspinDaemon):
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
     def _handle_server_command(self, payload: ServerCommandPayload) -> None:
+        # The actual sink-level volume / mute application is performed by
+        # ``services.pa_volume_controller.PulseVolumeController.set_state``,
+        # which sendspin invokes upstream of this callback.  We only mirror
+        # the new state into the bridge status dict so the parent-process
+        # SendspinClient surfaces it to the web UI.  Pinned ``sendspin==7.0.0``
+        # always provides the controller — the legacy <5.5.0 fallback that
+        # called ``aset_sink_volume`` from inside this method was dropped
+        # in 2.62.0-rc.9.
         super()._handle_server_command(payload)
         if payload.player is None:
             return
         cmd = payload.player
         if cmd.command == PlayerCommand.VOLUME and cmd.volume is not None:
-            vol = max(0, min(100, cmd.volume))
-            self._bridge_status["volume"] = vol
-            # Only sync manually when there is no upstream volume controller
-            if not self._has_upstream_volume_controller():
-                self._sync_bt_sink_volume(vol)
+            self._bridge_status["volume"] = max(0, min(100, cmd.volume))
             self._notify()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._bridge_status["muted"] = cmd.mute
             self._notify()
-
-    def _has_upstream_volume_controller(self) -> bool:
-        """Check if the upstream AudioStreamHandler uses an external volume controller."""
-        handler = self._audio_handler
-        return handler is not None and getattr(handler, "uses_external_volume_controller", False)
-
-    def _sync_bt_sink_volume(self, volume: int) -> None:
-        """Apply volume to the specific Bluetooth sink via pulsectl_asyncio."""
-        if not self._bluetooth_sink_name:
-            return
-        try:
-            task = asyncio.ensure_future(aset_sink_volume(self._bluetooth_sink_name, volume))
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
-            task.add_done_callback(
-                lambda t: (
-                    logger.info("✓ Synced Bluetooth speaker volume to %d%%", volume)
-                    if not t.exception() and t.result()
-                    else logger.debug("Could not sync volume: %s", t.exception())
-                )
-            )
-            if self._on_volume_save:
-                self._on_volume_save(volume)
-        except Exception as exc:
-            logger.debug("Could not sync volume: %s", exc)
 
     # ── MA group updates ─────────────────────────────────────────────────────
 
@@ -556,23 +471,6 @@ class BridgeDaemon(SendspinDaemon):
             self._bridge_status["group_muted"] = bool(muted)
             changed = True
         if changed:
-            self._notify()
-
-    # ── Artwork (binary frames via monkey-patch) ─────────────────────────────
-
-    def _on_artwork_frame(self, channel: int, image_data: bytes) -> None:
-        """Handle artwork binary frame received from the server."""
-        # Cap artwork at 48 KB raw (64 KB base64) to stay within IPC line limits
-        _MAX_ARTWORK_RAW = 48_000
-        if len(image_data) > _MAX_ARTWORK_RAW:
-            logger.debug("Artwork frame too large for IPC (%d bytes), skipping", len(image_data))
-            return
-        encoded = base64.b64encode(image_data).decode("ascii")
-        prev = self._bridge_status.get("artwork_b64")
-        self._bridge_status["artwork_b64"] = encoded
-        self._bridge_status["artwork_channel"] = channel
-        logger.debug("Artwork frame: channel=%d size=%d bytes", channel, len(image_data))
-        if encoded != prev:
             self._notify()
 
     # ── Visualizer (loudness / spectrum) ─────────────────────────────────────

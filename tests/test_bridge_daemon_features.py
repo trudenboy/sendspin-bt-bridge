@@ -1,9 +1,8 @@
-"""Tests for BridgeDaemon artwork and visualizer callback methods."""
+"""Tests for BridgeDaemon visualizer and metadata callback methods."""
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -18,7 +17,6 @@ _MOCK_MODULES = [
     "aiosendspin.models.core",
     "aiosendspin.models.player",
     "aiosendspin.models.types",
-    "aiosendspin.models.artwork",
     "aiosendspin.models.visualizer",
     "sendspin",
     "sendspin.audio",
@@ -45,18 +43,6 @@ for _mod in _MOCK_MODULES:
 _types_mod = sys.modules["aiosendspin.models.types"]
 _types_mod.PlayerCommand = type("PlayerCommand", (), {"VOLUME": "volume", "MUTE": "mute"})  # type: ignore[attr-defined]
 _types_mod.UndefinedField = type("UndefinedField", (), {})  # type: ignore[attr-defined]
-_types_mod.BinaryMessageType = type(  # type: ignore[attr-defined]
-    "BinaryMessageType",
-    (),
-    {
-        "ARTWORK_CHANNEL_0": SimpleNamespace(value=8),
-        "ARTWORK_CHANNEL_1": SimpleNamespace(value=9),
-        "ARTWORK_CHANNEL_2": SimpleNamespace(value=10),
-        "ARTWORK_CHANNEL_3": SimpleNamespace(value=11),
-        "AUDIO_CHUNK": SimpleNamespace(value=4),
-        "VISUALIZATION_DATA": SimpleNamespace(value=16),
-    },
-)
 
 _daemon_mod = sys.modules["sendspin.daemon.daemon"]
 _daemon_mod.DaemonArgs = MagicMock  # type: ignore[attr-defined]
@@ -114,9 +100,7 @@ def _make_bridge_daemon(status: dict | None = None) -> BridgeDaemon:
     daemon._args = mock_args
     daemon._bridge_status = status
     daemon._bluetooth_sink_name = "bluez_sink.AA_BB.a2dp_sink"
-    daemon._on_volume_save = None
     daemon._on_status_change = lambda: notified.append(True)
-    daemon._background_tasks = set()
     daemon._client = None
     daemon._listener = None  # type: ignore[assignment]
     daemon._audio_handler = None
@@ -128,24 +112,6 @@ def _make_bridge_daemon(status: dict | None = None) -> BridgeDaemon:
 
     daemon._notified = notified
     return daemon
-
-
-class TestArtworkCallback:
-    def test_artwork_frame_stores_b64_in_status(self):
-        daemon = _make_bridge_daemon()
-        image_data = b"\x89PNG\r\n\x1a\nfake_image_data"
-        daemon._on_artwork_frame(0, image_data)
-
-        assert daemon._bridge_status["artwork_b64"] == base64.b64encode(image_data).decode("ascii")
-        assert daemon._bridge_status["artwork_channel"] == 0
-        assert len(daemon._notified) == 1
-
-    def test_artwork_frame_different_channels(self):
-        daemon = _make_bridge_daemon()
-        daemon._on_artwork_frame(1, b"ch1")
-        assert daemon._bridge_status["artwork_channel"] == 1
-        daemon._on_artwork_frame(3, b"ch3")
-        assert daemon._bridge_status["artwork_channel"] == 3
 
 
 class TestVisualizerCallback:
@@ -183,57 +149,6 @@ class TestVisualizerCallback:
         daemon._on_visualizer_frames([])
         assert "visualizer" not in daemon._bridge_status
         assert len(daemon._notified) == 0
-
-
-class TestArtworkMonkeyPatch:
-    def test_patch_artwork_handler_forwards_artwork_bytes(self):
-        daemon = _make_bridge_daemon()
-
-        # Create a mock client with _handle_binary_message
-        client = MagicMock()
-        original_called = []
-        client._handle_binary_message = lambda payload: original_called.append(payload)
-
-        daemon._patch_artwork_handler(client)
-
-        # Artwork channel 0 = type byte 8
-        artwork_payload = bytes([8]) + b"\x00" * 8 + b"JPEG_DATA"
-        client._handle_binary_message(artwork_payload)
-
-        # Should NOT call original handler
-        assert len(original_called) == 0
-        # Should have stored artwork
-        assert daemon._bridge_status.get("artwork_b64") is not None
-        assert daemon._bridge_status["artwork_channel"] == 0
-
-    def test_patch_artwork_handler_passes_audio_through(self):
-        daemon = _make_bridge_daemon()
-
-        client = MagicMock()
-        original_called = []
-        client._handle_binary_message = lambda payload: original_called.append(payload)
-
-        daemon._patch_artwork_handler(client)
-
-        # Audio chunk = type byte 4
-        audio_payload = bytes([4]) + b"\x00" * 8 + b"AUDIO_DATA"
-        client._handle_binary_message(audio_payload)
-
-        assert len(original_called) == 1
-        assert "artwork_b64" not in daemon._bridge_status
-
-
-class TestUpstreamVolumeController:
-    def test_has_upstream_volume_controller_false_by_default(self):
-        daemon = _make_bridge_daemon()
-        assert daemon._has_upstream_volume_controller() is False
-
-    def test_has_upstream_volume_controller_true_with_external(self):
-        daemon = _make_bridge_daemon()
-        handler = MagicMock()
-        handler.uses_external_volume_controller = True
-        daemon._audio_handler = handler
-        assert daemon._has_upstream_volume_controller() is True
 
 
 class TestConnectionLifecycle:
@@ -288,7 +203,12 @@ class TestConnectionLifecycle:
 
 
 class TestClientHelloRoles:
-    def test_create_client_does_not_advertise_visualizer_role(self, monkeypatch):
+    def test_create_client_advertises_only_supported_roles(self, monkeypatch):
+        # Regression: bridge advertises PLAYER/METADATA/CONTROLLER but NOT
+        # the draft VISUALIZER role (current MA releases reject it during
+        # ClientHello parsing) and NOT the ARTWORK role (binary-frame relay
+        # was dropped in 2.62.0-rc.9 — UI sources artwork from MA's image_url
+        # via /api/ma/artwork instead).
         import services.sendspin_compat as compat_mod
 
         daemon = _make_bridge_daemon()
@@ -305,22 +225,15 @@ class TestClientHelloRoles:
                 "VISUALIZER": "visualizer-role",
             },
         )
-        _types_mod.ArtworkSource = type("ArtworkSource", (), {"ALBUM": "album"})
-        _types_mod.PictureFormat = type("PictureFormat", (), {"JPEG": "jpeg"})
 
         player_mod = sys.modules["aiosendspin.models.player"]
         player_mod.ClientHelloPlayerSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
-
-        artwork_mod = sys.modules["aiosendspin.models.artwork"]
-        artwork_mod.ArtworkChannel = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
-        artwork_mod.ClientHelloArtworkSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
 
         captured_kwargs: dict[str, object] = {}
 
         class FakeSendspinClient:
             def __init__(self, **kwargs):
                 captured_kwargs.update(kwargs)
-                self._handle_binary_message = lambda payload: payload
 
             def add_group_update_listener(self, _listener):
                 return None
@@ -346,8 +259,8 @@ class TestClientHelloRoles:
 
         daemon._create_client()
 
-        assert captured_kwargs["roles"] == ["player-role", "metadata-role", "controller-role", "artwork-role"]
-        assert "artwork_support" in captured_kwargs
+        assert captured_kwargs["roles"] == ["player-role", "metadata-role", "controller-role"]
+        assert "artwork_support" not in captured_kwargs
         assert "visualizer_support" not in captured_kwargs
 
 

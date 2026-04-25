@@ -415,7 +415,6 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     continue
                 with _status_lock:
                     daemon._bridge_status["volume"] = vol
-                daemon._sync_bt_sink_volume(vol)
                 daemon._notify()
         elif cmd.cmd == "set_mute":
             daemon = daemon_ref[0] if daemon_ref else None
@@ -594,6 +593,9 @@ async def _run(params: dict) -> None:
         except Exception as exc:
             logger.warning("[%s] Could not create PulseVolumeController: %s", player_name, exc)
 
+    # ``sendspin==7.0.0`` is pinned in requirements.txt — DaemonArgs always
+    # accepts ``volume_controller``.  The legacy ``use_hardware_volume``
+    # fallback for sendspin <5.5.0 was removed in 2.62.0-rc.9.
     daemon_kwargs = _filter_supported_daemon_args_kwargs(
         DaemonArgs,
         {
@@ -606,17 +608,16 @@ async def _run(params: dict) -> None:
             "listen_port": listen_port,
             "use_mpris": False,
             "volume_controller": pa_volume_controller,
-            # sendspin 7+ uses volume_controller; 5.x uses use_hardware_volume
-            "use_hardware_volume": False,
             "preferred_format": preferred_fmt,
         },
     )
-    # Remove whichever volume kwarg DaemonArgs doesn't accept
-    if "volume_controller" not in daemon_kwargs and "use_hardware_volume" not in daemon_kwargs:
-        logger.info("[%s] DaemonArgs accepts neither volume_controller nor use_hardware_volume", player_name)
-    elif "volume_controller" in daemon_kwargs and "use_hardware_volume" in daemon_kwargs:
-        # Both accepted — shouldn't happen, but prefer new API
-        daemon_kwargs.pop("use_hardware_volume", None)
+    if "volume_controller" not in daemon_kwargs:
+        logger.warning(
+            "[%s] DaemonArgs does not accept ``volume_controller`` — "
+            "MA volume will not propagate to the BT sink.  Pinned sendspin "
+            "==7.0.0 should always provide it; investigate the runtime env.",
+            player_name,
+        )
     args = DaemonArgs(
         **daemon_kwargs,
     )

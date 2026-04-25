@@ -1300,7 +1300,8 @@ class SendspinClient:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
                 cwd=os.path.dirname(os.path.abspath(__file__)),
-                limit=1024 * 1024,  # 1 MB readline buffer (artwork base64 can exceed 64 KB default)
+                limit=1024
+                * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
             )
             self._update_status({"playing": False})
             self._clear_ma_reconnecting()

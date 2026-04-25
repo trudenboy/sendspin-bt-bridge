@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.9] - 2026-04-24
+
+Continuation of the rc.8 simplification work: with sendspin's
+``PulseVolumeController`` doing real two-way state sync, the bridge
+no longer needs to maintain its own artwork-frame relay or its
+backwards-compat shims for sendspin <5.5.0.  ``requirements.txt``
+pins ``sendspin==7.0.0``, so the legacy paths can never execute.
+
+### Removed
+- **Sendspin artwork binary-frame relay**.  ``BridgeDaemon`` no
+  longer monkey-patches the sendspin client's
+  ``_handle_binary_message`` to intercept ``ArtworkFrame`` payloads
+  (``_patch_artwork_handler``, ``_on_artwork_frame``,
+  ``Roles.ARTWORK`` advertisement, ``ArtworkChannel`` /
+  ``ClientHelloArtworkSupport`` imports, ``base64`` import).  The
+  web UI already uses MA's ``image_url`` via the HMAC-signed
+  ``/api/ma/artwork`` proxy, so this ~80 LoC of fragile
+  monkey-patched code never reached the user.
+- **Legacy sendspin <5.5.0 fallback** in ``BridgeDaemon``.  Removed
+  ``_has_upstream_volume_controller`` / ``_sync_bt_sink_volume``
+  manual ``aset_sink_volume`` path, the ``on_volume_save`` callback
+  parameter, and the ``_background_tasks`` book-keeping set.  The
+  pinned sendspin always provides ``PulseVolumeController.set_state``,
+  so ``_handle_server_command`` only mirrors the value into
+  ``bridge_status`` and notifies SSE listeners.
+- **Legacy ``use_hardware_volume`` filter** in ``daemon_process``.
+  ``DaemonArgs`` always accepts ``volume_controller`` on sendspin
+  7.0.0; the kwarg-based fallback the bridge used to keep when
+  ``volume_controller`` wasn't supported is gone.  The generic
+  ``_filter_supported_daemon_args_kwargs`` helper still drops any
+  unknown keys (kept tested by ``test_daemon_process.py``), so
+  forward-compat with future sendspin signatures is unchanged.
+- ``daemon._sync_bt_sink_volume(vol)`` call from the IPC
+  ``set_volume`` handler in ``services/daemon_process.py:_read_commands``
+  (the method no longer exists).  PulseVolumeController already
+  drives the actual sink volume from inside sendspin.
+- Removed test classes ``TestArtworkCallback``, ``TestArtworkMonkeyPatch``
+  and ``TestUpstreamVolumeController`` from
+  ``tests/test_bridge_daemon_features.py`` (covered code is gone).
+  ``TestClientHelloRoles`` renamed to
+  ``test_create_client_advertises_only_supported_roles`` and now
+  asserts that neither ``visualizer_support`` nor
+  ``artwork_support`` kwargs are passed.
+
+### Changed
+- ``BridgeDaemon._handle_server_command`` is now a thin status
+  mirror: it forwards the call to ``super()._handle_server_command``
+  (so sendspin's ``PulseVolumeController`` is invoked) and then
+  copies ``volume`` / ``muted`` into ``bridge_status``.  No more
+  branching on whether an upstream controller exists.
+
 ## [2.62.0-rc.8] - 2026-04-25
 
 Architectural cleanup discussed on the rc.7 thread: the bridge no
