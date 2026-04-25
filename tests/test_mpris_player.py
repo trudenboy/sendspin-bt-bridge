@@ -339,6 +339,38 @@ def test_registry_register_replaces_existing_player_for_same_mac():
     assert reg.get("AA:BB:CC:DD:EE:FF") is second
 
 
+@pytest.mark.asyncio
+async def test_build_player_iface_emit_wraps_metadata_values_in_variant():
+    """``Metadata`` is an ``a{sv}`` MPRIS property; dbus_fast expects each
+    value to be a ``Variant``, not a raw Python primitive.  When
+    ``set_metadata`` triggers PropertiesChanged, the wired emit closure
+    must convert the flat dict via ``_metadata_to_variant_dict`` before
+    handing it to dbus_fast — otherwise the bus library raises a type
+    error and the speaker display never updates.
+
+    Regression test for Copilot review on PR #195: previous _emit()
+    forwarded the raw dict and only mentioned coercion in a comment.
+    """
+    from dbus_fast.signature import Variant  # type: ignore[import-untyped]
+
+    player = _make_player()
+    iface = _build_player_iface(player)
+
+    captured: list[dict] = []
+    iface.emit_properties_changed = lambda changes: captured.append(dict(changes))
+
+    await player.set_metadata({"xesam:title": "T", "xesam:artist": ["A"], "mpris:length": 1234})
+
+    md_emit = next(
+        (c["Metadata"] for c in captured if "Metadata" in c),
+        None,
+    )
+    assert md_emit is not None, captured
+    # Each value must be a Variant — not a raw string / int / list.
+    for key, value in md_emit.items():
+        assert isinstance(value, Variant), f"Metadata[{key}] is {type(value).__name__}, want Variant"
+
+
 def test_registry_active_macs_lists_currently_registered():
     """The Claim Audio UI button needs to know which MACs have an active
     MprisPlayer (so it can hide the button for offline devices)."""
@@ -351,3 +383,66 @@ def test_registry_active_macs_lists_currently_registered():
     reg.register(p2.mac, p2)
 
     assert sorted(reg.active_macs()) == ["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]
+
+
+def test_registry_concurrent_register_and_iterate_does_not_raise():
+    """Regression test for Copilot review on PR #195: ``MprisRegistry`` is
+    accessed from BT manager threads (register/unregister), Flask request
+    threads (Claim Audio endpoint), and the main asyncio loop (MA monitor
+    reverse hook).  Without synchronisation, iterating ``_by_mac.values()``
+    from one thread while another mutates it raises
+    ``RuntimeError: dictionary changed size during iteration``.
+
+    This test stresses the read+write fan-out and asserts no such error
+    surfaces.  It does NOT assert on intermediate values (those depend on
+    interleaving) — it only proves the operations are safe to interleave.
+    """
+    import threading
+
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    seed = MprisPlayer("AA:BB:CC:DD:EE:00", "seed", AsyncMock(), AsyncMock())
+    reg.register(seed.mac, seed)
+
+    errors: list[BaseException] = []
+    stop = threading.Event()
+
+    # Pre-populate so iterators have material to walk.  The bigger the
+    # snapshot, the more bytecode the iterator burns inside ``values()`` —
+    # widening the window during which a writer can mutate the underlying
+    # dict mid-iteration.
+    for i in range(200):
+        p = MprisPlayer(f"AA:BB:CC:DD:EE:{i % 256:02X}", f"seed-{i}", AsyncMock(), AsyncMock())
+        reg.register(f"AA:BB:CC:DD:EE:{i:04X}", p)
+
+    def _writer() -> None:
+        try:
+            i = 0
+            while not stop.is_set():
+                mac = f"AA:BB:CC:DD:E1:{i % 256:02X}"
+                reg.register(mac, MprisPlayer(mac, f"w-{i}", AsyncMock(), AsyncMock()))
+                reg.unregister(mac)
+                i += 1
+        except BaseException as exc:
+            errors.append(exc)
+
+    def _reader() -> None:
+        try:
+            for _ in range(20000):
+                reg.get_by_player_id("seed")
+                reg.active_macs()
+        except BaseException as exc:
+            errors.append(exc)
+
+    writers = [threading.Thread(target=_writer) for _ in range(4)]
+    readers = [threading.Thread(target=_reader) for _ in range(4)]
+    for t in writers + readers:
+        t.start()
+    for t in readers:
+        t.join(timeout=15.0)
+    stop.set()
+    for t in writers:
+        t.join(timeout=15.0)
+
+    assert errors == [], f"concurrent registry access raised: {errors[:3]!r}"

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -302,12 +303,17 @@ def _build_player_iface(player: MprisPlayer):
     # set_playback_status / set_metadata / set_volume actually push
     # PropertiesChanged on the bus.
     def _emit(changes: dict[str, Any]) -> None:
-        # dbus_fast's PropertiesChanged: pass each prop key + new value.
-        # The library handles signature derivation from the property's
-        # declared type.  We coerce Variant for Metadata only.
+        # dbus_fast handles signature derivation for primitive properties
+        # (PlaybackStatus 's', Volume 'd') from the declared @dbus_property
+        # signature, but ``Metadata`` is ``a{sv}`` — values must already be
+        # Variants or dbus_fast raises a type error and the speaker display
+        # never refreshes.  Coerce the flat dict before forwarding.
         try:
             for key, value in changes.items():
-                iface.emit_properties_changed({key: value})
+                emit_value = value
+                if key == "Metadata" and isinstance(value, dict):
+                    emit_value = _metadata_to_variant_dict(value, Variant)
+                iface.emit_properties_changed({key: emit_value})
         except Exception as exc:
             logger.debug("MprisPlayer[%s]: emit_properties_changed failed: %s", player.mac, exc)
 
@@ -341,18 +347,28 @@ class MprisRegistry:
 
     def __init__(self) -> None:
         self._by_mac: dict[str, MprisPlayer] = {}
+        # The registry is touched from BT manager threads (register /
+        # unregister via the on_connected / on_disconnected hooks), Flask
+        # request threads (Claim Audio endpoint), and the asyncio loop (MA
+        # monitor reverse hook).  Without serialisation the iterators in
+        # get_by_player_id / active_macs raise "dictionary changed size
+        # during iteration" when a concurrent register / unregister lands.
+        self._lock = threading.Lock()
 
     def register(self, mac: str, player: MprisPlayer) -> None:
         """Register *player* under *mac*; replaces any prior entry for the MAC."""
-        self._by_mac[_normalize_mac(mac)] = player
+        with self._lock:
+            self._by_mac[_normalize_mac(mac)] = player
 
     def unregister(self, mac: str) -> MprisPlayer | None:
         """Remove and return the player for *mac*; ``None`` if absent."""
-        return self._by_mac.pop(_normalize_mac(mac), None)
+        with self._lock:
+            return self._by_mac.pop(_normalize_mac(mac), None)
 
     def get(self, mac: str) -> MprisPlayer | None:
         """Look up the active MprisPlayer for *mac*, or ``None``."""
-        return self._by_mac.get(_normalize_mac(mac))
+        with self._lock:
+            return self._by_mac.get(_normalize_mac(mac))
 
     def get_by_player_id(self, player_id: str) -> MprisPlayer | None:
         """Reverse lookup keyed on the MprisPlayer's ``player_id`` attribute.
@@ -360,7 +376,9 @@ class MprisRegistry:
         Used by the MA monitor reverse hook: MA pushes ``player_id`` updates
         and we need to map back to the BT-attached MprisPlayer.
         """
-        for player in self._by_mac.values():
+        with self._lock:
+            snapshot = list(self._by_mac.values())
+        for player in snapshot:
             if player.player_id == player_id:
                 return player
         return None
@@ -372,7 +390,8 @@ class MprisRegistry:
         form, so UI surfaces ("Claim audio" buttons) can render them in the
         format users expect to see.
         """
-        return [player.mac for player in self._by_mac.values()]
+        with self._lock:
+            return [player.mac for player in self._by_mac.values()]
 
 
 # Process-wide singleton.  Exposed via get_registry() so tests can patch the

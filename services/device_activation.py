@@ -25,18 +25,39 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-_MPRIS_PATH_PREFIX = "/org/mpris/MediaPlayer2/sendspin_"
+# MPRIS clients (BlueZ' MPRIS forwarder, playerctl, GNOME / KDE MPRIS
+# applets) discover players by walking well-known bus names beginning
+# with ``org.mpris.MediaPlayer2.`` and reading the standard
+# ``/org/mpris/MediaPlayer2`` object path on each.  Exporting on a
+# non-standard object path or skipping the well-known name request makes
+# the player invisible to those clients — including BlueZ's AVRCP
+# bridge, which silently drops button events with nowhere to forward.
+_MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
+_MPRIS_NAME_PREFIX = "org.mpris.MediaPlayer2.sendspin_"
 
 
 def _mpris_dbus_path(mac: str) -> str:
-    """Per-device MPRIS object path on the system bus.
+    """Canonical MPRIS object path — same for every per-device export.
 
-    BlueZ scans MPRIS Player exports and forwards AVRCP buttons to whichever
-    one is associated with the connected device.  We use a stable, MAC-based
-    path so reconnects re-export at the same name and BlueZ does not need to
-    re-bind on every transition.
+    Per-device differentiation lives in the well-known *bus name* (see
+    ``_mpris_well_known_name``); the *object path* under that name is
+    always the standard ``/org/mpris/MediaPlayer2`` so MPRIS-spec
+    consumers (BlueZ AVRCP bridge, playerctl, GNOME/KDE applets) find
+    the iface where they expect.
     """
-    return _MPRIS_PATH_PREFIX + mac.upper().replace(":", "_")
+    del mac  # accepted for call-site symmetry; canonical path is global
+    return _MPRIS_OBJECT_PATH
+
+
+def _mpris_well_known_name(mac: str) -> str:
+    """Per-device well-known bus name.
+
+    MPRIS spec requires every player to claim a name beginning with
+    ``org.mpris.MediaPlayer2.``.  We append a MAC-derived suffix so each
+    BT speaker gets its own discoverable player.  Bus names disallow ``:``
+    and require alphanumerics + underscores, so colons map to ``_``.
+    """
+    return _MPRIS_NAME_PREFIX + mac.upper().replace(":", "_")
 
 
 def _build_mpris_transport_callback(client: Any) -> Callable[[str, str], Any]:
@@ -134,10 +155,31 @@ def _make_mpris_connected_hook(
                 iface = _build_player_iface(player)
                 bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
                 bus.export(_mpris_dbus_path(mac), iface)
-                # Pin the bus + iface on the player so unregister can release them.
+                # Claim the well-known org.mpris.MediaPlayer2.* name so
+                # BlueZ's MPRIS bridge (and any spec-conformant client)
+                # actually discovers us; without this we live only on the
+                # unique bus name (:1.NNN) where MPRIS consumers don't look.
+                well_known = _mpris_well_known_name(mac)
+                try:
+                    await bus.request_name(well_known)
+                except Exception as name_exc:
+                    logger.warning(
+                        "MPRIS request_name(%s) failed for %s: %s",
+                        well_known,
+                        mac,
+                        name_exc,
+                    )
+                # Pin the bus + iface + claimed name on the player so the
+                # disconnect hook can release them in symmetry.
                 player._dbus_bus = bus  # type: ignore[attr-defined]
                 player._dbus_iface = iface  # type: ignore[attr-defined]
-                logger.info("MPRIS player exported on D-Bus for %s at %s", mac, _mpris_dbus_path(mac))
+                player._dbus_well_known = well_known  # type: ignore[attr-defined]
+                logger.info(
+                    "MPRIS player exported on D-Bus for %s as %s at %s",
+                    mac,
+                    well_known,
+                    _mpris_dbus_path(mac),
+                )
             except Exception as exc:
                 logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
 
@@ -172,7 +214,14 @@ def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
         if bus is None:
             return
 
+        well_known = getattr(player, "_dbus_well_known", None)
+
         async def _unexport() -> None:
+            if well_known:
+                try:
+                    await bus.release_name(well_known)
+                except Exception as exc:
+                    logger.debug("MPRIS release_name(%s) failed: %s", well_known, exc)
             try:
                 bus.unexport(path)
             except Exception as exc:

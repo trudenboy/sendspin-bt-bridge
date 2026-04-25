@@ -84,3 +84,34 @@ def test_claim_audio_accepts_lowercase_mac(flask_client):
     response = flask_client.post("/api/bt/claim/aa:bb:cc:dd:ee:ff")
 
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "mac_in_url",
+    [
+        "aa-bb-cc-dd-ee-ff",  # dash separators (Windows MAC style)
+        "AA-BB-CC-DD-EE-FF",
+        "aabbccddeeff",  # no separators (compact form)
+        "AABBCCDDEEFF",
+    ],
+)
+def test_claim_audio_accepts_alternate_mac_separators(flask_client, mac_in_url):
+    """Regression test for Copilot review on PR #195: the endpoint and the
+    MprisRegistry are inconsistent if the endpoint validator only accepts
+    colon-separated MACs while the registry tolerates dashes / no
+    separators.  Operators (and any UI that derives the MAC from a
+    different source) must be able to claim regardless of the
+    representation; canonicalise on the server before validating."""
+    _register_player("AA:BB:CC:DD:EE:FF")
+
+    response = flask_client.post(f"/api/bt/claim/{mac_in_url}")
+
+    assert response.status_code == 200, response.data
+
+
+def test_claim_audio_rejects_too_short_mac_after_normalisation(flask_client):
+    """Once we canonicalise dashes / no-sep forms, validation must still
+    reject anything that isn't 12 hex digits.  Otherwise we'd silently
+    accept ``DEADBEEF`` and surface a confusing 404 instead of 400."""
+    response = flask_client.post("/api/bt/claim/DEADBEEF")
+    assert response.status_code == 400

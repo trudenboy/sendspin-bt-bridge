@@ -51,11 +51,35 @@ suppressed via a one-shot ``_volume_echo_pending`` guard on
 - ``tests/test_bt_manager.py`` — 8 new tests covering connect /
   disconnect transition fires, idempotency, and exception isolation.
 - ``tests/test_mpris_player.py`` — 7 new tests for ``MprisRegistry``
-  (lookup, MAC-case normalisation, replace semantics).
+  (lookup, MAC-case normalisation, replace semantics) + 1 Variant
+  wrapping regression + 1 concurrent register/iterate stress test.
 - ``tests/test_ma_monitor_mpris_bridge.py`` — solo + syncgroup → MPRIS
   bridging, idle→Stopped state mapping, MA→xesam metadata translation.
 - ``tests/test_api_bt_claim.py`` — Claim Audio endpoint contract
-  (success, no-player → 404, malformed MAC → 400, MAC-case tolerance).
+  (success, no-player → 404, malformed MAC → 400, MAC-case tolerance,
+  dash / no-separator MAC normalisation).
+- ``tests/test_device_activation.py`` — 2 new tests fixing the MPRIS
+  object path to the canonical ``/org/mpris/MediaPlayer2`` and
+  asserting per-device well-known bus names.
+
+### Fixes from initial review (PR #195)
+
+- **``services/mpris_player.py``** — wrap MPRIS ``Metadata`` values in
+  ``Variant`` before ``emit_properties_changed``; previous code
+  forwarded a flat dict and would have crashed dbus_fast on the
+  ``a{sv}`` signature.
+- **``services/mpris_player.py``** — guard ``MprisRegistry`` with a
+  ``threading.Lock`` and iterate over snapshots; the singleton is
+  touched by BT manager threads, Flask request threads, and the asyncio
+  loop simultaneously.
+- **``routes/api_bt.py``** — canonicalise MAC before validation in
+  ``POST /api/bt/claim/<mac>`` so dash-separated and compact (no
+  separator) forms match the registry's normalisation.
+- **``services/device_activation.py``** — claim a per-device well-known
+  ``org.mpris.MediaPlayer2.sendspin_<MAC>`` bus name and export at the
+  canonical ``/org/mpris/MediaPlayer2`` object path; without the
+  well-known name BlueZ' MPRIS bridge and other MPRIS clients can't
+  discover the player.
 
 ## [2.62.0] - 2026-04-25
 
