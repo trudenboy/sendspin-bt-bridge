@@ -1,15 +1,18 @@
 """Tests for services/bluetooth.py — BT helpers that don't require hardware."""
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from services.bluetooth import (
     bt_remove_device,
     describe_pair_failure,
     extract_pair_failure_reason,
+    get_adapter_alias,
     is_audio_device,
     persist_device_enabled,
     persist_device_released,
+    resolve_hci_for_mac,
 )
 
 # ---------------------------------------------------------------------------
@@ -325,3 +328,140 @@ def test_persist_device_released(tmp_config, monkeypatch):
     devs = result["BLUETOOTH_DEVICES"]
     assert devs[0]["released"] is True
     assert devs[1]["released"] is False
+
+
+# ---------------------------------------------------------------------------
+# resolve_hci_for_mac (issue #193)
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_sysfs(tmp_path, entries: dict[str, str]) -> "object":
+    """Build a fake ``/sys/class/bluetooth`` directory.
+
+    ``entries`` maps ``hciN`` → MAC string (with colons, any case).  Returns
+    the root directory ready to monkeypatch onto
+    ``services.bluetooth._BT_SYSFS_DIR``.
+    """
+    sysfs = tmp_path / "bluetooth"
+    sysfs.mkdir()
+    for name, addr in entries.items():
+        hci_dir = sysfs / name
+        hci_dir.mkdir()
+        (hci_dir / "address").write_text(addr + "\n")
+    return sysfs
+
+
+def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, monkeypatch):
+    # Pi built-in (Cypress) registered as hci0; USB BT500 plugged in second
+    # registered as hci1.  Sysfs is the canonical mapping — bluetoothctl's
+    # internal order may differ, but we must surface the kernel name so the
+    # frontend label matches `hciconfig` (issue #193).
+    sysfs = _make_fake_sysfs(
+        tmp_path,
+        {"hci0": "A0:AD:9F:6E:B2:D5", "hci1": "88:A2:9E:C0:07:0D"},
+    )
+    monkeypatch.setattr("services.bluetooth._BT_SYSFS_DIR", sysfs)
+
+    assert resolve_hci_for_mac("A0:AD:9F:6E:B2:D5") == "hci0"
+    assert resolve_hci_for_mac("88:A2:9E:C0:07:0D") == "hci1"
+    # Case-insensitive lookup — BlueZ may emit MAC in either case.
+    assert resolve_hci_for_mac("a0:ad:9f:6e:b2:d5") == "hci0"
+
+
+def test_resolve_hci_for_mac_returns_empty_when_unknown(tmp_path, monkeypatch):
+    sysfs = _make_fake_sysfs(tmp_path, {"hci0": "AA:BB:CC:DD:EE:FF"})
+    monkeypatch.setattr("services.bluetooth._BT_SYSFS_DIR", sysfs)
+
+    assert resolve_hci_for_mac("00:00:00:00:00:01") == ""
+
+
+def test_resolve_hci_for_mac_returns_empty_when_sysfs_missing(tmp_path, monkeypatch):
+    # /sys/class/bluetooth doesn't exist on macOS dev boxes / containers
+    # without /sys mounted.  Caller falls back to a synthetic label.
+    monkeypatch.setattr("services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
+
+    assert resolve_hci_for_mac("AA:BB:CC:DD:EE:FF") == ""
+
+
+def test_resolve_hci_for_mac_empty_input_returns_empty():
+    # Defensive: callers that pipe an empty MAC through must not walk sysfs.
+    assert resolve_hci_for_mac("") == ""
+
+
+# ---------------------------------------------------------------------------
+# get_adapter_alias (issue #193)
+# ---------------------------------------------------------------------------
+
+
+_SHOW_OUTPUT_CYPRESS = """\
+Controller A0:AD:9F:6E:B2:D5 (public)
+\tManufacturer: 0x0131
+\tVersion: 0x0a
+\tName: SendSpinEG
+\tAlias: SendSpinEG
+\tClass: 0x006c0000
+\tPowered: yes
+\tDiscoverable: no
+\tPairable: yes
+"""
+
+_SHOW_OUTPUT_REALTEK = """\
+Controller 88:A2:9E:C0:07:0D (public)
+\tManufacturer: 0x005d
+\tVersion: 0x0a
+\tName: SendSpinEG #2
+\tAlias: SendSpinEG #2
+\tClass: 0x000c0000
+\tPowered: yes
+"""
+
+
+def test_get_adapter_alias_returns_alias_and_powered_for_targeted_mac():
+    # Regression for issue #193: each ``show <MAC>`` call returns ONE
+    # ``Alias:`` line for the explicitly addressed adapter — no risk of
+    # picking up a stale default-controller line.
+    completed = MagicMock(stdout=_SHOW_OUTPUT_CYPRESS, returncode=0)
+    with patch("services.bluetooth.subprocess.run", return_value=completed) as run_mock:
+        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+
+    assert alias == "SendSpinEG"
+    assert powered is True
+    args, kwargs = run_mock.call_args
+    # Confirm we're using the explicit ``show <MAC>`` form, NOT the
+    # ``select <MAC>; show`` recipe that produced the alias swap in #193.
+    assert args[0] == ["bluetoothctl"]
+    assert kwargs["input"] == "show A0:AD:9F:6E:B2:D5\n"
+
+
+def test_get_adapter_alias_does_not_pick_up_default_controller_alias():
+    # Even if bluetoothctl banner / async events sneak a ``Pairable: yes``
+    # or unrelated ``[CHG] Controller ...`` lines into stdout before the
+    # block we want, the alias parser must still find the right one.
+    noisy = "Agent registered\n[CHG] Controller 88:A2:9E:C0:07:0D Pairable: yes\n" + _SHOW_OUTPUT_CYPRESS
+    completed = MagicMock(stdout=noisy, returncode=0)
+    with patch("services.bluetooth.subprocess.run", return_value=completed):
+        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+
+    assert alias == "SendSpinEG"
+    assert powered is True
+
+
+def test_get_adapter_alias_returns_empty_when_subprocess_fails():
+    with patch(
+        "services.bluetooth.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd="bluetoothctl", timeout=5),
+    ):
+        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+
+    assert alias == ""
+    assert powered is False
+
+
+def test_get_adapter_alias_empty_mac_returns_empty():
+    # Defensive: never call bluetoothctl with an empty MAC.
+    with patch("services.bluetooth.subprocess.run") as run_mock:
+        alias, powered = get_adapter_alias("")
+
+    assert alias == ""
+    assert powered is False
+    run_mock.assert_not_called()

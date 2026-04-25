@@ -345,7 +345,6 @@ async def test_read_commands_set_volume():
     """set_volume command should clamp and update daemon bridge_status."""
     daemon = MagicMock()
     daemon._bridge_status = {"volume": 50}
-    daemon._sync_bt_sink_volume = MagicMock()
     daemon._notify = MagicMock()
     daemon._client = MagicMock()
     daemon._client.connected = True
@@ -367,7 +366,6 @@ async def test_read_commands_set_volume():
         await asyncio.wait_for(_read_commands(daemon_ref, stop_event), timeout=2.0)
 
     assert daemon._bridge_status["volume"] == 100  # clamped
-    daemon._sync_bt_sink_volume.assert_called_once_with(100)
     daemon._notify.assert_called_once()
 
 

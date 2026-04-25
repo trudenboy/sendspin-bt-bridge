@@ -46,13 +46,13 @@ options:
   startup_banner_grace_seconds: 5
   recovery_banner_grace_seconds: 15
   prefer_sbc_codec: false
+  disable_pa_rescue_streams: false
   bt_check_interval: 10
   bt_max_reconnect_fails: 0
   log_level: "info"
   ma_api_url: ""
   ma_api_token: ""
   ma_auto_silent_auth: true
-  volume_via_ma: true
   bluetooth_devices: []
   bluetooth_adapters: []
 
@@ -67,13 +67,13 @@ schema:
   startup_banner_grace_seconds: int?
   recovery_banner_grace_seconds: int?
   prefer_sbc_codec: bool?
+  disable_pa_rescue_streams: bool?
   bt_check_interval: int?
   bt_max_reconnect_fails: int?
   log_level: "list(info|debug)?"
   ma_api_url: str?
   ma_api_token: str?
   ma_auto_silent_auth: bool?
-  volume_via_ma: bool?
   bluetooth_devices:
     - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
       player_name: str

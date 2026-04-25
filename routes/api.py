@@ -17,10 +17,10 @@ import time
 from flask import Blueprint, jsonify, request
 
 from config import save_device_volume
-from routes.api_config import _detect_runtime, get_mute_via_ma, get_volume_via_ma
+from routes.api_config import _detect_runtime
 from services.bridge_runtime_state import get_main_loop
 from services.device_registry import get_device_registry_snapshot
-from services.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player, is_ma_connected
+from services.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
 from services.pulse import (
     get_sink_mute,
     set_sink_mute,
@@ -198,101 +198,14 @@ def api_restart():
         return jsonify({"success": False, "error": "Internal error"}), 500
 
 
-# ---------------------------------------------------------------------------
-#  MA volume proxy helpers
-# ---------------------------------------------------------------------------
-
-
-def _set_volume_via_ma(target_pairs, volume: int, *, is_group: bool = False) -> bool:
-    """Proxy volume change through MA WebSocket API.
-
-    For group requests (is_group=True), uses ``players/cmd/group_volume``
-    once per unique sync group among the targets.
-    For individual requests, uses ``players/cmd/volume_set`` (flat).
-
-    Returns True if at least one target was set successfully via MA.
-    """
-    from services.ma_monitor import send_player_cmd
-
-    loop = get_main_loop()
-    if not loop:
-        return False
-    target_pairs = _ensure_target_pairs(target_pairs)
-
-    if is_group and target_pairs:
-        # Group volume: send one group_volume per unique sync group
-        seen_groups: set[str] = set()
-        for client, device in target_pairs:
-            gid = device.extra.get("group_id")
-            if not gid or gid in seen_groups:
-                continue
-            seen_groups.add(gid)
-            pid = getattr(client, "player_id", None)
-            if not pid:
-                continue
-            try:
-                fut = asyncio.run_coroutine_threadsafe(
-                    send_player_cmd("players/cmd/group_volume", {"player_id": pid, "volume_level": volume}),
-                    loop,
-                )
-                fut.result(timeout=5.0)
-            except Exception:
-                logger.debug("MA group_volume failed for group %s", gid, exc_info=True)
-                return False
-        return bool(seen_groups)
-
-    # Individual / all: flat volume_set for each target
-    for client, _device in target_pairs:
-        pid = getattr(client, "player_id", None)
-        if not pid:
-            continue
-        try:
-            fut = asyncio.run_coroutine_threadsafe(
-                send_player_cmd("players/cmd/volume_set", {"player_id": pid, "volume_level": volume}),
-                loop,
-            )
-            if not fut.result(timeout=5.0):
-                return False
-        except Exception:
-            logger.debug("MA volume_set failed for %s", pid, exc_info=True)
-            return False
-    return bool(target_pairs)
-
-
-def _set_mute_via_ma(target_pairs, muted: bool) -> bool:
-    """Proxy mute change through MA WebSocket API."""
-    from services.ma_monitor import send_player_cmd
-
-    loop = get_main_loop()
-    if not loop:
-        return False
-    target_pairs = _ensure_target_pairs(target_pairs)
-
-    for client, _device in target_pairs:
-        pid = getattr(client, "player_id", None)
-        if not pid:
-            continue
-        try:
-            fut = asyncio.run_coroutine_threadsafe(
-                send_player_cmd("players/cmd/volume_mute", {"player_id": pid, "muted": muted}),
-                loop,
-            )
-            if not fut.result(timeout=2.0):
-                return False
-        except Exception:
-            logger.debug("MA volume_mute failed for %s", pid, exc_info=True)
-            return False
-    return bool(target_pairs)
-
-
 @api_bp.route("/api/volume", methods=["POST"])
 def set_volume():
-    """Set player volume. Accepts player_name (single), player_names (list), or neither (all).
+    """Set player volume via direct pactl.
 
-    When MA is connected (and ``force_local`` is not set), routes volume changes
-    through the MA WebSocket API so that MA's own UI stays in sync.  Group
-    requests (``group: true``) use the delta-approach ``players/cmd/group_volume``.
-    Falls back to direct pactl on MA failure.
+    Sendspin's ``PulseVolumeController`` (in ``services/pa_volume_controller``)
+    subscribes to PA sink change events and proactively notifies MA of any
+    externally-applied state change, so MA's own UI stays in sync without
+    the bridge needing to proxy through ``players/cmd/volume_set`` first.
     """
     try:
         data = request.get_json() or {}
@@ -305,8 +218,6 @@ def set_volume():
             return jsonify({"error": "player_names must be a list"}), 400
         player_name = data.get("player_name")
         group_id = data.get("group_id")
-        is_group = data.get("group", False)
-        force_local = data.get("force_local", False)
 
         snapshot = get_device_registry_snapshot().active_clients
         target_pairs = _select_target_pairs(
@@ -317,37 +228,7 @@ def set_volume():
         )
         targets = [client for client, _device in target_pairs]
 
-        # --- MA path: proxy through MA API when connected ---
-        if not force_local and get_volume_via_ma() and is_ma_connected() and targets:
-            ma_ok = _set_volume_via_ma(target_pairs, volume, is_group=is_group)
-            if ma_ok:
-                # Do NOT update local status — bridge_daemon will receive the
-                # VolumeChanged echo from MA via sendspin protocol, apply pactl,
-                # and report the actual volume through subprocess stdout.
-                #
-                # However, devices NOT in a MA sync group won't receive the
-                # echo.  Apply volume locally for those orphan devices.
-                if is_group:
-                    orphans = [client for client, device in target_pairs if not device.extra.get("group_id")]
-                    for client in orphans:
-                        if client.bluetooth_sink_name:
-                            ok = set_sink_volume(client.bluetooth_sink_name, volume)
-                            if ok:
-                                client._update_status({"volume": volume})
-                                _loop = get_main_loop()
-                                if _loop:
-                                    _submit_loop_coroutine(
-                                        _loop,
-                                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}),
-                                        description=f"set_volume for {client.player_name}",
-                                    )
-                                mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
-                                if mac:
-                                    _schedule_volume_persist(mac, volume)
-                return jsonify({"success": True, "volume": volume, "via": "ma"})
-            logger.debug("MA volume proxy failed, falling back to local pactl")
-
-        # --- Local fallback: direct pactl ---
+        # --- Direct pactl path (only path now) ---
         def _set_one(client):
             if not client.bluetooth_sink_name:
                 return None
@@ -381,10 +262,11 @@ def set_volume():
 
 @api_bp.route("/api/mute", methods=["POST"])
 def set_mute():
-    """Toggle or set mute.
+    """Toggle or set mute via direct pactl.
 
-    When MA is connected, proxies through ``players/cmd/volume_mute`` so that
-    MA's UI stays in sync.  Falls back to direct pactl on failure.
+    Sendspin's ``PulseVolumeController`` subscribes to PA sink change events
+    and proactively pushes externally-applied mute changes to MA, so the
+    bridge no longer needs an MA WebSocket proxy here.
     """
     try:
         data = request.get_json() or {}
@@ -393,7 +275,6 @@ def set_mute():
             return jsonify({"error": "player_names must be a list"}), 400
         player_name = data.get("player_name")
         mute_value = data.get("mute")
-        force_local = data.get("force_local", False)
 
         snapshot = get_device_registry_snapshot().active_clients
         target_pairs = _select_target_pairs(snapshot, player_names=player_names, player_name=player_name)
@@ -402,21 +283,7 @@ def set_mute():
         targets = [client for client, _device in target_pairs]
         target_snapshot_map = {id(client): device for client, device in target_pairs}
 
-        # --- MA path ---
-        if not force_local and get_mute_via_ma() and is_ma_connected() and targets:
-            # Resolve desired mute state
-            current_muted = bool(target_pairs[0][1].extra.get("muted", False)) if target_pairs else False
-            desired = bool(mute_value) if mute_value is not None else not current_muted
-            if _set_mute_via_ma(target_pairs, desired):
-                # Also apply to PulseAudio sink so audio actually mutes/unmutes
-                for client in targets:
-                    if client.bluetooth_sink_name:
-                        set_sink_mute(client.bluetooth_sink_name, desired)
-                    client._update_status({"muted": desired})
-                return jsonify({"success": True, "muted": desired, "via": "ma"})
-            logger.debug("MA mute proxy failed, falling back to local pactl")
-
-        # --- Local fallback ---
+        # --- Direct pactl path (only path now) ---
         results = []
         loop = get_main_loop()
         for client in targets:

@@ -47,8 +47,6 @@ _DEVICE_WARM_FIELDS: frozenset[str] = frozenset(
 _GLOBAL_BROADCAST_FIELDS: frozenset[str] = frozenset(
     {
         "LOG_LEVEL",
-        "VOLUME_VIA_MA",
-        "MUTE_VIA_MA",
         "MA_API_URL",
         "MA_API_TOKEN",
         "HA_AREA_NAME_ASSIST_ENABLED",
@@ -119,6 +117,13 @@ _IGNORED_FIELDS: frozenset[str] = frozenset(
         # Consulted at pair-time via load_config() in _run_standalone_pair_inner —
         # toggling is picked up on the very next pair attempt without a restart.
         "EXPERIMENTAL_PAIR_JUST_WORKS",
+        # Removed in 2.62.0-rc.8: bridge no longer proxies volume / mute
+        # through MA — sendspin's PulseVolumeController.start_monitoring
+        # pushes external sink changes to MA directly, so the toggles are
+        # obsolete.  Listed here so old config.json files don't trigger
+        # spurious reconfig actions on save.
+        "VOLUME_VIA_MA",
+        "MUTE_VIA_MA",
     }
 )
 

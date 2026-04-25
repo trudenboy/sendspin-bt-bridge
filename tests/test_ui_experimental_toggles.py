@@ -217,17 +217,42 @@ def test_experimental_rows_have_red_visual_treatment() -> None:
     )
 
 
-def test_experimental_badge_label_is_present() -> None:
-    """The visual treatment must include a literal ``EXPERIMENTAL`` text
-    marker via a ``content: "EXPERIMENTAL"`` pseudo-element so the
-    signal doesn't rely on colour alone. Colour-blind operators and
-    screenshots in bug reports need the word itself.
+def test_experimental_badge_marker_is_present() -> None:
+    """The visual treatment must include an explicit non-colour marker
+    via ``[data-experimental]::before`` so colour-blind operators and
+    bug-report screenshots can identify the row even when red doesn't
+    register.
+
+    The marker has been a literal ``"EXPERIMENTAL"`` text label in the
+    past and is currently the circular ``"!"`` icon (slimmer; matches
+    the universal warning glyph).  Either form is acceptable — the
+    test asserts the pseudo-element exists with non-empty content
+    and stays in the red palette.
     """
     css = STYLE_CSS.read_text(encoding="utf-8")
-    has_pseudo_label = bool(re.search(r'content:\s*["\']\s*EXPERIMENTAL\s*["\']', css, re.IGNORECASE))
-    assert has_pseudo_label, (
-        "no ::before { content: 'EXPERIMENTAL' } pseudo-element found in static/style.css — "
-        "add a text marker so the red tint isn't the only signal"
+    pseudo_match = re.search(
+        r"\[data-experimental\][^{]*::before\s*\{([^}]*)\}",
+        css,
+        re.DOTALL,
+    )
+    assert pseudo_match, (
+        "no ``[data-experimental]::before`` rule found in static/style.css — "
+        "the experimental highlight needs a non-colour marker so the red tint "
+        "isn't the only signal"
+    )
+    block = pseudo_match.group(1)
+    content_match = re.search(r'content:\s*["\']([^"\']+)["\']', block)
+    assert content_match, (
+        "``[data-experimental]::before`` has no ``content:`` declaration — "
+        "the rule needs to render a glyph or text label so colour-blind operators "
+        "have a non-colour signal"
+    )
+    marker = content_match.group(1).strip()
+    assert marker, f"``[data-experimental]::before`` content is empty: {content_match.group(0)!r}"
+    # Sanity: the badge stays in the red palette so it visually matches
+    # the row's red outline and tinted background.
+    assert "ef4444" in block.lower() or "239, 68, 68" in block, (
+        f"``[data-experimental]::before`` should keep its red palette — block was:\n{block}"
     )
 
 

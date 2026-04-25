@@ -337,7 +337,7 @@
                                     <input type="number" name="BASE_LISTEN_PORT" placeholder="8928" min="1" max="65535">
                                 </div>
                             </div>
-                            <label class="config-setting-row config-setting-row--compact">
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Experimental. Lets bridge and adapter naming pull manual suggestions from HA areas. Enabled by default in HA add-on mode.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Use Home Assistant area suggestions for names</strong>
                                     <span class="form-hint">Lets bridge and adapter naming pull manual suggestions from HA areas. Enabled by default in HA add-on mode.</span>
@@ -872,31 +872,6 @@
                                 </span>
                             </label>
 
-                            <label class="config-setting-row">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Route volume through MA</strong>
-                                    <span class="form-hint">Keeps Music Assistant UI sliders in sync.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="VOLUME_VIA_MA" id="volume-via-ma" checked>
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Route mute through MA</strong>
-                                    <span class="form-hint">Syncs mute state with the Music Assistant UI.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="MUTE_VIA_MA" id="mute-via-ma">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
                         </div>
                     </div>
                 </div>

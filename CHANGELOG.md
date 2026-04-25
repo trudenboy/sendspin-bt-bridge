@@ -7,6 +7,260 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.10] - 2026-04-25
+
+Copilot review pass on the rc.9 PR (#194).  No behaviour changes —
+performance / robustness polish on top of the rc.8 + rc.9 cleanup.
+
+### Changed
+- ``GET /api/bt/adapters`` no longer walks ``/sys/class/bluetooth``
+  once per adapter.  New ``services.bluetooth.build_hci_map()`` scans
+  sysfs once per request and returns a ``{normalised_mac: hciN}``
+  map, dropping the endpoint from O(n²) to O(n) in the number of
+  adapters.  ``resolve_hci_for_mac`` now thinly wraps the same
+  helper so its single-MAC use cases (``scripts/translate_ha_config.py``)
+  stay backward-compatible.
+- ``services.pa_volume_controller._handle_sink_event`` now takes the
+  already-open ``PulseAsync`` connection from the subscribe loop and
+  reads sink state via the new ``services.pulse.aread_sink_state``
+  helper.  Each PA sink event used to spawn a fresh ``PulseAsync``
+  client through the one-shot ``aget_sink_volume`` /
+  ``aget_sink_mute`` helpers — under frequent updates that meant
+  noticeable connection churn against the PA daemon.  The subscribe
+  loop's own connection now serves both the event stream and the
+  per-event read.
+- ``PulseVolumeController.stop_monitoring`` no longer swallows every
+  exception when awaiting the cancelled monitor task.  ``CancelledError``
+  is still treated as the expected outcome; any other exception is
+  logged at DEBUG so a subscribe-loop crash during shutdown leaves a
+  trace instead of disappearing silently.
+
+### Fixed
+- ``CHANGELOG.md`` rc.9 section dated ``2026-04-24`` while rc.8 was
+  dated ``2026-04-25`` — corrected to ``2026-04-25``.
+
+## [2.62.0-rc.9] - 2026-04-25
+
+Continuation of the rc.8 simplification work: with sendspin's
+``PulseVolumeController`` doing real two-way state sync, the bridge
+no longer needs to maintain its own artwork-frame relay or its
+backwards-compat shims for sendspin <5.5.0.  ``requirements.txt``
+pins ``sendspin==7.0.0``, so the legacy paths can never execute.
+
+### Removed
+- **Sendspin artwork binary-frame relay**.  ``BridgeDaemon`` no
+  longer monkey-patches the sendspin client's
+  ``_handle_binary_message`` to intercept ``ArtworkFrame`` payloads
+  (``_patch_artwork_handler``, ``_on_artwork_frame``,
+  ``Roles.ARTWORK`` advertisement, ``ArtworkChannel`` /
+  ``ClientHelloArtworkSupport`` imports, ``base64`` import).  The
+  web UI already uses MA's ``image_url`` via the HMAC-signed
+  ``/api/ma/artwork`` proxy, so this ~80 LoC of fragile
+  monkey-patched code never reached the user.
+- **Legacy sendspin <5.5.0 fallback** in ``BridgeDaemon``.  Removed
+  ``_has_upstream_volume_controller`` / ``_sync_bt_sink_volume``
+  manual ``aset_sink_volume`` path, the ``on_volume_save`` callback
+  parameter, and the ``_background_tasks`` book-keeping set.  The
+  pinned sendspin always provides ``PulseVolumeController.set_state``,
+  so ``_handle_server_command`` only mirrors the value into
+  ``bridge_status`` and notifies SSE listeners.
+- **Legacy ``use_hardware_volume`` filter** in ``daemon_process``.
+  ``DaemonArgs`` always accepts ``volume_controller`` on sendspin
+  7.0.0; the kwarg-based fallback the bridge used to keep when
+  ``volume_controller`` wasn't supported is gone.  The generic
+  ``_filter_supported_daemon_args_kwargs`` helper still drops any
+  unknown keys (kept tested by ``test_daemon_process.py``), so
+  forward-compat with future sendspin signatures is unchanged.
+- ``daemon._sync_bt_sink_volume(vol)`` call from the IPC
+  ``set_volume`` handler in ``services/daemon_process.py:_read_commands``
+  (the method no longer exists).  PulseVolumeController already
+  drives the actual sink volume from inside sendspin.
+- Removed test classes ``TestArtworkCallback``, ``TestArtworkMonkeyPatch``
+  and ``TestUpstreamVolumeController`` from
+  ``tests/test_bridge_daemon_features.py`` (covered code is gone).
+  ``TestClientHelloRoles`` renamed to
+  ``test_create_client_advertises_only_supported_roles`` and now
+  asserts that neither ``visualizer_support`` nor
+  ``artwork_support`` kwargs are passed.
+
+### Changed
+- ``BridgeDaemon._handle_server_command`` is now a thin status
+  mirror: it forwards the call to ``super()._handle_server_command``
+  (so sendspin's ``PulseVolumeController`` is invoked) and then
+  copies ``volume`` / ``muted`` into ``bridge_status``.  No more
+  branching on whether an upstream controller exists.
+
+## [2.62.0-rc.8] - 2026-04-25
+
+Architectural cleanup discussed on the rc.7 thread: the bridge no
+longer keeps two parallel paths to push volume / mute changes to MA.
+Sendspin's ``PulseVolumeController.start_monitoring`` (made real in
+the previous commit) is now the single source of truth — bridge UI
+volume control goes straight to pactl, and the controller's PA
+event subscription pushes externally-applied changes to MA without
+the bridge needing an HTTP proxy.
+
+### Removed
+- ``Route volume through MA`` and ``Route mute through MA`` toggles in
+  the General settings card.  Their underlying config keys
+  ``VOLUME_VIA_MA`` and ``MUTE_VIA_MA`` are dropped from
+  ``config.py`` defaults, removed from the Supervisor options sync
+  (``ha-addon*/config.yaml`` no longer carry ``volume_via_ma``), and
+  added to the diff-config IGNORED set so old ``config.json`` files
+  carrying them don't trigger spurious reconfig actions on save.
+- ``routes.api._set_volume_via_ma`` / ``_set_mute_via_ma`` proxy
+  helpers and the ``force_local`` request flag (no longer needed —
+  the local pactl path is always taken).
+- ``routes.api_config.get_volume_via_ma`` / ``get_mute_via_ma`` and
+  the cached module-level ``_volume_via_ma`` / ``_mute_via_ma``
+  globals.
+- ``services.config_diff._GLOBAL_BROADCAST_FIELDS`` no longer lists
+  the two keys.
+- ``static/app.js`` ``_isMaConfigured`` / ``_refreshMaDependentToggles``
+  helpers and the ``data-ma-dependent`` row machinery added in
+  rc.6 — the toggles they greyed out are gone.
+- ``.config-setting-row--inactive`` CSS rule (sole user gone).
+- ``tests/test_volume_routing.py`` (147 LoC dedicated to the removed
+  proxy paths).
+
+### Changed
+- ``POST /api/volume`` and ``POST /api/mute`` always take the direct
+  pactl path now.  Sendspin's ``PulseVolumeController`` subscribes
+  to PA sink change events and pushes any external state change to
+  MA via the volume_controller callback, so MA's UI stays in sync
+  without the bridge round-tripping through ``players/cmd/volume_set``.
+- ``sendspin_client._sync_unmute_to_ma`` no longer reads
+  ``get_mute_via_ma`` (toggle removed); only checks ``is_ma_connected``
+  before pushing.  Kept as belt-and-suspenders for the post-spawn
+  initial sync because sendspin's controller-callback path takes a
+  short window to settle on first connection.
+- ``scripts/translate_ha_config.py`` no longer reads
+  ``volume_via_ma`` from Supervisor options.
+
+### Tests
+1568 → 1567 passing.  Removed ``tests/test_volume_routing.py``;
+adjusted ``tests/test_sendspin_client_runtime.py`` (5 places) and
+``tests/test_api_endpoints.py`` (~12 fixture cleanups) to drop the
+removed mock targets and dead config keys.
+``tests/test_config_diff.py`` test renamed and rewritten to assert
+the legacy keys are now silently ignored on diff (was
+"GLOBAL_BROADCAST", now "no actions") so old config.json files
+don't trigger spurious reconfig on save.
+``tests/test_config.py::test_load_volume_via_ma`` removed.
+``tests/test_translate_ha_config.py`` cleaned of ``volume_via_ma``
+references.
+
+## [2.62.0-rc.7] - 2026-04-25
+
+### Fixed
+- **MA shows bridge players as muted even though audio is playing**
+  (user-report on the HA community thread).  The daemon mutes its
+  PulseAudio sink during startup to hide format-probe and routing
+  glitches (``services/daemon_process.py:685``).  MA's first
+  ``volume_controller.get_state()`` poll happens during that ~15-second
+  window, reads ``(100, True)``, and records ``player.volume_muted=True``
+  in its state.  When the startup-unmute watcher later releases the
+  PA sink mute, the bridge's local ``status["muted"]`` flag is — and
+  always was — ``False``, so the existing post-spawn unmute sync
+  short-circuited at "already in sync" and never pushed the unmute
+  back to MA.  Result: HA's MA UI kept the volume slider greyed out
+  and the player labelled muted forever (until the user manually
+  clicked Unmute), while audio continued playing normally.
+
+  Fix: ``_sync_unmute_to_ma`` now accepts ``force=True``.  The
+  post-spawn caller in ``_read_subprocess_output`` passes it because
+  it knows the local ``status["muted"]`` doesn't reflect MA's view
+  at that point (MA polled while we were startup-muted; we never
+  intended to be muted ourselves).  The non-force code path keeps
+  the original safety guard against double-unmuting after explicit
+  user mute (#155).
+
+### Tests
+1567 → 1568 passing.  ``test_sink_unmute_skipped_when_already_in_sync``
+renamed and rewritten to ``test_sink_unmute_force_pushes_to_ma_even_when_local_status_says_unmuted``
+covering the regression directly, plus a new
+``test_sync_unmute_to_ma_without_force_skips_when_already_unmuted``
+that pins the original ``force=False`` early-exit behaviour so the
+#155 protection isn't lost.
+
+## [2.62.0-rc.6] - 2026-04-24
+
+### Fixed
+- **HA addon: ``Disable PA rescue-streams`` toggle silently reset on
+  every restart** (user report).  ``routes.api_config._sync_ha_options``
+  POSTs ``disable_pa_rescue_streams`` to Supervisor on every config
+  save, but the option was missing from all three
+  ``ha-addon*/config.yaml`` schemas.  Supervisor strips unknown options,
+  so on the next addon restart ``scripts/translate_ha_config.py`` read
+  the missing key as ``False`` and the bridge re-enabled
+  ``module-rescue-streams``.  Added the option (default ``false``) and
+  its schema type (``bool?``) to ``ha-addon/``, ``ha-addon-rc/``, and
+  ``ha-addon-beta/`` ``config.yaml``.
+
+### Tests
+1542 → 1551 passing.  New ``tests/test_ha_addon_schema_sync.py``
+parametrised across all three addon configs:
+- every key ``_sync_ha_options`` POSTs is present in both ``options:``
+  defaults and the ``schema:`` block, so the same kind of silent-reset
+  regression can't slip in again,
+- intentionally-unmapped keys (``auth_enabled`` — HA mode hardcodes
+  auth on, no round-trip) stay out of the schema, with the exemption
+  list documented in-test for review.
+
+## [2.62.0-rc.5] - 2026-04-24
+
+Bugfix RC for #193 — adapter listing in the web UI surfaced the wrong
+``Alias:`` per MAC and the ``hciN`` label tracked BlueZ's internal
+registration order instead of the kernel.
+
+### Fixed
+- **Adapter alias swap on multi-adapter hosts** (#193) — the
+  ``GET /api/bt/adapters`` endpoint pieced together ``bluetoothctl
+  select <MAC>; show`` per adapter and grabbed the **first** ``Alias:``
+  line it found in the combined stdout.  In piped-stdin mode
+  ``bluetoothctl`` interleaves the **default** controller's info ahead
+  of the freshly-selected block, so the parser surfaced the wrong
+  controller's alias for every non-default adapter.  Two-adapter
+  systems (e.g. Pi built-in BT + USB BT500 stick) saw the alias of
+  one adapter shown next to the MAC of the other.
+
+  Replaced with the explicit ``show <MAC>`` form via the new
+  ``services.bluetooth.get_adapter_alias`` helper — one targeted
+  bluetoothctl invocation per MAC, no ``select``, no default-vs-
+  selected ambiguity.
+
+- **``hciN`` labels track BlueZ list order, not the kernel** (#193) —
+  ``api_bt_adapters`` previously labelled adapters as
+  ``f"hci{enumerate-index}"`` against the order returned by
+  ``bluetoothctl list``.  That order is BlueZ's registration order
+  and disagrees with the kernel ``hciN`` numbering when adapters
+  hot-plug (very visible after attaching a USB stick to a Pi that
+  has built-in BT).
+
+  New ``services.bluetooth.resolve_hci_for_mac`` reads
+  ``/sys/class/bluetooth/hciN/address`` (the canonical kernel mapping
+  BlueZ honours) and returns the real ``hciN`` per MAC.  Endpoint
+  uses it; falls back to the synthetic index label only when sysfs
+  isn't mounted (non-Linux dev box, container without ``/sys``).
+
+### Refactor
+- ``scripts/translate_ha_config.py:_mac_to_hci`` is now a thin wrapper
+  around ``services.bluetooth.resolve_hci_for_mac`` so HA-addon config
+  translation and the live adapter endpoint share the same sysfs
+  walker (DRY).
+
+### Tests
+1531 → 1542 passing.  New coverage in ``tests/test_bluetooth_svc.py``
+(sysfs lookup + ``show <MAC>`` parsing, including the noisy-stdout
+case that surfaced the wrong adapter's alias) plus a new
+``tests/test_api_bt_adapters.py`` end-to-end module asserting:
+- the endpoint labels adapters by their kernel ``hciN`` even when
+  ``bluetoothctl list`` returns the USB stick first,
+- each adapter's alias is the alias of its actual MAC (not the
+  default controller's), and
+- the bluetoothctl input is the explicit ``show <MAC>\n`` form —
+  never ``select <MAC>; show``.
+
 ## [2.62.0-rc.4] - 2026-04-24
 
 Third pass of Copilot review feedback — three concurrency / cleanup

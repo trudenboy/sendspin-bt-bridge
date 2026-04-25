@@ -45,21 +45,18 @@ CONFIG_FILE = os.getenv("SENDSPIN_HA_CONFIG_FILE", "/data/config.json")
 
 
 def _mac_to_hci(mac: str) -> str:
-    """Return hciN interface name for a BT adapter MAC using sysfs, or empty string."""
-    mac_norm = mac.upper().replace(":", "").lower()  # e.g. "aabbccddeeff"
-    import pathlib
+    """Return hciN interface name for a BT adapter MAC using sysfs, or empty string.
 
-    bt_sysfs = pathlib.Path("/sys/class/bluetooth")
+    Thin wrapper over :func:`services.bluetooth.resolve_hci_for_mac` to keep
+    a single sysfs-walking implementation.  Imported lazily so the script
+    keeps working when invoked outside the bridge runtime.
+    """
     try:
-        for hci in sorted(bt_sysfs.iterdir()):
-            addr_file = hci / "address"
-            if addr_file.exists():
-                addr = addr_file.read_text().strip().replace(":", "").lower()
-                if addr == mac_norm:
-                    return hci.name  # e.g. "hci0"
+        from services.bluetooth import resolve_hci_for_mac
     except Exception as exc:
-        logger.debug("sysfs adapter lookup failed: %s", exc)
-    return ""
+        logger.debug("sysfs adapter lookup helper import failed: %s", exc)
+        return ""
+    return resolve_hci_for_mac(mac)
 
 
 def _detect_adapters() -> list[dict]:
@@ -153,7 +150,6 @@ def main() -> None:
         "MA_API_URL": opts.get("ma_api_url") or "",
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
         "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
-        "VOLUME_VIA_MA": bool(opts.get("volume_via_ma", True)),
         "DUPLICATE_DEVICE_CHECK": bool(opts.get("duplicate_device_check", True)),
         "UPDATE_CHANNEL": get_self_delivery_channel(),
     }

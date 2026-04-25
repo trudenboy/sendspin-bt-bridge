@@ -75,12 +75,6 @@ _ALLOWED_POST_CONFIG_KEYS = (
     CONFIG_ALLOWED_KEYS - SENSITIVE_CONFIG_KEYS - RUNTIME_STATE_CONFIG_KEYS - {"MA_AUTH_PROVIDER"}
 ) | {"LAST_VOLUMES", "MA_API_TOKEN", "_new_device_default_volume"}
 
-# Cached config flag — avoid reading config.json on every volume/mute request.
-# Reloaded in api_config() after config save; also valid on process restart
-# since config.py is re-read.  Does NOT auto-reload on manual file edit.
-_volume_via_ma: bool = True
-_mute_via_ma: bool = True
-
 
 def _submit_loop_coroutine(loop, coro, *, description: str) -> bool:
     """Schedule work on the main loop without blocking the current request."""
@@ -106,26 +100,6 @@ def _submit_loop_coroutine(loop, coro, *, description: str) -> bool:
 
         add_done_callback(_log_completion)
     return True
-
-
-def _reload_volume_via_ma() -> None:
-    global _volume_via_ma, _mute_via_ma
-    cfg = load_config()
-    _volume_via_ma = cfg.get("VOLUME_VIA_MA", True)
-    _mute_via_ma = cfg.get("MUTE_VIA_MA", True)
-
-
-_reload_volume_via_ma()
-
-
-def get_volume_via_ma() -> bool:
-    """Return the cached VOLUME_VIA_MA flag for use by other modules."""
-    return _volume_via_ma
-
-
-def get_mute_via_ma() -> bool:
-    """Return the cached MUTE_VIA_MA flag for use by other modules."""
-    return _mute_via_ma
 
 
 _DOWNLOAD_REDACTED_KEYS = (
@@ -649,8 +623,6 @@ def api_config():
         "BRUTE_FORCE_PROTECTION",
         "MA_AUTO_SILENT_AUTH",
         "MA_WEBSOCKET_MONITOR",
-        "VOLUME_VIA_MA",
-        "MUTE_VIA_MA",
         "HA_AREA_NAME_ASSIST_ENABLED",
         "SMOOTH_RESTART",
         "AUTO_UPDATE",
@@ -816,7 +788,6 @@ def api_config():
     # Invalidate adapter name cache so next status poll picks up changes
     refresh_adapter_name_cache()
 
-    _reload_volume_via_ma()
     _sync_ha_options(config)
 
     # Apply on-line reconfiguration: hot-update fields via IPC, warm-restart

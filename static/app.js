@@ -7017,8 +7017,6 @@ function _buildConfigPayload(options) {
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
     config.MA_AUTO_SILENT_AUTH = !!(document.getElementById('ma-auto-silent-auth') || {}).checked;
     config.MA_WEBSOCKET_MONITOR = !!(document.getElementById('ma-websocket-monitor') || {}).checked;
-    config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
-    config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
     config.SMOOTH_RESTART = !!(document.getElementById('smooth-restart') || {}).checked;
     config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
     config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
@@ -9609,10 +9607,6 @@ async function loadConfig(options) {
         if (maAutoSilentAuthCheck) maAutoSilentAuthCheck.checked = config.MA_AUTO_SILENT_AUTH !== false;
         var maMonitorCheck = document.getElementById('ma-websocket-monitor');
         if (maMonitorCheck) maMonitorCheck.checked = config.MA_WEBSOCKET_MONITOR !== false;
-        var volMaCheck = document.getElementById('volume-via-ma');
-        if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
-        var muteMaCheck = document.getElementById('mute-via-ma');
-        if (muteMaCheck) muteMaCheck.checked = !!config.MUTE_VIA_MA;
         var smoothRestartCheck = document.getElementById('smooth-restart');
         if (smoothRestartCheck) smoothRestartCheck.checked = !!config.SMOOTH_RESTART;
         var updateChannelSelect = document.getElementById('update-channel');

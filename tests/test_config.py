@@ -144,14 +144,6 @@ def test_check_password_handles_garbage():
     assert not check_password("x", "not_a_hash")
 
 
-def test_load_volume_via_ma(tmp_path):
-    """VOLUME_VIA_MA must survive load_config() round-trip."""
-    _write_config(tmp_path, {"VOLUME_VIA_MA": False})
-    from config import load_config
-
-    assert load_config()["VOLUME_VIA_MA"] is False
-
-
 def test_load_ma_auto_silent_auth(tmp_path):
     """MA_AUTO_SILENT_AUTH must survive load_config() round-trip."""
     _write_config(tmp_path, {"MA_AUTO_SILENT_AUTH": False})

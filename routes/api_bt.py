@@ -23,7 +23,9 @@ from services.async_job_state import create_scan_job, finish_scan_job, get_scan_
 from services.bluetooth import (
     _AUDIO_UUIDS,
     COMMON_BT_PAIR_PINS,
+    build_hci_map,
     describe_pair_failure,
+    get_adapter_alias,
     is_pin_rejection,
     list_bt_adapters,
 )
@@ -264,21 +266,32 @@ def api_bt_adapters():
     """List available Bluetooth adapters."""
     try:
         macs = list_bt_adapters()
+        # Scan sysfs once per request — keeps the endpoint O(n) in the
+        # number of adapters (vs. O(n²) when calling resolve_hci_for_mac
+        # in the loop, which re-walks /sys/class/bluetooth on every call).
+        hci_map = build_hci_map()
         adapters = []
         for i, mac in enumerate(macs):
-            show_out = subprocess.run(
-                ["bluetoothctl"],
-                input=f"select {mac}\nshow\n",
-                capture_output=True,
-                text=True,
-                timeout=5,
-            ).stdout
-            powered = "Powered: yes" in show_out
-            alias = next(
-                (ln.split("Alias:")[1].strip() for ln in show_out.splitlines() if "Alias:" in ln),
-                f"hci{i}",
+            # Resolve the kernel hciN via sysfs so the UI label matches what
+            # ``hciconfig`` and ``bluetoothctl info`` show (issue #193).  The
+            # ``bluetoothctl list`` order is BlueZ's internal registration
+            # order, which can differ from kernel hci numbering — especially
+            # after a USB stick hotplug.  Falls back to the synthetic
+            # ``hci{i}`` label only when /sys/class/bluetooth isn't mounted
+            # (non-Linux dev box, container missing /sys).
+            kernel_hci = hci_map.get(mac.upper().replace(":", "")) or f"hci{i}"
+            # Use ``show <MAC>`` instead of ``select <MAC>; show`` — the
+            # latter is unreliable in piped-stdin mode and surfaced the wrong
+            # adapter's alias when default and selected differed (issue #193).
+            alias, powered = get_adapter_alias(mac)
+            adapters.append(
+                {
+                    "id": kernel_hci,
+                    "mac": mac,
+                    "name": alias or kernel_hci,
+                    "powered": powered,
+                }
             )
-            adapters.append({"id": f"hci{i}", "mac": mac, "name": alias, "powered": powered})
         return jsonify({"adapters": adapters})
     except Exception:
         logger.exception("Failed to list adapters")

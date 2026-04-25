@@ -43,7 +43,6 @@ def _minimal_options(**overrides) -> dict:
         "tz": "UTC",
         "log_level": "info",
         "ma_auto_silent_auth": True,
-        "volume_via_ma": True,
     }
     opts.update(overrides)
     return opts
@@ -221,7 +220,6 @@ def test_basic_translation(tmp_path):
         ],
         tz="Europe/London",
         log_level="debug",
-        volume_via_ma=False,
         prefer_sbc_codec=True,
         pulse_latency_msec=100,
         startup_banner_grace_seconds=7,
@@ -263,7 +261,6 @@ def test_translation_uses_installed_addon_track(tmp_path):
         tmp_path / "options.json",
         _minimal_options(
             log_level="debug",
-            volume_via_ma=False,
             prefer_sbc_codec=True,
             pulse_latency_msec=100,
             bt_check_interval=30,
@@ -284,7 +281,6 @@ def test_translation_uses_installed_addon_track(tmp_path):
     assert cfg["UPDATE_CHANNEL"] == "rc"
     assert "AUTH_ENABLED" not in cfg  # managed by web_interface in addon mode
     assert cfg["LOG_LEVEL"] == "DEBUG"
-    assert cfg["VOLUME_VIA_MA"] is False
     assert cfg["PREFER_SBC_CODEC"] is True
     assert cfg["PULSE_LATENCY_MSEC"] == 100
     assert cfg["BT_CHECK_INTERVAL"] == 30

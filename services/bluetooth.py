@@ -22,13 +22,20 @@ _OPTIONS_FILE = Path("/data/options.json")
 __all__ = [
     "COMMON_BT_PAIR_PINS",
     "bt_remove_device",
+    "build_hci_map",
     "describe_pair_failure",
     "extract_pair_failure_reason",
+    "get_adapter_alias",
     "is_audio_device",
     "list_bt_adapters",
     "persist_device_enabled",
     "persist_device_released",
+    "resolve_hci_for_mac",
 ]
+
+# /sys/class/bluetooth/hciN/address is the canonical kernel mapping from
+# adapter MAC to interface name.  Override for tests.
+_BT_SYSFS_DIR: Path = Path("/sys/class/bluetooth")
 
 # Ordered list of PINs the bridge tries when a device asks for one. `0000`
 # is the BlueZ/consumer default; the rest are the most common fallbacks
@@ -81,6 +88,108 @@ def _clean_bluez_cache(adapter_mac: str, device_mac: str) -> None:
 def is_valid_mac(mac: str) -> bool:
     """Return True if *mac* looks like a valid colon-separated MAC address."""
     return bool(_MAC_RE.match(mac))
+
+
+def build_hci_map() -> dict[str, str]:
+    """Return a ``{normalised_mac: hciN}`` map by scanning sysfs once.
+
+    Use this instead of calling :func:`resolve_hci_for_mac` in a loop —
+    one sysfs walk per request keeps the endpoint O(n) in the number of
+    adapters and avoids redundant filesystem I/O on hosts with several
+    BT controllers.
+
+    Keys are uppercase, colon-stripped MACs (matching what
+    ``resolve_hci_for_mac`` compares internally).  Returns an empty dict
+    when sysfs is unreadable.
+    """
+    mapping: dict[str, str] = {}
+    try:
+        entries = sorted(_BT_SYSFS_DIR.iterdir())
+    except OSError as exc:
+        logger.debug("sysfs adapter lookup failed: %s", exc)
+        return mapping
+    for hci in entries:
+        addr_file = hci / "address"
+        if not addr_file.exists():
+            continue
+        try:
+            addr = addr_file.read_text().strip().upper().replace(":", "")
+        except OSError:
+            continue
+        if addr:
+            mapping[addr] = hci.name
+    return mapping
+
+
+def resolve_hci_for_mac(mac: str) -> str:
+    """Return the kernel ``hciN`` interface name for a BT adapter MAC.
+
+    Reads ``/sys/class/bluetooth/hciN/address`` — the canonical mapping
+    BlueZ honours.  ``bluetoothctl list`` enumerates controllers in
+    BlueZ's internal registration order, which is **not** guaranteed to
+    match the kernel ``hciN`` numbering (issue #193: a Pi with built-in
+    BT plus a hot-plugged USB stick).  Callers that surface adapter
+    labels to the user must resolve via sysfs to stay consistent with
+    ``hciconfig`` / ``bluetoothctl info``.
+
+    Returns an empty string when sysfs is unreadable (non-Linux dev box
+    or container without ``/sys`` mounted) so callers can fall back to
+    a synthetic ``hci{i}`` label.
+
+    For multi-MAC lookups in the same request, prefer :func:`build_hci_map`
+    + dict access to avoid an O(n²) sysfs scan.
+    """
+    if not mac:
+        return ""
+    target = mac.upper().replace(":", "")
+    return build_hci_map().get(target, "")
+
+
+def get_adapter_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:
+    """Return ``(alias, powered)`` for *mac* via ``bluetoothctl show <MAC>``.
+
+    Uses the explicit ``show <MAC>`` form rather than ``select <MAC>;
+    show`` — the select-then-show recipe is unreliable in piped-stdin
+    mode (the ``select`` D-Bus call may not propagate before ``show``
+    runs, and the resulting stdout often contains the **default**
+    controller's ``Alias:`` line first plus the selected controller's
+    block second; the original frontend parser picked the first match
+    and surfaced the wrong alias — issue #193).
+
+    Returns ``("", False)`` on any subprocess / parse failure so callers
+    can fall back to a synthetic label.
+    """
+    if not mac:
+        return "", False
+    try:
+        result = subprocess.run(
+            ["bluetoothctl"],
+            input=f"show {mac}\n",
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.debug("get_adapter_alias(%s) subprocess failed: %s", mac, exc)
+        return "", False
+    stdout = result.stdout or ""
+
+    # Anchor on lines that look like "<whitespace>Alias: <value>" — bluetoothctl
+    # nests the property lines under the ``Controller`` block with a leading tab.
+    # Discovery / async events ("[CHG] Controller ... Pairable: yes") never
+    # match because they don't have the bare ``Alias:`` token at the start of
+    # the trimmed line.
+    alias = ""
+    powered = False
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("Alias:"):
+            value = line.split("Alias:", 1)[1].strip()
+            if value and not alias:
+                alias = value
+        elif line.startswith("Powered:"):
+            powered = "yes" in line.split("Powered:", 1)[1].lower()
+    return alias, powered
 
 
 def list_bt_adapters(timeout: int = 5) -> list[str]:
