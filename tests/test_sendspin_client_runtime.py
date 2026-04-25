@@ -579,7 +579,6 @@ async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("routes.api_config.get_mute_via_ma", return_value=True),
         patch("services.ma_runtime_state.is_ma_connected", return_value=True),
         patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -591,40 +590,6 @@ async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
     )
     assert client.status.muted is False
     assert client._pending_reconnect_unmute_sync is False
-
-
-@pytest.mark.asyncio
-async def test_sink_unmute_skipped_when_mute_via_ma_disabled():
-    """When MUTE_VIA_MA is disabled, sink unmute should NOT be synced to MA."""
-    client = SendspinClient("Test Player", "localhost", 9000)
-    client.player_id = "sendspin-test-player"
-    client._update_status({"muted": True, "sink_muted": True})
-    client._pending_reconnect_unmute_sync = True
-
-    client._daemon_proc = SimpleNamespace(
-        stdout=_FakeStdoutLines(
-            [
-                json.dumps(
-                    {
-                        "type": "status",
-                        "protocol_version": IPC_PROTOCOL_VERSION,
-                        "sink_muted": False,
-                        "muted": True,
-                    }
-                ).encode(),
-            ]
-        )
-    )
-
-    with (
-        patch("sendspin_client._state.notify_status_changed"),
-        patch("routes.api_config.get_mute_via_ma", return_value=False),
-        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
-        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
-    ):
-        await client._read_subprocess_output()
-
-    mock_cmd.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -652,7 +617,6 @@ async def test_sink_unmute_skipped_when_ma_not_connected():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("routes.api_config.get_mute_via_ma", return_value=True),
         patch("services.ma_runtime_state.is_ma_connected", return_value=False),
         patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -700,7 +664,6 @@ async def test_sink_unmute_force_pushes_to_ma_even_when_local_status_says_unmute
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("routes.api_config.get_mute_via_ma", return_value=True),
         patch("services.ma_runtime_state.is_ma_connected", return_value=True),
         patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -726,7 +689,6 @@ async def test_sync_unmute_to_ma_without_force_skips_when_already_unmuted():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("routes.api_config.get_mute_via_ma", return_value=True),
         patch("services.ma_runtime_state.is_ma_connected", return_value=True),
         patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -762,7 +724,6 @@ async def test_sink_unmute_not_synced_without_reconnect_flag():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("routes.api_config.get_mute_via_ma", return_value=True),
         patch("services.ma_runtime_state.is_ma_connected", return_value=True),
         patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):

@@ -7017,8 +7017,6 @@ function _buildConfigPayload(options) {
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
     config.MA_AUTO_SILENT_AUTH = !!(document.getElementById('ma-auto-silent-auth') || {}).checked;
     config.MA_WEBSOCKET_MONITOR = !!(document.getElementById('ma-websocket-monitor') || {}).checked;
-    config.VOLUME_VIA_MA = !!(document.getElementById('volume-via-ma') || {}).checked;
-    config.MUTE_VIA_MA = !!(document.getElementById('mute-via-ma') || {}).checked;
     config.SMOOTH_RESTART = !!(document.getElementById('smooth-restart') || {}).checked;
     config.AUTO_UPDATE = !!(document.getElementById('auto-update') || {}).checked;
     config.CHECK_UPDATES = !!(document.getElementById('check-updates') || {}).checked;
@@ -8714,62 +8712,12 @@ async function maLogin() {
     }
 }
 
-function _isMaConfigured() {
-    // "Configured" = both URL + token are present (the bridge's own
-    // shouldReloadMaRuntime check at line ~7172 uses the same pair).
-    var urlField = document.querySelector('input[name="MA_API_URL"]');
-    var tokenField = document.querySelector('input[name="MA_API_TOKEN"]');
-    var url = (urlField && urlField.value || '').trim();
-    var token = (tokenField && tokenField.value || '').trim();
-    return !!(url && token);
-}
-
-function _refreshMaDependentToggles() {
-    // The bridge backend already auto-falls-back to local pactl when MA
-    // isn't connected (routes/api.py:321 + :406), so this is purely a
-    // UX signal: visually disable the "Route volume/mute through MA"
-    // toggles and explain why.  The underlying VOLUME_VIA_MA /
-    // MUTE_VIA_MA values stay set in config so the user's preference
-    // is honoured the moment MA comes back online.
-    var configured = _isMaConfigured();
-    var connected = !!_maConnected;
-    var inactive = !connected;  // disconnected covers both unconfigured + reachability failure
-    var reason = '';
-    if (!configured) {
-        reason = 'Music Assistant is not configured — bridge falls back to local volume/mute control.';
-    } else if (!connected) {
-        reason = 'Music Assistant is unreachable right now — bridge falls back to local volume/mute control until it reconnects.';
-    }
-    document.querySelectorAll('[data-ma-dependent="true"]').forEach(function(row) {
-        if (inactive) {
-            row.classList.add('config-setting-row--inactive');
-            row.title = reason;
-        } else {
-            row.classList.remove('config-setting-row--inactive');
-            row.removeAttribute('title');
-        }
-        var checkbox = row.querySelector('input[type="checkbox"]');
-        if (checkbox) checkbox.disabled = inactive;
-        var hint = row.querySelector('[data-ma-inactive-hint]');
-        if (hint) {
-            if (inactive && reason) {
-                hint.textContent = reason;
-                hint.hidden = false;
-            } else {
-                hint.textContent = '';
-                hint.hidden = true;
-            }
-        }
-    });
-}
-
 function _setMaStatus(connected, username, url) {
     var bar = document.getElementById('ma-status-bar');
     var icon = document.getElementById('ma-status-icon');
     var text = document.getElementById('ma-status-text');
     _maConnected = !!connected;
     if (!_maConnected) _maReconfigureRequested = false;
-    _refreshMaDependentToggles();
     if (connected) {
         _maAutoSilentAuthFailed = false;
         _setMaIntegrationBanner('');
@@ -9659,15 +9607,6 @@ async function loadConfig(options) {
         if (maAutoSilentAuthCheck) maAutoSilentAuthCheck.checked = config.MA_AUTO_SILENT_AUTH !== false;
         var maMonitorCheck = document.getElementById('ma-websocket-monitor');
         if (maMonitorCheck) maMonitorCheck.checked = config.MA_WEBSOCKET_MONITOR !== false;
-        var volMaCheck = document.getElementById('volume-via-ma');
-        if (volMaCheck) volMaCheck.checked = config.VOLUME_VIA_MA !== false;
-        var muteMaCheck = document.getElementById('mute-via-ma');
-        if (muteMaCheck) muteMaCheck.checked = !!config.MUTE_VIA_MA;
-        // Apply the disabled visual state once the checkboxes' values
-        // and the hidden MA_API_URL/TOKEN inputs are populated, so the
-        // first render reflects MA configuration status rather than
-        // waiting for the next /api/ma status poll.
-        _refreshMaDependentToggles();
         var smoothRestartCheck = document.getElementById('smooth-restart');
         if (smoothRestartCheck) smoothRestartCheck.checked = !!config.SMOOTH_RESTART;
         var updateChannelSelect = document.getElementById('update-channel');

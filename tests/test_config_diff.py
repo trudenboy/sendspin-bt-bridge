@@ -27,8 +27,6 @@ def _config(devices=None, **globals_):
         "SENDSPIN_PORT": 9000,
         "BRIDGE_NAME": "bridge-a",
         "PULSE_LATENCY_MSEC": 600,
-        "VOLUME_VIA_MA": True,
-        "MUTE_VIA_MA": True,
         "LOG_LEVEL": "INFO",
         "BLUETOOTH_DEVICES": devices or [],
     }
@@ -254,13 +252,17 @@ def test_log_level_change_is_global_broadcast():
     assert act.payload == {"LOG_LEVEL": "DEBUG"}
 
 
-def test_volume_via_ma_change_is_global_broadcast():
-    old = _config(VOLUME_VIA_MA=True)
-    new = _config(VOLUME_VIA_MA=False)
+def test_volume_via_ma_change_is_ignored_after_proxy_removal():
+    # Removed in 2.62.0-rc.8: bridge no longer proxies volume / mute
+    # through MA — sendspin's PulseVolumeController.start_monitoring
+    # pushes external sink changes to MA directly, so the toggles are
+    # obsolete.  Old config.json files that still carry the legacy keys
+    # must be silently ignored — no spurious reconfig action on save.
+    old = _config(VOLUME_VIA_MA=True, MUTE_VIA_MA=True)
+    new = _config(VOLUME_VIA_MA=False, MUTE_VIA_MA=False)
 
-    (act,) = diff_configs(old, new)
-    assert act.kind is ActionKind.GLOBAL_BROADCAST
-    assert act.fields == ["VOLUME_VIA_MA"]
+    actions = diff_configs(old, new)
+    assert actions == []
 
 
 def test_ma_url_change_is_global_broadcast():

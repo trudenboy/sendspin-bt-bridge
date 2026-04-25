@@ -1411,10 +1411,9 @@ class SendspinClient:
         unconditionally because the local ``status["muted"]`` flag does
         not reflect MA's view at that moment.
         """
-        from routes.api_config import get_mute_via_ma
         from services.ma_runtime_state import is_ma_connected
 
-        if not get_mute_via_ma() or not is_ma_connected():
+        if not is_ma_connected():
             return
         if not force and not self.status.get("muted"):
             return  # already in sync

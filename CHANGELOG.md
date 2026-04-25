@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.8] - 2026-04-25
+
+Architectural cleanup discussed on the rc.7 thread: the bridge no
+longer keeps two parallel paths to push volume / mute changes to MA.
+Sendspin's ``PulseVolumeController.start_monitoring`` (made real in
+the previous commit) is now the single source of truth — bridge UI
+volume control goes straight to pactl, and the controller's PA
+event subscription pushes externally-applied changes to MA without
+the bridge needing an HTTP proxy.
+
+### Removed
+- ``Route volume through MA`` and ``Route mute through MA`` toggles in
+  the General settings card.  Their underlying config keys
+  ``VOLUME_VIA_MA`` and ``MUTE_VIA_MA`` are dropped from
+  ``config.py`` defaults, removed from the Supervisor options sync
+  (``ha-addon*/config.yaml`` no longer carry ``volume_via_ma``), and
+  added to the diff-config IGNORED set so old ``config.json`` files
+  carrying them don't trigger spurious reconfig actions on save.
+- ``routes.api._set_volume_via_ma`` / ``_set_mute_via_ma`` proxy
+  helpers and the ``force_local`` request flag (no longer needed —
+  the local pactl path is always taken).
+- ``routes.api_config.get_volume_via_ma`` / ``get_mute_via_ma`` and
+  the cached module-level ``_volume_via_ma`` / ``_mute_via_ma``
+  globals.
+- ``services.config_diff._GLOBAL_BROADCAST_FIELDS`` no longer lists
+  the two keys.
+- ``static/app.js`` ``_isMaConfigured`` / ``_refreshMaDependentToggles``
+  helpers and the ``data-ma-dependent`` row machinery added in
+  rc.6 — the toggles they greyed out are gone.
+- ``.config-setting-row--inactive`` CSS rule (sole user gone).
+- ``tests/test_volume_routing.py`` (147 LoC dedicated to the removed
+  proxy paths).
+
+### Changed
+- ``POST /api/volume`` and ``POST /api/mute`` always take the direct
+  pactl path now.  Sendspin's ``PulseVolumeController`` subscribes
+  to PA sink change events and pushes any external state change to
+  MA via the volume_controller callback, so MA's UI stays in sync
+  without the bridge round-tripping through ``players/cmd/volume_set``.
+- ``sendspin_client._sync_unmute_to_ma`` no longer reads
+  ``get_mute_via_ma`` (toggle removed); only checks ``is_ma_connected``
+  before pushing.  Kept as belt-and-suspenders for the post-spawn
+  initial sync because sendspin's controller-callback path takes a
+  short window to settle on first connection.
+- ``scripts/translate_ha_config.py`` no longer reads
+  ``volume_via_ma`` from Supervisor options.
+
+### Tests
+1568 → 1567 passing.  Removed ``tests/test_volume_routing.py``;
+adjusted ``tests/test_sendspin_client_runtime.py`` (5 places) and
+``tests/test_api_endpoints.py`` (~12 fixture cleanups) to drop the
+removed mock targets and dead config keys.
+``tests/test_config_diff.py`` test renamed and rewritten to assert
+the legacy keys are now silently ignored on diff (was
+"GLOBAL_BROADCAST", now "no actions") so old config.json files
+don't trigger spurious reconfig on save.
+``tests/test_config.py::test_load_volume_via_ma`` removed.
+``tests/test_translate_ha_config.py`` cleaned of ``volume_via_ma``
+references.
+
 ## [2.62.0-rc.7] - 2026-04-25
 
 ### Fixed

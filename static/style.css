@@ -5759,22 +5759,6 @@ body {
             padding-bottom: 4px;
             border-bottom: none;
         }
-        /* Visual treatment for rows whose underlying setting can't take
-           effect right now (e.g. ``Route volume through MA`` while
-           Music Assistant is unconfigured / disconnected — the bridge
-           backend already falls back to local pactl in that case, so
-           the toggle is informational only until MA is back). */
-        .config-setting-row--inactive {
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-        .config-setting-row--inactive .config-switch-track {
-            opacity: 0.55;
-        }
-        .config-setting-row--inactive .form-hint--inactive-reason {
-            color: var(--secondary-text-color);
-            font-style: italic;
-        }
         .config-setting-copy {
             display: flex;
             flex-direction: column;

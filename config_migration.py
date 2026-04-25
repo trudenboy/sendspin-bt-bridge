@@ -356,8 +356,6 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "BRUTE_FORCE_PROTECTION",
         "MA_AUTO_SILENT_AUTH",
         "MA_WEBSOCKET_MONITOR",
-        "VOLUME_VIA_MA",
-        "MUTE_VIA_MA",
         "SMOOTH_RESTART",
         "AUTO_UPDATE",
         "CHECK_UPDATES",
