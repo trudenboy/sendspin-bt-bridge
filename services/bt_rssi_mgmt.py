@@ -110,8 +110,17 @@ def _mac_to_le_bytes(mac: str) -> bytes:
     The mgmt API encodes BD_ADDR with the lowest-order byte first
     (matches the HCI wire format), so the human-readable MAC string
     is reversed before packing.
+
+    Raises ``ValueError`` if the input doesn't have exactly 6 colon-
+    separated octets — silently truncating to a shorter BD_ADDR would
+    produce a malformed mgmt payload (the kernel would either reject
+    with InvalidParameters or, worse, slide the addr_type byte into a
+    BD_ADDR slot and address an unintended peer).
     """
-    return bytes(int(b, 16) for b in reversed(mac.split(":")))
+    parts = mac.split(":")
+    if len(parts) != 6:
+        raise ValueError(f"MAC must have 6 octets, got {len(parts)}: {mac!r}")
+    return bytes(int(b, 16) for b in reversed(parts))
 
 
 def _query_rssi_byte(adapter_index: int, mac: str) -> int | None:
@@ -165,7 +174,14 @@ def _query_rssi_byte(adapter_index: int, mac: str) -> int | None:
                 return None
             if len(data) < 6:
                 continue
-            ev_code = struct.unpack_from("<H", data, 0)[0]
+            ev_code, ev_idx = struct.unpack_from("<HH", data, 0)
+            # Multi-adapter hosts: bluetoothd and other mgmt clients
+            # share the control channel.  Skip events whose controller
+            # index doesn't match what we asked for — otherwise we'd
+            # treat hci1's reply as ours when querying hci0 (or
+            # falsely return None when the actual reply comes next).
+            if ev_idx != adapter_index:
+                continue
             if len(data) < 9:
                 continue
             cmd_op, status = struct.unpack_from("<HB", data, 6)
@@ -186,6 +202,13 @@ def _query_rssi_byte(adapter_index: int, mac: str) -> int | None:
             # then the RSSI byte at offset 16.
             if len(data) < 17:
                 return None
+            # Verify the kernel is replying about *our* peer.  Another
+            # client could have issued GetConnectionInformation for a
+            # different MAC moments earlier; matching only on opcode
+            # would let us steal that reading and label it ours.
+            if data[9:15] != addr_bytes or data[15] != _ADDR_TYPE_BREDR:
+                logger.debug("mgmt reply addr mismatch for %s — skipping", mac)
+                continue
             return data[16]
     finally:
         _close_mgmt_socket(sock)

@@ -241,3 +241,78 @@ def test_query_returns_none_on_malformed_mac(monkeypatch):
     assert bt_rssi_mgmt._query_rssi_byte(0, "not-a-mac") is None
     # And we never sent anything to the kernel.
     assert fake.sent == []
+
+
+def test_query_returns_none_for_short_mac(monkeypatch):
+    """A 5-octet MAC ('AA:BB:CC:DD:EE') would silently produce a
+    5-byte BD_ADDR; the kernel would either return InvalidParameters
+    or — worse — interpret a payload byte as an addr_type byte and
+    pick a random peer.  Validate the octet count before encoding."""
+    fake = _FakeMgmtSocket([])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE") is None
+    assert fake.sent == []
+
+
+def test_query_returns_none_for_long_mac(monkeypatch):
+    """Symmetric guard for a 7-octet input."""
+    fake = _FakeMgmtSocket([])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF:00") is None
+    assert fake.sent == []
+
+
+def _build_cmd_complete_with_idx(
+    *,
+    idx: int = 0,
+    mac: str = "AA:BB:CC:DD:EE:FF",
+    echoed_mac: str | None = None,
+    rssi_byte: int = 200,
+) -> bytes:
+    """Variant of ``_build_cmd_complete`` that lets a test set the
+    header ``controller_idx`` and an arbitrary echoed BD_ADDR — used
+    to simulate replies from a different controller or for a different
+    peer that bluetoothd may forward on the shared control channel."""
+    addr = bytes(int(b, 16) for b in reversed((echoed_mac or mac).split(":")))
+    payload = (
+        struct.pack("<HB", bt_rssi_mgmt._MGMT_OP_GET_CONN_INFO, 0)
+        + addr
+        + bytes([bt_rssi_mgmt._ADDR_TYPE_BREDR, rssi_byte, 0, 0])
+    )
+    header = struct.pack("<HHH", bt_rssi_mgmt._MGMT_EV_CMD_COMPLETE, idx, len(payload))
+    return header + payload
+
+
+def test_query_skips_event_for_different_controller_index(monkeypatch):
+    """On a host with hci0 + hci1, both bound to the same control
+    channel by other clients (bluetoothd, btmgmt), our recv may pick
+    up a sibling adapter's CommandComplete first.  The header's
+    controller_idx must gate the match — without it we'd return RSSI
+    measured on the wrong adapter for a coincidentally-same MAC, or
+    falsely return None when our actual reply still arrives later."""
+    foreign = _build_cmd_complete_with_idx(idx=1, rssi_byte=42)
+    ours = _build_cmd_complete_with_idx(idx=0, rssi_byte=180)
+    fake = _FakeMgmtSocket([foreign, ours])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") == 180
+
+
+def test_query_skips_reply_for_wrong_echoed_mac(monkeypatch):
+    """``GetConnectionInformation`` echoes the queried BD_ADDR back in
+    the CommandComplete payload.  If another mgmt client on the
+    control channel issued the same opcode for a different peer just
+    before us, we'd otherwise return that peer's RSSI as if it were
+    ours — wrong reading on the wrong device card."""
+    other_peer = _build_cmd_complete_with_idx(echoed_mac="11:22:33:44:55:66", rssi_byte=42)
+    ours = _build_cmd_complete_with_idx(echoed_mac="AA:BB:CC:DD:EE:FF", rssi_byte=180)
+    fake = _FakeMgmtSocket([other_peer, ours])
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", lambda: fake)
+    monkeypatch.setattr(bt_rssi_mgmt, "_close_mgmt_socket", lambda _s: None)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") == 180
