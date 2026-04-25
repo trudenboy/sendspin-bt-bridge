@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.2] - 2026-04-25
+
+UX polish on top of rc.1: signal-strength visibility, safer default
+codec selection, and an opt-in keepalive payload for the few speakers
+that misbehave on the 2 Hz infrasound burst.
+
+### Added — RSSI / signal strength badge (plan item 3)
+
+- ``routes/api_bt.py`` — ``_parse_scan_output`` now returns a
+  ``rssi_by_mac: dict[str, int]`` alongside the existing tuple, capturing
+  every ``[CHG] Device <MAC> RSSI: <dB>`` event.  Both modern decimal
+  (``-43``) and legacy parenthesised hex (``0xff... (-43)``) formats
+  parse to the same signed int.  ``_extract_rssi_from_info`` reads the
+  matching ``RSSI:`` line out of ``bluetoothctl info <MAC>`` for already
+  connected peers that don't appear in the live scan stream.
+- ``sendspin_client.py:DeviceStatus`` — new ``rssi_dbm`` and
+  ``rssi_at_ts`` fields.  Status snapshots include them by default; the
+  values come back as ``None`` when no reading has been captured yet.
+- ``static/app.js`` — new ``_renderRssiChip`` helper renders the colour
+  bands (green ≥ -65, yellow -75…-65, red ≤ -75, grey when stale > 90 s)
+  on both scan-result rows and per-device cards (``drssi-N`` slot).
+  ``static/style.css`` — matching ``rssi-good`` / ``rssi-fair`` /
+  ``rssi-bad`` / ``rssi-stale`` palette.
+
+### Added — Block HSP/HFP profiles by default (plan item 7)
+
+- ``services/pairing_agent.py`` — split out a new ``_HFP_SERVICE_UUIDS``
+  frozenset (HSP Headset / HSP AG / HFP Hands-Free / HFP AG) and gate
+  it behind a per-agent ``allow_hfp`` flag (default ``False``).  Some
+  DSPs (Bose QC, AKG Y500) prefer HFP over A2DP when both are accepted,
+  collapsing the link to an 8 kHz mono call codec — block by default
+  to preserve A2DP stereo.
+- ``config.py:DEFAULT_CONFIG`` — new ``ALLOW_HFP_PROFILE`` boolean
+  (default ``False``).  Set to ``True`` to restore the pre-rc.2
+  behaviour for HFP-only headphones (rare).
+- ``bluetooth_manager.py``, ``routes/api_bt.py`` — every
+  ``PairingAgent(...)`` construction reads the live config flag and
+  threads it into the agent.
+
+### Added — keep_alive_method enum (plan item 8 polish)
+
+- ``sendspin_client.py:_generate_keepalive_buffer(method)`` selects the
+  PCM payload for the keepalive burst:
+  ``infrasound`` (default — existing 2 Hz subsonic stereo at -50 dB),
+  ``silence`` (zero PCM, same length, for speakers that misbehave on
+  the 2 Hz tone), or ``none`` (skip — let the speaker time out
+  naturally).  Unknown values fall back to ``infrasound`` so a typo
+  in per-device config can't silently disable keepalive.
+- ``services/device_activation.py`` — reads ``keep_alive_method`` from
+  per-device config and threads it into ``SendspinClient``.
+- ``config.schema.json`` — new ``keep_alive_method`` device option
+  with the three-value enum.
+
+### Fixed
+
+- ``services/ma_runtime_state.py:get_ma_group_for_player_id`` — when a
+  bridge player is a member of multiple MA syncgroups simultaneously,
+  the lookup now walks ``_ma_all_groups`` and prefers whichever
+  syncgroup has an active now-playing state (``playing`` / ``paused`` /
+  ``buffering``) over an idle sibling.  Falls back to the
+  first-write-wins ``_ma_groups`` mapping when none are active.
+  Symptom on VM 105: ENEBY Portable @ DOCKER (member of both
+  "Sendspin BT" and "Sendspin RC") was permanently labelled "Sendspin
+  BT" with no track metadata even while the speaker was actively
+  streaming as part of the "Sendspin RC" syncgroup.
+
+### Fixes from initial review (PR #196)
+
+- ``static/app.js:_renderRssiChip`` — relabel chip + tooltip to
+  ``dBm`` (Bluetooth RSSI is dBm by spec, was rendering as ``dB``).
+- ``sendspin_client.py:DeviceStatus`` — rewrite the ``rssi_dbm`` /
+  ``rssi_at_ts`` field comment to reflect that scan-path population
+  is the only writer in rc.2; the periodic background refresh that
+  keeps connected device cards warm is deferred to rc.3.  Behaviour
+  unchanged.
+- ``config.schema.json`` — declare top-level ``ALLOW_HFP_PROFILE``
+  boolean so the schema documents the runtime config key added in
+  this rc.  ``tests/test_config.py`` gains a regression test that
+  asserts every ``DEFAULT_CONFIG`` key (other than the internal
+  ``CONFIG_SCHEMA_VERSION``) is declared in ``config.schema.json``,
+  catching this whole class of drift in future rcs.
+
+### Tests
+
+- ``tests/test_bt_scan_rssi.py`` — 8 new tests covering both
+  bluetoothctl RSSI formats, the ``_extract_rssi_from_info`` helper,
+  legacy active-MAC contract preservation, and ``DeviceStatus`` field
+  defaults.
+- ``tests/test_pairing_agent.py`` — 7 new tests for the HFP gate
+  (default-rejects all four UUIDs, opt-in accepts, A2DP unaffected
+  either way).
+- ``tests/test_standby_daemon.py`` — 4 new tests for
+  ``_generate_keepalive_buffer`` (infrasound parity, silence is zeros,
+  none is empty, unknown falls back).
+- ``tests/test_ma_runtime_state.py`` — 5 new tests covering the
+  multi-syncgroup lookup contract (active-state preference, paused
+  preferred over idle, all-idle falls back to cached mapping,
+  single-group case unchanged, unknown player returns ``None``).
+
 ## [2.63.0-rc.1] - 2026-04-25
 
 Headline feature: **MPRIS Speaker Hardware Integration**.  Per-device
