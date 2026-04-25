@@ -103,6 +103,52 @@ def test_status_ws_iter_yields_session_expired_then_stops():
     assert items[-1] == {"event": "session_expired"}
 
 
+def test_status_ws_iter_captures_version_before_initial_snapshot(monkeypatch):
+    """Regression for Copilot review on PR #197: ``status_ws_iter``
+    used to call ``get_status_version`` AFTER yielding the initial
+    snapshot.  If a status change landed between snapshot build and
+    version capture, the generator would record the *post-change*
+    version and then ``wait_for_status_change`` would never trigger
+    on it — clients silently saw stale state until the next change.
+
+    Capture the version BEFORE the snapshot so any concurrent change
+    pushes it past the captured baseline and the next
+    ``wait_for_status_change`` returns ``changed=True`` immediately.
+
+    Repro: monkey-patch the snapshot builder to emit a notify+flush
+    DURING snapshot construction, then assert the second yield is a
+    change frame (not heartbeat).
+    """
+    from routes.api_status import _build_status_payload as _real_build
+    from services import bridge_runtime_state as _brs
+
+    # Replace the snapshot builder with a spy that bumps the status
+    # version synchronously (bypassing the 100 ms debounce — we go
+    # straight to the underlying flush so the bump is observable
+    # before the spy returns).
+    def _spy_build():
+        snap = _real_build()
+        with _brs._status_condition:
+            _brs._status_version += 1
+            _brs._status_condition.notify_all()
+        return snap
+
+    monkeypatch.setattr("routes.api_status._build_status_payload", _spy_build)
+
+    gen = status_ws_iter(max_iterations=1, change_timeout=1.0)
+    next(gen)  # initial snapshot — spy bumps the version mid-build
+    msg = next(gen)
+
+    # If version capture is correctly BEFORE the snapshot, the bump
+    # raised the live version past the captured baseline, so the wait
+    # returns ``changed=True`` and we get a fresh payload.  If
+    # capture happens AFTER, the bump's new version was already
+    # baked into ``last_version`` and we'd get a heartbeat instead.
+    assert msg.get("event") != "heartbeat", (
+        f"version captured AFTER snapshot — concurrent change was missed; got {msg!r}"
+    )
+
+
 # ── Live log stream (/api/logs/stream) ──────────────────────────────────
 
 

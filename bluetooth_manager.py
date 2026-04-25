@@ -1231,29 +1231,50 @@ class BluetoothManager:
     def run_rssi_refresh(self) -> None:
         """Run a single RSSI refresh tick — synchronous on a worker thread.
 
-        Skips when a user-triggered scan owns BlueZ discovery
-        (otherwise the two would corrupt each other's output).  On a
-        successful burst, parses the most recent RSSI dBm for our MAC
-        and pushes it onto the host status dict via
+        Skips when a user-triggered scan owns BlueZ discovery OR when
+        any other ``bluetoothctl`` operation (pair / reset / re-pair /
+        standalone scan) holds the shared
+        ``services.bt_operation_lock``.  Both gates avoid corrupting
+        the other operation's stdout / flipping BlueZ into an
+        inconsistent state.  Acquires the shared lock for the duration
+        of the burst so concurrent pair attempts don't slip in
+        either; ``finally`` releases unconditionally so a missed tick
+        never deadlocks future BT operations.
+
+        On a successful burst, parses the most recent RSSI dBm for
+        our MAC and pushes it onto the host status dict via
         ``host.update_status``.  No-ops on parse miss so we don't spam
         the SSE / WS notify path with empty updates.
         """
+        from services.bt_operation_lock import (
+            release_bt_operation,
+            try_acquire_bt_operation,
+        )
+
         if is_scan_running():
             return
         if self.host is None:
             return
-        try:
-            output = self._run_rssi_burst()
-        except Exception as exc:
-            logger.debug("[%s] RSSI refresh burst failed: %s", self.device_name, exc)
-            return
-        rssi = _parse_own_rssi_from_burst(output, self.mac_address)
-        if rssi is None:
+        if not try_acquire_bt_operation():
+            # Another bluetoothctl operation is mid-flight — skip this
+            # tick rather than corrupt its stdout.  At a 60 s cadence a
+            # missed tick is cheap; the next one will succeed.
             return
         try:
-            self.host.update_status({"rssi_dbm": rssi, "rssi_at_ts": time.time()})
-        except Exception as exc:
-            logger.debug("[%s] RSSI host status push failed: %s", self.device_name, exc)
+            try:
+                output = self._run_rssi_burst()
+            except Exception as exc:
+                logger.debug("[%s] RSSI refresh burst failed: %s", self.device_name, exc)
+                return
+            rssi = _parse_own_rssi_from_burst(output, self.mac_address)
+            if rssi is None:
+                return
+            try:
+                self.host.update_status({"rssi_dbm": rssi, "rssi_at_ts": time.time()})
+            except Exception as exc:
+                logger.debug("[%s] RSSI host status push failed: %s", self.device_name, exc)
+        finally:
+            release_bt_operation()
 
     async def run_rssi_refresh_loop(self, interval_s: float = _RSSI_REFRESH_INTERVAL_S) -> None:
         """Async loop calling :meth:`run_rssi_refresh` every *interval_s*.

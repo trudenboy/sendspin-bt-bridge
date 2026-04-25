@@ -4194,6 +4194,11 @@ function _trimLogsBuffer() {
 function startLogsWebsocket() {
     if (typeof WebSocket === 'undefined') return;
     _logsWsActive = true;
+    // Reset the retry budget on every user-initiated start so a previous
+    // connection that exhausted retries doesn't leave the counter past
+    // the cap and silently refuse to reconnect when Auto-Refresh is
+    // toggled back on.
+    _logsWsRetries = 0;
     if (_logsWsReconnectTimer) {
         clearTimeout(_logsWsReconnectTimer);
         _logsWsReconnectTimer = null;
@@ -4244,6 +4249,7 @@ function startLogsWebsocket() {
 
 function stopLogsWebsocket() {
     _logsWsActive = false;
+    _logsWsRetries = 0;
     if (_logsWsReconnectTimer) {
         clearTimeout(_logsWsReconnectTimer);
         _logsWsReconnectTimer = null;

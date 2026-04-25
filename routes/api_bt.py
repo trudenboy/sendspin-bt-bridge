@@ -62,7 +62,6 @@ _INFO_RSSI_PAT = re.compile(
 )
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
-_bt_operation_lock = threading.Lock()
 _scan_lock = threading.Lock()
 
 
@@ -87,15 +86,20 @@ def _bt_operation_conflict_response():
     return jsonify({"success": False, "error": "Another Bluetooth operation is already in progress"}), 409
 
 
+# Shared BT operation lock — moved to services/bt_operation_lock.py in
+# rc.3 review fixes so background callers (RSSI refresh) can also gate
+# on it without importing routes/api_bt.  These thin wrappers preserve
+# the existing call sites within this file.
 def _try_acquire_bt_operation() -> bool:
-    return _bt_operation_lock.acquire(blocking=False)
+    from services.bt_operation_lock import try_acquire_bt_operation
+
+    return try_acquire_bt_operation()
 
 
 def _release_bt_operation() -> None:
-    try:
-        _bt_operation_lock.release()
-    except RuntimeError:
-        logger.debug("BT operation lock release skipped; lock was not held")
+    from services.bt_operation_lock import release_bt_operation
+
+    release_bt_operation()
 
 
 # ---------------------------------------------------------------------------

@@ -131,3 +131,46 @@ def test_run_rssi_refresh_swallows_burst_failure(bt_manager):
         bt_manager.run_rssi_refresh()
 
     host.update_status.assert_not_called()
+
+
+def test_run_rssi_refresh_skips_when_bt_operation_lock_held(bt_manager):
+    """Regression for Copilot review on PR #197: the background RSSI
+    burst must yield to the shared bluetoothctl operation lock, not
+    just user scan jobs.  Pair / Reset & Reconnect / Standalone Pair
+    all hold the lock for the duration of their (long) bluetoothctl
+    sessions; a parallel RSSI burst would corrupt their stdout / flip
+    BlueZ into an inconsistent state.
+    """
+    from services.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
+
+    host = MagicMock()
+    bt_manager.host = host
+
+    assert try_acquire_bt_operation() is True
+    try:
+        with patch.object(bt_manager, "_run_rssi_burst") as run_burst:
+            bt_manager.run_rssi_refresh()
+        run_burst.assert_not_called()
+        host.update_status.assert_not_called()
+    finally:
+        release_bt_operation()
+
+
+def test_run_rssi_refresh_releases_bt_operation_lock_after_burst(bt_manager):
+    """After a successful (or failed) refresh the shared lock must be
+    released — otherwise a single RSSI tick could permanently block all
+    subsequent pair / reconnect attempts on the bridge."""
+    from services.bt_operation_lock import try_acquire_bt_operation
+
+    host = MagicMock()
+    bt_manager.host = host
+
+    burst_out = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: -60\n"
+    with patch.object(bt_manager, "_run_rssi_burst", return_value=burst_out):
+        bt_manager.run_rssi_refresh()
+
+    # Lock must be free now.
+    assert try_acquire_bt_operation() is True
+    from services.bt_operation_lock import release_bt_operation
+
+    release_bt_operation()

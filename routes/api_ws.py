@@ -68,9 +68,16 @@ def status_ws_iter(
     # still being initialised by Flask blueprint registration.
     from routes.api_status import _build_status_payload
 
+    # Capture the status version BEFORE building the initial snapshot.
+    # If a status change lands between snapshot build and version
+    # capture, capturing AFTER would silently swallow the change
+    # (next ``wait_for_status_change`` would never trigger on a version
+    # already past the captured baseline).  Capturing BEFORE means any
+    # concurrent change forces an immediate follow-up snapshot — the
+    # client may briefly see the old then new state, which is correct.
+    last_version = _state.get_status_version()
     yield _build_status_payload()
 
-    last_version = _state.get_status_version()
     started = time.monotonic()
     iterations = 0
     while True:

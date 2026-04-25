@@ -122,6 +122,28 @@ scan.
   ``test_log_stream_iter_queue_is_bounded_drops_oldest_on_overflow``
   → ``..._drops_newest_when_full`` to match the actual implementation.
 
+### Third-round review fixes (PR #197)
+
+- ``routes/api_ws.py:status_ws_iter`` — capture
+  ``get_status_version`` BEFORE building the initial snapshot.  The
+  previous order let a status change landing between snapshot build
+  and version capture silently slip through: ``last_version`` would
+  already record the post-change number, so ``wait_for_status_change``
+  never fired for it and clients silently saw stale state until the
+  next change.  Regression test injects a notify during snapshot
+  construction and asserts the next yield is a change frame.
+- ``services/bt_operation_lock.py`` (new) — extracts the
+  ``_bt_operation_lock`` previously private to ``routes/api_bt.py``
+  into a shared module so background callers can also acquire it.
+  ``BluetoothManager.run_rssi_refresh`` now acquires it non-blocking
+  and skips the burst when held — its 60 s cadence makes a missed
+  tick cheap, and it can no longer corrupt a parallel pair / reset
+  / standalone-scan session by sharing BlueZ's discovery state.
+- ``static/app.js`` — reset ``_logsWsRetries`` in both
+  ``startLogsWebsocket`` and ``stopLogsWebsocket`` so a previous
+  exhausted retry budget can't silently block reconnect when the
+  user toggles Auto-Refresh off then back on.
+
 ## [2.63.0-rc.2] - 2026-04-25
 
 UX polish on top of rc.1: signal-strength visibility, safer default

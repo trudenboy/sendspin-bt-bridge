@@ -21,6 +21,31 @@ def _isolated_config(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(json.dumps({}))
 
 
+@pytest.fixture(autouse=True)
+def _release_bt_operation_lock_after_each_test():
+    """Reset the shared BT operation lock between tests in this file.
+
+    ``test_scan_allowed_after_cooldown_expires`` patches
+    ``threading.Thread.start`` to a no-op, so the background ``_run_job``
+    that would normally release the lock never fires — the acquire from
+    the scan endpoint leaks.  The leak was invisible while the lock was
+    private to ``routes/api_bt`` (rc.2-) but rc.3 promotes it to a
+    process-wide singleton in ``services.bt_operation_lock`` (so the
+    background RSSI refresh can also gate on it), and a leaked lock
+    here now blocks the next test's acquire.  Resetting after each
+    test keeps the suite deterministic without changing production
+    semantics.
+    """
+    yield
+    from services.bt_operation_lock import _bt_operation_lock
+
+    if _bt_operation_lock.locked():
+        try:
+            _bt_operation_lock.release()
+        except RuntimeError:
+            pass
+
+
 @pytest.fixture()
 def client():
     """Return a Flask test client with the bt_bp blueprint registered."""
