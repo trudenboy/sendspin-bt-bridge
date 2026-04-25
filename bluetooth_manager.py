@@ -84,6 +84,8 @@ class BluetoothManager:
         check_interval: int = 10,
         max_reconnect_fails: int = 0,
         on_sink_found: Callable[[str, int | None], None] | None = None,
+        on_connected: Callable[[], None] | None = None,
+        on_disconnected: Callable[[], None] | None = None,
         churn_threshold: int = 0,
         churn_window: float = 300.0,
         enable_a2dp_dance: bool = False,
@@ -95,6 +97,14 @@ class BluetoothManager:
         self.device_name = device_name or mac_address
         self.host = host
         self.on_sink_found = on_sink_found
+        # Connection-state transition callbacks (false→true / true→false).  The
+        # owner (services/device_activation.py) wires these to per-device
+        # MprisPlayer create/destroy so AVRCP buttons + speaker display follow
+        # the link state without mpris_player having to poll BT state itself.
+        # Fired exactly once per transition; exceptions are logged and
+        # swallowed (must not destabilise the BT state machine).
+        self.on_connected = on_connected
+        self.on_disconnected = on_disconnected
         self.prefer_sbc = prefer_sbc
         self.connected = False  # GIL-atomic bool; safe for cross-thread reads without lock
         self.last_check: float = 0
@@ -374,6 +384,7 @@ class BluetoothManager:
                     logger.info("✓ BT device %s (%s) connected", self.device_name, self.mac_address)
                 else:
                     logger.warning("✗ BT device %s (%s) disconnected", self.device_name, self.mac_address)
+                self._fire_connection_transition(is_connected)
 
             self.connected = is_connected
             return self.connected
@@ -836,13 +847,40 @@ class BluetoothManager:
 
     def disconnect_device(self) -> bool:
         """Disconnect from the Bluetooth device via D-Bus; falls back to bluetoothctl."""
+        was_connected = self.connected
         if _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
             self.connected = False
+            if was_connected:
+                self._fire_connection_transition(False)
             return True
         success, _ = self._run_bluetoothctl([f"disconnect {self.mac_address}"])
         if success:
             self.connected = False
+            if was_connected:
+                self._fire_connection_transition(False)
         return success
+
+    def _fire_connection_transition(self, now_connected: bool) -> None:
+        """Invoke on_connected / on_disconnected exactly once per transition.
+
+        Wired by services/device_activation.py to MprisPlayer create/destroy.
+        Callback exceptions must NOT destabilise the BT state machine — log
+        and continue.  The split between on_connected and on_disconnected
+        keeps each closure focused on a single direction.
+        """
+        cb = self.on_connected if now_connected else self.on_disconnected
+        if cb is None:
+            return
+        try:
+            cb()
+        except Exception as exc:
+            direction = "on_connected" if now_connected else "on_disconnected"
+            logger.warning(
+                "[%s] %s callback raised: %s",
+                self.device_name,
+                direction,
+                exc,
+            )
 
     def _a2dp_recovery_dance(self) -> bool:
         """Disconnect → wait → reconnect to nudge BlueZ into registering A2DP Sink.
@@ -861,9 +899,16 @@ class BluetoothManager:
             self.device_name,
         )
         # Disconnect — prefer D-Bus, fall back to bluetoothctl.
+        was_connected = self.connected
         if not _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
             self._run_bluetoothctl([f"disconnect {self.mac_address}"])
         self.connected = False
+        # Fire on_disconnected so any per-device hardware integration
+        # (MprisPlayer D-Bus path) is torn down before reconnect re-creates it;
+        # otherwise the dance would leave a dangling object on the bus and
+        # the reconnect's on_connected fire would clash with it.
+        if was_connected:
+            self._fire_connection_transition(False)
         # Short settle period — BlueZ needs a moment to tear down ACL state.
         if not self._wait_with_cancel(2):
             return False

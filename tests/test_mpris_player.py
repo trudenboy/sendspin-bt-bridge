@@ -255,3 +255,99 @@ def test_build_player_iface_playback_status_returns_current_state():
     # exposes the property as a Python attribute that delegates to the
     # underlying state on read).
     assert iface.PlaybackStatus == "Paused"
+
+
+# ── MprisRegistry — process-level lookup table for active players ──────
+
+
+def test_registry_register_then_get_returns_same_player():
+    """register(mac, player) stores the instance; get(mac) returns it.
+
+    Used by the BluetoothManager on_connected hook (services/device_activation.py)
+    and by the MA monitor reverse hook to find the right MprisPlayer for a
+    player_id arriving from MA.
+    """
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    player = _make_player()
+    reg.register("AA:BB:CC:DD:EE:FF", player)
+
+    assert reg.get("AA:BB:CC:DD:EE:FF") is player
+
+
+def test_registry_get_normalizes_mac_case_and_separators():
+    """Lookup must be MAC-case-insensitive and tolerate ``-`` vs ``:`` so the
+    Claim Audio endpoint works regardless of how the operator typed the URL."""
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    player = _make_player()
+    reg.register("aa:bb:cc:dd:ee:ff", player)
+
+    assert reg.get("AA-BB-CC-DD-EE-FF") is player
+    assert reg.get("aabbccddeeff") is player
+
+
+def test_registry_unregister_drops_player():
+    """unregister(mac) removes the player; subsequent get() returns None."""
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    player = _make_player()
+    reg.register("AA:BB:CC:DD:EE:FF", player)
+    reg.unregister("AA:BB:CC:DD:EE:FF")
+
+    assert reg.get("AA:BB:CC:DD:EE:FF") is None
+
+
+def test_registry_unregister_unknown_mac_is_silent_noop():
+    """unregister() must tolerate an already-removed MAC (race with disconnect
+    transition firing twice or operator double-clicking Release)."""
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    reg.unregister("AA:BB:CC:DD:EE:FF")  # must not raise
+
+
+def test_registry_get_by_player_id_lookup():
+    """The MA monitor reverse hook starts with a player_id (MA-side identifier)
+    and needs to find the corresponding MprisPlayer.  Reverse lookup is keyed
+    on the player_id stored on the MprisPlayer instance."""
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    player = _make_player()  # player_id="aabbccddeeff"
+    reg.register("AA:BB:CC:DD:EE:FF", player)
+
+    assert reg.get_by_player_id("aabbccddeeff") is player
+    assert reg.get_by_player_id("nonexistent") is None
+
+
+def test_registry_register_replaces_existing_player_for_same_mac():
+    """If a previous MprisPlayer is still registered (e.g. transition fired
+    twice without intervening unregister), register() must replace cleanly —
+    no AssertionError, no leak.  The previous player is silently dropped."""
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    first = _make_player()
+    second = _make_player()
+    reg.register("AA:BB:CC:DD:EE:FF", first)
+    reg.register("AA:BB:CC:DD:EE:FF", second)
+
+    assert reg.get("AA:BB:CC:DD:EE:FF") is second
+
+
+def test_registry_active_macs_lists_currently_registered():
+    """The Claim Audio UI button needs to know which MACs have an active
+    MprisPlayer (so it can hide the button for offline devices)."""
+    from services.mpris_player import MprisRegistry
+
+    reg = MprisRegistry()
+    p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock())
+    p2 = MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock())
+    reg.register(p1.mac, p1)
+    reg.register(p2.mac, p2)
+
+    assert sorted(reg.active_macs()) == ["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]

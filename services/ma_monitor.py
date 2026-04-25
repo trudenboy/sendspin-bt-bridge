@@ -45,6 +45,104 @@ def _active_bridge_clients() -> list:
     return get_device_registry_snapshot().active_clients
 
 
+# MA queue ``state`` strings → MPRIS PlaybackStatus.  Speakers (Bose,
+# Sony WH-1000XM, Yandex mini) only render one of {Playing, Paused,
+# Stopped}; any other string from MA collapses to Stopped so the display
+# doesn't render a blank state on transitions like "buffering".
+_MA_STATE_TO_MPRIS = {
+    "playing": "Playing",
+    "paused": "Paused",
+}
+
+
+def _ma_state_to_mpris_status(state: str | None) -> str:
+    return _MA_STATE_TO_MPRIS.get(str(state or "").strip().lower(), "Stopped")
+
+
+def _build_mpris_metadata(np: dict) -> dict:
+    """Translate flat now-playing dict to MPRIS Metadata dict.
+
+    Speakers expect the ``xesam:`` / ``mpris:`` namespaces; without these
+    keys the speaker display stays blank even when PlaybackStatus updates.
+    """
+    md: dict = {}
+    track = str(np.get("track") or "").strip()
+    if track:
+        md["xesam:title"] = track
+    artist = str(np.get("artist") or "").strip()
+    if artist:
+        md["xesam:artist"] = [artist]
+    album = str(np.get("album") or "").strip()
+    if album:
+        md["xesam:album"] = album
+    art_url = str(np.get("image_url") or "").strip()
+    if art_url:
+        md["mpris:artUrl"] = art_url
+    duration = np.get("duration") or 0
+    try:
+        duration_us = int(float(duration) * 1_000_000)
+    except (TypeError, ValueError):
+        duration_us = 0
+    if duration_us > 0:
+        md["mpris:length"] = duration_us
+    return md
+
+
+async def push_now_playing_to_mpris(fresh: dict, clients: list, registry) -> None:
+    """Forward MA now-playing snapshots to per-device MprisPlayer instances.
+
+    For each entry in *fresh*:
+      * If the key matches an MprisPlayer's ``player_id`` (solo case), push
+        directly to that player.
+      * Otherwise treat the key as a syncgroup_id and push to every
+        MprisPlayer attached to a client whose ``status.group_id`` matches.
+
+    Errors per-player are logged at debug and do not stop the overall
+    fan-out — one speaker dropping off the bus must not stall updates to
+    the rest.
+    """
+    if not fresh:
+        return
+    # Pre-compute the syncgroup → [MAC] mapping so we don't walk clients per entry.
+    syncgroup_macs: dict[str, list[str]] = {}
+    for client in clients:
+        bt = getattr(client, "bt_manager", None)
+        mac = getattr(bt, "mac_address", None) if bt is not None else None
+        if not mac:
+            continue
+        status = getattr(client, "status", {}) or {}
+        gid = status.get("group_id") if isinstance(status, dict) else None
+        if gid:
+            syncgroup_macs.setdefault(str(gid), []).append(str(mac))
+
+    for key, np in fresh.items():
+        if not isinstance(np, dict):
+            continue
+        status = _ma_state_to_mpris_status(np.get("state"))
+        metadata = _build_mpris_metadata(np)
+
+        targets: list = []
+        solo = registry.get_by_player_id(str(key)) if hasattr(registry, "get_by_player_id") else None
+        if solo is not None:
+            targets.append(solo)
+        else:
+            for mac in syncgroup_macs.get(str(key), []):
+                player = registry.get(mac)
+                if player is not None:
+                    targets.append(player)
+
+        for player in targets:
+            try:
+                await player.set_playback_status(status)
+            except Exception as exc:
+                logger.debug("MPRIS set_playback_status for %s failed: %s", player.mac, exc)
+            if metadata:
+                try:
+                    await player.set_metadata(metadata)
+                except Exception as exc:
+                    logger.debug("MPRIS set_metadata for %s failed: %s", player.mac, exc)
+
+
 def solo_queue_candidates(player_id: str | None) -> list[str]:
     """Return ordered MA solo queue IDs compatible with current and legacy players."""
     raw_player_id = str(player_id or "").strip()
@@ -803,6 +901,20 @@ class MaMonitor:
                 # Atomically replace to clear stale entries
                 if fresh:
                     _state.replace_ma_now_playing(fresh)
+                    # Reverse-bridge: push playback state to per-device MprisPlayer
+                    # so AVRCP-capable speakers (Bose, Sony WH-1000XM, Yandex
+                    # mini) reflect MA's now-playing on their display/LEDs.
+                    # Best-effort — failures here must not stop polling.
+                    try:
+                        from services.mpris_player import get_registry as _get_mpris_registry
+
+                        await push_now_playing_to_mpris(
+                            fresh,
+                            _active_bridge_clients(),
+                            _get_mpris_registry(),
+                        )
+                    except Exception as exc:
+                        logger.debug("MPRIS reverse-push failed: %s", exc)
                 return
         except Exception as exc:
             logger.debug("MA monitor poll error: %s", exc)

@@ -73,6 +73,51 @@ def _release_bt_operation() -> None:
 # ---------------------------------------------------------------------------
 
 
+@bt_bp.route("/api/bt/claim/<mac>", methods=["POST"])
+def api_bt_claim(mac: str):
+    """Claim AVRCP audio source on a multipoint speaker.
+
+    For speakers paired to multiple hosts simultaneously (phone + bridge),
+    this asserts the bridge as the active MPRIS source by pushing
+    PlaybackStatus = "Playing" through the per-device MprisPlayer.  BlueZ
+    forwards that to the speaker via AVRCP, which typically causes the
+    speaker to switch its active source to us.
+    """
+    if not validate_mac(mac):
+        return jsonify({"success": False, "error": "Invalid MAC address"}), 400
+
+    from services.bridge_runtime_state import get_main_loop
+    from services.mpris_player import get_registry
+
+    player = get_registry().get(mac)
+    if player is None:
+        return jsonify(
+            {
+                "success": False,
+                "error": "No MPRIS player for this device — is the speaker connected?",
+            }
+        ), 404
+
+    loop = get_main_loop()
+    if loop is None:
+        # No async loop → fall back to sync state mutation (registry-only).
+        # Production always has the loop; this branch keeps the test path
+        # deterministic when running endpoint tests without the bridge.
+        player._state.status = "Playing"
+        return jsonify({"success": True, "mac": mac})
+
+    import asyncio as _asyncio
+
+    try:
+        fut = _asyncio.run_coroutine_threadsafe(player.set_playback_status("Playing"), loop)
+        fut.result(timeout=2.0)
+    except Exception as exc:
+        logger.warning("Claim audio for %s failed: %s", mac, exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+    return jsonify({"success": True, "mac": mac})
+
+
 @bt_bp.route("/api/bt/reconnect", methods=["POST"])
 def api_bt_reconnect():
     """Force reconnect a BT device (connect without re-pairing)."""

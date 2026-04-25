@@ -3589,6 +3589,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-claim-' + i + '" data-action="bt-claim-audio" data-arg="' + i + '" title="Claim audio source on multipoint speaker (push Playing via AVRCP)">' + _actionButtonInnerHtml('play', 'Claim') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" data-action="wake-device" data-arg="' + i + '" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
             '<button type="button" class="action-btn warn" id="dbtn-standby-' + i + '" data-action="bt-toggle-standby" data-arg="' + i + '">' + _actionButtonInnerHtml('standby', 'Standby') + '</button>' +
             '<button type="button" class="action-btn danger" id="dbtn-disable-' + i + '" data-action="confirm-disable-device" data-arg="' + i + '">' + _actionButtonInnerHtml('disable', 'Disable') + '</button>' +
@@ -4649,6 +4650,35 @@ async function btReconnect(i) {
         if (pairBtn) pairBtn.disabled = false;
         if (status) status.textContent = '';
     }, 8000);
+    return result;
+}
+
+async function btClaimAudio(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return {success: false, message: 'Device not found'};
+    var mac = (dev.bluetooth_mac || dev.mac || '').trim();
+    if (!mac) return {success: false, message: 'No MAC for device'};
+    var btn = document.getElementById('dbtn-claim-' + i);
+    var status = document.getElementById('dbt-action-status-' + i);
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = '▶ Claiming…';
+    var result = {success: false, message: 'Claim failed'};
+    try {
+        var resp = await fetch(API_BASE + '/api/bt/claim/' + encodeURIComponent(mac), {method: 'POST'});
+        var d = await resp.json();
+        var msg = d.success ? '✓ Audio claimed' : '✗ ' + (d.error || 'Failed');
+        result = {success: !!d.success, message: d.error || 'Claimed'};
+        if (status) status.textContent = msg;
+        showToast(msg, d.success ? 'success' : 'error');
+    } catch (e) {
+        if (status) status.textContent = '✗ Error';
+        showToast('✗ Claim error', 'error');
+        result = {success: false, message: e && e.message ? e.message : 'Claim error'};
+    }
+    setTimeout(function() {
+        if (btn) btn.disabled = false;
+        if (status) status.textContent = '';
+    }, 4000);
     return result;
 }
 
@@ -12500,6 +12530,7 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'bt-claim-audio':           (_el, _ev, arg) => btClaimAudio(Number(arg)),
     'bt-toggle-management':     (_el, _ev, arg) => btToggleManagement(Number(arg)),
     'bt-toggle-standby':        (_el, _ev, arg) => btToggleStandby(Number(arg)),
     'confirm-disable-device':   (_el, _ev, arg) => confirmDisableDevice(Number(arg)),

@@ -315,6 +315,82 @@ def _build_player_iface(player: MprisPlayer):
     return iface
 
 
+def _normalize_mac(mac: str) -> str:
+    """Lowercase, strip separators — used as the registry's canonical key.
+
+    Operators and the Claim Audio URL may pass MACs with ``:``/``-``
+    separators or none at all; the registry must be tolerant.
+    """
+    return "".join(ch.lower() for ch in mac if ch.isalnum())
+
+
+class MprisRegistry:
+    """Process-level lookup table for active per-device MprisPlayer instances.
+
+    The BluetoothManager on_connected/on_disconnected hooks register and
+    unregister entries; the MA monitor reverse hook and the Claim Audio
+    endpoint use the registry to find the right player for a given MAC or
+    MA player_id.
+
+    This class is pure-Python state — D-Bus export is layered on top by
+    callers that hold a live ``dbus_fast`` MessageBus.  Keeping the registry
+    transport-agnostic means the lookup logic can be exercised in tests
+    without requiring D-Bus, and the same registry can later back a UI
+    diagnostic view without re-implementing the bookkeeping.
+    """
+
+    def __init__(self) -> None:
+        self._by_mac: dict[str, MprisPlayer] = {}
+
+    def register(self, mac: str, player: MprisPlayer) -> None:
+        """Register *player* under *mac*; replaces any prior entry for the MAC."""
+        self._by_mac[_normalize_mac(mac)] = player
+
+    def unregister(self, mac: str) -> MprisPlayer | None:
+        """Remove and return the player for *mac*; ``None`` if absent."""
+        return self._by_mac.pop(_normalize_mac(mac), None)
+
+    def get(self, mac: str) -> MprisPlayer | None:
+        """Look up the active MprisPlayer for *mac*, or ``None``."""
+        return self._by_mac.get(_normalize_mac(mac))
+
+    def get_by_player_id(self, player_id: str) -> MprisPlayer | None:
+        """Reverse lookup keyed on the MprisPlayer's ``player_id`` attribute.
+
+        Used by the MA monitor reverse hook: MA pushes ``player_id`` updates
+        and we need to map back to the BT-attached MprisPlayer.
+        """
+        for player in self._by_mac.values():
+            if player.player_id == player_id:
+                return player
+        return None
+
+    def active_macs(self) -> list[str]:
+        """Return the canonical MACs currently holding an MprisPlayer.
+
+        Returns the *original-case* MACs as registered, not the normalised
+        form, so UI surfaces ("Claim audio" buttons) can render them in the
+        format users expect to see.
+        """
+        return [player.mac for player in self._by_mac.values()]
+
+
+# Process-wide singleton.  Exposed via get_registry() so tests can patch the
+# accessor; instantiating fresh MprisRegistry per test stays cheap.
+_REGISTRY = MprisRegistry()
+
+
+def get_registry() -> MprisRegistry:
+    """Return the process-wide MprisRegistry.
+
+    The registry is shared across:
+      - services/device_activation.py (creates/destroys players via BT hooks)
+      - services/ma_monitor.py (pushes MA playback state into players)
+      - routes/api_bt.py (Claim Audio endpoint looks up players by MAC)
+    """
+    return _REGISTRY
+
+
 def _metadata_to_variant_dict(metadata: dict[str, Any], Variant: Any) -> dict[str, Any]:
     """Convert plain Python metadata to ``dbus_fast`` Variant dict.
 
