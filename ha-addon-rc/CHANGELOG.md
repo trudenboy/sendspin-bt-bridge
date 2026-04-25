@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.7] - 2026-04-25
+
+Restores the live RSSI display for connected speakers — the third (and
+working) attempt after rc.3 (``scan bredr``) and rc.5
+(``bluetoothctl info``) both proved BlueZ exposes nothing for an
+established ACL link via userspace tools.
+
+### Added — connected-device RSSI via kernel mgmt socket
+
+The remaining viable source on Linux is the BlueZ kernel mgmt
+interface: opcode 0x0031 (``MGMT_OP_GET_CONN_INFO``) returns the
+controller-measured RSSI for a connected peer, BR/EDR or LE.  Wrapped
+in ``services/bt_rssi_mgmt.py`` via the ``btsocket`` library so we
+don't hand-roll the binary protocol.  Requires ``CAP_NET_ADMIN`` —
+the bridge container already has it.
+
+- ``services/bt_rssi_mgmt.read_conn_info(adapter_index, mac)`` — sync
+  wrapper, returns signed dBm or ``None``.  Every failure mode (peer
+  not connected, EPERM, ENODEV, status != Success, sentinel 127,
+  btsocket missing on non-Linux test envs, garbage adapter index)
+  collapses to ``None`` so callers' contract is "fresh value or keep
+  last known — never propagate an exception".
+- ``BluetoothManager.run_rssi_refresh_loop`` (every 30 s) +
+  ``_rssi_refresh_tick`` — short-circuits when the link is down, when
+  the shared ``bt_operation_lock`` is held by a pair / scan /
+  reconnect, or when the adapter index can't be resolved from
+  ``adapter_hci_name``.  Spawned alongside ``monitor_and_reconnect``
+  in ``sendspin_client._run_async``.
+- ``BluetoothManager.__init__`` gains an ``on_rssi_update`` callback;
+  ``services/device_activation.activate_device`` wires it to
+  ``SendspinClient._update_status({"rssi_dbm": …, "rssi_at_ts": …})``
+  so values flow through the existing SSE pipeline into the UI chip
+  (``_renderRssiChip``) that's been there since rc.2.
+
+Tests: ``tests/test_bt_rssi_mgmt.py`` (8 cases pinning every
+short-circuit and the unsigned→signed byte fold);
+``tests/test_bt_rssi_refresh.py`` (9 cases covering adapter-index
+resolution and every refresh-tick branch including lock contention
+and callback exceptions).
+
+### Changed
+
+- ``btsocket==0.3.0`` added to ``requirements.txt``.  Linux-only
+  transitively; ``services.bt_rssi_mgmt`` catches ``ImportError`` so
+  developer macOS test runs stay green without it.
+- ``bluetooth_manager.py`` rc.6 docblock replaced; ``asyncio`` lifted
+  out of the ``TYPE_CHECKING`` block (now used at runtime by
+  ``run_rssi_refresh_loop``).
+
 ## [2.63.0-rc.6] - 2026-04-25
 
 Two findings from VM 105 manual validation of rc.5 forced an
