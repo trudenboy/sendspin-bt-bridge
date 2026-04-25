@@ -4181,6 +4181,8 @@ async function refreshLogs() {
 // unreachable (rc.2 deployments, browsers without WebSocket).
 var _logsWs = null;
 var _logsWsRetries = 0;
+var _logsWsReconnectTimer = null;
+var _logsWsActive = false;  // gate set by start/stop; reconnect honours it
 var _LOGS_WS_MAX_LINES = 2000;
 
 function _trimLogsBuffer() {
@@ -4191,6 +4193,11 @@ function _trimLogsBuffer() {
 
 function startLogsWebsocket() {
     if (typeof WebSocket === 'undefined') return;
+    _logsWsActive = true;
+    if (_logsWsReconnectTimer) {
+        clearTimeout(_logsWsReconnectTimer);
+        _logsWsReconnectTimer = null;
+    }
     if (_logsWs && _logsWs.readyState <= 1) return;  // already connecting / open
     try {
         _logsWs = new WebSocket(_wsUrlFor('/api/logs/stream'));
@@ -4213,31 +4220,45 @@ function startLogsWebsocket() {
                     renderLogs();
                 }
             } else if (frame.type === 'session_expired') {
-                // Server-side rotation: reconnect immediately.
+                // Server-side rotation: close cleanly; the onclose handler
+                // schedules reconnect (gated on _logsWsActive).
                 try { _logsWs.close(); } catch (_e) { /* ignore */ }
             }
             // type === 'heartbeat' — keepalive, no UI work.
         } catch (err) { console.error('Logs WS parse error:', err); }
     };
     _logsWs.onclose = function() {
+        _logsWs = null;
+        if (!_logsWsActive) return;  // user toggled Auto-Refresh off
         _logsWsRetries++;
         var delay = Math.min(1000 * Math.pow(2, _logsWsRetries - 1), 16000);
         if (_logsWsRetries <= 5) {
-            setTimeout(startLogsWebsocket, delay);
+            _logsWsReconnectTimer = setTimeout(function() {
+                _logsWsReconnectTimer = null;
+                startLogsWebsocket();
+            }, delay);
         }
     };
     _logsWs.onerror = function() { /* close handler does the retry */ };
-    window.addEventListener('beforeunload', function() {
-        try { if (_logsWs) _logsWs.close(); } catch (_e) { /* ignore */ }
-    });
 }
 
 function stopLogsWebsocket() {
+    _logsWsActive = false;
+    if (_logsWsReconnectTimer) {
+        clearTimeout(_logsWsReconnectTimer);
+        _logsWsReconnectTimer = null;
+    }
     if (_logsWs) {
         try { _logsWs.close(); } catch (_e) { /* ignore */ }
         _logsWs = null;
     }
 }
+
+// Single beforeunload handler closes whichever streams are open.
+// Registered once so reconnects don't accumulate duplicate handlers.
+window.addEventListener('beforeunload', function() {
+    try { if (_logsWs) _logsWs.close(); } catch (_e) { /* ignore */ }
+});
 
 async function downloadLogs() {
     try {
@@ -12546,7 +12567,16 @@ function _wsUrlFor(path) {
     var _wsRetries = 0;
     var _wsMaxRetries = 3;
     var _ws = null;
+    var _es = null;
     var _sseStarted = false;
+
+    // Single beforeunload handler closes whichever transport is open
+    // at unload time.  Registered once below so reconnects don't
+    // accumulate duplicate listeners.
+    window.addEventListener('beforeunload', function() {
+        try { if (_ws) _ws.close(); } catch (_e) { /* ignore */ }
+        try { if (_es) _es.close(); } catch (_e) { /* ignore */ }
+    });
 
     function startSSEFallback() {
         if (_sseStarted) return;
@@ -12558,17 +12588,18 @@ function _wsUrlFor(path) {
         var _sseRetries = 0;
         var _maxRetries = 5;
         function connectSSE() {
-            var es = new EventSource(API_BASE + '/api/status/stream');
-            es.onopen = function() {
+            _es = new EventSource(API_BASE + '/api/status/stream');
+            _es.onopen = function() {
                 _sseRetries = 0;
                 if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
             };
-            es.onmessage = function(e) {
+            _es.onmessage = function(e) {
                 try { renderStatusPayload(JSON.parse(e.data)); }
                 catch (err) { console.error('SSE parse error:', err); }
             };
-            es.onerror = function() {
-                es.close();
+            _es.onerror = function() {
+                try { _es.close(); } catch (_e) { /* ignore */ }
+                _es = null;
                 _sseRetries++;
                 if (_sseRetries <= _maxRetries) {
                     var delay = Math.min(1000 * Math.pow(2, _sseRetries - 1), 16000);
@@ -12578,13 +12609,19 @@ function _wsUrlFor(path) {
                     if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
                 }
             };
-            window.addEventListener('beforeunload', function() { es.close(); });
         }
         connectSSE();
     }
 
     function connectWS() {
         if (typeof WebSocket === 'undefined') { startSSEFallback(); return; }
+        // Defensive: tear down any prior socket so session_expired
+        // rotation (or a quick onerror→reconnect) can't leave two
+        // concurrent sockets emitting duplicate updates.
+        if (_ws) {
+            try { _ws.onclose = null; _ws.close(); } catch (_e) { /* ignore */ }
+            _ws = null;
+        }
         try {
             _ws = new WebSocket(_wsUrlFor('/api/status/ws'));
         } catch (err) {
@@ -12601,14 +12638,17 @@ function _wsUrlFor(path) {
                 var payload = JSON.parse(e.data);
                 if (payload && payload.event === 'heartbeat') return;
                 if (payload && payload.event === 'session_expired') {
-                    // Server forced rotation; reconnect immediately.
-                    setTimeout(connectWS, 100);
+                    // Server forced rotation: close current socket
+                    // explicitly and let onclose drive reconnect (single
+                    // path, single timer, no duplicate sockets).
+                    try { _ws.close(); } catch (_e) { /* ignore */ }
                     return;
                 }
                 renderStatusPayload(payload);
             } catch (err) { console.error('Status WS parse error:', err); }
         };
         _ws.onclose = function() {
+            _ws = null;
             _wsRetries++;
             if (_wsRetries <= _wsMaxRetries) {
                 var delay = Math.min(1000 * Math.pow(2, _wsRetries - 1), 8000);
@@ -12619,9 +12659,6 @@ function _wsUrlFor(path) {
             }
         };
         _ws.onerror = function() { /* close handler does the retry/fallback */ };
-        window.addEventListener('beforeunload', function() {
-            try { if (_ws) _ws.close(); } catch (_e) { /* ignore */ }
-        });
     }
 
     connectWS();

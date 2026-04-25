@@ -90,6 +90,14 @@ def status_ws_iter(
 _LOG_STREAM_DEFAULT_IDLE_TIMEOUT = 15.0
 _LOG_STREAM_MAX_LIFETIME_SECONDS = 1800  # 30 minutes — match status WS
 
+# Per-client queue cap.  A stalled browser tab (slow network, paused
+# JS) would otherwise grow the queue without bound under busy logging
+# and blow the bridge's memory budget.  Cap matches the ring buffer's
+# default size so even under sustained back-pressure the queue holds
+# at most one buffer's worth of lines; older lines fall off via the
+# drop-oldest path in ``log_stream_iter`` below.
+LOG_STREAM_QUEUE_MAXSIZE = 2000
+
 
 def log_stream_iter(
     handler: _RingLogHandler,
@@ -109,15 +117,20 @@ def log_stream_iter(
       * On idle timeout: ``{"type": "heartbeat"}`` keeps proxy +
         browser connection warm.
 
-    The generator subscribes a ``queue.Queue`` to *handler*, drains it
-    with timeouts, and unsubscribes via a ``finally`` block — so the
-    handler's subscriber list never leaks closed clients (verified by
+    The generator subscribes via :meth:`_RingLogHandler.subscribe_with_snapshot`
+    to take an atomic snapshot + register pair (so log lines emitted
+    between snapshot and subscribe land in the queue rather than being
+    dropped), uses a bounded queue (newest line is dropped at the
+    ``put_nowait`` step in the handler when the queue is full — the
+    ring buffer covers the gap on the client's next reconnect), and
+    unsubscribes via a ``finally`` block — so the handler's subscriber
+    list never leaks closed clients (verified by
     ``test_log_stream_iter_unsubscribes_on_completion``).
     """
-    yield {"type": "snapshot", "lines": handler.snapshot()}
+    bounded_q: _queue.Queue[str] = _queue.Queue(maxsize=LOG_STREAM_QUEUE_MAXSIZE)
+    q, snapshot = handler.subscribe_with_snapshot(bounded_q)
+    yield {"type": "snapshot", "lines": snapshot}
 
-    q: _queue.Queue[str] = _queue.Queue()
-    handler.subscribe(q)
     started = time.monotonic()
     iterations = 0
     try:
@@ -170,10 +183,18 @@ def register_ws_routes(sock: Sock) -> None:
         except Exception as exc:
             logger.warning("/api/logs/stream unavailable — ring handler missing: %s", exc)
             return
+        # Hold an explicit handle on the generator so we can ``.close()``
+        # it in ``finally``: ``ws.send`` raises on client disconnect, and
+        # without an explicit close the generator's ``finally`` (which
+        # calls ``handler.unsubscribe``) might be deferred until GC,
+        # leaking subscribers that emit() then has to fan out to.
+        stream = log_stream_iter(_ring_log_handler)
         try:
-            for frame in log_stream_iter(_ring_log_handler):
+            for frame in stream:
                 ws.send(json.dumps(frame))
                 if frame.get("type") == "session_expired":
                     return
         except Exception as exc:
             logger.debug("/api/logs/stream session ended: %s", exc)
+        finally:
+            stream.close()

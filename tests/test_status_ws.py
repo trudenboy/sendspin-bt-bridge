@@ -186,3 +186,55 @@ def test_log_stream_iter_unsubscribes_on_completion():
     list(log_stream_iter(h, max_iterations=1, idle_timeout=0.01))
 
     assert len(h._subscribers) == initial_subs
+
+
+def test_log_stream_iter_uses_atomic_subscribe_snapshot():
+    """Regression for Copilot review on PR #197: the iterator must
+    subscribe BEFORE building the snapshot (using
+    ``subscribe_with_snapshot``) so emits landing during snapshot
+    construction are still delivered to the client.
+    """
+    import logging as _logging
+
+    from routes.api_ws import log_stream_iter
+    from sendspin_client import _RingLogHandler
+
+    h = _RingLogHandler(maxlen=10)
+    h.setFormatter(_logging.Formatter("%(message)s"))
+    _emit_log_line(h, "history-1")
+
+    gen = log_stream_iter(h, max_iterations=1, idle_timeout=0.5)
+    snap = next(gen)
+    # After the snapshot frame is yielded, the queue must already be
+    # subscribed — meaning the handler has at least one subscriber.
+    assert snap == {"type": "snapshot", "lines": ["history-1"]}
+    assert len(h._subscribers) == 1, "subscribe didn't happen atomically with snapshot"
+    list(gen)  # drain to trigger unsubscribe in finally
+
+
+def test_log_stream_iter_queue_is_bounded_drops_oldest_on_overflow():
+    """Per-client queue must be bounded so a stalled browser tab can't
+    leak unbounded memory.  When the cap is exceeded, the oldest queued
+    line is dropped to make room for the newest — replicates the
+    bounded-channel pattern used elsewhere in the bridge.
+    """
+    import logging as _logging
+
+    from routes.api_ws import LOG_STREAM_QUEUE_MAXSIZE, log_stream_iter
+    from sendspin_client import _RingLogHandler
+
+    h = _RingLogHandler(maxlen=4096)
+    h.setFormatter(_logging.Formatter("%(message)s"))
+
+    # Spin up the generator (subscribe happens here).
+    gen = log_stream_iter(h, max_iterations=0, idle_timeout=0.01)
+    next(gen)  # snapshot
+    # Find the queue we just subscribed.
+    assert len(h._subscribers) == 1
+    q = h._subscribers[0]
+    # The queue must declare a maxsize matching the public constant.
+    assert q.maxsize == LOG_STREAM_QUEUE_MAXSIZE
+    # Push past the cap and verify queue size never exceeds it.
+    for i in range(LOG_STREAM_QUEUE_MAXSIZE + 50):
+        _emit_log_line(h, f"line-{i}")
+    assert q.qsize() <= LOG_STREAM_QUEUE_MAXSIZE

@@ -63,16 +63,46 @@ scan.
 
 ### Tests
 
-- ``tests/test_status_ws.py`` — 9 new tests covering the
+- ``tests/test_status_ws.py`` — 11 new tests covering the
   ``status_ws_iter`` and ``log_stream_iter`` generators (initial
   snapshot, change pushes, heartbeats, max iterations / lifetime,
-  subscriber cleanup).
-- ``tests/test_ring_log_handler_subscribe.py`` — 7 new tests for the
+  subscriber cleanup, atomic subscribe-with-snapshot, bounded queue).
+- ``tests/test_ring_log_handler_subscribe.py`` — 10 new tests for the
   ring buffer subscribe/unsubscribe/snapshot API + multi-subscriber
-  fan-out + bad-subscriber isolation.
+  fan-out + bad-subscriber isolation + concurrent snapshot/emit
+  stress + atomicity of ``subscribe_with_snapshot``.
 - ``tests/test_bt_rssi_refresh.py`` — 9 new tests for the parser and
   the ``run_rssi_refresh`` orchestration (push on hit, no-op on miss,
   skip on user scan, swallow burst failures).
+
+### Fixes from initial review (PR #197)
+
+- ``sendspin_client._RingLogHandler`` — single ``self._lock`` now
+  guards both ``records`` and ``_subscribers`` so ``snapshot()`` no
+  longer races ``emit()`` (Copilot flagged the deque-iteration
+  hazard).  New ``subscribe_with_snapshot()`` exposes an atomic
+  take-snapshot-then-register pair so the WS log stream cannot drop
+  lines emitted in the gap between the two ops.
+- ``routes/api_ws.log_stream_iter`` — uses
+  ``subscribe_with_snapshot`` (no race), bounds the per-client queue
+  at ``LOG_STREAM_QUEUE_MAXSIZE`` (newest line drops at the
+  ``put_nowait`` step when a stalled browser tab fills the queue;
+  the ring buffer covers the gap on the client's next reconnect).
+- ``routes/api_ws._api_logs_stream`` — explicit ``stream.close()`` in
+  ``finally`` so the generator's unsubscribe hook always runs even
+  when ``ws.send`` raises on client disconnect (no leaked
+  subscribers).
+- ``web_interface.py`` — narrow the WS-import soft-fallback to
+  ``ImportError``/``ModuleNotFoundError``; any other exception now
+  surfaces via ``logger.exception`` and re-raise so real bugs in
+  ``routes/api_ws`` aren't silently swallowed.
+- ``static/app.js`` — single ``beforeunload`` handler (was added on
+  every reconnect, leaking duplicate listeners); status WS
+  ``session_expired`` now closes the current socket and lets
+  ``onclose`` drive reconnect (no overlapping sockets); logs WS
+  tracks its reconnect timer id and clears it in
+  ``stopLogsWebsocket`` so toggling Auto-Refresh off can't reconnect
+  later.
 
 ## [2.63.0-rc.2] - 2026-04-25
 

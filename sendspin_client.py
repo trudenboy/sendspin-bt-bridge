@@ -82,25 +82,37 @@ class _RingLogHandler(logging.Handler):
         self.records: _deque[str] = _deque(maxlen=maxlen)
         # Subscribers are anything with ``put_nowait(line: str)`` —
         # plain stdlib queue.Queue, asyncio.Queue.put_nowait, etc.
-        # The list is guarded by a lock because emit() runs on whatever
-        # thread originated the log (logging is intentionally global) and
-        # subscribe / unsubscribe land on Flask request threads when WS
-        # clients connect or disconnect.
+        # A single lock guards both ``records`` and ``_subscribers``
+        # because emit() touches both atomically and snapshot() must
+        # see a consistent ring view (deque iteration under concurrent
+        # append from another thread can otherwise raise
+        # ``RuntimeError: deque mutated during iteration``).  A separate
+        # ``subscribe_with_snapshot`` exposes an atomic
+        # take-snapshot-then-register pair so the WS log stream never
+        # drops a line in the gap between snapshot and subscribe.
         self._subscribers: list[Any] = []
-        self._subscribers_lock = threading.Lock()
+        self._lock = threading.Lock()
+
+    # Back-compat alias for tests / callers that referenced the old
+    # subscribers-only lock; both the records deque and the subscriber
+    # list now share the single ``self._lock``.
+    @property
+    def _subscribers_lock(self) -> threading.Lock:
+        return self._lock
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             line = self.format(record)
         except Exception:
             return
-        self.records.append(line)
-        # Snapshot the subscribers list under the lock so a concurrent
-        # subscribe / unsubscribe can't race the iteration.  Failures in
-        # one subscriber must not block others — a stuck WS client must
-        # not stall the global log stream.
-        with self._subscribers_lock:
+        with self._lock:
+            self.records.append(line)
             subscribers = list(self._subscribers)
+        # Fan-out happens outside the lock so one slow subscriber can't
+        # block the next emit() call (the lock would otherwise be held
+        # for the whole ``put_nowait`` round-trip).  Failures in one
+        # subscriber must not block others — a stuck WS client must not
+        # stall the global log stream.
         for sub in subscribers:
             try:
                 sub.put_nowait(line)
@@ -109,22 +121,41 @@ class _RingLogHandler(logging.Handler):
 
     def subscribe(self, q: Any) -> None:
         """Register a queue-like object to receive every subsequent emit."""
-        with self._subscribers_lock:
+        with self._lock:
             self._subscribers.append(q)
 
     def unsubscribe(self, q: Any) -> None:
         """Drop *q* from the subscriber list; silent no-op if absent."""
-        with self._subscribers_lock:
+        with self._lock:
             try:
                 self._subscribers.remove(q)
             except ValueError:
                 pass
 
+    def subscribe_with_snapshot(self, q: Any | None = None) -> tuple[Any, list[str]]:
+        """Atomically register a queue + capture the current ring snapshot.
+
+        The WS log stream relies on this to avoid dropping lines that
+        would otherwise land in the gap between ``snapshot()`` and
+        ``subscribe()``.  When *q* is ``None``, a fresh stdlib
+        ``queue.Queue`` is created and returned alongside the snapshot;
+        callers that need a bounded queue should construct it
+        themselves and pass it in.
+        """
+        import queue as _queue
+
+        target = q if q is not None else _queue.Queue()
+        with self._lock:
+            snapshot = list(self.records)
+            self._subscribers.append(target)
+        return target, snapshot
+
     def snapshot(self) -> list[str]:
         """Return a list copy of the current ring contents.  The WS
         endpoint sends this on connect so subscribers see historical
         context before the first new line lands."""
-        return list(self.records)
+        with self._lock:
+            return list(self.records)
 
 
 _ring_log_handler = _RingLogHandler(maxlen=2000)
