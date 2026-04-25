@@ -262,12 +262,16 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
 
             connect_failures = 0
 
-            # Read initial connected state
+            # Read initial connected state.  ``_apply_connected_state``
+            # routes the assignment through the on_connected /
+            # on_disconnected callback fire so MprisPlayer registration
+            # (and any other transition-driven hook) lands on the
+            # initial D-Bus monitor startup, not just polling cycles.
             try:
-                mgr.connected = bool(await device_iface.get_connected())
+                mgr._apply_connected_state(bool(await device_iface.get_connected()))
             except Exception as exc:
                 logger.debug("get_connected() failed: %s", exc)
-                mgr.connected = False
+                mgr._apply_connected_state(False)
             if mgr.host:
                 mgr.host.update_status(
                     {
@@ -287,7 +291,11 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
                     new_connected = bool(changed["Connected"].value)
                     if new_connected == mgr.connected:
                         return
-                    mgr.connected = new_connected
+                    # Routes through the on_connected / on_disconnected
+                    # callback fire — the primary path that reaches the
+                    # MprisPlayer registration on Linux hosts where D-Bus
+                    # PropertiesChanged drives the connect detection.
+                    mgr._apply_connected_state(new_connected)
                     ts = datetime.now(tz=UTC).isoformat()
                     if mgr.host:
                         mgr.host.update_status(
@@ -367,7 +375,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
                     current_val = bool(await device_iface.get_connected())
                     if not current_val and mgr.connected:
                         logger.warning("[%s] Heartbeat: missed disconnect signal", mgr.device_name)
-                        mgr.connected = False
+                        mgr._apply_connected_state(False)
                         if mgr.host:
                             mgr.host.update_status(
                                 {
@@ -430,7 +438,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
             if success:
                 reconnect_attempt = 0
                 mgr._record_reconnect()
-                mgr.connected = True
+                mgr._apply_connected_state(True)
                 if mgr.host:
                     mgr.host.update_status(
                         {
@@ -454,7 +462,7 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
                 await asyncio.sleep(delay)
                 # Re-read state in case external reconnect happened
                 try:
-                    mgr.connected = bool(await device_iface.get_connected())
+                    mgr._apply_connected_state(bool(await device_iface.get_connected()))
                 except Exception as exc:
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:

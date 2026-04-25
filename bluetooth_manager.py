@@ -48,27 +48,41 @@ def _load_allow_hfp() -> bool:
         return False
 
 
-# v2.63.0-rc.3 — RSSI background refresh.  Periodically run a brief
-# bluetoothctl burst, parse the most recent RSSI event for our MAC,
+# v2.63.0-rc.3+ — RSSI background refresh.  Periodically read the live
+# RSSI for the connected device via ``bluetoothctl info <MAC>`` and
 # push the value into host status so the device card renders an
 # up-to-date dBm badge instead of waiting for a user-triggered scan.
+#
+# rc.3 used a ``scan bredr`` burst here, which is the right path for
+# *unconnected* peers (advertising packets carry RSSI).  Already-connected
+# BR/EDR peers stop advertising, so the burst window saw zero events for
+# our MAC and the badge stayed empty.  rc.5 swaps to ``bluetoothctl info``
+# which exposes the live ACL link RSSI from BlueZ's connection cache.
 _RSSI_REFRESH_INTERVAL_S = 60.0
-_RSSI_BURST_DURATION_S = 5
-# Modern bluetoothctl: ``[CHG] Device <MAC> RSSI: -43``.
-# Legacy form          : ``[CHG] Device <MAC> RSSI: 0xff... (-43)``.
+# Modern bluetoothctl: ``[CHG] Device <MAC> RSSI: -43`` (used by the
+# scan-stream parser in routes/api_bt.py for fresh-discovery results).
+# Legacy form         : ``[CHG] Device <MAC> RSSI: 0xff... (-43)``.
 _RSSI_LINE_RE = re.compile(
     r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
     r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
 )
+# ``bluetoothctl info <MAC>`` line — connected-device RSSI.
+_RSSI_INFO_LINE_RE = re.compile(
+    r"^\s*RSSI:\s*(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))",
+    re.MULTILINE,
+)
 
 
 def _parse_own_rssi_from_burst(stdout: str, target_mac: str) -> int | None:
-    """Return the most recent RSSI dBm for *target_mac* in *stdout*.
+    """Return the most recent RSSI dBm for *target_mac* from a scan
+    burst (``[CHG] Device ... RSSI: ...`` lines).
 
-    Returns ``None`` when the burst window did not see any RSSI event
-    for that MAC — caller must NOT clear the cached value, only update
-    it on success.  The staleness check on the UI side
-    (``rssi_at_ts > 90 s``) handles the "no signal at all" case.
+    Kept for the scan-time path / unit-test contract; the runtime
+    refresh in :meth:`BluetoothManager.run_rssi_refresh` reads from
+    ``bluetoothctl info`` instead — see :func:`_parse_rssi_from_info`.
+    Returns ``None`` when the burst window saw no RSSI event for that
+    MAC — caller must NOT clear the cached value, only update it on
+    success.
     """
     if not stdout or not target_mac:
         return None
@@ -83,6 +97,26 @@ def _parse_own_rssi_from_burst(stdout: str, target_mac: str) -> int | None:
         except (TypeError, ValueError):
             continue
     return most_recent
+
+
+def _parse_rssi_from_info(info_text: str) -> int | None:
+    """Pull the ``RSSI: <dB>`` line from ``bluetoothctl info <MAC>`` output.
+
+    Returns the signed dBm integer, or ``None`` when the RSSI line is
+    absent (some BlueZ versions / adapters don't expose RSSI for slow
+    or low-power links — the staleness check on the UI side handles
+    the no-signal case via the timestamp).
+    """
+    if not info_text:
+        return None
+    m = _RSSI_INFO_LINE_RE.search(info_text)
+    if not m:
+        return None
+    value = m.group(1) or m.group(2)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 if TYPE_CHECKING:
@@ -266,7 +300,7 @@ class BluetoothManager:
                 self.disconnect_device()
         except Exception as exc:
             logger.debug("[%s] Disconnect during reconnect cancellation failed: %s", self.device_name, exc)
-        self.connected = False
+        self._apply_connected_state(False)
         return True
 
     def _detect_default_adapter_mac(self) -> str:
@@ -433,13 +467,11 @@ class BluetoothManager:
                     logger.info("✓ BT device %s (%s) connected", self.device_name, self.mac_address)
                 else:
                     logger.warning("✗ BT device %s (%s) disconnected", self.device_name, self.mac_address)
-                self._fire_connection_transition(is_connected)
-
-            self.connected = is_connected
+            self._apply_connected_state(is_connected)
             return self.connected
         except Exception as e:
             logger.warning("Error checking Bluetooth connection: %s", e)
-            self.connected = False
+            self._apply_connected_state(False)
             return False
 
     def pair_device(self) -> bool:
@@ -748,7 +780,7 @@ class BluetoothManager:
         # First check if already connected
         if self.is_device_connected():
             logger.info("Device already connected")
-            self.connected = True
+            self._apply_connected_state(True)
             self.paired = self.is_device_paired()
             self._paired_unknown_count = 0
             if self._abort_connect_if_cancelled():
@@ -786,7 +818,7 @@ class BluetoothManager:
                 return False
             if self.is_device_connected():
                 logger.info("Successfully connected to Bluetooth speaker")
-                self.connected = True
+                self._apply_connected_state(True)
                 self.paired = True
                 self._paired_unknown_count = 0
                 if self._abort_connect_if_cancelled():
@@ -900,18 +932,32 @@ class BluetoothManager:
 
     def disconnect_device(self) -> bool:
         """Disconnect from the Bluetooth device via D-Bus; falls back to bluetoothctl."""
-        was_connected = self.connected
         if _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
-            self.connected = False
-            if was_connected:
-                self._fire_connection_transition(False)
+            self._apply_connected_state(False)
             return True
         success, _ = self._run_bluetoothctl([f"disconnect {self.mac_address}"])
         if success:
-            self.connected = False
-            if was_connected:
-                self._fire_connection_transition(False)
+            self._apply_connected_state(False)
         return success
+
+    def _apply_connected_state(self, value: bool) -> None:
+        """Single setter for ``self.connected`` that bookkeeps callbacks.
+
+        Replaces every ``self.connected = X`` / ``mgr.connected = X``
+        site across the codebase as of v2.63.0-rc.5 — direct
+        assignments bypassed ``_fire_connection_transition``, leaving
+        ``on_connected`` (which wires per-device MprisPlayer
+        registration) silent on the D-Bus PropertiesChanged path.
+        Symptom: physical AVRCP buttons on connected speakers had no
+        effect because no MprisPlayer was registered.
+
+        Idempotent: a no-op when *value* matches the cached state, so
+        the rapid-fire D-Bus polling cycles don't spam the callback.
+        """
+        if value == self.connected:
+            return
+        self.connected = value
+        self._fire_connection_transition(value)
 
     def _fire_connection_transition(self, now_connected: bool) -> None:
         """Invoke on_connected / on_disconnected exactly once per transition.
@@ -951,17 +997,15 @@ class BluetoothManager:
             "[%s] No A2DP sink after connect — attempting disconnect/reconnect dance (bluez/bluez#1922 workaround)",
             self.device_name,
         )
-        # Disconnect — prefer D-Bus, fall back to bluetoothctl.
-        was_connected = self.connected
+        # Disconnect — prefer D-Bus, fall back to bluetoothctl.  The
+        # _apply_connected_state setter handles the on_disconnected fire
+        # so the MprisPlayer D-Bus path is torn down before reconnect
+        # re-creates it; otherwise the dance would leave a dangling
+        # object on the bus and the reconnect's on_connected fire would
+        # clash with it.
         if not _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
             self._run_bluetoothctl([f"disconnect {self.mac_address}"])
-        self.connected = False
-        # Fire on_disconnected so any per-device hardware integration
-        # (MprisPlayer D-Bus path) is torn down before reconnect re-creates it;
-        # otherwise the dance would leave a dangling object on the bus and
-        # the reconnect's on_connected fire would clash with it.
-        if was_connected:
-            self._fire_connection_transition(False)
+        self._apply_connected_state(False)
         # Short settle period — BlueZ needs a moment to tear down ACL state.
         if not self._wait_with_cancel(2):
             return False
@@ -973,7 +1017,7 @@ class BluetoothManager:
             if not self._wait_with_cancel(1):
                 return False
             if self.is_device_connected():
-                self.connected = True
+                self._apply_connected_state(True)
                 self._force_a2dp_sink_profile()
                 return True
         logger.warning("[%s] A2DP recovery dance did not restore the link", self.device_name)
@@ -1193,41 +1237,6 @@ class BluetoothManager:
         """
         await bt_monitor.monitor_and_reconnect(self)
 
-    def _run_rssi_burst(self, duration_s: int = _RSSI_BURST_DURATION_S) -> str:
-        """Run a brief bluetoothctl ``scan bredr`` burst and return raw stdout.
-
-        Pattern mirrors ``routes/api_bt._run_bluetoothctl_scan`` (Popen
-        + stdin pipe + sleep + scan off) because plain
-        ``_run_bluetoothctl`` is one-shot and can't keep the discovery
-        window open for ``duration_s`` seconds.  Returns the captured
-        stdout (combined stdout+stderr) for the caller to parse.
-        """
-        init_cmds: list[str] = []
-        if self._adapter_select:
-            init_cmds.append(f"select {self._adapter_select}")
-        init_cmds.append("scan bredr")
-        proc = subprocess.Popen(
-            ["bluetoothctl"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        try:
-            if proc.stdin is None:
-                raise RuntimeError("bluetoothctl subprocess stdin unavailable")
-            proc.stdin.write("\n".join(init_cmds) + "\n")
-            proc.stdin.flush()
-            time.sleep(duration_s)
-            proc.stdin.write("scan off\n")
-            proc.stdin.flush()
-            output, _ = proc.communicate(timeout=duration_s + 4)
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
-        return output
-
     def run_rssi_refresh(self) -> None:
         """Run a single RSSI refresh tick — synchronous on a worker thread.
 
@@ -1237,14 +1246,19 @@ class BluetoothManager:
         ``services.bt_operation_lock``.  Both gates avoid corrupting
         the other operation's stdout / flipping BlueZ into an
         inconsistent state.  Acquires the shared lock for the duration
-        of the burst so concurrent pair attempts don't slip in
-        either; ``finally`` releases unconditionally so a missed tick
-        never deadlocks future BT operations.
+        of the call so concurrent pair attempts don't slip in either;
+        ``finally`` releases unconditionally so a missed tick never
+        deadlocks future BT operations.
 
-        On a successful burst, parses the most recent RSSI dBm for
-        our MAC and pushes it onto the host status dict via
-        ``host.update_status``.  No-ops on parse miss so we don't spam
-        the SSE / WS notify path with empty updates.
+        Reads RSSI via ``bluetoothctl info <MAC>`` — the only reliable
+        source for the live ACL link RSSI of a connected peer.  rc.3
+        used a ``scan bredr`` burst here, which silently produced
+        ``None`` in production because connected BR/EDR peers stop
+        advertising and the scan window saw no RSSI events for our MAC.
+
+        No-ops on missing RSSI line so we don't spam the SSE notify
+        path with empty updates; the UI's 90 s staleness check governs
+        the badge fade to grey.
         """
         from services.bt_operation_lock import (
             release_bt_operation,
@@ -1262,11 +1276,13 @@ class BluetoothManager:
             return
         try:
             try:
-                output = self._run_rssi_burst()
+                success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
             except Exception as exc:
-                logger.debug("[%s] RSSI refresh burst failed: %s", self.device_name, exc)
+                logger.debug("[%s] RSSI refresh info call failed: %s", self.device_name, exc)
                 return
-            rssi = _parse_own_rssi_from_burst(output, self.mac_address)
+            if not success:
+                return
+            rssi = _parse_rssi_from_info(output)
             if rssi is None:
                 return
             try:

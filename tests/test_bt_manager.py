@@ -1827,3 +1827,51 @@ def test_transition_callbacks_optional_when_unset():
     with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
         mgr.is_device_connected()
     # No exception → pass.
+
+
+def test_apply_connected_state_fires_transition_on_change():
+    """Regression for v2.63.0-rc.5: ``_apply_connected_state`` is the
+    single setter that bookkeeps both ``self.connected`` and the
+    transition callbacks.  Direct ``mgr.connected = X`` assignments
+    in ``bt_monitor.py`` and ``_connect_device_inner`` previously
+    bypassed the callback fire, leaving MprisPlayer unregistered
+    when the D-Bus PropertiesChanged path drove the connect
+    (production case on VM 105).
+    """
+    fired_up: list[str] = []
+    fired_down: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_connected=lambda: fired_up.append("up"),
+        on_disconnected=lambda: fired_down.append("down"),
+    )
+
+    mgr._apply_connected_state(True)
+    mgr._apply_connected_state(True)  # idempotent
+    mgr._apply_connected_state(False)
+    mgr._apply_connected_state(False)  # idempotent
+    mgr._apply_connected_state(True)
+
+    assert fired_up == ["up", "up"]
+    assert fired_down == ["down"]
+    assert mgr.connected is True
+
+
+def test_apply_connected_state_called_by_dbus_props_changed_path():
+    """``bt_monitor`` D-Bus PropertiesChanged path must route
+    ``connected`` mutations through ``_apply_connected_state`` so the
+    on_connected hook fires when the device connects via D-Bus signal
+    (the primary connect path on Linux hosts).
+    """
+    from pathlib import Path
+
+    import bt_monitor
+
+    src = Path(bt_monitor.__file__).read_text()
+    # No remaining direct mutation in the primary D-Bus / reconnect paths.
+    direct = [
+        line.strip() for line in src.splitlines() if "mgr.connected = " in line and not line.strip().startswith("#")
+    ]
+    assert direct == [], f"bt_monitor still has direct mgr.connected = sites: {direct}"
+    assert "_apply_connected_state" in src, (
+        "bt_monitor must call _apply_connected_state for the on_connected hook to fire"
+    )
