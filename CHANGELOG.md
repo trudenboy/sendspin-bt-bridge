@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0] - 2026-04-25
+
+Stable release promoting rc.5 → rc.13 from main.  Headline themes
+(see the per-rc sections below for the full diff per fix):
+
+- **MA volume / mute sync simplified to a single source of truth**
+  (rc.7 + rc.8).  Sendspin's ``PulseVolumeController.start_monitoring``
+  now does real two-way PA→MA sync via
+  ``pulsectl_asyncio.subscribe_events('sink')``; the bridge's parallel
+  MA-proxy / parent-side push paths (``Route volume through MA`` /
+  ``Route mute through MA`` toggles, ``_set_volume_via_ma`` /
+  ``_set_mute_via_ma`` helpers, ``VOLUME_VIA_MA`` / ``MUTE_VIA_MA``
+  config keys) are gone.  Fixes the forum-reported "MA player stuck
+  muted; volume slider greyed out in HA" symptom.
+- **Sendspin artwork relay + legacy <5.5.0 fallback removed**
+  (rc.9).  The web UI consumes MA's ``image_url`` via the HMAC-signed
+  ``/api/ma/artwork`` proxy since v2.50, so the monkey-patched
+  binary-frame artwork interceptor in ``BridgeDaemon`` was dead
+  code.  ``requirements.txt`` pins ``sendspin==7.0.0``, so the
+  ``_has_upstream_volume_controller`` / ``_sync_bt_sink_volume``
+  fallback for sendspin <5.5.0 (``use_hardware_volume`` kwarg)
+  collapsed too.  Net -218 LoC across daemon + tests.
+- **Multi-adapter UI listing fixes** (rc.5, #193).  ``GET /api/bt/adapters``
+  now resolves the kernel ``hciN`` via ``/sys/class/bluetooth/<hci>/address``
+  (BlueZ registration order disagrees with kernel numbering after USB
+  hotplug) and reads the per-adapter alias via the explicit
+  ``bluetoothctl show <MAC>`` form (the previous ``select <MAC>; show``
+  recipe surfaced the **default** controller's alias for every adapter
+  in piped-stdin mode).
+- **HA addon ``Disable PA rescue-streams`` no longer silently resets**
+  (rc.6).  The option key was missing from all three
+  ``ha-addon*/config.yaml`` schemas; Supervisor stripped it on every
+  restart.  Added matching options + schema entries plus a parametrised
+  regression test covering all three addon variants.
+- **HA addon mute-on-spawn desync fixed** (rc.7).
+  ``_sync_unmute_to_ma(force=True)`` on post-spawn bypasses the
+  "already in sync" early-exit because the bridge's local mute flag
+  doesn't reflect MA's ``volume_muted=True`` reading from the
+  ~15 s startup PA-mute window.
+- **Online activation of new BT devices without bridge restart**
+  (delivered earlier in rc.1-rc.4 cycle, this stable confirms it).
+  ``ReconfigOrchestrator.START_CLIENT`` builds a new client via the
+  shared ``services/device_activation.DeviceActivationContext``
+  factory, registers it, and schedules ``client.run()`` on the main
+  asyncio loop — no Save & Restart prompt.
+- **Copilot review polish** (rc.10).  ``GET /api/bt/adapters`` dropped
+  to O(n) via the new ``services.bluetooth.build_hci_map()`` helper;
+  ``PulseVolumeController._handle_sink_event`` reuses the
+  subscribe-loop's ``PulseAsync`` instead of opening a fresh client
+  per event; ``stop_monitoring`` logs non-CancelledError exceptions
+  instead of swallowing them silently.
+- **Dependency hygiene pass** (rc.11) — five Dependabot PRs (#185,
+  #186, #187, #188, #189): cryptography ``>=3.4.0`` → ``>=46.0.7``
+  (CVE coverage), pytest ``>=8.0.0`` → ``>=9.0.3``, pytest-asyncio
+  ``>=0.23.0`` → ``>=1.3.0``, mypy ``>=1.20.1`` → ``>=1.20.2``,
+  ruff ``==0.15.10`` → ``==0.15.12``.  armv7 wheel availability for
+  cryptography 46 verified against the ``python:3.12-slim`` base.
+- **Update modal release-notes parser rewritten** (rc.12).  The
+  regex-strip-then-textContent path mangled GitHub release bodies —
+  RST-style ``\`\`code\`\`` spans showed literally, ``###`` section
+  headings collapsed to blank lines orphaning the bullets that
+  followed.  Replaced with ``_renderReleaseNotes(md, container)``
+  that builds proper DOM (``<code>``, ``<strong>``, ``<a>``,
+  ``<ul><li>`` with multi-line bullet continuation, skips the
+  auto-generated "🤖 Generated with Claude Code" footer).
+- **Docker image slim** (rc.13).  ~38 MB removed from the runtime
+  stage: pip leftover from base image (6.6 MB, builder strip didn't
+  cover it), unused ``/usr/lib/udev/hwdb*`` (22 MB, no udevd inside
+  container), unreachable ``/usr/lib/systemd`` (5.6 MB, s6-overlay
+  is PID 1), package documentation (4.4 MB).  Smoke-tested live
+  inside a running container.
+
+### Changed since 2.61.1
+- Test suite: 1494 → 1547 tests, +53 net new across the rc cycle
+  (28 deletions of obsolete tests covered by rc.8/rc.9 removals,
+  plus new coverage for build_hci_map, aread_sink_state, HA addon
+  schema sync, etc.).
+
 ## [2.62.0-rc.13] - 2026-04-25
 
 Image size audit — five safe cleanups bundled together remove
