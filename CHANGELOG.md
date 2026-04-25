@@ -56,12 +56,32 @@ both pre-existing (rc.1 and rc.3) but only observable end-to-end now.
 
 ### Tests
 
-- ``tests/test_bt_manager.py`` — 2 new tests for
-  ``_apply_connected_state`` (transition fire + bt_monitor source
-  audit).
+- ``tests/test_bt_manager.py`` — 3 new tests for
+  ``_apply_connected_state`` (transition fire, thread-safety stress,
+  AST-based ``bt_monitor`` source audit).
 - ``tests/test_bt_rssi_refresh.py`` — 4 tests rewired to mock
   ``_run_bluetoothctl`` for the new info-query path; 1 new test
   asserting ``info <MAC>`` is the actual command issued.
+
+### Fixes from initial review (PR #199)
+
+- ``bluetooth_manager._apply_connected_state`` — guard the
+  check-then-set sequence with ``self._connected_state_lock`` so
+  the asyncio D-Bus monitor thread and the BT executor thread
+  cannot both observe ``self.connected==False``, both pass the
+  check, and both fire ``on_connected`` (would surface as duplicate
+  MprisPlayer D-Bus exports).  Callback runs OUTSIDE the lock so a
+  slow callback can't block a concurrent disconnect handler.
+- ``bluetooth_manager.py`` — rewrite the misleading
+  ``_RSSI_LINE_RE`` doc-comment that referenced
+  ``routes/api_bt.py`` (which keeps its own near-identical regex
+  rather than importing this one).
+- ``tests/test_bt_manager.py`` — replace the substring-based
+  ``bt_monitor`` source-audit with an ``ast``-based walk that
+  catches ``Assign`` / ``AugAssign`` / ``AnnAssign`` nodes
+  targeting ``mgr.connected``; immune to false positives in
+  docstrings / log strings and to false negatives from non-standard
+  whitespace.
 
 ## [2.63.0-rc.4] - 2026-04-25
 

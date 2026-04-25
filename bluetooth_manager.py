@@ -59,9 +59,13 @@ def _load_allow_hfp() -> bool:
 # our MAC and the badge stayed empty.  rc.5 swaps to ``bluetoothctl info``
 # which exposes the live ACL link RSSI from BlueZ's connection cache.
 _RSSI_REFRESH_INTERVAL_S = 60.0
-# Modern bluetoothctl: ``[CHG] Device <MAC> RSSI: -43`` (used by the
-# scan-stream parser in routes/api_bt.py for fresh-discovery results).
-# Legacy form         : ``[CHG] Device <MAC> RSSI: 0xff... (-43)``.
+# ``bluetoothctl`` scan-burst RSSI event consumed by
+# :func:`_parse_own_rssi_from_burst`.  Two on-the-wire forms:
+#   modern : ``[CHG] Device <MAC> RSSI: -43``
+#   legacy : ``[CHG] Device <MAC> RSSI: 0xff... (-43)``
+# (``routes/api_bt.py`` has its own near-identical regex for the
+# user-triggered scan path; intentionally not shared because the two
+# parsers diverge in what they capture beyond the RSSI value.)
 _RSSI_LINE_RE = re.compile(
     r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
     r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
@@ -190,6 +194,12 @@ class BluetoothManager:
         self.on_disconnected = on_disconnected
         self.prefer_sbc = prefer_sbc
         self.connected = False  # GIL-atomic bool; safe for cross-thread reads without lock
+        # Serialises ``_apply_connected_state`` so the ``check ==``
+        # current then write+fire sequence is atomic across the asyncio
+        # D-Bus monitor thread and the BT executor thread.  Without
+        # this both could observe the pre-transition state and fire
+        # ``on_connected`` twice — duplicate MprisPlayer registrations.
+        self._connected_state_lock = threading.Lock()
         self.last_check: float = 0
         self.check_interval = check_interval
         self.max_reconnect_fails = max_reconnect_fails
@@ -953,10 +963,19 @@ class BluetoothManager:
 
         Idempotent: a no-op when *value* matches the cached state, so
         the rapid-fire D-Bus polling cycles don't spam the callback.
+
+        Thread-safe: the check + write are serialised under
+        ``_connected_state_lock`` so the asyncio D-Bus monitor thread
+        and the BT executor thread can't both pass the check, both
+        write True, and both fire ``on_connected`` (would surface as
+        duplicate MprisPlayer D-Bus exports).  The callback itself
+        runs OUTSIDE the lock so a slow callback can't block a
+        concurrent disconnect handler from updating state.
         """
-        if value == self.connected:
-            return
-        self.connected = value
+        with self._connected_state_lock:
+            if value == self.connected:
+                return
+            self.connected = value
         self._fire_connection_transition(value)
 
     def _fire_connection_transition(self, now_connected: bool) -> None:
