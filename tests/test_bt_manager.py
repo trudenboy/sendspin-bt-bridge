@@ -1688,3 +1688,142 @@ def test_dbus_get_device_uuids_returns_empty_on_missing_path():
     import bt_dbus
 
     assert bt_dbus._dbus_get_device_uuids(None) == []
+
+
+# ---------------------------------------------------------------------------
+# Connect/disconnect transition callbacks — wires MprisPlayer create/destroy
+# (services/mpris_player.py) into the BT lifecycle so AVRCP buttons + speaker
+# display follow the connection state without mpris_player having to poll.
+# ---------------------------------------------------------------------------
+
+
+def _make_bt_manager_with_transition_callbacks(on_connected=None, on_disconnected=None):
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        return BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="TestSpeaker",
+            on_connected=on_connected,
+            on_disconnected=on_disconnected,
+        )
+
+
+def test_is_device_connected_fires_on_connected_on_false_to_true_transition():
+    """First successful is_device_connected() call after construction (False→True)
+    must fire ``on_connected``.  Closure target: spawn MprisPlayer for the MAC."""
+    fired: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(on_connected=lambda: fired.append("up"))
+    # mgr.connected starts False; flip the underlying check to True.
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+        assert mgr.is_device_connected() is True
+
+    assert fired == ["up"]
+
+
+def test_is_device_connected_does_not_refire_on_connected_when_already_connected():
+    """Subsequent is_device_connected() calls while already connected must NOT
+    re-fire ``on_connected`` (would create duplicate MprisPlayer registrations
+    on the system bus and crash dbus_fast)."""
+    fired: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(on_connected=lambda: fired.append("up"))
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+        mgr.is_device_connected()
+        mgr.is_device_connected()
+        mgr.is_device_connected()
+
+    assert fired == ["up"]  # exactly one transition fire
+
+
+def test_is_device_connected_fires_on_disconnected_on_true_to_false_transition():
+    """Once connected, an is_device_connected() that returns False must fire
+    ``on_disconnected``.  Closure target: tear down the MprisPlayer for the MAC."""
+    fired: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_disconnected=lambda: fired.append("down"),
+    )
+    mgr.connected = True  # simulate prior connected state
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+        assert mgr.is_device_connected() is False
+
+    assert fired == ["down"]
+
+
+def test_is_device_connected_does_not_refire_on_disconnected_when_already_disconnected():
+    """Polling while disconnected must not re-fire on_disconnected (would
+    repeatedly try to unregister an already-gone D-Bus path)."""
+    fired: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_disconnected=lambda: fired.append("down"),
+    )
+    # mgr.connected starts False
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+        mgr.is_device_connected()
+        mgr.is_device_connected()
+
+    assert fired == []  # no transition, no fire
+
+
+def test_disconnect_device_fires_on_disconnected():
+    """Explicit disconnect_device() must fire ``on_disconnected`` exactly once
+    (operator pressed Disconnect or release flow ran)."""
+    fired: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_disconnected=lambda: fired.append("down"),
+    )
+    mgr.connected = True
+    with patch("bluetooth_manager._dbus_call_device_method", return_value=True):
+        assert mgr.disconnect_device() is True
+
+    assert fired == ["down"]
+
+
+def test_disconnect_device_does_not_refire_when_already_disconnected():
+    """If disconnect_device runs but we were already disconnected (e.g. cleanup
+    after the speaker dropped on its own), the disconnect callback already
+    fired via is_device_connected — don't double-fire here."""
+    fired: list[str] = []
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_disconnected=lambda: fired.append("down"),
+    )
+    # mgr.connected starts False (already disconnected)
+    with patch("bluetooth_manager._dbus_call_device_method", return_value=True):
+        mgr.disconnect_device()
+
+    assert fired == []
+
+
+def test_transition_callbacks_swallow_exceptions():
+    """Callbacks crashing must NOT break the BT manager connection-state
+    machine. (MprisPlayer registration failure should log and continue, not
+    leave self.connected in an inconsistent state.)"""
+
+    def _boom():
+        raise RuntimeError("MprisPlayer registration failed")
+
+    mgr = _make_bt_manager_with_transition_callbacks(
+        on_connected=_boom,
+        on_disconnected=_boom,
+    )
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+        # Must not raise even though the callback explodes.
+        assert mgr.is_device_connected() is True
+    assert mgr.connected is True
+
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+        assert mgr.is_device_connected() is False
+    assert mgr.connected is False
+
+
+def test_transition_callbacks_optional_when_unset():
+    """No callbacks supplied → behaviour identical to pre-2.63 (no AttributeError,
+    no spurious calls).  Backwards-compat smoke."""
+    from bluetooth_manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="TestSpeaker")
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+        mgr.is_device_connected()
+    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+        mgr.is_device_connected()
+    # No exception → pass.

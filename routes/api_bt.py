@@ -53,6 +53,23 @@ _bt_operation_lock = threading.Lock()
 _scan_lock = threading.Lock()
 
 
+def _canonicalise_mac_input(mac: str) -> str | None:
+    """Normalise a user-supplied MAC into the canonical XX:XX:XX:XX:XX:XX form.
+
+    Accepts colon, dash, or no-separator forms (mirroring the
+    ``MprisRegistry`` tolerance) and returns ``None`` if the input does
+    not contain exactly 12 hex digits.  The caller still runs
+    ``validate_mac`` on the result so any out-of-band malformed payload
+    (non-string, oversized) is rejected with a clean 400.
+    """
+    if not isinstance(mac, str):
+        return None
+    hex_only = "".join(ch for ch in mac if ch.isalnum())
+    if len(hex_only) != 12 or not all(c in "0123456789abcdefABCDEF" for c in hex_only):
+        return None
+    return ":".join(hex_only[i : i + 2] for i in range(0, 12, 2)).upper()
+
+
 def _bt_operation_conflict_response():
     return jsonify({"success": False, "error": "Another Bluetooth operation is already in progress"}), 409
 
@@ -71,6 +88,58 @@ def _release_bt_operation() -> None:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@bt_bp.route("/api/bt/claim/<mac>", methods=["POST"])
+def api_bt_claim(mac: str):
+    """Claim AVRCP audio source on a multipoint speaker.
+
+    For speakers paired to multiple hosts simultaneously (phone + bridge),
+    this asserts the bridge as the active MPRIS source by pushing
+    PlaybackStatus = "Playing" through the per-device MprisPlayer.  BlueZ
+    forwards that to the speaker via AVRCP, which typically causes the
+    speaker to switch its active source to us.
+
+    Canonicalises the MAC before validating so dash-separated and
+    compact (no-separator) forms work — matches the MprisRegistry's
+    own normalisation and aligns with how operators tend to type or
+    paste MAC addresses.
+    """
+    canonical_mac = _canonicalise_mac_input(mac)
+    if canonical_mac is None or not validate_mac(canonical_mac):
+        return jsonify({"success": False, "error": "Invalid MAC address"}), 400
+    mac = canonical_mac
+
+    from services.bridge_runtime_state import get_main_loop
+    from services.mpris_player import get_registry
+
+    player = get_registry().get(mac)
+    if player is None:
+        return jsonify(
+            {
+                "success": False,
+                "error": "No MPRIS player for this device — is the speaker connected?",
+            }
+        ), 404
+
+    loop = get_main_loop()
+    if loop is None:
+        # No async loop → fall back to sync state mutation (registry-only).
+        # Production always has the loop; this branch keeps the test path
+        # deterministic when running endpoint tests without the bridge.
+        player._state.status = "Playing"
+        return jsonify({"success": True, "mac": mac})
+
+    import asyncio as _asyncio
+
+    try:
+        fut = _asyncio.run_coroutine_threadsafe(player.set_playback_status("Playing"), loop)
+        fut.result(timeout=2.0)
+    except Exception as exc:
+        logger.warning("Claim audio for %s failed: %s", mac, exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+    return jsonify({"success": True, "mac": mac})
 
 
 @bt_bp.route("/api/bt/reconnect", methods=["POST"])

@@ -206,3 +206,32 @@ def test_activate_context_is_frozen():
     ctx, _ = _make_context()
     with pytest.raises(FrozenInstanceError):
         ctx.server_host = "tamper"  # type: ignore[misc]
+
+
+# ── MPRIS export contract — bus-name + canonical object path ────────────
+
+
+def test_mpris_object_path_is_canonical_for_every_device():
+    """Regression test for Copilot review on PR #195: the original
+    implementation exported on a per-device object path
+    (``/org/mpris/MediaPlayer2/sendspin_<MAC>``).  MPRIS-spec consumers
+    (BlueZ AVRCP bridge, playerctl) only look at the canonical path
+    ``/org/mpris/MediaPlayer2``; per-device differentiation must live in
+    the *bus name*, not the object path."""
+    from services.device_activation import _mpris_dbus_path
+
+    assert _mpris_dbus_path("AA:BB:CC:DD:EE:FF") == "/org/mpris/MediaPlayer2"
+    assert _mpris_dbus_path("11:22:33:44:55:66") == "/org/mpris/MediaPlayer2"
+
+
+def test_mpris_well_known_name_uses_org_mpris_prefix_and_mac_suffix():
+    """Each per-device export must claim a well-known name beginning with
+    ``org.mpris.MediaPlayer2.``; without it, MPRIS clients (and BlueZ)
+    walk past the player.  MAC colons map to ``_`` because D-Bus names
+    only allow ``[A-Za-z0-9_]`` between dots."""
+    from services.device_activation import _mpris_well_known_name
+
+    name = _mpris_well_known_name("aa:bb:cc:dd:ee:ff")
+    assert name.startswith("org.mpris.MediaPlayer2.")
+    assert ":" not in name
+    assert name.endswith("AA_BB_CC_DD_EE_FF")

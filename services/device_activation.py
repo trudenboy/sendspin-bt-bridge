@@ -12,14 +12,231 @@ orchestrator can pull it from a Flask request thread.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from services.mpris_player import MprisPlayer, _build_player_iface, get_registry
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
+
+
+# MPRIS clients (BlueZ' MPRIS forwarder, playerctl, GNOME / KDE MPRIS
+# applets) discover players by walking well-known bus names beginning
+# with ``org.mpris.MediaPlayer2.`` and reading the standard
+# ``/org/mpris/MediaPlayer2`` object path on each.  Exporting on a
+# non-standard object path or skipping the well-known name request makes
+# the player invisible to those clients — including BlueZ's AVRCP
+# bridge, which silently drops button events with nowhere to forward.
+_MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
+_MPRIS_NAME_PREFIX = "org.mpris.MediaPlayer2.sendspin_"
+
+
+def _mpris_dbus_path(mac: str) -> str:
+    """Canonical MPRIS object path — same for every per-device export.
+
+    Per-device differentiation lives in the well-known *bus name* (see
+    ``_mpris_well_known_name``); the *object path* under that name is
+    always the standard ``/org/mpris/MediaPlayer2`` so MPRIS-spec
+    consumers (BlueZ AVRCP bridge, playerctl, GNOME/KDE applets) find
+    the iface where they expect.
+    """
+    del mac  # accepted for call-site symmetry; canonical path is global
+    return _MPRIS_OBJECT_PATH
+
+
+def _mpris_well_known_name(mac: str) -> str:
+    """Per-device well-known bus name.
+
+    MPRIS spec requires every player to claim a name beginning with
+    ``org.mpris.MediaPlayer2.``.  We append a MAC-derived suffix so each
+    BT speaker gets its own discoverable player.  Bus names disallow ``:``
+    and require alphanumerics + underscores, so colons map to ``_``.
+    """
+    return _MPRIS_NAME_PREFIX + mac.upper().replace(":", "_")
+
+
+def _build_mpris_transport_callback(client: Any) -> Callable[[str, str], Any]:
+    """AVRCP method → SendspinClient transport command.
+
+    Speaker buttons (Play/Pause/Stop/Next/Previous) reach the bridge via
+    BlueZ MPRIS forwarding.  Forward them to the daemon subprocess using
+    the same path the UI Transport buttons take — bypasses MA REST so
+    button-press latency is dominated by the IPC round-trip, not WAN.
+    """
+
+    async def _cb(_player_id: str, command: str) -> bool:
+        try:
+            ok = await client.send_transport_command(command)
+        except Exception as exc:
+            logger.warning("MPRIS transport %s for %s failed: %s", command, getattr(client, "player_name", "?"), exc)
+            return False
+        return bool(ok)
+
+    return _cb
+
+
+def _build_mpris_volume_callback(client: Any) -> Callable[[str, int], Any]:
+    """AVRCP absolute volume → bridge volume.
+
+    Inbound MPRIS Volume writes (BlueZ forwards the speaker's volume knob)
+    are normalised to 0..100 by ``MprisPlayer._on_volume_set`` before this
+    callback runs.  We push the new volume to the same subprocess command
+    that ``POST /api/volume`` uses, so the speaker, MA, and bridge UI stay
+    in agreement.
+    """
+
+    async def _cb(_player_id: str, volume_pct: int) -> bool:
+        try:
+            await client._send_subprocess_command({"cmd": "set_volume", "value": int(volume_pct)})
+        except Exception as exc:
+            logger.warning(
+                "MPRIS volume->%d for %s failed: %s",
+                volume_pct,
+                getattr(client, "player_name", "?"),
+                exc,
+            )
+            return False
+        try:
+            client._update_status({"volume": int(volume_pct)})
+        except Exception:
+            pass
+        return True
+
+    return _cb
+
+
+def _make_mpris_connected_hook(
+    client: Any,
+    mac: str,
+) -> Callable[[], None]:
+    """Build the on_connected closure passed to BluetoothManager.
+
+    Fires once per false→true connect transition.  Constructs the per-device
+    MprisPlayer, registers it in the process-wide registry (so the MA
+    monitor reverse hook and the Claim Audio endpoint can find it), and
+    schedules a best-effort D-Bus export onto the main asyncio loop.
+
+    All failure modes are non-fatal: if dbus_fast is unavailable on the
+    host, or the system bus rejects the export, the registry entry still
+    serves the in-process surfaces and BluetoothManager state stays
+    coherent.
+    """
+
+    def _hook() -> None:
+        from services.bridge_runtime_state import get_main_loop
+
+        registry = get_registry()
+        player = MprisPlayer(
+            mac=mac,
+            player_id=str(client.player_id),
+            transport_callback=_build_mpris_transport_callback(client),
+            volume_callback=_build_mpris_volume_callback(client),
+        )
+        registry.register(mac, player)
+
+        loop = get_main_loop()
+        if loop is None:
+            logger.debug("MprisPlayer for %s registered without D-Bus export (no main loop)", mac)
+            return
+
+        async def _export() -> None:
+            try:
+                from dbus_fast import BusType  # type: ignore[import-untyped]
+                from dbus_fast.aio import MessageBus  # type: ignore[import-untyped]
+            except Exception as exc:
+                logger.debug("dbus_fast unavailable, skipping MPRIS export for %s: %s", mac, exc)
+                return
+            try:
+                iface = _build_player_iface(player)
+                bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+                bus.export(_mpris_dbus_path(mac), iface)
+                # Claim the well-known org.mpris.MediaPlayer2.* name so
+                # BlueZ's MPRIS bridge (and any spec-conformant client)
+                # actually discovers us; without this we live only on the
+                # unique bus name (:1.NNN) where MPRIS consumers don't look.
+                well_known = _mpris_well_known_name(mac)
+                try:
+                    await bus.request_name(well_known)
+                except Exception as name_exc:
+                    logger.warning(
+                        "MPRIS request_name(%s) failed for %s: %s",
+                        well_known,
+                        mac,
+                        name_exc,
+                    )
+                # Pin the bus + iface + claimed name on the player so the
+                # disconnect hook can release them in symmetry.
+                player._dbus_bus = bus  # type: ignore[attr-defined]
+                player._dbus_iface = iface  # type: ignore[attr-defined]
+                player._dbus_well_known = well_known  # type: ignore[attr-defined]
+                logger.info(
+                    "MPRIS player exported on D-Bus for %s as %s at %s",
+                    mac,
+                    well_known,
+                    _mpris_dbus_path(mac),
+                )
+            except Exception as exc:
+                logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
+
+        try:
+            asyncio.run_coroutine_threadsafe(_export(), loop)
+        except Exception as exc:
+            logger.debug("Failed to schedule MPRIS export for %s: %s", mac, exc)
+
+    return _hook
+
+
+def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
+    """Build the on_disconnected closure for BluetoothManager.
+
+    Removes the per-device MprisPlayer from the registry and tears down its
+    D-Bus export on the main loop.  Safe to fire repeatedly — extras are
+    silent no-ops.
+    """
+
+    def _hook() -> None:
+        from services.bridge_runtime_state import get_main_loop
+
+        registry = get_registry()
+        player = registry.unregister(mac)
+        if player is None:
+            return
+        loop = get_main_loop()
+        if loop is None:
+            return
+        bus = getattr(player, "_dbus_bus", None)
+        path = _mpris_dbus_path(mac)
+        if bus is None:
+            return
+
+        well_known = getattr(player, "_dbus_well_known", None)
+
+        async def _unexport() -> None:
+            if well_known:
+                try:
+                    await bus.release_name(well_known)
+                except Exception as exc:
+                    logger.debug("MPRIS release_name(%s) failed: %s", well_known, exc)
+            try:
+                bus.unexport(path)
+            except Exception as exc:
+                logger.debug("MPRIS unexport for %s failed: %s", mac, exc)
+            try:
+                bus.disconnect()
+            except Exception:
+                pass
+
+        try:
+            asyncio.run_coroutine_threadsafe(_unexport(), loop)
+        except Exception as exc:
+            logger.debug("Failed to schedule MPRIS unexport for %s: %s", mac, exc)
+
+    return _hook
 
 
 @dataclass(frozen=True)
@@ -151,6 +368,8 @@ def activate_device(
             check_interval=context.bt_check_interval,
             max_reconnect_fails=context.bt_max_reconnect_fails,
             on_sink_found=_on_sink_found,
+            on_connected=_make_mpris_connected_hook(client, mac),
+            on_disconnected=_make_mpris_disconnected_hook(mac),
             churn_threshold=context.bt_churn_threshold,
             churn_window=context.bt_churn_window,
             enable_a2dp_dance=context.enable_a2dp_sink_recovery_dance,
