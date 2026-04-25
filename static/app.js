@@ -10555,6 +10555,138 @@ var _UPD_ICON_REFRESH = '<svg viewBox="0 0 16 16" fill="none" stroke="currentCol
 var _UPD_ICON_NOTES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="9" y2="11"/></svg>';
 var _UPD_ICON_HA = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5 8 3l5.5 4.5"/><path d="M4.5 7v6.5h7V7"/><path d="M6.8 13.5V9.8h2.4v3.7"/></svg>';
 
+// Render the GitHub release body markdown into *container* as proper DOM.
+// Replaces the previous regex-strip-then-textContent approach which lost
+// section structure (### Headings became blank lines), showed RST-style
+// double-backtick code spans literally, and offered no inline formatting.
+// Keeps the parser deliberately small — covers what our CHANGELOG actually
+// uses: ## / ### headings, `single` and ``double`` backtick code spans,
+// **bold**, [text](url) links, and `- ` bullets with multi-line continuation
+// (continuation lines indented 2+ spaces fold into the preceding <li>).
+function _renderReleaseNotes(md, container) {
+    if (!md) return;
+    var inlineRe = /(``[^`]+?``)|(`[^`]+?`)|(\*\*[^*]+?\*\*)|(\[[^\]]+?\]\([^)]+?\))/g;
+
+    function appendInline(parent, text) {
+        var lastIdx = 0;
+        var m;
+        inlineRe.lastIndex = 0;
+        while ((m = inlineRe.exec(text)) !== null) {
+            if (m.index > lastIdx) {
+                parent.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+            }
+            var tok = m[0];
+            if (tok.startsWith('``')) {
+                var code = document.createElement('code');
+                code.className = 'update-modal-inline-code';
+                code.textContent = tok.slice(2, -2);
+                parent.appendChild(code);
+            } else if (tok.startsWith('`')) {
+                var code1 = document.createElement('code');
+                code1.className = 'update-modal-inline-code';
+                code1.textContent = tok.slice(1, -1);
+                parent.appendChild(code1);
+            } else if (tok.startsWith('**')) {
+                var b = document.createElement('strong');
+                b.textContent = tok.slice(2, -2);
+                parent.appendChild(b);
+            } else {
+                var lm = /^\[([^\]]+?)\]\(([^)]+?)\)$/.exec(tok);
+                if (lm) {
+                    var a = document.createElement('a');
+                    a.href = lm[2];
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.textContent = lm[1];
+                    parent.appendChild(a);
+                } else {
+                    parent.appendChild(document.createTextNode(tok));
+                }
+            }
+            lastIdx = inlineRe.lastIndex;
+        }
+        if (lastIdx < text.length) {
+            parent.appendChild(document.createTextNode(text.slice(lastIdx)));
+        }
+    }
+
+    var lines = md.replace(/\r\n?/g, '\n').split('\n');
+    var i = 0;
+    var listEl = null;
+    var lastItem = null;
+
+    function endList() { listEl = null; lastItem = null; }
+
+    while (i < lines.length) {
+        var line = lines[i];
+        var trimmed = line.trim();
+
+        // Skip the auto-generated Claude Code footer if present.
+        if (/^🤖\s+Generated with/i.test(trimmed)) { i++; continue; }
+        // Blank line ends any open list.
+        if (!trimmed) { endList(); i++; continue; }
+
+        // ## H2
+        if (/^##\s+/.test(line)) {
+            endList();
+            var h2 = document.createElement('div');
+            h2.className = 'update-modal-md-h2';
+            appendInline(h2, line.replace(/^##\s+/, ''));
+            container.appendChild(h2);
+            i++;
+            continue;
+        }
+        // ### H3
+        if (/^###\s+/.test(line)) {
+            endList();
+            var h3 = document.createElement('div');
+            h3.className = 'update-modal-md-h3';
+            appendInline(h3, line.replace(/^###\s+/, ''));
+            container.appendChild(h3);
+            i++;
+            continue;
+        }
+        // Bullet `- text`
+        var bm = /^- (.*)$/.exec(line);
+        if (bm) {
+            if (!listEl) {
+                listEl = document.createElement('ul');
+                listEl.className = 'update-modal-md-list';
+                container.appendChild(listEl);
+            }
+            lastItem = document.createElement('li');
+            appendInline(lastItem, bm[1]);
+            listEl.appendChild(lastItem);
+            i++;
+            continue;
+        }
+        // Continuation of the previous bullet (line starts with 2+ spaces while a list is open).
+        if (listEl && lastItem && /^\s{2,}\S/.test(line)) {
+            lastItem.appendChild(document.createTextNode(' '));
+            appendInline(lastItem, trimmed);
+            i++;
+            continue;
+        }
+        // Plain paragraph: collect successive non-special, non-blank lines.
+        endList();
+        var p = document.createElement('p');
+        p.className = 'update-modal-md-p';
+        appendInline(p, trimmed);
+        while (i + 1 < lines.length) {
+            var next = lines[i + 1];
+            var nextTrim = next.trim();
+            if (!nextTrim) break;
+            if (/^(#{2,3}\s+|- )/.test(next)) break;
+            if (/^🤖\s+Generated with/i.test(nextTrim)) break;
+            p.appendChild(document.createTextNode(' '));
+            appendInline(p, nextTrim);
+            i++;
+        }
+        container.appendChild(p);
+        i++;
+    }
+}
+
 function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
     // Fetch update info to determine runtime/method
     fetch(API_BASE + '/api/update/info')
@@ -10672,14 +10804,7 @@ function _showUpdateDialog(ver, releaseUrl, releaseChannel) {
                     notesEl.appendChild(notesTitle);
                     var notesCopy = document.createElement('div');
                     notesCopy.className = 'update-modal-release-copy';
-                    var plain = info.body
-                        .replace(/^## .+\n+/, '')
-                        .replace(/^### .+$/gm, '')
-                        .replace(/\*\*(.+?)\*\*/g, '$1')
-                        .replace(/^- /gm, '\u2022 ')
-                        .replace(/\n{3,}/g, '\n\n')
-                        .trim();
-                    notesCopy.textContent = plain;
+                    _renderReleaseNotes(info.body, notesCopy);
                     notesEl.appendChild(notesCopy);
                     bodyEl.appendChild(notesEl);
                 }

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.62.0-rc.12] - 2026-04-25
+
+UI fix: the "Update Available" modal's release-notes pane was
+mangling GitHub release bodies — RST-style ``\`\`code\`\``` spans
+showed literally with both pairs of backticks visible, ``### Heading``
+sections collapsed to blank lines (orphaning the bullets that
+followed), and the regex strip-then-textContent path offered no
+inline formatting at all.
+
+### Changed
+- ``static/app.js`` — replaced the four-step regex strip in
+  ``_showUpdateDialog`` (``replace(/^## .+/)``, ``replace(/^### .+/g)``
+  …) with a small DOM-building markdown renderer
+  ``_renderReleaseNotes(md, container)``.  Handles ``##`` and ``###``
+  headings (rendered as section labels instead of erased), single and
+  double backtick code spans, ``**bold**``, ``[text](url)`` links, and
+  ``- `` bullets with multi-line continuation (continuation lines
+  indented 2+ spaces fold into the preceding ``<li>``).  Also skips
+  the auto-generated "🤖 Generated with Claude Code" footer.
+- ``static/style.css`` — added classes for the new DOM:
+  ``.update-modal-md-h2``, ``.update-modal-md-h3``,
+  ``.update-modal-md-p``, ``.update-modal-md-list``,
+  ``.update-modal-inline-code``.  Dropped ``white-space: pre-line``
+  from ``.update-modal-release-copy`` (the renderer now controls
+  whitespace via semantic blocks) but kept it on
+  ``.update-modal-instructions-copy`` where the textContent path
+  still renders.
+
 ## [2.62.0-rc.11] - 2026-04-25
 
 Dependency hygiene pass — five Dependabot PRs (#185, #186, #187,
