@@ -121,26 +121,25 @@ app.register_blueprint(status_bp)
 app.register_blueprint(transport_bp)
 app.register_blueprint(auth_bp)
 
-# WebSocket endpoints (v2.63.0-rc.3+).  flask-sock attaches WS routes
-# to the same Flask app so they share session cookies + auth middleware
-# but bypass blueprint registration (sock owns its own route table).
-# The ``ImportError`` arm is the only soft-fallback case (older addon
-# images / dev hosts without ``flask-sock``); any other exception is a
-# real bug in routes/api_ws and must surface during startup, not be
-# silently swallowed.
-try:
-    from flask_sock import Sock
-
-    from routes.api_ws import register_ws_routes
-
-    sock = Sock(app)
-    register_ws_routes(sock)
-    logger.info("WebSocket endpoints registered (/api/status/ws, /api/logs/stream)")
-except ImportError as _ws_exc:  # pragma: no cover — dev-host fallback
-    logger.warning("WebSocket endpoints unavailable: %s — SSE will keep serving", _ws_exc)
-except Exception:
-    logger.exception("WebSocket endpoint registration failed")
-    raise
+# WebSocket endpoints stay disabled in v2.63.0-rc.4+.
+#
+# The flask-sock + simple-websocket combo we shipped in rc.3 needs
+# raw-socket access via the WSGI environment; ``waitress`` does not
+# expose that, so the upgrade handler raises
+# ``RuntimeError: Cannot obtain socket from WSGI environment.`` on
+# every connect attempt and the endpoint returns HTTP 500.  See the
+# rc.4 CHANGELOG entry for the analysis + the alternatives we
+# considered (gunicorn+gevent, gevent.pywsgi embedded).
+#
+# The original problem the WS migration was supposed to solve — HA
+# Supervisor ingress applying deflate compression to
+# ``text/event-stream`` and corrupting SSE payloads — is closed in
+# rc.4 by the ``Cache-Control: no-transform`` + ``Content-Encoding:
+# identity`` headers added in ``routes/api_status.py``.  We keep
+# ``routes/api_ws.py`` and its ``status_ws_iter`` /
+# ``log_stream_iter`` generators (and their tests) so they're ready
+# for revival if/when the bridge moves to an ASGI server (uvicorn /
+# hypercorn) that supports WebSocket upgrades natively.
 
 
 @app.before_request

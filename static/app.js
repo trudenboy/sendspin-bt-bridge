@@ -4172,99 +4172,14 @@ async function refreshLogs() {
     }
 }
 
-// v2.63.0-rc.3: live log stream over WebSocket — replaces the 2 s
-// polling cadence of refreshLogs while the panel is open.  The
-// WebSocket subscribes to the same in-process ring buffer that
-// refreshLogs() snapshots over HTTP, so opening the panel now feels
-// instantaneous and trailing log lines append in real time.  Falls back
-// silently to the existing auto-refresh interval if the WS endpoint is
-// unreachable (rc.2 deployments, browsers without WebSocket).
-var _logsWs = null;
-var _logsWsRetries = 0;
-var _logsWsReconnectTimer = null;
-var _logsWsActive = false;  // gate set by start/stop; reconnect honours it
-var _LOGS_WS_MAX_LINES = 2000;
-
-function _trimLogsBuffer() {
-    if (allLogs.length > _LOGS_WS_MAX_LINES) {
-        allLogs = allLogs.slice(-_LOGS_WS_MAX_LINES);
-    }
-}
-
-function startLogsWebsocket() {
-    if (typeof WebSocket === 'undefined') return;
-    _logsWsActive = true;
-    // Reset the retry budget on every user-initiated start so a previous
-    // connection that exhausted retries doesn't leave the counter past
-    // the cap and silently refuse to reconnect when Auto-Refresh is
-    // toggled back on.
-    _logsWsRetries = 0;
-    if (_logsWsReconnectTimer) {
-        clearTimeout(_logsWsReconnectTimer);
-        _logsWsReconnectTimer = null;
-    }
-    if (_logsWs && _logsWs.readyState <= 1) return;  // already connecting / open
-    try {
-        _logsWs = new WebSocket(_wsUrlFor('/api/logs/stream'));
-    } catch (err) {
-        console.warn('Logs WS construct failed:', err);
-        return;
-    }
-    _logsWs.onopen = function() { _logsWsRetries = 0; };
-    _logsWs.onmessage = function(e) {
-        try {
-            var frame = JSON.parse(e.data);
-            if (frame.type === 'snapshot') {
-                allLogs = (frame.lines || []).slice();
-                _trimLogsBuffer();
-                renderLogs();
-            } else if (frame.type === 'append') {
-                if (typeof frame.line === 'string') {
-                    allLogs.push(frame.line);
-                    _trimLogsBuffer();
-                    renderLogs();
-                }
-            } else if (frame.type === 'session_expired') {
-                // Server-side rotation: close cleanly; the onclose handler
-                // schedules reconnect (gated on _logsWsActive).
-                try { _logsWs.close(); } catch (_e) { /* ignore */ }
-            }
-            // type === 'heartbeat' — keepalive, no UI work.
-        } catch (err) { console.error('Logs WS parse error:', err); }
-    };
-    _logsWs.onclose = function() {
-        _logsWs = null;
-        if (!_logsWsActive) return;  // user toggled Auto-Refresh off
-        _logsWsRetries++;
-        var delay = Math.min(1000 * Math.pow(2, _logsWsRetries - 1), 16000);
-        if (_logsWsRetries <= 5) {
-            _logsWsReconnectTimer = setTimeout(function() {
-                _logsWsReconnectTimer = null;
-                startLogsWebsocket();
-            }, delay);
-        }
-    };
-    _logsWs.onerror = function() { /* close handler does the retry */ };
-}
-
-function stopLogsWebsocket() {
-    _logsWsActive = false;
-    _logsWsRetries = 0;
-    if (_logsWsReconnectTimer) {
-        clearTimeout(_logsWsReconnectTimer);
-        _logsWsReconnectTimer = null;
-    }
-    if (_logsWs) {
-        try { _logsWs.close(); } catch (_e) { /* ignore */ }
-        _logsWs = null;
-    }
-}
-
-// Single beforeunload handler closes whichever streams are open.
-// Registered once so reconnects don't accumulate duplicate handlers.
-window.addEventListener('beforeunload', function() {
-    try { if (_logsWs) _logsWs.close(); } catch (_e) { /* ignore */ }
-});
+// v2.63.0-rc.4: log panel stays on polling (refreshLogs every 2 s).
+// rc.3 attempted WS push via /api/logs/stream but the same waitress /
+// flask-sock incompatibility that broke /api/status/ws affected this
+// path too.  The push-via-subscribe ring-buffer API on the server side
+// stays in place (sendspin_client._RingLogHandler) for future ASGI
+// revival.  No-op shims keep the existing call sites intact.
+function startLogsWebsocket() { /* WS deferred — rc.4 polling-only */ }
+function stopLogsWebsocket() { /* WS deferred — rc.4 polling-only */ }
 
 async function downloadLogs() {
     try {
@@ -4982,12 +4897,7 @@ function toggleAutoRefresh(forceState) {
             btn.classList.add('auto-on');
         }
         clearInterval(autoRefreshInterval);
-        // v2.63.0-rc.3: prefer WS push over polling.  Polling stays as
-        // a 5 s safety net in case WS connect fails silently — the
-        // interval is double the rc.2- cadence because the WS handles
-        // the real-time path, polling only catches a stuck WS.
-        startLogsWebsocket();
-        autoRefreshInterval = setInterval(refreshLogs, 5000);
+        autoRefreshInterval = setInterval(refreshLogs, 2000);
         refreshLogs();
     } else {
         if (btn) {
@@ -4995,7 +4905,6 @@ function toggleAutoRefresh(forceState) {
             btn.classList.remove('auto-on');
         }
         clearInterval(autoRefreshInterval);
-        stopLogsWebsocket();
     }
 }
 
@@ -12556,118 +12465,55 @@ _showSkeletonCards(3);
     }, {passive: true});
 })();
 
-// v2.63.0-rc.3: prefer WebSocket transport; fall back to SSE then polling.
-// HA Supervisor's ingress proxy applies deflate compression to text/event-
-// stream which breaks SSE; WS frames are not transformed by ingress so the
-// WS path is the long-term transport.  Existing SSE handler stays as the
-// safety net for older deployments still on rc.2- (no WS endpoint there).
+// v2.63.0-rc.4: SSE for real-time status push, polling fallback if not
+// supported.  WebSocket migration was attempted in rc.3 but rolled back
+// (waitress doesn't expose the raw socket simple-websocket needs).  The
+// SSE path now sets ``Cache-Control: no-transform`` server-side so HA
+// Supervisor's ingress no longer compresses (and corrupts) the
+// event-stream payload.
 var _statusInterval = null;
 
-function _wsUrlFor(path) {
-    var loc = window.location;
-    var proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-    return proto + '//' + loc.host + (API_BASE || '') + path;
-}
-
 (function _initStatusStream() {
-    var _wsRetries = 0;
-    var _wsMaxRetries = 3;
-    var _ws = null;
     var _es = null;
-    var _sseStarted = false;
+    if (typeof EventSource === 'undefined') {
+        _statusInterval = setInterval(updateStatus, 2000);
+        return;
+    }
+    var _sseRetries = 0;
+    var _maxRetries = 5;
 
-    // Single beforeunload handler closes whichever transport is open
-    // at unload time.  Registered once below so reconnects don't
-    // accumulate duplicate listeners.
+    // Single beforeunload handler closes whichever EventSource is open
+    // at unload time.  Registered once so reconnects don't accumulate
+    // duplicate listeners.
     window.addEventListener('beforeunload', function() {
-        try { if (_ws) _ws.close(); } catch (_e) { /* ignore */ }
         try { if (_es) _es.close(); } catch (_e) { /* ignore */ }
     });
 
-    function startSSEFallback() {
-        if (_sseStarted) return;
-        _sseStarted = true;
-        if (typeof EventSource === 'undefined') {
-            _statusInterval = setInterval(updateStatus, 2000);
-            return;
-        }
-        var _sseRetries = 0;
-        var _maxRetries = 5;
-        function connectSSE() {
-            _es = new EventSource(API_BASE + '/api/status/stream');
-            _es.onopen = function() {
-                _sseRetries = 0;
-                if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
-            };
-            _es.onmessage = function(e) {
-                try { renderStatusPayload(JSON.parse(e.data)); }
-                catch (err) { console.error('SSE parse error:', err); }
-            };
-            _es.onerror = function() {
-                try { _es.close(); } catch (_e) { /* ignore */ }
-                _es = null;
-                _sseRetries++;
-                if (_sseRetries <= _maxRetries) {
-                    var delay = Math.min(1000 * Math.pow(2, _sseRetries - 1), 16000);
-                    if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
-                    setTimeout(connectSSE, delay);
-                } else {
-                    if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
-                }
-            };
-        }
-        connectSSE();
-    }
-
-    function connectWS() {
-        if (typeof WebSocket === 'undefined') { startSSEFallback(); return; }
-        // Defensive: tear down any prior socket so session_expired
-        // rotation (or a quick onerror→reconnect) can't leave two
-        // concurrent sockets emitting duplicate updates.
-        if (_ws) {
-            try { _ws.onclose = null; _ws.close(); } catch (_e) { /* ignore */ }
-            _ws = null;
-        }
-        try {
-            _ws = new WebSocket(_wsUrlFor('/api/status/ws'));
-        } catch (err) {
-            console.warn('Status WS construct failed, falling back to SSE:', err);
-            startSSEFallback();
-            return;
-        }
-        _ws.onopen = function() {
-            _wsRetries = 0;
+    function connectSSE() {
+        _es = new EventSource(API_BASE + '/api/status/stream');
+        _es.onopen = function() {
+            _sseRetries = 0;
             if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
         };
-        _ws.onmessage = function(e) {
-            try {
-                var payload = JSON.parse(e.data);
-                if (payload && payload.event === 'heartbeat') return;
-                if (payload && payload.event === 'session_expired') {
-                    // Server forced rotation: close current socket
-                    // explicitly and let onclose drive reconnect (single
-                    // path, single timer, no duplicate sockets).
-                    try { _ws.close(); } catch (_e) { /* ignore */ }
-                    return;
-                }
-                renderStatusPayload(payload);
-            } catch (err) { console.error('Status WS parse error:', err); }
+        _es.onmessage = function(e) {
+            try { renderStatusPayload(JSON.parse(e.data)); }
+            catch (err) { console.error('SSE parse error:', err); }
         };
-        _ws.onclose = function() {
-            _ws = null;
-            _wsRetries++;
-            if (_wsRetries <= _wsMaxRetries) {
-                var delay = Math.min(1000 * Math.pow(2, _wsRetries - 1), 8000);
-                setTimeout(connectWS, delay);
+        _es.onerror = function() {
+            try { _es.close(); } catch (_e) { /* ignore */ }
+            _es = null;
+            _sseRetries++;
+            if (_sseRetries <= _maxRetries) {
+                var delay = Math.min(1000 * Math.pow(2, _sseRetries - 1), 16000);
+                if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
+                setTimeout(connectSSE, delay);
             } else {
-                console.warn('Status WS unavailable after ' + _wsMaxRetries + ' retries, switching to SSE');
-                startSSEFallback();
+                if (!_statusInterval) _statusInterval = setInterval(updateStatus, 2000);
             }
         };
-        _ws.onerror = function() { /* close handler does the retry/fallback */ };
     }
 
-    connectWS();
+    connectSSE();
 })();
 
 window.addEventListener('beforeunload', function() {
