@@ -26,8 +26,13 @@ ha-addon-beta/ export-ignore
 ha-addon-rc/ export-ignore
 ha-addon-assets/ export-ignore
 
-# Demo fixtures
-demo/ export-ignore
+# Demo fixtures — kept in the release tarball (188 KB) because the
+# v2.50–v2.62 lxc/upgrade.sh copies demo/ unconditionally.  Excluding
+# it bricks every existing LXC deployment on those versions
+# (cp: cannot stat '.../demo': No such file or directory → exit 1).
+# The newer upgrade.sh on main no longer references demo at all and
+# already guards every cp with [[ -d ]], so this can be re-introduced
+# only after every LXC in the wild has updated past that script.
 
 # Dev notes / snapshots
 github-issue-snapshot*.md export-ignore
