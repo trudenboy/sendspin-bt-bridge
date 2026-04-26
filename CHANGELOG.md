@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Diagnostics — surface MA server version
+
+The bug-report payload (`/api/bugreport`) and the runtime log now
+both expose the **Music Assistant server version**.  Previously only
+the bridge's `music-assistant-client` *library* pin (e.g.
+`1.3.5`) appeared in the report, which left auth-flow incidents
+like #190 stuck on "what MA build is the reporter running?" before
+any debugging could start.
+
+- `routes/api_status._collect_environment` — new `ma_server_version`
+  key, sourced from the cached value populated at WS handshake;
+  falls back to `"unknown"` if the bridge hasn't connected to MA yet
+  (matches the existing `bluez` / `audio_server` pattern so the key
+  always appears in the markdown body).
+- `services/ma_monitor` — emits one INFO line right after the
+  handshake in the form
+  `MA server: version=<x> schema=<y> url=<z>` so operators can grep
+  for it without trawling subprocess logs.  Mirrors the
+  `entrypoint.sh` banner's style (the entrypoint can't include the
+  version because it runs before any Python / WS connection).
+
+Three new tests in `tests/test_bugreport_environment.py` pin both
+the present-when-known and unknown-when-pre-handshake branches plus
+the existing runtime-deps key.
+
 ### UI follow-ups on rc.8 RSSI badge
 
 - ``_getRssiBadgeRenderData`` / ``_renderRssiBadgeHtml`` gain a
