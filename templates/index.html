@@ -654,10 +654,17 @@
                                     <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
                                 </div>
                             </div>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Last-resort workaround for bluez/bluez#1922. If a sink fails to publish after connect, the bridge disconnects and reconnects the device once per attempt. May cause extra churn — try leaving disabled first.">
+                        </div>
+
+                        <div class="config-settings-card" data-experimental style="display:none">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Experimental features</div>
+                                <p class="config-card-subtitle">Opt-in toggles for in-development behaviour. Visible only when "Show experimental features" is enabled in the onboarding section. Each requires an addon / container restart to take effect.</p>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact" title="Last-resort workaround for bluez/bluez#1922. If a sink fails to publish after connect, the bridge disconnects and reconnects the device once per attempt. May cause extra churn — try leaving disabled first.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Experimental: A2DP sink recovery dance</strong>
-                                    <span class="form-hint">Disconnect→reconnect on missing sink. Requires restart.</span>
+                                    <strong>A2DP sink recovery dance</strong>
+                                    <span class="form-hint">Disconnect→reconnect on missing sink.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -666,10 +673,10 @@
                                     </span>
                                 </span>
                             </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Last-resort recovery when a BT card never registers in PulseAudio. Reloads module-bluez5-discover — disrupts all Bluetooth audio bridge-wide. Throttled to once per 60 seconds.">
+                            <label class="config-setting-row config-setting-row--compact" title="Last-resort recovery when a BT card never registers in PulseAudio. Reloads module-bluez5-discover — disrupts all Bluetooth audio bridge-wide. Throttled to once per 60 seconds.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Experimental: Reload PulseAudio BT module</strong>
-                                    <span class="form-hint">Last-resort sink recovery. Disrupts all BT audio. Requires restart.</span>
+                                    <strong>Reload PulseAudio BT module</strong>
+                                    <span class="form-hint">Last-resort sink recovery. Disrupts all BT audio.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -678,10 +685,10 @@
                                     </span>
                                 </span>
                             </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Last-ditch adapter recovery: when reconnects fail BT_MAX_RECONNECT_FAILS times, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind). The USB step briefly disconnects every device on that controller — throttled per-adapter to once per 60 seconds. Requires CAP_NET_ADMIN, /dev/rfkill, /sys/bus/usb.">
+                            <label class="config-setting-row config-setting-row--compact" title="Last-ditch adapter recovery: when reconnects fail BT_MAX_RECONNECT_FAILS times, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind). The USB step briefly disconnects every device on that controller — throttled per-adapter to once per 60 seconds. Requires CAP_NET_ADMIN, /dev/rfkill, /sys/bus/usb.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Experimental: Adapter auto-recovery</strong>
-                                    <span class="form-hint">HCI mgmt reset → rfkill → USB rebind before auto-release. Requires restart.</span>
+                                    <strong>Adapter auto-recovery</strong>
+                                    <span class="form-hint">HCI mgmt reset → rfkill → USB rebind before auto-release.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -690,10 +697,10 @@
                                     </span>
                                 </span>
                             </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
+                            <label class="config-setting-row config-setting-row--compact" title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Experimental: Live RSSI badge</strong>
-                                    <span class="form-hint">Poll every 30 s via mgmt 0x0031. Requires restart.</span>
+                                    <strong>Live RSSI badge</strong>
+                                    <span class="form-hint">Poll every 30 s via mgmt 0x0031.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -702,10 +709,10 @@
                                     </span>
                                 </span>
                             </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Permit HSP/HFP service UUIDs in the pairing agent. Default off — most DSPs (Bose QC, AKG Y500, Sony XM4/5) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Enable only for HFP-only headsets that A2DP-block at the peer.">
+                            <label class="config-setting-row config-setting-row--compact" title="Permit HSP/HFP service UUIDs in the pairing agent. Default off — most DSPs (Bose QC, AKG Y500, Sony XM4/5) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Enable only for HFP-only headsets that A2DP-block at the peer.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Experimental: Allow HFP / HSP profile</strong>
-                                    <span class="form-hint">For HFP-only headsets. Risk: most BT speakers/headphones drop to 8 kHz mono. Requires restart.</span>
+                                    <strong>Allow HFP / HSP profile</strong>
+                                    <span class="form-hint">For HFP-only headsets. Risk: most BT speakers/headphones drop to 8 kHz mono.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">

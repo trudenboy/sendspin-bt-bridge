@@ -11,12 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 `ALLOW_HFP_PROFILE` was previously a config-only field — operators
 had to hand-edit `/config/config.json` to enable it for HFP-only
-headsets.  Now exposed as the seventh experimental toggle in the
-Settings page (Show experimental features → Allow HFP / HSP profile),
-with an explicit warning in the tooltip that most BT speakers and
+headsets.  Now exposed in the new "Experimental features" card with
+an explicit warning in the tooltip that most BT speakers and
 headphones will collapse to an 8 kHz mono call codec when HSP/HFP is
 permitted.  Persisted across HA addon restarts via the new
 preservation list (see below).
+
+### Changed — Settings UI: experimental flags moved to dedicated card
+
+All five experimental toggles (A2DP sink recovery dance, Reload PA
+BT module, Adapter auto-recovery, Live RSSI badge, Allow HFP / HSP)
+moved out of the Connection-recovery card into a new "Experimental
+features" card directly below it.  The card itself carries
+`data-experimental` so the entire group hides when "Show
+experimental features" is off — Connection recovery now contains
+only the two production-stable inputs (BT check interval +
+Auto-disable threshold), eliminating the cluttered mix of stable
+and experimental rows it had since rc.2.
 
 ### Fixed — HA addon: web-UI-only settings now survive restart
 
