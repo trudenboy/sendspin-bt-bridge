@@ -6905,19 +6905,50 @@ async function showBtDeviceInfo(mac, adapter) {
             body: JSON.stringify(body)
         });
         var info = await resp.json();
-        var lines = [];
-        if (info.name) lines.push('Name: ' + info.name);
-        if (info.alias) lines.push('Alias: ' + info.alias);
-        lines.push('MAC: ' + mac);
-        if (info.paired) lines.push('Paired: ' + info.paired);
-        if (info.trusted) lines.push('Trusted: ' + info.trusted);
-        if (info.connected) lines.push('Connected: ' + info.connected);
-        if (info.bonded) lines.push('Bonded: ' + info.bonded);
-        if (info.blocked) lines.push('Blocked: ' + info.blocked);
-        if (info['class']) lines.push('Class: ' + info['class']);
-        if (info.icon) lines.push('Icon: ' + info.icon);
-        if (info.error) lines.push('\nError: ' + info.error);
-        var text = lines.join('\n') || 'No info available for ' + mac;
+        // Render the full ``bluetoothctl info`` output verbatim (UUIDs,
+        // Modalias, LegacyPairing, Class, etc.) so issue-triage doesn't
+        // need a follow-up SSH session.  Backend stashes every
+        // ANSI-stripped non-empty line in ``raw``; we filter the
+        // bluetoothctl prompt / agent-registration noise it emits when
+        // commands are piped on stdin.
+        var text = '';
+        if (Array.isArray(info.raw) && info.raw.length) {
+            // Bluetoothctl noise we drop:
+            // - "Waiting to connect to bluetoothd..." — startup line
+            // - any line beginning with "[xxx]>" or "[xxx]#" — prompt
+            //   (the bracketed name varies: [bluetoothctl], [bluetooth],
+            //    or the currently-selected device's name)
+            // - "Agent registered" / "Agent unregistered"
+            // - "Changing ... succeeded/failed" status echoes
+            text = info.raw
+                .filter(function(ln) {
+                    if (!ln) return false;
+                    if (/^\[[^\]]+\][>#]/.test(ln)) return false;
+                    if (ln === 'Agent registered') return false;
+                    if (ln.indexOf('Agent unregistered') !== -1) return false;
+                    if (ln.indexOf('Waiting to connect to bluetoothd') !== -1) return false;
+                    return true;
+                })
+                .join('\n');
+        }
+        if (!text) {
+            // Fallback — backend returned no raw payload (older version
+            // or parse failure).  Build the minimal MAC-only summary
+            // from individual fields so the modal isn't empty.
+            var lines = [];
+            if (info.name) lines.push('Name: ' + info.name);
+            if (info.alias) lines.push('Alias: ' + info.alias);
+            lines.push('MAC: ' + mac);
+            if (info.paired) lines.push('Paired: ' + info.paired);
+            if (info.trusted) lines.push('Trusted: ' + info.trusted);
+            if (info.connected) lines.push('Connected: ' + info.connected);
+            if (info.bonded) lines.push('Bonded: ' + info.bonded);
+            if (info.blocked) lines.push('Blocked: ' + info.blocked);
+            if (info['class']) lines.push('Class: ' + info['class']);
+            if (info.icon) lines.push('Icon: ' + info.icon);
+            text = lines.join('\n') || 'No info available for ' + mac;
+        }
+        if (info.error) text += '\n\nError: ' + info.error;
         _showBtInfoModal(info.name || mac, text);
     } catch (err) {
         showToast('Failed to get info: ' + err.message, 'error');
@@ -6931,7 +6962,9 @@ function _showBtInfoModal(title, text) {
 
     var modal = document.createElement('div');
     modal.className = 'bugreport-modal bt-info-modal';
-    modal.style.maxWidth = '440px';
+    // Wider than other modals — UUID lines are 60+ chars and look
+    // ugly when wrapped in a narrow column.
+    modal.style.maxWidth = '620px';
 
     var header = document.createElement('div');
     header.className = 'bugreport-header bt-info-header';

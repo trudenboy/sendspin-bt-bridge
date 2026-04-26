@@ -17,6 +17,27 @@ headphones will collapse to an 8 kHz mono call codec when HSP/HFP is
 permitted.  Persisted across HA addon restarts via the new
 preservation list (see below).
 
+### Changed — BT info modal shows full ``bluetoothctl info`` output
+
+The BT info modal previously rendered a 9-field summary (Name,
+Alias, MAC, Paired/Trusted/Connected/Bonded/Blocked, Class, Icon).
+That dropped the ``UUID:`` lines which carry the load-bearing
+diagnostic for "does this speaker actually advertise A2DP Sink"
+(``0000110b``), AVRCP target/controller, etc. — the same data that
+took an SSH round-trip to extract during issue #168 triage.
+
+Modal now renders ``info.raw`` directly: the full line-by-line
+bluetoothctl output (Class, Icon, Paired, Bonded, Trusted, Blocked,
+Connected, LegacyPairing, every UUID with friendly name, Modalias).
+Backend already collected all of this in ``raw``; the frontend just
+needed to use it.  Bluetoothctl's piped-stdin noise (``Agent
+registered``, ``[bluetooth]#`` prompts) is filtered client-side.
+Modal width bumped 440 → 620 px to fit the long UUID lines.
+
+One new test in ``tests/test_bt_info_adapter_awareness`` pins the
+parser contract: every UUID, Modalias, Class, and LegacyPairing
+line must appear in ``info["raw"]``.
+
 ### Changed — Settings UI: experimental flags moved to dedicated card
 
 All five experimental toggles (A2DP sink recovery dance, Reload PA
