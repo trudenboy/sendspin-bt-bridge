@@ -6919,7 +6919,9 @@ async function showBtDeviceInfo(mac, adapter) {
             //   (the bracketed name varies: [bluetoothctl], [bluetooth],
             //    or the currently-selected device's name)
             // - "Agent registered" / "Agent unregistered"
-            // - "Changing ... succeeded/failed" status echoes
+            // - "Changing ... succeeded/failed" status echoes from
+            //   trust/connect commands that pass through the same
+            //   bluetoothctl session
             text = info.raw
                 .filter(function(ln) {
                     if (!ln) return false;
@@ -6927,6 +6929,7 @@ async function showBtDeviceInfo(mac, adapter) {
                     if (ln === 'Agent registered') return false;
                     if (ln.indexOf('Agent unregistered') !== -1) return false;
                     if (ln.indexOf('Waiting to connect to bluetoothd') !== -1) return false;
+                    if (/^Changing .+ (succeeded|failed)$/.test(ln)) return false;
                     return true;
                 })
                 .join('\n');
