@@ -7,6 +7,124 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.9] - 2026-04-26
+
+UX + diagnostics polish on top of the rc.8 RSSI work.  No protocol
+or audio-pipeline changes — every fix here is either a UI rearrange,
+a settings-persistence guard, or a bug-report payload addition.
+
+### Added — Settings UI: experimental "Allow HFP / HSP profile" toggle
+
+`ALLOW_HFP_PROFILE` was previously a config-only field — operators
+had to hand-edit `/config/config.json` to enable it for HFP-only
+headsets.  Now exposed in the new "Experimental features" card with
+an explicit warning in the tooltip that most BT speakers and
+headphones will collapse to an 8 kHz mono call codec when HSP/HFP is
+permitted.  Persisted across HA addon restarts via the new
+preservation list (see below).
+
+### Changed — BT info modal shows full ``bluetoothctl info`` output
+
+The BT info modal previously rendered a 9-field summary (Name,
+Alias, MAC, Paired/Trusted/Connected/Bonded/Blocked, Class, Icon).
+That dropped the ``UUID:`` lines which carry the load-bearing
+diagnostic for "does this speaker actually advertise A2DP Sink"
+(``0000110b``), AVRCP target/controller, etc. — the same data that
+took an SSH round-trip to extract during issue #168 triage.
+
+Modal now renders ``info.raw`` directly: the full line-by-line
+bluetoothctl output (Class, Icon, Paired, Bonded, Trusted, Blocked,
+Connected, LegacyPairing, every UUID with friendly name, Modalias).
+Backend already collected all of this in ``raw``; the frontend just
+needed to use it.  Bluetoothctl's piped-stdin noise (``Agent
+registered``, ``[bluetooth]#`` prompts) is filtered client-side.
+Modal width bumped 440 → 620 px to fit the long UUID lines.
+
+One new test in ``tests/test_bt_info_adapter_awareness`` pins the
+parser contract: every UUID, Modalias, Class, and LegacyPairing
+line must appear in ``info["raw"]``.
+
+### Changed — Settings UI: experimental flags moved to dedicated card
+
+All five experimental toggles (A2DP sink recovery dance, Reload PA
+BT module, Adapter auto-recovery, Live RSSI badge, Allow HFP / HSP)
+moved out of the Connection-recovery card into a new "Experimental
+features" card directly below it.  The card itself carries
+`data-experimental` so the entire group hides when "Show
+experimental features" is off — Connection recovery now contains
+only the two production-stable inputs (BT check interval +
+Auto-disable threshold), eliminating the cluttered mix of stable
+and experimental rows it had since rc.2.
+
+### Fixed — HA addon: web-UI-only settings now survive restart
+
+In HA addon mode every restart ran `scripts/translate_ha_config.py`
+which rebuilds `config.json` from the addon's `options.json`.  The
+addon schema doesn't expose the `EXPERIMENTAL_*` family or several
+auth / update / sync settings — those are managed only via the
+bridge web UI (Settings → Show experimental features).  The
+translator's preservation list missed them, so a single restart
+silently rewrote each toggle to its default and operators saw the
+controls "not save".
+
+Now preserved across restart in addon mode:
+
+- `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`,
+  `EXPERIMENTAL_PA_MODULE_RELOAD`,
+  `EXPERIMENTAL_PAIR_JUST_WORKS`,
+  `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`,
+  `EXPERIMENTAL_RSSI_BADGE` — the entire experimental-flags family.
+- `AUTH_ENABLED`, `BRUTE_FORCE_PROTECTION` — auth toggles.
+- `MA_WEBSOCKET_MONITOR` — MA real-time sync toggle.
+- `AUTO_UPDATE`, `CHECK_UPDATES`, `SMOOTH_RESTART` — update / restart
+  behaviour.
+- `ALLOW_HFP_PROFILE` — HFP/HSP authorisation override.
+- `TRUSTED_PROXIES` — X-Forwarded-For accept list.
+
+Two new tests in `tests/test_translate_ha_config.py` pin the
+experimental-flags group and the broader web-UI-only group so a
+future field added to either family doesn't silently regress on
+addon-mode restarts.
+
+### Diagnostics — surface MA server version
+
+The bug-report payload (`/api/bugreport`) and the runtime log now
+both expose the **Music Assistant server version**.  Previously only
+the bridge's `music-assistant-client` *library* pin (e.g.
+`1.3.5`) appeared in the report, which left auth-flow incidents
+like #190 stuck on "what MA build is the reporter running?" before
+any debugging could start.
+
+- `routes/api_status._collect_environment` — new `ma_server_version`
+  key, sourced from the cached value populated at WS handshake;
+  falls back to `"unknown"` if the bridge hasn't connected to MA yet
+  (matches the existing `bluez` / `audio_server` pattern so the key
+  always appears in the markdown body).
+- `services/ma_monitor` — emits one INFO line right after the
+  handshake in the form
+  `MA server: version=<x> schema=<y> url=<z>` so operators can grep
+  for it without trawling subprocess logs.  Mirrors the
+  `entrypoint.sh` banner's style (the entrypoint can't include the
+  version because it runs before any Python / WS connection).
+
+Three new tests in `tests/test_bugreport_environment.py` pin both
+the present-when-known and unknown-when-pre-handshake branches plus
+the existing runtime-deps key.
+
+### UI follow-ups on rc.8 RSSI badge
+
+- ``_getRssiBadgeRenderData`` / ``_renderRssiBadgeHtml`` gain a
+  ``mode`` argument so the chip label matches the underlying
+  measurement.  Connected-link RSSI from mgmt 0x0031 is BR/EDR
+  delta-from-Golden-Receive-Power-Range — labelled "Δ dB".
+  Scan-result RSSI from BlueZ inquiry stays absolute "dBm".  Tooltip
+  spells out the unit either way.
+- Stale ``_renderRssiChip`` reference scrubbed from the
+  ``services/bt_rssi_mgmt`` module docstring; now points at the
+  current UI helpers.
+- Default RSSI refresh interval gated by ``EXPERIMENTAL_RSSI_BADGE``
+  remains opt-in (no behaviour change in this section).
+
 ## [2.63.0-rc.8] - 2026-04-26
 
 Fixes two real bugs that VM 105 manual validation surfaced in rc.7's
