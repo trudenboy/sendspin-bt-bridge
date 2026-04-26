@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### UI follow-ups on rc.8 RSSI badge
+
+- ``_getRssiBadgeRenderData`` / ``_renderRssiBadgeHtml`` gain a
+  ``mode`` argument so the chip label matches the underlying
+  measurement.  Connected-link RSSI from mgmt 0x0031 is BR/EDR
+  delta-from-Golden-Receive-Power-Range — labelled "Δ dB".
+  Scan-result RSSI from BlueZ inquiry stays absolute "dBm".  Tooltip
+  spells out the unit either way.
+- Stale ``_renderRssiChip`` reference scrubbed from the
+  ``services/bt_rssi_mgmt`` module docstring; now points at the
+  current UI helpers.
+- Default RSSI refresh interval gated by ``EXPERIMENTAL_RSSI_BADGE``
+  remains opt-in (no behaviour change in this section).
+
 ## [2.63.0-rc.8] - 2026-04-26
 
 Fixes two real bugs that VM 105 manual validation surfaced in rc.7's

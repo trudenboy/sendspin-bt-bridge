@@ -2383,7 +2383,11 @@ function _getListCollapsedBadgesHtml(dev, i) {
     // so the array entry collapses to '' and the badge stays hidden.
     var rssiTs = dev && dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
     var rssiStale = rssiTs ? (Date.now() / 1000 - rssiTs > 90) : false;
-    var rssiHtml = _renderRssiBadgeHtml(dev && dev.rssi_dbm, rssiStale, 'chip list-inline-badge list-rssi-chip');
+    // Connected-link RSSI from mgmt 0x0031 is BR/EDR delta-from-golden,
+    // not absolute dBm — pass mode='delta' so the chip labels it as
+    // "Δ dB" instead of "dBm".  Scan-result chip below stays default
+    // 'absolute' because that path comes from BlueZ inquiry which IS dBm.
+    var rssiHtml = _renderRssiBadgeHtml(dev && dev.rssi_dbm, rssiStale, 'chip list-inline-badge list-rssi-chip', null, 'delta');
     if (rssiHtml) badges.push(rssiHtml);
 
     return badges.length ? '<span class="list-inline-badges">' + badges.join('') + '</span>' : '';
@@ -3698,7 +3702,8 @@ function populateDeviceCard(i, dev) {
         var rssiTs = dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
         var nowSec = Date.now() / 1000;
         var isStale = rssiTs ? (nowSec - rssiTs > 90) : false;
-        var rssiRenderData = _getRssiBadgeRenderData(rssiVal, isStale, 'chip rssi-chip');
+        // Grid-mode device card: same delta semantics as the list-mode badge.
+        var rssiRenderData = _getRssiBadgeRenderData(rssiVal, isStale, 'chip rssi-chip', 'delta');
         if (rssiRenderData) {
             rssiEl.className = rssiRenderData.className;
             rssiEl.innerHTML = rssiRenderData.innerHtml;
@@ -6468,18 +6473,26 @@ function openConfigAndAddDevice(options) {
 // tone-class colour scheme (no bespoke ``rssi-good`` CSS).
 //
 // Thresholds align with the WiFi-style buckets most operators expect.
-// LE RSSI is absolute dBm; BR/EDR RSSI from ``HCI_Read_RSSI`` is the
-// delta from the controller's Golden Receive Power Range (0 = good,
-// negative = weak).  The buckets happen to read sensibly for both —
-// 0 lands in "excellent" for BR/EDR golden-range, -90 lands in "bad"
-// for LE far-edge.
+// The same number maps to two different physical meanings depending
+// on the source:
+//   ``mode='absolute'`` — scan-result RSSI from BlueZ inquiry, signed
+//                          int8 dBm. Standard WiFi-style interpretation
+//                          (-65 = good, -90 = far-edge).
+//   ``mode='delta'``    — connected-link RSSI from HCI_Read_RSSI for
+//                          BR/EDR ACL: delta from the controller's
+//                          Golden Receive Power Range. 0 = in range,
+//                          negative = below, positive = above. Label
+//                          says "Δ dB" so users don't misread it as
+//                          absolute dBm.
+// Buckets are shared because both happen to read sensibly the same
+// way: 0/-55 dB Δ ≈ excellent, -75 ≈ fair, etc.
 //
-//   ≥ -55 dBm  excellent (4 bars, success tone)
+//   ≥ -55  excellent (4 bars, success tone)
 //   -65..-55   strong    (3 bars, success tone)
 //   -75..-65   fair      (2 bars, warning tone)
 //   ≤ -75      bad       (1 bar,  error tone)
 //   stale      grey      (0 bars, neutral tone — rssi_at_ts > 90 s)
-function _getRssiBadgeRenderData(rssiDbm, isStale, className) {
+function _getRssiBadgeRenderData(rssiDbm, isStale, className, mode) {
     if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(Number(rssiDbm))) {
         return null;
     }
@@ -6502,10 +6515,13 @@ function _getRssiBadgeRenderData(rssiDbm, isStale, className) {
         bars = 1;
         tone = 'error';
     }
-    var label = n + ' dBm';
+    var isDelta = mode === 'delta';
+    var unitLabel = isDelta ? ' Δ dB' : ' dBm';
+    var humanUnit = isDelta ? 'Δ dB (vs Golden Receive Power Range)' : 'dBm';
+    var label = n + unitLabel;
     var title = isStale
-        ? 'Last RSSI ' + n + ' dBm (stale — value not refreshed in 90 s)'
-        : 'Signal strength ' + n + ' dBm';
+        ? 'Last RSSI ' + n + ' ' + humanUnit + ' (stale — value not refreshed in 90 s)'
+        : 'Signal strength ' + n + ' ' + humanUnit;
     return {
         className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', _deviceStatusToneClass(tone)]),
         title: title,
@@ -6514,8 +6530,8 @@ function _getRssiBadgeRenderData(rssiDbm, isStale, className) {
     };
 }
 
-function _renderRssiBadgeHtml(rssiDbm, isStale, className, id) {
-    var renderData = _getRssiBadgeRenderData(rssiDbm, isStale, className);
+function _renderRssiBadgeHtml(rssiDbm, isStale, className, id, mode) {
+    var renderData = _getRssiBadgeRenderData(rssiDbm, isStale, className, mode);
     if (!renderData) return '';
     return '<span class="' + renderData.className + '"' +
         (id ? ' id="' + id + '"' : '') +

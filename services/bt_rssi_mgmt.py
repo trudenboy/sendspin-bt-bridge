@@ -14,9 +14,10 @@ controller's Golden Receive Power Range:
 
 LE links get absolute dBm.  We don't currently address LE peers
 (Sendspin is BR/EDR-only), so callers should interpret the returned
-integer as "delta from golden range" — the existing UI chip
-(``_renderRssiChip``) happens to colour 0 as green which matches
-"healthy" semantically; we don't try to reinterpret here.
+integer as "delta from golden range" — the existing UI badge
+helpers (``_getRssiBadgeRenderData`` / ``_renderRssiBadgeHtml``)
+happen to colour 0 as green which matches "healthy" semantically;
+we don't try to reinterpret here.
 
 This is the *only* path on Linux that exposes RSSI for an
 already-connected peer:
