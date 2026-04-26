@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0] - 2026-04-26
+
+Stable release promoting rc.1 → rc.9 from main.  Headline themes
+(see the per-rc sections below for the full diff per fix):
+
+- **MPRIS hardware integration for connected speakers** (rc.1 +
+  rc.5 + rc.6).  The bridge now exports a per-device
+  ``org.mpris.MediaPlayer2.Player`` interface and registers it with
+  BlueZ via ``org.bluez.Media1.RegisterPlayer(path, properties)``,
+  which is what BlueZ actually uses to route AVRCP passthrough
+  commands.  Physical Play / Pause / Next / Previous / Volume on
+  the speaker now propagate to MA in ~50 ms via direct IPC instead
+  of needing the operator to drive playback exclusively from the HA
+  side.  rc.1-rc.5 had the wrong architecture (system-bus
+  well-known name + canonical ``/org/mpris/MediaPlayer2`` path);
+  rc.6 fixed it after VM 105 manual validation showed nothing was
+  wired through.
+- **Live RSSI badge for connected BR/EDR speakers** (rc.7 + rc.8 +
+  rc.9, opt-in via ``EXPERIMENTAL_RSSI_BADGE``).  Polls the kernel
+  mgmt socket (opcode 0x0031) every 30 s, gated by the shared
+  ``bt_operation_lock`` so a pair / scan / reconnect can never be
+  starved.  Required swapping ``gosu`` for ``setpriv`` in the
+  entrypoint so ``CAP_NET_ADMIN`` survives the UID drop — gosu was
+  silently clobbering capabilities, which is why every prior
+  attempt at connected-link RSSI returned ``MGMT_STATUS_PERMISSION_DENIED``
+  (rc.3 / rc.5 had wrong source; rc.7 had right source + wrong
+  encoding via btsocket; rc.8 finally hand-rolls the wire packet
+  and ships).  UI chip uses a monochrome 4-bar SVG matching the
+  battery icon idiom.
+- **HA addon settings persistence fixed** (rc.9, regression-class).
+  ``scripts/translate_ha_config.py`` rebuilds ``config.json`` from
+  ``options.json`` on every addon start; the preservation list
+  missed all 5 EXPERIMENTAL_* flags plus AUTH_ENABLED,
+  BRUTE_FORCE_PROTECTION, MA_WEBSOCKET_MONITOR, AUTO_UPDATE,
+  CHECK_UPDATES, SMOOTH_RESTART, ALLOW_HFP_PROFILE, TRUSTED_PROXIES.
+  Every restart silently rewrote those toggles to defaults — looked
+  to operators like the controls "didn't save".  All 13 fields now
+  preserved.
+- **Settings UI experimental block reorganised** (rc.9).  Moved
+  out of Connection recovery into a dedicated "Experimental
+  features" card with amber accent + ⚠ icon.  ALLOW_HFP_PROFILE
+  exposed as the fifth toggle in that card (was previously
+  hand-edit-only).
+- **BT info modal renders full ``bluetoothctl info``** (rc.9).
+  Backend always collected every line in ``info["raw"]``; modal
+  used to drop UUIDs, Modalias, LegacyPairing — the load-bearing
+  diagnostic for "does this speaker actually advertise A2DP Sink".
+  Now renders raw verbatim with bluetoothctl piped-stdin noise
+  filtered client-side.
+- **MA server version in diagnostics** (rc.9).  Bug-report env
+  block + post-handshake INFO banner line — issue #190 was slow
+  to triage because we couldn't tell which MA build the operator
+  ran.
+- **HA Supervisor SSE corruption fix under ingress** (rc.4).
+  Adds ``Cache-Control: no-cache, no-transform`` +
+  ``Content-Encoding: identity`` to the SSE response so the
+  ingress proxy stops deflate-compressing the event stream
+  (RFC 7234 §5.2.2.4).  Status updates in HA addon mode now
+  arrive without truncation again.
+- **Pre-existing bugs surfaced and fixed** during the rc cycle:
+  MA syncgroup multi-membership lookup (a player belonging to two
+  syncgroups got pinned to the first one iterated, breaking
+  on/off-target playback routing); ``_apply_connected_state``
+  centralised so the BT-monitor D-Bus path actually fires the
+  ``on_connected`` hook (rc.1 MPRIS regression); shared
+  ``bt_operation_lock`` promoted from per-module singletons.
+
 ## [2.62.0] - 2026-04-25
 
 Stable release promoting rc.5 → rc.13 from main.  Headline themes
