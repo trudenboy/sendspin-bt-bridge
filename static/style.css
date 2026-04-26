@@ -5717,6 +5717,28 @@ body {
         .config-settings-card--utility {
             background: rgba(255, 166, 0, 0.03);
         }
+        /* Experimental-flags grouping card.  Mirrors the amber palette
+           used by .notice-card--warning so operators read it as
+           "in-development, may bite" at a glance.  Border-inline-start
+           accent + faint tint match the notice-card pattern; title gets
+           the warning colour and an icon to the left. */
+        .config-settings-card--experimental {
+            background: rgba(255, 166, 0, 0.05);
+            border-color: rgba(255, 166, 0, 0.32);
+            border-inline-start: 4px solid #c77700;
+        }
+        .config-settings-card--experimental .config-card-title {
+            color: #c77700;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .config-settings-card--experimental .config-card-title-icon {
+            width: 18px;
+            height: 18px;
+            color: #c77700;
+            flex: 0 0 auto;
+        }
         .config-card-stack {
             display: flex;
             flex-direction: column;

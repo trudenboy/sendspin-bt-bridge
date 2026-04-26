@@ -6905,19 +6905,53 @@ async function showBtDeviceInfo(mac, adapter) {
             body: JSON.stringify(body)
         });
         var info = await resp.json();
-        var lines = [];
-        if (info.name) lines.push('Name: ' + info.name);
-        if (info.alias) lines.push('Alias: ' + info.alias);
-        lines.push('MAC: ' + mac);
-        if (info.paired) lines.push('Paired: ' + info.paired);
-        if (info.trusted) lines.push('Trusted: ' + info.trusted);
-        if (info.connected) lines.push('Connected: ' + info.connected);
-        if (info.bonded) lines.push('Bonded: ' + info.bonded);
-        if (info.blocked) lines.push('Blocked: ' + info.blocked);
-        if (info['class']) lines.push('Class: ' + info['class']);
-        if (info.icon) lines.push('Icon: ' + info.icon);
-        if (info.error) lines.push('\nError: ' + info.error);
-        var text = lines.join('\n') || 'No info available for ' + mac;
+        // Render the full ``bluetoothctl info`` output verbatim (UUIDs,
+        // Modalias, LegacyPairing, Class, etc.) so issue-triage doesn't
+        // need a follow-up SSH session.  Backend stashes every
+        // ANSI-stripped non-empty line in ``raw``; we filter the
+        // bluetoothctl prompt / agent-registration noise it emits when
+        // commands are piped on stdin.
+        var text = '';
+        if (Array.isArray(info.raw) && info.raw.length) {
+            // Bluetoothctl noise we drop:
+            // - "Waiting to connect to bluetoothd..." — startup line
+            // - any line beginning with "[xxx]>" or "[xxx]#" — prompt
+            //   (the bracketed name varies: [bluetoothctl], [bluetooth],
+            //    or the currently-selected device's name)
+            // - "Agent registered" / "Agent unregistered"
+            // - "Changing ... succeeded/failed" status echoes from
+            //   trust/connect commands that pass through the same
+            //   bluetoothctl session
+            text = info.raw
+                .filter(function(ln) {
+                    if (!ln) return false;
+                    if (/^\[[^\]]+\][>#]/.test(ln)) return false;
+                    if (ln === 'Agent registered') return false;
+                    if (ln.indexOf('Agent unregistered') !== -1) return false;
+                    if (ln.indexOf('Waiting to connect to bluetoothd') !== -1) return false;
+                    if (/^Changing .+ (succeeded|failed)$/.test(ln)) return false;
+                    return true;
+                })
+                .join('\n');
+        }
+        if (!text) {
+            // Fallback — backend returned no raw payload (older version
+            // or parse failure).  Build the minimal MAC-only summary
+            // from individual fields so the modal isn't empty.
+            var lines = [];
+            if (info.name) lines.push('Name: ' + info.name);
+            if (info.alias) lines.push('Alias: ' + info.alias);
+            lines.push('MAC: ' + mac);
+            if (info.paired) lines.push('Paired: ' + info.paired);
+            if (info.trusted) lines.push('Trusted: ' + info.trusted);
+            if (info.connected) lines.push('Connected: ' + info.connected);
+            if (info.bonded) lines.push('Bonded: ' + info.bonded);
+            if (info.blocked) lines.push('Blocked: ' + info.blocked);
+            if (info['class']) lines.push('Class: ' + info['class']);
+            if (info.icon) lines.push('Icon: ' + info.icon);
+            text = lines.join('\n') || 'No info available for ' + mac;
+        }
+        if (info.error) text += '\n\nError: ' + info.error;
         _showBtInfoModal(info.name || mac, text);
     } catch (err) {
         showToast('Failed to get info: ' + err.message, 'error');
@@ -6931,7 +6965,9 @@ function _showBtInfoModal(title, text) {
 
     var modal = document.createElement('div');
     modal.className = 'bugreport-modal bt-info-modal';
-    modal.style.maxWidth = '440px';
+    // Wider than other modals — UUID lines are 60+ chars and look
+    // ugly when wrapped in a narrow column.
+    modal.style.maxWidth = '620px';
 
     var header = document.createElement('div');
     header.className = 'bugreport-header bt-info-header';
@@ -7188,6 +7224,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
     config.EXPERIMENTAL_RSSI_BADGE = !!(document.getElementById('experimental-rssi-badge') || {}).checked;
+    config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
     // the Settings form. The config key is still honoured as a fallback for
@@ -9771,6 +9808,8 @@ async function loadConfig(options) {
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
         var expRssiBadgeCheck = document.getElementById('experimental-rssi-badge');
         if (expRssiBadgeCheck) expRssiBadgeCheck.checked = !!config.EXPERIMENTAL_RSSI_BADGE;
+        var expAllowHfpCheck = document.getElementById('experimental-allow-hfp-profile');
+        if (expAllowHfpCheck) expAllowHfpCheck.checked = !!config.ALLOW_HFP_PROFILE;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

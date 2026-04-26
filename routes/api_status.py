@@ -1071,6 +1071,15 @@ def _collect_environment() -> dict:
 
     env.update(get_runtime_dependency_versions())
 
+    # MA *server* version (vs. ``music-assistant-client`` library
+    # version, which lives in the runtime-deps pin).  Cached at WS
+    # handshake; pre-handshake it's an empty string.  Surfaced as
+    # "unknown" so the bug-report markdown stays consistent with the
+    # other "?" fields rather than silently dropping the key — issue
+    # #190 was diagnosed slowly because we couldn't tell which MA
+    # build the operator was running.
+    env["ma_server_version"] = get_ma_server_version() or "unknown"
+
     return env
 
 

@@ -171,6 +171,68 @@ def test_api_bt_info_forwards_adapter_field(client, monkeypatch):
     assert captured == {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"}
 
 
+_DEVICE_INFO_FULL_WITH_UUIDS = (
+    "Agent registered\n"
+    "[bluetooth]# select C0:FB:F9:62:D7:D6\n"
+    "[bluetooth]# info AA:BB:CC:DD:EE:FF\n"
+    "Device AA:BB:CC:DD:EE:FF (public)\n"
+    "\tName: VAPPEBY Outdoor\n"
+    "\tAlias: VAPPEBY Outdoor\n"
+    "\tClass: 0x00240404\n"
+    "\tIcon: audio-headset\n"
+    "\tPaired: yes\n"
+    "\tBonded: yes\n"
+    "\tTrusted: yes\n"
+    "\tBlocked: no\n"
+    "\tConnected: no\n"
+    "\tLegacyPairing: no\n"
+    "\tUUID: Vendor specific           (00000000-deca-fade-deca-deafdecacaff)\n"
+    "\tUUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)\n"
+    "\tUUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)\n"
+    "\tUUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)\n"
+    "\tUUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)\n"
+    "\tModalias: bluetooth:vE003p3528d0001\n"
+)
+
+
+def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(monkeypatch):
+    """The info modal in the UI now renders ``info["raw"]`` directly so
+    operators see everything ``bluetoothctl info`` outputs.  Pin the
+    parser contract: every non-prompt line — including UUIDs (the
+    A2DP Sink / AVRCP / etc. service UUID list that's load-bearing
+    for diagnosing why a speaker won't play), Modalias (vendor /
+    product / version), LegacyPairing, and the ``Class`` octet —
+    must reach the ``raw`` array.  Without UUIDs in the modal,
+    issue #168 would have taken another round of asking the
+    reporter for ``bluetoothctl info`` over SSH."""
+    import routes.api_bt as module
+
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *_a, **_kw: _FakeCompletedProcess(stdout=_DEVICE_INFO_FULL_WITH_UUIDS),
+    )
+
+    info = module._get_bt_device_info("AA:BB:CC:DD:EE:FF", adapter="C0:FB:F9:62:D7:D6")
+
+    raw = info.get("raw") or []
+    raw_text = "\n".join(raw)
+    # Header + every diagnostic field the parser used to drop
+    assert "Device AA:BB:CC:DD:EE:FF (public)" in raw
+    assert "Class: 0x00240404" in raw_text
+    assert "LegacyPairing: no" in raw_text
+    # All five UUIDs must be present verbatim — UI treats them as
+    # the load-bearing diagnostic for "does this speaker actually
+    # advertise A2DP Sink".
+    assert "UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)" in raw_text
+    assert "UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)" in raw_text
+    assert "UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)" in raw_text
+    assert "UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)" in raw_text
+    assert "UUID: Vendor specific           (00000000-deca-fade-deca-deafdecacaff)" in raw_text
+    # Vendor identity for the speaker
+    assert "Modalias: bluetooth:vE003p3528d0001" in raw_text
+
+
 def test_api_bt_info_rejects_invalid_adapter(client, monkeypatch):
     """Garbage adapter strings must 400 before touching bluetoothctl."""
     import routes.api_bt as module

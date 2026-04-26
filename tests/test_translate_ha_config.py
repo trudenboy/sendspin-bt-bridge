@@ -346,6 +346,109 @@ def test_translation_respects_explicit_ha_area_name_assist_setting(tmp_path):
     assert cfg["HA_AREA_NAME_ASSIST_ENABLED"] is False
 
 
+def test_translation_preserves_settings_experimental_card_toggles(tmp_path):
+    """All five toggles in the Settings → Experimental features card
+    are managed only via the bridge web UI — none are exposed in the
+    addon's options.json schema.  Without explicit preservation the
+    translator rewrites config.json on every restart and silently
+    drops the operator's choices, which looks like the toggles
+    "don't save".
+
+    The card holds: A2DP sink recovery dance, Reload PA BT module,
+    Adapter auto-recovery, Live RSSI badge, Allow HFP / HSP profile.
+
+    NOTE: ``EXPERIMENTAL_PAIR_JUST_WORKS`` is *not* in this card —
+    it lives in the scan modal as a per-pair transient override.
+    Its preservation is asserted in the separate scan-modal-flag
+    test below so the two concerns stay separable."""
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": True,
+            "EXPERIMENTAL_PA_MODULE_RELOAD": True,
+            "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": True,
+            "EXPERIMENTAL_RSSI_BADGE": True,
+            "ALLOW_HFP_PROFILE": True,
+            "BLUETOOTH_DEVICES": [],
+        },
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE"] is True
+    assert cfg["EXPERIMENTAL_PA_MODULE_RELOAD"] is True
+    assert cfg["EXPERIMENTAL_ADAPTER_AUTO_RECOVERY"] is True
+    assert cfg["EXPERIMENTAL_RSSI_BADGE"] is True
+    assert cfg["ALLOW_HFP_PROFILE"] is True
+
+
+def test_translation_preserves_scan_modal_pair_just_works_flag(tmp_path):
+    """``EXPERIMENTAL_PAIR_JUST_WORKS`` lives in the scan modal as a
+    per-pair toggle (not in the Settings card) — but the value can
+    still end up in config.json via POST /api/config when the bridge
+    persists a global default, so the translator must preserve it
+    across addon restarts the same way as the Settings flags."""
+    _write_json(
+        tmp_path / "config.json",
+        {"EXPERIMENTAL_PAIR_JUST_WORKS": True, "BLUETOOTH_DEVICES": []},
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["EXPERIMENTAL_PAIR_JUST_WORKS"] is True
+
+
+def test_translation_preserves_other_config_only_settings(tmp_path):
+    """Same gap affects every other web-UI-managed field that the
+    addon schema doesn't expose: AUTH_ENABLED, BRUTE_FORCE_PROTECTION,
+    MA_WEBSOCKET_MONITOR, AUTO_UPDATE, CHECK_UPDATES, SMOOTH_RESTART,
+    TRUSTED_PROXIES.  All reach config.json via POST /api/config from
+    the bridge UI.  Pin them here so addon restarts can't silently
+    clobber operator choices, and surface the regression now so we
+    don't have to re-discover it per flag."""
+    _write_json(
+        tmp_path / "config.json",
+        {
+            "AUTH_ENABLED": True,
+            "BRUTE_FORCE_PROTECTION": False,
+            "MA_WEBSOCKET_MONITOR": False,
+            "AUTO_UPDATE": True,
+            "CHECK_UPDATES": False,
+            "SMOOTH_RESTART": False,
+            "TRUSTED_PROXIES": ["10.0.0.1", "10.0.0.2"],
+            "BLUETOOTH_DEVICES": [],
+        },
+    )
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with (
+        patch("scripts.translate_ha_config._detect_adapters", return_value=[]),
+        patch("scripts.translate_ha_config.get_self_delivery_channel", return_value="stable"),
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["AUTH_ENABLED"] is True
+    assert cfg["BRUTE_FORCE_PROTECTION"] is False
+    assert cfg["MA_WEBSOCKET_MONITOR"] is False
+    assert cfg["AUTO_UPDATE"] is True
+    assert cfg["CHECK_UPDATES"] is False
+    assert cfg["SMOOTH_RESTART"] is False
+    assert cfg["TRUSTED_PROXIES"] == ["10.0.0.1", "10.0.0.2"]
+
+
 def test_translation_preserves_existing_startup_banner_grace_when_option_omitted(tmp_path):
     _write_json(
         tmp_path / "config.json",

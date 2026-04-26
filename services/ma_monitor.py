@@ -816,11 +816,23 @@ class MaMonitor:
             # Server info
             server_info = await _recv(ws, timeout=10.0)
             self._detect_ha_addon(server_info)
-            # Cache MA server version
+            # Cache MA server version + banner-line it into the runtime
+            # log so operators can grep one line for "what MA build
+            # are we talking to".  Mirrors the entrypoint banner's
+            # format (which can't include the version because it runs
+            # before the WS handshake).  Issue #190 was slowed by not
+            # knowing which MA build the reporter ran.
             si = server_info.get("server_info", server_info)
             _ma_ver = si.get("server_version", "")
+            _ma_schema = si.get("schema_version", "")
             if _ma_ver:
                 _state.set_ma_server_version(_ma_ver)
+                logger.info(
+                    "MA server: version=%s schema=%s url=%s",
+                    _ma_ver,
+                    _ma_schema or "?",
+                    self._ws_url,
+                )
 
             # Auth
             mid = self._next_id()
