@@ -656,9 +656,9 @@
                             </div>
                         </div>
 
-                        <div class="config-settings-card" data-experimental style="display:none">
+                        <div class="config-settings-card config-settings-card--experimental" data-experimental style="display:none">
                             <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Experimental features</div>
+                                <div class="config-card-title"><span class="config-card-title-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>Experimental features</div>
                                 <p class="config-card-subtitle">Opt-in toggles for in-development behaviour. Visible only when "Show experimental features" is enabled in the onboarding section. Each requires an addon / container restart to take effect.</p>
                             </div>
                             <label class="config-setting-row config-setting-row--compact" title="Last-resort workaround for bluez/bluez#1922. If a sink fails to publish after connect, the bridge disconnects and reconnects the device once per attempt. May cause extra churn — try leaving disabled first.">
