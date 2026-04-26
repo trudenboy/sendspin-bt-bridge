@@ -690,6 +690,18 @@
                                     </span>
                                 </span>
                             </label>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Experimental: Live RSSI badge</strong>
+                                    <span class="form-hint">Poll every 30 s via mgmt 0x0031. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="EXPERIMENTAL_RSSI_BADGE" id="experimental-rssi-badge">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
 

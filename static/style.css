@@ -4265,24 +4265,10 @@ body {
             border-color: transparent;
             color: #c62828;
         }
-        /* v2.63.0-rc.2: RSSI badge palette — green/yellow/red/grey track
-           the WiFi-style buckets defined in app.js _renderRssiChip. */
-        .scan-result-chip.rssi-good {
-            background: rgba(67, 160, 71, 0.18);
-            color: #1b5e20;
-        }
-        .scan-result-chip.rssi-fair {
-            background: rgba(255, 193, 7, 0.20);
-            color: #8d6e00;
-        }
-        .scan-result-chip.rssi-bad {
-            background: rgba(244, 67, 54, 0.16);
-            color: #b71c1c;
-        }
-        .scan-result-chip.rssi-stale {
-            background: rgba(120, 120, 120, 0.18);
-            color: #555;
-        }
+        /* v2.63.0-rc.8: RSSI badge palette removed — _renderRssiBadgeHtml
+           now uses the shared meta-badge tone classes
+           (.is-success / .is-warning / .is-error / .is-neutral) so the
+           chip inherits the project-wide colour scheme. */
         .scan-result-passive {
             color: var(--secondary-text-color);
             background: rgba(107, 114, 128, 0.08);

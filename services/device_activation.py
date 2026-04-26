@@ -331,6 +331,12 @@ class DeviceActivationContext:
     default_player_name: str = "Sendspin"
     load_saved_volume_fn: Callable[[str], int | None] | None = None
     persist_enabled_fn: Callable[[str, bool], None] | None = None
+    # Gate for the periodic mgmt-socket RSSI refresh.  When False the
+    # ``on_rssi_update`` callback is left None so ``_rssi_refresh_tick``
+    # short-circuits before acquiring the BT operation lock — the mgmt
+    # round-trip is never issued.  Default False so existing tests and
+    # any other callers that don't pass the flag stay quiet on RSSI.
+    enable_rssi_badge: bool = False
 
 
 @dataclass
@@ -429,6 +435,12 @@ def activate_device(
             ages past 90 s (e.g. mgmt socket starts returning EBUSY)."""
             _client._update_status({"rssi_dbm": int(rssi_dbm), "rssi_at_ts": time.time()})
 
+        # When the experimental flag is off, leave the callback
+        # unwired so ``BluetoothManager._rssi_refresh_tick`` early-
+        # returns before touching the BT operation lock or the mgmt
+        # socket — zero overhead for the default-off path.
+        rssi_callback = _on_rssi_update if context.enable_rssi_badge else None
+
         bt_mgr = context.bt_manager_factory(
             mac,
             adapter=adapter,
@@ -440,7 +452,7 @@ def activate_device(
             on_sink_found=_on_sink_found,
             on_connected=_make_mpris_connected_hook(client, mac),
             on_disconnected=_make_mpris_disconnected_hook(mac),
-            on_rssi_update=_on_rssi_update,
+            on_rssi_update=rssi_callback,
             churn_threshold=context.bt_churn_threshold,
             churn_window=context.bt_churn_window,
             enable_a2dp_dance=context.enable_a2dp_sink_recovery_dance,

@@ -1011,6 +1011,7 @@ function _getBadgeIndicatorInnerHtml(kind, stateMeta) {
         return '<span class="status-symbol-indicator-text">' + escHtml(_getStatusIndicatorSymbol(stateMeta)) + '</span>';
     }
     if (kind === 'battery') return _batteryIconSvg((stateMeta && stateMeta.level) || 0, 'meta-badge-indicator-icon');
+    if (kind === 'signal') return _signalIconSvg((stateMeta && stateMeta.bars) || 0, 'meta-badge-indicator-icon');
     if (kind === 'check') return _checkIconSvg('meta-badge-indicator-icon');
     if (kind === 'release') return _releaseIconSvg('meta-badge-indicator-icon');
     if (kind === 'bt') return _bluetoothIconSvg('meta-badge-indicator-icon');
@@ -2376,6 +2377,18 @@ function _getListCollapsedBadgesHtml(dev, i) {
     badges.push(_renderSyncBadgeHtml(dev, i, 'chip list-inline-badge list-sync-chip'));
     badges.push(_renderSyncDetailBadgeHtml(dev, i, 'chip list-inline-badge list-sync-detail-chip'));
     badges.push(_renderBatteryBadgeHtml(dev.battery_level, 'chip list-inline-badge list-battery-chip'));
+    // RSSI chip — list mode parity with the device card (grid).  The
+    // render-data helper short-circuits to null when ``rssi_dbm`` is
+    // absent (experimental refresh disabled, or no fresh value yet),
+    // so the array entry collapses to '' and the badge stays hidden.
+    var rssiTs = dev && dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
+    var rssiStale = rssiTs ? (Date.now() / 1000 - rssiTs > 90) : false;
+    // Connected-link RSSI from mgmt 0x0031 is BR/EDR delta-from-golden,
+    // not absolute dBm — pass mode='delta' so the chip labels it as
+    // "Δ dB" instead of "dBm".  Scan-result chip below stays default
+    // 'absolute' because that path comes from BlueZ inquiry which IS dBm.
+    var rssiHtml = _renderRssiBadgeHtml(dev && dev.rssi_dbm, rssiStale, 'chip list-inline-badge list-rssi-chip', null, 'delta');
+    if (rssiHtml) badges.push(rssiHtml);
 
     return badges.length ? '<span class="list-inline-badges">' + badges.join('') + '</span>' : '';
 }
@@ -2426,6 +2439,33 @@ function _batteryIconSvg(level, className) {
         (fillWidth > 0
             ? '<rect x="5.2" y="9.2" width="' + fillWidth + '" height="5.6" rx="1.1" fill="currentColor" stroke="none"/>'
             : '') +
+    '</svg>';
+}
+
+// Monochrome 4-bar signal icon — matches the battery-icon idiom
+// (outline-only base, filled rectangles drawn in currentColor for the
+// "active" portion).  ``bars`` clamps to 0..4 so callers can map any
+// quality scheme to a discrete bar count without bounds-checking.
+function _signalIconSvg(bars, className) {
+    var cls = className ? ' class="' + className + '"' : '';
+    var b = Math.max(0, Math.min(4, Math.round(Number(bars) || 0)));
+    // Four bars, ascending heights, bottoms aligned to y=18.
+    // Outline drawn in stroke for ALL bars; filled rects layered on top
+    // for the first ``b`` bars so the icon stays a single colour.
+    var bars_ = [
+        {x: 3,  y: 14, w: 3, h: 4},
+        {x: 8,  y: 11, w: 3, h: 7},
+        {x: 13, y: 8,  w: 3, h: 10},
+        {x: 18, y: 5,  w: 3, h: 13},
+    ];
+    var outlines = bars_.map(function(r) {
+        return '<rect x="' + r.x + '" y="' + r.y + '" width="' + r.w + '" height="' + r.h + '" rx="0.6"/>';
+    }).join('');
+    var fills = bars_.slice(0, b).map(function(r) {
+        return '<rect x="' + r.x + '" y="' + r.y + '" width="' + r.w + '" height="' + r.h + '" rx="0.6" fill="currentColor" stroke="none"/>';
+    }).join('');
+    return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">' +
+        outlines + fills +
     '</svg>';
 }
 
@@ -3662,12 +3702,17 @@ function populateDeviceCard(i, dev) {
         var rssiTs = dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
         var nowSec = Date.now() / 1000;
         var isStale = rssiTs ? (nowSec - rssiTs > 90) : false;
-        var chipHtml = _renderRssiChip(rssiVal, isStale);
-        if (chipHtml) {
-            rssiEl.innerHTML = chipHtml;
+        // Grid-mode device card: same delta semantics as the list-mode badge.
+        var rssiRenderData = _getRssiBadgeRenderData(rssiVal, isStale, 'chip rssi-chip', 'delta');
+        if (rssiRenderData) {
+            rssiEl.className = rssiRenderData.className;
+            rssiEl.innerHTML = rssiRenderData.innerHtml;
+            rssiEl.title = rssiRenderData.title;
             rssiEl.style.display = '';
         } else {
+            rssiEl.className = '';
             rssiEl.innerHTML = '';
+            rssiEl.title = '';
             rssiEl.style.display = 'none';
         }
     }
@@ -6422,30 +6467,77 @@ function openConfigAndAddDevice(options) {
     }
 }
 
-// v2.63.0-rc.2: RSSI badge with colour-coded signal strength.
+// v2.63.0-rc.2: RSSI badge with monochrome 4-bar icon, rendered through
+// the same ``meta-badge`` pipeline as the battery / status / room
+// chips so it inherits typography, padding, and the project-wide
+// tone-class colour scheme (no bespoke ``rssi-good`` CSS).
+//
 // Thresholds align with the WiFi-style buckets most operators expect.
-// Bluetooth RSSI is reported in dBm (signed dB relative to 1 mW); we
-// surface the unit in the chip text so it lines up with what btmgmt /
-// hcidump / wireshark display.
-//   green  ≥ -65 dBm  (excellent / next-room range)
-//   yellow -75…-65    (workable but lossy retransmits start)
-//   red    ≤ -75      (audible drops likely)
-//   grey   stale      (rssi_at_ts older than 90 s — value not trustworthy)
-function _renderRssiChip(rssiDbm, isStale) {
-    if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(rssiDbm)) {
-        return '';
+// The same number maps to two different physical meanings depending
+// on the source:
+//   ``mode='absolute'`` — scan-result RSSI from BlueZ inquiry, signed
+//                          int8 dBm. Standard WiFi-style interpretation
+//                          (-65 = good, -90 = far-edge).
+//   ``mode='delta'``    — connected-link RSSI from HCI_Read_RSSI for
+//                          BR/EDR ACL: delta from the controller's
+//                          Golden Receive Power Range. 0 = in range,
+//                          negative = below, positive = above. Label
+//                          says "Δ dB" so users don't misread it as
+//                          absolute dBm.
+// Buckets are shared because both happen to read sensibly the same
+// way: 0/-55 dB Δ ≈ excellent, -75 ≈ fair, etc.
+//
+//   ≥ -55  excellent (4 bars, success tone)
+//   -65..-55   strong    (3 bars, success tone)
+//   -75..-65   fair      (2 bars, warning tone)
+//   ≤ -75      bad       (1 bar,  error tone)
+//   stale      grey      (0 bars, neutral tone — rssi_at_ts > 90 s)
+function _getRssiBadgeRenderData(rssiDbm, isStale, className, mode) {
+    if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(Number(rssiDbm))) {
+        return null;
     }
     var n = Number(rssiDbm);
-    var cls = 'rssi-bad';
+    var bars;
+    var tone;
     if (isStale) {
-        cls = 'rssi-stale';
+        bars = 0;
+        tone = 'neutral';
+    } else if (n >= -55) {
+        bars = 4;
+        tone = 'success';
     } else if (n >= -65) {
-        cls = 'rssi-good';
+        bars = 3;
+        tone = 'success';
     } else if (n >= -75) {
-        cls = 'rssi-fair';
+        bars = 2;
+        tone = 'warning';
+    } else {
+        bars = 1;
+        tone = 'error';
     }
-    var title = isStale ? 'Last RSSI ' + n + ' dBm (stale)' : 'Signal strength ' + n + ' dBm';
-    return '<span class="scan-result-chip ' + cls + '" title="' + escHtmlAttr(title) + '">📶 ' + n + ' dBm</span>';
+    var isDelta = mode === 'delta';
+    var unitLabel = isDelta ? ' Δ dB' : ' dBm';
+    var humanUnit = isDelta ? 'Δ dB (vs Golden Receive Power Range)' : 'dBm';
+    var label = n + unitLabel;
+    var title = isStale
+        ? 'Last RSSI ' + n + ' ' + humanUnit + ' (stale — value not refreshed in 90 s)'
+        : 'Signal strength ' + n + ' ' + humanUnit;
+    return {
+        className: _joinClassNames([className, 'meta-badge', 'meta-badge-status', _deviceStatusToneClass(tone)]),
+        title: title,
+        innerHtml: _renderBadgeIndicatorHtml('signal', {key: 'rssi', bars: bars, pulse: false}) +
+            '<span class="meta-badge-label">' + escHtml(label) + '</span>',
+    };
+}
+
+function _renderRssiBadgeHtml(rssiDbm, isStale, className, id, mode) {
+    var renderData = _getRssiBadgeRenderData(rssiDbm, isStale, className, mode);
+    if (!renderData) return '';
+    return '<span class="' + renderData.className + '"' +
+        (id ? ' id="' + id + '"' : '') +
+        ' title="' + escHtmlAttr(renderData.title) + '">' +
+        renderData.innerHtml +
+    '</span>';
 }
 
 
@@ -6463,7 +6555,7 @@ function _renderBtScanResults(devices) {
         if (d.adapter) {
             chips.push('<span class="scan-result-chip">' + escHtml(_getBtScanAdapterLabel(d.adapter)) + '</span>');
         }
-        var rssiChip = _renderRssiChip(d.rssi_dbm);
+        var rssiChip = _renderRssiBadgeHtml(d.rssi_dbm, false, 'scan-result-chip rssi-chip');
         if (rssiChip) {
             chips.push(rssiChip);
         }
@@ -7095,6 +7187,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
+    config.EXPERIMENTAL_RSSI_BADGE = !!(document.getElementById('experimental-rssi-badge') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
     // the Settings form. The config key is still honoured as a fallback for
@@ -9676,6 +9769,8 @@ async function loadConfig(options) {
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
+        var expRssiBadgeCheck = document.getElementById('experimental-rssi-badge');
+        if (expRssiBadgeCheck) expRssiBadgeCheck.checked = !!config.EXPERIMENTAL_RSSI_BADGE;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### UI follow-ups on rc.8 RSSI badge
+
+- ``_getRssiBadgeRenderData`` / ``_renderRssiBadgeHtml`` gain a
+  ``mode`` argument so the chip label matches the underlying
+  measurement.  Connected-link RSSI from mgmt 0x0031 is BR/EDR
+  delta-from-Golden-Receive-Power-Range — labelled "Δ dB".
+  Scan-result RSSI from BlueZ inquiry stays absolute "dBm".  Tooltip
+  spells out the unit either way.
+- Stale ``_renderRssiChip`` reference scrubbed from the
+  ``services/bt_rssi_mgmt`` module docstring; now points at the
+  current UI helpers.
+- Default RSSI refresh interval gated by ``EXPERIMENTAL_RSSI_BADGE``
+  remains opt-in (no behaviour change in this section).
+
+## [2.63.0-rc.8] - 2026-04-26
+
+Fixes two real bugs that VM 105 manual validation surfaced in rc.7's
+RSSI restoration: the ``btsocket`` library encodes the address-type
+byte as a bitmask but ``GetConnectionInformation`` expects a
+discriminator, and ``gosu`` drops every capability when changing UID
+so the bridge never had ``CAP_NET_ADMIN`` to query the kernel mgmt
+socket in the first place.
+
+### Fixed — direct mgmt socket bypassing btsocket's broken encoder
+
+``services/bt_rssi_mgmt.read_conn_info`` now constructs the mgmt
+opcode 0x0031 packet by hand and parses the ``CommandComplete`` event
+itself.  ``btsocket.btmgmt_socket.open()`` is still used for the
+socket setup (it works around `Python bug #36132 <https://bugs.python.org/issue36132>`_
+via a libc-bind shim) but its protocol encoder is no longer involved.
+
+The library's ``AddressTypeField`` encoder treats the field as a
+bitmask (``1 << AddressType.BREDR.value`` ⇒ wire ``0x01``) which is
+correct for some scan/filter opcodes but wrong for
+``GetConnectionInformation`` where the byte is a discriminator
+(BR/EDR ⇒ wire ``0x00``).  rc.7 passed an int and crashed inside
+the encoder with ``'int' object is not iterable``; passing the enum
+would have produced a wrong wire byte and the kernel rejected with
+``MGMT_STATUS_PERMISSION_DENIED``.  Bypassing the encoder is much
+simpler than monkey-patching the library.
+
+The reader now also skips unrelated events on the shared control
+channel (``IndexAdded``, other clients' ``CommandComplete``) until
+our matching ``CommandComplete`` or ``CommandStatus`` arrives.
+
+### Fixed — preserve CAP_NET_ADMIN across UID drop
+
+``entrypoint.sh`` previously used ``gosu`` to drop the bridge process
+to ``UID 1000`` for PulseAudio socket access, but ``gosu`` clears the
+effective capability set during the ``setresuid``.  The kernel's
+mgmt-socket bind only sets ``HCI_SOCK_TRUSTED`` when the caller has
+``CAP_NET_ADMIN`` *at bind time*; without it every mgmt command for
+an established link returns ``MGMT_STATUS_PERMISSION_DENIED`` (status
+0x14).
+
+Switched the launch path to ``setpriv``:
+
+- ``--reuid`` / ``--regid`` perform the UID drop
+- ``--inh-caps=+net_admin`` puts ``CAP_NET_ADMIN`` in the inheritable set
+- ``--ambient-caps=+net_admin`` puts it in the ambient set so it
+  survives both ``execve`` and the ``setresuid``
+
+Result: the Python process runs as UID 1000 with ``CapEff=0x1000``
+(``CAP_NET_ADMIN`` only — every other cap dropped, no escalation
+beyond the strict minimum).  ``gosu`` is kept as a fall-back when
+``setpriv`` is unavailable; in that case RSSI degrades to the
+existing fail-soft "no fresh value, keep last known".
+
+Verified end-to-end on VM 105: bridge process ``CapEff=0000000000001000``,
+mgmt socket bound trusted, ``CommandComplete`` arrives with the
+expected payload, ``DeviceStatus.rssi_dbm`` populates and flows
+through SSE to the UI chip.
+
+### Tests
+
+Unit tests rewritten around two new seams:
+
+- ``read_conn_info`` is the public API — sentinel/sign handling.
+  Mocked at ``_query_rssi_byte`` to feed it specific raw bytes.
+- ``_query_rssi_byte`` is the syscall layer — mocked at
+  ``_open_mgmt_socket`` with a fake socket that replays pre-baked
+  ``CommandComplete`` blobs, exercising the wire-format parser and
+  the event-skipping loop.
+
+14 cases in ``tests/test_bt_rssi_mgmt.py`` (was 9 in rc.7) cover:
+the wire-byte parse, opcode/index/addr-type packet shape, the
+event-skipping loop, ``CommandStatus`` failures, non-zero
+``CommandComplete`` status, ``ImportError`` and other open failures,
+malformed MAC, plus the original sentinel/sign/short-circuit logic.
+
 ## [2.63.0-rc.7] - 2026-04-25
 
 Restores the live RSSI display for connected speakers — the third (and
