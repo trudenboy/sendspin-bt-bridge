@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.1] - 2026-04-26
+
+### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again
+
+The v2.50.x–v2.62.x ``lxc/upgrade.sh`` copies a fixed list of
+top-level directories from the downloaded GitHub release tarball,
+including ``demo/``, with no ``[[ -d ]]`` existence guard:
+
+```bash
+for dir in services routes demo templates static lxc scripts; do
+    rm -rf "${dest_root}/${dir}"
+    cp -a "${src_root}/${dir}" "${dest_root}/${dir}"   # ← exits 1 here
+done
+```
+
+The 2.63 series added ``demo/ export-ignore`` to ``.gitattributes``
+to trim the release tarball — but ``git archive`` honours that, so
+the directory disappears from
+``github.com/.../archive/refs/tags/<tag>.tar.gz`` for every release
+from 2.63.0 onward.  Result: every operator on v2.50.x–v2.62.x who
+hits "Apply update" gets ``cp: cannot stat '.../demo': No such file
+or directory`` and the upgrade aborts.  The deployed scripts have
+no self-update path either, so they're stuck **until a tarball that
+contains ``demo/`` ships**.
+
+Reverted ``demo/ export-ignore`` in this release so the v2.63.1
+tarball includes the directory and the legacy upgrade scripts can
+copy it.  Cost: +188 KB on the release archive.  The newer
+``upgrade.sh`` on ``main`` already drops ``demo`` from the loop
+*and* guards every copy with ``[[ -d ]]``, so this exclusion can be
+restored once every LXC in the wild has updated past that script
+(realistically after the next major release cycle).
+
 ## [2.63.0] - 2026-04-26
 
 Stable release promoting rc.1 → rc.9 from main.  Headline themes
