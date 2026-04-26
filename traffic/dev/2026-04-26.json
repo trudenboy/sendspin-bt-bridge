@@ -54,31 +54,19 @@
   "code_frequency": [],
   "ai": {
     "commits_scanned": 200,
-    "ai_commits": 32,
-    "ai_ratio": 0.16,
+    "ai_commits": 19,
+    "ai_ratio": 0.095,
     "agents": [
       {
         "name": "Renso",
-        "commits": 20
+        "commits": 19
       },
       {
         "name": "Claude Opus 4.7",
         "commits": 18
       },
       {
-        "name": "Copilot",
-        "commits": 7
-      },
-      {
-        "name": "dependabot[bot]",
-        "commits": 5
-      },
-      {
         "name": "Claude Opus 4.6",
-        "commits": 2
-      },
-      {
-        "name": "github-actions[bot]",
         "commits": 1
       }
     ]
