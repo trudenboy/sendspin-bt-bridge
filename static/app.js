@@ -7188,6 +7188,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
     config.EXPERIMENTAL_RSSI_BADGE = !!(document.getElementById('experimental-rssi-badge') || {}).checked;
+    config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
     // the Settings form. The config key is still honoured as a fallback for
@@ -9771,6 +9772,8 @@ async function loadConfig(options) {
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
         var expRssiBadgeCheck = document.getElementById('experimental-rssi-badge');
         if (expRssiBadgeCheck) expRssiBadgeCheck.checked = !!config.EXPERIMENTAL_RSSI_BADGE;
+        var expAllowHfpCheck = document.getElementById('experimental-allow-hfp-profile');
+        if (expAllowHfpCheck) expAllowHfpCheck.checked = !!config.ALLOW_HFP_PROFILE;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

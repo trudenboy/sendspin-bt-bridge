@@ -702,6 +702,18 @@
                                     </span>
                                 </span>
                             </label>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental style="display:none" title="Permit HSP/HFP service UUIDs in the pairing agent. Default off — most DSPs (Bose QC, AKG Y500, Sony XM4/5) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Enable only for HFP-only headsets that A2DP-block at the peer.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Experimental: Allow HFP / HSP profile</strong>
+                                    <span class="form-hint">For HFP-only headsets. Risk: most BT speakers/headphones drop to 8 kHz mono. Requires restart.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="ALLOW_HFP_PROFILE" id="experimental-allow-hfp-profile">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
 

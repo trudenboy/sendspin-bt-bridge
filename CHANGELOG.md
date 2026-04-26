@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Settings UI: experimental "Allow HFP / HSP profile" toggle
+
+`ALLOW_HFP_PROFILE` was previously a config-only field — operators
+had to hand-edit `/config/config.json` to enable it for HFP-only
+headsets.  Now exposed as the seventh experimental toggle in the
+Settings page (Show experimental features → Allow HFP / HSP profile),
+with an explicit warning in the tooltip that most BT speakers and
+headphones will collapse to an 8 kHz mono call codec when HSP/HFP is
+permitted.  Persisted across HA addon restarts via the new
+preservation list (see below).
+
 ### Fixed — HA addon: web-UI-only settings now survive restart
 
 In HA addon mode every restart ran `scripts/translate_ha_config.py`
