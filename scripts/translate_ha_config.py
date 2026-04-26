@@ -181,6 +181,30 @@ def main() -> None:
         for key in ("AUTH_PASSWORD_HASH", "SECRET_KEY"):
             if key in existing:
                 config[key] = existing[key]
+        # UI-only settings that POST /api/config writes to config.json
+        # but the addon options.json schema doesn't expose.  Without
+        # explicit preservation a restart silently rewrites them to
+        # defaults, which looked to operators like the toggles "don't
+        # save".  Includes every EXPERIMENTAL_* flag plus the broader
+        # auth / update / sync / proxy family.
+        web_ui_only_keys = (
+            "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
+            "EXPERIMENTAL_PA_MODULE_RELOAD",
+            "EXPERIMENTAL_PAIR_JUST_WORKS",
+            "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
+            "EXPERIMENTAL_RSSI_BADGE",
+            "AUTH_ENABLED",
+            "BRUTE_FORCE_PROTECTION",
+            "MA_WEBSOCKET_MONITOR",
+            "AUTO_UPDATE",
+            "CHECK_UPDATES",
+            "SMOOTH_RESTART",
+            "ALLOW_HFP_PROFILE",
+            "TRUSTED_PROXIES",
+        )
+        for key in web_ui_only_keys:
+            if key in existing:
+                config[key] = existing[key]
         for key in ("MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN"):
             if existing.get(key):
                 config[key] = existing[key]

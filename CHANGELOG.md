@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — HA addon: web-UI-only settings now survive restart
+
+In HA addon mode every restart ran `scripts/translate_ha_config.py`
+which rebuilds `config.json` from the addon's `options.json`.  The
+addon schema doesn't expose the `EXPERIMENTAL_*` family or several
+auth / update / sync settings — those are managed only via the
+bridge web UI (Settings → Show experimental features).  The
+translator's preservation list missed them, so a single restart
+silently rewrote each toggle to its default and operators saw the
+controls "not save".
+
+Now preserved across restart in addon mode:
+
+- `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`,
+  `EXPERIMENTAL_PA_MODULE_RELOAD`,
+  `EXPERIMENTAL_PAIR_JUST_WORKS`,
+  `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`,
+  `EXPERIMENTAL_RSSI_BADGE` — the entire experimental-flags family.
+- `AUTH_ENABLED`, `BRUTE_FORCE_PROTECTION` — auth toggles.
+- `MA_WEBSOCKET_MONITOR` — MA real-time sync toggle.
+- `AUTO_UPDATE`, `CHECK_UPDATES`, `SMOOTH_RESTART` — update / restart
+  behaviour.
+- `ALLOW_HFP_PROFILE` — HFP/HSP authorisation override.
+- `TRUSTED_PROXIES` — X-Forwarded-For accept list.
+
+Two new tests in `tests/test_translate_ha_config.py` pin the
+experimental-flags group and the broader web-UI-only group so a
+future field added to either family doesn't silently regress on
+addon-mode restarts.
+
 ### Diagnostics — surface MA server version
 
 The bug-report payload (`/api/bugreport`) and the runtime log now
