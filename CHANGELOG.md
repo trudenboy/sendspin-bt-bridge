@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.0-rc.9] - 2026-04-26
+
+UX + diagnostics polish on top of the rc.8 RSSI work.  No protocol
+or audio-pipeline changes — every fix here is either a UI rearrange,
+a settings-persistence guard, or a bug-report payload addition.
+
 ### Added — Settings UI: experimental "Allow HFP / HSP profile" toggle
 
 `ALLOW_HFP_PROFILE` was previously a config-only field — operators
