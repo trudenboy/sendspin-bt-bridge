@@ -21,3 +21,15 @@ bluetooth-auto-recovery==1.5.3
 # hand-roll struct.pack of the request/response packets. Linux-only;
 # services.bt_rssi_mgmt catches ImportError and returns None on non-Linux.
 btsocket==0.3.0
+
+# ── Transitive minimum-version pins for security fixes ────────────────
+# These packages aren't direct deps — they come in via aiosendspin /
+# music-assistant-client / aiohttp.  Pinning a >= floor forces the
+# resolver to skip vulnerable releases without locking us to a single
+# version (so upstream patch releases roll forward automatically).
+# Bump alongside ``pip-audit`` findings; remove a pin once the
+# upstream that pulls the package raises its own floor past it.
+aiohttp>=3.13.4   # CVE-2026-22815, 34513-34520, 34525 (10 advisories)
+pillow>=12.2.0    # CVE-2026-40192
+pygments>=2.20.0  # CVE-2026-4539
+requests>=2.33.0  # CVE-2026-25645

@@ -63,6 +63,7 @@ jobs:
           find rootfs -name '*.sh' -o -name 'run' -o -name 'finish' | xargs -r shellcheck --shell=bash || true
         continue-on-error: true
 
-      - name: Audit dependencies for CVEs
-        run: pip install pip-audit && pip-audit -r requirements.txt
-        continue-on-error: true
+      # Dependency CVE audit moved to ``_test.yml`` so it runs against
+      # the already-installed venv (no need to rebuild ``dbus-python``
+      # in a sandboxed virtualenv just to resolve metadata, which used
+      # to fail in this lint job for lack of ``libdbus-1-dev``).
