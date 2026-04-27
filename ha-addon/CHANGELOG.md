@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< fix/group-actions-dropdown
 ## [2.64.0-rc.2] - 2026-04-27
 
 ### Fixed — "Reconnect all" no-op on healthy fleet
@@ -82,6 +83,8 @@ Frontend → backend transport dispatch now keys on ``player_id``
 (UUID5 from MAC) instead of ``device_index``, immune to
 ``active_clients`` re-ordering.
 
+=======
+>>>>>>> main
 ## [2.63.1] - 2026-04-26
 
 ### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again
