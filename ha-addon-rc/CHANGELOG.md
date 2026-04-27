@@ -7,6 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.2] - 2026-04-27
+
+### Fixed — "Reconnect all" silently no-op'd when speakers were connected
+
+The bulk action's per-device filter required ``dev.bluetooth_connected
+=== false``, so clicking the toolbar's *Reconnect all* on a healthy
+fleet skipped every speaker.  The per-device button never had this
+constraint — it forces a reconnect cycle regardless.  Aligned the
+bulk action with the per-device button: only ``bt_management_enabled``
++ not-disabled now gate it.
+
+### Changed — UI polish for the experimental toggle and scan modal
+
+Three small but visible behaviour tweaks:
+
+- **"Show experimental features" toggle** now wears amber warning
+  treatment (border + soft fill, ⚠ glyph next to the label) so the
+  master switch that reveals in-development surface area reads as
+  the cautionary control it is.  Distinct from the per-row
+  ``data-experimental`` styling that marks individual experimental
+  settings inside the revealed card.
+
+- **Scan nearby modal no longer auto-starts a scan on open.** The
+  user may have arrived to review prior results, change adapter, or
+  toggle the audio-only filter before committing to a fresh round
+  of mgmt traffic.  The action button now presents as accent
+  *Start Scan* (with a soft pulse, respecting
+  ``prefers-reduced-motion``) until the first scan in the session
+  completes; thereafter it reverts to neutral *Rescan*.  Deep-link
+  callers that already imply intent (e.g. onboarding's "go to BT
+  and scan") can opt back into the old behaviour by passing
+  ``{autoStart: true}`` explicitly.
+
+- **Scan-result rows collapse the two add actions into a split
+  button.** Primary action is now *Pair and Add* (the safe default
+  — most discovered speakers need pairing first); the adjacent ▾
+  caret reveals a small ui-action-menu containing *Add to fleet*
+  for the rare case the operator already paired the device
+  elsewhere and just wants to import the config row.  Mirrors the
+  per-device Tools menu and the new Bulk actions dropdown so the
+  visual language is consistent.
+
+### Changed — Live RSSI badge promoted out of "experimental", on by default
+
+The badge has been stable since v2.63.0-rc.8 and the per-tick mgmt
+round-trip is gated by the existing ``bt_operation_lock`` so the
+overhead is negligible.  Promoted to a regular feature:
+
+- **Config key renamed** ``EXPERIMENTAL_RSSI_BADGE`` → ``RSSI_BADGE``
+  (default ``true``).  ``config_migration._normalize_loaded_config``
+  copies the legacy key into the new one on first load and drops the
+  old one — explicit ``false`` / ``true`` preferences round-trip
+  unchanged so an operator who had reasons to keep it off (CPU-
+  constrained host, mgmt-socket conflicts) keeps it off after upgrade.
+- **UI toggle moved** from the *Experimental features* card to the
+  *Connection recovery* card, hint copy reframed as a regular setting
+  (no warning iconography).  Form input renamed to ``RSSI_BADGE``;
+  ``static/app.js`` reader prefers the new key, falls back to the
+  legacy snake-cased key in stale snapshots, defaults to ``true``
+  when both are absent.
+- **Schema + HA-options-merge updated** so ``RSSI_BADGE`` lands under
+  the web-UI-only family that ``scripts/translate_ha_config`` round-
+  trips, preserving operator preference across HA addon restarts.
+
+### Added — *Power save all* and *Standby all* in the bulk dropdown
+
+Two new menu items in *Bulk actions ▾*:
+
+- **Power save all** — fans out a new ``POST /api/bt/power_save``
+  endpoint (``{"player_name", "enter": true}``) which suspends each
+  selected speaker's PulseAudio sink so the codec stops working on
+  silence.  BT link stays connected — this is much lighter than
+  Standby and matches what the per-device idle timer triggers
+  automatically when ``idle_mode='power_save'``.  Skips devices
+  already in power save.
+- **Standby all** — fans out the existing ``/api/bt/standby`` per
+  selected device that isn't already in standby.  Pairs with the
+  per-device Standby button on each card.
+
+Both gates on ``bt_management_enabled`` + not-disabled, same as
+*Reconnect all* / *Release all*.  Use per-device Wake / individual
+Reconnect to bring devices back; bulk-Wake intentionally not added
+to keep the dropdown focused.
+
+### Changed — Bulk device actions consolidated into a dropdown
+
+*Reconnect all* / *Release all* moved out of the action-bar's inline
+button row into a single ``Bulk actions ▾`` dropdown using the
+existing ``ui-action-menu`` (``<details>`` / ``<summary>``) pattern.
+Frees toolbar real estate, gives a clear home for future bulk
+operations, and matches the per-device "Tools" menu UX.  Mute All /
+Pause All stay inline — they're transport-style, naturally grouped
+with the volume slider.
+
+Outside-click and Esc close the dropdown via the existing
+``_closeActionMenus`` plumbing; ``aria-haspopup`` / ``aria-expanded``
+on the toggle for screen-reader parity.
+
+### Fixed — demo mode broken after AVRCP MPRIS hooks
+
+``DemoBluetoothManager`` rejected the new ``on_connected`` /
+``on_disconnected`` kwargs that the real ``BluetoothManager`` grew
+in 2.64.0-rc.1 for AVRCP MPRIS export, so ``DEMO_MODE=1`` startup
+crashed with ``TypeError: unexpected keyword argument 'on_connected'``.
+The demo accepts and ignores them now (it doesn't simulate
+transport-level dis/connect events); ``**_extra`` swallows future
+kwargs to avoid signature drift regressions.
+
+### Review follow-ups (Copilot on PR #207)
+
+- ``services/hci_avrcp_monitor._open_hci_monitor_socket`` now closes
+  the raw fd from ``libc.socket`` if anything between socket creation
+  and the ``socket.socket(fileno=fd)`` handoff fails (most commonly
+  ``bind`` returning EPERM).  The exponential backoff loop in
+  ``_monitor_loop`` would otherwise leak one fd per failed attempt.
+- ``routes/api_transport.transport_cmd`` rejects non-dict JSON bodies
+  with 400 — ``request.get_json(silent=True)`` returns ``None`` on
+  parse failure and accepts top-level lists/scalars, both of which
+  would crash on ``data.get(...)`` and surface as a 500.
+- Refreshed stale module / function docstrings that still referenced
+  the removed D-Bus heuristic path
+  (``_subscribe_avrcp_source_tracker``, the "single-streaming-client
+  fallback", the "never falls back to default_client directly" claim
+  on the transport/volume callbacks, etc.).  Behaviour unchanged;
+  documentation now matches the post-cleanup architecture.
+
 ## [2.64.0-rc.1] - 2026-04-27
 
 ### Fixed — AVRCP commands mis-routed between speakers on the same adapter
