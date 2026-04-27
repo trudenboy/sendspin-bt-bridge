@@ -459,6 +459,164 @@ async def test_volume_callback_dispatches_to_resolved_source_client():
 
 
 @pytest.mark.asyncio
+async def test_transport_callback_skips_wait_when_single_player_on_adapter():
+    """Single-speaker setup — the only MprisPlayer registered for this
+    adapter is the one BlueZ would dispatch to.  Source correlation is
+    unambiguous by construction; no need to wait for HCI.  Saves up to
+    1s of safety-cap latency in degraded modes and cuts steady-state
+    latency to sub-ms.
+    """
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_transport_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    eneby_client = SimpleNamespace(
+        player_name="ENEBY",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client),
+    )
+
+    # Spy on wait_for_next_activity so we can assert the fast path
+    # didn't go through it.
+    fresh_tracker.wait_for_next_activity = AsyncMock(return_value=True)
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    cb = _build_mpris_transport_callback(eneby_client)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("eneby-id", "play")
+
+    assert result is True
+    eneby_client.send_transport_command.assert_awaited_once_with("play")
+    # Fast path — no HCI wait, no tracker correlation needed.
+    fresh_tracker.wait_for_next_activity.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_skips_wait_for_one_speaker_per_adapter_multi_adapter():
+    """Two adapters, one speaker on each — each adapter is a single-speaker
+    setup independently.  BlueZ on hciN dispatches to the only MprisPlayer
+    on hciN; HCI correlation is unnecessary on either side.
+    """
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_transport_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    eneby = SimpleNamespace(
+        player_name="ENEBY",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh = SimpleNamespace(
+        player_name="WH",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci1"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh),
+    )
+    fresh_tracker.wait_for_next_activity = AsyncMock(return_value=True)
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        await _build_mpris_transport_callback(eneby)("eneby-id", "play")
+        await _build_mpris_transport_callback(wh)("wh-id", "pause")
+
+    eneby.send_transport_command.assert_awaited_once_with("play")
+    wh.send_transport_command.assert_awaited_once_with("pause")
+    fresh_tracker.wait_for_next_activity.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_uses_hci_wait_when_multi_speakers_same_adapter():
+    """Two speakers on the SAME adapter → BlueZ may forward either's
+    AVRCP to the other's MprisPlayer (the players[0] race).  The HCI
+    wait is required to correlate the actual source.
+    """
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_transport_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    eneby = SimpleNamespace(
+        player_name="ENEBY",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh = SimpleNamespace(
+        player_name="WH",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),  # same adapter as ENEBY
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh),
+    )
+    # Pre-populate tracker so the resolver returns immediately and the
+    # wait completes via the same path the fast path is meant to skip.
+    fresh_tracker.note_activity("80:99:E7:C2:0B:D3")
+    fresh_tracker.wait_for_next_activity = AsyncMock(return_value=True)
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    cb = _build_mpris_transport_callback(eneby)  # default_client = ENEBY
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        await cb("eneby-id", "pause")
+
+    # HCI wait was needed because both speakers share hci0.
+    fresh_tracker.wait_for_next_activity.assert_awaited_once()
+    # And the resolver picked WH over the captured default.
+    wh.send_transport_command.assert_awaited_once_with("pause")
+    eneby.send_transport_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_transport_callback_waits_for_hci_monitor_to_populate_tracker():
     """The HCI monitor records source MAC into the tracker ~5-10ms AFTER
     BlueZ's D-Bus AVRCP dispatch arrives at our process — observed empirically

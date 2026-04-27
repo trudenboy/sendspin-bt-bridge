@@ -51,6 +51,36 @@ logger = logging.getLogger(__name__)
 _INBOUND_AVRCP_HCI_WAIT_S = 1.0
 
 
+def _is_single_speaker_adapter(default_client: Any) -> bool:
+    """True iff *default_client* is the ONLY MprisPlayer-bound client on
+    its adapter.
+
+    BlueZ on adapter X dispatches every speaker's AVRCP to its single
+    addressed player on X.  When only one MprisPlayer is registered for
+    X, that's the unambiguous source — no need to wait for HCI source
+    correlation; dispatch directly via ``default_client``.
+
+    Tolerant of missing ``bt_manager`` / ``adapter_hci_name`` (returns
+    False so the caller takes the safe slow path) so test fixtures that
+    skip wiring the bt_manager get the existing source-correlation
+    behaviour.
+    """
+    my_adapter = getattr(getattr(default_client, "bt_manager", None), "adapter_hci_name", None)
+    if not my_adapter:
+        return False
+    same_adapter = 0
+    for player in get_registry().all_players():
+        client = getattr(player, "client", None)
+        if client is None:
+            continue
+        adapter = getattr(getattr(client, "bt_manager", None), "adapter_hci_name", None)
+        if adapter == my_adapter:
+            same_adapter += 1
+            if same_adapter > 1:
+                return False
+    return same_adapter == 1
+
+
 # BlueZ AVRCP forwarding architecture (v2.63.0-rc.6+):
 #
 # When a BR/EDR speaker presses Play/Pause, BlueZ on the bridge side
@@ -112,8 +142,11 @@ def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str],
     """
 
     async def _cb(_player_id: str, command: str) -> bool:
-        await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
-        client = resolve_avrcp_source_client(default_client=default_client)
+        if _is_single_speaker_adapter(default_client):
+            client: Any = default_client
+        else:
+            await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
+            client = resolve_avrcp_source_client(default_client=default_client)
         if client is None:
             logger.info(
                 "MPRIS transport %s: no source client identifiable, dropping (default=%r)",
@@ -159,8 +192,11 @@ def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], An
     """
 
     async def _cb(_player_id: str, volume_pct: int) -> bool:
-        await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
-        client = resolve_avrcp_source_client(default_client=default_client)
+        if _is_single_speaker_adapter(default_client):
+            client: Any = default_client
+        else:
+            await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
+            client = resolve_avrcp_source_client(default_client=default_client)
         if client is None:
             logger.info(
                 "MPRIS volume->%d: no source client identifiable, dropping (default=%r)",
