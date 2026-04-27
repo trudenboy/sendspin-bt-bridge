@@ -13,6 +13,7 @@ decorator strips return values on direct calls — same pattern as
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -383,6 +384,212 @@ def test_registry_active_macs_lists_currently_registered():
     reg.register(p2.mac, p2)
 
     assert sorted(reg.active_macs()) == ["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]
+
+
+# ── resolve_avrcp_source_client — inbound dispatch correlation ─────────
+
+
+def test_resolver_returns_client_for_recently_active_mac():
+    """Happy path: tracker has a recent MAC → registry has that player →
+    that player has a client → resolver returns it.
+
+    This is the case that fixes the VM 105 mis-route: speaker WH presses
+    Next, BlueZ forwards anonymously to whichever MprisPlayer it picked
+    as addressed (could be ENEBY's), the player's transport_callback
+    consults the resolver, the resolver sees WH's MAC was the most
+    recent MediaPlayer1.PropertiesChanged source, and returns WH's client.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    wh_client = object()  # opaque sentinel — resolver doesn't introspect it
+    eneby_client = object()
+    wh = MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh_client)
+    eneby = MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client)
+    registry = MprisRegistry()
+    registry.register(wh.mac, wh)
+    registry.register(eneby.mac, eneby)
+
+    tracker = AvrcpSourceTracker()
+    tracker.note_activity("80:99:E7:C2:0B:D3", now=100.0)
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=eneby_client, now=100.5)
+
+    assert resolved is wh_client
+
+
+def test_resolver_falls_back_to_default_client_when_no_recent_source():
+    """No MediaPlayer1 activity → resolver uses default_client.
+
+    Routing to the currently-streaming device (old Strategy 2) caused
+    mis-routing when a PAUSED device's button was pressed while another
+    device was streaming.  Default_client (first-registered, same as
+    BlueZ's AVRCP dispatch target) is the correct fallback.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    default_client = SimpleNamespace(status={"audio_streaming": False})
+    other_client = SimpleNamespace(status={"audio_streaming": True})
+    p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=default_client)
+    p2 = MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=other_client)
+    registry = MprisRegistry()
+    registry.register(p1.mac, p1)
+    registry.register(p2.mac, p2)
+
+    tracker = AvrcpSourceTracker()  # no activity recorded
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=default_client, now=100.0)
+
+    assert resolved is default_client
+
+
+def test_resolver_returns_none_when_no_recent_and_multiple_streaming():
+    """Two streaming clients + no source identifiable → drop the command.
+
+    Mis-routing is the bug we're fixing.  Better to drop than route to
+    the wrong device (the operator will press the button again or see
+    no effect — clearer signal than the wrong speaker doing the wrong
+    thing)."""
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    c1 = SimpleNamespace(status={"audio_streaming": True})
+    c2 = SimpleNamespace(status={"audio_streaming": True})
+    p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=c1)
+    p2 = MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=c2)
+    registry = MprisRegistry()
+    registry.register(p1.mac, p1)
+    registry.register(p2.mac, p2)
+
+    tracker = AvrcpSourceTracker()  # nothing recent
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=None, now=100.0)
+
+    assert resolved is None
+
+
+def test_resolver_returns_none_when_no_streaming_and_no_recent_source():
+    """No activity AND no streaming clients → nothing to do.  Drop."""
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    quiet = SimpleNamespace(status={"audio_streaming": False})
+    p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=quiet)
+    registry = MprisRegistry()
+    registry.register(p1.mac, p1)
+
+    tracker = AvrcpSourceTracker()
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=None, now=100.0)
+
+    assert resolved is None
+
+
+def test_resolver_falls_back_to_default_client_when_paused_and_no_tracker():
+    """Regression: dumb BT speaker (e.g. ENEBY) has no AVRCP TG → no
+    MediaPlayer1 child → AvrcpSourceTracker never records it.  When the
+    user presses Play after Pause, audio_streaming=False so Strategy 2
+    (streaming fallback) also misses.
+
+    Strategy 3 must use default_client so the Play command reaches the
+    device instead of being silently dropped — the pre-fix behaviour was
+    to route to default_client unconditionally, and we must not regress it.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    eneby_client = SimpleNamespace(status={"audio_streaming": False})  # paused
+    p = MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client)
+    registry = MprisRegistry()
+    registry.register(p.mac, p)
+
+    tracker = AvrcpSourceTracker()  # no activity — dumb speaker has no MediaPlayer1
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=eneby_client, now=100.0)
+
+    assert resolved is eneby_client
+
+
+def test_resolver_skips_recent_mac_with_no_registered_player():
+    """Stale tracker entry for a MAC that's been disconnected (registry
+    entry already gone, but disconnect hook didn't clear() yet) — the
+    resolver must fall through to default_client rather than return None
+    on the tracker miss.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    active = SimpleNamespace(status={"audio_streaming": True})
+    p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=active)
+    registry = MprisRegistry()
+    registry.register(p1.mac, p1)
+
+    tracker = AvrcpSourceTracker()
+    tracker.note_activity("AA:BB:CC:DD:EE:99", now=100.0)  # not in registry
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=active, now=100.5)
+
+    # Falls through orphan tracker entry → default_client.
+    assert resolved is active
+
+
+def test_resolver_skips_recent_mac_with_player_but_no_client():
+    """A registered player whose client field is None (not yet set, or
+    cleared during teardown) — must not return None just because the
+    correlation hit landed on it; fall through to default_client."""
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    orphan = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=None)
+    other_client = SimpleNamespace(status={"audio_streaming": True})
+    p2 = MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=other_client)
+    registry = MprisRegistry()
+    registry.register(orphan.mac, orphan)
+    registry.register(p2.mac, p2)
+
+    tracker = AvrcpSourceTracker()
+    tracker.note_activity("AA:BB:CC:DD:EE:01", now=100.0)  # hits orphan
+
+    # default_client is p2's client — the first-registered non-orphan device
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=other_client, now=100.5)
+
+    assert resolved is other_client
+
+
+def test_resolver_uses_module_singletons_when_called_without_args():
+    """The transport_callback closure in production calls
+    ``resolve_avrcp_source_client()`` with no args — it should fall back
+    to the process-wide registry + tracker singletons.
+
+    This wires the production codepath to the singletons populated by
+    ``device_activation`` (registry on connect, tracker via
+    MediaPlayer1 subscription).
+    """
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+    from services.mpris_player import MprisPlayer, resolve_avrcp_source_client
+
+    # Patch BOTH module-level singletons so the call uses our test
+    # instances instead of the real process-wide ones (which other tests
+    # may have polluted).
+    fresh_registry = player_mod.MprisRegistry()
+    fresh_tracker = tracker_mod.AvrcpSourceTracker()
+
+    streaming = SimpleNamespace(status={"audio_streaming": True})
+    p = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=streaming)
+    fresh_registry.register(p.mac, p)
+    fresh_tracker.note_activity("AA:BB:CC:DD:EE:01", now=100.0)
+
+    import unittest.mock as _mock
+
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        resolved = resolve_avrcp_source_client(now=100.5)
+
+    assert resolved is streaming
 
 
 def test_registry_concurrent_register_and_iterate_does_not_raise():

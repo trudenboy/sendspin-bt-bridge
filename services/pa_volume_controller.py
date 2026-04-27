@@ -54,7 +54,20 @@ class PulseVolumeController:
         self._volume = 100
         self._muted = False
         self._callback: VolumeChangeCallback | None = None
+        # Parallel observer for the *bridge* — sendspin lib owns ``_callback``
+        # and uses it to forward to MA; the tap lets the bridge daemon
+        # mirror sink-side volume changes into its own status dict so the
+        # web UI slider tracks the speaker's physical volume knob.
+        self._external_change_tap: VolumeChangeCallback | None = None
         self._monitor_task: asyncio.Task | None = None
+
+    def set_external_change_tap(self, tap: VolumeChangeCallback | None) -> None:
+        """Install (or clear) a parallel observer for external sink state.
+
+        Fires from the same place as ``_callback`` but isolated from it:
+        an exception in either path must not block the other.
+        """
+        self._external_change_tap = tap
 
     async def set_state(self, volume: int, *, muted: bool) -> None:
         """Apply volume and mute state to the PA sink."""
@@ -191,9 +204,6 @@ class PulseVolumeController:
             return  # echo from our own set_state — suppress
         prev_vol, prev_muted = self._volume, self._muted
         self._volume, self._muted = new_vol, new_muted
-        callback = self._callback
-        if callback is None:
-            return
         logger.info(
             "PA volume monitor: external change on %s → vol=%d%% muted=%s (was vol=%d%% muted=%s)",
             self._sink_name,
@@ -202,6 +212,17 @@ class PulseVolumeController:
             prev_vol,
             prev_muted,
         )
+        # Tap fires first and is isolated from callback failures so a bad
+        # downstream on either path doesn't block the other.
+        tap = self._external_change_tap
+        if tap is not None:
+            try:
+                tap(new_vol, new_muted)
+            except Exception as exc:
+                logger.warning("external_change_tap raised: %s", exc)
+        callback = self._callback
+        if callback is None:
+            return
         try:
             callback(new_vol, new_muted)
         except Exception as exc:

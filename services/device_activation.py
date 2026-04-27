@@ -18,12 +18,67 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from services.mpris_player import MprisPlayer, _build_player_iface, get_registry
+from services.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
+from services.mpris_player import (
+    MprisPlayer,
+    _build_player_iface,
+    get_registry,
+    resolve_avrcp_source_client,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
+
+
+# BlueZ delivers the inbound AVRCP D-Bus dispatch to our process before
+# the kernel's HCI_CHANNEL_MONITOR copy reaches us — observed empirically
+# at ~2-10ms on VM 105 in steady state, with the first post-restart event
+# at ~115ms (cold ``asyncio.to_thread`` worker thread spin-up).  Without
+# synchronisation the resolver runs against an empty AvrcpSourceTracker
+# and falls back to ``default_client``, mis-routing the press.
+#
+# We synchronise via ``AvrcpSourceTracker.wait_for_next_activity`` —
+# the resolver awaits the *next* note_activity (from HCI monitor or
+# D-Bus PropertiesChanged) and resolves immediately on its arrival,
+# instead of guessing a fixed sleep.  Common-case latency drops to
+# ~5ms; cold-start no longer mis-routes.
+#
+# This timeout is the *safety cap* for degraded modes — HCI monitor
+# unavailable (no CAP_NET_RAW) AND speaker has no MediaPlayer1 either.
+# In normal operation users never see it.
+_INBOUND_AVRCP_HCI_WAIT_S = 1.0
+
+
+def _is_single_speaker_adapter(default_client: Any) -> bool:
+    """True iff *default_client* is the ONLY MprisPlayer-bound client on
+    its adapter.
+
+    BlueZ on adapter X dispatches every speaker's AVRCP to its single
+    addressed player on X.  When only one MprisPlayer is registered for
+    X, that's the unambiguous source — no need to wait for HCI source
+    correlation; dispatch directly via ``default_client``.
+
+    Tolerant of missing ``bt_manager`` / ``adapter_hci_name`` (returns
+    False so the caller takes the safe slow path) so test fixtures that
+    skip wiring the bt_manager get the existing source-correlation
+    behaviour.
+    """
+    my_adapter = getattr(getattr(default_client, "bt_manager", None), "adapter_hci_name", None)
+    if not my_adapter:
+        return False
+    same_adapter = 0
+    for player in get_registry().all_players():
+        client = getattr(player, "client", None)
+        if client is None:
+            continue
+        adapter = getattr(getattr(client, "bt_manager", None), "adapter_hci_name", None)
+        if adapter == my_adapter:
+            same_adapter += 1
+            if same_adapter > 1:
+                return False
+    return same_adapter == 1
 
 
 # BlueZ AVRCP forwarding architecture (v2.63.0-rc.6+):
@@ -68,51 +123,125 @@ def _bluez_adapter_path(bt_manager: Any) -> str | None:
     return f"/org/bluez/{hci}"
 
 
-def _build_mpris_transport_callback(client: Any) -> Callable[[str, str], Any]:
+def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str], Any]:
     """AVRCP method → SendspinClient transport command.
 
     Speaker buttons (Play/Pause/Stop/Next/Previous) reach the bridge via
-    BlueZ MPRIS forwarding.  Forward them to the daemon subprocess using
-    the same path the UI Transport buttons take — bypasses MA REST so
-    button-press latency is dominated by the IPC round-trip, not WAN.
+    BlueZ MPRIS forwarding.  BlueZ picks ONE registered MPRIS player as
+    the addressed player on the adapter and forwards every speaker's
+    AVRCP commands to that one player — the source CT identity is stripped
+    by the BlueZ AVRCP TG layer.  See ``services/avrcp_source_tracker``.
+
+    To recover the source we await ``tracker.wait_for_next_activity``
+    (fed by ``services/hci_avrcp_monitor`` from raw HCI traffic) and
+    then call ``resolve_avrcp_source_client`` to look up the source
+    MAC's MprisPlayer in the registry.  When the tracker has nothing
+    recent (HCI-degraded mode, packet lost), the resolver returns
+    ``default_client`` as a best-guess fallback — for single-speaker-
+    per-adapter setups this is by construction correct, and that case
+    short-circuits the wait+resolve via ``_is_single_speaker_adapter``
+    for sub-millisecond latency.
     """
 
     async def _cb(_player_id: str, command: str) -> bool:
+        if _is_single_speaker_adapter(default_client):
+            client: Any = default_client
+        else:
+            await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
+            client = resolve_avrcp_source_client(default_client=default_client)
+        if client is None:
+            logger.info(
+                "MPRIS transport %s: no source client identifiable, dropping (default=%r)",
+                command,
+                getattr(default_client, "player_name", "?"),
+            )
+            return False
+        routed = getattr(client, "player_name", "?")
+        default = getattr(default_client, "player_name", "?")
+        if routed == default:
+            logger.info("MPRIS transport %s → %s", command, routed)
+        else:
+            logger.info(
+                "MPRIS transport %s → %s (BlueZ default=%s, corrected via HCI source)",
+                command,
+                routed,
+                default,
+            )
         try:
             ok = await client.send_transport_command(command)
         except Exception as exc:
-            logger.warning("MPRIS transport %s for %s failed: %s", command, getattr(client, "player_name", "?"), exc)
+            logger.warning(
+                "MPRIS transport %s for %s failed: %s",
+                command,
+                routed,
+                exc,
+            )
             return False
         return bool(ok)
 
     return _cb
 
 
-def _build_mpris_volume_callback(client: Any) -> Callable[[str, int], Any]:
+def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], Any]:
     """AVRCP absolute volume → bridge volume.
 
-    Inbound MPRIS Volume writes (BlueZ forwards the speaker's volume knob)
-    are normalised to 0..100 by ``MprisPlayer._on_volume_set`` before this
-    callback runs.  We push the new volume to the same subprocess command
-    that ``POST /api/volume`` uses, so the speaker, MA, and bridge UI stay
-    in agreement.
+    Note: speaker physical volume knob → AVRCP Set Absolute Volume PDU
+    is NOT a passthrough op_id, and BlueZ does NOT forward it to our
+    exported MPRIS Volume property — that path is covered by
+    ``PulseVolumeController.set_external_change_tap`` in the daemon.
+    This callback only fires for explicit MPRIS Volume property writes
+    from BlueZ (rare in practice — most speakers route through the
+    AVRCP Set Absolute Volume PDU).
+
+    Same source-correlation logic as the transport path applies when
+    it does fire: HCI tracker via wait_for_next_activity, resolver
+    falls back to ``default_client`` for HCI-degraded mode, single-
+    speaker-per-adapter short-circuits to ``default_client`` directly.
     """
 
     async def _cb(_player_id: str, volume_pct: int) -> bool:
+        if _is_single_speaker_adapter(default_client):
+            client: Any = default_client
+        else:
+            await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
+            client = resolve_avrcp_source_client(default_client=default_client)
+        if client is None:
+            logger.info(
+                "MPRIS volume->%d: no source client identifiable, dropping (default=%r)",
+                volume_pct,
+                getattr(default_client, "player_name", "?"),
+            )
+            return False
+        routed = getattr(client, "player_name", "?")
+        default = getattr(default_client, "player_name", "?")
+        if routed == default:
+            logger.info("MPRIS volume %d%% → %s", volume_pct, routed)
+        else:
+            logger.info(
+                "MPRIS volume %d%% → %s (BlueZ default=%s, corrected via HCI source)",
+                volume_pct,
+                routed,
+                default,
+            )
         try:
             await client._send_subprocess_command({"cmd": "set_volume", "value": int(volume_pct)})
         except Exception as exc:
             logger.warning(
                 "MPRIS volume->%d for %s failed: %s",
                 volume_pct,
-                getattr(client, "player_name", "?"),
+                routed,
                 exc,
             )
             return False
         try:
             client._update_status({"volume": int(volume_pct)})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "MPRIS volume->%d for %s: _update_status raised: %s",
+                volume_pct,
+                routed,
+                exc,
+            )
         return True
 
     return _cb
@@ -144,6 +273,7 @@ def _make_mpris_connected_hook(
             player_id=str(client.player_id),
             transport_callback=_build_mpris_transport_callback(client),
             volume_callback=_build_mpris_volume_callback(client),
+            client=client,
         )
         registry.register(mac, player)
 
@@ -234,6 +364,7 @@ def _make_mpris_connected_hook(
                         mac,
                         exc,
                     )
+
             except Exception as exc:
                 logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
 
@@ -255,6 +386,11 @@ def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
 
     def _hook() -> None:
         from services.bridge_runtime_state import get_main_loop
+
+        # Forget any tracker activity for this MAC so a stale recent-
+        # activity record doesn't mis-route a subsequent button press
+        # from another speaker after this device is gone.
+        _get_avrcp_source_tracker().clear(mac)
 
         registry = get_registry()
         player = registry.unregister(mac)

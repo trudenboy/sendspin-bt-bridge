@@ -4597,7 +4597,19 @@ async function maQueueCmd(action, value, devIdx) {
     }
     if (transportState.hasNativeTransport && transportState.nativeCommands.indexOf(nativeAction) !== -1) {
         try {
-            var nativeBody = {action: nativeAction, device_index: devIdx};
+            // Resolve by player_id (unique, MAC-derived) instead of
+            // device_index — index can mis-route to the wrong device
+            // when the backend's active_clients order diverges from
+            // the frontend's lastDevices order (e.g. after disable /
+            // online-add / restart).  Reproduced on VM 105 with WH +
+            // ENEBY: index 0 from the frontend (WH's card) was
+            // dispatched to ENEBY's daemon by the backend.
+            var nativeBody = {action: nativeAction};
+            if (dev && dev.player_id) {
+                nativeBody.player_id = dev.player_id;
+            } else {
+                nativeBody.device_index = devIdx;  // fallback for stale clients
+            }
             if (value !== undefined) nativeBody.value = value;
             var resp = await fetch(API_BASE + '/api/transport/cmd', {
                 method: 'POST',

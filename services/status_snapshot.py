@@ -34,6 +34,12 @@ class DeviceSnapshot:
     build_date: str = BUILD_DATE
     bluetooth_mac: str | None = None
     player_name: str | None = None
+    # Cross-cutting unique device identifier — UUID5 derived from MAC
+    # via ``_player_id_from_mac``.  Surfaced at top level so frontends
+    # can use it as a stable lookup key (vs the brittle ``device_index``
+    # which mis-routed transport commands when ``active_clients`` order
+    # diverged from rendered order — VM 105 issue).
+    player_id: str | None = None
     listen_port: int | None = None
     server_host: str | None = None
     server_port: int | None = None
@@ -503,6 +509,7 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
         build_date=BUILD_DATE,
         bluetooth_mac=_snap_mac,
         player_name=_snap_player_name,
+        player_id=_snap_player_id or None,
         listen_port=_snap_listen_port,
         server_host=_snap_server_host,
         server_port=_snap_server_port,

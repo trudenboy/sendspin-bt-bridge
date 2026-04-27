@@ -679,6 +679,25 @@ async def _run(params: dict) -> None:
     )
     daemon_ref.append(daemon)
 
+    # Mirror external sink-state changes (speaker physical volume knob →
+    # BlueZ-PA module → PA sink) into bridge status so the web UI slider
+    # tracks the speaker.  Sendspin lib owns ``_callback`` and forwards
+    # to MA; the tap is parallel and isolated from sendspin's path.
+    if pa_volume_controller is not None:
+
+        def _mirror_external_volume_to_bridge(vol: int, muted: bool) -> None:
+            updates: dict = {}
+            if status.get("volume") != vol:
+                status["volume"] = max(0, min(100, int(vol)))
+                updates["volume"] = status["volume"]
+            if status.get("muted") != muted:
+                status["muted"] = bool(muted)
+                updates["muted"] = status["muted"]
+            if updates:
+                _on_status_change()
+
+        pa_volume_controller.set_external_change_tap(_mirror_external_volume_to_bridge)
+
     # Mute the PA sink before audio starts to hide re-anchor clicks and routing glitches.
     # The _startup_unmute_watcher will unmute after audio_streaming becomes True + stabilization delay.
     _startup_muted = False

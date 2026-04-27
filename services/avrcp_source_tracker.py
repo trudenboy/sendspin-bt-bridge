@@ -1,0 +1,192 @@
+"""Per-MAC last-activity tracker for inbound AVRCP source correlation.
+
+BlueZ's AVRCP TG → MPRIS forwarding strips source-CT identity: when a
+speaker presses Play/Pause/Next, BlueZ dispatches the method call to
+whichever MPRIS player it picked as the addressed player on the adapter
+(``profiles/audio/avrcp.c:target_init`` always picks
+``server->players[0]``).  The forwarded D-Bus message carries no field
+identifying which connected speaker actually pressed the button.
+
+We sidestep this by tapping the kernel HCI traffic at
+``HCI_CHANNEL_MONITOR`` (see ``services/hci_avrcp_monitor``): every
+AVRCP passthrough op_id is parsed, mapped back to its source ACL
+connection handle → MAC, and fed in via ``note_activity()``.  The
+inbound MPRIS dispatch then awaits ``wait_for_next_activity()`` so
+the resolver runs against a freshly-correlated MAC, not a stale one.
+
+The legacy heuristic — subscribing to
+``org.bluez.MediaPlayer1.PropertiesChanged`` and recording activity on
+Status changes — was removed once HCI proved reliable.  HCI sees every
+passthrough op_id (including Next/Previous, which the D-Bus path
+missed because they don't change Status) and works for "dumb"
+speakers without an AVRCP TG / MediaPlayer1 child.
+
+Trade-offs:
+
+* When two speakers' button presses arrive within the same correlation
+  window, the most-recent wins — adequate for hands-on use, may
+  mis-route under simultaneous button-mashing.
+* HCI-degraded mode (no ``CAP_NET_RAW`` / kernel monitor unavailable):
+  ``note_activity()`` is never called, ``get_recent_active()`` always
+  returns ``None``, and the resolver falls back to ``default_client``.
+  Single-speaker-per-adapter setups still route correctly via the
+  fast path; multi-speaker setups lose source correlation.
+
+This module is pure state — the HCI socket and packet parsing live in
+``services/hci_avrcp_monitor`` so the tracker stays exercisable from
+tests without binding raw sockets.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import time
+
+# Default correlation window in seconds.  Empirically sufficient for the
+# speaker firmware tested on VM 105 (ENEBY 20, WH-1000XM4); same value
+# scyto's ha-bluetooth-audio-manager uses for the same workaround.
+DEFAULT_CORRELATION_WINDOW_S = 2.0
+
+
+def _safe_set_result(fut: asyncio.Future[None]) -> None:
+    """Resolve *fut* with ``None`` if not already done.
+
+    Module-level so it survives ``call_soon_threadsafe`` scheduling
+    across event loops without leaking a closure to the loop.
+    """
+    if not fut.done():
+        fut.set_result(None)
+
+
+class AvrcpSourceTracker:
+    """Per-MAC monotonic-timestamp store with thread-safe access.
+
+    Lifecycle: ``note_activity`` runs from BT-manager subscription
+    threads (one per connected device), ``get_recent_active`` runs from
+    the asyncio loop (inbound MPRIS dispatch), and ``clear`` runs from
+    the disconnect hook.  All three contend for the same internal dict;
+    ``_lock`` serialises them.
+    """
+
+    def __init__(self) -> None:
+        self._last: dict[str, float] = {}  # uppercased MAC → monotonic ts
+        self._lock = threading.Lock()
+        # Pending waiters for the *next* note_activity call.  Each
+        # ``wait_for_next_activity`` adds one Future; ``note_activity``
+        # resolves all current waiters atomically.  ``loop`` is captured
+        # per-future so cross-thread signalling (D-Bus delivery thread →
+        # asyncio loop) routes through ``call_soon_threadsafe``.
+        self._waiters: list[tuple[asyncio.AbstractEventLoop, asyncio.Future[None]]] = []
+
+    def note_activity(self, mac: str, *, now: float | None = None) -> None:
+        """Record that *mac* just emitted MediaPlayer1.PropertiesChanged.
+
+        Empty MAC is silently ignored — a defensive guard against bad
+        callers passing through ``getattr(x, 'mac', '')`` results that
+        shouldn't pollute the lookup table with a meaningless key.
+        """
+        if not mac:
+            return
+        ts = now if now is not None else time.monotonic()
+        key = mac.upper()
+        with self._lock:
+            self._last[key] = ts
+            waiters = self._waiters
+            self._waiters = []
+        # Resolve waiters outside the lock to avoid holding it during
+        # cross-thread scheduling.  Each waiter's loop may differ
+        # (theoretically — in practice it's always the bridge's main
+        # loop) so we route through call_soon_threadsafe.
+        for loop, fut in waiters:
+            try:
+                loop.call_soon_threadsafe(_safe_set_result, fut)
+            except RuntimeError:
+                # Loop closed before signal landed — drop silently;
+                # the awaiter is already gone or about to time out.
+                pass
+
+    def get_recent_active(
+        self,
+        *,
+        window_s: float = DEFAULT_CORRELATION_WINDOW_S,
+        now: float | None = None,
+    ) -> str | None:
+        """Return the MAC whose last activity is within *window_s* seconds.
+
+        When multiple MACs are within the window, the most-recent wins —
+        matches the user-intent assumption that the freshest speaker
+        Status update came from the speaker the user just touched.
+        """
+        ts_now = now if now is not None else time.monotonic()
+        cutoff = ts_now - window_s
+        with self._lock:
+            recent = [(mac, ts) for mac, ts in self._last.items() if ts >= cutoff]
+        if not recent:
+            return None
+        recent.sort(key=lambda kv: kv[1], reverse=True)
+        return recent[0][0]
+
+    async def wait_for_next_activity(self, *, timeout: float) -> bool:
+        """Block until the next ``note_activity`` call, or timeout.
+
+        Used by the inbound MPRIS dispatch resolver to synchronise on a
+        fresh source-MAC signal from either the kernel HCI monitor or
+        the BlueZ MediaPlayer1.PropertiesChanged subscription, so the
+        resolver doesn't race against an empty / stale tracker.
+
+        Returns ``True`` if a note_activity call landed during the wait,
+        ``False`` if the timeout elapsed first.  The timeout is a safety
+        cap for degraded modes (HCI monitor unavailable, no D-Bus
+        subscription) — common-case latency is well under it.
+
+        Stale entries already in the tracker do NOT cause an immediate
+        return; only a *new* signal does.  This is exactly the
+        correlation we want: the waiter is timing-aligned with the
+        current dispatch, not whatever happened to be cached.
+        """
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[None] = loop.create_future()
+        with self._lock:
+            self._waiters.append((loop, fut))
+        try:
+            await asyncio.wait_for(fut, timeout=timeout)
+            return True
+        except TimeoutError:
+            return False
+        finally:
+            with self._lock:
+                # Remove our waiter on either path — we won't be reused.
+                try:
+                    self._waiters.remove((loop, fut))
+                except ValueError:
+                    pass
+
+    def clear(self, mac: str) -> None:
+        """Forget any activity for *mac*.
+
+        Called from the disconnect hook so a stale recent-activity record
+        for a now-gone device doesn't mis-route a subsequent button press
+        from another speaker.  Tolerant of unknown MACs (disconnect hook
+        may fire twice).
+        """
+        if not mac:
+            return
+        key = mac.upper()
+        with self._lock:
+            self._last.pop(key, None)
+
+
+_TRACKER = AvrcpSourceTracker()
+
+
+def get_tracker() -> AvrcpSourceTracker:
+    """Return the process-wide AvrcpSourceTracker singleton.
+
+    Shared across:
+      - ``services/device_activation.py`` (writes from PropertiesChanged
+        subscriptions, clears on disconnect)
+      - the inbound MPRIS dispatch resolver (reads to correlate the
+        anonymous BlueZ-forwarded method call to a source MAC)
+    """
+    return _TRACKER

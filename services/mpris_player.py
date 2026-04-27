@@ -71,9 +71,16 @@ class MprisPlayer:
         player_id: str,
         transport_callback: TransportCallback,
         volume_callback: VolumeCallback,
+        client: Any = None,
     ) -> None:
         self.mac = mac
         self.player_id = player_id
+        # Optional reference to the SendspinClient this player represents.
+        # The inbound dispatch resolver reads this from the registry to
+        # find the right client when AVRCP source correlation succeeds.
+        # Kept untyped (Any) to avoid a hard import cycle with
+        # ``sendspin_client.py``.
+        self.client: Any = client
         self._state = PlaybackState()
         self._transport_cb = transport_callback
         self._volume_cb = volume_callback
@@ -159,6 +166,7 @@ class MprisPlayer:
     async def _on_volume_set(self, mpris_double: float) -> None:
         """MPRIS Volume property setter.  ``mpris_double`` is 0.0..1.0."""
         clamped_pct = max(0, min(100, int(round(mpris_double * 100))))
+        logger.info("MprisPlayer[%s]: AVRCP Volume=%d%%", self.mac, clamped_pct)
         if self._volume_echo_pending == clamped_pct:
             # Echo from our own outbound set_volume — suppress and clear guard.
             self._volume_echo_pending = None
@@ -389,6 +397,16 @@ class MprisRegistry:
                 return player
         return None
 
+    def all_players(self) -> list[MprisPlayer]:
+        """Return a snapshot list of all currently-registered players.
+
+        Used by ``device_activation._is_single_speaker_adapter`` to count
+        how many MprisPlayers share an adapter (fast-path eligibility),
+        and by tests inspecting registry state.
+        """
+        with self._lock:
+            return list(self._by_mac.values())
+
     def active_macs(self) -> list[str]:
         """Return the canonical MACs currently holding an MprisPlayer.
 
@@ -414,6 +432,74 @@ def get_registry() -> MprisRegistry:
       - routes/api_bt.py (Claim Audio endpoint looks up players by MAC)
     """
     return _REGISTRY
+
+
+def resolve_avrcp_source_client(
+    *,
+    registry: MprisRegistry | None = None,
+    tracker: Any = None,
+    default_client: Any = None,
+    window_s: float | None = None,
+    now: float | None = None,
+) -> Any:
+    """Determine which SendspinClient should receive an inbound AVRCP command.
+
+    BlueZ's AVRCP TG → MPRIS forwarder strips source-CT identity (see
+    ``services/avrcp_source_tracker``).  This resolver applies two
+    correlation strategies, in order:
+
+    1. **Recent HCI-recorded activity** — the AvrcpSourceTracker is fed
+       by ``services/hci_avrcp_monitor`` on every AVRCP passthrough
+       op_id seen on ``HCI_CHANNEL_MONITOR``.  When the tracker reports
+       a recent MAC and that MAC has a registered MprisPlayer with a
+       non-None client, that's the source.
+    2. **default_client fallback** — when the tracker has nothing
+       recent (HCI-degraded mode, packet lost, or the inbound MPRIS
+       call has no corresponding HCI passthrough — unusual but
+       possible), return the ``default_client`` captured at the
+       MprisPlayer's registration.  This is the device whose buttons
+       BlueZ naturally routes here, so it's the best available guess.
+
+    Returns ``None`` only when both the tracker miss AND
+    ``default_client`` is ``None`` (e.g., the MprisPlayer was built
+    without a client binding) — the caller drops the command in that
+    case to avoid a wild guess.
+
+    The ``registry``/``tracker``/``window_s`` arguments default to the
+    process-wide singletons — production callers pass nothing; tests
+    inject fakes.
+    """
+    from services.avrcp_source_tracker import (
+        DEFAULT_CORRELATION_WINDOW_S,
+    )
+    from services.avrcp_source_tracker import (
+        get_tracker as _get_tracker,
+    )
+
+    if registry is None:
+        registry = get_registry()
+    if tracker is None:
+        tracker = _get_tracker()
+    if window_s is None:
+        window_s = DEFAULT_CORRELATION_WINDOW_S
+
+    recent_mac = tracker.get_recent_active(window_s=window_s, now=now)
+    if recent_mac:
+        player = registry.get(recent_mac)
+        if player is not None and player.client is not None:
+            return player.client
+        # Fall through — orphan tracker entry or player without a client.
+
+    # Strategy 2: default_client captured at registration time — the
+    # device whose MprisPlayer BlueZ is currently dispatching to.  For
+    # single-speaker-per-adapter setups this is by construction the
+    # correct source (see ``device_activation._is_single_speaker_adapter``
+    # which short-circuits this whole resolver).  For multi-speaker
+    # adapters in HCI-degraded mode it's a best-guess fallback.
+    if default_client is not None:
+        return default_client
+
+    return None
 
 
 def _metadata_to_variant_dict(metadata: dict[str, Any], Variant: Any) -> dict[str, Any]:
