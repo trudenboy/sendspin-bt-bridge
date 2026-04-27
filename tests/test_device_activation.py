@@ -666,6 +666,84 @@ async def test_subscribe_avrcp_source_tracker_returns_none_when_no_player_node()
     assert teardown is None
 
 
+@pytest.mark.asyncio
+async def test_subscribe_avrcp_source_tracker_propagates_volume_to_client_status():
+    """Speaker physical volume knob → AVRCP Set Absolute Volume → BlueZ
+    MediaPlayer1.Volume property change.  This is NOT a passthrough
+    command (so HCI monitor doesn't see op_id) and NOT a write to our
+    own MPRIS Volume property (so MprisPlayer._on_volume_set isn't
+    called by BlueZ).  BlueZ's MediaPlayer1.PropertiesChanged is the
+    only signal that reflects the speaker-side volume knob.
+
+    The subscription must convert the BlueZ 0..127 scale to 0..100 and
+    push the value into the client's status so the bridge UI slider
+    tracks the speaker.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _subscribe_avrcp_source_tracker
+
+    captured_handlers: list = []
+    props_iface = MagicMock()
+    props_iface.on_properties_changed = lambda fn: captured_handlers.append(fn)
+    proxy = MagicMock()
+    proxy.get_interface = MagicMock(return_value=props_iface)
+    bus = MagicMock()
+    bus.introspect = AsyncMock(return_value=MagicMock(tostring=lambda: "<node><node name='player1'/></node>"))
+    bus.get_proxy_object = MagicMock(return_value=proxy)
+
+    client = MagicMock()
+    client._update_status = MagicMock()
+
+    fresh_tracker = AvrcpSourceTracker()
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+
+    with _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker):
+        await _subscribe_avrcp_source_tracker(
+            bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=1, delay=0.0, client=client
+        )
+
+        # BlueZ uses 0..127 (AVRCP absolute volume scale) on MediaPlayer1.Volume.
+        # 95/127 ≈ 74.8 → round → 75 percent.
+        captured_handlers[0]("org.bluez.MediaPlayer1", {"Volume": 95}, [])
+
+    client._update_status.assert_called_once_with({"volume": 75})
+
+
+@pytest.mark.asyncio
+async def test_subscribe_avrcp_source_tracker_volume_handles_extremes():
+    """0 → 0%, 127 → 100% — boundaries must round cleanly so the slider
+    snaps to mute and full instead of off-by-one."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.device_activation import _subscribe_avrcp_source_tracker
+
+    captured_handlers: list = []
+    props_iface = MagicMock()
+    props_iface.on_properties_changed = lambda fn: captured_handlers.append(fn)
+    proxy = MagicMock()
+    proxy.get_interface = MagicMock(return_value=props_iface)
+    bus = MagicMock()
+    bus.introspect = AsyncMock(return_value=MagicMock(tostring=lambda: "<node><node name='player1'/></node>"))
+    bus.get_proxy_object = MagicMock(return_value=proxy)
+
+    client = MagicMock()
+    client._update_status = MagicMock()
+
+    await _subscribe_avrcp_source_tracker(
+        bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=1, delay=0.0, client=client
+    )
+
+    captured_handlers[0]("org.bluez.MediaPlayer1", {"Volume": 0}, [])
+    captured_handlers[0]("org.bluez.MediaPlayer1", {"Volume": 127}, [])
+
+    calls = [c.args[0] for c in client._update_status.call_args_list]
+    assert calls == [{"volume": 0}, {"volume": 100}]
+
+
 # ── BlueZ re-registration for AVRCP dispatch ordering ────────────────────
 
 

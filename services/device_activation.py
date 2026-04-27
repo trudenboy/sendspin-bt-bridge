@@ -183,8 +183,13 @@ def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], An
             return False
         try:
             client._update_status({"volume": int(volume_pct)})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "MPRIS volume->%d for %s: _update_status raised: %s",
+                volume_pct,
+                routed,
+                exc,
+            )
         return True
 
     return _cb
@@ -201,15 +206,29 @@ def _bluez_device_player_path(adapter_path: str, mac: str) -> str:
 
 
 async def _subscribe_avrcp_source_tracker(
-    bus: Any, mac: str, adapter_path: str, *, retries: int = 5, delay: float = 1.5
+    bus: Any,
+    mac: str,
+    adapter_path: str,
+    *,
+    retries: int = 5,
+    delay: float = 1.5,
+    client: Any = None,
 ) -> Any:
     """Subscribe to BlueZ MediaPlayer1 PropertiesChanged for *mac*.
 
-    Used so that the inbound MPRIS dispatch resolver can correlate an
-    anonymous Play/Pause/Next call back to the source speaker.  When
-    *any* property under ``org.bluez.MediaPlayer1`` on this device's
-    BlueZ object changes, we record activity in the global
-    ``AvrcpSourceTracker``.
+    Two responsibilities, sharing one D-Bus subscription:
+
+    1. **Source tracking** — record activity in the global
+       ``AvrcpSourceTracker`` on every Status change so the inbound
+       MPRIS dispatch resolver can correlate anonymous Play/Pause/Next
+       calls back to the source speaker.
+    2. **Volume propagation** — when ``client`` is provided, mirror the
+       BlueZ-reported volume into the client's bridge status so the UI
+       slider tracks the speaker's physical volume knob.  AVRCP "Set
+       Absolute Volume" is NOT a passthrough command (HCI monitor only
+       sees passthrough op_ids) and BlueZ does NOT write speaker-side
+       volume back to our exported MPRIS Volume property — its own
+       MediaPlayer1.Volume is the canonical signal.
 
     Returns a teardown callable on success, or ``None`` if the player
     object isn't created by BlueZ within the retry budget (some
@@ -264,9 +283,37 @@ async def _subscribe_avrcp_source_tracker(
         # Only record on Status changes — Position/Track/metadata updates fire
         # continuously during streaming and would keep the tracker alive even
         # when the streaming device did NOT press a button, causing mis-routing.
-        if "Status" not in changed:
-            return
-        tracker.note_activity(mac)
+        if "Status" in changed:
+            tracker.note_activity(mac)
+        if "Volume" in changed and client is not None:
+            try:
+                # BlueZ Volume is uint8 0..127 (AVRCP absolute volume scale).
+                raw = int(changed["Volume"])
+                pct = max(0, min(100, round(raw * 100 / 127)))
+            except (TypeError, ValueError) as exc:
+                logger.debug(
+                    "AVRCP source tracker: Volume change for %s not coercible: %r (%s)",
+                    mac,
+                    changed.get("Volume"),
+                    exc,
+                )
+                return
+            try:
+                client._update_status({"volume": pct})
+            except Exception as exc:
+                logger.warning(
+                    "AVRCP source tracker: _update_status({volume:%d}) for %s raised: %s",
+                    pct,
+                    mac,
+                    exc,
+                )
+            else:
+                logger.info(
+                    "AVRCP volume from %s: %d/127 → %d%% (BlueZ MediaPlayer1.Volume)",
+                    mac,
+                    raw,
+                    pct,
+                )
 
     try:
         props_iface.on_properties_changed(_on_changed)
@@ -441,7 +488,7 @@ def _make_mpris_connected_hook(
                 # hook can unsubscribe before unexporting the bus.
                 teardown: Callable[[], None] | None = None
                 try:
-                    teardown = await _subscribe_avrcp_source_tracker(bus, mac, adapter_path)
+                    teardown = await _subscribe_avrcp_source_tracker(bus, mac, adapter_path, client=client)
                     player._avrcp_source_subscription_teardown = teardown  # type: ignore[attr-defined]
                 except Exception as exc:
                     logger.debug(
