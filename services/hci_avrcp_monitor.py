@@ -45,3 +45,12 @@ def _parse_connection_complete(params: bytes) -> tuple[int, str] | None:
         return None
     mac = ":".join(f"{b:02X}" for b in reversed(bdaddr))
     return handle, mac
+
+
+def _parse_disconnect_complete(params: bytes) -> int | None:
+    if len(params) < 4:
+        return None
+    if params[0] != 0:
+        return None
+    (handle,) = struct.unpack_from("<H", params, 1)
+    return handle

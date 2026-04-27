@@ -45,3 +45,20 @@ class TestParseConnectionComplete:
         from services.hci_avrcp_monitor import _parse_connection_complete
 
         assert _parse_connection_complete(b"\x00\x42") is None
+
+
+class TestParseDisconnectComplete:
+    def test_success_returns_handle(self):
+        from services.hci_avrcp_monitor import _parse_disconnect_complete
+
+        assert _parse_disconnect_complete(DISC_COMPLETE) == 0x0042
+
+    def test_nonzero_status_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_disconnect_complete
+
+        assert _parse_disconnect_complete(DISC_COMPLETE_FAIL) is None
+
+    def test_too_short_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_disconnect_complete
+
+        assert _parse_disconnect_complete(b"\x00") is None
