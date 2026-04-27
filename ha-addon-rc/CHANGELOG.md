@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.2-rc.1] - 2026-04-27
+
+### Review follow-ups (Copilot on PR #206)
+
+- ``services/recovery_assistant._build_config_writable_issue`` now
+  accepts an optional ``preflight`` parameter and is called with the
+  already-collected payload from
+  ``routes/api_status._build_recovery_assistant_payload`` — avoids
+  rerunning the bluetoothctl + audio probes a second time per
+  ``/api/status`` request.
+- ``services/preflight_status._build_config_writable_payload`` no
+  longer silently returns ``ok`` when ``$CONFIG_DIR`` doesn't exist;
+  attempts ``mkdir(parents=True, exist_ok=True)`` and classifies any
+  resulting ``OSError`` via ``collection_error_payload`` so non-
+  container deployments without a pre-created config dir surface
+  the issue instead of hiding it.
+- ``routes/_helpers.config_write_error_response`` now derives the
+  reported path from ``exc.filename`` (most accurate) with a fallback
+  to ``config.CONFIG_DIR`` (live, monkey-patchable) instead of
+  ``os.environ["CONFIG_DIR"]`` — keeps the response consistent with
+  the actual config location across HA addon mode and tests.
+- ``entrypoint.sh`` chown-failure ERROR line updated to say "fail
+  with 500 responses because config cannot be persisted" instead of
+  the now-misleading "return generic 500" — the new structured 500
+  is exactly what Layer 2 ships.
+- ``routes/ma_auth._save_ma_token_and_rediscover`` gains an explicit
+  ``None | tuple[Response, int]`` return annotation so the new
+  contract is grep-able.
+
+One new test in ``tests/test_preflight_config_writable.py``
+(mkdir-failure classification) + autouse fixture in
+``tests/test_recovery_assistant.py`` to neutralise the global
+preflight collector so existing tests don't surface a false-positive
+``config_dir_not_writable`` card on dev machines.
+
+### Fixed — defense in depth: detect & surface non-writable ``$CONFIG_DIR``
+
+Issue [#190](https://github.com/trudenboy/sendspin-bt-bridge/issues/190)
+spent significant time at "MA OAuth returns Internal Server Error" with
+no actionable diagnostic — root cause was the bind-mount target left
+as ``root:root`` while the bridge process runs as UID 1000, so the
+first config write (``_save_ma_token_and_rediscover`` →
+``update_config``) raised ``PermissionError`` and Flask defaulted to
+the generic 500 HTML page.
+
+Three layers of defense so the next operator gets a single-glance
+diagnosis:
+
+1. **Startup banner** — entrypoint now probes ``$CONFIG_DIR`` with
+   touch/unlink as the *runtime* UID (via ``setpriv`` / ``gosu``) and
+   adds a ``Config write: ✓ writable`` / ``✗ NOT writable`` row to the
+   banner.  On failure, also emits an ``ERROR:`` line in journald with
+   the exact ``chown`` command operators can copy verbatim.
+2. **Actionable 500** — every Flask handler that writes to the config
+   directory now wraps the write in ``try/except OSError`` and returns
+   a structured JSON 500 with a ``remediation`` block (chown for
+   ``EACCES``, remount for ``EROFS``, generic for the rest) instead of
+   Flask's default ``Internal Server Error`` HTML.  Wrapped sites:
+   ``_save_ma_token_and_rediscover`` (5 OAuth callers), ``POST
+   /api/config``, ``POST /api/config/upload``, ``POST /api/set-password``,
+   ``POST /api/settings/log_level``.
+3. **Diagnostics surface** — ``services/preflight_status`` adds a
+   ``config_writable`` slice (status / writable / config_dir / uid /
+   remediation).  ``services/recovery_assistant`` reads it and renders
+   a ``config_dir_not_writable`` recovery card with the chown command
+   in the summary so it appears in the UI Diagnostics panel without
+   operators reading container logs.  ``services/operator_check_runner``
+   adds a ``config_writable`` re-runnable check so the "Re-run check"
+   button flips the card green as soon as the operator runs the chown.
+   ``services/guidance_issue_registry`` registers the new issue at
+   priority 15 (between ``runtime_access`` and ``bluetooth``).
+
+Helper: ``routes/_helpers.config_write_error_response(exc, context=...)``
+builds the structured response.  Distinguishes ``EACCES`` /
+``EROFS`` / unknown ``OSError`` so each gets the correct hint;
+non-OSError exceptions still raise so real bugs aren't masked.
+
+``docker-compose.yml`` gains a comment block above the ``/config``
+volume mount documenting the pre-start ``chown -R 1000:1000`` step.
+
+Tests: 5 + 4 + 5 + 2 + 2 new in
+``tests/test_config_write_error_response.py``,
+``tests/test_ma_auth_config_write.py``,
+``tests/test_preflight_config_writable.py``,
+``tests/test_operator_check_runner.py``, and
+``tests/test_recovery_assistant.py``.  Full suite 1719 passing.
+
 ## [2.63.0-rc.9] - 2026-04-26
 
 UX + diagnostics polish on top of the rc.8 RSSI work.  No protocol
