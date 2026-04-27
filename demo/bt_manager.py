@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from demo.fixtures import DEMO_DEVICE_STATUS, get_demo_adapter
 
@@ -32,7 +32,17 @@ class DemoBluetoothManager:
         on_sink_found: Callable[[str, int | None], None] | None = None,
         churn_threshold: int = 0,
         churn_window: float = 300.0,
+        on_connected: Callable[..., Any] | None = None,
+        on_disconnected: Callable[..., Any] | None = None,
+        **_extra: Any,
     ):
+        # ``on_connected`` / ``on_disconnected`` are accepted for compatibility
+        # with the real BluetoothManager (AVRCP MPRIS export hooks); demo
+        # mode doesn't simulate transport-level dis/connect events, so they
+        # are intentionally unused.  ``**_extra`` swallows any future kwargs
+        # the real manager grows so demo doesn't regress on signature drift.
+        self._on_connected = on_connected
+        self._on_disconnected = on_disconnected
         self.mac_address = mac_address
         adapter_info = get_demo_adapter(adapter)
         self.adapter = str(adapter_info["id"])

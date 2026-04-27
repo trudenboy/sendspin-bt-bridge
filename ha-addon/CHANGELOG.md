@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — "Reconnect all" no-op on healthy fleet
+
+The toolbar's *Reconnect all* button required every speaker to already
+be disconnected, so clicking it on a healthy setup did nothing.  Now
+matches the per-device Reconnect button — fires regardless of current
+connection state.
+
+### Changed — Bulk actions in dropdown menu
+
+*Reconnect all* / *Release all* moved into a single ``Bulk actions``
+dropdown.  Mute / Pause stay inline next to the group volume slider.
+
+### Fixed — demo mode startup
+
+Demo mode no longer crashes on launch with ``TypeError`` after the
+2.64.0-rc.1 AVRCP MPRIS hooks added new kwargs to ``BluetoothManager``.
+
 ### Review follow-ups
 
 - ``HCI_CHANNEL_MONITOR`` socket-open path no longer leaks a file

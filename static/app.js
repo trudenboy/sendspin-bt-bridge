@@ -1502,7 +1502,7 @@ function onArtworkPreviewKeydown(event, el) {
 }
 
 function _closeActionMenus(eventTarget) {
-    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open], .bt-device-action-menu[open]');
+    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open], .bt-device-action-menu[open], .group-bulk-action-menu[open]');
     openMenus.forEach(function(menu) {
         if (eventTarget && menu.contains(eventTarget)) return;
         menu.open = false;
@@ -4521,15 +4521,24 @@ function toggleListRow(key) {
 }
 
 function onGroupAction(action) {
+    // Close the bulk-actions dropdown right after picking an item so
+    // the user gets immediate visual feedback that the click landed.
+    var menu = document.getElementById('group-bulk-action-menu');
+    if (menu && menu.open) menu.open = false;
+
+    // Mirror the per-device button preconditions: skip released and
+    // disabled devices, but DO fire on currently-connected ones — the
+    // user clicked "reconnect all" expecting a forced cycle, not a
+    // best-effort retry of just the offline ones.
     if (action === 'reconnect') {
         lastDevices.forEach(function(dev, idx) {
-            if (_groupSelected[idx] !== false && dev.bluetooth_connected === false && dev.bt_management_enabled !== false) {
+            if (_groupSelected[idx] !== false && dev && dev.bt_management_enabled !== false && !_isDeviceDisabled(dev)) {
                 btReconnect(idx);
             }
         });
     } else if (action === 'release') {
         lastDevices.forEach(function(dev, idx) {
-            if (_groupSelected[idx] !== false && dev.bt_management_enabled !== false) {
+            if (_groupSelected[idx] !== false && dev && dev.bt_management_enabled !== false && !_isDeviceDisabled(dev)) {
                 btToggleManagement(idx);
             }
         });

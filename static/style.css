@@ -1827,7 +1827,11 @@ body {
             gap: 0;
             margin-bottom: 16px;
             position: relative;
-            z-index: 1;
+            /* Bumped above .status-grid (z-index:2) so the bulk-actions
+               dropdown menu — which is positioned outside the toolbar's
+               box but inherits its stacking context — floats over the
+               device cards instead of being intercepted by them. */
+            z-index: 5;
         }
         .filter-bar {
             background: var(--card-background-color);
@@ -1866,6 +1870,11 @@ body {
             align-items: center;
             gap: 12px;
             border-top: 1px solid var(--divider-color);
+            /* Lift above the status-grid (z-index:2) so the bulk-actions
+               dropdown menu floats over device cards instead of being
+               clipped/intercepted by them. */
+            position: relative;
+            z-index: 5;
         }
         .toolbar-count {
             font-size: 13px;
@@ -3906,6 +3915,74 @@ body {
         .bt-device-action-item {
             width: 100%;
             justify-content: flex-start;
+        }
+        .group-bulk-action-menu {
+            position: relative;
+        }
+        .group-bulk-action-menu > summary {
+            list-style: none;
+            cursor: pointer;
+        }
+        .group-bulk-action-menu > summary::-webkit-details-marker {
+            display: none;
+        }
+        .group-bulk-action-toggle::after {
+            content: "▾";
+            margin-left: 6px;
+            font-size: 10px;
+        }
+        .group-bulk-action-menu[open] .group-bulk-action-toggle::after {
+            content: "▴";
+        }
+        .group-bulk-action-menu[open] .group-bulk-action-toggle {
+            background: var(--secondary-background-color);
+        }
+        .group-bulk-action-menu-list {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            min-width: 220px;
+            display: grid;
+            gap: 6px;
+            padding: 8px;
+            border-radius: 14px;
+            border: 1px solid var(--divider-color);
+            background: var(--card-background-color);
+            box-shadow: var(--ui-floating-shadow, var(--ha-card-box-shadow));
+            z-index: 30;
+        }
+        .group-bulk-action-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            justify-content: flex-start;
+            padding: 8px 12px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            background: transparent;
+            color: var(--primary-text-color);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .group-bulk-action-item:hover,
+        .group-bulk-action-item:focus-visible {
+            background: var(--secondary-background-color);
+            outline: none;
+        }
+        .group-bulk-action-item.accent {
+            color: var(--accent-color, #03a9f4);
+        }
+        .group-bulk-action-item.accent:hover {
+            background: rgba(3, 169, 244, 0.12);
+        }
+        .group-bulk-action-item.warn {
+            color: var(--error-color, #db4437);
+        }
+        .group-bulk-action-item.warn:hover {
+            background: rgba(219, 68, 55, 0.12);
         }
         .bt-toolbar {
             display: flex;

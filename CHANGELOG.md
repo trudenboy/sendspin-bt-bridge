@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — "Reconnect all" silently no-op'd when speakers were connected
+
+The bulk action's per-device filter required ``dev.bluetooth_connected
+=== false``, so clicking the toolbar's *Reconnect all* on a healthy
+fleet skipped every speaker.  The per-device button never had this
+constraint — it forces a reconnect cycle regardless.  Aligned the
+bulk action with the per-device button: only ``bt_management_enabled``
++ not-disabled now gate it.
+
+### Changed — Bulk device actions consolidated into a dropdown
+
+*Reconnect all* / *Release all* moved out of the action-bar's inline
+button row into a single ``Bulk actions ▾`` dropdown using the
+existing ``ui-action-menu`` (``<details>`` / ``<summary>``) pattern.
+Frees toolbar real estate, gives a clear home for future bulk
+operations, and matches the per-device "Tools" menu UX.  Mute All /
+Pause All stay inline — they're transport-style, naturally grouped
+with the volume slider.
+
+Outside-click and Esc close the dropdown via the existing
+``_closeActionMenus`` plumbing; ``aria-haspopup`` / ``aria-expanded``
+on the toggle for screen-reader parity.
+
+### Fixed — demo mode broken after AVRCP MPRIS hooks
+
+``DemoBluetoothManager`` rejected the new ``on_connected`` /
+``on_disconnected`` kwargs that the real ``BluetoothManager`` grew
+in 2.64.0-rc.1 for AVRCP MPRIS export, so ``DEMO_MODE=1`` startup
+crashed with ``TypeError: unexpected keyword argument 'on_connected'``.
+The demo accepts and ignores them now (it doesn't simulate
+transport-level dis/connect events); ``**_extra`` swallows future
+kwargs to avoid signature drift regressions.
+
 ### Review follow-ups (Copilot on PR #207)
 
 - ``services/hci_avrcp_monitor._open_hci_monitor_socket`` now closes
