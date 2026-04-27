@@ -7,28 +7,34 @@ whichever MPRIS player it picked as the addressed player on the adapter
 ``server->players[0]``).  The forwarded D-Bus message carries no field
 identifying which connected speaker actually pressed the button.
 
-We sidestep this by subscribing to ``org.bluez.MediaPlayer1.PropertiesChanged``
-on the per-device path ``/org/bluez/hciN/dev_<MAC>/playerN`` (BlueZ
-creates this object per connected speaker as part of the AVRCP TG ↔ CT
-exchange).  When a speaker's button press triggers a Status update on
-its own MediaPlayer1, we record ``(mac, monotonic_ts)`` here.  The
-inbound MPRIS dispatch then queries ``get_recent_active()`` within a
-short time window to recover the source MAC and dispatch to the right
-client.
+We sidestep this by tapping the kernel HCI traffic at
+``HCI_CHANNEL_MONITOR`` (see ``services/hci_avrcp_monitor``): every
+AVRCP passthrough op_id is parsed, mapped back to its source ACL
+connection handle → MAC, and fed in via ``note_activity()``.  The
+inbound MPRIS dispatch then awaits ``wait_for_next_activity()`` so
+the resolver runs against a freshly-correlated MAC, not a stale one.
+
+The legacy heuristic — subscribing to
+``org.bluez.MediaPlayer1.PropertiesChanged`` and recording activity on
+Status changes — was removed once HCI proved reliable.  HCI sees every
+passthrough op_id (including Next/Previous, which the D-Bus path
+missed because they don't change Status) and works for "dumb"
+speakers without an AVRCP TG / MediaPlayer1 child.
 
 Trade-offs:
 
-* Speaker firmware must emit MediaPlayer1.PropertiesChanged near the
-  AVRCP passthrough.  Most do for Play/Pause/Status; some are silent on
-  Next/Previous (those rely on the streaming-fallback in the dispatch
-  resolver).
-* When two speakers emit Status updates within the same window, the
-  most-recent wins — adequate for hands-on use, may mis-route under
-  rapid concurrent button-mashing on multiple devices.
+* When two speakers' button presses arrive within the same correlation
+  window, the most-recent wins — adequate for hands-on use, may
+  mis-route under simultaneous button-mashing.
+* HCI-degraded mode (no ``CAP_NET_RAW`` / kernel monitor unavailable):
+  ``note_activity()`` is never called, ``get_recent_active()`` always
+  returns ``None``, and the resolver falls back to ``default_client``.
+  Single-speaker-per-adapter setups still route correctly via the
+  fast path; multi-speaker setups lose source correlation.
 
-This module is pure state — D-Bus subscription is layered on top by
-``services/device_activation.py`` so the tracker stays exercisable from
-tests without requiring a live system bus.
+This module is pure state — the HCI socket and packet parsing live in
+``services/hci_avrcp_monitor`` so the tracker stays exercisable from
+tests without binding raw sockets.
 """
 
 from __future__ import annotations

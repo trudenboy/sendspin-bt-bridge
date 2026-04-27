@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Review follow-ups (Copilot on PR #207)
+
+- ``services/hci_avrcp_monitor._open_hci_monitor_socket`` now closes
+  the raw fd from ``libc.socket`` if anything between socket creation
+  and the ``socket.socket(fileno=fd)`` handoff fails (most commonly
+  ``bind`` returning EPERM).  The exponential backoff loop in
+  ``_monitor_loop`` would otherwise leak one fd per failed attempt.
+- ``routes/api_transport.transport_cmd`` rejects non-dict JSON bodies
+  with 400 — ``request.get_json(silent=True)`` returns ``None`` on
+  parse failure and accepts top-level lists/scalars, both of which
+  would crash on ``data.get(...)`` and surface as a 500.
+- Refreshed stale module / function docstrings that still referenced
+  the removed D-Bus heuristic path
+  (``_subscribe_avrcp_source_tracker``, the "single-streaming-client
+  fallback", the "never falls back to default_client directly" claim
+  on the transport/volume callbacks, etc.).  Behaviour unchanged;
+  documentation now matches the post-cleanup architecture.
+
 ## [2.64.0-rc.1] - 2026-04-27
 
 ### Fixed — AVRCP commands mis-routed between speakers on the same adapter

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Review follow-ups
+
+- ``HCI_CHANNEL_MONITOR`` socket-open path no longer leaks a file
+  descriptor on bind failure (e.g. transient EPERM during the
+  exponential backoff retry loop).
+- ``POST /api/transport/cmd`` returns 400 instead of 500 when the
+  request body is not a JSON object.
+
 ## [2.64.0-rc.1] - 2026-04-27
 
 ### Fixed — AVRCP commands mis-routed between speakers on same adapter

@@ -52,7 +52,12 @@ def transport_cmd():
         device_index: int (deprecated, fallback) — index into the device list.
         value: any (optional) — for volume (0-100) or mute (bool)
     """
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        # JSON top-level must be an object — guard against `null`, lists,
+        # scalars, or invalid JSON (silent=True returns None) before
+        # calling .get() on the body.
+        return jsonify(success=False, error="Request body must be a JSON object"), 400
     action = str(data.get("action", "")).strip()
     if not action or action not in _VALID_ACTIONS:
         return jsonify(success=False, error=f"Invalid action: {action!r}"), 400

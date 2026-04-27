@@ -132,13 +132,15 @@ def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str],
     AVRCP commands to that one player — the source CT identity is stripped
     by the BlueZ AVRCP TG layer.  See ``services/avrcp_source_tracker``.
 
-    To recover the source we delegate to ``resolve_avrcp_source_client``,
-    which correlates the anonymous inbound dispatch with recent
-    ``org.bluez.MediaPlayer1.PropertiesChanged`` activity to find the MAC
-    of the speaker that actually pressed the button.  ``default_client``
-    here is the client this MprisPlayer was constructed for; the resolver
-    only consults it via the registry, never falls back to it directly
-    (so a mis-routed dispatch doesn't silently land on the wrong client).
+    To recover the source we await ``tracker.wait_for_next_activity``
+    (fed by ``services/hci_avrcp_monitor`` from raw HCI traffic) and
+    then call ``resolve_avrcp_source_client`` to look up the source
+    MAC's MprisPlayer in the registry.  When the tracker has nothing
+    recent (HCI-degraded mode, packet lost), the resolver returns
+    ``default_client`` as a best-guess fallback — for single-speaker-
+    per-adapter setups this is by construction correct, and that case
+    short-circuits the wait+resolve via ``_is_single_speaker_adapter``
+    for sub-millisecond latency.
     """
 
     async def _cb(_player_id: str, command: str) -> bool:
@@ -183,12 +185,18 @@ def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str],
 def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], Any]:
     """AVRCP absolute volume → bridge volume.
 
-    Inbound MPRIS Volume writes (BlueZ forwards the speaker's volume knob)
-    are normalised to 0..100 by ``MprisPlayer._on_volume_set`` before this
-    callback runs.  Same source-correlation problem as the transport path
-    — see ``_build_mpris_transport_callback`` — so we resolve the actual
-    source client via the registry+tracker rather than trusting the
-    captured ``default_client``.
+    Note: speaker physical volume knob → AVRCP Set Absolute Volume PDU
+    is NOT a passthrough op_id, and BlueZ does NOT forward it to our
+    exported MPRIS Volume property — that path is covered by
+    ``PulseVolumeController.set_external_change_tap`` in the daemon.
+    This callback only fires for explicit MPRIS Volume property writes
+    from BlueZ (rare in practice — most speakers route through the
+    AVRCP Set Absolute Volume PDU).
+
+    Same source-correlation logic as the transport path applies when
+    it does fire: HCI tracker via wait_for_next_activity, resolver
+    falls back to ``default_client`` for HCI-degraded mode, single-
+    speaker-per-adapter short-circuits to ``default_client`` directly.
     """
 
     async def _cb(_player_id: str, volume_pct: int) -> bool:

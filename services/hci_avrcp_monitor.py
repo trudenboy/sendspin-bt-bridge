@@ -1,12 +1,22 @@
 """HCI-level AVRCP passthrough command monitor.
 
-Watches raw HCI_CHANNEL_MONITOR traffic to identify the source MAC for inbound
-AVRCP passthrough commands. Updates AvrcpSourceTracker before BlueZ's D-Bus MPRIS
-dispatch arrives — fixes Next/Previous mis-routing and timing race on Play/Pause.
+Watches raw HCI_CHANNEL_MONITOR traffic to identify the source MAC for
+inbound AVRCP passthrough commands and writes it into
+``AvrcpSourceTracker``.  The inbound MPRIS dispatch then awaits
+``tracker.wait_for_next_activity`` to synchronise on the freshest
+source signal before resolving — fixes Next/Previous mis-routing and
+the timing race on Play/Pause when 2+ speakers share an adapter.
 
-Graceful degradation: if the socket can't be opened (non-Linux, missing CAP_NET_RAW,
-no BT adapter), logs at INFO and does nothing. The D-Bus heuristic in
-device_activation._subscribe_avrcp_source_tracker remains active as fallback.
+This is the canonical (and currently only) source of activity signals
+for the tracker: the legacy MediaPlayer1.PropertiesChanged D-Bus path
+was removed once HCI proved sufficient (see commit ``35286638``).
+
+Graceful degradation: if the socket can't be opened (non-Linux,
+missing ``CAP_NET_RAW``, no BT adapter), logs at INFO and the task
+self-disables.  The resolver then falls back to ``default_client``
+unconditionally — single-speaker-per-adapter setups still work
+correctly via the fast path; multi-speaker setups lose source
+correlation and route every press to BlueZ's chosen ``players[0]``.
 """
 
 from __future__ import annotations
@@ -15,6 +25,7 @@ import asyncio
 import contextlib
 import ctypes
 import logging
+import os
 import socket
 import struct
 import sys
@@ -269,15 +280,22 @@ def _open_hci_monitor_socket() -> socket.socket:
     fd = libc.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI)
     if fd < 0:
         raise OSError("Unable to open PF_BLUETOOTH socket")
-    addr = _SocketAddr(
-        hci_family=_AF_BLUETOOTH,
-        hci_dev=_HCI_DEV_NONE,
-        hci_channel=_HCI_CHANNEL_MONITOR,
-    )
-    r = libc.bind(fd, ctypes.pointer(addr), ctypes.sizeof(addr))
-    if r < 0:
-        raise OSError(f"Unable to bind HCI_CHANNEL_MONITOR: errno={ctypes.get_errno()}")
-    return socket.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI, fileno=fd)
+    try:
+        addr = _SocketAddr(
+            hci_family=_AF_BLUETOOTH,
+            hci_dev=_HCI_DEV_NONE,
+            hci_channel=_HCI_CHANNEL_MONITOR,
+        )
+        r = libc.bind(fd, ctypes.pointer(addr), ctypes.sizeof(addr))
+        if r < 0:
+            raise OSError(f"Unable to bind HCI_CHANNEL_MONITOR: errno={ctypes.get_errno()}")
+        return socket.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI, fileno=fd)
+    except BaseException:
+        # Close the raw fd on any failure between socket() and the
+        # successful socket.socket() handoff — otherwise the backoff
+        # retry loop in _monitor_loop leaks one fd per failed attempt.
+        os.close(fd)
+        raise
 
 
 class HciAvrcpMonitor:

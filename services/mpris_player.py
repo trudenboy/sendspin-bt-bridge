@@ -400,10 +400,9 @@ class MprisRegistry:
     def all_players(self) -> list[MprisPlayer]:
         """Return a snapshot list of all currently-registered players.
 
-        Used by the inbound AVRCP dispatch resolver's streaming-fallback
-        branch — when the source-correlation tracker can't pin down a
-        single MAC, we look across all registered players to see if
-        exactly one has an actively-streaming client.
+        Used by ``device_activation._is_single_speaker_adapter`` to count
+        how many MprisPlayers share an adapter (fast-path eligibility),
+        and by tests inspecting registry state.
         """
         with self._lock:
             return list(self._by_mac.values())
@@ -447,22 +446,24 @@ def resolve_avrcp_source_client(
 
     BlueZ's AVRCP TG → MPRIS forwarder strips source-CT identity (see
     ``services/avrcp_source_tracker``).  This resolver applies two
-    correlation strategies in order:
+    correlation strategies, in order:
 
-    1. **Recent MediaPlayer1 activity** — the AvrcpSourceTracker records a
-       timestamp every time *any* speaker emits a
-       ``org.bluez.MediaPlayer1.PropertiesChanged`` signal.  When the
-       tracker reports a recent MAC and that MAC has a registered
-       MprisPlayer with a non-None client, that's our answer.
-    2. **Single-streaming-client fallback** — if no MAC was recent enough
-       (some speaker firmwares don't emit Status updates around button
-       presses, especially Next/Previous), and exactly *one* registered
-       client has ``audio_streaming=True``, route there.  Single-source
-       audio is the common-case shape; this handles it gracefully.
+    1. **Recent HCI-recorded activity** — the AvrcpSourceTracker is fed
+       by ``services/hci_avrcp_monitor`` on every AVRCP passthrough
+       op_id seen on ``HCI_CHANNEL_MONITOR``.  When the tracker reports
+       a recent MAC and that MAC has a registered MprisPlayer with a
+       non-None client, that's the source.
+    2. **default_client fallback** — when the tracker has nothing
+       recent (HCI-degraded mode, packet lost, or the inbound MPRIS
+       call has no corresponding HCI passthrough — unusual but
+       possible), return the ``default_client`` captured at the
+       MprisPlayer's registration.  This is the device whose buttons
+       BlueZ naturally routes here, so it's the best available guess.
 
-    Returns ``None`` when neither strategy yields a unique client — the
-    caller should drop the command.  Mis-routing is the bug we're fixing,
-    so dropping is preferable to guessing wrong.
+    Returns ``None`` only when both the tracker miss AND
+    ``default_client`` is ``None`` (e.g., the MprisPlayer was built
+    without a client binding) — the caller drops the command in that
+    case to avoid a wild guess.
 
     The ``registry``/``tracker``/``window_s`` arguments default to the
     process-wide singletons — production callers pass nothing; tests
@@ -489,14 +490,12 @@ def resolve_avrcp_source_client(
             return player.client
         # Fall through — orphan tracker entry or player without a client.
 
-    # Strategy 2: default_client captured at registration time.  BlueZ always
-    # dispatches AVRCP to the first-registered player's callbacks; that
-    # player's default_client is the device whose buttons naturally route here.
-    # For smart devices (with MediaPlayer1) Strategy 1 fires first via the
-    # tracker.  For dumb speakers (no MediaPlayer1) and all paused states,
-    # default_client is the correct fallback — routing to the currently-streaming
-    # device (old Strategy 2) caused mis-routing when a paused device's button
-    # was pressed while another device was streaming.
+    # Strategy 2: default_client captured at registration time — the
+    # device whose MprisPlayer BlueZ is currently dispatching to.  For
+    # single-speaker-per-adapter setups this is by construction the
+    # correct source (see ``device_activation._is_single_speaker_adapter``
+    # which short-circuits this whole resolver).  For multi-speaker
+    # adapters in HCI-degraded mode it's a best-guess fallback.
     if default_client is not None:
         return default_client
 
