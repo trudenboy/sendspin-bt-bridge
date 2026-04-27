@@ -5970,14 +5970,18 @@ body {
             min-height: 32px !important;
         }
         .scan-action-split-toggle {
-            /* Repeat the ``--pair`` colour explicitly with !important
-               so .ui-action-menu-toggle / .scan-action-btn:hover and
-               other shared rules can't repaint the toggle in a
-               different colour and break the visual seam. */
-            background: rgba(67, 160, 71, 0.12) !important;
-            border: 1px solid rgba(67, 160, 71, 0.24) !important;
-            border-left: 1px solid rgba(67, 160, 71, 0.36) !important;
-            color: #2e7d32 !important;
+            /* Match the SOLID primary look of the "Pair and Add" half
+               (which is themed via .btn-primary / --button-primary-bg
+               and ends up as solid var(--primary-color) with white
+               text).  !important guards against shared rules
+               (.ui-action-menu-toggle / .scan-action-btn:hover) that
+               would otherwise repaint the toggle and break the seam. */
+            background: var(--primary-color) !important;
+            border: 1px solid var(--primary-color) !important;
+            /* Subtle inner divider so the seam between primary and
+               toggle is still visible without breaking the solid look. */
+            border-left: 1px solid rgba(255, 255, 255, 0.32) !important;
+            color: #fff !important;
             border-radius: 999px;
             border-top-left-radius: 0 !important;
             border-bottom-left-radius: 0 !important;
@@ -6012,8 +6016,10 @@ body {
         }
         .scan-action-split-toggle:hover,
         .scan-action-split-menu[open] .scan-action-split-toggle {
-            background: rgba(67, 160, 71, 0.22) !important;
-            border-color: rgba(67, 160, 71, 0.42) !important;
+            /* Slightly darker solid blue on hover/open — uses
+               --button-primary-hover-bg from the theme stack. */
+            background: var(--button-primary-hover-bg, #0288d1) !important;
+            border-color: var(--button-primary-hover-bg, #0288d1) !important;
         }
         .scan-action-split-menu[open] .scan-action-split-toggle::after {
             transform: rotate(180deg);

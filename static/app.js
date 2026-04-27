@@ -6648,7 +6648,7 @@ function _renderBtScanResults(devices) {
         // to import the config row.
         var actionsHtml = addable
             ? '<span class="scan-action-split">' +
-                  '<button type="button" class="scan-action-btn scan-action-btn--pair scan-pair-btn scan-action-split-primary" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Pair and Add</button>' +
+                  '<button type="button" class="scan-action-btn scan-action-btn--primary scan-pair-btn scan-action-split-primary" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Pair and Add</button>' +
                   '<details class="scan-action-split-menu ui-action-menu">' +
                       '<summary class="scan-action-split-toggle ui-action-menu-toggle" aria-haspopup="true" aria-label="More add options" title="More add options"></summary>' +
                       '<div class="scan-action-split-menu-list ui-action-menu-list">' +
