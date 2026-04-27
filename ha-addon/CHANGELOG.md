@@ -9,41 +9,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.64.0] - 2026-04-27
 
-### Added — Bulk device actions (Reconnect all, Power save all, Standby all, Release all)
+### Added — Bulk actions for all selected devices
 
-A *Bulk actions* dropdown in the device toolbar acts on all selected
-speakers at once: reconnect, enter power-save or standby, or release
-Bluetooth management.
+A new **Bulk actions ▾** dropdown in the device toolbar lets you act
+on every selected speaker at once:
 
-### Added — Live signal strength (RSSI) badge on every speaker card
+- **Reconnect all** — force a Bluetooth reconnect cycle.
+- **Power save all** — suspend audio streaming while keeping the
+  Bluetooth link alive (saves codec power on idle speakers).
+- **Standby all** — fully disconnect Bluetooth so the speaker can
+  power down its radio.
+- **Release all** — hand BT management back to the OS.
 
-Signal-strength chip updated every 30 s.
-Can be turned off in Settings → Connection recovery.
+### Added — Live signal strength (RSSI) badge enabled by default
 
-### Changed — Scan and pairing UX improvements
+Every connected speaker now shows a coloured signal-strength chip in
+its device card, updated every 30 s.  Can be turned off under
+*Connection recovery* in Settings.
 
-- *Scan nearby* no longer auto-starts on open — press the highlighted
-  *Start Scan* button when ready.
-- *Pair and Add* is now the default primary action on discovered
-  devices; *Add to fleet* is one click away.
+### Changed — Scan modal asks before scanning
 
-### Fixed — Speaker buttons mis-route when multiple speakers share an adapter
+Opening *Scan nearby* no longer starts a scan automatically.  The
+**Start Scan** button is highlighted so it's obvious what to press,
+letting you adjust adapter and audio-only filter first.
 
-Play, Pause, Next, Previous from physical speaker buttons now always
-reach the correct speaker, even when two or more are on the same
-Bluetooth adapter.  Next/Previous could not be fixed before — now
-they work too.
+### Changed — *Pair and Add* is now the default action for discovered devices
 
-### Fixed — Turning the volume knob on a speaker now moves the bridge slider
+In scan results, the primary action is *Pair and Add* — the safe
+default for most speakers.  A small ▾ button exposes *Add to fleet*
+for devices you've already paired elsewhere.
 
-The bridge UI slider tracks the speaker's physical volume knob in
-real time.
+### Changed — Show experimental features toggle has a visual warning
 
-### Fixed — "Reconnect all" and transport commands now target the right device
+The master switch that reveals in-development settings now has an
+amber border and a ⚠ icon so it reads as the cautionary control
+it is.
 
-*Reconnect all* was silently skipping connected speakers; transport
-commands could land on the wrong device after a bridge restart.
-Both are fixed.
+### Fixed — Speaker buttons mis-route to the wrong device when multiple speakers share an adapter
+
+When two or more Bluetooth speakers are on the same adapter, every
+speaker's button presses now reach the correct player — including
+Next/Previous, which the previous workaround missed entirely.
+
+### Fixed — Physical volume knob on speaker didn't update the bridge slider
+
+Turning the volume knob now immediately moves the corresponding slider
+in the bridge UI.  Previously only the MA slider tracked it.
+
+### Fixed — "Reconnect all" silently did nothing on a healthy fleet
+
+The button now forces a reconnect cycle on selected speakers regardless
+of their current connection state, matching the per-device button.
+
+### Fixed — Transport commands routed to the wrong device after a bridge restart
+
+Play/Pause/Next from the UI now use a stable per-device identifier
+and can no longer land on the wrong speaker after a restart.
 
 ## [2.63.1] - 2026-04-26
 
