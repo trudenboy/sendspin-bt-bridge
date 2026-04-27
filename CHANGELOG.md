@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.2] - 2026-04-27
+
 ### Fixed — "Reconnect all" silently no-op'd when speakers were connected
 
 The bulk action's per-device filter required ``dev.bluetooth_connected

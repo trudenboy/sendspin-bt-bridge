@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.2] - 2026-04-27
+
 ### Fixed — "Reconnect all" no-op on healthy fleet
 
 The toolbar's *Reconnect all* button required every speaker to already
