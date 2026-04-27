@@ -496,12 +496,12 @@ def resolve_avrcp_source_client(
     if len(streaming) == 1:
         return streaming[0]
 
-    # Strategy 3: single-device fallback using the client captured at
-    # registration time.  Only applies when exactly one player is registered
-    # — with multiple devices we can't determine the source and prefer to drop
-    # rather than mis-route.  Handles dumb speakers (no AVRCP TG / no
-    # MediaPlayer1) in the common single-speaker setup.
-    if default_client is not None and len(registry.all_players()) == 1:
+    # Strategy 3: default_client captured at registration time.  BlueZ always
+    # dispatches AVRCP to the first-registered player's callbacks; that
+    # player's default_client is the device whose buttons should naturally
+    # route here.  For smart devices (MediaPlayer1 present) Strategy 1 fires
+    # first; Strategy 3 is the safety net for dumb speakers and paused state.
+    if default_client is not None:
         return default_client
 
     return None

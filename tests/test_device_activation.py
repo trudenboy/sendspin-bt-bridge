@@ -348,10 +348,16 @@ async def test_transport_callback_dispatches_to_resolved_source_client():
 
 
 @pytest.mark.asyncio
-async def test_transport_callback_drops_when_resolver_returns_none():
-    """No recent activity, no single-streaming-client fallback applicable
-    (multiple streaming) → resolver returns None → callback drops the
-    command.  Prevents regression to mis-routing.
+async def test_transport_callback_falls_back_to_default_when_ambiguous():
+    """No recent tracker activity, multiple streaming clients (ambiguous source)
+    → resolver falls back to default_client (Strategy 3).
+
+    default_client is the client whose MprisPlayer BlueZ chose to dispatch to
+    (always the first registered).  Routing to it is the correct BlueZ-default
+    behaviour for buttons pressed on the first-registered device — better than
+    silently dropping the command and leaving the user with an unresponsive
+    button.  Strategy 1 (tracker) handles other devices when their Status
+    changes fire before the AVRCP command reaches us.
     """
     from unittest.mock import AsyncMock
 
@@ -393,8 +399,9 @@ async def test_transport_callback_drops_when_resolver_returns_none():
     ):
         result = await cb("1", "next")
 
-    assert result is False
-    c1.send_transport_command.assert_not_awaited()
+    # Strategy 3 returns default_client (c1) → command dispatched
+    assert result is True
+    c1.send_transport_command.assert_awaited_once_with("next")
     c2.send_transport_command.assert_not_awaited()
 
 
