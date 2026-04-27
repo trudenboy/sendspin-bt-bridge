@@ -6650,7 +6650,7 @@ function _renderBtScanResults(devices) {
             ? '<span class="scan-action-split">' +
                   '<button type="button" class="scan-action-btn scan-action-btn--pair scan-pair-btn scan-action-split-primary" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Pair and Add</button>' +
                   '<details class="scan-action-split-menu ui-action-menu">' +
-                      '<summary class="scan-action-split-toggle ui-action-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="More add options" title="More add options"></summary>' +
+                      '<summary class="scan-action-split-toggle ui-action-menu-toggle" aria-haspopup="true" aria-label="More add options" title="More add options"></summary>' +
                       '<div class="scan-action-split-menu-list ui-action-menu-list">' +
                           '<button type="button" class="ui-action-menu-item scan-action-menu-item scan-add-btn" title="Add to config without pairing now (already paired elsewhere)">Add to fleet</button>' +
                       '</div>' +

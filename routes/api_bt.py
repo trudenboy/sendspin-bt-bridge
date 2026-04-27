@@ -304,7 +304,15 @@ def api_bt_power_save():
     if not isinstance(data, dict):
         return jsonify({"success": False, "error": "Request body must be a JSON object"}), 400
     player_name = data.get("player_name")
-    enter = bool(data.get("enter", True))
+    # Strict bool validation for ``enter``: missing → True (default
+    # behaviour, "enter power save"), but the moment the client sends
+    # the field it must be an actual JSON boolean.  Plain
+    # ``bool(data.get(...))`` would treat the string ``"false"`` as
+    # truthy and silently flip behaviour.
+    raw_enter = data.get("enter", True)
+    if not isinstance(raw_enter, bool):
+        return jsonify({"success": False, "error": "'enter' must be a boolean"}), 400
+    enter = raw_enter
     client, err = get_client_or_error(player_name)
     if err:
         return err
@@ -322,14 +330,27 @@ def api_bt_power_save():
     import state as _state
 
     loop = _state.get_main_loop()
-    if loop and loop.is_running():
-        coro = client._enter_power_save() if enter else client._exit_power_save()
-        fut = asyncio.run_coroutine_threadsafe(coro, loop)
-        try:
-            fut.result(timeout=5.0)
-        except Exception as exc:
-            logger.warning("[%s] power_save error: %s", player_name, exc)
-            return jsonify({"success": False, "error": str(exc)}), 500
+    if loop is None or not loop.is_running():
+        # Without a running asyncio loop we can't dispatch the
+        # coroutine — return 503 instead of a false-positive 200 that
+        # would mislead the bulk-actions dropdown into thinking every
+        # selected device transitioned successfully.
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Bridge asyncio loop is not running; cannot apply power-save",
+                }
+            ),
+            503,
+        )
+    coro = client._enter_power_save() if enter else client._exit_power_save()
+    fut = asyncio.run_coroutine_threadsafe(coro, loop)
+    try:
+        fut.result(timeout=5.0)
+    except Exception as exc:
+        logger.warning("[%s] power_save error: %s", player_name, exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
     return jsonify(
         {
             "success": True,

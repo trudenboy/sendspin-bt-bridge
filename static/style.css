@@ -3972,17 +3972,28 @@ body {
             background: var(--secondary-background-color);
             outline: none;
         }
+        /* Match the accent / warn semantics of ``.action-btn.accent`` /
+           ``.action-btn.warn`` (line ~2390) — the master ``accent``
+           tone in this app is ``--primary-color`` (blue), not
+           ``--accent-color`` (which is amber in the default theme).
+           Hover background derives from the same colour-family so a
+           themed deployment with a non-blue ``--primary-color`` keeps
+           text and hover bg coherent. */
         .group-bulk-action-item.accent {
-            color: var(--accent-color, #03a9f4);
+            color: var(--primary-color);
         }
-        .group-bulk-action-item.accent:hover {
-            background: rgba(3, 169, 244, 0.12);
+        .group-bulk-action-item.accent:hover,
+        .group-bulk-action-item.accent:focus-visible {
+            background: rgba(3, 169, 244, 0.10);
+            color: var(--primary-color);
         }
         .group-bulk-action-item.warn {
             color: var(--error-color, #db4437);
         }
-        .group-bulk-action-item.warn:hover {
-            background: rgba(219, 68, 55, 0.12);
+        .group-bulk-action-item.warn:hover,
+        .group-bulk-action-item.warn:focus-visible {
+            background: rgba(219, 68, 55, 0.10);
+            color: var(--error-color, #db4437);
         }
         .bt-toolbar {
             display: flex;
@@ -5934,12 +5945,6 @@ body {
            the ``--pair`` green colour so they read as one control;
            inner corners are flat (border-radius 0) and the seam is a
            1px subtle divider so the two halves don't bleed together. */
-        .scan-action-split {
-            position: relative;
-            display: inline-flex;
-            align-items: stretch;
-            line-height: 1;
-        }
         /* The wrapper is the positioning context — both halves of the
            split button anchor to it, and the popup floats relative
            to the wrapper's edges so it lines up with the END of the
@@ -5947,6 +5952,9 @@ body {
            <details> itself must NOT be position:relative or the popup
            would shrink to its 30px width and overflow horizontally. */
         .scan-action-split {
+            position: relative;
+            display: inline-flex;
+            align-items: stretch;
             line-height: 1;
         }
         .scan-action-split-menu {

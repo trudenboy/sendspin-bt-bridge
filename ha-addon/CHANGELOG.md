@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-<<<<<<< fix/group-actions-dropdown
+### Review follow-ups
+
+- ``POST /api/bt/power_save`` now strictly validates that ``enter``
+  is a JSON boolean (was accepting truthy strings) and returns 503
+  when the asyncio loop is unavailable instead of a false-positive
+  200.
+- Removed stale ``aria-expanded`` attribute from the bulk-actions
+  and scan-result dropdown toggles — native ``<details>`` already
+  reports state correctly to screen readers.
+- Aligned bulk-actions menu accent / warn colours with the rest of
+  the app theme.
+
 ## [2.64.0-rc.2] - 2026-04-27
 
 ### Fixed — "Reconnect all" no-op on healthy fleet
