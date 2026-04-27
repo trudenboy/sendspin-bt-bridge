@@ -291,6 +291,7 @@ class BridgeOrchestrator:
         get_sink_volume: Callable[[str], Awaitable[int | None]] | None = None,
         save_volume: Callable[[str | None, int], None] | None = None,
         sink_monitor: Any | None = None,
+        hci_monitor: Any | None = None,
     ) -> None:
         """Mute active sinks, stop the sink monitor, and stop all clients."""
         logger.info("Received shutdown signal — muting sinks before exit...")
@@ -334,6 +335,8 @@ class BridgeOrchestrator:
 
         if sink_monitor is not None:
             await sink_monitor.stop()
+        if hci_monitor is not None:
+            await hci_monitor.stop()
 
         self.lifecycle_state.publish_clients([])
         self.lifecycle_state.publish_shutdown_complete(stopped_clients=len(shutdown_clients))
@@ -628,8 +631,13 @@ class BridgeOrchestrator:
         for client in clients:
             client._sink_monitor = sink_monitor
 
+        from services.hci_avrcp_monitor import get_monitor as _get_hci_monitor
+
+        hci_monitor = _get_hci_monitor()
+
         try:
             await sink_monitor.start()
+            await hci_monitor.start()
             startup_phase = "web"
             web_thread = (
                 self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)
@@ -638,7 +646,10 @@ class BridgeOrchestrator:
             await self.configure_executor(len(clients), web_thread_name=web_thread.name)
             startup_phase = "signals"
             self.install_signal_handlers(
-                loop, shutdown_factory=lambda: self.graceful_shutdown(clients=clients, sink_monitor=sink_monitor)
+                loop,
+                shutdown_factory=lambda: self.graceful_shutdown(
+                    clients=clients, sink_monitor=sink_monitor, hci_monitor=hci_monitor
+                ),
             )
             startup_phase = "integrations"
             ma_bootstrap = await self.initialize_ma_integration(
@@ -653,6 +664,7 @@ class BridgeOrchestrator:
                 details={"error_type": type(exc).__name__},
             )
             await sink_monitor.stop()
+            await hci_monitor.stop()
             raise
         try:
             return await self.run_runtime(
@@ -663,3 +675,4 @@ class BridgeOrchestrator:
             )
         finally:
             await sink_monitor.stop()
+            await hci_monitor.stop()
