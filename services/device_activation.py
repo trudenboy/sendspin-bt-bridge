@@ -113,13 +113,24 @@ def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str],
                 getattr(default_client, "player_name", "?"),
             )
             return False
+        routed = getattr(client, "player_name", "?")
+        default = getattr(default_client, "player_name", "?")
+        if routed == default:
+            logger.info("MPRIS transport %s → %s", command, routed)
+        else:
+            logger.info(
+                "MPRIS transport %s → %s (BlueZ default=%s, corrected via HCI source)",
+                command,
+                routed,
+                default,
+            )
         try:
             ok = await client.send_transport_command(command)
         except Exception as exc:
             logger.warning(
                 "MPRIS transport %s for %s failed: %s",
                 command,
-                getattr(client, "player_name", "?"),
+                routed,
                 exc,
             )
             return False
@@ -149,13 +160,24 @@ def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], An
                 getattr(default_client, "player_name", "?"),
             )
             return False
+        routed = getattr(client, "player_name", "?")
+        default = getattr(default_client, "player_name", "?")
+        if routed == default:
+            logger.info("MPRIS volume %d%% → %s", volume_pct, routed)
+        else:
+            logger.info(
+                "MPRIS volume %d%% → %s (BlueZ default=%s, corrected via HCI source)",
+                volume_pct,
+                routed,
+                default,
+            )
         try:
             await client._send_subprocess_command({"cmd": "set_volume", "value": int(volume_pct)})
         except Exception as exc:
             logger.warning(
                 "MPRIS volume->%d for %s failed: %s",
                 volume_pct,
-                getattr(client, "player_name", "?"),
+                routed,
                 exc,
             )
             return False
