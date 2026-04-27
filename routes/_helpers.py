@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import logging
 import os
+import os.path as _os_path
 import re
 
 from flask import jsonify
@@ -30,7 +31,19 @@ def config_write_error_response(exc: OSError, context: str | None = None):
     """
     logger.exception("Config write failed: %s", exc)
     error_no = getattr(exc, "errno", None)
-    config_dir = os.environ.get("CONFIG_DIR", "/config")
+    # Prefer the path the exception itself names (caught directly from
+    # the failing write), then fall back to the live ``config.CONFIG_DIR``
+    # — tests monkey-patch the latter via tests/conftest.py, so reading
+    # ``os.environ["CONFIG_DIR"]`` would point operators at the wrong
+    # path in test scenarios and at addon-translated paths in HA addon
+    # mode where the env var is not the source of truth.
+    exc_filename = getattr(exc, "filename", None)
+    if exc_filename:
+        config_dir = str(_os_path.dirname(exc_filename) or exc_filename)
+    else:
+        from config import CONFIG_DIR as _live_config_dir
+
+        config_dir = str(_live_config_dir)
     runtime_uid = os.getuid()
     prefix = f"{context}: " if context else ""
 

@@ -2,7 +2,27 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from services.recovery_assistant import build_recovery_assistant_snapshot
+
+
+@pytest.fixture(autouse=True)
+def _isolate_config_writable_check(monkeypatch):
+    """Default tests in this file don't supply a preflight payload and
+    don't mock CONFIG_DIR, so the strict missing-dir check would
+    surface a ``config_dir_not_writable`` card on dev machines where
+    ``/config`` is unreachable.  Force the issue builder to no-op
+    here; tests that exercise the card explicitly mock
+    ``collect_preflight_status`` themselves and bypass this fixture
+    via direct monkeypatch ordering."""
+    import services.recovery_assistant as recovery_module
+
+    monkeypatch.setattr(
+        recovery_module,
+        "collect_preflight_status",
+        lambda: {"config_writable": {"status": "ok"}},
+    )
 
 
 def test_recovery_assistant_flags_sink_and_disconnect_issues():

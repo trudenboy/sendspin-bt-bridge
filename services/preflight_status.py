@@ -131,12 +131,23 @@ def _build_config_writable_payload(config_dir) -> dict[str, Any]:
         "config_dir": str(config_dir),
         "uid": _os.getuid(),
     }
-    if not Path(config_dir).is_dir():
-        payload["status"] = "ok"
-        payload["writable"] = True
-        payload["remediation"] = None
-        payload["note"] = "config_dir does not exist — covered by Config status check"
-        return payload
+    # Missing directory: try to create it (entrypoint normally handles
+    # this at startup, but a runtime-time delete or a non-container
+    # deployment that never had startup-side mkdir would land here).
+    # mkdir failures are themselves diagnostic — surface them with the
+    # same canonical reason codes as the touch probe.
+    cfg_path = Path(config_dir)
+    if not cfg_path.is_dir():
+        try:
+            cfg_path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            payload["status"] = "degraded"
+            payload["writable"] = False
+            payload["error"] = collection_error_payload(exc)
+            payload["remediation"] = (
+                f"Create {config_dir} on the host and chown -R {_os.getuid()}:{_os.getgid()} <bind-mount target>"
+            )
+            return payload
     try:
         _probe_config_writable(config_dir)
     except OSError as exc:

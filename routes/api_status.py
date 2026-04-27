@@ -309,6 +309,9 @@ def _build_recovery_assistant_payload(
         onboarding_assistant=onboarding_assistant,
         startup_progress=startup_progress,
         bridge_state=bridge_state,
+        # Reuse the already-collected preflight payload so the recovery
+        # snapshot builder doesn't rerun the bluetoothctl + audio probes.
+        preflight=preflight,
     )
     return recovery.to_dict()
 

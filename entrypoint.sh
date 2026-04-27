@@ -129,7 +129,7 @@ _check_config_writable() {
     echo "ERROR: ${dir} is not writable by UID ${target_uid} (${target_user})." >&2
     echo "ERROR:   probe error: ${probe_err}" >&2
     echo "ERROR:   ${CONFIG_WRITABLE_HINT}" >&2
-    echo "ERROR:   without this fix, MA OAuth save / config save / log_level save will all return generic 500." >&2
+    echo "ERROR:   without this fix, MA OAuth save / config save / log_level save will all fail with 500 responses because config cannot be persisted." >&2
     return 1
 }
 

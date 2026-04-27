@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.63.2-rc.1] - 2026-04-27
 
+### Review follow-ups (Copilot on PR #206)
+
+- ``services/recovery_assistant._build_config_writable_issue`` now
+  accepts an optional ``preflight`` parameter and is called with the
+  already-collected payload from
+  ``routes/api_status._build_recovery_assistant_payload`` — avoids
+  rerunning the bluetoothctl + audio probes a second time per
+  ``/api/status`` request.
+- ``services/preflight_status._build_config_writable_payload`` no
+  longer silently returns ``ok`` when ``$CONFIG_DIR`` doesn't exist;
+  attempts ``mkdir(parents=True, exist_ok=True)`` and classifies any
+  resulting ``OSError`` via ``collection_error_payload`` so non-
+  container deployments without a pre-created config dir surface
+  the issue instead of hiding it.
+- ``routes/_helpers.config_write_error_response`` now derives the
+  reported path from ``exc.filename`` (most accurate) with a fallback
+  to ``config.CONFIG_DIR`` (live, monkey-patchable) instead of
+  ``os.environ["CONFIG_DIR"]`` — keeps the response consistent with
+  the actual config location across HA addon mode and tests.
+- ``entrypoint.sh`` chown-failure ERROR line updated to say "fail
+  with 500 responses because config cannot be persisted" instead of
+  the now-misleading "return generic 500" — the new structured 500
+  is exactly what Layer 2 ships.
+- ``routes/ma_auth._save_ma_token_and_rediscover`` gains an explicit
+  ``None | tuple[Response, int]`` return annotation so the new
+  contract is grep-able.
+
+One new test in ``tests/test_preflight_config_writable.py``
+(mkdir-failure classification) + autouse fixture in
+``tests/test_recovery_assistant.py`` to neutralise the global
+preflight collector so existing tests don't surface a false-positive
+``config_dir_not_writable`` card on dev machines.
+
 ### Fixed — defense in depth: detect & surface non-writable ``$CONFIG_DIR``
 
 Issue [#190](https://github.com/trudenboy/sendspin-bt-bridge/issues/190)

@@ -125,6 +125,32 @@ def test_preflight_overall_status_flips_to_degraded_on_writable_failure(tmp_path
     assert result["status"] == "degraded"
 
 
+def test_preflight_config_writable_classifies_mkdir_failure_as_degraded(tmp_path, monkeypatch):
+    """When ``$CONFIG_DIR`` doesn't exist *and* the entrypoint
+    couldn't create it (parent not writable for the runtime UID —
+    the non-container deployment case Copilot flagged), strict mode
+    must surface this as ``status=degraded`` with a remediation
+    pointing at the right path.  Earlier tolerance (returning ``ok``
+    silently) was a false positive that masked the gap entirely on
+    operator machines that bind-mount a read-only parent."""
+    import config
+
+    nonexistent = tmp_path / "child"
+    monkeypatch.setattr(config, "CONFIG_DIR", nonexistent)
+
+    def _mkdir_fails(self, *_a, **_kw):
+        raise PermissionError(errno.EACCES, "Permission denied", str(nonexistent))
+
+    monkeypatch.setattr("pathlib.Path.mkdir", _mkdir_fails)
+
+    result = collect_preflight_status(**_stub_collectors())
+
+    assert result["config_writable"]["status"] == "degraded"
+    assert result["config_writable"]["writable"] is False
+    assert result["config_writable"]["error"]["code"] == "permission_denied"
+    assert "chown" in result["config_writable"].get("remediation", "").lower()
+
+
 def test_preflight_config_writable_records_path_and_uid(tmp_path, monkeypatch):
     """The payload must include the actual ``$CONFIG_DIR`` path and
     the runtime UID so a bug-report attached blob makes the

@@ -466,21 +466,23 @@ def _build_duplicate_device_issues() -> list[RecoveryIssue]:
     return issues
 
 
-def _build_config_writable_issue() -> RecoveryIssue | None:
+def _build_config_writable_issue(preflight: dict[str, Any] | None = None) -> RecoveryIssue | None:
     """Surface ``/config not writable`` (issue #190) as a recovery card.
 
-    Calls ``collect_preflight_status`` directly — the writable probe is
-    cheap (touch + unlink) and runs already as part of preflight, so
-    this just consumes the cached payload structure.  Returns ``None``
-    on the happy path so the recovery banner stays empty when nothing
-    is wrong.
+    Reuses an already-collected ``preflight`` payload when supplied so
+    recovery snapshot builders don't rerun the bluetoothctl + audio
+    probes a second time per request.  Falls back to
+    ``collect_preflight_status()`` for legacy callers that don't
+    plumb preflight through.  Returns ``None`` on the happy path so
+    the recovery banner stays empty when nothing is wrong.
     """
-    try:
-        preflight = collect_preflight_status()
-    except Exception:
-        # Never let this assistant builder crash the whole recovery
-        # snapshot — preflight collection is best-effort.
-        return None
+    if preflight is None:
+        try:
+            preflight = collect_preflight_status()
+        except Exception:
+            # Never let this assistant builder crash the whole recovery
+            # snapshot — preflight collection is best-effort.
+            return None
     config_writable = preflight.get("config_writable") or {}
     if config_writable.get("status") == "ok":
         return None
@@ -748,6 +750,7 @@ def build_recovery_assistant_snapshot(
     onboarding_assistant: dict[str, Any],
     startup_progress: dict[str, Any],
     bridge_state: BridgeStateModel | None = None,
+    preflight: dict[str, Any] | None = None,
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
         delay_by_name: dict[str, Any] = {}
@@ -767,7 +770,7 @@ def build_recovery_assistant_snapshot(
         ]
     issues = _build_device_issues(devices)
     issues.extend(_build_duplicate_device_issues())
-    config_writable_issue = _build_config_writable_issue()
+    config_writable_issue = _build_config_writable_issue(preflight=preflight)
     if config_writable_issue:
         issues.append(config_writable_issue)
     onboarding_issue = _build_onboarding_issue(onboarding_assistant)
