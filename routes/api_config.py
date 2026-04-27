@@ -551,7 +551,12 @@ def api_config_upload():
             if key not in existing:
                 uploaded.pop(key, None)
 
-        write_config_file(uploaded, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
+        try:
+            write_config_file(uploaded, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
+        except OSError as exc:
+            from routes._helpers import config_write_error_response
+
+            return config_write_error_response(exc, context="Cannot save uploaded config")
 
     payload: dict[str, object] = {"success": True}
     if warnings:
@@ -779,7 +784,12 @@ def api_config():
                     last_volumes[mac] = default_vol
         config["LAST_VOLUMES"] = _sanitize_last_volumes(last_volumes, set(new_devices))
 
-        write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
+        try:
+            write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
+        except OSError as exc:
+            from routes._helpers import config_write_error_response
+
+            return config_write_error_response(exc, context="Cannot save bridge config")
 
         # Compute reconfig actions from the on-disk "before" snapshot to the
         # just-persisted "after" snapshot while the lock is still held.
@@ -861,7 +871,11 @@ def api_set_password():
 
     try:
         update_config(lambda cfg: cfg.__setitem__("AUTH_PASSWORD_HASH", pw_hash))
-    except (OSError, json.JSONDecodeError, ValueError):
+    except OSError as exc:
+        from routes._helpers import config_write_error_response
+
+        return config_write_error_response(exc, context="Cannot save password")
+    except (json.JSONDecodeError, ValueError):
         logger.exception("Could not persist auth password hash")
         return jsonify({"success": False, "error": "Could not save password"}), 500
 
@@ -879,7 +893,11 @@ def api_set_log_level():
     # Persist to config.json
     try:
         update_config(lambda cfg: cfg.__setitem__("LOG_LEVEL", level))
-    except (OSError, json.JSONDecodeError, ValueError):
+    except OSError as exc:
+        from routes._helpers import config_write_error_response
+
+        return config_write_error_response(exc, context=f"Cannot save log level {level}")
+    except (json.JSONDecodeError, ValueError):
         logger.exception("Could not persist log level %s", level)
         return jsonify({"success": False, "error": "Could not persist log level"}), 500
 

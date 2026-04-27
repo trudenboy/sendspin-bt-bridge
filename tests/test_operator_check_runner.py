@@ -26,6 +26,71 @@ def test_run_safe_check_reports_preflight_failure(monkeypatch):
     assert "D-Bus access is unavailable" in result["summary"]
 
 
+def test_run_safe_check_config_writable_ok(monkeypatch):
+    """Re-run check button on the recovery banner: when the operator
+    has fixed the chown, this returns ``ok`` so the card flips green
+    immediately without a full diagnostics page reload."""
+    import services.operator_check_runner as runner
+
+    monkeypatch.setattr(
+        runner,
+        "collect_preflight_status",
+        lambda: {
+            "status": "ok",
+            "dbus": True,
+            "collections_status": {"config_writable": {"status": "ok"}},
+            "bluetooth": {"controller": True, "paired_devices": 0},
+            "audio": {"sinks": 0},
+            "config_writable": {
+                "status": "ok",
+                "writable": True,
+                "config_dir": "/config",
+                "uid": 1000,
+                "remediation": None,
+            },
+        },
+    )
+
+    result = run_safe_check("config_writable")
+
+    assert result["status"] == "ok"
+    assert "/config" in result["summary"]
+    assert "1000" in result["summary"]
+
+
+def test_run_safe_check_config_writable_error_includes_remediation(monkeypatch):
+    """Issue #190 path: re-run check after the dir is still root-owned
+    must surface the chown command in the summary string so the
+    operator's next click is informed."""
+    import services.operator_check_runner as runner
+
+    monkeypatch.setattr(
+        runner,
+        "collect_preflight_status",
+        lambda: {
+            "status": "degraded",
+            "dbus": True,
+            "collections_status": {"config_writable": {"status": "error"}},
+            "bluetooth": {"controller": True, "paired_devices": 0},
+            "audio": {"sinks": 0},
+            "config_writable": {
+                "status": "degraded",
+                "writable": False,
+                "config_dir": "/config",
+                "uid": 1000,
+                "remediation": "chown -R 1000:1000 <bind-mount target for /config>",
+                "error": {"code": "permission_denied"},
+            },
+        },
+    )
+
+    result = run_safe_check("config_writable")
+
+    assert result["status"] == "error"
+    assert "chown" in result["summary"].lower()
+    assert "1000" in result["summary"]
+
+
 def test_run_safe_check_revalidates_ma_groups(monkeypatch):
     import services.operator_check_runner as runner
     from services.device_registry import DeviceRegistrySnapshot

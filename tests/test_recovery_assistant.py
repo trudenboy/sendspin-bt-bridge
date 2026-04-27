@@ -2,7 +2,27 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from services.recovery_assistant import build_recovery_assistant_snapshot
+
+
+@pytest.fixture(autouse=True)
+def _isolate_config_writable_check(monkeypatch):
+    """Default tests in this file don't supply a preflight payload and
+    don't mock CONFIG_DIR, so the strict missing-dir check would
+    surface a ``config_dir_not_writable`` card on dev machines where
+    ``/config`` is unreachable.  Force the issue builder to no-op
+    here; tests that exercise the card explicitly mock
+    ``collect_preflight_status`` themselves and bypass this fixture
+    via direct monkeypatch ordering."""
+    import services.recovery_assistant as recovery_module
+
+    monkeypatch.setattr(
+        recovery_module,
+        "collect_preflight_status",
+        lambda: {"config_writable": {"status": "ok"}},
+    )
 
 
 def test_recovery_assistant_flags_sink_and_disconnect_issues():
@@ -77,6 +97,77 @@ def test_recovery_assistant_flags_sink_and_disconnect_issues():
     assert data["timeline"]["summary"]["entry_count"] >= 2
     assert data["known_good_test_path"]["steps"][0]["reached"] is True
     assert data["known_good_test_path"]["steps"][1]["reached"] is False
+
+
+def test_recovery_assistant_surfaces_config_writable_failure_as_issue(monkeypatch):
+    """Issue #190 — when preflight reports ``config_writable.status =
+    degraded``, the recovery snapshot must include an issue card with
+    key ``config_dir_not_writable``, the chown remediation in the
+    summary, and an error severity.  This is what makes the failure
+    visible in the Diagnostics panel without operators reading
+    container logs."""
+    import services.recovery_assistant as recovery_module
+
+    monkeypatch.setattr(
+        recovery_module,
+        "collect_preflight_status",
+        lambda: {
+            "status": "degraded",
+            "config_writable": {
+                "status": "degraded",
+                "writable": False,
+                "config_dir": "/config",
+                "uid": 1000,
+                "remediation": "chown -R 1000:1000 <bind-mount target for /config>",
+                "error": {"code": "permission_denied"},
+            },
+        },
+    )
+
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    keys = [issue["key"] for issue in data["issues"]]
+    assert "config_dir_not_writable" in keys
+    card = next(issue for issue in data["issues"] if issue["key"] == "config_dir_not_writable")
+    assert card["severity"] == "error"
+    assert "/config" in card["title"]
+    assert "chown" in card["summary"].lower()
+    assert "1000" in card["summary"]
+    # Recovery snapshot summary must escalate to "error"
+    assert data["summary"]["highest_severity"] == "error"
+
+
+def test_recovery_assistant_omits_config_writable_card_when_ok(monkeypatch):
+    """Happy path: when preflight is clean, the recovery snapshot
+    must not introduce noise.  Pin this so a future refactor doesn't
+    accidentally always-render the card."""
+    import services.recovery_assistant as recovery_module
+
+    monkeypatch.setattr(
+        recovery_module,
+        "collect_preflight_status",
+        lambda: {
+            "status": "ok",
+            "config_writable": {"status": "ok", "writable": True, "config_dir": "/config", "uid": 1000},
+        },
+    )
+
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    keys = [issue["key"] for issue in data["issues"]]
+    assert "config_dir_not_writable" not in keys
 
 
 def test_recovery_assistant_reports_healthy_single_device_setup():

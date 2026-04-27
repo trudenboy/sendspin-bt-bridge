@@ -101,6 +101,29 @@ def _run_preflight_check(check_key: str) -> dict[str, Any]:
         return _result(
             "warning", check_key, "Audio backend responded, but no sinks were visible yet.", preflight=preflight
         )
+    if check_key == "config_writable":
+        # Issue #190 — bind-mount target left as ``root:root`` while
+        # the bridge runs as a dropped UID.  The "Re-run check" button
+        # in Diagnostics flips green as soon as the operator runs the
+        # suggested chown on the host.
+        config_writable = preflight.get("config_writable") or {}
+        if config_writable.get("status") == "ok":
+            return _result(
+                "ok",
+                check_key,
+                f"{config_writable.get('config_dir')} is writable by UID {config_writable.get('uid')}.",
+                preflight=preflight,
+            )
+        remediation = config_writable.get("remediation") or ""
+        return _result(
+            "error",
+            check_key,
+            (
+                f"{config_writable.get('config_dir')} is not writable by UID "
+                f"{config_writable.get('uid')}. {remediation}".strip()
+            ),
+            preflight=preflight,
+        )
     return _result("error", check_key, "Unsupported safe check.", preflight=preflight)
 
 
@@ -228,7 +251,7 @@ def run_safe_check(
     """Run one rerunnable safe check and return a structured summary."""
     normalized_key = str(check_key or "").strip()
     config = {} if config is None else config
-    if normalized_key in {"runtime_access", "bluetooth", "audio"}:
+    if normalized_key in {"runtime_access", "bluetooth", "audio", "config_writable"}:
         return _run_preflight_check(normalized_key)
     if normalized_key == "sink_verification":
         return _run_sink_verification(device_names=device_names)

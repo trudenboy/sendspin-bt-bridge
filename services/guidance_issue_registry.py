@@ -30,6 +30,17 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("runtime_access_unavailable",),
     ),
+    "config_dir_not_writable": GuidanceIssueDefinition(
+        # Issue #190 — bind-mount target left as ``root:root`` while the
+        # bridge runs as a dropped UID.  Surfaces in the recovery
+        # banner with a chown remediation hint so operators don't have
+        # to ``ls -la /config`` to find this.
+        key="config_dir_not_writable",
+        layer="storage",
+        priority=15,  # higher than bluetooth (20), lower than runtime_access (10)
+        severity="error",
+        default_reason_codes=("permission_denied", "read_only_filesystem"),
+    ),
     "bluetooth_unavailable": GuidanceIssueDefinition(
         key="bluetooth_unavailable",
         layer="bluetooth",

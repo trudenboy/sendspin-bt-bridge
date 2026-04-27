@@ -2859,7 +2859,12 @@ def test_api_set_password_returns_error_when_config_persist_fails(client, monkey
     )
 
     assert resp.status_code == 500
-    assert resp.get_json() == {"success": False, "error": "Could not save password"}
+    payload = resp.get_json()
+    assert payload["success"] is False
+    # New behaviour (issue #190 hardening): error includes operation
+    # context + structured remediation instead of a flat message.
+    assert "save password" in payload["error"].lower()
+    assert "remediation" in payload
 
 
 def test_api_set_log_level_returns_error_when_config_persist_fails(client, monkeypatch):
@@ -2886,7 +2891,11 @@ def test_api_set_log_level_returns_error_when_config_persist_fails(client, monke
             content_type="application/json",
         )
         assert resp.status_code == 500
-        assert resp.get_json() == {"success": False, "error": "Could not persist log level"}
+        payload = resp.get_json()
+        assert payload["success"] is False
+        # New behaviour (issue #190 hardening): structured remediation.
+        assert "log level" in payload["error"].lower()
+        assert "remediation" in payload
         assert root_logger.level == original_level
         assert "LOG_LEVEL" not in api_config_mod.os.environ
     finally:

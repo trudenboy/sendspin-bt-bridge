@@ -460,7 +460,7 @@ def test_idempotent_reuse(_mock_validate, _mock_get_ma_api_credentials, client):
 
 @patch("routes.ma_auth.socket.gethostname", return_value="current-host")
 @patch("routes.ma_auth.get_ma_api_credentials", return_value=("http://localhost:8095", "existing_token"))
-@patch("routes.ma_auth._save_ma_token_and_rediscover")
+@patch("routes.ma_auth._save_ma_token_and_rediscover", return_value=None)
 @patch("routes.ma_auth._validate_ma_token", return_value=True)
 @patch("routes.ma_auth._create_ma_token_via_ingress", return_value="new_ma_token")
 @patch(
@@ -507,7 +507,7 @@ def test_ha_ws_failure_returns_401(_mock_ws, _mock_get_ma_api_credentials, clien
 
 
 @patch("routes.ma_auth.get_ma_api_credentials", return_value=("", ""))
-@patch("routes.ma_auth._save_ma_token_and_rediscover")
+@patch("routes.ma_auth._save_ma_token_and_rediscover", return_value=None)
 @patch("routes.ma_auth._validate_ma_token", return_value=True)
 @patch("routes.ma_auth._create_ma_token_via_ingress", return_value="new_ma_token")
 @patch(
@@ -622,7 +622,7 @@ def test_ha_login_returns_specific_ma_oauth_error(_mock_addon, _mock_oauth, clie
     assert "switch to Music Assistant authentication" in data["error"]
 
 
-@patch("routes.ma_auth._save_ma_token_and_rediscover")
+@patch("routes.ma_auth._save_ma_token_and_rediscover", return_value=None)
 @patch("routes.ma_auth._validate_ma_token", return_value=True)
 @patch("routes.ma_auth._create_ma_token_via_ha_proxy", return_value="ma-token")
 @patch("routes.ma_auth._get_ha_user_via_ws", return_value={"id": "u1", "name": "admin", "is_admin": True})

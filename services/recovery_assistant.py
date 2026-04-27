@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from services.bridge_state_model import BridgeStateModel
 
 from services._helpers import _device_audio_streaming, _device_extra, _device_ma_reconnecting
+from services.preflight_status import collect_preflight_status
 from services.recovery_timeline import build_recovery_timeline
 
 UTC = timezone.utc
@@ -465,6 +466,45 @@ def _build_duplicate_device_issues() -> list[RecoveryIssue]:
     return issues
 
 
+def _build_config_writable_issue(preflight: dict[str, Any] | None = None) -> RecoveryIssue | None:
+    """Surface ``/config not writable`` (issue #190) as a recovery card.
+
+    Reuses an already-collected ``preflight`` payload when supplied so
+    recovery snapshot builders don't rerun the bluetoothctl + audio
+    probes a second time per request.  Falls back to
+    ``collect_preflight_status()`` for legacy callers that don't
+    plumb preflight through.  Returns ``None`` on the happy path so
+    the recovery banner stays empty when nothing is wrong.
+    """
+    if preflight is None:
+        try:
+            preflight = collect_preflight_status()
+        except Exception:
+            # Never let this assistant builder crash the whole recovery
+            # snapshot — preflight collection is best-effort.
+            return None
+    config_writable = preflight.get("config_writable") or {}
+    if config_writable.get("status") == "ok":
+        return None
+    config_dir = config_writable.get("config_dir") or "/config"
+    uid = config_writable.get("uid")
+    remediation = config_writable.get("remediation") or ""
+    primary_action, secondary_actions = build_recovery_issue_actions("config_dir_not_writable", [])
+    return RecoveryIssue(
+        key="config_dir_not_writable",
+        severity="error",
+        title=f"{config_dir} is not writable by the bridge",
+        summary=(
+            f"The bridge process (UID {uid}) cannot write to {config_dir}. "
+            "Music Assistant token saves, password changes, and per-device "
+            "config edits will all fail with a 500. "
+            f"Fix: {remediation}"
+        ),
+        primary_action=primary_action,
+        secondary_actions=secondary_actions,
+    )
+
+
 def _build_onboarding_issue(onboarding_assistant: dict[str, Any]) -> RecoveryIssue | None:
     checklist = onboarding_assistant.get("checklist") or {}
     current_title = str(checklist.get("current_step_title") or "").strip()
@@ -710,6 +750,7 @@ def build_recovery_assistant_snapshot(
     onboarding_assistant: dict[str, Any],
     startup_progress: dict[str, Any],
     bridge_state: BridgeStateModel | None = None,
+    preflight: dict[str, Any] | None = None,
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
         delay_by_name: dict[str, Any] = {}
@@ -729,6 +770,9 @@ def build_recovery_assistant_snapshot(
         ]
     issues = _build_device_issues(devices)
     issues.extend(_build_duplicate_device_issues())
+    config_writable_issue = _build_config_writable_issue(preflight=preflight)
+    if config_writable_issue:
+        issues.append(config_writable_issue)
     onboarding_issue = _build_onboarding_issue(onboarding_assistant)
     if onboarding_issue:
         issues.append(onboarding_issue)

@@ -19,6 +19,8 @@ STARTUP_WAIT_STATUS="not needed"
 STARTUP_WAIT_ERROR=""
 CONFIG_PATH=""
 CONFIG_STATUS="✗ config not checked"
+CONFIG_WRITABLE="? not checked"
+CONFIG_WRITABLE_HINT=""
 DEV_COUNT=0
 BT_STATUS="✗ no controller"
 BT_PAIRED=0
@@ -73,6 +75,62 @@ _refresh_config_diagnostics() {
     else
         CONFIG_STATUS="✗ $CONFIG_PATH not found (will use defaults)"
     fi
+}
+
+# Probe whether ``$CONFIG_DIR`` is actually writable by the *runtime*
+# process (after the upcoming UID drop), not just by container init.
+# Issue #190 root cause: bind-mount target left as ``root:root`` while
+# the bridge runs as UID 1000 → first config write (MA OAuth save)
+# raises ``PermissionError`` → Flask returns generic 500 with no
+# diagnostic signal.  Surfacing the failure here means operators see
+# the actionable chown command in journald + banner *before* the bug
+# manifests as a confused user clicking "Get token" and getting 500.
+#
+# Test method: ``touch`` + ``rm`` a unique probe file as the target
+# UID via ``setpriv`` / ``gosu`` (or directly when init UID == app
+# UID).  Avoids race with /config writes happening at startup because
+# the probe filename includes the PID.
+_check_config_writable() {
+    local dir="${CONFIG_DIR:-/config}"
+    local probe="${dir}/.sendspin-write-probe-$$"
+    local target_uid="${APP_RUNTIME_UID:-$RUNTIME_UID}"
+    local target_user="${APP_RUNTIME_USER:-$RUNTIME_USER}"
+    local probe_err=""
+
+    if [ ! -d "$dir" ]; then
+        CONFIG_WRITABLE="✗ ${dir} does not exist"
+        CONFIG_WRITABLE_HINT="Create the host-side bind-mount target before starting the container."
+        return 1
+    fi
+
+    # Prefer testing as the runtime UID — that's the user who'll
+    # actually hit the write path.  When init and runtime UIDs are
+    # the same we skip the helper hop.
+    if [ -n "${APP_RUNTIME_SPEC:-}" ] && command -v setpriv >/dev/null 2>&1; then
+        probe_err=$(setpriv --reuid="$APP_RUNTIME_UID" --regid="$APP_RUNTIME_GID" --clear-groups \
+            sh -c "touch '$probe' && rm -f '$probe'" 2>&1) && probe_err=""
+    elif [ -n "${APP_RUNTIME_SPEC:-}" ] && command -v gosu >/dev/null 2>&1; then
+        probe_err=$(gosu "$APP_RUNTIME_SPEC" sh -c "touch '$probe' && rm -f '$probe'" 2>&1) && probe_err=""
+    else
+        probe_err=$( { touch "$probe" && rm -f "$probe"; } 2>&1) && probe_err=""
+    fi
+
+    if [ -z "$probe_err" ]; then
+        CONFIG_WRITABLE="✓ writable by ${target_user} (UID ${target_uid})"
+        CONFIG_WRITABLE_HINT=""
+        return 0
+    fi
+
+    # Failure: build the actionable chown hint.  Include the
+    # *container-side* path (operators copy this verbatim — not
+    # always obvious which host path maps to /config).
+    CONFIG_WRITABLE="✗ NOT writable by ${target_user} (UID ${target_uid})"
+    CONFIG_WRITABLE_HINT="On the host: chown -R ${APP_RUNTIME_UID}:${APP_RUNTIME_GID} <bind-mount target for ${dir}>"
+    echo "ERROR: ${dir} is not writable by UID ${target_uid} (${target_user})." >&2
+    echo "ERROR:   probe error: ${probe_err}" >&2
+    echo "ERROR:   ${CONFIG_WRITABLE_HINT}" >&2
+    echo "ERROR:   without this fix, MA OAuth save / config save / log_level save will all fail with 500 responses because config cannot be persisted." >&2
+    return 1
 }
 
 _configured_devices_present() {
@@ -335,6 +393,10 @@ if ! _configured_devices_present; then
     _refresh_bluetooth_status || true
 fi
 _refresh_audio_probe_status || true
+# Run AFTER _refresh_audio_probe_status so APP_RUNTIME_SPEC is set
+# (audio detection promotes init-as-root to runtime-as-AUDIO_UID).
+# The probe needs the runtime UID, not init's, to be meaningful.
+_check_config_writable || true
 
 if ! _refresh_dbus_status; then
     echo "WARNING: Host D-Bus socket not found, Bluetooth may not work"
@@ -392,9 +454,14 @@ printf "║  BlueZ:       %-38s ║\n" "$BLUEZ_VERSION"
 printf "║  Paired:      %-38s ║\n" "$BT_PAIRED devices"
 printf "║  D-Bus:       %-38s ║\n" "$DBUS_STATUS"
 printf "║  Config:      %-38s ║\n" "$CONFIG_STATUS"
+printf "║  Config write:%-38s ║\n" "$CONFIG_WRITABLE"
 printf "║  MA Server:   %-38s ║\n" "$MA_SERVER"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
+
+if [ -n "$CONFIG_WRITABLE_HINT" ]; then
+    echo "Config write hint: $CONFIG_WRITABLE_HINT"
+fi
 
 if [ -n "$AUDIO_SOCKET_PATH" ]; then
     echo "Audio socket path: $AUDIO_SOCKET_PATH"
