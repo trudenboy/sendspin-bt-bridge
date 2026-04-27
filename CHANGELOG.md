@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.63.2-rc.1] - 2026-04-27
+
 ### Fixed — defense in depth: detect & surface non-writable ``$CONFIG_DIR``
 
 Issue [#190](https://github.com/trudenboy/sendspin-bt-bridge/issues/190)
