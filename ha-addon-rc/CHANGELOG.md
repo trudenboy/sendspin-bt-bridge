@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.1] - 2026-04-27
+
+### Fixed — AVRCP commands mis-routed between speakers on the same adapter
+
+When 2+ speakers share one BT adapter, BlueZ's AVRCP TG forwards every
+speaker's button presses to the same MPRIS player (``players[0]``),
+stripping source identity. The previous D-Bus heuristic missed
+``Next``/``Previous`` (no Status change) and lost the race vs BlueZ's
+own dispatch on ``Play``/``Pause``.
+
+New ``services/hci_avrcp_monitor`` opens a ``HCI_CHANNEL_MONITOR``
+socket and parses raw AVRCP passthrough packets to attribute each
+press to its real source MAC. The inbound MPRIS callback then waits
+on ``AvrcpSourceTracker.wait_for_next_activity`` (asyncio.Future,
+cross-thread safe via ``loop.call_soon_threadsafe``) and resolves to
+the correct client as soon as HCI fires — typically ~5ms.
+
+- ``HCIGETDEVLIST`` + ``HCIGETCONNLIST`` ioctls seed handle→MAC at
+  startup so connections that pre-date the monitor are attributed
+  correctly (kernel doesn't replay past Connection Complete events).
+- ``entrypoint.sh`` now keeps ``cap_net_raw`` alongside ``cap_net_admin``
+  via ``setpriv --ambient-caps`` so the bridge process under UID 1000
+  can bind ``HCI_CHANNEL_MONITOR``.
+- Single-speaker-per-adapter setups skip the wait/resolver entirely and
+  dispatch directly via BlueZ — sub-ms latency, no behaviour change.
+- Inbound logs now show resolved destination, e.g.
+  ``MPRIS transport pause → WH-1000XM4 (BlueZ default=ENEBY, corrected via HCI source)``.
+
+### Fixed — speaker physical volume knob didn't move bridge UI slider
+
+Speaker-side volume changes arrive as AVRCP "Set Absolute Volume"
+PDUs (not passthrough op_ids) and BlueZ doesn't write them to our
+exported MPRIS Volume. ``MediaPlayer1.PropertiesChanged.Volume`` covers
+"smart" speakers (AVRCP TG); for "dumb" speakers without
+MediaPlayer1, ``PulseVolumeController`` now exposes
+``set_external_change_tap`` so the daemon mirrors PA-sink volume
+changes into ``_bridge_status`` in parallel with sendspin's MA-bound
+callback (isolated — failure on one path doesn't block the other).
+
+### Fixed — transport commands routed to wrong device (VM 105 repro)
+
+``POST /api/transport/cmd`` resolved the target by
+``clients[device_index]``, but ``active_clients`` and the frontend's
+``lastDevices`` are independently re-ordered on disable/online-add/
+restart, so the indices diverge. Frontend now sends ``player_id``
+(UUID5 from MAC, exposed on every ``DeviceSnapshot``) and the
+endpoint looks up by player_id first, falling back to index with a
+WARN.
+
 ## [2.63.2-rc.1] - 2026-04-27
 
 ### Review follow-ups (Copilot on PR #206)

@@ -7,36 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Review follow-ups
-
-- ``HCI_CHANNEL_MONITOR`` socket-open path no longer leaks a file
-  descriptor on bind failure (e.g. transient EPERM during the
-  exponential backoff retry loop).
-- ``POST /api/transport/cmd`` returns 400 instead of 500 when the
-  request body is not a JSON object.
-
-## [2.64.0-rc.1] - 2026-04-27
-
-### Fixed — AVRCP commands mis-routed between speakers on same adapter
-
-New HCI-level source monitor (``HCI_CHANNEL_MONITOR``) attributes each
-AVRCP press to its real source MAC, fixing ``Next``/``Previous`` and
-the timing race on ``Play``/``Pause`` with 2+ speakers per adapter.
-``entrypoint.sh`` retains ``cap_net_raw`` across the UID drop.
-Single-speaker-per-adapter setups bypass the resolver entirely.
-
-### Fixed — speaker volume knob didn't move bridge UI slider
-
-PA-sink ``external_change_tap`` mirrors speaker-side volume changes
-into bridge status in parallel with sendspin's MA-bound callback,
-covering "dumb" speakers without ``MediaPlayer1``.
-
-### Fixed — transport commands routed to wrong device
-
-Frontend → backend transport dispatch now keys on ``player_id``
-(UUID5 from MAC) instead of ``device_index``, immune to
-``active_clients`` re-ordering.
-
 ## [2.63.1] - 2026-04-26
 
 ### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again
