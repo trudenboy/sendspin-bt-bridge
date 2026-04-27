@@ -6569,11 +6569,16 @@ function openConfigAndAddDevice(options) {
 //                          already "fair" territory.
 //
 // absolute (dBm):                 delta (Δ dB):
-//   ≥ -55  excellent (4 bars)       ≥   0  excellent (4 bars)
-//   ≥ -65  strong    (3 bars)       ≥ -10  strong    (3 bars)
-//   ≥ -75  fair      (2 bars)       ≥ -20  fair      (2 bars)
-//   <  -75 bad       (1 bar)        <  -20 bad       (1 bar)
+//   ≥ -55  excellent (4 bars)       ≥   0  excellent (4 bars, success)
+//   ≥ -65  strong    (3 bars)       ≥ -10  strong    (3 bars, success)
+//   ≥ -75  fair      (2 bars)       ≥ -20  fair      (2 bars, warning)
+//   <  -75 bad       (1 bar)        ≥ -25  poor      (1 bar,  warning)
+//                                   <  -25 bad       (1 bar,  error)
 //   stale  grey      (0 bars, rssi_at_ts > 90 s) — both modes
+//
+// Delta scheme has an extra "poor" tier between -20 and -25 because
+// real-world links often sit in that band — rendering them straight
+// to red "bad" was too alarmist for a working-but-marginal speaker.
 function _getRssiBadgeRenderData(rssiDbm, isStale, className, mode) {
     if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(Number(rssiDbm))) {
         return null;
@@ -6588,6 +6593,7 @@ function _getRssiBadgeRenderData(rssiDbm, isStale, className, mode) {
         if (n >= 0) { bars = 4; tone = 'success'; }
         else if (n >= -10) { bars = 3; tone = 'success'; }
         else if (n >= -20) { bars = 2; tone = 'warning'; }
+        else if (n >= -25) { bars = 1; tone = 'warning'; }
         else { bars = 1; tone = 'error'; }
     } else if (n >= -55) {
         bars = 4;
