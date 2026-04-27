@@ -7,44 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed — transport commands routed to wrong device (issue: VM 105 repro)
+## [2.64.0-rc.1] - 2026-04-27
 
-Pressing **Next / Pause / Volume** on a device card in the bridge UI
-(or via AVRCP from the speaker) silently dispatched the command to a
-different device whenever the backend's ``active_clients`` list order
-diverged from the frontend's ``lastDevices`` order — reproduced on
-VM 105 with WH-1000XM4 (frontend index 0) where ``device_index=0``
-landed on ENEBY Portable's daemon, advancing ENEBY's queue while
-WH's stream stayed put.
+### Fixed — AVRCP commands mis-routed between speakers on the same adapter
 
-Root cause: ``POST /api/transport/cmd`` resolved the target client by
-``clients[device_index]``.  The two arrays are independently
-re-ordered on disable / online-add / restart, so index lookup is
-inherently brittle.
+When 2+ speakers share one BT adapter, BlueZ's AVRCP TG forwards every
+speaker's button presses to the same MPRIS player (``players[0]``),
+stripping source identity. The previous D-Bus heuristic missed
+``Next``/``Previous`` (no Status change) and lost the race vs BlueZ's
+own dispatch on ``Play``/``Pause``.
 
-Fix:
+New ``services/hci_avrcp_monitor`` opens a ``HCI_CHANNEL_MONITOR``
+socket and parses raw AVRCP passthrough packets to attribute each
+press to its real source MAC. The inbound MPRIS callback then waits
+on ``AvrcpSourceTracker.wait_for_next_activity`` (asyncio.Future,
+cross-thread safe via ``loop.call_soon_threadsafe``) and resolves to
+the correct client as soon as HCI fires — typically ~5ms.
 
-- ``services/status_snapshot.DeviceSnapshot`` gains a top-level
-  ``player_id`` field (was already in ``client.player_id`` — UUID5
-  derived from MAC via ``_player_id_from_mac`` — but only surfaced
-  in ``device.extra``).  Frontend now sees it on every ``lastDevices``
-  entry.
-- ``static/app.js`` ``maQueueCmd`` sends ``{action, player_id}``
-  instead of ``{action, device_index}``.  Falls back to the index
-  path only when no ``player_id`` is available (older snapshots).
-- ``routes/api_transport.transport_cmd`` looks up the client by
-  ``player_id`` first, falling back to ``device_index`` with a WARN
-  log so we can spot stragglers.  Returns 404 with the bad id if
-  the player_id no longer exists.
+- ``HCIGETDEVLIST`` + ``HCIGETCONNLIST`` ioctls seed handle→MAC at
+  startup so connections that pre-date the monitor are attributed
+  correctly (kernel doesn't replay past Connection Complete events).
+- ``entrypoint.sh`` now keeps ``cap_net_raw`` alongside ``cap_net_admin``
+  via ``setpriv --ambient-caps`` so the bridge process under UID 1000
+  can bind ``HCI_CHANNEL_MONITOR``.
+- Single-speaker-per-adapter setups skip the wait/resolver entirely and
+  dispatch directly via BlueZ — sub-ms latency, no behaviour change.
+- Inbound logs now show resolved destination, e.g.
+  ``MPRIS transport pause → WH-1000XM4 (BlueZ default=ENEBY, corrected via HCI source)``.
 
-Group operations (Mute All / Pause All / group volume / Reconnect
-all) were already index-free — they use ``player_names`` /
-dedicated ``/api/pause_all`` endpoints — so unaffected.
+### Fixed — speaker physical volume knob didn't move bridge UI slider
 
-Tests: 3 new in ``tests/test_transport_cmd.py`` (player_id routes
-to correct client even with reversed backend order; unknown
-player_id returns 404; legacy device_index path still works with
-warning).
+Speaker-side volume changes arrive as AVRCP "Set Absolute Volume"
+PDUs (not passthrough op_ids) and BlueZ doesn't write them to our
+exported MPRIS Volume. ``MediaPlayer1.PropertiesChanged.Volume`` covers
+"smart" speakers (AVRCP TG); for "dumb" speakers without
+MediaPlayer1, ``PulseVolumeController`` now exposes
+``set_external_change_tap`` so the daemon mirrors PA-sink volume
+changes into ``_bridge_status`` in parallel with sendspin's MA-bound
+callback (isolated — failure on one path doesn't block the other).
+
+### Fixed — transport commands routed to wrong device (VM 105 repro)
+
+``POST /api/transport/cmd`` resolved the target by
+``clients[device_index]``, but ``active_clients`` and the frontend's
+``lastDevices`` are independently re-ordered on disable/online-add/
+restart, so the indices diverge. Frontend now sends ``player_id``
+(UUID5 from MAC, exposed on every ``DeviceSnapshot``) and the
+endpoint looks up by player_id first, falling back to index with a
+WARN.
 
 ## [2.63.2-rc.1] - 2026-04-27
 
