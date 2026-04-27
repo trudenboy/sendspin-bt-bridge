@@ -109,3 +109,70 @@ class TestParseAvrcpPassthrough:
         from services.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(b"\x00\x11\x0e") is None
+
+
+class TestProcessPacket:
+    def _full_acl_frame(self) -> bytes:
+        """Build ACL_RX_PKT monitor frame for handle 0x0042 carrying AVRCP Play."""
+        avctp = AVRCP_PLAY_PRESSED
+        l2cap = struct.pack("<HH", len(avctp), 0x0045) + avctp
+        acl = struct.pack("<HH", 0x0042, len(l2cap)) + l2cap
+        return _mon_frame(0x0005, acl)
+
+    def test_connection_complete_adds_to_handle_map(self):
+        from unittest.mock import MagicMock
+
+        from services.hci_avrcp_monitor import _OPCODE_EVENT_PKT, _process_packet
+
+        event_payload = bytes([0x03, len(CONN_COMPLETE_ACL)]) + CONN_COMPLETE_ACL
+        frame = _mon_frame(_OPCODE_EVENT_PKT, event_payload)
+        h2m: dict = {}
+        _process_packet(frame, h2m, MagicMock())
+        assert h2m == {0x0042: "FC:58:FA:EB:08:6C"}
+
+    def test_disconnect_complete_removes_from_handle_map(self):
+        from unittest.mock import MagicMock
+
+        from services.hci_avrcp_monitor import _OPCODE_EVENT_PKT, _process_packet
+
+        event_payload = bytes([0x05, len(DISC_COMPLETE)]) + DISC_COMPLETE
+        frame = _mon_frame(_OPCODE_EVENT_PKT, event_payload)
+        h2m = {0x0042: "FC:58:FA:EB:08:6C"}
+        _process_packet(frame, h2m, MagicMock())
+        assert 0x0042 not in h2m
+
+    def test_avrcp_play_calls_note_activity(self):
+        from unittest.mock import MagicMock
+
+        from services.hci_avrcp_monitor import _process_packet
+
+        h2m = {0x0042: "FC:58:FA:EB:08:6C"}
+        tracker = MagicMock()
+        _process_packet(self._full_acl_frame(), h2m, tracker)
+        tracker.note_activity.assert_called_once_with("FC:58:FA:EB:08:6C")
+
+    def test_avrcp_unknown_handle_does_not_call_tracker(self):
+        from unittest.mock import MagicMock
+
+        from services.hci_avrcp_monitor import _process_packet
+
+        tracker = MagicMock()
+        _process_packet(self._full_acl_frame(), {}, tracker)
+        tracker.note_activity.assert_not_called()
+
+    def test_too_short_frame_does_not_raise(self):
+        from unittest.mock import MagicMock
+
+        from services.hci_avrcp_monitor import _process_packet
+
+        _process_packet(b"\x03\x00", {}, MagicMock())  # must not raise
+
+    def test_unknown_opcode_is_ignored(self):
+        from unittest.mock import MagicMock
+
+        from services.hci_avrcp_monitor import _process_packet
+
+        frame = _mon_frame(0x0099, b"\x00" * 8)
+        tracker = MagicMock()
+        _process_packet(frame, {}, tracker)
+        tracker.note_activity.assert_not_called()

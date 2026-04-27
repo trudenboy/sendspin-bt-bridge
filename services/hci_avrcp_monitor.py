@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import logging
 import struct
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.avrcp_source_tracker import AvrcpSourceTracker
 
 logger = logging.getLogger(__name__)
 
@@ -76,3 +80,76 @@ def _parse_avrcp_passthrough(data: bytes) -> int | None:
     if op_byte & 0x80:  # state_flag=1 means released
         return None
     return op_byte & 0x7F
+
+
+_AVRCP_OP_NAMES = {
+    0x44: "play",
+    0x46: "pause",
+    0x4B: "next",
+    0x4C: "previous",
+    0x40: "vol_up",
+    0x41: "vol_down",
+}
+
+
+def _dispatch_acl_packet(
+    payload: bytes,
+    handle_to_mac: dict[int, str],
+    tracker: AvrcpSourceTracker,
+) -> None:
+    if len(payload) < 4:
+        return
+    handle_flags, _ = struct.unpack_from("<HH", payload, 0)
+    handle = handle_flags & 0x0FFF
+    mac = handle_to_mac.get(handle)
+    if mac is None:
+        return
+    l2cap = payload[4:]
+    if len(l2cap) < 4:
+        return
+    _, cid = struct.unpack_from("<HH", l2cap, 0)
+    if cid < 0x0040:
+        return
+    l2cap_payload = l2cap[4:]
+    op_id = _parse_avrcp_passthrough(l2cap_payload)
+    if op_id is None:
+        return
+    logger.debug(
+        "HCI AVRCP: %s from %s (op_id=0x%02X)",
+        _AVRCP_OP_NAMES.get(op_id, f"0x{op_id:02X}"),
+        mac,
+        op_id,
+    )
+    tracker.note_activity(mac)
+
+
+def _process_packet(
+    data: bytes,
+    handle_to_mac: dict[int, str],
+    tracker: AvrcpSourceTracker,
+) -> None:
+    if len(data) < 6:
+        return
+    opcode, _adapter_idx, payload_len = struct.unpack_from("<HHH", data, 0)
+    payload = data[6 : 6 + payload_len]
+
+    if opcode == _OPCODE_EVENT_PKT:
+        if len(payload) < 2:
+            return
+        event_code = payload[0]
+        params = payload[2:]
+        if event_code == _HCI_EVT_CONNECTION_COMPLETE:
+            result = _parse_connection_complete(params)
+            if result:
+                handle, mac = result
+                handle_to_mac[handle] = mac
+                logger.debug("HCI conn: handle=0x%04X mac=%s", handle, mac)
+        elif event_code == _HCI_EVT_DISCONNECT_COMPLETE:
+            disc_handle = _parse_disconnect_complete(params)
+            if disc_handle is not None:
+                removed = handle_to_mac.pop(disc_handle, None)
+                if removed:
+                    logger.debug("HCI disc: handle=0x%04X mac=%s", disc_handle, removed)
+
+    elif opcode == _OPCODE_ACL_RX_PKT:
+        _dispatch_acl_packet(payload, handle_to_mac, tracker)
