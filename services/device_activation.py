@@ -34,15 +34,21 @@ logger = logging.getLogger(__name__)
 
 # BlueZ delivers the inbound AVRCP D-Bus dispatch to our process before
 # the kernel's HCI_CHANNEL_MONITOR copy reaches us — observed empirically
-# at ~2-10ms on VM 105 in steady state, but the FIRST event after bridge
-# restart was 115ms (cold ``asyncio.to_thread`` worker thread spin-up).
-# Without a brief wait the resolver runs against an empty
-# AvrcpSourceTracker and falls back to ``default_client``, mis-routing
-# the press to the BlueZ-chosen "addressed player" rather than the
-# speaker that actually emitted the command.  A 200ms cap covers the
-# observed cold-start case with margin and still stays under the
-# button-response perception threshold.
-_INBOUND_AVRCP_HCI_WAIT_S = 0.20
+# at ~2-10ms on VM 105 in steady state, with the first post-restart event
+# at ~115ms (cold ``asyncio.to_thread`` worker thread spin-up).  Without
+# synchronisation the resolver runs against an empty AvrcpSourceTracker
+# and falls back to ``default_client``, mis-routing the press.
+#
+# We synchronise via ``AvrcpSourceTracker.wait_for_next_activity`` —
+# the resolver awaits the *next* note_activity (from HCI monitor or
+# D-Bus PropertiesChanged) and resolves immediately on its arrival,
+# instead of guessing a fixed sleep.  Common-case latency drops to
+# ~5ms; cold-start no longer mis-routes.
+#
+# This timeout is the *safety cap* for degraded modes — HCI monitor
+# unavailable (no CAP_NET_RAW) AND speaker has no MediaPlayer1 either.
+# In normal operation users never see it.
+_INBOUND_AVRCP_HCI_WAIT_S = 1.0
 
 
 # BlueZ AVRCP forwarding architecture (v2.63.0-rc.6+):
@@ -106,7 +112,7 @@ def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str],
     """
 
     async def _cb(_player_id: str, command: str) -> bool:
-        await asyncio.sleep(_INBOUND_AVRCP_HCI_WAIT_S)
+        await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
         client = resolve_avrcp_source_client(default_client=default_client)
         if client is None:
             logger.info(
@@ -153,7 +159,7 @@ def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], An
     """
 
     async def _cb(_player_id: str, volume_pct: int) -> bool:
-        await asyncio.sleep(_INBOUND_AVRCP_HCI_WAIT_S)
+        await _get_avrcp_source_tracker().wait_for_next_activity(timeout=_INBOUND_AVRCP_HCI_WAIT_S)
         client = resolve_avrcp_source_client(default_client=default_client)
         if client is None:
             logger.info(

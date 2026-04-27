@@ -33,6 +33,7 @@ tests without requiring a live system bus.
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 
@@ -40,6 +41,16 @@ import time
 # speaker firmware tested on VM 105 (ENEBY 20, WH-1000XM4); same value
 # scyto's ha-bluetooth-audio-manager uses for the same workaround.
 DEFAULT_CORRELATION_WINDOW_S = 2.0
+
+
+def _safe_set_result(fut: asyncio.Future[None]) -> None:
+    """Resolve *fut* with ``None`` if not already done.
+
+    Module-level so it survives ``call_soon_threadsafe`` scheduling
+    across event loops without leaking a closure to the loop.
+    """
+    if not fut.done():
+        fut.set_result(None)
 
 
 class AvrcpSourceTracker:
@@ -55,6 +66,12 @@ class AvrcpSourceTracker:
     def __init__(self) -> None:
         self._last: dict[str, float] = {}  # uppercased MAC → monotonic ts
         self._lock = threading.Lock()
+        # Pending waiters for the *next* note_activity call.  Each
+        # ``wait_for_next_activity`` adds one Future; ``note_activity``
+        # resolves all current waiters atomically.  ``loop`` is captured
+        # per-future so cross-thread signalling (D-Bus delivery thread →
+        # asyncio loop) routes through ``call_soon_threadsafe``.
+        self._waiters: list[tuple[asyncio.AbstractEventLoop, asyncio.Future[None]]] = []
 
     def note_activity(self, mac: str, *, now: float | None = None) -> None:
         """Record that *mac* just emitted MediaPlayer1.PropertiesChanged.
@@ -69,6 +86,19 @@ class AvrcpSourceTracker:
         key = mac.upper()
         with self._lock:
             self._last[key] = ts
+            waiters = self._waiters
+            self._waiters = []
+        # Resolve waiters outside the lock to avoid holding it during
+        # cross-thread scheduling.  Each waiter's loop may differ
+        # (theoretically — in practice it's always the bridge's main
+        # loop) so we route through call_soon_threadsafe.
+        for loop, fut in waiters:
+            try:
+                loop.call_soon_threadsafe(_safe_set_result, fut)
+            except RuntimeError:
+                # Loop closed before signal landed — drop silently;
+                # the awaiter is already gone or about to time out.
+                pass
 
     def get_recent_active(
         self,
@@ -90,6 +120,41 @@ class AvrcpSourceTracker:
             return None
         recent.sort(key=lambda kv: kv[1], reverse=True)
         return recent[0][0]
+
+    async def wait_for_next_activity(self, *, timeout: float) -> bool:
+        """Block until the next ``note_activity`` call, or timeout.
+
+        Used by the inbound MPRIS dispatch resolver to synchronise on a
+        fresh source-MAC signal from either the kernel HCI monitor or
+        the BlueZ MediaPlayer1.PropertiesChanged subscription, so the
+        resolver doesn't race against an empty / stale tracker.
+
+        Returns ``True`` if a note_activity call landed during the wait,
+        ``False`` if the timeout elapsed first.  The timeout is a safety
+        cap for degraded modes (HCI monitor unavailable, no D-Bus
+        subscription) — common-case latency is well under it.
+
+        Stale entries already in the tracker do NOT cause an immediate
+        return; only a *new* signal does.  This is exactly the
+        correlation we want: the waiter is timing-aligned with the
+        current dispatch, not whatever happened to be cached.
+        """
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[None] = loop.create_future()
+        with self._lock:
+            self._waiters.append((loop, fut))
+        try:
+            await asyncio.wait_for(fut, timeout=timeout)
+            return True
+        except TimeoutError:
+            return False
+        finally:
+            with self._lock:
+                # Remove our waiter on either path — we won't be reused.
+                try:
+                    self._waiters.remove((loop, fut))
+                except ValueError:
+                    pass
 
     def clear(self, mac: str) -> None:
         """Forget any activity for *mac*.

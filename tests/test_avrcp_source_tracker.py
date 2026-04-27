@@ -10,6 +10,10 @@ limitation this works around.
 
 from __future__ import annotations
 
+import asyncio
+
+import pytest
+
 
 def test_note_activity_then_get_recent_active_returns_mac():
     from services.avrcp_source_tracker import AvrcpSourceTracker
@@ -123,6 +127,107 @@ def test_get_tracker_returns_process_singleton():
     from services.avrcp_source_tracker import get_tracker
 
     assert get_tracker() is get_tracker()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_next_activity_returns_when_note_activity_called():
+    """The MPRIS callback uses this to *wait* for the kernel HCI monitor
+    (or the D-Bus PropertiesChanged subscription) to record a fresh
+    source MAC, instead of guessing a fixed sleep.  Returns True when
+    activity arrived during the wait.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+
+    tracker = AvrcpSourceTracker()
+
+    async def _delayed_note():
+        await asyncio.sleep(0.005)
+        tracker.note_activity("AA:BB:CC:DD:EE:FF")
+
+    asyncio.create_task(_delayed_note())
+    arrived = await tracker.wait_for_next_activity(timeout=1.0)
+
+    assert arrived is True
+    assert tracker.get_recent_active() == "AA:BB:CC:DD:EE:FF"
+
+
+@pytest.mark.asyncio
+async def test_wait_for_next_activity_returns_false_on_timeout():
+    """Safety cap — if HCI monitor is unavailable (graceful degradation
+    on hosts without CAP_NET_RAW) and no D-Bus subscription is active
+    either, the callback can't hang forever.  Returns False after the
+    cap so the resolver falls back to default_client.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+
+    tracker = AvrcpSourceTracker()
+
+    arrived = await tracker.wait_for_next_activity(timeout=0.05)
+
+    assert arrived is False
+
+
+@pytest.mark.asyncio
+async def test_wait_for_next_activity_only_wakes_on_NEW_activity():
+    """Stale data already in the tracker (from a press 1s earlier) must
+    NOT cause an immediate return — the waiter is for FRESH activity
+    correlated with the current dispatch, not whatever happens to be
+    cached.  Only a *new* note_activity call fires the waiter.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+
+    tracker = AvrcpSourceTracker()
+    tracker.note_activity("AA:BB:CC:DD:EE:01")  # pre-existing stale entry
+
+    arrived = await tracker.wait_for_next_activity(timeout=0.05)
+
+    assert arrived is False  # no NEW activity during the wait → timeout
+
+
+@pytest.mark.asyncio
+async def test_wait_for_next_activity_supports_multiple_concurrent_waiters():
+    """Two concurrent inbound MPRIS dispatches (transport + volume
+    racing, or two rapid presses) must both wake on a single
+    note_activity call — neither should starve the other.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+
+    tracker = AvrcpSourceTracker()
+
+    async def _waiter() -> bool:
+        return await tracker.wait_for_next_activity(timeout=1.0)
+
+    t1 = asyncio.create_task(_waiter())
+    t2 = asyncio.create_task(_waiter())
+    await asyncio.sleep(0.005)  # let both register
+    tracker.note_activity("AA:BB:CC:DD:EE:FF")
+
+    assert await t1 is True
+    assert await t2 is True
+
+
+@pytest.mark.asyncio
+async def test_wait_for_next_activity_cross_thread_signal():
+    """note_activity may run on the asyncio loop (HCI monitor) OR on a
+    D-Bus signal thread (PropertiesChanged delivery).  The waiter must
+    wake regardless of which thread fires the signal — covered by
+    ``loop.call_soon_threadsafe`` in the implementation.
+    """
+    import threading
+    import time as _time
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+
+    tracker = AvrcpSourceTracker()
+
+    def _signal_from_other_thread():
+        _time.sleep(0.005)
+        tracker.note_activity("AA:BB:CC:DD:EE:FF")
+
+    threading.Thread(target=_signal_from_other_thread, daemon=True).start()
+    arrived = await tracker.wait_for_next_activity(timeout=1.0)
+
+    assert arrived is True
 
 
 def test_concurrent_note_and_query_does_not_raise():
