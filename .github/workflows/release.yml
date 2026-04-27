@@ -466,11 +466,20 @@ jobs:
 
       - name: Create or update GitHub release
         uses: actions/github-script@v9
+        env:
+          # Inlining the body via ${{ toJSON(...) }} bakes it into
+          # the script source itself, and once the cumulative body
+          # crosses the kernel's argv limit the runner refuses to
+          # spawn node ("Argument list too long").  Reading from
+          # env keeps the script source small regardless of how
+          # large the release notes get.
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_BODY: ${{ steps.body.outputs.body }}
         with:
           script: |
             const {owner, repo} = context.repo;
-            const tag = '${{ needs.prepare.outputs.tag }}';
-            const body = ${{ toJSON(steps.body.outputs.body) }};
+            const tag = process.env.RELEASE_TAG;
+            const body = process.env.RELEASE_BODY;
             const payload = {
               owner, repo, tag_name: tag, name: tag, body,
               draft: false, prerelease: false, make_latest: 'true',

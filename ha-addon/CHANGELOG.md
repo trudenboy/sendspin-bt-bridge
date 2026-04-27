@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.3] - 2026-04-27
+
+### Fixed
+
+- Group badge now shows a short `#suffix` instead of the full
+  UUID when an MA syncgroup has no friendly name — previously
+  the long id obscured the player name on the device card.
+- Release pipeline now publishes GitHub Releases reliably; the
+  final create-release step used to crash with `Argument list
+  too long` once the cumulative body got big enough.
+
 ## [2.64.2] - 2026-04-27
 
 ### Fixed — Now-playing progress bar resetting every ~15 s

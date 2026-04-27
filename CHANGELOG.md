@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.3] - 2026-04-27
+
+### Fixed — Group ID no longer overflows the device card
+
+When a Music Assistant syncgroup has no friendly name, the
+group badge fell back to rendering the raw group UUID (e.g.
+`b6b07ca7-79bf-4d75-a949-81c7dcff691b`).  The full UUID was
+wider than the player name and visibly obscured it on smaller
+cards.  The badge now shows only a short `#suffix` taken from
+the last hyphen segment of the UUID; the full id is still
+available in the badge tooltip.
+
+### Fixed — Release pipeline could not publish GitHub Releases
+
+Release builds for v2.64.1 and v2.64.2 produced the Docker
+images and synced the Home Assistant addon directories
+correctly, but the final "Create GitHub Release" step crashed
+with `Argument list too long` once the cumulative body grew
+past the runner's `execve()` argv limit.  The workflow now
+passes the release body to `actions/github-script` through an
+environment variable instead of inlining it into the script
+source, so the script payload stays small regardless of how
+large the notes get.  v2.64.1 and v2.64.2 GitHub Releases
+were backfilled manually after the fact.
+
 ## [2.64.2] - 2026-04-27
 
 ### Fixed — Now-playing progress bar resetting every ~15 s

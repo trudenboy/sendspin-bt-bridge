@@ -2398,8 +2398,23 @@ function _groupMemberStatusIcon(member) {
     return '✓';
 }
 
+function _shortenGroupId(rawId) {
+    // MA group IDs are full UUIDs (e.g. b6b07ca7-79bf-4d75-a949-81c7dcff691b)
+    // — the whole string is wider than the player name on a card.
+    // When we don't have a friendly group name, show only the last
+    // hyphen / underscore segment, prefixed with '#' so it reads
+    // as a fragment instead of a full identifier.
+    var s = String(rawId || '');
+    if (!s) return '';
+    var sepIdx = Math.max(s.lastIndexOf('-'), s.lastIndexOf('_'));
+    var tail = sepIdx >= 0 ? s.slice(sepIdx + 1) : s;
+    return tail ? '#' + tail : '';
+}
+
 function _getGroupBadgeMeta(dev) {
-    var rawLabel = dev && (dev.group_name || dev.group_id) ? String(dev.group_name || dev.group_id) : '';
+    var rawName = dev && dev.group_name ? String(dev.group_name) : '';
+    var rawId = dev && dev.group_id ? String(dev.group_id) : '';
+    var rawLabel = rawName || rawId;
     if (!rawLabel) {
         return {
             label: 'No group',
@@ -2413,11 +2428,15 @@ function _getGroupBadgeMeta(dev) {
             groupUrl: '',
         };
     }
+    // When the group has no friendly name, the raw UUID would
+    // overflow the card and obscure the player name — render a
+    // short '#suffix' instead and put the full id in the tooltip.
+    var shownLabel = rawName ? rawName : _shortenGroupId(rawId);
 
     var grp = _findGroupSummaryForDevice(dev);
     var externalCount = grp ? (grp.external_count || 0) : 0;
     var suffix = externalCount > 0 ? ' +' + externalCount : '';
-    var displayLabel = rawLabel + suffix;
+    var displayLabel = shownLabel + suffix;
     var titleLines = [rawLabel];
     if (grp && grp.members && grp.members.length > 0) {
         titleLines.push('───');
