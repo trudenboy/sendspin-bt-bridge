@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.3] - 2026-04-27
+
+### Changed — Primary discovery actions painted solid blue
+
+Visual emphasis pass on the two main discovery surfaces so they
+read as "the thing to click" instead of neutral grey:
+
+- ``#scan-btn`` (Paired devices toolbar's *Scan nearby*): switched
+  from ``btn-secondary`` to ``btn-primary`` — solid blue with
+  white text, matches the modal's *Start Scan* accent button.
+- *Pair and Add* primary action in scan-result rows: switched
+  from ``scan-action-btn--pair`` (green tint) to
+  ``scan-action-btn--primary`` (themed via the shared
+  ``--button-primary-bg`` family → solid blue + white text).
+- The ▾ caret toggle next to *Pair and Add* repainted to match
+  (solid ``var(--primary-color)`` background, white text,
+  semi-opaque white inner divider so the seam between primary
+  and toggle stays crisp); hover/open uses
+  ``--button-primary-hover-bg`` for dark/light theme parity.
+
+### Review follow-ups (Copilot on PR #208)
+
+- **Hardened ``POST /api/bt/power_save`` body validation.**
+  ``enter`` is now strictly boolean — a string like ``"false"`` no
+  longer slips through ``bool(data.get(...))`` as truthy and flips
+  behaviour silently.  Returns 400 with a clear error on bad type.
+- **``/api/bt/power_save`` returns 503 when the asyncio loop is
+  unavailable** instead of a false-positive 200 that would mislead
+  the bulk-actions dropdown into thinking every selected device
+  transitioned successfully.
+- **Dropped stale ``aria-expanded="false"`` on the bulk-actions and
+  scan-result split-button summaries.**  Native ``<details>`` /
+  ``<summary>`` already exposes expand state to assistive tech via
+  the DOM ``open`` attribute; the static value was actively
+  misinforming screen readers.
+- **Aligned ``.group-bulk-action-item.accent`` and ``.warn`` colours
+  with ``.action-btn.accent`` / ``.warn``** — accent now uses
+  ``--primary-color`` (blue, the app-wide accent semantic) instead
+  of ``--accent-color`` (amber in the default theme), so text
+  colour and hover background match.  Hover bg also gets ``color``
+  re-asserted so future shared-rule overrides don't flatten it.
+- **Consolidated the duplicate ``.scan-action-split`` declaration**
+  introduced during the split-button polish round; merged into a
+  single rule with the documented anchoring comment.
+
 ## [2.64.0-rc.2] - 2026-04-27
 
 ### Fixed — "Reconnect all" silently no-op'd when speakers were connected

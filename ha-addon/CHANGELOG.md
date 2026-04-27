@@ -7,16 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.64.0-rc.3] - 2026-04-27
-
-### Changed — Primary discovery buttons painted solid blue
-
-*Scan nearby* (Paired devices toolbar) and *Pair and Add* (scan
-result rows) now use the solid ``btn-primary`` blue treatment to
-read as the obvious primary action, matching the modal's *Start
-Scan* button.  The ▾ caret toggle next to *Pair and Add* was
-repainted to match so the split-button seam stays crisp.
-
 ## [2.63.1] - 2026-04-26
 
 ### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again
