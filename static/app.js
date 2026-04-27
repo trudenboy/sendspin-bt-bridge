@@ -6551,26 +6551,29 @@ function openConfigAndAddDevice(options) {
 // chips so it inherits typography, padding, and the project-wide
 // tone-class colour scheme (no bespoke ``rssi-good`` CSS).
 //
-// Thresholds align with the WiFi-style buckets most operators expect.
 // The same number maps to two different physical meanings depending
-// on the source:
+// on the source — and v2.64.0 splits the bucket thresholds per mode
+// because the previous "shared buckets" rendering reported a delta
+// of -23 Δ dB (sub-Golden, real-world weak link) as 4-bar excellent
+// green, which was actively misleading.
+//
 //   ``mode='absolute'`` — scan-result RSSI from BlueZ inquiry, signed
-//                          int8 dBm. Standard WiFi-style interpretation
-//                          (-65 = good, -90 = far-edge).
+//                          int8 dBm.  Standard WiFi-style buckets:
+//                          -55 = strong, -75 = bad.
 //   ``mode='delta'``    — connected-link RSSI from HCI_Read_RSSI for
 //                          BR/EDR ACL: delta from the controller's
-//                          Golden Receive Power Range. 0 = in range,
-//                          negative = below, positive = above. Label
-//                          says "Δ dB" so users don't misread it as
-//                          absolute dBm.
-// Buckets are shared because both happen to read sensibly the same
-// way: 0/-55 dB Δ ≈ excellent, -75 ≈ fair, etc.
+//                          Golden Receive Power Range.  0 = in
+//                          range, negative = below, positive = above.
+//                          Tighter buckets — being even slightly
+//                          below the controller's golden range is
+//                          already "fair" territory.
 //
-//   ≥ -55  excellent (4 bars, success tone)
-//   -65..-55   strong    (3 bars, success tone)
-//   -75..-65   fair      (2 bars, warning tone)
-//   ≤ -75      bad       (1 bar,  error tone)
-//   stale      grey      (0 bars, neutral tone — rssi_at_ts > 90 s)
+// absolute (dBm):                 delta (Δ dB):
+//   ≥ -55  excellent (4 bars)       ≥   0  excellent (4 bars)
+//   ≥ -65  strong    (3 bars)       ≥ -10  strong    (3 bars)
+//   ≥ -75  fair      (2 bars)       ≥ -20  fair      (2 bars)
+//   <  -75 bad       (1 bar)        <  -20 bad       (1 bar)
+//   stale  grey      (0 bars, rssi_at_ts > 90 s) — both modes
 function _getRssiBadgeRenderData(rssiDbm, isStale, className, mode) {
     if (rssiDbm === null || rssiDbm === undefined || Number.isNaN(Number(rssiDbm))) {
         return null;
@@ -6581,6 +6584,11 @@ function _getRssiBadgeRenderData(rssiDbm, isStale, className, mode) {
     if (isStale) {
         bars = 0;
         tone = 'neutral';
+    } else if (mode === 'delta') {
+        if (n >= 0) { bars = 4; tone = 'success'; }
+        else if (n >= -10) { bars = 3; tone = 'success'; }
+        else if (n >= -20) { bars = 2; tone = 'warning'; }
+        else { bars = 1; tone = 'error'; }
     } else if (n >= -55) {
         bars = 4;
         tone = 'success';
