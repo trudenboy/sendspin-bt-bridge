@@ -21,13 +21,15 @@ def transport_client():
     return app.test_client()
 
 
-def _make_mock_client(supported_commands=None, send_result=True):
+def _make_mock_client(supported_commands=None, send_result=True, *, player_id=None, player_name=None):
     """Build a mock SendspinClient with transport support."""
     client = MagicMock()
     status = MagicMock()
     status.get = lambda key, default=None: {"supported_commands": supported_commands}.get(key, default)
     client.status = status
     client.send_transport_command = AsyncMock(return_value=send_result)
+    client.player_id = player_id or "player-default"
+    client.player_name = player_name or "Default Player"
     return client
 
 
@@ -75,6 +77,86 @@ class TestTransportEndpoint:
             content_type="application/json",
         )
         assert resp.status_code == 404
+
+    @patch("routes.api_transport.get_main_loop")
+    @patch("routes.api_transport.get_device_registry_snapshot")
+    def test_player_id_lookup_routes_to_correct_client(self, mock_registry, mock_loop, transport_client):
+        """Reproduces the VM 105 mis-route: WH at frontend-index 0 but
+        backend ``active_clients`` order is reversed, so
+        ``device_index=0`` would dispatch to ENEBY's client.  After the
+        fix, looking up by ``player_id`` resolves WH directly regardless
+        of list position."""
+        wh = _make_mock_client(supported_commands=["next"], player_id="wh-uuid", player_name="WH")
+        eneby = _make_mock_client(supported_commands=["next"], player_id="eneby-uuid", player_name="ENEBY")
+        # Backend order is [ENEBY, WH] — opposite of the frontend's
+        # [WH, ENEBY].  Index 0 → ENEBY (the bug).
+        mock_registry.return_value = _make_registry_snapshot([eneby, wh])
+        mock_loop.return_value = MagicMock()
+
+        import concurrent.futures
+
+        with patch("routes.api_transport.asyncio") as mock_asyncio:
+            future = concurrent.futures.Future()
+            future.set_result(True)
+            mock_asyncio.run_coroutine_threadsafe.return_value = future
+
+            resp = transport_client.post(
+                "/api/transport/cmd",
+                data=json.dumps({"action": "next", "player_id": "wh-uuid"}),
+                content_type="application/json",
+            )
+
+        assert resp.status_code == 200
+        # The coroutine handed to run_coroutine_threadsafe must have
+        # been built from WH's client, not ENEBY's.
+        wh.send_transport_command.assert_called_once_with("next", value=None)
+        eneby.send_transport_command.assert_not_called()
+
+    @patch("routes.api_transport.get_main_loop")
+    @patch("routes.api_transport.get_device_registry_snapshot")
+    def test_player_id_unknown_returns_404(self, mock_registry, mock_loop, transport_client):
+        """A stale frontend that sends a player_id no longer present
+        (device removed live) gets a clear 404 with the bad id —
+        easier than tracking down a generic 500."""
+        existing = _make_mock_client(supported_commands=["next"], player_id="exists")
+        mock_registry.return_value = _make_registry_snapshot([existing])
+        mock_loop.return_value = MagicMock()
+
+        resp = transport_client.post(
+            "/api/transport/cmd",
+            data=json.dumps({"action": "next", "player_id": "missing-uuid"}),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 404
+        assert "missing-uuid" in resp.get_json()["error"]
+        existing.send_transport_command.assert_not_called()
+
+    @patch("routes.api_transport.get_main_loop")
+    @patch("routes.api_transport.get_device_registry_snapshot")
+    def test_legacy_device_index_path_still_works_with_warning(self, mock_registry, mock_loop, transport_client):
+        """Backward-compat: callers that haven't updated to player_id
+        yet must still work — but the backend logs a warning so we
+        spot stragglers in production."""
+        client = _make_mock_client(supported_commands=["next"], player_id="x")
+        mock_registry.return_value = _make_registry_snapshot([client])
+        mock_loop.return_value = MagicMock()
+
+        import concurrent.futures
+
+        with patch("routes.api_transport.asyncio") as mock_asyncio:
+            future = concurrent.futures.Future()
+            future.set_result(True)
+            mock_asyncio.run_coroutine_threadsafe.return_value = future
+
+            resp = transport_client.post(
+                "/api/transport/cmd",
+                data=json.dumps({"action": "next", "device_index": 0}),
+                content_type="application/json",
+            )
+
+        assert resp.status_code == 200
+        client.send_transport_command.assert_called_once_with("next", value=None)
 
     @patch("routes.api_transport.get_main_loop")
     @patch("routes.api_transport.get_device_registry_snapshot")

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — transport commands routed to wrong device (issue: VM 105 repro)
+
+Pressing **Next / Pause / Volume** on a device card in the bridge UI
+(or via AVRCP from the speaker) silently dispatched the command to a
+different device whenever the backend's ``active_clients`` list order
+diverged from the frontend's ``lastDevices`` order — reproduced on
+VM 105 with WH-1000XM4 (frontend index 0) where ``device_index=0``
+landed on ENEBY Portable's daemon, advancing ENEBY's queue while
+WH's stream stayed put.
+
+Root cause: ``POST /api/transport/cmd`` resolved the target client by
+``clients[device_index]``.  The two arrays are independently
+re-ordered on disable / online-add / restart, so index lookup is
+inherently brittle.
+
+Fix:
+
+- ``services/status_snapshot.DeviceSnapshot`` gains a top-level
+  ``player_id`` field (was already in ``client.player_id`` — UUID5
+  derived from MAC via ``_player_id_from_mac`` — but only surfaced
+  in ``device.extra``).  Frontend now sees it on every ``lastDevices``
+  entry.
+- ``static/app.js`` ``maQueueCmd`` sends ``{action, player_id}``
+  instead of ``{action, device_index}``.  Falls back to the index
+  path only when no ``player_id`` is available (older snapshots).
+- ``routes/api_transport.transport_cmd`` looks up the client by
+  ``player_id`` first, falling back to ``device_index`` with a WARN
+  log so we can spot stragglers.  Returns 404 with the bad id if
+  the player_id no longer exists.
+
+Group operations (Mute All / Pause All / group volume / Reconnect
+all) were already index-free — they use ``player_names`` /
+dedicated ``/api/pause_all`` endpoints — so unaffected.
+
+Tests: 3 new in ``tests/test_transport_cmd.py`` (player_id routes
+to correct client even with reversed backend order; unknown
+player_id returns 404; legacy device_index path still works with
+warning).
+
 ## [2.63.2-rc.1] - 2026-04-27
 
 ### Review follow-ups (Copilot on PR #206)

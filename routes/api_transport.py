@@ -42,7 +42,14 @@ def transport_cmd():
 
     Body JSON:
         action: str — one of the valid transport actions
-        device_index: int — index into the device list
+        player_id: str — unique device player_id (UUID5 of MAC,
+                          derived via ``_player_id_from_mac``).  Resilient
+                          to device reorder / disable / online-add —
+                          unlike the deprecated ``device_index`` path
+                          which mis-routed Next/Pause to the wrong
+                          device after ``active_clients`` order
+                          diverged from frontend ``lastDevices`` order.
+        device_index: int (deprecated, fallback) — index into the device list.
         value: any (optional) — for volume (0-100) or mute (bool)
     """
     data = request.get_json(silent=True) or {}
@@ -50,17 +57,33 @@ def transport_cmd():
     if not action or action not in _VALID_ACTIONS:
         return jsonify(success=False, error=f"Invalid action: {action!r}"), 400
 
-    try:
-        device_index = int(data.get("device_index", -1))
-    except (ValueError, TypeError):
-        return jsonify(success=False, error="Invalid device_index"), 400
-
     registry = get_device_registry_snapshot()
     clients = registry.active_clients
-    if device_index < 0 or device_index >= len(clients):
-        return jsonify(success=False, error="Device not found"), 404
 
-    client = clients[device_index]
+    # Prefer player_id lookup — unique per device (UUID5 of MAC), stable
+    # across reorder / disable / online-add.
+    player_id = str(data.get("player_id") or "").strip()
+    if player_id:
+        client = next((c for c in clients if getattr(c, "player_id", None) == player_id), None)
+        if client is None:
+            return jsonify(success=False, error=f"Unknown player_id: {player_id}"), 404
+    else:
+        # Legacy index-based path — kept for backward compat with any
+        # caller that hasn't been updated yet.  Logs a warning so we
+        # can spot stragglers.
+        try:
+            device_index = int(data.get("device_index", -1))
+        except (ValueError, TypeError):
+            return jsonify(success=False, error="Invalid device_index"), 400
+        if device_index < 0 or device_index >= len(clients):
+            return jsonify(success=False, error="Device not found"), 404
+        client = clients[device_index]
+        logger.warning(
+            "Transport command via deprecated device_index=%d (no player_id) — "
+            "client resolved to %r; update the caller to pass player_id",
+            device_index,
+            getattr(client, "player_name", "?"),
+        )
     if client is None:
         return jsonify(success=False, error="Device client unavailable"), 503
 
