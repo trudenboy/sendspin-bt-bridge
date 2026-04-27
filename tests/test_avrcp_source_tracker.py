@@ -234,6 +234,14 @@ def test_concurrent_note_and_query_does_not_raise():
     """Tracker is touched from BT-manager subscription threads and the
     asyncio loop's MPRIS dispatch — needs the same internal lock as
     MprisRegistry to avoid 'dictionary changed size during iteration'.
+
+    Both writer and reader loops are bounded so a slow CI runner can't
+    leave threads alive after the test returns — note_activity calls
+    ``time.monotonic()`` and a leaked writer would consume patched
+    side_effects in downstream tests (notably
+    ``test_bt_manager.test_record_reconnect_prunes_old_entries``).
+    daemon=True is belt-and-suspenders against process-wide shutdown
+    leaks; the iteration cap is what actually prevents test pollution.
     """
     import threading
 
@@ -245,10 +253,10 @@ def test_concurrent_note_and_query_does_not_raise():
 
     def _writer() -> None:
         try:
-            i = 0
-            while not stop.is_set():
+            for i in range(20000):
+                if stop.is_set():
+                    return
                 tracker.note_activity(f"AA:BB:CC:DD:00:{i % 256:02X}")
-                i += 1
         except BaseException as exc:
             errors.append(exc)
 
@@ -259,8 +267,8 @@ def test_concurrent_note_and_query_does_not_raise():
         except BaseException as exc:
             errors.append(exc)
 
-    writers = [threading.Thread(target=_writer) for _ in range(4)]
-    readers = [threading.Thread(target=_reader) for _ in range(4)]
+    writers = [threading.Thread(target=_writer, daemon=True) for _ in range(4)]
+    readers = [threading.Thread(target=_reader, daemon=True) for _ in range(4)]
     for t in writers + readers:
         t.start()
     for t in readers:
@@ -269,4 +277,8 @@ def test_concurrent_note_and_query_does_not_raise():
     for t in writers:
         t.join(timeout=10.0)
 
+    # Diagnostic: any thread still alive at this point would leak into
+    # the next test and could consume patched time.monotonic side_effects.
+    leaked = [t.name for t in writers + readers if t.is_alive()]
+    assert not leaked, f"threads leaked past join timeout: {leaked}"
     assert errors == [], f"concurrent tracker access raised: {errors[:3]!r}"
