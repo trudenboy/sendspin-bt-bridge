@@ -12,6 +12,7 @@ device_activation._subscribe_avrcp_source_tracker remains active as fallback.
 from __future__ import annotations
 
 import logging
+import struct
 
 logger = logging.getLogger(__name__)
 
@@ -29,3 +30,18 @@ _AVC_SUBUNIT_PANEL_BYTE: int = 0x48  # (0x09 << 3) | 0
 _BACKOFF_BASE: float = 5.0
 _BACKOFF_MAX: float = 60.0
 _BACKOFF_FACTOR: float = 2.0
+
+
+def _parse_connection_complete(params: bytes) -> tuple[int, str] | None:
+    if len(params) < 11:
+        return None
+    status = params[0]
+    if status != 0:
+        return None
+    (handle,) = struct.unpack_from("<H", params, 1)
+    bdaddr = params[3:9]
+    link_type = params[9]
+    if link_type != 0x01:  # only ACL
+        return None
+    mac = ":".join(f"{b:02X}" for b in reversed(bdaddr))
+    return handle, mac
