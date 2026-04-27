@@ -488,19 +488,14 @@ def resolve_avrcp_source_client(
             return player.client
         # Fall through — orphan tracker entry or player without a client.
 
-    streaming = [
-        p.client
-        for p in registry.all_players()
-        if p.client is not None and bool(p.client.status.get("audio_streaming"))
-    ]
-    if len(streaming) == 1:
-        return streaming[0]
-
-    # Strategy 3: default_client captured at registration time.  BlueZ always
+    # Strategy 2: default_client captured at registration time.  BlueZ always
     # dispatches AVRCP to the first-registered player's callbacks; that
-    # player's default_client is the device whose buttons should naturally
-    # route here.  For smart devices (MediaPlayer1 present) Strategy 1 fires
-    # first; Strategy 3 is the safety net for dumb speakers and paused state.
+    # player's default_client is the device whose buttons naturally route here.
+    # For smart devices (with MediaPlayer1) Strategy 1 fires first via the
+    # tracker.  For dumb speakers (no MediaPlayer1) and all paused states,
+    # default_client is the correct fallback — routing to the currently-streaming
+    # device (old Strategy 2) caused mis-routing when a paused device's button
+    # was pressed while another device was streaming.
     if default_client is not None:
         return default_client
 
