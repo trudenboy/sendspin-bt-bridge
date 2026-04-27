@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.3] - 2026-04-27
+
+### Changed — Primary discovery actions painted solid blue
+
+Visual emphasis pass on the two main discovery surfaces so they
+read as "the thing to click" instead of neutral grey:
+
+- ``#scan-btn`` (Paired devices toolbar's *Scan nearby*): switched
+  from ``btn-secondary`` to ``btn-primary`` — solid blue with
+  white text, matches the modal's *Start Scan* accent button.
+- *Pair and Add* primary action in scan-result rows: switched
+  from ``scan-action-btn--pair`` (green tint) to
+  ``scan-action-btn--primary`` (themed via the shared
+  ``--button-primary-bg`` family → solid blue + white text).
+- The ▾ caret toggle next to *Pair and Add* repainted to match
+  (solid ``var(--primary-color)`` background, white text,
+  semi-opaque white inner divider so the seam between primary
+  and toggle stays crisp); hover/open uses
+  ``--button-primary-hover-bg`` for dark/light theme parity.
+
 ### Review follow-ups (Copilot on PR #208)
 
 - **Hardened ``POST /api/bt/power_save`` body validation.**
