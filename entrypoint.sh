@@ -344,28 +344,30 @@ _exec_sendspin_client() {
         export HOME="${APP_RUNTIME_HOME:-/tmp/sendspin-runtime-${APP_RUNTIME_UID}}"
         export USER="$APP_RUNTIME_USER"
         # v2.63.0-rc.8: replace ``gosu`` with ``setpriv`` so we can carry
-        # CAP_NET_ADMIN across the UID drop via the *ambient* capability
-        # set.  Needed by ``services/bt_rssi_mgmt`` to query connected-
-        # peer RSSI through the kernel mgmt socket — gosu drops every
-        # cap when changing UID, which fails the kernel's ``capable()``
-        # check at HCI bind time and the kernel never marks the socket
-        # ``HCI_SOCK_TRUSTED``, after which every mgmt command for an
-        # established link returns ``MGMT_STATUS_PERMISSION_DENIED``.
+        # Bluetooth caps across the UID drop via the *ambient* capability
+        # set.  Caps required:
+        #   * CAP_NET_ADMIN — ``services/bt_rssi_mgmt`` mgmt-socket
+        #     (``HCI_CHANNEL_CONTROL``) for peer RSSI queries
+        #   * CAP_NET_RAW   — ``services/hci_avrcp_monitor``
+        #     (``HCI_CHANNEL_MONITOR``) for source-MAC correlation on
+        #     inbound AVRCP passthrough commands
+        # ``gosu`` drops every cap on UID change, which fails the
+        # kernel's ``capable()`` check at HCI bind time.
         #
         # ``--ambient-caps`` survives both ``execve`` and the ``setresuid``
         # that ``--reuid`` performs, so the resulting Python process
-        # has CapEff=cap_net_admin without inheriting any other cap.
-        # Falls back to plain ``gosu`` (no caps) if setpriv is missing
-        # — older base images may not have it.  RSSI then degrades to
-        # the existing fail-soft "no fresh value, keep last known".
+        # has CapEff={cap_net_admin,cap_net_raw} without inheriting any
+        # other cap.  Falls back to plain ``gosu`` (no caps) if setpriv
+        # is missing — older base images may not have it.  RSSI and
+        # AVRCP source correlation both degrade fail-soft.
         if command -v setpriv >/dev/null 2>&1; then
-            echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID} (cap_net_admin retained)..."
+            echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID} (cap_net_admin + cap_net_raw retained)..."
             exec setpriv \
                 --reuid="$APP_RUNTIME_UID" \
                 --regid="$APP_RUNTIME_GID" \
                 --clear-groups \
-                --inh-caps=+net_admin \
-                --ambient-caps=+net_admin \
+                --inh-caps=+net_admin,+net_raw \
+                --ambient-caps=+net_admin,+net_raw \
                 env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
         fi
         if command -v gosu >/dev/null 2>&1; then
