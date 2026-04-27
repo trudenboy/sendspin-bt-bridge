@@ -40,6 +40,43 @@ _BACKOFF_BASE: float = 5.0
 _BACKOFF_MAX: float = 60.0
 _BACKOFF_FACTOR: float = 2.0
 
+# HCI ioctl numbers for enumerating existing connections (so the monitor
+# can attribute ACL packets from connections that existed BEFORE it was
+# bound — the kernel's HCI_CHANNEL_MONITOR replay only re-emits device
+# state events, not historical Connection Complete events).
+_HCIGETDEVLIST: int = 0x800448D2  # _IOR('H', 210, int)
+_HCIGETCONNLIST: int = 0x800448D4  # _IOR('H', 212, int)
+_HCI_LINK_TYPE_ACL: int = 1
+_MAX_CONNS_PER_DEV: int = 16
+
+
+class _HciDevReq(ctypes.Structure):
+    _fields_ = [("dev_id", ctypes.c_uint16), ("dev_opt", ctypes.c_uint32)]
+
+
+class _HciDevListReq(ctypes.Structure):
+    # Variable-length array — DEV_NUM_MAX is HCI_MAX_DEV (16 in mainline).
+    _fields_ = [("dev_num", ctypes.c_uint16), ("dev_req", _HciDevReq * 16)]
+
+
+class _HciConnInfo(ctypes.Structure):
+    _fields_ = [
+        ("handle", ctypes.c_uint16),
+        ("bdaddr", ctypes.c_uint8 * 6),
+        ("type", ctypes.c_uint8),
+        ("out", ctypes.c_uint8),
+        ("state", ctypes.c_uint16),
+        ("link_mode", ctypes.c_uint32),
+    ]
+
+
+class _HciConnListReq(ctypes.Structure):
+    _fields_ = [
+        ("dev_id", ctypes.c_uint16),
+        ("conn_num", ctypes.c_uint16),
+        ("conn_info", _HciConnInfo * _MAX_CONNS_PER_DEV),
+    ]
+
 
 def _parse_connection_complete(params: bytes) -> tuple[int, str] | None:
     if len(params) < 11:
@@ -160,6 +197,56 @@ def _process_packet(
         _dispatch_acl_packet(payload, handle_to_mac, tracker)
 
 
+def _hci_ioctl(fd: int, request: int, req: ctypes.Structure) -> int:
+    """Thin libc.ioctl wrapper kept patchable in tests."""
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    libc.ioctl.restype = ctypes.c_int
+    return libc.ioctl(fd, request, ctypes.byref(req))
+
+
+def _seed_handle_map_from_kernel(handle_to_mac: dict[int, str]) -> None:
+    """Populate ``handle_to_mac`` from the kernel's existing HCI connections.
+
+    HCI_CHANNEL_MONITOR replays device-state events (REG/OPEN/UP), but not
+    past Connection Complete events.  Without this seed, every ACL packet
+    from connections that existed when the monitor bound is silently
+    dropped because the dispatcher can't resolve handle → MAC, and inbound
+    AVRCP commands fall back to default_client (mis-routing).
+
+    Errors are swallowed: the monitor stays usable for new connections via
+    Connection Complete event parsing.
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        sock = socket.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI)
+    except OSError as exc:
+        logger.debug("HCI seed: cannot open enumeration socket: %s", exc)
+        return
+    try:
+        dev_list = _HciDevListReq()
+        dev_list.dev_num = len(dev_list.dev_req)
+        if _hci_ioctl(sock.fileno(), _HCIGETDEVLIST, dev_list) < 0:
+            logger.debug("HCI seed: HCIGETDEVLIST failed (errno=%d)", ctypes.get_errno())
+            return
+        for i in range(dev_list.dev_num):
+            dev_id = dev_list.dev_req[i].dev_id
+            conn_list = _HciConnListReq()
+            conn_list.dev_id = dev_id
+            conn_list.conn_num = _MAX_CONNS_PER_DEV
+            if _hci_ioctl(sock.fileno(), _HCIGETCONNLIST, conn_list) < 0:
+                continue
+            for j in range(conn_list.conn_num):
+                ci = conn_list.conn_info[j]
+                if ci.type != _HCI_LINK_TYPE_ACL:
+                    continue
+                mac = ":".join(f"{b:02X}" for b in reversed(bytes(ci.bdaddr)))
+                handle_to_mac[ci.handle] = mac
+                logger.debug("HCI seed: hci%d handle=0x%04X mac=%s", dev_id, ci.handle, mac)
+    finally:
+        sock.close()
+
+
 # ctypes.Structure mirrors btsocket.btmgmt_socket.SocketAddr exactly — same C
 # layout, validated working. We use HCI_CHANNEL_MONITOR (2) instead of channel 3.
 class _SocketAddr(ctypes.Structure):
@@ -242,7 +329,15 @@ class HciAvrcpMonitor:
                 )
                 self._task = None
                 return
-            logger.info("HciAvrcpMonitor: HCI_CHANNEL_MONITOR open — tracking AVRCP source MACs")
+            # Seed handle→MAC from existing connections.  HCI_CHANNEL_MONITOR
+            # only emits Connection Complete events for connections that
+            # form AFTER bind, so without this the monitor silently drops
+            # ACL packets for already-connected speakers.
+            _seed_handle_map_from_kernel(handle_to_mac)
+            logger.info(
+                "HciAvrcpMonitor: HCI_CHANNEL_MONITOR open — tracking AVRCP source MACs (seeded %d existing connections)",
+                len(handle_to_mac),
+            )
             current_backoff = _BACKOFF_BASE
             try:
                 while True:

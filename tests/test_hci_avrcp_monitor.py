@@ -258,3 +258,104 @@ class TestHciAvrcpMonitorLifecycle:
         from services.hci_avrcp_monitor import get_monitor
 
         assert get_monitor() is get_monitor()
+
+
+class TestSeedHandleMapFromKernel:
+    """At startup, connections that exist BEFORE the monitor binds are not
+    replayed to HCI_CHANNEL_MONITOR — only future Connection Complete events
+    are visible.  Without seeding from the kernel's existing connection
+    list (HCIGETCONNLIST ioctl), every ACL packet from a pre-existing
+    connection silently drops because handle_to_mac is empty, and inbound
+    AVRCP commands silently fall back to default_client.
+    """
+
+    def test_seed_populates_handles_from_ioctl(self):
+        from unittest.mock import patch
+
+        from services.hci_avrcp_monitor import _seed_handle_map_from_kernel
+
+        # Fake ioctl returns 2 connections on hci0, no devices on hci1+
+        def fake_ioctl(fd, request, req):
+            # request 0x800448D2 = HCIGETDEVLIST → return one device (id=0)
+            # request 0x800448D4 = HCIGETCONNLIST → fill conn_info for dev_id=0
+            if request == 0x800448D2:
+                # hci_dev_list_req: dev_num u16, [hci_dev_req {dev_id u16, dev_opt u32}]
+                req.dev_num = 1
+                req.dev_req[0].dev_id = 0
+                return 0
+            if request == 0x800448D4:
+                if req.dev_id != 0:
+                    return -1
+                req.conn_num = 2
+                req.conn_info[0].handle = 0x0047
+                req.conn_info[0].bdaddr[:] = [0x99, 0x17, 0x35, 0x3D, 0x5C, 0x6C]  # LE reversed
+                req.conn_info[0].type = 1  # ACL
+                req.conn_info[1].handle = 0x0048
+                req.conn_info[1].bdaddr[:] = [0xD3, 0x0B, 0xC2, 0xE7, 0x99, 0x80]
+                req.conn_info[1].type = 1
+                return 0
+            return -1
+
+        h2m: dict[int, str] = {}
+        with (
+            patch("services.hci_avrcp_monitor.sys.platform", "linux"),
+            patch("services.hci_avrcp_monitor.socket.socket"),
+            patch("services.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
+        ):
+            _seed_handle_map_from_kernel(h2m)
+
+        assert h2m == {
+            0x0047: "6C:5C:3D:35:17:99",
+            0x0048: "80:99:E7:C2:0B:D3",
+        }
+
+    def test_seed_skips_non_acl_connections(self):
+        """SCO links (type=0) shouldn't pollute the table — AVRCP runs over
+        L2CAP on ACL only."""
+        from unittest.mock import patch
+
+        from services.hci_avrcp_monitor import _seed_handle_map_from_kernel
+
+        def fake_ioctl(fd, request, req):
+            if request == 0x800448D2:
+                req.dev_num = 1
+                req.dev_req[0].dev_id = 0
+                return 0
+            if request == 0x800448D4:
+                req.conn_num = 1
+                req.conn_info[0].handle = 0x0049
+                req.conn_info[0].bdaddr[:] = [1, 2, 3, 4, 5, 6]
+                req.conn_info[0].type = 0  # SCO, not ACL
+                return 0
+            return -1
+
+        h2m: dict[int, str] = {}
+        with (
+            patch("services.hci_avrcp_monitor.sys.platform", "linux"),
+            patch("services.hci_avrcp_monitor.socket.socket"),
+            patch("services.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
+        ):
+            _seed_handle_map_from_kernel(h2m)
+
+        assert h2m == {}
+
+    def test_seed_oserror_is_silent_noop(self):
+        """If the ioctl path fails (no caps, kernel build w/o HCI mgmt, etc.),
+        the seeder must not raise — the monitor should keep running and
+        rely on Connection Complete events for new connections."""
+        from unittest.mock import patch
+
+        from services.hci_avrcp_monitor import _seed_handle_map_from_kernel
+
+        def fake_ioctl(fd, request, req):
+            return -1
+
+        h2m: dict[int, str] = {}
+        with (
+            patch("services.hci_avrcp_monitor.sys.platform", "linux"),
+            patch("services.hci_avrcp_monitor.socket.socket"),
+            patch("services.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
+        ):
+            _seed_handle_map_from_kernel(h2m)  # must not raise
+
+        assert h2m == {}
