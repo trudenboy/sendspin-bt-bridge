@@ -254,6 +254,31 @@ async def _subscribe_avrcp_source_tracker(
     return _teardown
 
 
+async def _reregister_player_for_avrcp_dispatch(
+    media: Any,
+    path: str,
+    props: dict,
+    mac: str,
+) -> None:
+    """Unregister + re-register an MPRIS player to move it to BlueZ players[0].
+
+    BlueZ builds its internal player list with g_list_prepend, so the last
+    registered player is players[0] and receives all inbound AVRCP CT
+    commands (Play/Pause/Next from physical buttons).  Devices without an
+    AVRCP Target role (no MediaPlayer1 in the BlueZ object tree) can only
+    be reached via the default_client Strategy 2 fallback, so they must own
+    the players[0] slot.  Re-registering after the subscription attempt
+    ensures they are always prepended after any smart device that may have
+    registered just before them.
+    """
+    await media.call_unregister_player(path)
+    await media.call_register_player(path, props)
+    logger.info(
+        "AVRCP: %s has no MediaPlayer1 — re-registered as BlueZ players[0] for correct default_client routing",
+        mac,
+    )
+
+
 def _make_mpris_connected_hook(
     client: Any,
     mac: str,
@@ -379,6 +404,7 @@ def _make_mpris_connected_hook(
                 # handles the single-active-speaker common case.  Captures
                 # the teardown callable on the player so the disconnect
                 # hook can unsubscribe before unexporting the bus.
+                teardown: Callable[[], None] | None = None
                 try:
                     teardown = await _subscribe_avrcp_source_tracker(bus, mac, adapter_path)
                     player._avrcp_source_subscription_teardown = teardown  # type: ignore[attr-defined]
@@ -388,6 +414,30 @@ def _make_mpris_connected_hook(
                         mac,
                         exc,
                     )
+
+                # BlueZ dispatches all inbound AVRCP CT commands to
+                # players[0], which is built with g_list_prepend — so the
+                # LAST registered player becomes players[0].
+                #
+                # Smart devices (AVRCP TG UUID, MediaPlayer1 child in BlueZ)
+                # self-identify via PropertiesChanged → tracker Strategy 1
+                # handles them regardless of list position.
+                #
+                # Dumb speakers (no MediaPlayer1 / subscription returned
+                # None) must be players[0] so the default_client Strategy 2
+                # fallback reaches them.  Unregister + re-register moves
+                # this device to the front (prepend → players[0]), which is
+                # correct: dumb devices can only be reached via default_client
+                # and must therefore own the BlueZ dispatch slot.
+                if teardown is None and player._dbus_registered:  # type: ignore[attr-defined]
+                    try:
+                        await _reregister_player_for_avrcp_dispatch(media, path, props, mac)
+                    except Exception as exc:
+                        logger.debug(
+                            "AVRCP: re-register for %s failed: %s",
+                            mac,
+                            exc,
+                        )
             except Exception as exc:
                 logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
 

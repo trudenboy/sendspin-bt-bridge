@@ -599,3 +599,48 @@ async def test_subscribe_avrcp_source_tracker_returns_none_when_no_player_node()
     teardown = await _subscribe_avrcp_source_tracker(bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=2, delay=0.0)
 
     assert teardown is None
+
+
+# ── BlueZ re-registration for AVRCP dispatch ordering ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_reregister_player_for_avrcp_dispatch_calls_unregister_then_register():
+    """Re-registration must call unregister first, then register.
+
+    BlueZ uses g_list_prepend — registering last makes a player players[0]
+    (receives all AVRCP CT commands).  The unregister→register sequence
+    ensures the dumb speaker is always prepended AFTER any smart device,
+    claiming the players[0] slot regardless of the original connection order.
+    """
+    from unittest.mock import AsyncMock, call
+
+    from services.device_activation import _reregister_player_for_avrcp_dispatch
+
+    media = AsyncMock()
+    path = "/org/mpris/MediaPlayer2/sendspin_AA_BB_CC_DD_EE_FF"
+    props = {"PlaybackStatus": "Stopped"}
+
+    await _reregister_player_for_avrcp_dispatch(media, path, props, "AA:BB:CC:DD:EE:FF")
+
+    assert media.call_unregister_player.call_args_list == [call(path)]
+    assert media.call_register_player.call_args_list == [call(path, props)]
+    # Unregister must precede register so the re-prepend is atomic from BlueZ's view
+    unregister_idx = [c[0] for c in media.mock_calls].index("call_unregister_player")
+    register_idx = [c[0] for c in media.mock_calls].index("call_register_player")
+    assert unregister_idx < register_idx, "unregister must be called before register"
+
+
+@pytest.mark.asyncio
+async def test_reregister_player_propagates_exceptions():
+    """If Media1.UnregisterPlayer raises, the exception propagates so the
+    caller can log it without masking the error."""
+    from unittest.mock import AsyncMock
+
+    from services.device_activation import _reregister_player_for_avrcp_dispatch
+
+    media = AsyncMock()
+    media.call_unregister_player = AsyncMock(side_effect=RuntimeError("dbus error"))
+
+    with pytest.raises(RuntimeError, match="dbus error"):
+        await _reregister_player_for_avrcp_dispatch(media, "/path", {}, "AA:BB:CC:DD:EE:FF")
