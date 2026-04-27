@@ -483,6 +483,31 @@ def test_resolver_returns_none_when_no_streaming_and_no_recent_source():
     assert resolved is None
 
 
+def test_resolver_falls_back_to_default_client_when_paused_and_no_tracker():
+    """Regression: dumb BT speaker (e.g. ENEBY) has no AVRCP TG → no
+    MediaPlayer1 child → AvrcpSourceTracker never records it.  When the
+    user presses Play after Pause, audio_streaming=False so Strategy 2
+    (streaming fallback) also misses.
+
+    Strategy 3 must use default_client so the Play command reaches the
+    device instead of being silently dropped — the pre-fix behaviour was
+    to route to default_client unconditionally, and we must not regress it.
+    """
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+
+    eneby_client = SimpleNamespace(status={"audio_streaming": False})  # paused
+    p = MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client)
+    registry = MprisRegistry()
+    registry.register(p.mac, p)
+
+    tracker = AvrcpSourceTracker()  # no activity — dumb speaker has no MediaPlayer1
+
+    resolved = resolve_avrcp_source_client(registry=registry, tracker=tracker, default_client=eneby_client, now=100.0)
+
+    assert resolved is eneby_client
+
+
 def test_resolver_skips_recent_mac_with_no_registered_player():
     """Stale tracker entry for a MAC that's been disconnected (registry
     entry already gone, but disconnect hook didn't clear() yet) — the

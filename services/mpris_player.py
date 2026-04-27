@@ -496,6 +496,14 @@ def resolve_avrcp_source_client(
     if len(streaming) == 1:
         return streaming[0]
 
+    # Strategy 3: default_client captured at registration time.  Handles dumb
+    # speakers that have no AVRCP TG (no MediaPlayer1 → tracker never fires)
+    # and are paused (audio_streaming=False → Strategy 2 also misses).  In the
+    # multi-device case Strategy 1 should have already fired for smart devices;
+    # this is the single-device / dumb-speaker safety net.
+    if default_client is not None:
+        return default_client
+
     return None
 
 
