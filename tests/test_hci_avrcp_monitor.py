@@ -62,3 +62,50 @@ class TestParseDisconnectComplete:
         from services.hci_avrcp_monitor import _parse_disconnect_complete
 
         assert _parse_disconnect_complete(b"\x00") is None
+
+
+class TestParseAvrcpPassthrough:
+    def test_play_pressed_returns_op_id(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVRCP_PLAY_PRESSED) == 0x44
+
+    def test_next_pressed_returns_op_id(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVRCP_NEXT_PRESSED) == 0x4B
+
+    def test_released_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVRCP_PLAY_RELEASED) is None
+
+    def test_wrong_pid_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVCTP_WRONG_PID) is None
+
+    def test_response_cr_bit_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVCTP_RESPONSE) is None
+
+    def test_invalid_pid_flag_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVCTP_INVALID_PID) is None
+
+    def test_wrong_subunit_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVC_WRONG_SUBUNIT) is None
+
+    def test_wrong_opcode_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(AVC_WRONG_OPCODE) is None
+
+    def test_too_short_returns_none(self):
+        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+
+        assert _parse_avrcp_passthrough(b"\x00\x11\x0e") is None

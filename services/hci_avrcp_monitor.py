@@ -54,3 +54,25 @@ def _parse_disconnect_complete(params: bytes) -> int | None:
         return None
     (handle,) = struct.unpack_from("<H", params, 1)
     return handle
+
+
+def _parse_avrcp_passthrough(data: bytes) -> int | None:
+    if len(data) < 8:
+        return None
+    avctp_hdr = data[0]
+    if avctp_hdr & 0x01:  # IPID=1 invalid PID
+        return None
+    if avctp_hdr & 0x02:  # C/R=1 response, not a command from speaker
+        return None
+    (pid,) = struct.unpack_from(">H", data, 1)
+    if pid != _AVRCP_PID:
+        return None
+    # AVC frame at offset 3: ctype(1) subunit(1) opcode(1) op_byte(1) len(1)
+    if data[4] != _AVC_SUBUNIT_PANEL_BYTE:
+        return None
+    if data[5] != _AVC_OPCODE_PASSTHROUGH:
+        return None
+    op_byte = data[6]
+    if op_byte & 0x80:  # state_flag=1 means released
+        return None
+    return op_byte & 0x7F
