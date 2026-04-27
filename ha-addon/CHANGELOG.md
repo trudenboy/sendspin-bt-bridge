@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.1] - 2026-04-27
+
+### Changed — RSSI badge colour thresholds tuned for connected speakers
+
+The signal-strength chip no longer flags a connected speaker as
+red "bad" purely because the link is a bit below the controller's
+Golden Receive Power Range.  Marginal-but-working links now
+render amber, and only genuinely weak links (< −25 Δ dB) stay red.
+
 ## [2.64.0] - 2026-04-27
 
 ### Added — Bulk actions for all selected devices

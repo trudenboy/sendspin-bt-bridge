@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.1] - 2026-04-27
+
+### Changed — RSSI badge thresholds tuned for connected speakers
+
+The signal-strength chip on a device card now uses different
+buckets depending on whether the value comes from an inquiry
+scan (absolute dBm) or from a connected link (delta from the
+controller's Golden Receive Power Range).  Previously the same
+shared thresholds made a perfectly typical −23 Δ dB reading
+render as full-red "bad" 1-bar even when the speaker was
+streaming cleanly — misleading.
+
+New thresholds for connected-link Δ dB:
+
+- ≥ 0 — green, 4 bars (in golden range)
+- ≥ −10 — green, 3 bars (strong)
+- ≥ −20 — amber, 2 bars (fair)
+- ≥ −25 — amber, 1 bar (poor — margin shrinking but link still works)
+- < −25 — red, 1 bar (bad — likely audio issues)
+
+Inquiry-scan thresholds (absolute dBm) are unchanged.
+
 ## [2.64.0] - 2026-04-27
 
 ### Added — Bulk actions for all selected devices
