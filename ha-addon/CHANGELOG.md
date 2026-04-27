@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.2] - 2026-04-27
+
+### Fixed — Now-playing progress bar resetting every ~15 s
+
+The bar lurched backward on each Music Assistant poll cycle.
+Removed the MA progress branch from the UI; the bridge daemon's
+native track-progress events drive the bar directly now.
+
 ## [2.64.1] - 2026-04-27
 
 ### Changed — RSSI badge thresholds tuned for connected speakers

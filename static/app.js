@@ -319,7 +319,6 @@ var reanchorShownAt = {};   // deviceIndex -> timestamp(ms) when last re-anchor 
 var lastReanchorCount = {}; // deviceIndex -> reanchor_count at last render (to detect new events)
 var lastReanchorAt = {};    // deviceIndex -> last_reanchor_at string seen (catches count resets on stream restart)
 var _progSnapshots = {};    // deviceIndex -> {pos, dur, t} for Sendspin native progress interpolation
-var _maProgSnapshots = {};  // deviceIndex -> {elapsed, duration, t, paused} for MA progress interpolation
 
 // ---- Utility ----
 
@@ -337,104 +336,12 @@ function fmtSec(sec) {
     return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
-function _getMaProgressTrackKey(ma) {
-    return [
-        ma.syncgroup_id || '',
-        ma.queue_index != null ? String(ma.queue_index) : '',
-        ma.track || '',
-        ma.artist || '',
-        ma.album || '',
-        ma.duration != null ? String(ma.duration) : '',
-    ].join('||');
-}
-
-function _getMaSnapshotElapsedNow(snapshot, now) {
-    if (!snapshot) return 0;
-    var duration = Math.max(0, Number(snapshot.duration) || 0);
-    var elapsed = Math.max(0, Math.min(Number(snapshot.elapsed) || 0, duration || Number(snapshot.elapsed) || 0));
-    if (snapshot.paused) return elapsed;
-    var startedAt = Number(snapshot.t) || now;
-    return Math.max(0, Math.min(elapsed + Math.max(0, now - startedAt) / 1000, duration || elapsed));
-}
-
-function _buildMergedMaProgressSnapshot(idx, ma, now) {
-    var duration = Math.max(0, Number(ma.duration) || 0);
-    var elapsed = Math.max(0, Math.min(Number(ma.elapsed) || 0, duration));
-    var startedAt = ma.elapsed_updated_at != null ? Number(ma.elapsed_updated_at) * 1000 : now;
-    if (!Number.isFinite(startedAt)) startedAt = now;
-    if (startedAt > now) startedAt = now;
-
-    var incoming = {
-        elapsed: elapsed,
-        duration: duration,
-        t: startedAt,
-        key: _getMaProgressTrackKey(ma),
-    };
-    var existing = _maProgSnapshots[idx];
-    if (!existing || existing.key !== incoming.key || existing.duration !== incoming.duration) {
-        return incoming;
-    }
-
-    var existingElapsedNow = _getMaSnapshotElapsedNow(existing, now);
-    var incomingElapsedNow = _getMaSnapshotElapsedNow(incoming, now);
-    if (incomingElapsedNow + 0.75 < existingElapsedNow) {
-        return {
-            elapsed: existingElapsedNow,
-            duration: existing.duration,
-            t: now,
-            key: existing.key,
-        };
-    }
-    return incoming;
-}
-
 function _getDevicePlaybackProgressState(dev, idx, nowMs) {
+    // Sendspin native progress is the single source of truth here:
+    // its metadata events carry track_progress_ms / track_duration_ms
+    // with one less hop than MA's polled elapsed_time, so the bar
+    // doesn't lurch every time the MA monitor's 15 s poll cycle fires.
     var now = nowMs != null ? nowMs : Date.now();
-    var ma = dev.ma_now_playing || {};
-    var deviceMaActive = !!(ma.connected && deviceHasSink(dev));
-    var maHasProg = deviceMaActive && ma.state === 'playing' && ma.duration > 0 && ma.elapsed != null;
-    var maPausedProg = deviceMaActive && ma.state === 'paused' && ma.duration > 0 && ma.elapsed != null;
-    if (maHasProg || maPausedProg) {
-        var maSnapshot;
-        if (maHasProg) {
-            maSnapshot = idx != null
-                ? _buildMergedMaProgressSnapshot(idx, ma, now)
-                : {
-                    elapsed: Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0)),
-                    duration: Math.max(0, Number(ma.duration) || 0),
-                    t: now,
-                    key: _getMaProgressTrackKey(ma),
-                };
-            maSnapshot.paused = false;
-        } else {
-            // Paused — freeze at current elapsed position
-            var existing = idx != null ? _maProgSnapshots[idx] : null;
-            var frozenElapsed = Math.max(0, Math.min(Number(ma.elapsed) || 0, Number(ma.duration) || 0));
-            if (existing && existing.key === _getMaProgressTrackKey(ma) && !existing.paused) {
-                frozenElapsed = _getMaSnapshotElapsedNow(existing, now);
-            }
-            maSnapshot = {
-                elapsed: frozenElapsed,
-                duration: Math.max(0, Number(ma.duration) || 0),
-                t: now,
-                key: _getMaProgressTrackKey(ma),
-                paused: true,
-            };
-        }
-        var maElapsedSec = _getMaSnapshotElapsedNow(maSnapshot, now);
-        if (idx != null) {
-            _maProgSnapshots[idx] = maSnapshot;
-            delete _progSnapshots[idx];
-        }
-        return {
-            visible: true,
-            pct: Math.min(100, (maElapsedSec / maSnapshot.duration) * 100),
-            text: fmtSec(maElapsedSec) + ' / ' + fmtSec(maSnapshot.duration),
-        };
-    }
-
-    if (idx != null) delete _maProgSnapshots[idx];
-
     var nativeHasProg = dev.track_duration_ms > 0 && dev.track_progress_ms != null;
     var nativePaused = Number(dev.playback_speed) === 0;
     if (nativeHasProg && (dev.playing || nativePaused)) {
@@ -3534,18 +3441,6 @@ async function updateStatus() {
 // Interpolate progress bars every second between SSE updates
 setInterval(function() {
     var now = Date.now();
-    // MA progress per device
-    Object.keys(_maProgSnapshots).forEach(function(idx) {
-        var snap = _maProgSnapshots[idx];
-        if (!snap) return;
-        var elapsedSec = _getMaSnapshotElapsedNow(snap, now);
-        _applyPlaybackProgressForIndex(idx, {
-            visible: true,
-            pct: Math.min(100, (elapsedSec / snap.duration) * 100),
-            text: fmtSec(elapsedSec) + ' / ' + fmtSec(snap.duration),
-        });
-    });
-    // Sendspin-native per-device progress (ms)
     Object.keys(_progSnapshots).forEach(function(idx) {
         var snap = _progSnapshots[idx];
         if (!snap) return;

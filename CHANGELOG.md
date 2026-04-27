@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.2] - 2026-04-27
+
+### Fixed — Now-playing progress bar resetting every ~15 s
+
+The progress bar on a device card was visibly jumping backward
+roughly every fifteen seconds during playback even though the
+audio itself never stuttered.  Two parallel sources of progress
+existed — Music Assistant's polled `elapsed_time` and the bridge
+daemon's native `track_progress_ms` — and the UI preferred the
+MA value.  MA's elapsed only refreshes on the monitor's 15 s
+poll cycle, which is exactly the interval at which the bar
+appeared to lurch.
+
+The native sendspin path already delivers the same data with
+one less hop.  Removed the MA progress branch from the UI so
+the bar is driven only by the bridge daemon's metadata events.
+Track / artist / album / artwork still come from MA when
+sendspin hasn't filled them in.
+
 ## [2.64.1] - 2026-04-27
 
 ### Changed — RSSI badge thresholds tuned for connected speakers
