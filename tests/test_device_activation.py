@@ -458,6 +458,71 @@ async def test_volume_callback_dispatches_to_resolved_source_client():
     default._send_subprocess_command.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_transport_callback_waits_for_hci_monitor_to_populate_tracker():
+    """The HCI monitor records source MAC into the tracker ~5-10ms AFTER
+    BlueZ's D-Bus AVRCP dispatch arrives at our process — observed empirically
+    on VM 105 from kernel HCI_CHANNEL_MONITOR copies racing the user-space
+    BlueZ → D-Bus path.  Without a brief await, the resolver runs against an
+    empty tracker and falls back to ``default_client`` (the wrong speaker).
+
+    Reproduces that race by leaving the tracker empty when ``cb`` is called,
+    scheduling ``note_activity`` for the source MAC ~10ms later (mimicking
+    the HCI monitor), and asserting the resolver routes to the source — not
+    the captured default.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_transport_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    eneby_client = SimpleNamespace(
+        player_name="ENEBY",
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh_client = SimpleNamespace(
+        player_name="WH",
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh_client),
+    )
+    # NOTE: tracker is intentionally empty when cb starts — that is the race.
+
+    async def _delayed_hci_record():
+        await asyncio.sleep(0.010)  # HCI monitor lag observed at ~10ms
+        fresh_tracker.note_activity("80:99:E7:C2:0B:D3")
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    cb = _build_mpris_transport_callback(eneby_client)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        # Fire the simulated HCI monitor write concurrently with cb.
+        hci_task = asyncio.create_task(_delayed_hci_record())
+        result = await cb("eneby-id", "pause")
+        await hci_task
+
+    assert result is True
+    wh_client.send_transport_command.assert_awaited_once_with("pause")
+    eneby_client.send_transport_command.assert_not_awaited()
+
+
 # ── BlueZ MediaPlayer1 PropertiesChanged subscription ───────────────────
 
 
