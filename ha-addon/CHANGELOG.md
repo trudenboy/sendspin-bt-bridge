@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.4] - 2026-04-27
+
+### Changed — Transitive dependencies bumped past CVE advisories
+
+Floor-pinned ``aiohttp >= 3.13.4``, ``pillow >= 12.2.0``,
+``pygments >= 2.20.0``, ``requests >= 2.33.0`` in
+``requirements.txt`` so the resolver picks up the patched
+releases of these transitive deps (pulled in via aiosendspin /
+music-assistant-client).  Closes 16 known advisories.  CI now
+runs ``pip-audit`` against the installed venv on every test run
+and blocks on new findings instead of swallowing them.
+
 ## [2.63.1] - 2026-04-26
 
 ### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again

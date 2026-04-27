@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0-rc.4] - 2026-04-27
+
+### Changed — CVE audit now real, transitive deps bumped past advisories
+
+The lint job's ``pip-audit -r requirements.txt`` step had been
+silently failing on every run for lack of ``libdbus-1-dev`` —
+``continue-on-error: true`` masked it and would have masked any
+real CVEs as well.
+
+- Audit step moved out of ``_lint.yml`` and into ``_test.yml``
+  after ``Install dependencies``, running against the already-
+  installed venv (no sandboxed re-resolve, no native rebuilds,
+  ~1-2 s).  Real findings now block CI.
+- Pre-fix audit surfaced 16 advisories across 5 transitive deps
+  (pulled in via aiosendspin / music-assistant-client).  Added
+  minimum-version floors in ``requirements.txt`` so the resolver
+  picks up patched releases without locking us to a single
+  version: ``aiohttp >= 3.13.4``, ``pillow >= 12.2.0``,
+  ``pygments >= 2.20.0``, ``requests >= 2.33.0``.
+- Three remaining advisories on ``pip`` itself (toolchain, not
+  shipped runtime) are explicitly ignored per-ID via
+  ``--ignore-vuln`` with rationale in the workflow comment so a
+  new pip CVE gets a deliberate review rather than a silent skip.
+
 ## [2.64.0-rc.3] - 2026-04-27
 
 ### Changed — Primary discovery actions painted solid blue
