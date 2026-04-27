@@ -14,6 +14,18 @@ be disconnected, so clicking it on a healthy setup did nothing.  Now
 matches the per-device Reconnect button — fires regardless of current
 connection state.
 
+### Changed — UI polish
+
+- Master *Show experimental features* toggle now has amber warning
+  treatment (border + ⚠ glyph) so it reads as the cautionary
+  control it is.
+- *Scan nearby* modal no longer auto-starts on open — primary
+  action button presents as accent *Start Scan* with a soft pulse
+  until first scan, then reverts to neutral *Rescan*.
+- Scan-result rows: *Add to fleet* and *Pair and Add* collapsed
+  into a split button; default action is *Pair and Add*, ▾ caret
+  exposes *Add to fleet* for already-paired devices.
+
 ### Changed — Live RSSI badge on by default
 
 Promoted out of "experimental".  Config key

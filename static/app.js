@@ -1502,7 +1502,7 @@ function onArtworkPreviewKeydown(event, el) {
 }
 
 function _closeActionMenus(eventTarget) {
-    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open], .bt-device-action-menu[open], .group-bulk-action-menu[open]');
+    var openMenus = document.querySelectorAll('.notice-action-menu[open], .diag-action-menu[open], .bt-device-action-menu[open], .group-bulk-action-menu[open], .scan-action-split-menu[open]');
     openMenus.forEach(function(menu) {
         if (eventTarget && menu.contains(eventTarget)) return;
         menu.open = false;
@@ -6039,6 +6039,10 @@ var _btScanModalState = {
     lastFocusedElement: null,
     requestToken: 0,
     backgroundNoticeShown: false,
+    // Tracks whether the user has run *any* scan in this modal session
+    // so the action button can present as accent "Start Scan" before
+    // first run and revert to neutral "Rescan" afterwards.
+    hasScanned: false,
 };
 var _scanCooldownTimer = null;
 var _scanCooldownRemaining = 0;
@@ -6308,12 +6312,22 @@ function _syncBtScanControls() {
     }
     if (rescanBtn) {
         rescanBtn.disabled = _btScanModalState.isRunning || _scanCooldownRemaining > 0;
+        // Pre-first-scan: accent "Start Scan" so the button is the
+        // obvious next action.  Post-scan: neutral "Rescan" — the
+        // primary intent now is to inspect results, not re-run.
+        var hasScanned = !!_btScanModalState.hasScanned;
+        rescanBtn.classList.toggle('btn-primary', !hasScanned && !_btScanModalState.isRunning);
+        rescanBtn.classList.toggle('btn-secondary', hasScanned || _btScanModalState.isRunning);
+        rescanBtn.classList.toggle('scan-start-btn--pulse', !hasScanned && !_btScanModalState.isRunning && _scanCooldownRemaining <= 0);
         if (_btScanModalState.isRunning) {
             rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', 'Scanning...');
         } else if (_scanCooldownRemaining > 0) {
-            rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', 'Rescan (' + _scanCooldownRemaining + 's)');
+            rescanBtn.innerHTML = _buttonLabelWithIconHtml(
+                'refresh',
+                (hasScanned ? 'Rescan' : 'Start Scan') + ' (' + _scanCooldownRemaining + 's)'
+            );
         } else {
-            rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', 'Rescan');
+            rescanBtn.innerHTML = _buttonLabelWithIconHtml('refresh', hasScanned ? 'Rescan' : 'Start Scan');
         }
     }
 }
@@ -6440,6 +6454,14 @@ function openBtScanModal(options) {
     overlay.hidden = false;
     _btScanModalState.isVisible = true;
     _btScanModalState.backgroundNoticeShown = false;
+    // Fresh modal session → primary button presents as "Start Scan"
+    // until the user clicks it; closing+reopening resets so the
+    // accent treatment reappears next visit.  In-flight or recently
+    // completed scans (lastDevices populated) keep "Rescan" so the
+    // language matches what's on screen.
+    if (!_btScanModalState.isRunning && !(_btScanModalState.lastDevices && _btScanModalState.lastDevices.length)) {
+        _btScanModalState.hasScanned = false;
+    }
     overlay.onclick = function(event) {
         if (event.target === overlay) closeBtScanModal();
     };
@@ -6465,7 +6487,15 @@ function openBtScanModal(options) {
     _renderBtScanOutcome();
     _applyBtScanCooldownUi();
     _focusBtScanModalTarget();
-    if (opts.autoStart !== false && !_btScanModalState.isRunning) startBtScan();
+    // Default behaviour as of v2.64.0: do NOT auto-start the scan when
+    // the user opens the modal — they may have arrived to review prior
+    // results, change adapter, or toggle the audio-only filter before
+    // committing to a new round of mgmt traffic.  The Start Scan button
+    // takes the accent treatment until the first scan completes (see
+    // _renderBtScanStartButton).  Callers can still pass
+    // ``{autoStart: true}`` explicitly for the "go to BT and scan" deep
+    // links that already imply scan intent.
+    if (opts.autoStart === true && !_btScanModalState.isRunning) startBtScan();
     return false;
 }
 
@@ -6611,13 +6641,24 @@ function _renderBtScanResults(devices) {
         if (d.warning) {
             chips.push('<span class="scan-result-chip is-warning" title="' + escHtmlAttr(d.warning) + '">⚠ Another bridge</span>');
         }
+        // Split-button: primary action is "Pair and Add" (the safe
+        // default — most discovered speakers need pairing first), with
+        // a caret menu exposing "Add to fleet" for the rare case the
+        // operator already paired the device elsewhere and just wants
+        // to import the config row.
+        var actionsHtml = addable
+            ? '<span class="scan-action-split">' +
+                  '<button type="button" class="scan-action-btn scan-action-btn--pair scan-pair-btn scan-action-split-primary" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Pair and Add</button>' +
+                  '<details class="scan-action-split-menu ui-action-menu">' +
+                      '<summary class="scan-action-split-toggle ui-action-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="More add options" title="More add options"></summary>' +
+                      '<div class="scan-action-split-menu-list ui-action-menu-list">' +
+                          '<button type="button" class="ui-action-menu-item scan-action-menu-item scan-add-btn" title="Add to config without pairing now (already paired elsewhere)">Add to fleet</button>' +
+                      '</div>' +
+                  '</details>' +
+              '</span>'
+            : '<span class="scan-result-passive">Audio import unavailable</span>';
         return '<div class="scan-result-item' + (addable ? '' : ' scan-result-item--passive') + '" data-scan-idx="' + i + '">' +
-            '<span class="scan-result-actions">' +
-                (addable
-                    ? '<button type="button" class="scan-action-btn scan-action-btn--primary scan-add-btn" title="Add to config without pairing now">Add to fleet</button>' +
-                      '<button type="button" class="scan-action-btn scan-action-btn--pair scan-pair-btn" data-pair-idx="' + i + '" title="Pair, trust, and add to config">Add & pair</button>'
-                    : '<span class="scan-result-passive">Audio import unavailable</span>') +
-            '</span>' +
+            '<span class="scan-result-actions">' + actionsHtml + '</span>' +
             '<span class="scan-result-mac">' + escHtml(d.mac) + '</span>' +
             '<span class="scan-result-summary">' +
                 '<span class="scan-result-name">' + escHtml(d.name) + '</span>' +
@@ -6631,6 +6672,9 @@ function _renderBtScanResults(devices) {
         if (scanAddBtn) {
             scanAddBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
+                // Collapse the split-menu after picking the secondary action.
+                var menu = scanAddBtn.closest('.scan-action-split-menu');
+                if (menu && menu.open) menu.open = false;
                 var d = devices[parseInt(row.dataset.scanIdx, 10)];
                 if (d.warning && !confirm(d.warning + '\n\nAdd anyway?')) return;
                 addFromScan(d.mac, d.name, d.adapter);
@@ -6658,6 +6702,7 @@ async function startBtScan() {
 
     _btScanModalState.activeJobId = '';
     _btScanModalState.isRunning = true;
+    _btScanModalState.hasScanned = true;
     _btScanModalState.lastDevices = [];
     _btScanModalState.lastStats = null;
     _btScanModalState.lastError = '';

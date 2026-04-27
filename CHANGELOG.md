@@ -16,6 +16,37 @@ constraint — it forces a reconnect cycle regardless.  Aligned the
 bulk action with the per-device button: only ``bt_management_enabled``
 + not-disabled now gate it.
 
+### Changed — UI polish for the experimental toggle and scan modal
+
+Three small but visible behaviour tweaks:
+
+- **"Show experimental features" toggle** now wears amber warning
+  treatment (border + soft fill, ⚠ glyph next to the label) so the
+  master switch that reveals in-development surface area reads as
+  the cautionary control it is.  Distinct from the per-row
+  ``data-experimental`` styling that marks individual experimental
+  settings inside the revealed card.
+
+- **Scan nearby modal no longer auto-starts a scan on open.** The
+  user may have arrived to review prior results, change adapter, or
+  toggle the audio-only filter before committing to a fresh round
+  of mgmt traffic.  The action button now presents as accent
+  *Start Scan* (with a soft pulse, respecting
+  ``prefers-reduced-motion``) until the first scan in the session
+  completes; thereafter it reverts to neutral *Rescan*.  Deep-link
+  callers that already imply intent (e.g. onboarding's "go to BT
+  and scan") can opt back into the old behaviour by passing
+  ``{autoStart: true}`` explicitly.
+
+- **Scan-result rows collapse the two add actions into a split
+  button.** Primary action is now *Pair and Add* (the safe default
+  — most discovered speakers need pairing first); the adjacent ▾
+  caret reveals a small ui-action-menu containing *Add to fleet*
+  for the rare case the operator already paired the device
+  elsewhere and just wants to import the config row.  Mirrors the
+  per-device Tools menu and the new Bulk actions dropdown so the
+  visual language is consistent.
+
 ### Changed — Live RSSI badge promoted out of "experimental", on by default
 
 The badge has been stable since v2.63.0-rc.8 and the per-tick mgmt
