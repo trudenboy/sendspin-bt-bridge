@@ -16,6 +16,28 @@ constraint — it forces a reconnect cycle regardless.  Aligned the
 bulk action with the per-device button: only ``bt_management_enabled``
 + not-disabled now gate it.
 
+### Changed — Live RSSI badge promoted out of "experimental", on by default
+
+The badge has been stable since v2.63.0-rc.8 and the per-tick mgmt
+round-trip is gated by the existing ``bt_operation_lock`` so the
+overhead is negligible.  Promoted to a regular feature:
+
+- **Config key renamed** ``EXPERIMENTAL_RSSI_BADGE`` → ``RSSI_BADGE``
+  (default ``true``).  ``config_migration._normalize_loaded_config``
+  copies the legacy key into the new one on first load and drops the
+  old one — explicit ``false`` / ``true`` preferences round-trip
+  unchanged so an operator who had reasons to keep it off (CPU-
+  constrained host, mgmt-socket conflicts) keeps it off after upgrade.
+- **UI toggle moved** from the *Experimental features* card to the
+  *Connection recovery* card, hint copy reframed as a regular setting
+  (no warning iconography).  Form input renamed to ``RSSI_BADGE``;
+  ``static/app.js`` reader prefers the new key, falls back to the
+  legacy snake-cased key in stale snapshots, defaults to ``true``
+  when both are absent.
+- **Schema + HA-options-merge updated** so ``RSSI_BADGE`` lands under
+  the web-UI-only family that ``scripts/translate_ha_config`` round-
+  trips, preserving operator preference across HA addon restarts.
+
 ### Added — *Power save all* and *Standby all* in the bulk dropdown
 
 Two new menu items in *Bulk actions ▾*:

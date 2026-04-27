@@ -7272,7 +7272,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
-    config.EXPERIMENTAL_RSSI_BADGE = !!(document.getElementById('experimental-rssi-badge') || {}).checked;
+    config.RSSI_BADGE = !!(document.getElementById('rssi-badge') || {}).checked;
     config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
@@ -9855,8 +9855,18 @@ async function loadConfig(options) {
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
-        var expRssiBadgeCheck = document.getElementById('experimental-rssi-badge');
-        if (expRssiBadgeCheck) expRssiBadgeCheck.checked = !!config.EXPERIMENTAL_RSSI_BADGE;
+        var rssiBadgeCheck = document.getElementById('rssi-badge');
+        if (rssiBadgeCheck) {
+            // Default ON when key absent (fresh / migrated config); honour
+            // explicit false when user has disabled it.  The legacy
+            // ``EXPERIMENTAL_RSSI_BADGE`` key is migrated to ``RSSI_BADGE``
+            // server-side; if a stale snapshot still has the old key,
+            // fall back to it before defaulting.
+            var legacy = config.EXPERIMENTAL_RSSI_BADGE;
+            var current = config.RSSI_BADGE;
+            if (current === undefined) current = legacy;
+            rssiBadgeCheck.checked = current === undefined ? true : !!current;
+        }
         var expAllowHfpCheck = document.getElementById('experimental-allow-hfp-profile');
         if (expAllowHfpCheck) expAllowHfpCheck.checked = !!config.ALLOW_HFP_PROFILE;
         var authCheck = document.getElementById('auth-enabled');

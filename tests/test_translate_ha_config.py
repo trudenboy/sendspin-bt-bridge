@@ -367,7 +367,7 @@ def test_translation_preserves_settings_experimental_card_toggles(tmp_path):
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": True,
             "EXPERIMENTAL_PA_MODULE_RELOAD": True,
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": True,
-            "EXPERIMENTAL_RSSI_BADGE": True,
+            "RSSI_BADGE": False,
             "ALLOW_HFP_PROFILE": True,
             "BLUETOOTH_DEVICES": [],
         },
@@ -384,7 +384,10 @@ def test_translation_preserves_settings_experimental_card_toggles(tmp_path):
     assert cfg["EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE"] is True
     assert cfg["EXPERIMENTAL_PA_MODULE_RELOAD"] is True
     assert cfg["EXPERIMENTAL_ADAPTER_AUTO_RECOVERY"] is True
-    assert cfg["EXPERIMENTAL_RSSI_BADGE"] is True
+    # Web-UI-only flag must round-trip through HA's options-merge so a
+    # user who disabled the (now default-on) RSSI badge keeps their
+    # preference across addon restarts.
+    assert cfg["RSSI_BADGE"] is False
     assert cfg["ALLOW_HFP_PROFILE"] is True
 
 

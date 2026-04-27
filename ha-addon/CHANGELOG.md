@@ -14,6 +14,14 @@ be disconnected, so clicking it on a healthy setup did nothing.  Now
 matches the per-device Reconnect button — fires regardless of current
 connection state.
 
+### Changed — Live RSSI badge on by default
+
+Promoted out of "experimental".  Config key
+``EXPERIMENTAL_RSSI_BADGE`` renamed to ``RSSI_BADGE``; the legacy key
+is migrated automatically on load (preserves explicit
+enable/disable).  Toggle moved from the *Experimental features* card
+to *Connection recovery* in the web UI.
+
 ### Added — Power save all + Standby all bulk actions
 
 Two new items in the *Bulk actions* dropdown that fan out per-device

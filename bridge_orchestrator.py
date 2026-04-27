@@ -186,13 +186,18 @@ class BridgeOrchestrator:
         enable_a2dp_sink_recovery_dance = bool(config.get("EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE", False))
         enable_pa_module_reload = bool(config.get("EXPERIMENTAL_PA_MODULE_RELOAD", False))
         enable_adapter_auto_recovery = bool(config.get("EXPERIMENTAL_ADAPTER_AUTO_RECOVERY", False))
-        enable_rssi_badge = bool(config.get("EXPERIMENTAL_RSSI_BADGE", False))
+        # RSSI badge default is True since v2.64.0 (was opt-in / experimental
+        # earlier).  ``config_migration`` migrates the legacy
+        # ``EXPERIMENTAL_RSSI_BADGE`` key to ``RSSI_BADGE`` on load, so by the
+        # time we read it the value is under the new name.  Default ``True``
+        # here matches the schema default and applies to fresh configs.
+        enable_rssi_badge = bool(config.get("RSSI_BADGE", True))
         if enable_a2dp_sink_recovery_dance:
             logger.info("EXPERIMENTAL: A2DP sink recovery dance enabled")
         if enable_pa_module_reload:
             logger.info("EXPERIMENTAL: PulseAudio module-bluez5-discover reload enabled")
         if enable_rssi_badge:
-            logger.info("EXPERIMENTAL: live RSSI refresh enabled — every 30 s via mgmt opcode 0x0031")
+            logger.info("Live RSSI badge enabled — refreshing every 30 s via mgmt opcode 0x0031")
         if enable_adapter_auto_recovery:
             logger.info(
                 "EXPERIMENTAL: adapter auto-recovery enabled — bluetooth-auto-recovery ladder will run at reconnect-fail threshold",
