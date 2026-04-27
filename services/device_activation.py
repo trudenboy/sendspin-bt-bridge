@@ -34,13 +34,15 @@ logger = logging.getLogger(__name__)
 
 # BlueZ delivers the inbound AVRCP D-Bus dispatch to our process before
 # the kernel's HCI_CHANNEL_MONITOR copy reaches us — observed empirically
-# at ~5-10ms on VM 105.  Without a brief wait the resolver runs against
-# an empty AvrcpSourceTracker and falls back to ``default_client``,
-# mis-routing the press to the BlueZ-chosen "addressed player" rather
-# than the speaker that actually emitted the command.  A 50ms wait is
-# below human perception for a button press and gives the HCI monitor
-# the asyncio scheduling slot it needs to write the source MAC.
-_INBOUND_AVRCP_HCI_WAIT_S = 0.05
+# at ~2-10ms on VM 105 in steady state, but the FIRST event after bridge
+# restart was 115ms (cold ``asyncio.to_thread`` worker thread spin-up).
+# Without a brief wait the resolver runs against an empty
+# AvrcpSourceTracker and falls back to ``default_client``, mis-routing
+# the press to the BlueZ-chosen "addressed player" rather than the
+# speaker that actually emitted the command.  A 200ms cap covers the
+# observed cold-start case with margin and still stays under the
+# button-response perception threshold.
+_INBOUND_AVRCP_HCI_WAIT_S = 0.20
 
 
 # BlueZ AVRCP forwarding architecture (v2.63.0-rc.6+):

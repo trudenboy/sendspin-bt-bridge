@@ -133,6 +133,56 @@ async def test_handle_sink_event_skips_when_sink_unreachable(controller):
 
 
 @pytest.mark.asyncio
+async def test_external_change_tap_fires_alongside_callback(controller):
+    """A speaker physical volume knob → BlueZ-PA module updates the PA sink.
+    The PA monitor sees the change and notifies the sendspin-owned callback
+    (which forwards to MA).  But that path doesn't update the bridge's own
+    status dict — the UI slider stays frozen.
+
+    The bridge daemon needs a *parallel* observer that mirrors external
+    sink-state changes into ``_bridge_status`` so SSE → web UI tracks the
+    speaker.  Implemented as an ``external_change_tap`` callable invoked
+    from ``_check_state_and_notify`` alongside the sendspin callback.
+    """
+    sendspin_received: list[tuple[int, bool]] = []
+    bridge_received: list[tuple[int, bool]] = []
+    controller._callback = lambda v, m: sendspin_received.append((v, m))
+    controller.set_external_change_tap(lambda v, m: bridge_received.append((v, m)))
+    controller._volume = 100
+    controller._muted = False
+
+    pulse = object()
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(42, True)):
+        await controller._handle_sink_event(pulse)
+
+    assert sendspin_received == [(42, True)]
+    assert bridge_received == [(42, True)]
+
+
+@pytest.mark.asyncio
+async def test_external_change_tap_isolated_from_callback_failure(controller):
+    """If sendspin's callback raises, the tap must still fire — and vice
+    versa.  The two observers are independent so a downstream failure on
+    one path doesn't freeze the other.
+    """
+    bridge_received: list[tuple[int, bool]] = []
+
+    def bad_sendspin_cb(v, m):
+        raise RuntimeError("sendspin downstream sad")
+
+    controller._callback = bad_sendspin_cb
+    controller.set_external_change_tap(lambda v, m: bridge_received.append((v, m)))
+    controller._volume = 0
+    controller._muted = False
+
+    pulse = object()
+    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(55, False)):
+        await controller._handle_sink_event(pulse)
+
+    assert bridge_received == [(55, False)]
+
+
+@pytest.mark.asyncio
 async def test_handle_sink_event_swallows_callback_exception(controller):
     # A bad sendspin-side callback must not kill the subscribe loop.
     def boom(v, m):
