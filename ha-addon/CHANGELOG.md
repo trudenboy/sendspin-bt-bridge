@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.64.0] - 2026-04-27
+
+### Added — Bulk device actions (Reconnect all, Power save all, Standby all, Release all)
+
+A *Bulk actions* dropdown in the device toolbar acts on all selected
+speakers at once: reconnect, enter power-save or standby, or release
+Bluetooth management.
+
+### Added — Live signal strength (RSSI) badge on every speaker card
+
+Signal-strength chip updated every 30 s.
+Can be turned off in Settings → Connection recovery.
+
+### Changed — Scan and pairing UX improvements
+
+- *Scan nearby* no longer auto-starts on open — press the highlighted
+  *Start Scan* button when ready.
+- *Pair and Add* is now the default primary action on discovered
+  devices; *Add to fleet* is one click away.
+
+### Fixed — Speaker buttons mis-route when multiple speakers share an adapter
+
+Play, Pause, Next, Previous from physical speaker buttons now always
+reach the correct speaker, even when two or more are on the same
+Bluetooth adapter.  Next/Previous could not be fixed before — now
+they work too.
+
+### Fixed — Turning the volume knob on a speaker now moves the bridge slider
+
+The bridge UI slider tracks the speaker's physical volume knob in
+real time.
+
+### Fixed — "Reconnect all" and transport commands now target the right device
+
+*Reconnect all* was silently skipping connected speakers; transport
+commands could land on the wrong device after a bridge restart.
+Both are fixed.
+
 ## [2.63.1] - 2026-04-26
 
 ### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again

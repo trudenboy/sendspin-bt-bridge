@@ -7,249 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.64.0-rc.4] - 2026-04-27
+## [2.64.0] - 2026-04-27
 
-### Changed — CVE audit now real, transitive deps bumped past advisories
+### Added — Bulk actions for all selected devices
 
-The lint job's ``pip-audit -r requirements.txt`` step had been
-silently failing on every run for lack of ``libdbus-1-dev`` —
-``continue-on-error: true`` masked it and would have masked any
-real CVEs as well.
+A new **Bulk actions ▾** dropdown in the device toolbar lets you act
+on every selected speaker at once:
 
-- Audit step moved out of ``_lint.yml`` and into ``_test.yml``
-  after ``Install dependencies``, running against the already-
-  installed venv (no sandboxed re-resolve, no native rebuilds,
-  ~1-2 s).  Real findings now block CI.
-- Pre-fix audit surfaced 16 advisories across 5 transitive deps
-  (pulled in via aiosendspin / music-assistant-client).  Added
-  minimum-version floors in ``requirements.txt`` so the resolver
-  picks up patched releases without locking us to a single
-  version: ``aiohttp >= 3.13.4``, ``pillow >= 12.2.0``,
-  ``pygments >= 2.20.0``, ``requests >= 2.33.0``.
-- Three remaining advisories on ``pip`` itself (toolchain, not
-  shipped runtime) are explicitly ignored per-ID via
-  ``--ignore-vuln`` with rationale in the workflow comment so a
-  new pip CVE gets a deliberate review rather than a silent skip.
+- **Reconnect all** — force a Bluetooth reconnect cycle.
+- **Power save all** — suspend audio streaming while keeping the
+  Bluetooth link alive (saves codec power on idle speakers).
+- **Standby all** — fully disconnect Bluetooth so the speaker can
+  power down its radio.
+- **Release all** — hand BT management back to the OS.
 
-## [2.64.0-rc.3] - 2026-04-27
+### Added — Live signal strength (RSSI) badge enabled by default
 
-### Changed — Primary discovery actions painted solid blue
+Every connected speaker now shows a coloured signal-strength chip in
+its device card, updated every 30 s.  Can be turned off under
+*Connection recovery* in Settings.
 
-Visual emphasis pass on the two main discovery surfaces so they
-read as "the thing to click" instead of neutral grey:
+### Changed — Scan modal asks before scanning
 
-- ``#scan-btn`` (Paired devices toolbar's *Scan nearby*): switched
-  from ``btn-secondary`` to ``btn-primary`` — solid blue with
-  white text, matches the modal's *Start Scan* accent button.
-- *Pair and Add* primary action in scan-result rows: switched
-  from ``scan-action-btn--pair`` (green tint) to
-  ``scan-action-btn--primary`` (themed via the shared
-  ``--button-primary-bg`` family → solid blue + white text).
-- The ▾ caret toggle next to *Pair and Add* repainted to match
-  (solid ``var(--primary-color)`` background, white text,
-  semi-opaque white inner divider so the seam between primary
-  and toggle stays crisp); hover/open uses
-  ``--button-primary-hover-bg`` for dark/light theme parity.
+Opening *Scan nearby* no longer starts a scan automatically.  The
+**Start Scan** button is highlighted so it's obvious what to press,
+letting you adjust adapter and audio-only filter first.
 
-### Review follow-ups (Copilot on PR #208)
+### Changed — *Pair and Add* is now the default action for discovered devices
 
-- **Hardened ``POST /api/bt/power_save`` body validation.**
-  ``enter`` is now strictly boolean — a string like ``"false"`` no
-  longer slips through ``bool(data.get(...))`` as truthy and flips
-  behaviour silently.  Returns 400 with a clear error on bad type.
-- **``/api/bt/power_save`` returns 503 when the asyncio loop is
-  unavailable** instead of a false-positive 200 that would mislead
-  the bulk-actions dropdown into thinking every selected device
-  transitioned successfully.
-- **Dropped stale ``aria-expanded="false"`` on the bulk-actions and
-  scan-result split-button summaries.**  Native ``<details>`` /
-  ``<summary>`` already exposes expand state to assistive tech via
-  the DOM ``open`` attribute; the static value was actively
-  misinforming screen readers.
-- **Aligned ``.group-bulk-action-item.accent`` and ``.warn`` colours
-  with ``.action-btn.accent`` / ``.warn``** — accent now uses
-  ``--primary-color`` (blue, the app-wide accent semantic) instead
-  of ``--accent-color`` (amber in the default theme), so text
-  colour and hover background match.  Hover bg also gets ``color``
-  re-asserted so future shared-rule overrides don't flatten it.
-- **Consolidated the duplicate ``.scan-action-split`` declaration**
-  introduced during the split-button polish round; merged into a
-  single rule with the documented anchoring comment.
+In scan results, the primary action is *Pair and Add* — the safe
+default for most speakers.  A small ▾ button exposes *Add to fleet*
+for devices you've already paired elsewhere.
 
-## [2.64.0-rc.2] - 2026-04-27
+### Changed — Show experimental features toggle has a visual warning
 
-### Fixed — "Reconnect all" silently no-op'd when speakers were connected
+The master switch that reveals in-development settings now has an
+amber border and a ⚠ icon so it reads as the cautionary control
+it is.
 
-The bulk action's per-device filter required ``dev.bluetooth_connected
-=== false``, so clicking the toolbar's *Reconnect all* on a healthy
-fleet skipped every speaker.  The per-device button never had this
-constraint — it forces a reconnect cycle regardless.  Aligned the
-bulk action with the per-device button: only ``bt_management_enabled``
-+ not-disabled now gate it.
+### Fixed — Speaker buttons mis-route to the wrong device when multiple speakers share an adapter
 
-### Changed — UI polish for the experimental toggle and scan modal
+When two or more Bluetooth speakers are on the same adapter, every
+speaker's button presses now reach the correct player — including
+Next/Previous, which the previous workaround missed entirely.
 
-Three small but visible behaviour tweaks:
+### Fixed — Physical volume knob on speaker didn't update the bridge slider
 
-- **"Show experimental features" toggle** now wears amber warning
-  treatment (border + soft fill, ⚠ glyph next to the label) so the
-  master switch that reveals in-development surface area reads as
-  the cautionary control it is.  Distinct from the per-row
-  ``data-experimental`` styling that marks individual experimental
-  settings inside the revealed card.
+Turning the volume knob now immediately moves the corresponding slider
+in the bridge UI.  Previously only the MA slider tracked it.
 
-- **Scan nearby modal no longer auto-starts a scan on open.** The
-  user may have arrived to review prior results, change adapter, or
-  toggle the audio-only filter before committing to a fresh round
-  of mgmt traffic.  The action button now presents as accent
-  *Start Scan* (with a soft pulse, respecting
-  ``prefers-reduced-motion``) until the first scan in the session
-  completes; thereafter it reverts to neutral *Rescan*.  Deep-link
-  callers that already imply intent (e.g. onboarding's "go to BT
-  and scan") can opt back into the old behaviour by passing
-  ``{autoStart: true}`` explicitly.
+### Fixed — "Reconnect all" silently did nothing on a healthy fleet
 
-- **Scan-result rows collapse the two add actions into a split
-  button.** Primary action is now *Pair and Add* (the safe default
-  — most discovered speakers need pairing first); the adjacent ▾
-  caret reveals a small ui-action-menu containing *Add to fleet*
-  for the rare case the operator already paired the device
-  elsewhere and just wants to import the config row.  Mirrors the
-  per-device Tools menu and the new Bulk actions dropdown so the
-  visual language is consistent.
+The button now forces a reconnect cycle on selected speakers regardless
+of their current connection state, matching the per-device button.
 
-### Changed — Live RSSI badge promoted out of "experimental", on by default
+### Fixed — Transport commands routed to the wrong device after a bridge restart
 
-The badge has been stable since v2.63.0-rc.8 and the per-tick mgmt
-round-trip is gated by the existing ``bt_operation_lock`` so the
-overhead is negligible.  Promoted to a regular feature:
-
-- **Config key renamed** ``EXPERIMENTAL_RSSI_BADGE`` → ``RSSI_BADGE``
-  (default ``true``).  ``config_migration._normalize_loaded_config``
-  copies the legacy key into the new one on first load and drops the
-  old one — explicit ``false`` / ``true`` preferences round-trip
-  unchanged so an operator who had reasons to keep it off (CPU-
-  constrained host, mgmt-socket conflicts) keeps it off after upgrade.
-- **UI toggle moved** from the *Experimental features* card to the
-  *Connection recovery* card, hint copy reframed as a regular setting
-  (no warning iconography).  Form input renamed to ``RSSI_BADGE``;
-  ``static/app.js`` reader prefers the new key, falls back to the
-  legacy snake-cased key in stale snapshots, defaults to ``true``
-  when both are absent.
-- **Schema + HA-options-merge updated** so ``RSSI_BADGE`` lands under
-  the web-UI-only family that ``scripts/translate_ha_config`` round-
-  trips, preserving operator preference across HA addon restarts.
-
-### Added — *Power save all* and *Standby all* in the bulk dropdown
-
-Two new menu items in *Bulk actions ▾*:
-
-- **Power save all** — fans out a new ``POST /api/bt/power_save``
-  endpoint (``{"player_name", "enter": true}``) which suspends each
-  selected speaker's PulseAudio sink so the codec stops working on
-  silence.  BT link stays connected — this is much lighter than
-  Standby and matches what the per-device idle timer triggers
-  automatically when ``idle_mode='power_save'``.  Skips devices
-  already in power save.
-- **Standby all** — fans out the existing ``/api/bt/standby`` per
-  selected device that isn't already in standby.  Pairs with the
-  per-device Standby button on each card.
-
-Both gates on ``bt_management_enabled`` + not-disabled, same as
-*Reconnect all* / *Release all*.  Use per-device Wake / individual
-Reconnect to bring devices back; bulk-Wake intentionally not added
-to keep the dropdown focused.
-
-### Changed — Bulk device actions consolidated into a dropdown
-
-*Reconnect all* / *Release all* moved out of the action-bar's inline
-button row into a single ``Bulk actions ▾`` dropdown using the
-existing ``ui-action-menu`` (``<details>`` / ``<summary>``) pattern.
-Frees toolbar real estate, gives a clear home for future bulk
-operations, and matches the per-device "Tools" menu UX.  Mute All /
-Pause All stay inline — they're transport-style, naturally grouped
-with the volume slider.
-
-Outside-click and Esc close the dropdown via the existing
-``_closeActionMenus`` plumbing; ``aria-haspopup`` / ``aria-expanded``
-on the toggle for screen-reader parity.
-
-### Fixed — demo mode broken after AVRCP MPRIS hooks
-
-``DemoBluetoothManager`` rejected the new ``on_connected`` /
-``on_disconnected`` kwargs that the real ``BluetoothManager`` grew
-in 2.64.0-rc.1 for AVRCP MPRIS export, so ``DEMO_MODE=1`` startup
-crashed with ``TypeError: unexpected keyword argument 'on_connected'``.
-The demo accepts and ignores them now (it doesn't simulate
-transport-level dis/connect events); ``**_extra`` swallows future
-kwargs to avoid signature drift regressions.
-
-### Review follow-ups (Copilot on PR #207)
-
-- ``services/hci_avrcp_monitor._open_hci_monitor_socket`` now closes
-  the raw fd from ``libc.socket`` if anything between socket creation
-  and the ``socket.socket(fileno=fd)`` handoff fails (most commonly
-  ``bind`` returning EPERM).  The exponential backoff loop in
-  ``_monitor_loop`` would otherwise leak one fd per failed attempt.
-- ``routes/api_transport.transport_cmd`` rejects non-dict JSON bodies
-  with 400 — ``request.get_json(silent=True)`` returns ``None`` on
-  parse failure and accepts top-level lists/scalars, both of which
-  would crash on ``data.get(...)`` and surface as a 500.
-- Refreshed stale module / function docstrings that still referenced
-  the removed D-Bus heuristic path
-  (``_subscribe_avrcp_source_tracker``, the "single-streaming-client
-  fallback", the "never falls back to default_client directly" claim
-  on the transport/volume callbacks, etc.).  Behaviour unchanged;
-  documentation now matches the post-cleanup architecture.
-
-## [2.64.0-rc.1] - 2026-04-27
-
-### Fixed — AVRCP commands mis-routed between speakers on the same adapter
-
-When 2+ speakers share one BT adapter, BlueZ's AVRCP TG forwards every
-speaker's button presses to the same MPRIS player (``players[0]``),
-stripping source identity. The previous D-Bus heuristic missed
-``Next``/``Previous`` (no Status change) and lost the race vs BlueZ's
-own dispatch on ``Play``/``Pause``.
-
-New ``services/hci_avrcp_monitor`` opens a ``HCI_CHANNEL_MONITOR``
-socket and parses raw AVRCP passthrough packets to attribute each
-press to its real source MAC. The inbound MPRIS callback then waits
-on ``AvrcpSourceTracker.wait_for_next_activity`` (asyncio.Future,
-cross-thread safe via ``loop.call_soon_threadsafe``) and resolves to
-the correct client as soon as HCI fires — typically ~5ms.
-
-- ``HCIGETDEVLIST`` + ``HCIGETCONNLIST`` ioctls seed handle→MAC at
-  startup so connections that pre-date the monitor are attributed
-  correctly (kernel doesn't replay past Connection Complete events).
-- ``entrypoint.sh`` now keeps ``cap_net_raw`` alongside ``cap_net_admin``
-  via ``setpriv --ambient-caps`` so the bridge process under UID 1000
-  can bind ``HCI_CHANNEL_MONITOR``.
-- Single-speaker-per-adapter setups skip the wait/resolver entirely and
-  dispatch directly via BlueZ — sub-ms latency, no behaviour change.
-- Inbound logs now show resolved destination, e.g.
-  ``MPRIS transport pause → WH-1000XM4 (BlueZ default=ENEBY, corrected via HCI source)``.
-
-### Fixed — speaker physical volume knob didn't move bridge UI slider
-
-Speaker-side volume changes arrive as AVRCP "Set Absolute Volume"
-PDUs (not passthrough op_ids) and BlueZ doesn't write them to our
-exported MPRIS Volume. ``MediaPlayer1.PropertiesChanged.Volume`` covers
-"smart" speakers (AVRCP TG); for "dumb" speakers without
-MediaPlayer1, ``PulseVolumeController`` now exposes
-``set_external_change_tap`` so the daemon mirrors PA-sink volume
-changes into ``_bridge_status`` in parallel with sendspin's MA-bound
-callback (isolated — failure on one path doesn't block the other).
-
-### Fixed — transport commands routed to wrong device (VM 105 repro)
-
-``POST /api/transport/cmd`` resolved the target by
-``clients[device_index]``, but ``active_clients`` and the frontend's
-``lastDevices`` are independently re-ordered on disable/online-add/
-restart, so the indices diverge. Frontend now sends ``player_id``
-(UUID5 from MAC, exposed on every ``DeviceSnapshot``) and the
-endpoint looks up by player_id first, falling back to index with a
-WARN.
+Play/Pause/Next from the UI now use a stable per-device identifier
+and can no longer land on the wrong speaker after a restart.
 
 ## [2.63.2-rc.1] - 2026-04-27
 
