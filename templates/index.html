@@ -240,25 +240,48 @@
                 </button>
             </div>
             <div class="action-bar-group action-bar-group--bulk">
-                <button type="button" class="action-btn accent" data-action="group-action" data-arg="reconnect">
-                    <span class="action-btn-content">
-                        <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M21 12a9 9 0 0 1-15.36 6.36"></path>
-                            <path d="M3 12A9 9 0 0 1 18.36 5.64"></path>
-                            <path d="M3 16v-4h4"></path>
-                            <path d="M21 8v4h-4"></path>
-                        </svg>
-                        <span class="action-btn-label">Reconnect all</span>
-                    </span>
-                </button>
-                <button type="button" class="action-btn warn" data-action="group-action" data-arg="release">
-                    <span class="action-btn-content">
-                        <svg class="action-btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"></path>
-                        </svg>
-                        <span class="action-btn-label">Release all</span>
-                    </span>
-                </button>
+                <details class="group-bulk-action-menu ui-action-menu" id="group-bulk-action-menu">
+                    <summary class="action-btn group-bulk-action-toggle ui-action-menu-toggle" aria-haspopup="true" title="Bulk actions">
+                        <span class="action-btn-content">
+                            <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="6" r="1.5"></circle>
+                                <circle cx="12" cy="12" r="1.5"></circle>
+                                <circle cx="12" cy="18" r="1.5"></circle>
+                            </svg>
+                            <span class="action-btn-label">Bulk actions</span>
+                        </span>
+                    </summary>
+                    <div class="group-bulk-action-menu-list ui-action-menu-list">
+                        <button type="button" class="ui-action-menu-item group-bulk-action-item accent" data-action="group-action" data-arg="reconnect">
+                            <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21 12a9 9 0 0 1-15.36 6.36"></path>
+                                <path d="M3 12A9 9 0 0 1 18.36 5.64"></path>
+                                <path d="M3 16v-4h4"></path>
+                                <path d="M21 8v4h-4"></path>
+                            </svg>
+                            <span>Reconnect all</span>
+                        </button>
+                        <button type="button" class="ui-action-menu-item group-bulk-action-item" data-action="group-action" data-arg="power_save" title="Suspend PA sink on selected speakers (BT stays connected)">
+                            <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 2v6"></path>
+                                <path d="M5.64 5.64a9 9 0 1 0 12.72 0"></path>
+                            </svg>
+                            <span>Power save all</span>
+                        </button>
+                        <button type="button" class="ui-action-menu-item group-bulk-action-item" data-action="group-action" data-arg="standby" title="Disconnect BT to put selected speakers in low-power standby">
+                            <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                            </svg>
+                            <span>Standby all</span>
+                        </button>
+                        <button type="button" class="ui-action-menu-item group-bulk-action-item warn" data-action="group-action" data-arg="release">
+                            <svg class="action-btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M14.88 16.29 13 14.41V17.59L14.88 16.29ZM13 6.41V9.59L14.88 8.29 13 6.41ZM17.71 7.71 12 2H11V9.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22H12L17.71 16.29 13.41 12 17.71 7.71ZM15.29 16.29 13 18.17V14.41L15.29 16.29ZM13 9.59V5.83L15.29 7.71 13 9.59Z"></path>
+                            </svg>
+                            <span>Release all</span>
+                        </button>
+                    </div>
+                </details>
             </div>
         </div>
     </div>
@@ -486,10 +509,10 @@
                                 </span>
                             </div>
 
-                            <label class="config-setting-row">
+                            <label class="config-setting-row config-setting-row--warn">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Show experimental features</strong>
-                                    <span class="form-hint">Reveal early-stage settings that may change or be removed in future versions.</span>
+                                    <strong><span class="config-setting-warn-glyph" aria-hidden="true">⚠</span>Show experimental features</strong>
+                                    <span class="form-hint">Reveal early-stage settings that may change or be removed in future versions. Enable only if you're comfortable troubleshooting unstable behaviour.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -654,6 +677,18 @@
                                     <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
                                 </div>
                             </div>
+                            <label class="config-setting-row config-setting-row--compact" title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Live RSSI badge</strong>
+                                    <span class="form-hint">Poll every 30 s via mgmt 0x0031. Disable to skip the signal-strength chip and the round-trip cost.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="RSSI_BADGE" id="rssi-badge" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
 
                         <div class="config-settings-card config-settings-card--experimental" data-experimental style="display:none">
@@ -693,18 +728,6 @@
                                 <span class="config-setting-control">
                                     <span class="config-switch">
                                         <input type="checkbox" name="EXPERIMENTAL_ADAPTER_AUTO_RECOVERY" id="experimental-adapter-auto-recovery">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Live RSSI badge</strong>
-                                    <span class="form-hint">Poll every 30 s via mgmt 0x0031.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="EXPERIMENTAL_RSSI_BADGE" id="experimental-rssi-badge">
                                         <span class="config-switch-track"></span>
                                     </span>
                                 </span>

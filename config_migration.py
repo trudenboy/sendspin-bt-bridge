@@ -350,6 +350,16 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         default=DEFAULT_UPDATE_CHANNEL,
     )
 
+    # ``EXPERIMENTAL_RSSI_BADGE`` was promoted to ``RSSI_BADGE`` (default
+    # True) in v2.64.0 once it stabilised.  Migrate any pre-existing
+    # config silently — preserve the user's setting (whether True or
+    # False) under the new key, then drop the old key.  If both are
+    # present the new key wins (operator may have edited it directly).
+    if "EXPERIMENTAL_RSSI_BADGE" in config:
+        if "RSSI_BADGE" not in config:
+            config["RSSI_BADGE"] = config["EXPERIMENTAL_RSSI_BADGE"]
+        config.pop("EXPERIMENTAL_RSSI_BADGE", None)
+
     for key in (
         "PREFER_SBC_CODEC",
         "AUTH_ENABLED",
@@ -363,7 +373,7 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "EXPERIMENTAL_PA_MODULE_RELOAD",
         "EXPERIMENTAL_PAIR_JUST_WORKS",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
-        "EXPERIMENTAL_RSSI_BADGE",
+        "RSSI_BADGE",
     ):
         _normalize_bool_setting(config, key, defaults=defaults)
 

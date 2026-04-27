@@ -200,11 +200,11 @@ def test_activate_device_clamps_tiny_keepalive_interval_up_to_30():
 
 
 def test_activate_device_leaves_rssi_callback_unset_when_flag_off():
-    """``EXPERIMENTAL_RSSI_BADGE`` defaults to False — the BT manager
-    must not receive an ``on_rssi_update`` callback in that case so
-    the periodic refresh tick short-circuits before it ever touches
-    the BT operation lock or the kernel mgmt socket.  Pinning this
-    keeps the no-op default-off path truly free of overhead."""
+    """``RSSI_BADGE`` defaults to True since v2.64.0, but operators can
+    still disable it.  When disabled, the BT manager must not receive
+    an ``on_rssi_update`` callback so the periodic refresh tick
+    short-circuits before it ever touches the BT operation lock or
+    the kernel mgmt socket — keeps the off path truly overhead-free."""
     ctx, captured = _make_context(enable_rssi_badge=False)
     device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
 
@@ -214,9 +214,9 @@ def test_activate_device_leaves_rssi_callback_unset_when_flag_off():
 
 
 def test_activate_device_wires_rssi_callback_when_flag_on():
-    """When the operator opts in, the callback must reach the BT
-    manager so periodic refresh ticks can forward fresh RSSI into
-    the client status pipeline."""
+    """Default-on path: the callback must reach the BT manager so
+    periodic refresh ticks forward fresh RSSI into the client status
+    pipeline."""
     ctx, captured = _make_context(enable_rssi_badge=True)
     device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
 

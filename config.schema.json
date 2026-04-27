@@ -305,10 +305,10 @@
       "default": false,
       "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the adapter as a last-ditch attempt before auto-releasing BT management. Disruptive: the USB step briefly disconnects every device on that controller, and it requires CAP_NET_ADMIN plus /dev/rfkill and /sys/bus/usb access (Docker privileged or matching capabilities)."
     },
-    "EXPERIMENTAL_RSSI_BADGE": {
+    "RSSI_BADGE": {
       "type": "boolean",
-      "default": false,
-      "description": "Experimental: poll live RSSI for connected BR/EDR speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface it in the device card / scan results as a coloured signal-strength chip. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good, negative = weak), LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick, gated by the shared bt_operation_lock."
+      "default": true,
+      "description": "Poll live RSSI for connected BR/EDR speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface it in the device card / scan results as a coloured signal-strength chip. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good, negative = weak), LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick, gated by the shared bt_operation_lock. Legacy key ``EXPERIMENTAL_RSSI_BADGE`` is migrated automatically."
     },
     "ALLOW_HFP_PROFILE": {
       "type": "boolean",
