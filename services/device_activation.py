@@ -223,8 +223,13 @@ async def _subscribe_avrcp_source_tracker(
 
     tracker = _get_avrcp_source_tracker()
 
-    def _on_changed(interface_name: str, _changed: dict, _invalidated: list) -> None:
+    def _on_changed(interface_name: str, changed: dict, _invalidated: list) -> None:
         if interface_name != "org.bluez.MediaPlayer1":
+            return
+        # Only record on Status changes — Position/Track/metadata updates fire
+        # continuously during streaming and would keep the tracker alive even
+        # when the streaming device did NOT press a button, causing mis-routing.
+        if "Status" not in changed:
             return
         tracker.note_activity(mac)
 

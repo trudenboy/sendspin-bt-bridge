@@ -497,6 +497,52 @@ async def test_subscribe_avrcp_source_tracker_records_activity_on_mediaplayer1_c
 
 
 @pytest.mark.asyncio
+async def test_subscribe_avrcp_source_tracker_ignores_non_status_properties():
+    """PropertiesChanged on MediaPlayer1 for Position / Track metadata must
+    NOT refresh the tracker.
+
+    When a speaker is actively streaming, BlueZ emits PropertiesChanged
+    for Position on every AVRCP NOTIFY cycle.  Recording those updates
+    would keep the tracker permanently fresh for the streaming device —
+    so any button press on a *different* (dumb) speaker would then
+    mis-route to the streaming device via Strategy 1 instead of falling
+    through to Strategy 3.  Only ``Status`` changes correlate with actual
+    user button presses."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _subscribe_avrcp_source_tracker
+
+    captured_handlers: list = []
+    props_iface = MagicMock()
+    props_iface.on_properties_changed = lambda fn: captured_handlers.append(fn)
+    proxy = MagicMock()
+    proxy.get_interface = MagicMock(return_value=props_iface)
+    bus = MagicMock()
+    bus.introspect = AsyncMock(return_value=MagicMock(tostring=lambda: "<node><node name='player1'/></node>"))
+    bus.get_proxy_object = MagicMock(return_value=proxy)
+
+    fresh_tracker = AvrcpSourceTracker()
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+
+    with _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker):
+        await _subscribe_avrcp_source_tracker(bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=1, delay=0.0)
+
+        # Simulate BlueZ firing PropertiesChanged for Position (no Status key)
+        captured_handlers[0]("org.bluez.MediaPlayer1", {"Position": 12345678}, [])
+
+        # Track metadata change — also should not trigger
+        captured_handlers[0]("org.bluez.MediaPlayer1", {"Track": {"xesam:title": "Song"}}, [])
+
+    assert fresh_tracker.get_recent_active() is None, (
+        "Position/Track-only changes must not refresh the tracker — "
+        "only Status changes correlate with user button presses"
+    )
+
+
+@pytest.mark.asyncio
 async def test_subscribe_avrcp_source_tracker_ignores_other_interfaces():
     """PropertiesChanged for other interfaces (e.g. ``Device1.Connected``)
     must NOT be misinterpreted as AVRCP activity — those signals fire
