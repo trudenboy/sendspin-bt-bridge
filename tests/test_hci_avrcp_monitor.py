@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import struct
 
+import pytest
+
 # ── Concrete test bytes ────────────────────────────────────────────────────
 CONN_COMPLETE_ACL = bytes([0x00, 0x42, 0x00, 0x6C, 0x08, 0xEB, 0xFA, 0x58, 0xFC, 0x01, 0x00])
 CONN_COMPLETE_SCO = bytes([0x00, 0x42, 0x00, 0x6C, 0x08, 0xEB, 0xFA, 0x58, 0xFC, 0x00, 0x00])
@@ -176,3 +178,83 @@ class TestProcessPacket:
         tracker = MagicMock()
         _process_packet(frame, {}, tracker)
         tracker.note_activity.assert_not_called()
+
+
+class TestHciAvrcpMonitorLifecycle:
+    @pytest.mark.asyncio
+    async def test_start_creates_background_task(self):
+        from unittest.mock import MagicMock, patch
+
+        from services.hci_avrcp_monitor import HciAvrcpMonitor
+
+        mon = HciAvrcpMonitor()
+        mock_sock = MagicMock()
+        mock_sock.recv.side_effect = OSError("closed")
+        with patch(
+            "services.hci_avrcp_monitor._open_hci_monitor_socket",
+            return_value=mock_sock,
+        ):
+            await mon.start()
+            assert mon._task is not None
+            await mon.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_and_clears_task(self):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+
+        from services.hci_avrcp_monitor import HciAvrcpMonitor
+
+        mon = HciAvrcpMonitor()
+        mock_sock = MagicMock()
+
+        async def _block(*_):
+            await asyncio.sleep(9999)
+
+        with (
+            patch(
+                "services.hci_avrcp_monitor._open_hci_monitor_socket",
+                return_value=mock_sock,
+            ),
+            patch("asyncio.to_thread", new=_block),
+        ):
+            await mon.start()
+            await mon.stop()
+        assert mon._task is None
+
+    @pytest.mark.asyncio
+    async def test_oserror_on_socket_open_disables_monitor(self):
+        import asyncio
+        from unittest.mock import patch
+
+        from services.hci_avrcp_monitor import HciAvrcpMonitor
+
+        mon = HciAvrcpMonitor()
+        with patch(
+            "services.hci_avrcp_monitor._open_hci_monitor_socket",
+            side_effect=OSError("EPERM"),
+        ):
+            await mon.start()
+            await asyncio.sleep(0.05)
+        assert mon._task is None or mon._task.done()
+
+    @pytest.mark.asyncio
+    async def test_double_start_is_noop(self):
+        from unittest.mock import patch
+
+        from services.hci_avrcp_monitor import HciAvrcpMonitor
+
+        mon = HciAvrcpMonitor()
+        with patch(
+            "services.hci_avrcp_monitor._open_hci_monitor_socket",
+            side_effect=OSError,
+        ):
+            await mon.start()
+            task1 = mon._task
+            await mon.start()
+            assert mon._task is task1
+
+    def test_get_monitor_returns_singleton(self):
+        from services.hci_avrcp_monitor import get_monitor
+
+        assert get_monitor() is get_monitor()

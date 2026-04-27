@@ -11,8 +11,13 @@ device_activation._subscribe_avrcp_source_tracker remains active as fallback.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import ctypes
 import logging
+import socket
 import struct
+import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -153,3 +158,117 @@ def _process_packet(
 
     elif opcode == _OPCODE_ACL_RX_PKT:
         _dispatch_acl_packet(payload, handle_to_mac, tracker)
+
+
+# ctypes.Structure mirrors btsocket.btmgmt_socket.SocketAddr exactly — same C
+# layout, validated working. We use HCI_CHANNEL_MONITOR (2) instead of channel 3.
+class _SocketAddr(ctypes.Structure):
+    _fields_ = [
+        ("hci_family", ctypes.c_ushort),
+        ("hci_dev", ctypes.c_ushort),
+        ("hci_channel", ctypes.c_ushort),
+    ]
+
+
+def _open_hci_monitor_socket() -> socket.socket:
+    """Open BTPROTO_HCI socket on HCI_CHANNEL_MONITOR. Raises OSError if unavailable."""
+    if sys.platform != "linux":
+        raise OSError("HCI monitor requires Linux")
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    libc.socket.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
+    libc.socket.restype = ctypes.c_int
+    libc.bind.argtypes = (ctypes.c_int, ctypes.POINTER(_SocketAddr), ctypes.c_int)
+    libc.bind.restype = ctypes.c_int
+    fd = libc.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI)
+    if fd < 0:
+        raise OSError("Unable to open PF_BLUETOOTH socket")
+    addr = _SocketAddr(
+        hci_family=_AF_BLUETOOTH,
+        hci_dev=_HCI_DEV_NONE,
+        hci_channel=_HCI_CHANNEL_MONITOR,
+    )
+    r = libc.bind(fd, ctypes.pointer(addr), ctypes.sizeof(addr))
+    if r < 0:
+        raise OSError(f"Unable to bind HCI_CHANNEL_MONITOR: errno={ctypes.get_errno()}")
+    return socket.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI, fileno=fd)
+
+
+class HciAvrcpMonitor:
+    """Background asyncio task that monitors HCI traffic for AVRCP passthrough commands.
+
+    Feeds AvrcpSourceTracker with accurate per-device MAC attribution so
+    resolve_avrcp_source_client() routes Next/Previous correctly even when BlueZ
+    routes all inbound AVRCP to players[0].
+
+    Follows the SinkMonitor lifecycle pattern: start()/stop() are idempotent;
+    OSError on socket open is logged at INFO and the task self-disables.
+    """
+
+    def __init__(self) -> None:
+        self._task: asyncio.Task[None] | None = None
+
+    @property
+    def available(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    async def start(self) -> None:
+        if self._task is not None:
+            return
+        self._task = asyncio.create_task(self._monitor_loop())
+
+    async def stop(self) -> None:
+        task = self._task
+        if task is None:
+            return
+        self._task = None
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    async def _monitor_loop(self) -> None:
+        from services.avrcp_source_tracker import get_tracker
+
+        tracker = get_tracker()
+        handle_to_mac: dict[int, str] = {}
+        current_backoff = _BACKOFF_BASE
+        while True:
+            try:
+                sock = _open_hci_monitor_socket()
+            except OSError as exc:
+                logger.info(
+                    "HciAvrcpMonitor: cannot open HCI monitor socket (%s) — "
+                    "AVRCP source correlation will rely on D-Bus heuristic only",
+                    exc,
+                )
+                self._task = None
+                return
+            logger.info("HciAvrcpMonitor: HCI_CHANNEL_MONITOR open — tracking AVRCP source MACs")
+            current_backoff = _BACKOFF_BASE
+            try:
+                while True:
+                    data = await asyncio.to_thread(sock.recv, 4096)
+                    _process_packet(data, handle_to_mac, tracker)
+            except asyncio.CancelledError:
+                sock.close()
+                return
+            except OSError as exc:
+                sock.close()
+                handle_to_mac.clear()
+                logger.warning(
+                    "HciAvrcpMonitor: socket error (%s) — retrying in %.0fs",
+                    exc,
+                    current_backoff,
+                )
+                try:
+                    await asyncio.sleep(current_backoff)
+                except asyncio.CancelledError:
+                    return
+                current_backoff = min(current_backoff * _BACKOFF_FACTOR, _BACKOFF_MAX)
+
+
+_MONITOR = HciAvrcpMonitor()
+
+
+def get_monitor() -> HciAvrcpMonitor:
+    """Return the process-wide HciAvrcpMonitor singleton."""
+    return _MONITOR
