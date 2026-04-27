@@ -14,6 +14,12 @@ be disconnected, so clicking it on a healthy setup did nothing.  Now
 matches the per-device Reconnect button — fires regardless of current
 connection state.
 
+### Added — Power save all + Standby all bulk actions
+
+Two new items in the *Bulk actions* dropdown that fan out per-device
+power-save / standby across selected speakers.  Power save suspends
+the PA sink (BT stays up); Standby fully disconnects BT.
+
 ### Changed — Bulk actions in dropdown menu
 
 *Reconnect all* / *Release all* moved into a single ``Bulk actions``

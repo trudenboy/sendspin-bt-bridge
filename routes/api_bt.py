@@ -284,6 +284,60 @@ def api_bt_wake():
     return jsonify({"success": True, "message": "Device waking from standby"})
 
 
+@bt_bp.route("/api/bt/power_save", methods=["POST"])
+def api_bt_power_save():
+    """Toggle power-save mode (PA-sink suspend) for a single device.
+
+    Power-save keeps the BT link up but suspends the PulseAudio sink so
+    the speaker doesn't spin its codec on silence — much lighter than
+    Standby (which fully disconnects BT).  Triggered automatically by
+    the per-device idle timer when ``idle_mode='power_save'``; this
+    endpoint exposes it as an on-demand action so the bulk-actions
+    dropdown can fan it out.
+
+    Body: ``{"player_name": str, "enter": bool}``.  ``enter=true``
+    suspends the sink; ``enter=false`` resumes it.  Already-in-state
+    requests collapse to a no-op success rather than 409 so a bulk
+    fan-out doesn't error on devices that happen to be there already.
+    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "Request body must be a JSON object"}), 400
+    player_name = data.get("player_name")
+    enter = bool(data.get("enter", True))
+    client, err = get_client_or_error(player_name)
+    if err:
+        return err
+    if not client:
+        return jsonify({"success": False, "error": "No client found"}), 503
+
+    already = bool(client.status.get("bt_power_save"))
+    if enter and already:
+        return jsonify({"success": True, "message": "Device already in power save"})
+    if not enter and not already:
+        return jsonify({"success": True, "message": "Device not in power save"})
+
+    import asyncio
+
+    import state as _state
+
+    loop = _state.get_main_loop()
+    if loop and loop.is_running():
+        coro = client._enter_power_save() if enter else client._exit_power_save()
+        fut = asyncio.run_coroutine_threadsafe(coro, loop)
+        try:
+            fut.result(timeout=5.0)
+        except Exception as exc:
+            logger.warning("[%s] power_save error: %s", player_name, exc)
+            return jsonify({"success": False, "error": str(exc)}), 500
+    return jsonify(
+        {
+            "success": True,
+            "message": "Device entering power save" if enter else "Device exiting power save",
+        }
+    )
+
+
 @bt_bp.route("/api/bt/standby", methods=["POST"])
 def api_bt_standby():
     """Put a device into standby (disconnect BT, park daemon on null sink)."""

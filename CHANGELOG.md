@@ -16,6 +16,26 @@ constraint — it forces a reconnect cycle regardless.  Aligned the
 bulk action with the per-device button: only ``bt_management_enabled``
 + not-disabled now gate it.
 
+### Added — *Power save all* and *Standby all* in the bulk dropdown
+
+Two new menu items in *Bulk actions ▾*:
+
+- **Power save all** — fans out a new ``POST /api/bt/power_save``
+  endpoint (``{"player_name", "enter": true}``) which suspends each
+  selected speaker's PulseAudio sink so the codec stops working on
+  silence.  BT link stays connected — this is much lighter than
+  Standby and matches what the per-device idle timer triggers
+  automatically when ``idle_mode='power_save'``.  Skips devices
+  already in power save.
+- **Standby all** — fans out the existing ``/api/bt/standby`` per
+  selected device that isn't already in standby.  Pairs with the
+  per-device Standby button on each card.
+
+Both gates on ``bt_management_enabled`` + not-disabled, same as
+*Reconnect all* / *Release all*.  Use per-device Wake / individual
+Reconnect to bring devices back; bulk-Wake intentionally not added
+to keep the dropdown focused.
+
 ### Changed — Bulk device actions consolidated into a dropdown
 
 *Reconnect all* / *Release all* moved out of the action-bar's inline

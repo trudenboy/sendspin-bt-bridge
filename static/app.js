@@ -4526,20 +4526,48 @@ function onGroupAction(action) {
     var menu = document.getElementById('group-bulk-action-menu');
     if (menu && menu.open) menu.open = false;
 
-    // Mirror the per-device button preconditions: skip released and
-    // disabled devices, but DO fire on currently-connected ones — the
-    // user clicked "reconnect all" expecting a forced cycle, not a
-    // best-effort retry of just the offline ones.
+    // Common gate: device must be selected, BT-managed, and not
+    // config-disabled.  Mirrors the per-device button preconditions
+    // so bulk and per-device behave identically per device.
+    var eligible = function(dev, idx) {
+        return _groupSelected[idx] !== false && dev && dev.bt_management_enabled !== false && !_isDeviceDisabled(dev);
+    };
+
     if (action === 'reconnect') {
+        // Reconnect all selected — DO fire on currently-connected ones
+        // too; the user clicked "reconnect all" expecting a forced
+        // cycle, not a best-effort retry of just the offline ones.
         lastDevices.forEach(function(dev, idx) {
-            if (_groupSelected[idx] !== false && dev && dev.bt_management_enabled !== false && !_isDeviceDisabled(dev)) {
-                btReconnect(idx);
-            }
+            if (eligible(dev, idx)) btReconnect(idx);
         });
     } else if (action === 'release') {
         lastDevices.forEach(function(dev, idx) {
-            if (_groupSelected[idx] !== false && dev && dev.bt_management_enabled !== false && !_isDeviceDisabled(dev)) {
-                btToggleManagement(idx);
+            if (eligible(dev, idx)) btToggleManagement(idx);
+        });
+    } else if (action === 'standby') {
+        // Standby all — only fire on devices NOT already in standby
+        // (the per-device endpoint 409s on duplicate enter).  Use the
+        // existing per-device toggle: it picks /api/bt/standby vs
+        // /api/bt/wake based on dev.bt_standby, but here we want only
+        // the enter direction so we skip already-standby devices.
+        lastDevices.forEach(function(dev, idx) {
+            if (eligible(dev, idx) && !dev.bt_standby) btToggleStandby(idx);
+        });
+    } else if (action === 'power_save') {
+        // Power save all — suspends the PA sink for each selected
+        // device that's not already power-saving.  Lighter than
+        // Standby (BT link stays up).
+        lastDevices.forEach(function(dev, idx) {
+            if (eligible(dev, idx) && !dev.bt_power_save) {
+                fetch(API_BASE + '/api/bt/power_save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({player_name: dev.player_name, enter: true})
+                }).then(function(r) { return r.json(); }).then(function(d) {
+                    if (!d.success) showToast('✗ ' + (d.error || 'Power save failed') + ' [' + (dev.player_name || idx) + ']', 'error');
+                }).catch(function() {
+                    showToast('✗ Power save error [' + (dev.player_name || idx) + ']', 'error');
+                });
             }
         });
     }
