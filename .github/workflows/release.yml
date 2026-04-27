@@ -391,36 +391,23 @@ jobs:
 
       - name: Resolve previous stable release
         id: previous
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const targetTag = '${{ needs.prepare.outputs.tag }}';
-
-            function parseStableTag(tag) {
-              const m = String(tag || '').match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              return m ? { major: +m[1], minor: +m[2], patch: +m[3] } : null;
-            }
-            function cmp(a, b) {
-              const pa = parseStableTag(a), pb = parseStableTag(b);
-              if (!pa || !pb) return 0;
-              for (const k of ['major', 'minor', 'patch']) {
-                if (pa[k] !== pb[k]) return pa[k] - pb[k];
-              }
-              return 0;
-            }
-
-            const releases = await github.paginate(github.rest.repos.listReleases, {
-              owner, repo, per_page: 100,
-            });
-            const prev = releases
-              .filter(r => !r.draft && !r.prerelease)
-              .map(r => r.tag_name)
-              .filter(t => parseStableTag(t) && t !== targetTag)
-              .sort(cmp)
-              .filter(t => cmp(t, targetTag) < 0)
-              .pop() || '';
-            core.setOutput('tag', prev);
+        env:
+          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
+        # Read from local git tags (already fetched above) instead of
+        # github.rest.repos.listReleases.  The Releases listing endpoint
+        # is eventually consistent — releases created via REST API in
+        # the last few minutes can be missing from it for a while —
+        # which previously made this step return '' and caused
+        # release_notes.py to dump every changelog section it could
+        # find.  Local tags are always authoritative.
+        run: |
+          set -euo pipefail
+          PREV_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -v "^${TARGET_TAG}$" \
+            | head -1 || true)
+          echo "Previous stable tag: ${PREV_TAG:-<none>}"
+          echo "tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Generate release notes
         id: notes
@@ -442,11 +429,12 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
+          GENERATED_NOTES: ${{ steps.notes.outputs.body }}
         run: |
           set -euo pipefail
-          cat > /tmp/generated-notes.md <<'EOF_GENERATED_NOTES'
-          ${{ steps.notes.outputs.body }}
-          EOF_GENERATED_NOTES
+          # Round-trip the generated notes through a file so newlines
+          # and special characters don't break the heredoc.
+          printf '%s' "$GENERATED_NOTES" > /tmp/generated-notes.md
           COMPARE_URL=""
           if [ -n "${PREVIOUS_TAG}" ]; then
             COMPARE_URL="https://github.com/${REPOSITORY}/compare/${PREVIOUS_TAG}...${TAG}"
@@ -458,28 +446,33 @@ jobs:
             --previous-tag "${PREVIOUS_TAG}" \
             --compare-url "${COMPARE_URL}" \
             --output /tmp/release-body.md
-          {
-            echo "body<<EOF_RELEASE_BODY"
-            cat /tmp/release-body.md
-            echo "EOF_RELEASE_BODY"
-          } >> "$GITHUB_OUTPUT"
+          # Stash the body where the next step can read it from disk.
+          # Don't roundtrip via $GITHUB_OUTPUT — that env var also
+          # counts toward execve()'s ARG_MAX in the next step, and
+          # large cumulative bodies broke v2.64.1 / v2.64.2 / v2.64.3
+          # with "Argument list too long" before this fix.
+          mkdir -p "$RUNNER_TEMP/release-meta"
+          cp /tmp/release-body.md "$RUNNER_TEMP/release-meta/body.md"
+          BYTES=$(wc -c < "$RUNNER_TEMP/release-meta/body.md")
+          echo "Composed release body: ${BYTES} bytes -> $RUNNER_TEMP/release-meta/body.md"
+          echo "path=$RUNNER_TEMP/release-meta/body.md" >> "$GITHUB_OUTPUT"
 
       - name: Create or update GitHub release
         uses: actions/github-script@v9
         env:
-          # Inlining the body via ${{ toJSON(...) }} bakes it into
-          # the script source itself, and once the cumulative body
-          # crosses the kernel's argv limit the runner refuses to
-          # spawn node ("Argument list too long").  Reading from
-          # env keeps the script source small regardless of how
-          # large the release notes get.
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
-          RELEASE_BODY: ${{ steps.body.outputs.body }}
+          # Pass the body via a file path, NOT inlined or via env.
+          # Both argv and envp count toward the kernel's ARG_MAX
+          # (~128 KB on Linux runners); the cumulative body easily
+          # exceeds that.  fs.readFileSync keeps the runner spawn
+          # small regardless of body size.
+          RELEASE_BODY_PATH: ${{ steps.body.outputs.path }}
         with:
           script: |
+            const fs = require('fs');
             const {owner, repo} = context.repo;
             const tag = process.env.RELEASE_TAG;
-            const body = process.env.RELEASE_BODY;
+            const body = fs.readFileSync(process.env.RELEASE_BODY_PATH, 'utf8');
             const payload = {
               owner, repo, tag_name: tag, name: tag, body,
               draft: false, prerelease: false, make_latest: 'true',
