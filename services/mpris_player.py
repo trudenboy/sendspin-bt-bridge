@@ -71,9 +71,16 @@ class MprisPlayer:
         player_id: str,
         transport_callback: TransportCallback,
         volume_callback: VolumeCallback,
+        client: Any = None,
     ) -> None:
         self.mac = mac
         self.player_id = player_id
+        # Optional reference to the SendspinClient this player represents.
+        # The inbound dispatch resolver reads this from the registry to
+        # find the right client when AVRCP source correlation succeeds.
+        # Kept untyped (Any) to avoid a hard import cycle with
+        # ``sendspin_client.py``.
+        self.client: Any = client
         self._state = PlaybackState()
         self._transport_cb = transport_callback
         self._volume_cb = volume_callback
@@ -389,6 +396,17 @@ class MprisRegistry:
                 return player
         return None
 
+    def all_players(self) -> list[MprisPlayer]:
+        """Return a snapshot list of all currently-registered players.
+
+        Used by the inbound AVRCP dispatch resolver's streaming-fallback
+        branch — when the source-correlation tracker can't pin down a
+        single MAC, we look across all registered players to see if
+        exactly one has an actively-streaming client.
+        """
+        with self._lock:
+            return list(self._by_mac.values())
+
     def active_macs(self) -> list[str]:
         """Return the canonical MACs currently holding an MprisPlayer.
 
@@ -414,6 +432,71 @@ def get_registry() -> MprisRegistry:
       - routes/api_bt.py (Claim Audio endpoint looks up players by MAC)
     """
     return _REGISTRY
+
+
+def resolve_avrcp_source_client(
+    *,
+    registry: MprisRegistry | None = None,
+    tracker: Any = None,
+    default_client: Any = None,
+    window_s: float | None = None,
+    now: float | None = None,
+) -> Any:
+    """Determine which SendspinClient should receive an inbound AVRCP command.
+
+    BlueZ's AVRCP TG → MPRIS forwarder strips source-CT identity (see
+    ``services/avrcp_source_tracker``).  This resolver applies two
+    correlation strategies in order:
+
+    1. **Recent MediaPlayer1 activity** — the AvrcpSourceTracker records a
+       timestamp every time *any* speaker emits a
+       ``org.bluez.MediaPlayer1.PropertiesChanged`` signal.  When the
+       tracker reports a recent MAC and that MAC has a registered
+       MprisPlayer with a non-None client, that's our answer.
+    2. **Single-streaming-client fallback** — if no MAC was recent enough
+       (some speaker firmwares don't emit Status updates around button
+       presses, especially Next/Previous), and exactly *one* registered
+       client has ``audio_streaming=True``, route there.  Single-source
+       audio is the common-case shape; this handles it gracefully.
+
+    Returns ``None`` when neither strategy yields a unique client — the
+    caller should drop the command.  Mis-routing is the bug we're fixing,
+    so dropping is preferable to guessing wrong.
+
+    The ``registry``/``tracker``/``window_s`` arguments default to the
+    process-wide singletons — production callers pass nothing; tests
+    inject fakes.
+    """
+    from services.avrcp_source_tracker import (
+        DEFAULT_CORRELATION_WINDOW_S,
+    )
+    from services.avrcp_source_tracker import (
+        get_tracker as _get_tracker,
+    )
+
+    if registry is None:
+        registry = get_registry()
+    if tracker is None:
+        tracker = _get_tracker()
+    if window_s is None:
+        window_s = DEFAULT_CORRELATION_WINDOW_S
+
+    recent_mac = tracker.get_recent_active(window_s=window_s, now=now)
+    if recent_mac:
+        player = registry.get(recent_mac)
+        if player is not None and player.client is not None:
+            return player.client
+        # Fall through — orphan tracker entry or player without a client.
+
+    streaming = [
+        p.client
+        for p in registry.all_players()
+        if p.client is not None and bool(p.client.status.get("audio_streaming"))
+    ]
+    if len(streaming) == 1:
+        return streaming[0]
+
+    return None
 
 
 def _metadata_to_variant_dict(metadata: dict[str, Any], Variant: Any) -> dict[str, Any]:

@@ -282,3 +282,267 @@ def test_bluez_adapter_path_returns_org_bluez_hci_form():
     assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci1")) == "/org/bluez/hci1"
     assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="")) is None
     assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="bogus")) is None
+
+
+# ── AVRCP source correlation — transport callback dispatches via resolver ──
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_dispatches_to_resolved_source_client():
+    """The transport callback returned by ``_build_mpris_transport_callback``
+    must NOT dispatch to its captured ``default_client`` directly — it
+    must consult ``resolve_avrcp_source_client``, which uses
+    ``AvrcpSourceTracker`` to identify which speaker actually pressed the
+    button.
+
+    Reproduces the VM 105 mis-route: BlueZ forwards the AVRCP Next from
+    WH speaker to ENEBY's exported MprisPlayer (ENEBY is BlueZ's chosen
+    addressed player on the adapter).  ENEBY's MprisPlayer was built
+    with ``default_client=eneby_client``, but the resolver sees recent
+    MediaPlayer1 activity from WH's MAC and returns wh_client instead.
+    """
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_transport_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    eneby_client = SimpleNamespace(
+        player_name="ENEBY",
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh_client = SimpleNamespace(
+        player_name="WH",
+        send_transport_command=AsyncMock(return_value=True),
+        status={"audio_streaming": True},
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh_client),
+    )
+    fresh_tracker.note_activity("80:99:E7:C2:0B:D3")
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    cb = _build_mpris_transport_callback(eneby_client)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("eneby-id", "next")
+
+    assert result is True
+    # The actual command went to WH (the source), not ENEBY (the captured default).
+    wh_client.send_transport_command.assert_awaited_once_with("next")
+    eneby_client.send_transport_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_drops_when_resolver_returns_none():
+    """No recent activity, no single-streaming-client fallback applicable
+    (multiple streaming) → resolver returns None → callback drops the
+    command.  Prevents regression to mis-routing.
+    """
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_transport_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    c1 = SimpleNamespace(
+        player_name="A",
+        send_transport_command=AsyncMock(return_value=True),
+        status={"audio_streaming": True},
+    )
+    c2 = SimpleNamespace(
+        player_name="B",
+        send_transport_command=AsyncMock(return_value=True),
+        status={"audio_streaming": True},
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:01",
+        MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=c1),
+    )
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:02",
+        MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=c2),
+    )
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    cb = _build_mpris_transport_callback(c1)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("1", "next")
+
+    assert result is False
+    c1.send_transport_command.assert_not_awaited()
+    c2.send_transport_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_volume_callback_dispatches_to_resolved_source_client():
+    """Volume from speaker → MPRIS Volume property → BlueZ → us — same
+    correlation problem as transport, same solution.
+    """
+    from unittest.mock import AsyncMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _build_mpris_volume_callback
+    from services.mpris_player import MprisPlayer, MprisRegistry
+
+    default = SimpleNamespace(
+        player_name="default",
+        _send_subprocess_command=AsyncMock(return_value=None),
+        _update_status=lambda _delta: None,
+        status={"audio_streaming": False},
+    )
+    source = SimpleNamespace(
+        player_name="source",
+        _send_subprocess_command=AsyncMock(return_value=None),
+        _update_status=lambda _delta: None,
+        status={"audio_streaming": True},
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:01",
+        MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=default),
+    )
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:02",
+        MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=source),
+    )
+    fresh_tracker.note_activity("AA:BB:CC:DD:EE:02")
+
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+    from services import mpris_player as player_mod
+
+    cb = _build_mpris_volume_callback(default)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("1", 75)
+
+    assert result is True
+    source._send_subprocess_command.assert_awaited_once_with({"cmd": "set_volume", "value": 75})
+    default._send_subprocess_command.assert_not_awaited()
+
+
+# ── BlueZ MediaPlayer1 PropertiesChanged subscription ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_subscribe_avrcp_source_tracker_records_activity_on_mediaplayer1_change():
+    """When BlueZ emits PropertiesChanged on
+    ``org.bluez.MediaPlayer1`` for the device, the subscription callback
+    must record activity in the tracker so later inbound MPRIS commands
+    can correlate to this MAC."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _subscribe_avrcp_source_tracker
+
+    captured_handlers: list = []
+
+    props_iface = MagicMock()
+    props_iface.on_properties_changed = lambda fn: captured_handlers.append(fn)
+
+    proxy = MagicMock()
+    proxy.get_interface = MagicMock(return_value=props_iface)
+
+    bus = MagicMock()
+    bus.introspect = AsyncMock(return_value=MagicMock(tostring=lambda: "<node><node name='player1'/></node>"))
+    bus.get_proxy_object = MagicMock(return_value=proxy)
+
+    fresh_tracker = AvrcpSourceTracker()
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+
+    with _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker):
+        teardown = await _subscribe_avrcp_source_tracker(
+            bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=1, delay=0.0
+        )
+
+        assert callable(teardown)
+        assert len(captured_handlers) == 1
+
+        # Simulate BlueZ firing PropertiesChanged on MediaPlayer1
+        captured_handlers[0]("org.bluez.MediaPlayer1", {"Status": "playing"}, [])
+
+        assert fresh_tracker.get_recent_active() == "AA:BB:CC:DD:EE:FF"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_avrcp_source_tracker_ignores_other_interfaces():
+    """PropertiesChanged for other interfaces (e.g. ``Device1.Connected``)
+    must NOT be misinterpreted as AVRCP activity — those signals fire
+    for routine connect/disconnect events and would constantly mark the
+    last-active speaker as 'whoever connected most recently' regardless
+    of whether they pressed a button."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from services.device_activation import _subscribe_avrcp_source_tracker
+
+    captured_handlers: list = []
+    props_iface = MagicMock()
+    props_iface.on_properties_changed = lambda fn: captured_handlers.append(fn)
+    proxy = MagicMock()
+    proxy.get_interface = MagicMock(return_value=props_iface)
+    bus = MagicMock()
+    bus.introspect = AsyncMock(return_value=MagicMock(tostring=lambda: "<node><node name='player1'/></node>"))
+    bus.get_proxy_object = MagicMock(return_value=proxy)
+
+    fresh_tracker = AvrcpSourceTracker()
+    import unittest.mock as _mock
+
+    from services import avrcp_source_tracker as tracker_mod
+
+    with _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker):
+        await _subscribe_avrcp_source_tracker(bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=1, delay=0.0)
+
+        captured_handlers[0]("org.bluez.Device1", {"Connected": True}, [])
+
+    assert fresh_tracker.get_recent_active() is None
+
+
+@pytest.mark.asyncio
+async def test_subscribe_avrcp_source_tracker_returns_none_when_no_player_node():
+    """Some speaker firmware doesn't expose AVRCP TG → BlueZ never
+    creates a playerN child node → subscription returns None and the
+    resolver falls back to the streaming-fallback for this device."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.device_activation import _subscribe_avrcp_source_tracker
+
+    bus = MagicMock()
+    # Empty node — no player child
+    bus.introspect = AsyncMock(return_value=MagicMock(tostring=lambda: "<node></node>"))
+
+    teardown = await _subscribe_avrcp_source_tracker(bus, "AA:BB:CC:DD:EE:FF", "/org/bluez/hci0", retries=2, delay=0.0)
+
+    assert teardown is None

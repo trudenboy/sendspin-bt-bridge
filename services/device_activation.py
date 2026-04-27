@@ -18,7 +18,13 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from services.mpris_player import MprisPlayer, _build_player_iface, get_registry
+from services.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
+from services.mpris_player import (
+    MprisPlayer,
+    _build_player_iface,
+    get_registry,
+    resolve_avrcp_source_client,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -68,37 +74,68 @@ def _bluez_adapter_path(bt_manager: Any) -> str | None:
     return f"/org/bluez/{hci}"
 
 
-def _build_mpris_transport_callback(client: Any) -> Callable[[str, str], Any]:
+def _build_mpris_transport_callback(default_client: Any) -> Callable[[str, str], Any]:
     """AVRCP method → SendspinClient transport command.
 
     Speaker buttons (Play/Pause/Stop/Next/Previous) reach the bridge via
-    BlueZ MPRIS forwarding.  Forward them to the daemon subprocess using
-    the same path the UI Transport buttons take — bypasses MA REST so
-    button-press latency is dominated by the IPC round-trip, not WAN.
+    BlueZ MPRIS forwarding.  BlueZ picks ONE registered MPRIS player as
+    the addressed player on the adapter and forwards every speaker's
+    AVRCP commands to that one player — the source CT identity is stripped
+    by the BlueZ AVRCP TG layer.  See ``services/avrcp_source_tracker``.
+
+    To recover the source we delegate to ``resolve_avrcp_source_client``,
+    which correlates the anonymous inbound dispatch with recent
+    ``org.bluez.MediaPlayer1.PropertiesChanged`` activity to find the MAC
+    of the speaker that actually pressed the button.  ``default_client``
+    here is the client this MprisPlayer was constructed for; the resolver
+    only consults it via the registry, never falls back to it directly
+    (so a mis-routed dispatch doesn't silently land on the wrong client).
     """
 
     async def _cb(_player_id: str, command: str) -> bool:
+        client = resolve_avrcp_source_client(default_client=default_client)
+        if client is None:
+            logger.info(
+                "MPRIS transport %s: no source client identifiable, dropping (default=%r)",
+                command,
+                getattr(default_client, "player_name", "?"),
+            )
+            return False
         try:
             ok = await client.send_transport_command(command)
         except Exception as exc:
-            logger.warning("MPRIS transport %s for %s failed: %s", command, getattr(client, "player_name", "?"), exc)
+            logger.warning(
+                "MPRIS transport %s for %s failed: %s",
+                command,
+                getattr(client, "player_name", "?"),
+                exc,
+            )
             return False
         return bool(ok)
 
     return _cb
 
 
-def _build_mpris_volume_callback(client: Any) -> Callable[[str, int], Any]:
+def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], Any]:
     """AVRCP absolute volume → bridge volume.
 
     Inbound MPRIS Volume writes (BlueZ forwards the speaker's volume knob)
     are normalised to 0..100 by ``MprisPlayer._on_volume_set`` before this
-    callback runs.  We push the new volume to the same subprocess command
-    that ``POST /api/volume`` uses, so the speaker, MA, and bridge UI stay
-    in agreement.
+    callback runs.  Same source-correlation problem as the transport path
+    — see ``_build_mpris_transport_callback`` — so we resolve the actual
+    source client via the registry+tracker rather than trusting the
+    captured ``default_client``.
     """
 
     async def _cb(_player_id: str, volume_pct: int) -> bool:
+        client = resolve_avrcp_source_client(default_client=default_client)
+        if client is None:
+            logger.info(
+                "MPRIS volume->%d: no source client identifiable, dropping (default=%r)",
+                volume_pct,
+                getattr(default_client, "player_name", "?"),
+            )
+            return False
         try:
             await client._send_subprocess_command({"cmd": "set_volume", "value": int(volume_pct)})
         except Exception as exc:
@@ -116,6 +153,100 @@ def _build_mpris_volume_callback(client: Any) -> Callable[[str, int], Any]:
         return True
 
     return _cb
+
+
+def _bluez_device_player_path(adapter_path: str, mac: str) -> str:
+    """``/org/bluez/hciN/dev_<MAC>`` — root of BlueZ's per-device tree.
+
+    BlueZ creates ``MediaPlayer1`` child nodes under this path
+    (``playerN``) once the AVRCP target↔controller exchange completes.
+    Our subscription introspects this root to find the playerN child.
+    """
+    return f"{adapter_path}/dev_{mac.upper().replace(':', '_')}"
+
+
+async def _subscribe_avrcp_source_tracker(
+    bus: Any, mac: str, adapter_path: str, *, retries: int = 5, delay: float = 1.5
+) -> Any:
+    """Subscribe to BlueZ MediaPlayer1 PropertiesChanged for *mac*.
+
+    Used so that the inbound MPRIS dispatch resolver can correlate an
+    anonymous Play/Pause/Next call back to the source speaker.  When
+    *any* property under ``org.bluez.MediaPlayer1`` on this device's
+    BlueZ object changes, we record activity in the global
+    ``AvrcpSourceTracker``.
+
+    Returns a teardown callable on success, or ``None`` if the player
+    object isn't created by BlueZ within the retry budget (some
+    speakers don't expose AVRCP TG → no playerN child → correlation
+    falls back to the streaming-fallback in the resolver).
+    """
+    from xml.etree import ElementTree as ET
+
+    dev_path = _bluez_device_player_path(adapter_path, mac)
+
+    player_path: str | None = None
+    for attempt in range(retries):
+        try:
+            introspection = await bus.introspect("org.bluez", dev_path)
+            xml_data = introspection.tostring()
+            root = ET.fromstring(xml_data)
+            player_nodes = [n.get("name", "") for n in root.findall("node") if n.get("name", "").startswith("player")]
+            if player_nodes:
+                player_path = f"{dev_path}/{player_nodes[0]}"
+                break
+        except Exception as exc:
+            logger.debug(
+                "AVRCP source tracker: introspect %s attempt %d failed: %s",
+                dev_path,
+                attempt,
+                exc,
+            )
+        await asyncio.sleep(delay)
+
+    if player_path is None:
+        logger.info(
+            "AVRCP source tracker: no MediaPlayer1 child for %s after %d attempts — "
+            "correlation degraded for this device",
+            mac,
+            retries,
+        )
+        return None
+
+    try:
+        introspection = await bus.introspect("org.bluez", player_path)
+        proxy = bus.get_proxy_object("org.bluez", player_path, introspection)
+        props_iface = proxy.get_interface("org.freedesktop.DBus.Properties")
+    except Exception as exc:
+        logger.debug("AVRCP source tracker: proxy setup for %s failed: %s", player_path, exc)
+        return None
+
+    tracker = _get_avrcp_source_tracker()
+
+    def _on_changed(interface_name: str, _changed: dict, _invalidated: list) -> None:
+        if interface_name != "org.bluez.MediaPlayer1":
+            return
+        tracker.note_activity(mac)
+
+    try:
+        props_iface.on_properties_changed(_on_changed)
+    except Exception as exc:
+        logger.debug("AVRCP source tracker: subscribe to %s failed: %s", player_path, exc)
+        return None
+
+    logger.info(
+        "AVRCP source tracker: subscribed to MediaPlayer1.PropertiesChanged for %s at %s",
+        mac,
+        player_path,
+    )
+
+    def _teardown() -> None:
+        try:
+            props_iface.off_properties_changed(_on_changed)
+        except Exception as exc:
+            logger.debug("AVRCP source tracker: unsubscribe for %s failed: %s", mac, exc)
+
+    return _teardown
 
 
 def _make_mpris_connected_hook(
@@ -144,6 +275,7 @@ def _make_mpris_connected_hook(
             player_id=str(client.player_id),
             transport_callback=_build_mpris_transport_callback(client),
             volume_callback=_build_mpris_volume_callback(client),
+            client=client,
         )
         registry.register(mac, player)
 
@@ -234,6 +366,23 @@ def _make_mpris_connected_hook(
                         mac,
                         exc,
                     )
+
+                # AVRCP source-correlation tracker: subscribe to BlueZ
+                # MediaPlayer1.PropertiesChanged on the per-device path.
+                # Best-effort; failure here only degrades inbound dispatch
+                # accuracy — the streaming-fallback in the resolver still
+                # handles the single-active-speaker common case.  Captures
+                # the teardown callable on the player so the disconnect
+                # hook can unsubscribe before unexporting the bus.
+                try:
+                    teardown = await _subscribe_avrcp_source_tracker(bus, mac, adapter_path)
+                    player._avrcp_source_subscription_teardown = teardown  # type: ignore[attr-defined]
+                except Exception as exc:
+                    logger.debug(
+                        "AVRCP source tracker subscription scheduling failed for %s: %s",
+                        mac,
+                        exc,
+                    )
             except Exception as exc:
                 logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
 
@@ -256,6 +405,11 @@ def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
     def _hook() -> None:
         from services.bridge_runtime_state import get_main_loop
 
+        # Forget any tracker activity for this MAC so a stale recent-
+        # activity record doesn't mis-route a subsequent button press
+        # from another speaker after this device is gone.
+        _get_avrcp_source_tracker().clear(mac)
+
         registry = get_registry()
         player = registry.unregister(mac)
         if player is None:
@@ -269,8 +423,17 @@ def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
             return
         adapter_path = getattr(player, "_dbus_adapter_path", None)
         was_registered = getattr(player, "_dbus_registered", False)
+        source_teardown = getattr(player, "_avrcp_source_subscription_teardown", None)
 
         async def _unexport() -> None:
+            # Drop the AVRCP source-correlation subscription first so no
+            # late PropertiesChanged signals land in the tracker after
+            # we've cleared activity for this MAC above.
+            if callable(source_teardown):
+                try:
+                    source_teardown()
+                except Exception as exc:
+                    logger.debug("AVRCP source tracker unsubscribe for %s failed: %s", mac, exc)
             # Tell BlueZ to drop the AVRCP forwarding registration
             # before we unexport the path — otherwise BlueZ keeps the
             # cached pointer and the next forwarded command races a
