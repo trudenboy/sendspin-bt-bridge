@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — defense in depth: detect & surface non-writable ``$CONFIG_DIR``
+
+Issue [#190](https://github.com/trudenboy/sendspin-bt-bridge/issues/190)
+spent significant time at "MA OAuth returns Internal Server Error" with
+no actionable diagnostic — root cause was the bind-mount target left
+as ``root:root`` while the bridge process runs as UID 1000, so the
+first config write (``_save_ma_token_and_rediscover`` →
+``update_config``) raised ``PermissionError`` and Flask defaulted to
+the generic 500 HTML page.
+
+Three layers of defense so the next operator gets a single-glance
+diagnosis:
+
+1. **Startup banner** — entrypoint now probes ``$CONFIG_DIR`` with
+   touch/unlink as the *runtime* UID (via ``setpriv`` / ``gosu``) and
+   adds a ``Config write: ✓ writable`` / ``✗ NOT writable`` row to the
+   banner.  On failure, also emits an ``ERROR:`` line in journald with
+   the exact ``chown`` command operators can copy verbatim.
+2. **Actionable 500** — every Flask handler that writes to the config
+   directory now wraps the write in ``try/except OSError`` and returns
+   a structured JSON 500 with a ``remediation`` block (chown for
+   ``EACCES``, remount for ``EROFS``, generic for the rest) instead of
+   Flask's default ``Internal Server Error`` HTML.  Wrapped sites:
+   ``_save_ma_token_and_rediscover`` (5 OAuth callers), ``POST
+   /api/config``, ``POST /api/config/upload``, ``POST /api/set-password``,
+   ``POST /api/settings/log_level``.
+3. **Diagnostics surface** — ``services/preflight_status`` adds a
+   ``config_writable`` slice (status / writable / config_dir / uid /
+   remediation).  ``services/recovery_assistant`` reads it and renders
+   a ``config_dir_not_writable`` recovery card with the chown command
+   in the summary so it appears in the UI Diagnostics panel without
+   operators reading container logs.  ``services/operator_check_runner``
+   adds a ``config_writable`` re-runnable check so the "Re-run check"
+   button flips the card green as soon as the operator runs the chown.
+   ``services/guidance_issue_registry`` registers the new issue at
+   priority 15 (between ``runtime_access`` and ``bluetooth``).
+
+Helper: ``routes/_helpers.config_write_error_response(exc, context=...)``
+builds the structured response.  Distinguishes ``EACCES`` /
+``EROFS`` / unknown ``OSError`` so each gets the correct hint;
+non-OSError exceptions still raise so real bugs aren't masked.
+
+``docker-compose.yml`` gains a comment block above the ``/config``
+volume mount documenting the pre-start ``chown -R 1000:1000`` step.
+
+Tests: 5 + 4 + 5 + 2 + 2 new in
+``tests/test_config_write_error_response.py``,
+``tests/test_ma_auth_config_write.py``,
+``tests/test_preflight_config_writable.py``,
+``tests/test_operator_check_runner.py``, and
+``tests/test_recovery_assistant.py``.  Full suite 1719 passing.
+
 ## [2.63.1] - 2026-04-26
 
 ### Fixed — LXC deployments on v2.50.x–v2.62.x can upgrade again

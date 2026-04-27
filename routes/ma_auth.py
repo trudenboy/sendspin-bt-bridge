@@ -240,8 +240,24 @@ async def _rediscover_after_login(
         logger.debug("MA group rediscovery after login failed", exc_info=True)
 
 
-def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "", auth_provider: str = "") -> None:
-    """Save MA token to config and trigger group rediscovery."""
+def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = "", auth_provider: str = ""):
+    """Save MA token to config and trigger group rediscovery.
+
+    Returns ``None`` on success, or a Flask ``(response, status)`` tuple
+    when the config-dir write failed (issue #190 — bind-mount target
+    not owned by the bridge UID).  Callers do::
+
+        err = _save_ma_token_and_rediscover(...)
+        if err is not None:
+            return err
+
+    so all 6 OAuth handlers get the same chown-remediation 500
+    instead of letting Flask 500 on an uncaught PermissionError.
+    Non-OS exceptions (ValueError, TypeError, etc.) still raise so
+    real bugs aren't masked.
+    """
+    from routes._helpers import config_write_error_response
+
     token_label = _ma_token_name()
     token_hostname = _current_instance_hostname()
 
@@ -255,7 +271,11 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
         if auth_provider:
             cfg["MA_AUTH_PROVIDER"] = auth_provider
 
-    update_config(_save)
+    try:
+        update_config(_save)
+    except OSError as exc:
+        return config_write_error_response(exc, context="Cannot save MA token")
+
     set_ma_api_credentials(ma_url, ma_token)
 
     loop = get_main_loop()
@@ -267,6 +287,7 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
             )
         except Exception:
             pass
+    return None
 
 
 # ── MA ↔ HA OAuth helpers (shared by ha-login and ha-silent-auth) ─────────
@@ -1268,7 +1289,9 @@ def api_ma_login():
     if not token:
         return jsonify({"success": False, "error": "Login succeeded but no token received"}), 500
 
-    _save_ma_token_and_rediscover(ma_url, token, username, auth_provider="builtin")
+    err = _save_ma_token_and_rediscover(ma_url, token, username, auth_provider="builtin")
+    if err is not None:
+        return err
 
     return jsonify(
         {
@@ -1341,12 +1364,14 @@ def api_ma_ha_silent_auth():
             ma_url, existing_token
         ):
             if not cfg.get("MA_TOKEN_INSTANCE_HOSTNAME") or not cfg.get("MA_TOKEN_LABEL"):
-                _save_ma_token_and_rediscover(
+                err = _save_ma_token_and_rediscover(
                     ma_url,
                     existing_token,
                     str(cfg.get("MA_USERNAME") or ""),
                     auth_provider=str(cfg.get("MA_AUTH_PROVIDER") or ""),
                 )
+                if err is not None:
+                    return err
             logger.debug("Silent auth: existing MA token still valid — reusing")
             return jsonify(
                 {
@@ -1396,7 +1421,9 @@ def api_ma_ha_silent_auth():
         )
 
     # 4. Save and rediscover
-    _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""), auth_provider="ha")
+    err = _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""), auth_provider="ha")
+    if err is not None:
+        return err
 
     return jsonify(
         {
@@ -1465,7 +1492,9 @@ def api_ma_ha_login():
                     return jsonify({"success": False, "error": "Failed to exchange HA code for MA token"}), 500
 
                 ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
-                _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
+                err = _save_ma_token_and_rediscover(ma_url, ma_token, username, auth_provider="ha")
+                if err is not None:
+                    return err
 
                 return jsonify(
                     {
@@ -1539,7 +1568,9 @@ def api_ma_ha_login():
 
             ma_token = str(auth_result.get("ma_token") or "")
             ha_username = str(auth_result.get("name") or username)
-            _save_ma_token_and_rediscover(ma_url, ma_token, ha_username, auth_provider="ha")
+            err = _save_ma_token_and_rediscover(ma_url, ma_token, ha_username, auth_provider="ha")
+            if err is not None:
+                return err
 
             return jsonify(
                 {
@@ -1620,9 +1651,11 @@ def api_ma_ha_login():
                     ma_token = _exchange_for_long_lived_token(ma_url, ma_session_token)
                     saved_username = username or "HA user"
 
-                _save_ma_token_and_rediscover(ma_url, ma_token, saved_username, auth_provider="ha")
+                ma_save_err = _save_ma_token_and_rediscover(ma_url, ma_token, saved_username, auth_provider="ha")
             finally:
                 session.pop("_ha_oauth", None)
+            if ma_save_err is not None:
+                return ma_save_err
 
             return jsonify(
                 {

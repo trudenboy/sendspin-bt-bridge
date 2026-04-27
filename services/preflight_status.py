@@ -83,6 +83,81 @@ def _parse_memtotal_mb(line: str) -> int | None:
         return None
 
 
+def _probe_config_writable(config_dir) -> None:
+    """Touch + remove a probe file in ``config_dir``.  Raises whatever
+    OSError-class exception the underlying touch/remove emits — caller
+    classifies via ``collection_error_payload`` so the canonical
+    ``permission_denied`` / ``not_found`` codes apply.
+
+    Indirection seam: tests monkey-patch this without faking the
+    filesystem itself, which would require root or chmod 555 dance
+    that's flaky in CI."""
+    import os as _os
+    from pathlib import Path
+
+    probe = Path(config_dir) / f".sendspin-preflight-write-test-{_os.getpid()}"
+    try:
+        probe.touch()
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _build_config_writable_payload(config_dir) -> dict[str, Any]:
+    """Return the ``config_writable`` slice of preflight status.
+
+    On success: ``status=ok``, ``writable=True``, ``remediation=None``.
+    On any OSError: ``status=degraded``, ``writable=False``, error
+    payload (with canonical code), and a chown/remount remediation
+    string the UI renders verbatim.
+
+    Missing ``config_dir`` is treated as ``status=ok`` (no opinion) —
+    the entrypoint already creates the dir at startup, so a missing
+    dir at runtime means the operator deleted the bind-mount target
+    while running, which is a different category surfaced by the
+    Config status check.  Avoids polluting the recovery banner during
+    tests that don't bother to monkeypatch ``CONFIG_DIR``.
+
+    Always records ``config_dir`` (the actual path probed) and ``uid``
+    (the process UID) so a bug-report attached blob is self-evident.
+    """
+    import errno as _errno
+    import os as _os
+    from pathlib import Path
+
+    payload: dict[str, Any] = {
+        "config_dir": str(config_dir),
+        "uid": _os.getuid(),
+    }
+    if not Path(config_dir).is_dir():
+        payload["status"] = "ok"
+        payload["writable"] = True
+        payload["remediation"] = None
+        payload["note"] = "config_dir does not exist — covered by Config status check"
+        return payload
+    try:
+        _probe_config_writable(config_dir)
+    except OSError as exc:
+        payload["status"] = "degraded"
+        payload["writable"] = False
+        payload["error"] = collection_error_payload(exc)
+        if getattr(exc, "errno", None) == _errno.EACCES or isinstance(exc, PermissionError):
+            payload["remediation"] = f"chown -R {_os.getuid()}:{_os.getgid()} <bind-mount target for {config_dir}>"
+        elif getattr(exc, "errno", None) == _errno.EROFS:
+            payload["remediation"] = (
+                f"Remount {config_dir} read-write — read-only filesystem can't persist runtime config"
+            )
+        else:
+            payload["remediation"] = ""
+        return payload
+    payload["status"] = "ok"
+    payload["writable"] = True
+    payload["remediation"] = None
+    return payload
+
+
 def collect_preflight_status(
     *,
     get_server_name_fn=None,
@@ -201,6 +276,22 @@ def collect_preflight_status(
         failed_collections.append("memory")
         collections_status["memory"] = collection_status_payload("error", error=collection_error_payload(exc))
 
+    # Issue #190 root cause: bind-mount target left as ``root:root``
+    # while the bridge runs as UID 1000 → first config write raises
+    # PermissionError → handler returns generic 500.  Surfacing this
+    # in preflight makes it visible in the Diagnostics panel without
+    # operators reading container logs.
+    from config import CONFIG_DIR
+
+    config_writable_payload = _build_config_writable_payload(CONFIG_DIR)
+    if config_writable_payload["status"] == "degraded":
+        failed_collections.append("config_writable")
+        collections_status["config_writable"] = collection_status_payload(
+            "error", error=config_writable_payload.get("error")
+        )
+    else:
+        collections_status["config_writable"] = collection_status_payload("ok")
+
     return {
         "status": "degraded" if failed_collections else "ok",
         "failed_collections": failed_collections,
@@ -210,5 +301,6 @@ def collect_preflight_status(
         "bluetooth": bt_info,
         "dbus": dbus_ok,
         "memory_mb": mem_mb,
+        "config_writable": config_writable_payload,
         "version": runtime_version_fn(),
     }

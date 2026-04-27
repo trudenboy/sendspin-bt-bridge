@@ -17,6 +17,15 @@ services:
       - /run/user/${AUDIO_UID:-1000}/pulse:/run/user/${AUDIO_UID:-1000}/pulse
       - /run/user/${AUDIO_UID:-1000}/pipewire-0:/run/user/${AUDIO_UID:-1000}/pipewire-0
       # Configuration directory
+      # IMPORTANT: the bridge process runs as UID 1000 (for PulseAudio
+      # socket access — see entrypoint.sh).  The host-side bind-mount
+      # target must be writable by UID 1000, otherwise MA OAuth save /
+      # password change / log-level toggle will all fail.  Pre-create
+      # the dir before first start:
+      #   sudo mkdir -p /etc/docker/Sendspin
+      #   sudo chown -R 1000:1000 /etc/docker/Sendspin
+      # The startup banner shows "Config write: ✓ writable" or
+      # "✗ NOT writable — chown -R ..." so you can verify.
       - /etc/docker/Sendspin:/config
 
     environment:
