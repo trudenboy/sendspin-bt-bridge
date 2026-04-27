@@ -2382,7 +2382,11 @@ function _getListCollapsedBadgesHtml(dev, i) {
     // absent (experimental refresh disabled, or no fresh value yet),
     // so the array entry collapses to '' and the badge stays hidden.
     var rssiTs = dev && dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
-    var rssiStale = rssiTs ? (Date.now() / 1000 - rssiTs > 90) : false;
+    // Staleness threshold: 6x the BT manager's 5 s refresh cadence —
+    // a device that hasn't reported RSSI for 30 s is either really
+    // disconnected or the mgmt path is jammed; either way the chip
+    // greys out so the user knows the value isn't live.
+    var rssiStale = rssiTs ? (Date.now() / 1000 - rssiTs > 30) : false;
     // Connected-link RSSI from mgmt 0x0031 is BR/EDR delta-from-golden,
     // not absolute dBm — pass mode='delta' so the chip labels it as
     // "Δ dB" instead of "dBm".  Scan-result chip below stays default
@@ -3701,7 +3705,9 @@ function populateDeviceCard(i, dev) {
         var rssiVal = (dev.rssi_dbm === null || dev.rssi_dbm === undefined) ? null : Number(dev.rssi_dbm);
         var rssiTs = dev.rssi_at_ts ? Number(dev.rssi_at_ts) : null;
         var nowSec = Date.now() / 1000;
-        var isStale = rssiTs ? (nowSec - rssiTs > 90) : false;
+        // 30 s = 6x the BT manager's 5 s refresh cadence; see the
+        // matching threshold in the list-row renderer.
+        var isStale = rssiTs ? (nowSec - rssiTs > 30) : false;
         // Grid-mode device card: same delta semantics as the list-mode badge.
         var rssiRenderData = _getRssiBadgeRenderData(rssiVal, isStale, 'chip rssi-chip', 'delta');
         if (rssiRenderData) {
@@ -6574,7 +6580,7 @@ function openConfigAndAddDevice(options) {
 //   ≥ -75  fair      (2 bars)       ≥ -20  fair      (2 bars, warning)
 //   <  -75 bad       (1 bar)        ≥ -25  poor      (1 bar,  warning)
 //                                   <  -25 bad       (1 bar,  error)
-//   stale  grey      (0 bars, rssi_at_ts > 90 s) — both modes
+//   stale  grey      (0 bars, rssi_at_ts > 30 s) — both modes
 //
 // Delta scheme has an extra "poor" tier between -20 and -25 because
 // real-world links often sit in that band — rendering them straight

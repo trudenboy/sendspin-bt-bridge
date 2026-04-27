@@ -197,7 +197,7 @@ class BridgeOrchestrator:
         if enable_pa_module_reload:
             logger.info("EXPERIMENTAL: PulseAudio module-bluez5-discover reload enabled")
         if enable_rssi_badge:
-            logger.info("Live RSSI badge enabled — refreshing every 30 s via mgmt opcode 0x0031")
+            logger.info("Live RSSI badge enabled — refreshing every 5 s via mgmt opcode 0x0031")
         if enable_adapter_auto_recovery:
             logger.info(
                 "EXPERIMENTAL: adapter auto-recovery enabled — bluetooth-auto-recovery ladder will run at reconnect-fail threshold",

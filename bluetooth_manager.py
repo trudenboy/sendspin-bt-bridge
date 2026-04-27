@@ -78,11 +78,16 @@ _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
 _PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
 _MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
 _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
-# Cadence for live-RSSI refresh via kernel mgmt opcode 0x0031.  Picked
-# to align with the UI chip's 90 s staleness threshold (3x safety
-# margin) and to keep mgmt traffic per controller well under what a
-# concurrent pair attempt would tolerate.
-_RSSI_REFRESH_INTERVAL_S = 30.0
+# Cadence for live-RSSI refresh via kernel mgmt opcode 0x0031.
+# 5 s feels live to the UI (chip updates while you walk past a
+# speaker) without exceeding the controller's internal averaging
+# window (~1 s), and on N speakers costs N/5 mgmt ops/sec — at most
+# tenths of a percent of CPU even on a Pi.  Non-blocking lock acquire
+# means a pair / scan / reconnect ladder simply skips the tick
+# rather than queueing.  Aligned with a 30 s UI staleness threshold
+# (6x safety margin so transient mgmt contention doesn't grey out
+# every chip).
+_RSSI_REFRESH_INTERVAL_S = 5.0
 # After this many consecutive failed connect attempts where BlueZ has no current
 # device object, force-remove the stale BlueZ entry so the next reconnect cycle
 # can escalate to pair_device (KALLSUP-class loop, #162).
