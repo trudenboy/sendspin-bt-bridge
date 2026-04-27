@@ -166,6 +166,7 @@ class MprisPlayer:
     async def _on_volume_set(self, mpris_double: float) -> None:
         """MPRIS Volume property setter.  ``mpris_double`` is 0.0..1.0."""
         clamped_pct = max(0, min(100, int(round(mpris_double * 100))))
+        logger.info("MprisPlayer[%s]: AVRCP Volume=%d%%", self.mac, clamped_pct)
         if self._volume_echo_pending == clamped_pct:
             # Echo from our own outbound set_volume — suppress and clear guard.
             self._volume_echo_pending = None
