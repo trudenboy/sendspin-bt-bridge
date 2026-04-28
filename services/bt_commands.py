@@ -237,40 +237,26 @@ def command_set_bt_management(client, enabled: bool) -> CommandResult:
 
 
 def command_claim_audio(client) -> CommandResult:
-    """Force the bridge to assert active MPRIS source on a multipoint speaker.
+    """Assert the bridge as the active AVRCP source on a multipoint speaker.
 
-    Implementation: wraps ``services.mpris_player.assert_active_source`` if
-    available; otherwise falls back to a reconnect which re-registers the
-    MPRIS player.  Many speakers will only respect the freshest registration.
+    Mirrors ``POST /api/bt/claim/<mac>``: pushes ``PlaybackStatus = "Playing"``
+    through the per-device MprisPlayer so BlueZ propagates it over AVRCP.
+    Most multipoint speakers treat that as an active-source claim and
+    switch their output to us — without disturbing the existing BT link
+    or the running daemon.
     """
+    from services.mpris_player import get_registry
+
     bt = getattr(client, "bt_manager", None)
-    if bt is None:
+    mac = getattr(bt, "mac_address", "") if bt is not None else ""
+    if not mac:
         return _err("No BT manager for this player", code=503)
 
-    try:
-        # Resolve the MPRIS registry by name so mypy doesn't fail when the
-        # exposed singleton class evolves between bridge versions (rc cycle
-        # has renamed it more than once).
-        import importlib
+    player = get_registry().get(mac)
+    if player is None:
+        return _err("Speaker is not connected — nothing to claim", code=409)
 
-        mpris_mod = importlib.import_module("services.mpris_player")
-        registry_cls = getattr(mpris_mod, "MprisPlayerRegistry", None) or getattr(mpris_mod, "MprisRegistry", None)
-        registry = registry_cls.singleton() if registry_cls and hasattr(registry_cls, "singleton") else None
-        player = (
-            registry.get_by_mac(getattr(bt, "mac_address", ""))
-            if registry is not None and hasattr(registry, "get_by_mac")
-            else None
-        )
-        if player is not None and hasattr(player, "assert_active_source"):
-            _spawn_thread(player.assert_active_source)
-            return _ok("Audio source claim requested")
-    except Exception as exc:
-        logger.debug("[%s] MPRIS assert path unavailable: %s", getattr(client, "player_name", ""), exc)
-
-    # Fallback: a reconnect cycles the BlueZ MPRIS registration as a side
-    # effect.  Acceptable because HA users invoking "claim audio" expect
-    # *some* observable change, not a silent no-op.
-    return command_reconnect(client)
+    return _schedule_coroutine(player.set_playback_status("Playing"), timeout=2.0)
 
 
 def command_reset_reconnect(client) -> CommandResult:

@@ -60,6 +60,20 @@ and disabled devices show ``"disabled"`` in the projection JSON, so HA
 dashboards can highlight parked / dormant speakers without parsing
 multiple binary sensors.
 
+### Fixed — HA "Claim audio" no longer breaks playback
+
+``services.bt_commands.command_claim_audio`` was probing for a
+non-existent ``MprisPlayer.assert_active_source`` attribute and falling
+through to ``command_reconnect`` on every press — so pressing the
+``button.<player>_claim_audio`` entity from HA tore the BT link down
+and back up instead of doing the lightweight MPRIS-source assert that
+the bridge web UI's Claim Audio button does.  The dispatcher path now
+mirrors ``POST /api/bt/claim/<mac>``: it looks up the player in
+``MprisRegistry`` and schedules ``set_playback_status("Playing")`` on
+the asyncio loop, which BlueZ propagates over AVRCP to the speaker.
+Returns 409 instead of silently reconnecting when the speaker has no
+active MPRIS player (i.e. is not currently connected).
+
 ### Removed — `reset_reconnect` button from HA catalog
 
 Heavy recovery action better triggered manually from the bridge web UI

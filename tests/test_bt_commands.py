@@ -218,6 +218,64 @@ def test_command_set_bt_management_calls_client_method(fake_client):
 
 
 # ---------------------------------------------------------------------------
+# command_claim_audio
+# ---------------------------------------------------------------------------
+
+
+def test_command_claim_audio_pushes_playing_via_mpris(fake_client, monkeypatch):
+    """Claim must reach the MprisPlayer via set_playback_status('Playing'),
+    not bounce through reconnect — the old fallback interrupted playback."""
+    from services.mpris_player import get_registry
+
+    scheduled: list[str] = []
+
+    def fake_schedule(coro, *, timeout=5.0):
+        scheduled.append(getattr(coro, "__qualname__", "") or "?")
+        coro.close()
+        return CommandResult(success=True, message="claimed")
+
+    monkeypatch.setattr(M, "_schedule_coroutine", fake_schedule)
+
+    fake_player = MagicMock()
+
+    async def set_playback_status(status):
+        return None
+
+    fake_player.set_playback_status = set_playback_status
+
+    reg = get_registry()
+    reg.register(fake_client.bt_manager.mac_address, fake_player)
+    try:
+        result = M.command_claim_audio(fake_client)
+    finally:
+        reg.unregister(fake_client.bt_manager.mac_address)
+
+    # The coroutine was constructed (with status="Playing") and handed to
+    # the scheduler — that proves the MPRIS path was taken, not reconnect.
+    assert result.success
+    assert len(scheduled) == 1
+    assert "set_playback_status" in scheduled[0]
+
+
+def test_command_claim_audio_returns_409_when_speaker_not_connected(fake_client, monkeypatch):
+    """When no MprisPlayer is registered for the MAC the speaker isn't
+    reachable — fail loud (409) instead of falling through to reconnect."""
+    monkeypatch.setattr("services.mpris_player.get_registry", lambda: SimpleNamespace(get=lambda mac: None))
+
+    result = M.command_claim_audio(fake_client)
+
+    assert not result.success
+    assert result.code == 409
+
+
+def test_command_claim_audio_without_bt_manager_fails():
+    client = SimpleNamespace(player_name="x", bt_manager=None)
+    result = M.command_claim_audio(client)
+    assert not result.success
+    assert result.code == 503
+
+
+# ---------------------------------------------------------------------------
 # apply_device_config_change validation
 # ---------------------------------------------------------------------------
 
