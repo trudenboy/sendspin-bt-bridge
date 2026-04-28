@@ -42,6 +42,9 @@ DeviceExtractor = Callable[[dict[str, Any], dict[str, Any]], Any]
 BridgeExtractor = Callable[[dict[str, Any]], Any]
 
 
+AVAILABILITY_CLASSES = ("config", "runtime", "cumulative")
+
+
 @dataclass(frozen=True)
 class EntitySpec:
     """One HA entity row.
@@ -49,6 +52,23 @@ class EntitySpec:
     ``object_id`` is the part after the last dot in the entity ID (e.g.
     ``rssi_dbm`` → ``sensor.<player_slug>_rssi_dbm``).  Combined with the
     bridge-issued ``player_id`` it forms a stable ``unique_id``.
+
+    ``availability_class`` decides when HA shows the entity as available:
+
+    - ``config``: online whenever the device is in the bridge's fleet
+      (configured), regardless of BT state.  Used for everything that
+      survives standby / disabled (the ``enabled`` switch itself,
+      ``idle_mode``, all command buttons).  This is what lets operators
+      enable a disabled device or wake a standby device from HA.
+    - ``runtime``: online only when the BT link is up and the daemon
+      subprocess is alive.  Used for live diagnostics whose values are
+      meaningless when the speaker is unreachable (``rssi_dbm``,
+      ``battery_level``, ``audio_format``, ``audio_streaming``).
+    - ``cumulative``: same availability gate as ``config`` (always
+      online while in fleet) but the value reflects the last-known
+      observation rather than a live read.  Used for counters and
+      last-error-style fields (``reanchor_count``, ``last_error``,
+      ``health_state``) so HA dashboards show history through standby.
     """
 
     object_id: str
@@ -68,6 +88,7 @@ class EntitySpec:
     payload_on: str = "ON"
     payload_off: str = "OFF"
     expose_attrs: tuple[str, ...] = ()  # extra keys to surface as entity attrs
+    availability_class: str = "runtime"  # one of AVAILABILITY_CLASSES
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +266,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         device_class="connectivity",
         entity_category="diagnostic",
         icon="mdi:bluetooth",
+        availability_class="cumulative",  # surface "off" through standby
     ),
     EntitySpec(
         object_id="audio_streaming",
@@ -253,6 +275,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_audio_streaming,
         entity_category="diagnostic",
         icon="mdi:music-note",
+        availability_class="runtime",
     ),
     EntitySpec(
         object_id="reanchoring",
@@ -261,6 +284,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_reanchoring,
         entity_category="diagnostic",
         icon="mdi:sync-alert",
+        availability_class="runtime",
     ),
     EntitySpec(
         object_id="reconnecting",
@@ -269,6 +293,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_reconnecting,
         entity_category="diagnostic",
         icon="mdi:sync",
+        availability_class="cumulative",  # meaningful when offline too
     ),
     EntitySpec(
         object_id="bt_standby",
@@ -277,6 +302,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_bt_standby,
         entity_category="diagnostic",
         icon="mdi:power-sleep",
+        availability_class="cumulative",  # state we want HA to see during standby
     ),
     EntitySpec(
         object_id="bt_power_save",
@@ -285,6 +311,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_bt_power_save,
         entity_category="diagnostic",
         icon="mdi:leaf",
+        availability_class="cumulative",
     ),
     # Diagnostics sensors -----------------------------------------------------
     EntitySpec(
@@ -297,6 +324,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         unit="dBm",
         entity_category="diagnostic",
         icon="mdi:signal",
+        availability_class="runtime",
     ),
     EntitySpec(
         object_id="battery_level",
@@ -308,6 +336,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         unit="%",
         entity_category="diagnostic",
         icon="mdi:battery",
+        availability_class="runtime",
     ),
     EntitySpec(
         object_id="audio_format",
@@ -316,6 +345,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_audio_format,
         entity_category="diagnostic",
         icon="mdi:music-clef-treble",
+        availability_class="runtime",
     ),
     EntitySpec(
         object_id="reanchor_count",
@@ -325,6 +355,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         state_class="total_increasing",
         entity_category="diagnostic",
         icon="mdi:sync-alert",
+        availability_class="cumulative",  # counter persists across standby
     ),
     EntitySpec(
         object_id="last_sync_error_ms",
@@ -335,6 +366,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         state_class="measurement",
         unit="ms",
         entity_category="diagnostic",
+        availability_class="cumulative",
     ),
     EntitySpec(
         object_id="reconnect_attempt",
@@ -343,6 +375,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_reconnect_attempt,
         state_class="measurement",
         entity_category="diagnostic",
+        availability_class="cumulative",
     ),
     EntitySpec(
         object_id="last_error",
@@ -351,6 +384,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_last_error,
         entity_category="diagnostic",
         icon="mdi:alert-circle",
+        availability_class="cumulative",  # last seen error stays useful
     ),
     EntitySpec(
         object_id="health_state",
@@ -359,8 +393,9 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_d_health_state,
         entity_category="diagnostic",
         icon="mdi:heart-pulse",
+        availability_class="cumulative",
     ),
-    # Config knobs (writable) -------------------------------------------------
+    # Config knobs (writable) — always reachable while in fleet ---------------
     EntitySpec(
         object_id="enabled",
         kind=EntityKind.SWITCH,
@@ -369,6 +404,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="config",
         icon="mdi:check-circle-outline",
         command="set_enabled",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="bt_management_enabled",
@@ -378,6 +414,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="config",
         icon="mdi:tools",
         command="set_bt_management",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="idle_mode",
@@ -388,6 +425,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:power-sleep",
         options=("default", "power_save", "auto_disconnect", "keep_alive"),
         command="set_idle_mode",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="keep_alive_method",
@@ -398,6 +436,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:waveform",
         options=("infrasound", "silence", "none"),
         command="set_keep_alive_method",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="static_delay_ms",
@@ -411,6 +450,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=10,
         icon="mdi:timer-cog",
         command="set_static_delay_ms",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="power_save_delay_minutes",
@@ -424,14 +464,17 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=1,
         icon="mdi:timer-outline",
         command="set_power_save_delay_minutes",
+        availability_class="config",
     ),
-    # Buttons (BT-level commands MA cannot perform) ---------------------------
+    # Buttons (BT-level commands MA cannot perform) — always pressable
+    # while in fleet, including during standby and when device is disabled.
     EntitySpec(
         object_id="reconnect",
         kind=EntityKind.BUTTON,
         name="Reconnect",
         icon="mdi:bluetooth-connect",
         command="reconnect",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="disconnect",
@@ -439,6 +482,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         name="Disconnect",
         icon="mdi:bluetooth-off",
         command="disconnect",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="wake",
@@ -446,6 +490,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         name="Wake from standby",
         icon="mdi:bluetooth-audio",
         command="wake",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="standby",
@@ -453,6 +498,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         name="Enter standby",
         icon="mdi:power-sleep",
         command="standby",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="power_save_toggle",
@@ -460,20 +506,15 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         name="Toggle power save",
         icon="mdi:leaf",
         command="power_save_toggle",
+        availability_class="config",
     ),
-    EntitySpec(
-        object_id="reset_reconnect",
-        kind=EntityKind.BUTTON,
-        name="Full BT reset",
-        entity_category="diagnostic",
-        icon="mdi:restart-alert",
-        command="reset_reconnect",
-    ),
-    # Pairing intentionally NOT exposed as an HA button — it's a one-shot
-    # workflow that needs the speaker in pairing mode and produces a
-    # secret on success.  Triggering it from an HA automation has no
-    # safe failure path; bridge web UI keeps the button.  See PR #216
-    # discussion for the rationale.
+    # Pairing and reset_reconnect intentionally NOT exposed:
+    #   - pair: one-shot interactive workflow needing the speaker in pairing
+    #     mode (no safe HA-automation surface).
+    #   - reset_reconnect: heavy recovery action better triggered manually
+    #     from the bridge web UI than from an HA automation that might fire
+    #     it on a transient blip.
+    # Bridge web UI keeps both.
     EntitySpec(
         object_id="claim_audio",
         kind=EntityKind.BUTTON,
@@ -481,6 +522,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:hand-back-right",
         command="claim_audio",
+        availability_class="config",
     ),
 )
 
@@ -490,6 +532,9 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
 # ---------------------------------------------------------------------------
 
 BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
+    # Bridge entities are always meaningful while the bridge process is
+    # alive (LWT on the bridge availability topic covers process death),
+    # so all use ``config`` availability — no per-device runtime gating.
     EntitySpec(
         object_id="version",
         kind=EntityKind.SENSOR,
@@ -497,6 +542,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_b_version,
         entity_category="diagnostic",
         icon="mdi:tag-outline",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="ma_connected",
@@ -506,6 +552,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         device_class="connectivity",
         entity_category="diagnostic",
         icon="mdi:music",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="startup_phase",
@@ -514,6 +561,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_b_startup_phase,
         entity_category="diagnostic",
         icon="mdi:rocket-launch",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="runtime_mode",
@@ -522,6 +570,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_b_runtime_mode,
         entity_category="diagnostic",
         icon="mdi:cog-outline",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="update_available",
@@ -531,6 +580,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:package-up",
         expose_attrs=("latest_version",),
+        availability_class="config",
     ),
     EntitySpec(
         object_id="restart",
@@ -539,6 +589,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:restart",
         command="restart",
+        availability_class="config",
     ),
     # ``Scan for devices`` intentionally NOT exposed — scan results
     # only mean anything inside the bridge web UI's pair-flow modal,

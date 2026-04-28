@@ -131,7 +131,6 @@ def test_missing_command_rejected(dispatcher_with_calls):
         ("wake", "command_wake"),
         ("standby", "command_standby"),
         ("claim_audio", "command_claim_audio"),
-        ("reset_reconnect", "command_reset_reconnect"),
     ],
 )
 def test_button_command_routes_to_helper(dispatcher_with_calls, command, expected_helper):
@@ -145,6 +144,16 @@ def test_pair_command_not_exposed_via_dispatcher(dispatcher_with_calls):
     """Pairing intentionally NOT routable from HA — see PR #216 discussion."""
     d, _ = dispatcher_with_calls
     result = d.dispatch_device("player-aaa", "pair")
+    assert not result.success
+    assert result.code == 404
+
+
+def test_reset_reconnect_command_not_exposed_via_dispatcher(dispatcher_with_calls):
+    """Reset_reconnect intentionally NOT routable from HA in v2.65.0-rc.4 —
+    heavy recovery action better triggered manually from the bridge web UI
+    than from an automation that might fire on a transient blip."""
+    d, _ = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "reset_reconnect")
     assert not result.success
     assert result.code == 404
 

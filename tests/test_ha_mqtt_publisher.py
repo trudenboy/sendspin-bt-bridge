@@ -101,7 +101,8 @@ def projection():
     return HAStateProjection(
         devices=devices,
         bridge=bridge,
-        availability={"player-aaa": True},
+        availability_runtime={"player-aaa": True},
+        availability_config={"player-aaa": True},
         bridge_available=True,
         device_meta={"player-aaa": meta},
         bridge_meta=bridge_meta,
@@ -285,10 +286,23 @@ def test_discovery_state_topic_consolidated_per_device(cfg, projection):
     assert sensor_payload["value_template"] == "{{ value_json.rssi_dbm }}"
 
 
-def test_discovery_availability_topic_per_device(cfg, projection):
+def test_discovery_availability_topic_routes_by_class(cfg, projection):
+    """Each entity points at the availability topic appropriate to its
+    availability_class:
+
+    - ``runtime`` (RSSI, audio_streaming) → ``.../availability/runtime``
+    - ``config`` (enabled switch, command buttons) → ``.../availability/config``
+    - ``cumulative`` (reanchor_count, last_error) → also ``.../availability/config``
+    """
     payloads = build_discovery_payloads(cfg, projection)
-    sensor_payload = next(p for t, p in payloads if "_rssi_dbm/config" in t)
-    assert sensor_payload["availability_topic"] == "sendspin/player-aaa/availability"
+    rssi_payload = next(p for t, p in payloads if "_rssi_dbm/config" in t)
+    assert rssi_payload["availability_topic"] == "sendspin/player-aaa/availability/runtime"
+    enabled_payload = next(p for t, p in payloads if "_enabled/config" in t)
+    assert enabled_payload["availability_topic"] == "sendspin/player-aaa/availability/config"
+    reanchor_payload = next(p for t, p in payloads if "_reanchor_count/config" in t)
+    assert reanchor_payload["availability_topic"] == "sendspin/player-aaa/availability/config"
+    reconnect_payload = next(p for t, p in payloads if "_reconnect/config" in t)
+    assert reconnect_payload["availability_topic"] == "sendspin/player-aaa/availability/config"
 
 
 def test_discovery_room_name_becomes_suggested_area(cfg, projection):
@@ -448,3 +462,70 @@ def test_topic_helpers_use_consistent_root(cfg):
     assert cfg.state_topic_bridge() == "sendspin/bridge/state"
     assert cfg.cmd_topic_bridge("scan") == "sendspin/bridge/cmd/scan"
     assert cfg.discovery_topic("sensor", "uid_x") == "homeassistant/sensor/uid_x/config"
+
+
+# ---------------------------------------------------------------------------
+# Legacy availability topic — backwards-compat for rc.1-rc.3 caches
+# ---------------------------------------------------------------------------
+
+
+class _RecordingClient:
+    """Captures ``await client.publish(topic, payload, qos=, retain=)`` calls."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, str]] = []
+
+    async def publish(self, topic, payload, qos=0, retain=False):
+        # Normalise payload to a string so JSON / plain values compare cleanly.
+        if isinstance(payload, bytes):
+            payload = payload.decode()
+        self.calls.append((topic, str(payload)))
+
+
+def _topics_for(client: _RecordingClient) -> list[str]:
+    return [t for t, _ in client.calls]
+
+
+def test_full_state_publishes_legacy_availability_topic(cfg, projection):
+    """Per Copilot review on PR #218: ``_publish_full_state`` must keep
+    writing the legacy single-channel ``sendspin/<pid>/availability``
+    topic so HA caches from rc.1–rc.3 stay in sync.  The legacy topic
+    mirrors the runtime channel."""
+    publisher = HaMqttPublisher(
+        config_provider=lambda: cfg,
+        projection_provider=lambda: projection,
+        dispatcher=MagicMock(),
+        event_subscribe=lambda cb: lambda: None,
+    )
+    client = _RecordingClient()
+    asyncio.run(publisher._publish_full_state(client, cfg, projection))
+
+    legacy_writes = [(t, p) for t, p in client.calls if t == cfg.availability_topic_device("player-aaa")]
+    assert legacy_writes, "legacy availability topic was not published"
+    assert legacy_writes[-1][1] == "online"  # mirrors runtime=True from the projection
+
+
+def test_delta_runtime_change_mirrors_to_legacy_topic(cfg, projection):
+    """Per Copilot review on PR #218: a runtime availability flip must
+    also reach the legacy topic so HA caches that still subscribe to it
+    receive the transition.  Without this mirror, an entity that went
+    offline would stay stuck at the last retained ``online`` value."""
+    from services.ha_state_projector import StateDelta
+
+    publisher = HaMqttPublisher(
+        config_provider=lambda: cfg,
+        projection_provider=lambda: projection,
+        dispatcher=MagicMock(),
+        event_subscribe=lambda cb: lambda: None,
+    )
+    client = _RecordingClient()
+    delta = StateDelta(
+        devices={},
+        bridge={},
+        availability_runtime_changed={"player-aaa": False},
+    )
+    asyncio.run(publisher._publish_delta(client, cfg, projection, delta))
+
+    legacy_writes = [(t, p) for t, p in client.calls if t == cfg.availability_topic_device("player-aaa")]
+    assert legacy_writes, "legacy availability topic was not mirrored on delta"
+    assert legacy_writes[-1][1] == "offline"  # mirrors the runtime flip

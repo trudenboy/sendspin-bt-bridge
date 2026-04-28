@@ -7,6 +7,169 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.5] - 2026-04-28
+
+### Fixed — Copilot review on PR #218 (v2.65.0-rc.4)
+
+Five issues caught by the Copilot reviewer on the rc.4 PR:
+
+- **Legacy availability topic stuck on stale value.**
+  ``services/ha_mqtt_publisher.py`` only published the legacy
+  ``sendspin/<pid>/availability`` topic on device removal — the full /
+  delta paths skipped it.  HA caches from rc.1–rc.3 that still
+  subscribe to the legacy topic kept the last retained value forever.
+  ``_publish_full_state`` and ``_publish_delta`` now mirror the runtime
+  channel into the legacy topic so older caches stay in sync.
+- **Disabled-device entities showed hard-coded defaults.**
+  ``services/ha_state_projector._project_disabled_device`` synthesised
+  ``idle_mode=default``, ``static_delay_ms=0``, etc., regardless of
+  what the operator had saved — so HA displayed misleading values for
+  disabled devices and a write-back from HA could silently overwrite
+  the saved settings.  ``bridge_orchestrator.initialize_devices`` now
+  enriches each ``disabled_devices`` entry with the saved per-device
+  config knobs (``idle_mode``, ``keep_alive_method``,
+  ``static_delay_ms``, ``power_save_delay_minutes``,
+  ``bt_management_enabled``, ``preferred_format``, ``room_id``,
+  ``room_name``); the projector uses what's there and falls back to
+  defaults only for legacy entries that pre-date the enrichment.
+- **``GET /api/ha/mosquitto/status`` exception path hid the banner.**
+  The 500 fallback hardcoded ``available=False``, which made the UI
+  silently drop the install banner inside HA addon mode — exactly when
+  the operator most needed actionable hints.  Now derives ``available``
+  from ``SUPERVISOR_TOKEN`` even on the error branch and reuses the
+  ``MOSQUITTO_ADDON_SLUG`` / ``MOSQUITTO_ADDON_DEEP_LINK`` constants
+  from ``services.ha_addon`` instead of duplicating them.
+- **Runtime availability ignored daemon liveness.**
+  ``availability_runtime`` only mirrored ``device.bluetooth_connected``,
+  so a dead daemon subprocess with BlueZ still reporting the link up
+  would leave RSSI / battery / audio_format reading the last cached
+  value forever.  Now gated on ``device.connected AND
+  device.bluetooth_connected`` — if either is false, runtime entities
+  go ``unavailable``.
+- **Legacy ``enabled=false, mode=mqtt`` auto-enabled on UI load.**
+  ``static/app.js:_populateHaIntegrationForm`` populated the dropdown
+  from ``block.mode`` regardless of ``block.enabled``, so a saved
+  config where the operator had toggled the master off but left the
+  transport at ``mqtt`` would silently re-enable on the first save
+  through the new UI.  Now treats ``enabled=false`` as off in *both*
+  directions: ``enabled=true, mode=off`` stays off, and
+  ``enabled=false, mode=mqtt|rest`` is also forced off — the operator
+  must explicitly pick a transport to opt back in.
+
+## [2.65.0-rc.4] - 2026-04-28
+
+### Changed — HA: fleet-based visibility + per-class entity availability
+
+Standby and disabled devices were effectively invisible from HA: the
+projection only iterated active clients with a live BT link, and any
+device with ``bluetooth_connected=false`` reported ``offline`` on its
+single availability topic — which dragged every entity (including
+toggles and command buttons) to ``unavailable``.  Net result: an
+operator could not flip ``enabled`` on a disabled device or fire
+``wake`` on a standby device from HA, defeating the whole point of
+the integration for fleet management.
+
+This release reworks visibility around two ideas:
+
+1. **Fleet-based exposure.** ``project_snapshot`` now also iterates
+   ``snapshot.disabled_devices``.  Every member of the fleet
+   (configured in ``BLUETOOTH_DEVICES``, regardless of ``enabled``
+   flag) appears in HA with synthesised entity states (``enabled``
+   shows ``False``, runtime fields default to safe falsy values,
+   config knobs preserve their saved settings).  HA operators can
+   re-enable a disabled device from the standard ``switch.<player>_enabled``
+   entity, which the dispatcher routes to ``bt_commands.apply_device_enabled``.
+
+2. **Per-class availability** via a new ``EntitySpec.availability_class``
+   field.  Three classes:
+   - ``config``: online whenever the device is in the fleet.  Used
+     for the ``enabled`` switch, all command buttons (``reconnect``,
+     ``wake``, ``standby``, ``power_save_toggle``, ``claim_audio``),
+     and every config knob (``idle_mode``, ``static_delay_ms``, etc.).
+   - ``runtime``: online only when the BT link is up.  Used for
+     live diagnostics whose values are meaningless when the speaker
+     is unreachable (``rssi_dbm``, ``battery_level``, ``audio_format``,
+     ``audio_streaming``, ``reanchoring``).
+   - ``cumulative``: shares the ``config`` availability gate so HA
+     dashboards keep showing last-known values through standby.
+     Used for counters and last-error fields (``reanchor_count``,
+     ``last_error``, ``health_state``, ``bt_standby``, ``bt_power_save``).
+
+   MQTT discovery payloads now route each entity to one of two
+   per-device availability topics: ``sendspin/<pid>/availability/config``
+   and ``sendspin/<pid>/availability/runtime``.  The legacy
+   ``sendspin/<pid>/availability`` topic is still published (and now
+   tracks runtime) for backwards compat with rc.1–rc.3 HA caches.
+
+   The HACS custom_component coordinator gains parallel
+   ``device_runtime_available`` / ``device_config_available`` /
+   ``device_lifecycle`` accessors; the entity base picks the right
+   one via ``availability_class``.
+
+Side benefit: standby devices now show ``device_lifecycle="standby"``
+and disabled devices show ``"disabled"`` in the projection JSON, so HA
+dashboards can highlight parked / dormant speakers without parsing
+multiple binary sensors.
+
+### Changed — HA integration panel: dropdown-master + connected banner + Mosquitto guidance
+
+The HA integration tab (Settings → Home Assistant) gets a UX rebuild
+that mirrors the Music Assistant panel pattern:
+
+  - **Dropdown replaces toggle.** The "Enable HA integration" checkbox
+    is gone; the existing transport dropdown (off / mqtt / rest) is
+    now the single source of truth.  Picking a transport implicitly
+    enables the integration, picking ``off`` disables it — no two-step
+    flow where the master switch can disagree with the picked
+    transport.  Saved configs with an inconsistent ``enabled=true,
+    mode=off`` (or vice versa) load as ``off`` in the new dropdown so
+    the user makes the choice explicit on first save.
+  - **Connection-status banner.** A new card at the top of the panel
+    shows "Off / Connecting / Connected via MQTT to <broker> /
+    Configured for REST but not connected yet / Error: …" with the
+    same colour palette the MA panel uses.  Once the publisher is
+    ``connected`` the transport-specific cards collapse; the operator
+    sees only the banner with a "Reconfigure" button to expand the
+    form again.
+  - **Mosquitto guidance banner.** When in HA addon mode, the panel
+    detects the Mosquitto broker add-on state via the new
+    ``GET /api/ha/mosquitto/status`` endpoint:
+      * mode == ``mqtt`` and the add-on is missing or stopped →
+        shows install/start instructions with a deep-link to the
+        official Mosquitto add-on page (Supervisor add-on install
+        needs ``manager`` role, which our add-on doesn't request, so
+        the link rather than a one-click install is the safe path).
+      * mode == ``off`` and the add-on is installed and started →
+        offers a "Set up automatically" CTA that flips the dropdown
+        to ``mqtt``, leaves the broker on ``auto`` (Supervisor
+        auto-resolves credentials), saves, and hot-applies — one
+        click from "off" to "connected" without typing anything.
+
+The auto-config CTA is gated on the form being clean (no other
+unsaved changes elsewhere on the page) so saving doesn't silently
+flush unrelated dirty state.
+
+### Fixed — HA "Claim audio" no longer breaks playback
+
+``services.bt_commands.command_claim_audio`` was probing for a
+non-existent ``MprisPlayer.assert_active_source`` attribute and falling
+through to ``command_reconnect`` on every press — so pressing the
+``button.<player>_claim_audio`` entity from HA tore the BT link down
+and back up instead of doing the lightweight MPRIS-source assert that
+the bridge web UI's Claim Audio button does.  The dispatcher path now
+mirrors ``POST /api/bt/claim/<mac>``: it looks up the player in
+``MprisRegistry`` and schedules ``set_playback_status("Playing")`` on
+the asyncio loop, which BlueZ propagates over AVRCP to the speaker.
+Returns 409 instead of silently reconnecting when the speaker has no
+active MPRIS player (i.e. is not currently connected).
+
+### Removed — `reset_reconnect` button from HA catalog
+
+Heavy recovery action better triggered manually from the bridge web UI
+than from an HA automation that might fire it on a transient blip.
+Catalog reduces from 26 → 25 per-device entities.  Bridge web UI
+keeps the button.
+
 ## [2.65.0-rc.3] - 2026-04-28
 
 ### Changed — auth-gate read switched to `current_app.config`

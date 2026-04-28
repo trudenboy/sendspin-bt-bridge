@@ -213,10 +213,9 @@ _BUTTON_HANDLER_NAMES: dict[str, str] = {
     "standby": "command_standby",
     "power_save_toggle": "command_power_save_toggle",
     "claim_audio": "command_claim_audio",
-    "reset_reconnect": "command_reset_reconnect",
-    # ``pair`` is intentionally absent — pairing requires the speaker in
-    # pairing mode and produces a one-shot result; no safe HA-automation
-    # surface for it (see services/ha_entity_model.py).
+    # ``pair`` and ``reset_reconnect`` intentionally absent — both are
+    # heavy / interactive actions better triggered manually from the
+    # bridge web UI than from HA automations (see services/ha_entity_model.py).
 }
 
 

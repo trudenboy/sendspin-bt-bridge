@@ -208,6 +208,47 @@ def api_ha_mqtt_probe():
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/mosquitto/status — Mosquitto add-on install state
+# ---------------------------------------------------------------------------
+
+
+@ha_bp.route("/api/ha/mosquitto/status", methods=["GET"])
+def api_ha_mosquitto_status():
+    """Read-only snapshot of the Mosquitto add-on state on HAOS.
+
+    Used by the web UI to decide whether to show the "Install Mosquitto"
+    install banner, the "Start Mosquitto" hint, or the auto-configure
+    CTA.  Outside HA addon mode the response has ``available=false`` so
+    the UI hides the banner.
+    """
+    try:
+        from services.ha_addon import get_mosquitto_addon_state
+
+        return jsonify(get_mosquitto_addon_state())
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Mosquitto status query failed")
+        # Reuse the canonical constants instead of duplicating them.  Set
+        # ``available`` from SUPERVISOR_TOKEN even on the error path so
+        # the UI keeps showing the banner (with the error context) when
+        # we're inside HA addon mode — otherwise the operator loses the
+        # actionable hint and just sees a silent missing banner.
+        import os as _os
+
+        from services.ha_addon import MOSQUITTO_ADDON_DEEP_LINK, MOSQUITTO_ADDON_SLUG
+
+        return jsonify(
+            {
+                "available": bool(_os.environ.get("SUPERVISOR_TOKEN", "").strip()),
+                "installed": False,
+                "started": False,
+                "slug": MOSQUITTO_ADDON_SLUG,
+                "install_url": MOSQUITTO_ADDON_DEEP_LINK,
+                "error": str(exc),
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mqtt/status — publisher diagnostics
 # ---------------------------------------------------------------------------
 

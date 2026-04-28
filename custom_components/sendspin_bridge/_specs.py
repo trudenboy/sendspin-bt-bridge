@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+AVAILABILITY_CLASSES = ("config", "runtime", "cumulative")
+
 
 @dataclass(frozen=True)
 class EntitySpec:
@@ -31,6 +33,8 @@ class EntitySpec:
     max_value: float | None = None
     step: float | None = None
     command: str | None = None
+    # See services/ha_entity_model.EntitySpec.availability_class for semantics.
+    availability_class: str = "runtime"
 
 
 DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
@@ -42,14 +46,48 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         device_class="connectivity",
         entity_category="diagnostic",
         icon="mdi:bluetooth",
+        availability_class="cumulative",
     ),
     EntitySpec(
-        "audio_streaming", "binary_sensor", "Audio streaming", entity_category="diagnostic", icon="mdi:music-note"
+        "audio_streaming",
+        "binary_sensor",
+        "Audio streaming",
+        entity_category="diagnostic",
+        icon="mdi:music-note",
+        availability_class="runtime",
     ),
-    EntitySpec("reanchoring", "binary_sensor", "Reanchoring", entity_category="diagnostic", icon="mdi:sync-alert"),
-    EntitySpec("reconnecting", "binary_sensor", "Reconnecting", entity_category="diagnostic", icon="mdi:sync"),
-    EntitySpec("bt_standby", "binary_sensor", "BT standby", entity_category="diagnostic", icon="mdi:power-sleep"),
-    EntitySpec("bt_power_save", "binary_sensor", "BT power save", entity_category="diagnostic", icon="mdi:leaf"),
+    EntitySpec(
+        "reanchoring",
+        "binary_sensor",
+        "Reanchoring",
+        entity_category="diagnostic",
+        icon="mdi:sync-alert",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        "reconnecting",
+        "binary_sensor",
+        "Reconnecting",
+        entity_category="diagnostic",
+        icon="mdi:sync",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
+        "bt_standby",
+        "binary_sensor",
+        "BT standby",
+        entity_category="diagnostic",
+        icon="mdi:power-sleep",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
+        "bt_power_save",
+        "binary_sensor",
+        "BT power save",
+        entity_category="diagnostic",
+        icon="mdi:leaf",
+        availability_class="cumulative",
+    ),
     # Diagnostic sensors
     EntitySpec(
         "rssi_dbm",
@@ -60,6 +98,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         unit="dBm",
         entity_category="diagnostic",
         icon="mdi:signal",
+        availability_class="runtime",
     ),
     EntitySpec(
         "battery_level",
@@ -70,8 +109,16 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         unit="%",
         entity_category="diagnostic",
         icon="mdi:battery",
+        availability_class="runtime",
     ),
-    EntitySpec("audio_format", "sensor", "Audio codec", entity_category="diagnostic", icon="mdi:music-clef-treble"),
+    EntitySpec(
+        "audio_format",
+        "sensor",
+        "Audio codec",
+        entity_category="diagnostic",
+        icon="mdi:music-clef-treble",
+        availability_class="runtime",
+    ),
     EntitySpec(
         "reanchor_count",
         "sensor",
@@ -79,6 +126,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         state_class="total_increasing",
         entity_category="diagnostic",
         icon="mdi:sync-alert",
+        availability_class="cumulative",
     ),
     EntitySpec(
         "last_sync_error_ms",
@@ -88,15 +136,41 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         state_class="measurement",
         unit="ms",
         entity_category="diagnostic",
+        availability_class="cumulative",
     ),
     EntitySpec(
-        "reconnect_attempt", "sensor", "Reconnect attempt", state_class="measurement", entity_category="diagnostic"
+        "reconnect_attempt",
+        "sensor",
+        "Reconnect attempt",
+        state_class="measurement",
+        entity_category="diagnostic",
+        availability_class="cumulative",
     ),
-    EntitySpec("last_error", "sensor", "Last error", entity_category="diagnostic", icon="mdi:alert-circle"),
-    EntitySpec("health_state", "sensor", "Health", entity_category="diagnostic", icon="mdi:heart-pulse"),
-    # Config
     EntitySpec(
-        "enabled", "switch", "Enabled", entity_category="config", icon="mdi:check-circle-outline", command="set_enabled"
+        "last_error",
+        "sensor",
+        "Last error",
+        entity_category="diagnostic",
+        icon="mdi:alert-circle",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
+        "health_state",
+        "sensor",
+        "Health",
+        entity_category="diagnostic",
+        icon="mdi:heart-pulse",
+        availability_class="cumulative",
+    ),
+    # Config — always reachable while in fleet
+    EntitySpec(
+        "enabled",
+        "switch",
+        "Enabled",
+        entity_category="config",
+        icon="mdi:check-circle-outline",
+        command="set_enabled",
+        availability_class="config",
     ),
     EntitySpec(
         "bt_management_enabled",
@@ -105,6 +179,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="config",
         icon="mdi:tools",
         command="set_bt_management",
+        availability_class="config",
     ),
     EntitySpec(
         "idle_mode",
@@ -114,6 +189,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:power-sleep",
         options=("default", "power_save", "auto_disconnect", "keep_alive"),
         command="set_idle_mode",
+        availability_class="config",
     ),
     EntitySpec(
         "keep_alive_method",
@@ -123,6 +199,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:waveform",
         options=("infrasound", "silence", "none"),
         command="set_keep_alive_method",
+        availability_class="config",
     ),
     EntitySpec(
         "static_delay_ms",
@@ -135,6 +212,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=10,
         icon="mdi:timer-cog",
         command="set_static_delay_ms",
+        availability_class="config",
     ),
     EntitySpec(
         "power_save_delay_minutes",
@@ -147,22 +225,51 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=1,
         icon="mdi:timer-outline",
         command="set_power_save_delay_minutes",
+        availability_class="config",
     ),
-    # Buttons
-    EntitySpec("reconnect", "button", "Reconnect", icon="mdi:bluetooth-connect", command="reconnect"),
-    EntitySpec("disconnect", "button", "Disconnect", icon="mdi:bluetooth-off", command="disconnect"),
-    EntitySpec("wake", "button", "Wake from standby", icon="mdi:bluetooth-audio", command="wake"),
-    EntitySpec("standby", "button", "Enter standby", icon="mdi:power-sleep", command="standby"),
-    EntitySpec("power_save_toggle", "button", "Toggle power save", icon="mdi:leaf", command="power_save_toggle"),
+    # Buttons — always pressable while in fleet
     EntitySpec(
-        "reset_reconnect",
+        "reconnect",
         "button",
-        "Full BT reset",
-        entity_category="diagnostic",
-        icon="mdi:restart-alert",
-        command="reset_reconnect",
+        "Reconnect",
+        icon="mdi:bluetooth-connect",
+        command="reconnect",
+        availability_class="config",
     ),
-    # Pairing intentionally NOT exposed (see services/ha_entity_model.py).
+    EntitySpec(
+        "disconnect",
+        "button",
+        "Disconnect",
+        icon="mdi:bluetooth-off",
+        command="disconnect",
+        availability_class="config",
+    ),
+    EntitySpec(
+        "wake",
+        "button",
+        "Wake from standby",
+        icon="mdi:bluetooth-audio",
+        command="wake",
+        availability_class="config",
+    ),
+    EntitySpec(
+        "standby",
+        "button",
+        "Enter standby",
+        icon="mdi:power-sleep",
+        command="standby",
+        availability_class="config",
+    ),
+    EntitySpec(
+        "power_save_toggle",
+        "button",
+        "Toggle power save",
+        icon="mdi:leaf",
+        command="power_save_toggle",
+        availability_class="config",
+    ),
+    # Pairing and reset_reconnect intentionally NOT exposed (see
+    # services/ha_entity_model.py).
     EntitySpec(
         "claim_audio",
         "button",
@@ -170,12 +277,20 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:hand-back-right",
         command="claim_audio",
+        availability_class="config",
     ),
 )
 
 
 BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
-    EntitySpec("version", "sensor", "Version", entity_category="diagnostic", icon="mdi:tag-outline"),
+    EntitySpec(
+        "version",
+        "sensor",
+        "Version",
+        entity_category="diagnostic",
+        icon="mdi:tag-outline",
+        availability_class="config",
+    ),
     EntitySpec(
         "ma_connected",
         "binary_sensor",
@@ -183,12 +298,40 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         device_class="connectivity",
         entity_category="diagnostic",
         icon="mdi:music",
+        availability_class="config",
     ),
-    EntitySpec("startup_phase", "sensor", "Startup phase", entity_category="diagnostic", icon="mdi:rocket-launch"),
-    EntitySpec("runtime_mode", "sensor", "Runtime mode", entity_category="diagnostic", icon="mdi:cog-outline"),
-    EntitySpec("update_available", "update", "Update", entity_category="diagnostic", icon="mdi:package-up"),
     EntitySpec(
-        "restart", "button", "Restart bridge", entity_category="diagnostic", icon="mdi:restart", command="restart"
+        "startup_phase",
+        "sensor",
+        "Startup phase",
+        entity_category="diagnostic",
+        icon="mdi:rocket-launch",
+        availability_class="config",
+    ),
+    EntitySpec(
+        "runtime_mode",
+        "sensor",
+        "Runtime mode",
+        entity_category="diagnostic",
+        icon="mdi:cog-outline",
+        availability_class="config",
+    ),
+    EntitySpec(
+        "update_available",
+        "update",
+        "Update",
+        entity_category="diagnostic",
+        icon="mdi:package-up",
+        availability_class="config",
+    ),
+    EntitySpec(
+        "restart",
+        "button",
+        "Restart bridge",
+        entity_category="diagnostic",
+        icon="mdi:restart",
+        command="restart",
+        availability_class="config",
     ),
     # Scan intentionally NOT exposed (see services/ha_entity_model.py).
 )

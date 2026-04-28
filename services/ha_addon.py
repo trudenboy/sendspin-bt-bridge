@@ -18,6 +18,13 @@ KNOWN_MA_ADDON_SLUGS = (
     "d5369777_music_assistant_dev",
 )
 
+# Official Mosquitto broker add-on slug.  Stable since the add-on was
+# introduced — used to query install/start state and to build the
+# my.home-assistant.io deep-link the UI surfaces when the broker is
+# missing.
+MOSQUITTO_ADDON_SLUG = "core_mosquitto"
+MOSQUITTO_ADDON_DEEP_LINK = "https://my.home-assistant.io/redirect/supervisor_addon/?addon=core_mosquitto"
+
 
 def _get_supervisor_payload(path: str, timeout: float = 5.0) -> dict[str, Any] | None:
     token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
@@ -95,6 +102,56 @@ def get_mqtt_addon_credentials(timeout: float = 5.0) -> dict[str, Any] | None:
         "password": str(password),
         "ssl": ssl,
     }
+
+
+def get_mosquitto_addon_state(timeout: float = 5.0) -> dict[str, Any]:
+    """Report the install/start state of the official Mosquitto add-on.
+
+    Used by the web UI's HA panel to decide whether to show the install
+    banner (with a deep-link to the HA add-on store), the "start the
+    add-on" hint, or the "auto-configure" CTA.
+
+    Returns a dict with stable shape (always populated):
+
+      ``available``: ``True`` when running in HA addon mode (Supervisor
+        token present); ``False`` otherwise.  When ``False`` the other
+        fields are best-effort defaults — callers should hide the banner.
+      ``installed``: ``True`` when Supervisor reports the add-on as
+        present (any state).
+      ``started``: ``True`` when ``state == "started"``.
+      ``slug``: the add-on slug (``core_mosquitto``).
+      ``install_url``: my.home-assistant.io deep-link to the add-on page,
+        suitable for an "Install" / "Open Mosquitto add-on" button.
+      ``error``: optional string when the Supervisor query failed for a
+        reason other than "add-on not installed" (e.g. permission denied).
+
+    Outside HA addon mode this returns ``{"available": False, ...}``
+    rather than ``None`` so the UI doesn't have to special-case the
+    response shape.
+    """
+    base: dict[str, Any] = {
+        "available": False,
+        "installed": False,
+        "started": False,
+        "slug": MOSQUITTO_ADDON_SLUG,
+        "install_url": MOSQUITTO_ADDON_DEEP_LINK,
+        "error": None,
+    }
+    if not os.environ.get("SUPERVISOR_TOKEN", "").strip():
+        return base
+    base["available"] = True
+    info = get_supervisor_addon_info(MOSQUITTO_ADDON_SLUG, timeout=timeout)
+    if info is None:
+        # Supervisor returns 400 for unknown / not-installed add-ons.  We
+        # can't tell a permission-denied response from "not installed"
+        # at this layer (``_get_supervisor_payload`` swallows both into
+        # ``None``), but treating "no info" as "not installed" matches
+        # what the operator would see in the HA add-on list and keeps
+        # the install button useful in either case.
+        return base
+    base["installed"] = True
+    base["started"] = str(info.get("state") or "").lower() == "started"
+    return base
 
 
 def detect_delivery_channel_from_slug(slug: str) -> str | None:

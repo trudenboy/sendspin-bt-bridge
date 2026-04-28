@@ -6190,6 +6190,16 @@ body {
             border-color: rgba(67,160,71,0.24);
             color: #2e7d32;
         }
+        .panel-status--warning {
+            background: rgba(245,166,35,0.10);
+            border-color: rgba(245,166,35,0.30);
+            color: #b86e00;
+        }
+        .panel-status--error {
+            background: rgba(229,57,53,0.10);
+            border-color: rgba(229,57,53,0.30);
+            color: #b71c1c;
+        }
         .panel-status-icon {
             width: 16px;
             height: 16px;

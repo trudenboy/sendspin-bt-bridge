@@ -487,14 +487,33 @@ class BridgeOrchestrator:
             )
 
             if not device.get("enabled", True):
-                disabled_list.append(
-                    {
-                        "player_name": player_name,
-                        "mac": mac,
-                        "adapter": adapter,
-                        "enabled": False,
-                    }
-                )
+                # Carry the saved per-device config knobs into the
+                # disabled_devices entry so the HA state projector
+                # surfaces real values instead of hard-coded defaults.
+                # Without this enrichment, HA's idle_mode/keep_alive/
+                # static_delay/power_save_delay entities for a disabled
+                # device would always show defaults and a write-back
+                # from HA would silently overwrite the operator's saved
+                # settings.
+                disabled_entry: dict[str, Any] = {
+                    "player_name": player_name,
+                    "mac": mac,
+                    "adapter": adapter,
+                    "enabled": False,
+                }
+                for cfg_key in (
+                    "idle_mode",
+                    "keep_alive_method",
+                    "static_delay_ms",
+                    "power_save_delay_minutes",
+                    "bt_management_enabled",
+                    "preferred_format",
+                    "room_id",
+                    "room_name",
+                ):
+                    if cfg_key in device:
+                        disabled_entry[cfg_key] = device[cfg_key]
+                disabled_list.append(disabled_entry)
                 logger.info("  Player '%s': globally disabled — skipping", player_name)
                 continue
 

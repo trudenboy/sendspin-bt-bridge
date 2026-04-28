@@ -182,7 +182,33 @@ class SendspinDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return (self.data or {}).get("bridge", {}).get(object_id)
 
     def device_available(self, player_id: str) -> bool:
-        return bool((self.data or {}).get("availability", {}).get(player_id, False))
+        """Legacy single-channel accessor — now backed by runtime availability."""
+        return self.device_runtime_available(player_id)
+
+    def device_runtime_available(self, player_id: str) -> bool:
+        """BT link up + daemon alive (drives runtime entities)."""
+        data = self.data or {}
+        # New shape (rc.4+) — fallback to legacy single field for older bridges
+        runtime = data.get("availability_runtime") or data.get("availability") or {}
+        return bool(runtime.get(player_id, False))
+
+    def device_config_available(self, player_id: str) -> bool:
+        """Device is in fleet (configured, even if disabled or in standby).
+
+        Drives availability for the always-online entities (``enabled``
+        switch, command buttons, cumulative counters).  Falls back to
+        runtime availability when the bridge predates rc.4.
+        """
+        data = self.data or {}
+        config_avail = data.get("availability_config")
+        if config_avail is None:
+            return self.device_runtime_available(player_id)
+        return bool(config_avail.get(player_id, False))
+
+    def device_lifecycle(self, player_id: str) -> str:
+        """``"active"`` / ``"standby"`` / ``"disabled"`` (or ``"unknown"``
+        when the bridge predates rc.4)."""
+        return str((self.data or {}).get("device_lifecycle", {}).get(player_id, "unknown"))
 
     def known_player_ids(self) -> list[str]:
         return list((self.data or {}).get("devices", {}).keys())
