@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.65.0-rc.3] - 2026-04-28
 
+### Added — Settings → Home Assistant: conditional fields by transport
+
+The Settings → Home Assistant tab now hides fields that aren't
+relevant to the chosen transport, mirroring the rest of the form.
+``off`` shows only the master toggle + transport selector;
+``mqtt`` adds the broker card; ``rest`` adds the mDNS / Supervisor-pair
+card and the bearer-token list.  No more typing into a card whose
+fields the publisher won't read.
+
+### Removed — `HA_INTEGRATION.mode = "both"`
+
+``both`` shipped briefly in rc.1 / rc.2 but was a footgun: running
+the MQTT publisher AND the REST custom_component path against the
+same HA produced **two copies of every entity**.  Both transports
+publish ``sensor.<player>_rssi``, ``button.<player>_reconnect``,
+etc. with the same ``unique_id``; HA's entity registry keys on
+``(domain, platform, unique_id)`` and the platforms differ
+(``mqtt`` vs ``sendspin_bridge``), so the second set lands as
+``sensor.<player>_rssi_2``.  The mode selector now offers
+``off / mqtt / rest`` only.  Saved configs still containing
+``"both"`` are normalised to ``"mqtt"`` on load (config_migration
+``_normalize_ha_integration``) so an upgrade can't silently disable
+publishing — operators who actually wanted REST flip the mode back
+manually after upgrading.  Tests:
+``test_ha_integration_mode_migration.py`` and
+``test_resolve_mqtt_config_legacy_both_mode_normalised_to_mqtt``.
+
 ### Fixed — Settings tab redirected to /login on Docker / standalone
 ###          (no-auth) deployments after upgrading to v2.65.0-rc.2
 

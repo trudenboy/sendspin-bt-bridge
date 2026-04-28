@@ -660,6 +660,16 @@ class BridgeOrchestrator:
 
         config = load_config()
         block = config.get("HA_INTEGRATION") or {}
+        if not block.get("enabled"):
+            return
+        # mDNS only runs when the REST / custom_component transport is
+        # selected.  ``both`` is a v2.65.0-rc.1/rc.2 alias normalised to
+        # ``mqtt`` everywhere else; honour it as ``rest`` here for the
+        # narrow upgrade window where a saved ``both`` should keep mDNS
+        # alive until the operator re-saves and config_migration rewrites.
+        mode = str(block.get("mode") or "off").lower()
+        if mode not in ("rest", "both"):
+            return
         rest_block = block.get("rest") or {}
         if not rest_block.get("advertise_mdns", True):
             return

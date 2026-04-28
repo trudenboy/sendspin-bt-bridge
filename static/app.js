@@ -5161,6 +5161,34 @@ function _populateHaIntegrationForm(block) {
     if (advertise) advertise.checked = rest.advertise_mdns !== false;
     var supervisorPair = document.getElementById('ha-rest-supervisor-pair');
     if (supervisorPair) supervisorPair.checked = rest.supervisor_pair !== false;
+    _updateHaIntegrationVisibility();
+}
+
+// Hide MQTT / REST / token cards based on transport mode.
+//
+//   mode == "off"  → only the Transport card is visible
+//   mode == "mqtt" → Transport + MQTT broker
+//   mode == "rest" → Transport + REST/Zeroconf + Bearer tokens
+//
+// Only one transport runs at a time (``both`` was removed in v2.65.0-rc.3
+// to avoid duplicate HA entities — MQTT discovery and the REST
+// custom_component would each register their own copy of the same
+// sensor/switch/button under one HA device card).  The master
+// ``enabled`` toggle does NOT hide cards on its own — operators often
+// want to fill out broker creds before flipping the master switch on.
+function _updateHaIntegrationVisibility() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    var showMqtt = mode === 'mqtt';
+    var showRest = mode === 'rest';
+    var mqttCard = document.getElementById('ha-mqtt-card');
+    if (mqttCard) mqttCard.hidden = !showMqtt;
+    var restCard = document.getElementById('ha-rest-card');
+    if (restCard) restCard.hidden = !showRest;
+    // Tokens are only meaningful for the REST / custom_component path —
+    // MQTT auth uses broker credentials, not bearer tokens.
+    var tokensCard = document.getElementById('ha-tokens-card');
+    if (tokensCard) tokensCard.hidden = !showRest;
 }
 
 function _readHaIntegrationFromForm(existingBlock) {
@@ -13042,6 +13070,7 @@ const _ACTION_REGISTRY = {
     'ha-token-revoke':          (el) => { _haTokenRevoke(el && el.dataset && el.dataset.tokenId); return false; },
     'ha-token-copy':            () => { _haTokenCopy(); return false; },
     'ha-token-once-dismiss':    () => { _haTokenOnceDismiss(); return false; },
+    'ha-integration-mode-change': () => { _updateHaIntegrationVisibility(); return false; },
     'save-and-restart':         saveAndRestart,
     'cancel-config-changes':    cancelConfigChanges,
     'download-config':          () => { window.location.href = API_BASE + '/api/config/download'; },

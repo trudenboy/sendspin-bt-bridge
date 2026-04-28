@@ -175,10 +175,21 @@ def test_resolve_mqtt_config_auto_falls_back_to_none_when_no_addon():
     assert cfg is None
 
 
-def test_resolve_mqtt_config_both_mode_works():
+def test_resolve_mqtt_config_legacy_both_mode_normalised_to_mqtt():
+    """``both`` was removed in v2.65.0-rc.3.  Saved configs from earlier
+    rc builds must not silently disable MQTT publishing — treat the legacy
+    value as ``mqtt`` so brokers keep working through the upgrade."""
     block = {"enabled": True, "mode": "both", "mqtt": {"broker": "host"}}
     cfg = resolve_mqtt_config(block, bridge_id="x", bridge_name="x")
     assert cfg is not None
+    assert cfg.host == "host"
+
+
+def test_resolve_mqtt_config_rest_mode_does_not_start_publisher():
+    """Picking ``rest`` runs the REST/custom_component path only — no MQTT."""
+    block = {"enabled": True, "mode": "rest", "mqtt": {"broker": "host"}}
+    cfg = resolve_mqtt_config(block, bridge_id="x", bridge_name="x")
+    assert cfg is None
 
 
 # ---------------------------------------------------------------------------

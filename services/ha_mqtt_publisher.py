@@ -117,7 +117,13 @@ def resolve_mqtt_config(
     if not block.get("enabled"):
         return None
     mode = str(block.get("mode") or "off").lower()
-    if mode not in ("mqtt", "both"):
+    # ``both`` was removed in v2.65.0-rc.3 — treat any pre-existing value
+    # from saved configs as ``mqtt`` so an upgrade doesn't silently stop
+    # publishing.  ``config_migration._normalize_ha_integration`` rewrites
+    # the stored value on the next save.
+    if mode == "both":
+        mode = "mqtt"
+    if mode != "mqtt":
         return None
     mqtt_block = dict(block.get("mqtt") or {})
 

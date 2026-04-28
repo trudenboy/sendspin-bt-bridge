@@ -317,12 +317,39 @@ def _normalize_ha_area_name_assist_enabled(config: dict, *, defaults: Mapping[st
     config["HA_AREA_NAME_ASSIST_ENABLED"] = default_enabled
 
 
+def _normalize_ha_integration(config: dict, *, defaults: Mapping[str, Any]) -> None:
+    """Normalise the ``HA_INTEGRATION`` block.
+
+    The only fix-up needed today is rewriting ``mode == "both"`` from
+    rc.1/rc.2 saved configs to ``"mqtt"``.  Both kicked off MQTT
+    publishing AND mDNS advertisement at once, which led to duplicate HA
+    entities (one set per transport).  v2.65.0-rc.3 collapsed the choice
+    to one transport at a time; carry forward the MQTT half because that
+    was the high-cost setup (broker creds) and operators rarely typed
+    those by accident.
+    """
+    block = config.get("HA_INTEGRATION")
+    if not isinstance(block, dict):
+        return
+    raw_mode = block.get("mode")
+    if not isinstance(raw_mode, str):
+        return
+    if raw_mode.strip().lower() == "both":
+        block["mode"] = "mqtt"
+        logger.info(
+            "HA_INTEGRATION.mode 'both' is no longer supported (v2.65.0-rc.3 dropped it). "
+            "Coerced to 'mqtt' on load.  Switch to 'rest' explicitly if you only want the "
+            "REST/custom_component transport."
+        )
+
+
 def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> None:
     config["BLUETOOTH_DEVICES"] = _normalize_bluetooth_devices(config, defaults=defaults)
     _prune_last_volumes(config, defaults=defaults)
     _prune_last_sinks(config, defaults=defaults)
     _normalize_ha_area_name_assist_enabled(config, defaults=defaults)
     _normalize_adapter_area_map(config, defaults=defaults)
+    _normalize_ha_integration(config, defaults=defaults)
 
     for key, min_value, max_value in (
         ("SENDSPIN_PORT", 1, 65535),

@@ -164,7 +164,7 @@ DEFAULT_CONFIG = {
     # the Mosquitto add-on (see ``services.ha_addon.get_mqtt_addon_credentials``).
     "HA_INTEGRATION": {
         "enabled": False,
-        "mode": "off",  # off | mqtt | rest | both
+        "mode": "off",  # off | mqtt | rest  (rc.1/rc.2 "both" coerced to mqtt at load)
         "mqtt": {
             "broker": "auto",
             "port": 1883,

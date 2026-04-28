@@ -337,7 +337,7 @@
       "description": "Home Assistant integration: MQTT discovery (transport B) and/or mDNS-advertised REST surface for the custom_component (transport A1). Bridge-only entities — never duplicates Music Assistant's media_player.<name>.",
       "properties": {
         "enabled": {"type": "boolean", "default": false},
-        "mode": {"type": "string", "enum": ["off", "mqtt", "rest", "both"], "default": "off"},
+        "mode": {"type": "string", "enum": ["off", "mqtt", "rest"], "default": "off", "description": "Transport selector — pick exactly one. ``both`` was removed in v2.65.0-rc.3 because it caused duplicate HA entities; legacy stored values are normalised to ``mqtt`` on load."},
         "mqtt": {
           "type": "object",
           "properties": {
