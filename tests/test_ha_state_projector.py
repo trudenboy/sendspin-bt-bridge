@@ -323,6 +323,72 @@ def test_active_device_runtime_availability_mirrors_bluetooth():
     assert proj.device_lifecycle["player-aaa"] == "active"
 
 
+def test_runtime_availability_requires_daemon_alive_too():
+    """Runtime availability needs BOTH daemon (``connected``) AND BT link
+    (``bluetooth_connected``) — if the daemon dies but BlueZ still reports
+    the link up, runtime entities (RSSI, battery, audio_streaming) must
+    go unavailable because nothing is feeding them.  Caught by Copilot
+    review on PR #218."""
+    device = _make_device()
+    object.__setattr__(device, "connected", False)  # daemon down
+    # BT link still reports up — the whole point of the test
+    assert device.bluetooth_connected is True
+    snap = _make_bridge_snapshot([device])
+    proj = project_snapshot(snap, bridge_id="haos", bridge_name="HAOS")
+
+    assert proj.availability_runtime["player-aaa"] is False
+    # config availability stays True so the operator can still toggle
+    # the device or read last-known cumulative values.
+    assert proj.availability_config["player-aaa"] is True
+
+
+def test_disabled_device_carries_through_saved_config_knobs():
+    """Per Copilot review on PR #218: ``_project_disabled_device`` must
+    surface the operator's saved ``idle_mode`` / ``keep_alive_method`` /
+    ``static_delay_ms`` / ``power_save_delay_minutes`` instead of
+    hard-coded defaults — otherwise HA shows misleading values and a
+    write-back would silently overwrite the saved settings."""
+    snap = _make_bridge_snapshot()
+    snap.disabled_devices = [
+        {
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "player_name": "Saved Settings",
+            "enabled": False,
+            "idle_mode": "power_save",
+            "keep_alive_method": "silence",
+            "static_delay_ms": 250,
+            "power_save_delay_minutes": 5,
+            "bt_management_enabled": False,
+        }
+    ]
+    proj = project_snapshot(snap, bridge_id="haos", bridge_name="HAOS")
+
+    pid = next(iter(proj.devices))
+    entities = proj.devices[pid]
+    assert entities["idle_mode"].value == "power_save"
+    assert entities["keep_alive_method"].value == "silence"
+    assert entities["static_delay_ms"].value == 250
+    assert entities["power_save_delay_minutes"].value == 5
+    assert entities["bt_management_enabled"].value is False
+
+
+def test_disabled_device_falls_back_to_defaults_when_keys_missing():
+    """Legacy disabled entries that pre-date the bridge_orchestrator
+    enrichment should still render — defaults kick in only when a key
+    is genuinely absent (not when it's set to a falsy value)."""
+    snap = _make_bridge_snapshot()
+    snap.disabled_devices = [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Legacy", "enabled": False}]
+    proj = project_snapshot(snap, bridge_id="haos", bridge_name="HAOS")
+
+    pid = next(iter(proj.devices))
+    entities = proj.devices[pid]
+    assert entities["idle_mode"].value == "default"
+    assert entities["keep_alive_method"].value == "infrasound"
+    assert entities["static_delay_ms"].value == 0
+    assert entities["power_save_delay_minutes"].value == 1
+    assert entities["bt_management_enabled"].value is True
+
+
 def test_standby_device_marked_as_standby_lifecycle():
     """bt_standby=True flag → lifecycle bucket "standby" so HA dashboards
     can highlight parked devices."""

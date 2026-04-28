@@ -648,8 +648,13 @@ class HaMqttPublisher:
         self.discovery_payload_count = len(payloads)
 
         # Per-device availability — two channels, see EntitySpec.availability_class.
+        # The legacy single-channel topic ``sendspin/<pid>/availability`` is
+        # also written (mirroring the runtime channel) so HA caches from
+        # rc.1-rc.3 that still subscribe to it stay in sync without needing
+        # a discovery refresh.
         all_player_ids = set(projection.availability_config) | set(projection.availability_runtime)
         for player_id in all_player_ids:
+            runtime_payload = "online" if projection.availability_runtime.get(player_id, False) else "offline"
             await client.publish(
                 cfg.availability_topic_device_config(player_id),
                 "online" if projection.availability_config.get(player_id, False) else "offline",
@@ -658,7 +663,13 @@ class HaMqttPublisher:
             )
             await client.publish(
                 cfg.availability_topic_device_runtime(player_id),
-                "online" if projection.availability_runtime.get(player_id, False) else "offline",
+                runtime_payload,
+                qos=1,
+                retain=True,
+            )
+            await client.publish(
+                cfg.availability_topic_device(player_id),
+                runtime_payload,
                 qos=1,
                 retain=True,
             )
@@ -668,7 +679,7 @@ class HaMqttPublisher:
                 qos=1,
                 retain=True,
             )
-            self.published_messages += 3
+            self.published_messages += 4
 
         # Bridge state.
         await client.publish(
@@ -733,13 +744,22 @@ class HaMqttPublisher:
             self.published_messages += 1
 
         for player_id, online in delta.availability_runtime_changed.items():
+            availability_payload = "online" if online else "offline"
             await client.publish(
                 cfg.availability_topic_device_runtime(player_id),
-                "online" if online else "offline",
+                availability_payload,
                 qos=1,
                 retain=True,
             )
-            self.published_messages += 1
+            # Legacy single-channel topic — mirror the runtime value so HA
+            # caches from rc.1-rc.3 still get availability transitions.
+            await client.publish(
+                cfg.availability_topic_device(player_id),
+                availability_payload,
+                qos=1,
+                retain=True,
+            )
+            self.published_messages += 2
         for player_id, online in delta.availability_config_changed.items():
             await client.publish(
                 cfg.availability_topic_device_config(player_id),

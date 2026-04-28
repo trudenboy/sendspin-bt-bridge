@@ -5143,10 +5143,13 @@ function _populateHaIntegrationForm(block) {
     var rest = block.rest || {};
     var mode = document.getElementById('ha-integration-mode');
     // Drop the legacy ``Enable HA integration`` checkbox in favour of the
-    // single mode dropdown — a saved config with ``enabled=true, mode=off``
-    // (the rc.1–rc.3 inconsistency) is treated as off, since with the new
-    // model the only way to be on is to pick a transport.
-    if (mode) mode.value = block.mode || 'off';
+    // single mode dropdown.  Inconsistent legacy configs are treated as
+    // off in *both* directions:
+    //   * ``enabled=true, mode=off``  → stays off (mode is the master)
+    //   * ``enabled=false, mode=mqtt`` → also off, so loading an older
+    //     config never auto-enables the integration unexpectedly.
+    var effectiveMode = block.enabled === false ? 'off' : (block.mode || 'off');
+    if (mode) mode.value = effectiveMode;
     var broker = document.getElementById('ha-mqtt-broker');
     if (broker) broker.value = mqtt.broker == null ? 'auto' : String(mqtt.broker);
     var port = document.getElementById('ha-mqtt-port');

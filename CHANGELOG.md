@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.5] - 2026-04-28
+
+### Fixed — Copilot review on PR #218 (v2.65.0-rc.4)
+
+Five issues caught by the Copilot reviewer on the rc.4 PR:
+
+- **Legacy availability topic stuck on stale value.**
+  ``services/ha_mqtt_publisher.py`` only published the legacy
+  ``sendspin/<pid>/availability`` topic on device removal — the full /
+  delta paths skipped it.  HA caches from rc.1–rc.3 that still
+  subscribe to the legacy topic kept the last retained value forever.
+  ``_publish_full_state`` and ``_publish_delta`` now mirror the runtime
+  channel into the legacy topic so older caches stay in sync.
+- **Disabled-device entities showed hard-coded defaults.**
+  ``services/ha_state_projector._project_disabled_device`` synthesised
+  ``idle_mode=default``, ``static_delay_ms=0``, etc., regardless of
+  what the operator had saved — so HA displayed misleading values for
+  disabled devices and a write-back from HA could silently overwrite
+  the saved settings.  ``bridge_orchestrator.initialize_devices`` now
+  enriches each ``disabled_devices`` entry with the saved per-device
+  config knobs (``idle_mode``, ``keep_alive_method``,
+  ``static_delay_ms``, ``power_save_delay_minutes``,
+  ``bt_management_enabled``, ``preferred_format``, ``room_id``,
+  ``room_name``); the projector uses what's there and falls back to
+  defaults only for legacy entries that pre-date the enrichment.
+- **``GET /api/ha/mosquitto/status`` exception path hid the banner.**
+  The 500 fallback hardcoded ``available=False``, which made the UI
+  silently drop the install banner inside HA addon mode — exactly when
+  the operator most needed actionable hints.  Now derives ``available``
+  from ``SUPERVISOR_TOKEN`` even on the error branch and reuses the
+  ``MOSQUITTO_ADDON_SLUG`` / ``MOSQUITTO_ADDON_DEEP_LINK`` constants
+  from ``services.ha_addon`` instead of duplicating them.
+- **Runtime availability ignored daemon liveness.**
+  ``availability_runtime`` only mirrored ``device.bluetooth_connected``,
+  so a dead daemon subprocess with BlueZ still reporting the link up
+  would leave RSSI / battery / audio_format reading the last cached
+  value forever.  Now gated on ``device.connected AND
+  device.bluetooth_connected`` — if either is false, runtime entities
+  go ``unavailable``.
+- **Legacy ``enabled=false, mode=mqtt`` auto-enabled on UI load.**
+  ``static/app.js:_populateHaIntegrationForm`` populated the dropdown
+  from ``block.mode`` regardless of ``block.enabled``, so a saved
+  config where the operator had toggled the master off but left the
+  transport at ``mqtt`` would silently re-enable on the first save
+  through the new UI.  Now treats ``enabled=false`` as off in *both*
+  directions: ``enabled=true, mode=off`` stays off, and
+  ``enabled=false, mode=mqtt|rest`` is also forced off — the operator
+  must explicitly pick a transport to opt back in.
+
 ## [2.65.0-rc.4] - 2026-04-28
 
 ### Changed — HA: fleet-based visibility + per-class entity availability

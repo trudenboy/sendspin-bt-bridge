@@ -246,22 +246,45 @@ def _project_disabled_device(
     safe falsy values.  The ``enabled`` switch shows ``False`` so HA
     operators can flip it back on, which the dispatcher handles via
     ``bt_commands.apply_device_enabled``.
+
+    Per-device config knobs (``idle_mode``, ``keep_alive_method``,
+    ``static_delay_ms``, ``power_save_delay_minutes``,
+    ``bt_management_enabled``) are carried through from the
+    ``disabled_devices`` entry — see ``bridge_orchestrator.initialize_devices``,
+    which enriches each entry with these saved values from
+    ``BLUETOOTH_DEVICES``.  Falls back to defaults only when a key is
+    truly missing (legacy entries that pre-date the enrichment).
     """
-    synthetic = {
+    synthetic: dict[str, Any] = {
         "enabled": False,
         "bluetooth_connected": False,
         "audio_streaming": False,
-        "bt_management_enabled": True,
         "bt_standby": False,
         "bt_power_save": False,
         "reanchoring": False,
         "reconnecting": False,
-        "idle_mode": str(disabled_dict.get("idle_mode") or "default"),
-        "keep_alive_method": str(disabled_dict.get("keep_alive_method") or "infrasound"),
-        "static_delay_ms": int(disabled_dict.get("static_delay_ms") or 0),
-        "power_save_delay_minutes": int(disabled_dict.get("power_save_delay_minutes") or 1),
         # Diagnostic keys deliberately absent so extractors return None.
     }
+    if "bt_management_enabled" in disabled_dict:
+        synthetic["bt_management_enabled"] = bool(disabled_dict["bt_management_enabled"])
+    else:
+        synthetic["bt_management_enabled"] = True
+    if "idle_mode" in disabled_dict:
+        synthetic["idle_mode"] = str(disabled_dict["idle_mode"])
+    else:
+        synthetic["idle_mode"] = "default"
+    if "keep_alive_method" in disabled_dict:
+        synthetic["keep_alive_method"] = str(disabled_dict["keep_alive_method"])
+    else:
+        synthetic["keep_alive_method"] = "infrasound"
+    if "static_delay_ms" in disabled_dict:
+        synthetic["static_delay_ms"] = int(disabled_dict["static_delay_ms"])
+    else:
+        synthetic["static_delay_ms"] = 0
+    if "power_save_delay_minutes" in disabled_dict:
+        synthetic["power_save_delay_minutes"] = int(disabled_dict["power_save_delay_minutes"])
+    else:
+        synthetic["power_save_delay_minutes"] = 1
     return _project_one_device(synthetic, bridge_dict)
 
 
@@ -309,9 +332,12 @@ def project_snapshot(
       anywhere in the snapshot (active or disabled).  Drives the
       always-online entities (``enabled`` switch, ``idle_mode``
       select, command buttons, cumulative counters).
-    * ``availability_runtime[pid] = bluetooth_connected`` for active
-      devices, ``False`` for disabled.  Drives live-data entities
-      (RSSI, battery, audio_streaming).
+    * ``availability_runtime[pid] = device.connected AND
+      device.bluetooth_connected`` for active devices, ``False`` for
+      disabled.  Drives live-data entities (RSSI, battery,
+      audio_streaming).  Both gates matter: if the daemon subprocess
+      dies but BlueZ still reports the link up, runtime entities must
+      go ``unavailable`` because nothing is actually feeding them.
 
     ``bridge_id`` and ``bridge_name`` are passed in (rather than derived
     from snapshot) because the snapshot doesn't carry the resolved
@@ -333,7 +359,7 @@ def project_snapshot(
             continue
         device_dict = device.to_dict()
         devices_state[player_id] = _project_one_device(device_dict, bridge_dict)
-        availability_runtime[player_id] = bool(device.bluetooth_connected)
+        availability_runtime[player_id] = bool(device.connected) and bool(device.bluetooth_connected)
         availability_config[player_id] = True
         device_meta[player_id] = _device_meta_from_snapshot(device)
         # Lifecycle: standby has its own bt_standby flag set by the

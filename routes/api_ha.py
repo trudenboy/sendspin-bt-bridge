@@ -227,13 +227,22 @@ def api_ha_mosquitto_status():
         return jsonify(get_mosquitto_addon_state())
     except Exception as exc:  # pragma: no cover
         logger.exception("Mosquitto status query failed")
+        # Reuse the canonical constants instead of duplicating them.  Set
+        # ``available`` from SUPERVISOR_TOKEN even on the error path so
+        # the UI keeps showing the banner (with the error context) when
+        # we're inside HA addon mode — otherwise the operator loses the
+        # actionable hint and just sees a silent missing banner.
+        import os as _os
+
+        from services.ha_addon import MOSQUITTO_ADDON_DEEP_LINK, MOSQUITTO_ADDON_SLUG
+
         return jsonify(
             {
-                "available": False,
+                "available": bool(_os.environ.get("SUPERVISOR_TOKEN", "").strip()),
                 "installed": False,
                 "started": False,
-                "slug": "core_mosquitto",
-                "install_url": "https://my.home-assistant.io/redirect/supervisor_addon/?addon=core_mosquitto",
+                "slug": MOSQUITTO_ADDON_SLUG,
+                "install_url": MOSQUITTO_ADDON_DEEP_LINK,
                 "error": str(exc),
             }
         )
