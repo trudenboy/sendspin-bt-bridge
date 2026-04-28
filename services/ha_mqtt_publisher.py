@@ -80,7 +80,28 @@ class MqttPublisherConfig:
         return f"{self.state_topic_root}/bridge/availability"
 
     def availability_topic_device(self, player_id: str) -> str:
+        """Legacy single-channel availability topic (rc.1–rc.3 callers)."""
         return f"{self.state_topic_root}/{player_id}/availability"
+
+    def availability_topic_device_runtime(self, player_id: str) -> str:
+        """Runtime availability — BT link up + daemon alive."""
+        return f"{self.state_topic_root}/{player_id}/availability/runtime"
+
+    def availability_topic_device_config(self, player_id: str) -> str:
+        """Config availability — device is in fleet (active or disabled)."""
+        return f"{self.state_topic_root}/{player_id}/availability/config"
+
+    def availability_topic_for_class(self, player_id: str, availability_class: str) -> str:
+        """Resolve the per-entity availability topic by class.
+
+        ``cumulative`` shares the ``config`` topic — the value may be
+        stale but HA should treat it as available so dashboards keep
+        showing the last known reading through standby.
+        """
+        if availability_class == "runtime":
+            return self.availability_topic_device_runtime(player_id)
+        # config and cumulative both ride the config availability topic
+        return self.availability_topic_device_config(player_id)
 
     def state_topic_device(self, player_id: str) -> str:
         return f"{self.state_topic_root}/{player_id}/state"
@@ -239,7 +260,11 @@ def _payload_for_device_spec(
         payload["icon"] = spec.icon
 
     state_topic = cfg.state_topic_device(meta.player_id)
-    availability_topic = cfg.availability_topic_device(meta.player_id)
+    # Per-entity availability topic — config / runtime / cumulative
+    # routes through ``availability_topic_for_class``.  Drives the
+    # "fleet vs live" distinction so toggles + buttons stay reachable
+    # while the device is in standby or disabled.
+    availability_topic = cfg.availability_topic_for_class(meta.player_id, spec.availability_class)
 
     if spec.kind is EntityKind.BUTTON:
         # Buttons publish to a command topic only; no state.
@@ -622,11 +647,18 @@ class HaMqttPublisher:
             self.published_messages += 1
         self.discovery_payload_count = len(payloads)
 
-        # Per-device availability + state.
-        for player_id, online in projection.availability.items():
+        # Per-device availability — two channels, see EntitySpec.availability_class.
+        all_player_ids = set(projection.availability_config) | set(projection.availability_runtime)
+        for player_id in all_player_ids:
             await client.publish(
-                cfg.availability_topic_device(player_id),
-                "online" if online else "offline",
+                cfg.availability_topic_device_config(player_id),
+                "online" if projection.availability_config.get(player_id, False) else "offline",
+                qos=1,
+                retain=True,
+            )
+            await client.publish(
+                cfg.availability_topic_device_runtime(player_id),
+                "online" if projection.availability_runtime.get(player_id, False) else "offline",
                 qos=1,
                 retain=True,
             )
@@ -636,7 +668,7 @@ class HaMqttPublisher:
                 qos=1,
                 retain=True,
             )
-            self.published_messages += 2
+            self.published_messages += 3
 
         # Bridge state.
         await client.publish(
@@ -700,9 +732,17 @@ class HaMqttPublisher:
             )
             self.published_messages += 1
 
-        for player_id, online in delta.availability_changed.items():
+        for player_id, online in delta.availability_runtime_changed.items():
             await client.publish(
-                cfg.availability_topic_device(player_id),
+                cfg.availability_topic_device_runtime(player_id),
+                "online" if online else "offline",
+                qos=1,
+                retain=True,
+            )
+            self.published_messages += 1
+        for player_id, online in delta.availability_config_changed.items():
+            await client.publish(
+                cfg.availability_topic_device_config(player_id),
                 "online" if online else "offline",
                 qos=1,
                 retain=True,
@@ -711,14 +751,19 @@ class HaMqttPublisher:
 
         if delta.devices_removed:
             # Clear retained config + state for the removed devices so HA
-            # cleans up its registry.
+            # cleans up its registry.  Both availability channels go
+            # offline (retained) so HA stops showing the entities as
+            # available after the discovery clear.
             for player_id in delta.devices_removed:
                 for spec in DEVICE_ENTITIES:
                     uid = device_unique_id(player_id, spec)
                     topic = cfg.discovery_topic(_component_for_kind(spec.kind), uid)
                     await client.publish(topic, "", qos=1, retain=True)
+                await client.publish(cfg.availability_topic_device_config(player_id), "offline", qos=1, retain=True)
+                await client.publish(cfg.availability_topic_device_runtime(player_id), "offline", qos=1, retain=True)
+                # Legacy single-channel topic — clear too in case HA had it cached.
                 await client.publish(cfg.availability_topic_device(player_id), "offline", qos=1, retain=True)
-            self.published_messages += len(delta.devices_removed) * (len(DEVICE_ENTITIES) + 1)
+            self.published_messages += len(delta.devices_removed) * (len(DEVICE_ENTITIES) + 3)
 
     # -- command subscription loop -----------------------------------
 

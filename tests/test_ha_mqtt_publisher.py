@@ -101,7 +101,8 @@ def projection():
     return HAStateProjection(
         devices=devices,
         bridge=bridge,
-        availability={"player-aaa": True},
+        availability_runtime={"player-aaa": True},
+        availability_config={"player-aaa": True},
         bridge_available=True,
         device_meta={"player-aaa": meta},
         bridge_meta=bridge_meta,
@@ -285,10 +286,23 @@ def test_discovery_state_topic_consolidated_per_device(cfg, projection):
     assert sensor_payload["value_template"] == "{{ value_json.rssi_dbm }}"
 
 
-def test_discovery_availability_topic_per_device(cfg, projection):
+def test_discovery_availability_topic_routes_by_class(cfg, projection):
+    """Each entity points at the availability topic appropriate to its
+    availability_class:
+
+    - ``runtime`` (RSSI, audio_streaming) → ``.../availability/runtime``
+    - ``config`` (enabled switch, command buttons) → ``.../availability/config``
+    - ``cumulative`` (reanchor_count, last_error) → also ``.../availability/config``
+    """
     payloads = build_discovery_payloads(cfg, projection)
-    sensor_payload = next(p for t, p in payloads if "_rssi_dbm/config" in t)
-    assert sensor_payload["availability_topic"] == "sendspin/player-aaa/availability"
+    rssi_payload = next(p for t, p in payloads if "_rssi_dbm/config" in t)
+    assert rssi_payload["availability_topic"] == "sendspin/player-aaa/availability/runtime"
+    enabled_payload = next(p for t, p in payloads if "_enabled/config" in t)
+    assert enabled_payload["availability_topic"] == "sendspin/player-aaa/availability/config"
+    reanchor_payload = next(p for t, p in payloads if "_reanchor_count/config" in t)
+    assert reanchor_payload["availability_topic"] == "sendspin/player-aaa/availability/config"
+    reconnect_payload = next(p for t, p in payloads if "_reconnect/config" in t)
+    assert reconnect_payload["availability_topic"] == "sendspin/player-aaa/availability/config"
 
 
 def test_discovery_room_name_becomes_suggested_area(cfg, projection):

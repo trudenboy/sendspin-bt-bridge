@@ -19,7 +19,18 @@ from .coordinator import SendspinDataUpdateCoordinator
 
 
 class SendspinDeviceEntity(CoordinatorEntity[SendspinDataUpdateCoordinator]):
-    """Base class for per-device entities."""
+    """Base class for per-device entities.
+
+    Availability respects the entity's ``availability_class``:
+
+    - ``config`` / ``cumulative`` (default for switches, selects, numbers,
+      buttons, counters): available whenever the device is in the bridge
+      fleet — even when disabled or in standby — so operators can flip
+      ``enabled`` on or fire a ``wake`` button from HA.
+    - ``runtime``: available only when the BT link is up.
+
+    Subclasses pass ``availability_class`` from the spec catalog.
+    """
 
     _attr_has_entity_name = True
 
@@ -29,10 +40,12 @@ class SendspinDeviceEntity(CoordinatorEntity[SendspinDataUpdateCoordinator]):
         player_id: str,
         object_id: str,
         name: str,
+        availability_class: str = "runtime",
     ) -> None:
         super().__init__(coordinator)
         self._player_id = player_id
         self._object_id = object_id
+        self._availability_class = availability_class
         self._attr_name = name
         self._attr_unique_id = f"{UNIQUE_ID_PREFIX}_{player_id}_{object_id}"
 
@@ -58,7 +71,12 @@ class SendspinDeviceEntity(CoordinatorEntity[SendspinDataUpdateCoordinator]):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self.coordinator.device_available(self._player_id)
+        if not self.coordinator.last_update_success:
+            return False
+        if self._availability_class == "runtime":
+            return self.coordinator.device_runtime_available(self._player_id)
+        # config / cumulative — online while in fleet
+        return self.coordinator.device_config_available(self._player_id)
 
     def _state_value(self) -> Any:
         record = self.coordinator.device_state(self._player_id, self._object_id)

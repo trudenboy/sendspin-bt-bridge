@@ -48,7 +48,7 @@ def _entity_category(spec: EntitySpec) -> EntityCategory | None:
 
 class _SendspinDeviceSensor(SendspinDeviceEntity, SensorEntity):
     def __init__(self, coordinator, player_id, spec: EntitySpec):
-        super().__init__(coordinator, player_id, spec.object_id, spec.name)
+        super().__init__(coordinator, player_id, spec.object_id, spec.name, availability_class=spec.availability_class)
         self._spec = spec
         self._attr_icon = spec.icon
         self._attr_device_class = spec.device_class  # type: ignore[assignment]

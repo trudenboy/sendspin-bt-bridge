@@ -80,6 +80,10 @@ def test_kinds_and_commands_match(scope):
         assert cc_spec.command == bridge_spec.command, (
             f"{object_id}: command drift {cc_spec.command} vs {bridge_spec.command}"
         )
+        assert cc_spec.availability_class == bridge_spec.availability_class, (
+            f"{object_id}: availability_class drift "
+            f"{cc_spec.availability_class!r} vs {bridge_spec.availability_class!r}"
+        )
 
 
 def test_select_options_match():

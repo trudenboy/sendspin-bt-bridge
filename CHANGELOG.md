@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — HA: fleet-based visibility + per-class entity availability
+
+Standby and disabled devices were effectively invisible from HA: the
+projection only iterated active clients with a live BT link, and any
+device with ``bluetooth_connected=false`` reported ``offline`` on its
+single availability topic — which dragged every entity (including
+toggles and command buttons) to ``unavailable``.  Net result: an
+operator could not flip ``enabled`` on a disabled device or fire
+``wake`` on a standby device from HA, defeating the whole point of
+the integration for fleet management.
+
+This release reworks visibility around two ideas:
+
+1. **Fleet-based exposure.** ``project_snapshot`` now also iterates
+   ``snapshot.disabled_devices``.  Every member of the fleet
+   (configured in ``BLUETOOTH_DEVICES``, regardless of ``enabled``
+   flag) appears in HA with synthesised entity states (``enabled``
+   shows ``False``, runtime fields default to safe falsy values,
+   config knobs preserve their saved settings).  HA operators can
+   re-enable a disabled device from the standard ``switch.<player>_enabled``
+   entity, which the dispatcher routes to ``bt_commands.apply_device_enabled``.
+
+2. **Per-class availability** via a new ``EntitySpec.availability_class``
+   field.  Three classes:
+   - ``config``: online whenever the device is in the fleet.  Used
+     for the ``enabled`` switch, all command buttons (``reconnect``,
+     ``wake``, ``standby``, ``power_save_toggle``, ``claim_audio``),
+     and every config knob (``idle_mode``, ``static_delay_ms``, etc.).
+   - ``runtime``: online only when the BT link is up.  Used for
+     live diagnostics whose values are meaningless when the speaker
+     is unreachable (``rssi_dbm``, ``battery_level``, ``audio_format``,
+     ``audio_streaming``, ``reanchoring``).
+   - ``cumulative``: shares the ``config`` availability gate so HA
+     dashboards keep showing last-known values through standby.
+     Used for counters and last-error fields (``reanchor_count``,
+     ``last_error``, ``health_state``, ``bt_standby``, ``bt_power_save``).
+
+   MQTT discovery payloads now route each entity to one of two
+   per-device availability topics: ``sendspin/<pid>/availability/config``
+   and ``sendspin/<pid>/availability/runtime``.  The legacy
+   ``sendspin/<pid>/availability`` topic is still published (and now
+   tracks runtime) for backwards compat with rc.1–rc.3 HA caches.
+
+   The HACS custom_component coordinator gains parallel
+   ``device_runtime_available`` / ``device_config_available`` /
+   ``device_lifecycle`` accessors; the entity base picks the right
+   one via ``availability_class``.
+
+Side benefit: standby devices now show ``device_lifecycle="standby"``
+and disabled devices show ``"disabled"`` in the projection JSON, so HA
+dashboards can highlight parked / dormant speakers without parsing
+multiple binary sensors.
+
+### Removed — `reset_reconnect` button from HA catalog
+
+Heavy recovery action better triggered manually from the bridge web UI
+than from an HA automation that might fire it on a transient blip.
+Catalog reduces from 26 → 25 per-device entities.  Bridge web UI
+keeps the button.
+
 ## [2.65.0-rc.3] - 2026-04-28
 
 ### Changed — auth-gate read switched to `current_app.config`
