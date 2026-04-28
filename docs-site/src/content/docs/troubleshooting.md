@@ -41,10 +41,10 @@ If the device has no explicit `listen_port`, remember that the runtime uses **`B
 ## Web UI port or Ingress access is confusing
 
 - Standalone installs use direct browser access on `WEB_PORT` (default **8080**).
-- HA addon installs always keep their primary channel port for **Ingress** (`8080` stable, `8081` rc, `8082` beta).
-- In addon mode, setting `WEB_PORT` to a different value adds an **extra direct listener**; it does not move Ingress.
+- HA addon installs receive the **Ingress port dynamically from Home Assistant Supervisor** (the addon manifest declares `ingress_port: 0`). The bridge reads the actual port from `/addons/self/info` on startup. The legacy fallback constants `8080 / 8081 / 8082` only apply if Supervisor lookup fails.
+- `WEB_PORT` set inside the addon is **ignored**: the bridge does not currently open a parallel direct listener in addon mode. Open the UI through the Home Assistant sidebar entry or the addon page's **Open Web UI** button.
 
-If a direct port does not respond, check for another service already bound to that port and use **Save & Restart** after changing the setting.
+In standalone installs, if a direct port does not respond, check for another service already bound to that port and use **Save & Restart** after changing the setting.
 
 ## Bluetooth not accessible on HA Supervised + Ubuntu
 

@@ -5,7 +5,7 @@ description: Current guide to the Sendspin Bluetooth Bridge dashboard, guidance 
 
 import { Aside } from '@astrojs/starlight/components';
 
-The web interface is available through a direct browser port controlled by **`WEB_PORT`** (default **8080** for standalone installs) and through **HA Ingress** for the Home Assistant addon. In addon mode, `WEB_PORT` can open an extra direct listener, but Ingress keeps using the fixed addon channel port. The page updates in real time over Server-Sent Events, so most status changes appear without a refresh.
+The web interface is available through a direct browser port controlled by **`WEB_PORT`** (default **8080** for standalone installs) and through **HA Ingress** for the Home Assistant addon. In addon mode the ingress port is **dynamically assigned by Home Assistant Supervisor** (the addon manifest declares `ingress_port: 0`), so `WEB_PORT` set inside the addon is ignored — open the UI from the addon's Home Assistant sidebar entry. The page updates in real time over Server-Sent Events, so most status changes appear without a refresh.
 
 ## Sign-in flow
 

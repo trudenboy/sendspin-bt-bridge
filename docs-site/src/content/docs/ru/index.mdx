@@ -63,7 +63,7 @@ import { Aside, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 | | Home Assistant Addon | Docker / Raspberry Pi | Proxmox / OpenWrt LXC |
 |---|---|---|---|
 | Установка | Магазин аддонов | `docker compose up -d` | Скрипт на хосте |
-| Веб-интерфейс | HA Ingress (`8080` / `8081` / `8082`) + опциональный прямой `WEB_PORT` listener | Прямой `WEB_PORT` listener (по умолчанию `8080`) | Прямой `WEB_PORT` listener (по умолчанию `8080`) |
+| Веб-интерфейс | HA Ingress (порт назначается Supervisor динамически); поле `web_port` в аддоне игнорируется | Прямой `WEB_PORT` listener (по умолчанию `8080`) | Прямой `WEB_PORT` listener (по умолчанию `8080`) |
 | Порты плееров | Channel default `BASE_LISTEN_PORT` (`8928+`, `9028+`, `9128+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) | `BASE_LISTEN_PORT` (по умолчанию `8928+`) |
 | Bluetooth stack | `bluetoothd` хоста через Supervisor/runtime mounts | `bluetoothd` хоста через D-Bus | `bluetoothd` хоста через D-Bus bridge |
 | Аудио | Аудиомост HA | PulseAudio / PipeWire хоста | PulseAudio внутри контейнера |

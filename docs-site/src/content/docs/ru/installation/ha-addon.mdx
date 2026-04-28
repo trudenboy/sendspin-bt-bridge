@@ -50,7 +50,6 @@ import { Aside, Steps } from '@astrojs/starlight/components';
    ```yaml
    sendspin_server: auto
    sendspin_port: 9000
-   web_port: 8090                 # опционально: дополнительный прямой listener в host network
    base_listen_port: 8928         # опционально: базовый порт для плееров без listen_port
    update_channel: stable         # влияет только на проверку обновлений, а не на смену варианта аддона
    bluetooth_devices:
@@ -59,7 +58,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
      - mac: "11:22:33:44:55:66"
        player_name: "Колонка на кухне"
        adapter: hci1
-       static_delay_ms: -500
+       static_delay_ms: 0
        listen_port: 8935          # опционально: переопределение Sendspin-порта для устройства
        listen_host: 192.168.1.50  # опционально: рекламируемый host/IP в отображаемом URL
    ```
@@ -76,23 +75,15 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Как работают порты в режиме аддона
 
-- **Ingress всегда фиксирован для каждого трека.** Stable использует `8080`, RC — `8081`, beta — `8082`.
-- **`web_port` не заменяет ingress.** Он открывает дополнительный прямой listener в сети хоста HA. Ссылка в sidebar и кнопка **Open Web UI** по-прежнему ведут через HA Ingress.
-- **`base_listen_port` задаёт базовый диапазон Sendspin player-port** для устройств без явного `listen_port`.
+- **Ingress-порт назначается Home Assistant Supervisor динамически.** У всех трёх треков аддона (stable / RC / beta) в манифесте стоит `ingress_port: 0`, и Supervisor выбирает свободный порт на лету — это позволяет аддонам уживаться с Matter / Thread и другими сервисами host-network без ручного планирования портов. Bridge при старте читает реальный порт из `/addons/self/info`.
+- **`web_port` читается, но не применяется.** Поле остаётся в схеме ради совместимости, однако bridge сейчас не открывает параллельный прямой listener в режиме аддона. Оставляйте пустым.
+- **`base_listen_port` задаёт базовый диапазон Sendspin player-port** для устройств без явного `listen_port`. Per-channel дефолты разные, чтобы варианты аддона не пересекались: stable `8928`, RC `9028`, beta `9128`.
 - **Поле `listen_port` у устройства имеет приоритет.** Используйте его, если конкретной колонке нужен фиксированный порт.
 - **Поле `listen_host` меняет только рекламируемый host/IP.** Внутри плеер всё равно bind'ится на `0.0.0.0`.
 
 ## Как открыть веб-интерфейс
 
-Используйте кнопку **Open Web UI** на странице аддона или ссылку в боковой панели HA — это основной ingress-путь.
-
-Если задан `web_port`, появляется и прямой URL в сети хоста HA:
-
-```text
-http://<ip-хоста-ha>:<web_port>
-```
-
-Это удобно для прямой диагностики и API-доступа, но ingress остаётся основным HA-интегрированным вариантом.
+Используйте кнопку **Open Web UI** на странице аддона или ссылку в боковой панели HA. Оба маршрута идут через HA Ingress на динамически назначенный Supervisor порт — отдельного прямого URL запоминать не нужно.
 
 ## Семантика канала обновлений
 

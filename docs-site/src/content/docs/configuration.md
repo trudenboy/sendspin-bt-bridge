@@ -35,14 +35,14 @@ The **General** tab contains settings that apply to the whole bridge instance:
 - **Bridge name** — appended to player names as `Player @ Name`.
 - **Timezone** — with a live preview of the current local time.
 - **PulseAudio latency (ms)** — higher values trade latency for stability on slower hardware.
-- **Web UI port** — direct browser port for standalone installs, or an optional extra direct port in HA addon mode.
+- **Web UI port** — direct browser port for Docker / LXC / systemd installs. Ignored in HA addon mode, where Home Assistant Supervisor assigns the ingress port dynamically.
 - **Base player listen port** — starting port for automatically assigned per-device sendspin listeners.
 - **Smooth restart** — mutes before restart and shows restart progress.
 - **Show empty-state onboarding guidance** — controls whether the first-run checklist stays visible when setup is incomplete.
 - **Show recovery banners** — controls whether top-level operator/recovery notices stay visible.
 - **Check for updates / Update channel / Auto-update** — available outside HA addon mode, with auto-update limited to supported runtimes.
 
-If you leave the port fields empty, standalone installs default to **8080** for the web UI and **8928** for player listeners. In Home Assistant addon mode, the primary channel defaults stay fixed at **8080 / 8928** for stable, **8081 / 9028** for rc, and **8082 / 9128** for beta. Setting `WEB_PORT` to a different value in addon mode opens an **additional direct listener**; HA Ingress keeps using the fixed addon port.
+If you leave the port fields empty, standalone installs default to **8080** for the web UI and **8928** for player listeners. In Home Assistant addon mode, all three channels (stable / rc / beta) ship with `ingress_port: 0`, so HA Supervisor picks a free port at runtime — that change [shipped in v2.55.0](https://github.com/trudenboy/sendspin-bt-bridge/pull/138) to stop addon variants from colliding with Matter / Thread and other host-network addons. The per-channel base listener defaults (`8928 / 9028 / 9128`) are still meaningful — they keep the device listeners disjoint when several addon variants run side-by-side. `WEB_PORT` set inside the addon is ignored; access the UI via the Home Assistant sidebar entry instead.
 
 ### Devices tab
 
@@ -169,7 +169,7 @@ Core addon options include:
 |---|---|
 | **sendspin_server** | Hostname/IP of the Music Assistant server, or `auto` for mDNS |
 | **sendspin_port** | Sendspin WebSocket port, usually `9000` |
-| **web_port** | Optional direct host-network web port; Ingress keeps using the fixed addon port |
+| **web_port** | Read but **not applied** in addon mode; Supervisor assigns the ingress port dynamically. Kept in the schema for legacy parity — you can leave it blank. |
 | **base_listen_port** | Starting port for auto-assigned device listeners |
 | **bridge_name** | Optional instance label appended to players |
 | **tz** | IANA timezone |
@@ -198,22 +198,23 @@ The bridge supports two optional top-level port overrides:
 
 | Key | Applies to | Default | Notes |
 |---|---|---|---|
-| `WEB_PORT` | Web UI listener | `8080` outside HA addon mode | In Home Assistant addon mode, the fixed ingress listener keeps using the channel-safe addon default; a configured `WEB_PORT` opens an additional direct listener only. |
-| `BASE_LISTEN_PORT` | Auto-assigned per-device Sendspin listeners | `8928` outside HA addon mode | Used as the starting port when a device does not define its own `listen_port`. |
+| `WEB_PORT` | Web UI listener | `8080` outside HA addon mode | **Ignored in HA addon mode.** HA Supervisor dynamically assigns the ingress port at runtime (the addon manifest declares `ingress_port: 0`), so there is no fixed addon port for `WEB_PORT` to override. Access the UI via the addon's Home Assistant sidebar entry. |
+| `BASE_LISTEN_PORT` | Auto-assigned per-device Sendspin listeners | `8928` outside HA addon mode | Used as the starting port when a device does not define its own `listen_port`. Honoured in **all** runtimes including HA addon mode. |
 
-In Home Assistant addon mode, channel defaults are intentionally separated to avoid collisions when multiple addon variants run on the same HAOS host:
+In Home Assistant addon mode, the **listener** ranges are intentionally separated by channel so that multiple addon variants can co-exist on the same HAOS host without colliding on per-device listener ports:
 
-| Installed addon track | Default ingress / web port | Default base listen port |
+| Installed addon track | Channel base listen port | Channel web-port fallback |
 |---|---|---|
-| Stable | `8080` | `8928` |
-| RC | `8081` | `9028` |
-| Beta | `8082` | `9128` |
+| Stable | `8928` | `8080` |
+| RC | `9028` | `8081` |
+| Beta | `9128` | `8082` |
+
+The **base listen port** column is the active default for that channel and shows up directly in the device listener URLs. The **web-port fallback** column is a safety value used only if the bridge cannot reach `/addons/self/info` on the Supervisor REST API to read the dynamically assigned ingress port — in normal operation you will never see those numbers, because Supervisor returns its own runtime-assigned port and the UI is served on that.
 
 Use overrides only when you need:
 
-- a direct non-Ingress web listener in addon mode;
-- a custom web port for Docker/LXC/systemd deployments;
-- a different default range for many device listeners on the same host.
+- a custom web port for Docker / LXC / systemd deployments (HA addon mode does not currently support a direct non-Ingress listener — `WEB_PORT` is read but discarded);
+- a different starting point for the device-listener range on the same host (e.g. running two non-addon bridge instances).
 
 ### Per-device listener overrides
 
@@ -348,8 +349,8 @@ Each effective `listen_port` must be unique across devices. If you run multiple 
 
 ## Port planning and HA ingress notes
 
-- **HA Ingress** keeps using the addon channel port even if you configure a custom `WEB_PORT`.
-- **Multi-bridge setups** should use non-overlapping `WEB_PORT` and `BASE_LISTEN_PORT` ranges.
+- **HA Ingress** uses a dynamically assigned port from Home Assistant Supervisor (`ingress_port: 0` in the addon manifest). `WEB_PORT` set inside the addon does not override this and does not open a parallel direct listener.
+- **Multi-bridge setups** outside HA addon mode should use non-overlapping `WEB_PORT` and `BASE_LISTEN_PORT` ranges. Multiple addon variants on the same HAOS host already get distinct `BASE_LISTEN_PORT` defaults per channel (8928 / 9028 / 9128) to avoid listener collisions.
 - **Per-device overrides win**: `listen_port` and `listen_host` override top-level defaults.
 - **Port conflicts are fatal for the daemon**: duplicate `listen_port` values will prevent a device listener from binding.
 
@@ -364,8 +365,8 @@ These are the most commonly used overrides. `CONFIG_DIR` always determines where
 | Variable | Default | Description |
 |---|---|---|
 | `CONFIG_DIR` | `/config` | Config directory path |
-| `WEB_PORT` | `8080` (standalone) | Direct web UI port override. Addon channels keep fixed primary ports and may open this as an extra direct port |
-| `BASE_LISTEN_PORT` | `8928` (standalone) | Starting port for auto-assigned player listeners. Stable `8928`, rc `9028`, beta `9128` |
+| `WEB_PORT` | `8080` (standalone) | Direct web UI port override for Docker / LXC / systemd. **Ignored in HA addon mode** — Supervisor assigns the ingress port dynamically and the bridge does not open a parallel direct listener. |
+| `BASE_LISTEN_PORT` | `8928` (standalone) | Starting port for auto-assigned player listeners. In HA addon mode the per-channel defaults are stable `8928`, rc `9028`, beta `9128` (so multiple addon variants do not clash). |
 | `TZ` | from config | Timezone override applied when the runtime initializes local time handling |
 | `BRIDGE_NAME` | from config | Optional bridge-name override before a stored name exists |
 | `LOG_LEVEL` | `INFO` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. Also settable via config or web UI |

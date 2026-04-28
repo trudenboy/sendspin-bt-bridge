@@ -63,7 +63,7 @@ Each configured Bluetooth device shows up as its own player in Music Assistant. 
 | | Home Assistant Addon | Docker / Raspberry Pi | Proxmox / OpenWrt LXC |
 |---|---|---|---|
 | Install | Addon Store | `docker compose up -d` | Host bootstrap script |
-| Web UI | HA Ingress (`8080` / `8081` / `8082`) + optional direct `WEB_PORT` listener | Direct `WEB_PORT` listener (default `8080`) | Direct `WEB_PORT` listener (default `8080`) |
+| Web UI | HA Ingress (port assigned dynamically by Supervisor); the addon's own `web_port` field is ignored | Direct `WEB_PORT` listener (default `8080`) | Direct `WEB_PORT` listener (default `8080`) |
 | Player ports | Channel default `BASE_LISTEN_PORT` (`8928+`, `9028+`, `9128+`) | `BASE_LISTEN_PORT` (default `8928+`) | `BASE_LISTEN_PORT` (default `8928+`) |
 | Bluetooth stack | Host `bluetoothd` via Supervisor/runtime mounts | Host `bluetoothd` via D-Bus | Host `bluetoothd` via D-Bus bridge |
 | Audio | HA audio bridge | Host PulseAudio / PipeWire | PulseAudio inside the container |

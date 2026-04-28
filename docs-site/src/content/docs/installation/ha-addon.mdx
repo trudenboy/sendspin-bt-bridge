@@ -50,7 +50,6 @@ import { Aside, Steps } from '@astrojs/starlight/components';
    ```yaml
    sendspin_server: auto
    sendspin_port: 9000
-   web_port: 8090                 # optional: extra direct listener on the host network
    base_listen_port: 8928         # optional: base port for players without explicit listen_port
    update_channel: stable         # controls update checks only; does not switch addon variant
    bluetooth_devices:
@@ -59,7 +58,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
      - mac: "11:22:33:44:55:66"
        player_name: "Kitchen Speaker"
        adapter: hci1
-       static_delay_ms: -500
+       static_delay_ms: 0
        listen_port: 8935          # optional per-device Sendspin port override
        listen_host: 192.168.1.50  # optional advertised host/IP for URL display
    ```
@@ -76,23 +75,15 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## Port behavior in addon mode
 
-- **Ingress stays fixed per addon track.** Stable uses `8080`, RC uses `8081`, beta uses `8082`.
-- **`web_port` does not replace ingress.** It opens an additional direct listener on the HA host network. Your sidebar link and **Open Web UI** button still use HA Ingress.
-- **`base_listen_port` sets the default Sendspin player range** for devices without an explicit `listen_port`.
+- **Ingress port is dynamically assigned by Home Assistant Supervisor.** All three addon tracks (stable / RC / beta) ship with `ingress_port: 0`, and Supervisor picks a free port at runtime so the addons can co-exist with Matter / Thread and other host-network services without manual port planning. The bridge reads the actual port back from `/addons/self/info` on startup.
+- **`web_port` is read but not applied.** The addon schema still accepts it for legacy parity, but the bridge currently does not open a parallel direct listener in addon mode. Leave it blank.
+- **`base_listen_port` sets the default Sendspin player range** for devices without an explicit `listen_port`. Per-channel defaults differ to keep multiple addon variants disjoint: stable `8928`, RC `9028`, beta `9128`.
 - **Device `listen_port` wins per player.** Use it when one speaker needs a fixed port.
 - **Device `listen_host` changes the advertised host/IP only.** The player still binds on `0.0.0.0` internally.
 
 ## Opening the web interface
 
-Use **Open Web UI** on the addon page or the HA sidebar entry for the normal ingress path.
-
-If you set `web_port`, you also get a direct URL on the HA host network:
-
-```text
-http://<ha-host-ip>:<web_port>
-```
-
-This is useful for direct diagnostics or API access, but ingress remains the primary HA-integrated path.
+Use **Open Web UI** on the addon page or the HA sidebar entry. Both routes go through HA Ingress on the Supervisor-assigned port — there is no separate direct URL to memorise.
 
 ## Update channel semantics
 
