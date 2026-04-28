@@ -24,6 +24,8 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
+services:
+  - mqtt:want
 apparmor: true
 init: false
 ingress: true

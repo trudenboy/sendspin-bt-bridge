@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.3] - 2026-04-28
+
 ### Fixed — Settings tab redirected to /login on Docker / standalone
 ###          (no-auth) deployments after upgrading to v2.65.0-rc.2
 
@@ -25,6 +27,18 @@ the auth blueprint) now treat "global auth gate off" as
 ``AUTH_ENABLED`` keep working unchanged.  HA addon mode is
 unaffected (Supervisor sessions are always present).  Regression
 test in ``test_auth_token_routes.py::test_token_endpoints_open_when_global_auth_disabled``.
+
+### Fixed — MQTT broker auto-detect failed on HAOS
+
+The HA addon manifest didn't declare ``services: ['mqtt:want']``,
+so Supervisor refused queries to ``/services/mqtt`` with
+``"No access to mqtt service!"`` and the bridge's
+``ha_integration.mqtt_broker = "auto"`` path silently fell through
+to "publisher disabled".  All three addon variants (stable / RC /
+beta) now declare the optional service so the auto-detect populates
+host / port / username from the Mosquitto add-on without the
+operator typing them manually.  ``mqtt:want`` (not ``mqtt:need``)
+keeps the addon installable when no MQTT broker is present.
 
 ### Changed — explicit clear path for the MQTT broker password
 
