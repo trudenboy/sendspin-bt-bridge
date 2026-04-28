@@ -320,6 +320,9 @@ def csrf_client():
         static_folder=os.path.join(project_root, "static"),
     )
     app.secret_key = "test-csrf"
+    # CSRF guard short-circuits when global auth is off (Docker / no-auth
+    # mode); these tests exercise the auth-on enforcement path.
+    app.config["AUTH_ENABLED"] = True
     app.register_blueprint(auth_bp)
 
     @app.context_processor

@@ -29,6 +29,9 @@ def app():
     )
     application.secret_key = "test-secret"
     application.config["TESTING"] = True
+    # CSRF guard short-circuits when global auth is off; logout tests
+    # exercise the auth-on path, so simulate it.
+    application.config["AUTH_ENABLED"] = True
     application.register_blueprint(auth_bp)
 
     @application.route("/static/v<version>/<path:filename>")

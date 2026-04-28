@@ -162,7 +162,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:restart-alert",
         command="reset_reconnect",
     ),
-    EntitySpec("pair", "button", "Pair", entity_category="diagnostic", icon="mdi:bluetooth-settings", command="pair"),
+    # Pairing intentionally NOT exposed (see services/ha_entity_model.py).
     EntitySpec(
         "claim_audio",
         "button",
@@ -190,9 +190,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
     EntitySpec(
         "restart", "button", "Restart bridge", entity_category="diagnostic", icon="mdi:restart", command="restart"
     ),
-    EntitySpec(
-        "scan", "button", "Scan for devices", entity_category="diagnostic", icon="mdi:bluetooth-search", command="scan"
-    ),
+    # Scan intentionally NOT exposed (see services/ha_entity_model.py).
 )
 
 

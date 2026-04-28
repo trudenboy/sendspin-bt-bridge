@@ -966,15 +966,15 @@
                             </label>
                             <label class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Mode</strong>
-                                    <span class="form-hint">Which transports run. <code>off</code> = disabled, <code>mqtt</code> = MQTT only, <code>rest</code> = mDNS + REST/SSE only, <code>both</code> = both.</span>
+                                    <strong>Transport</strong>
+                                    <span class="form-hint">Pick one transport.  <code>mqtt</code> publishes discovery payloads to a broker (zero install in HA when Mosquitto is present).  <code>rest</code> advertises the bridge via mDNS so the HACS custom_component can attach over REST + SSE.  Pick the path that matches how you'll configure HA.</span>
                                 </span>
                                 <span class="config-setting-control">
-                                    <select id="ha-integration-mode" class="config-inline-select">
+                                    <select id="ha-integration-mode" class="config-inline-select"
+                                            data-action="ha-integration-mode-change" data-event="change">
                                         <option value="off">off</option>
                                         <option value="mqtt">mqtt</option>
                                         <option value="rest">rest</option>
-                                        <option value="both">both</option>
                                     </select>
                                 </span>
                             </label>

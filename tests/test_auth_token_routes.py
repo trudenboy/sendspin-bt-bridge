@@ -34,6 +34,10 @@ def client(tmp_path, monkeypatch):
     app = Flask(__name__)
     app.secret_key = "testing"
     app.config["TESTING"] = True
+    # Simulate "auth enforcement on" so the tokens endpoints exercise the
+    # session-required path.  Without this flag, _require_authenticated_session
+    # short-circuits because the global gate is treated as off.
+    app.config["AUTH_ENABLED"] = True
     app.register_blueprint(auth_bp)
     yield app.test_client()
 
@@ -155,6 +159,54 @@ def test_ha_pair_rejects_supervisor_ip_without_ingress_header(client):
         environ_base={"REMOTE_ADDR": "172.30.32.2"},
     )
     assert resp.status_code == 403
+
+
+def test_token_endpoints_open_when_global_auth_disabled(tmp_path, monkeypatch):
+    """When AUTH_ENABLED is off (Docker / standalone default) the token
+    endpoints must not require a session — there's no session to require.
+    Otherwise the Settings → Home Assistant tab silently 401s and the JS
+    fallback redirects the browser to /login.  Regression from
+    v2.65.0-rc.2 deployment on VM 105."""
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"AUTH_TOKENS": []}))
+    import config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
+    monkeypatch.setattr(config, "load_config", lambda: json.loads(cfg_file.read_text()))
+
+    import services.auth_tokens as M
+
+    monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)
+    monkeypatch.setattr(M, "load_config", lambda: json.loads(cfg_file.read_text()))
+
+    from routes.auth import auth_bp
+
+    app = Flask(__name__)
+    app.secret_key = "testing"
+    app.config["TESTING"] = True
+    # Critical part of the test — global auth gate is OFF.  Default is
+    # already off, but set explicitly for clarity.
+    app.config["AUTH_ENABLED"] = False
+    app.register_blueprint(auth_bp)
+    cl = app.test_client()
+
+    # GET — must NOT 401 (otherwise the UI redirects to /login on every
+    # config load).
+    resp = cl.get("/api/auth/tokens")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body["tokens"] == []
+
+    # POST — must accept the request without a CSRF token (no session = no
+    # CSRF token issued).
+    resp = cl.post("/api/auth/tokens", json={"label": "headless"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body["token"]
 
 
 def test_ha_pair_mints_token_when_supervisor_indicators_present(client):

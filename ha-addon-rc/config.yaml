@@ -24,6 +24,8 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
+services:
+  - mqtt:want
 apparmor: true
 init: false
 ingress: true
@@ -105,7 +107,7 @@ schema:
       name: str?
   ha_integration:
     enabled: bool?
-    mode: "list(off|mqtt|rest|both)?"
+    mode: "list(off|mqtt|rest)?"
     mqtt_broker: str?
     mqtt_port: port?
     mqtt_username: str?

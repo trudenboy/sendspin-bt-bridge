@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-from flask import Blueprint, Response, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from config import check_password, load_config
 
@@ -223,7 +223,17 @@ def _validate_csrf_token() -> bool:
     JSON-content-type endpoints (e.g. ``POST /api/auth/tokens``) cannot
     POST a form body, so they pass the same token through either the
     JSON envelope or an explicit ``X-CSRF-Token`` header.
+
+    When the global auth gate is OFF, no session exists, so no CSRF
+    token can be issued — treat the request as valid.  This mirrors
+    ``_require_authenticated_session`` and lets the Settings → Home
+    Assistant tab issue tokens on Docker / standalone deployments
+    without auth.  Reads the gate via ``current_app.config`` (mirrors
+    the pattern in ``routes/views.py`` / ``routes/api_status.py``)
+    instead of importing ``web_interface`` directly.
     """
+    if not current_app.config.get("AUTH_ENABLED", False):
+        return True
     session_token = session.get("csrf_token", "")
     if not session_token:
         return False
@@ -841,8 +851,20 @@ def _require_authenticated_session() -> tuple[Response, int] | None:
 
     Used as the bearer for `/api/auth/tokens` issuance — we don't allow a
     token to mint another token, only the operator behind the web UI does.
+
+    When the global auth gate is OFF (Docker / standalone mode without
+    AUTH_ENABLED, no SUPERVISOR_TOKEN) sessions are never created in the
+    first place; treat those callers as authorised because the rest of
+    ``/api/*`` is already wide-open on this deployment.  Otherwise the
+    Settings → Home Assistant tab would 401 on load and bounce the
+    browser to ``/login`` even though auth is disabled (issue from
+    v2.65.0-rc.2 deployment).  Reads the gate via ``current_app.config``
+    (mirrors ``routes/views.py`` / ``routes/api_status.py``) so the
+    blueprint stays decoupled from the ``web_interface`` module.
     """
     if session.get("authenticated"):
+        return None
+    if not current_app.config.get("AUTH_ENABLED", False):
         return None
     return jsonify({"error": "Unauthorized"}), 401
 

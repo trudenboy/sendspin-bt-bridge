@@ -47,7 +47,7 @@ from config_network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.65.0-rc.2"
+VERSION = "2.65.0-rc.3"
 BUILD_DATE = "2026-04-28"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
@@ -164,7 +164,7 @@ DEFAULT_CONFIG = {
     # the Mosquitto add-on (see ``services.ha_addon.get_mqtt_addon_credentials``).
     "HA_INTEGRATION": {
         "enabled": False,
-        "mode": "off",  # off | mqtt | rest | both
+        "mode": "off",  # off | mqtt | rest  (rc.1/rc.2 "both" coerced to mqtt at load)
         "mqtt": {
             "broker": "auto",
             "port": 1883,

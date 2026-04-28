@@ -24,6 +24,12 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
+# Declare MQTT as an optional Supervisor service so the bridge can read
+# Mosquitto broker credentials via /services/mqtt for the
+# ha_integration.mqtt_broker = "auto" auto-detect path.  ``mqtt:want``
+# means "we'd like it if it's installed", not "we require it".
+services:
+  - mqtt:want
 apparmor: true
 init: false
 ingress: true
@@ -104,7 +110,7 @@ schema:
       name: str?
   ha_integration:
     enabled: bool?
-    mode: "list(off|mqtt|rest|both)?"
+    mode: "list(off|mqtt|rest)?"
     mqtt_broker: str?
     mqtt_port: port?
     mqtt_username: str?
