@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0] - 2026-04-28
+
+**Sendspin BT Bridge now talks to Home Assistant directly.**  No more
+running everything through Music Assistant just to reach a dashboard
+toggle or fire an automation on a Bluetooth speaker.
+
+### What you get
+
+- Every speaker shows up in HA on the same device card Music
+  Assistant already made for it — signal strength, battery, audio
+  codec, link status, sync health, last error.  Nothing duplicates
+  what MA already exposes.
+- Switches for the things you'd actually automate: enable, standby,
+  power save, BT management.  Toggle them, read their state in
+  conditions, like any other HA switch.
+- Buttons for one-shot actions: reconnect, disconnect, claim audio
+  (steal a multipoint speaker back from a phone).
+- Per-device config writable from HA: idle mode, keep-alive method,
+  static delay, power-save delay.
+- Disabled or sleeping speakers stay reachable — the toggle to wake
+  or re-enable a speaker is always live.
+
+### Two ways to wire it up — pick one
+
+- **MQTT.**  Install the official Mosquitto add-on, then open
+  Settings → Home Assistant in the bridge web UI and pick **MQTT**.
+  On HAOS the broker is auto-detected — one click and you're done.
+- **HACS custom_component.**  Add this repo to HACS, install
+  "Sendspin BT Bridge".  HA discovers the bridge automatically; on
+  HAOS it auto-pairs, otherwise paste a token from the bridge UI.
+
+### New Settings → Home Assistant tab
+
+A dedicated tab in the bridge web UI: mode picker, live connection
+status, broker / token settings.  Once connected the config cards
+collapse out of the way.
+
+The detailed rc-cycle history (rc.1 → rc.6) follows below verbatim
+for traceability.
+
 ## [2.64.3] - 2026-04-27
 
 ### Fixed — Group ID no longer overflows the device card
