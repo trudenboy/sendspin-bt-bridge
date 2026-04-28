@@ -19,6 +19,12 @@ def _isolated_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
 
+    # CSRF guard short-circuits when global auth is off; logout tests
+    # exercise the auth-on path, so simulate it.
+    import web_interface as _web
+
+    monkeypatch.setattr(_web, "_auth_enabled", True)
+
 
 @pytest.fixture()
 def app():

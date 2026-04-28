@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Settings tab redirected to /login on Docker / standalone
+###          (no-auth) deployments after upgrading to v2.65.0-rc.2
+
+The new Settings → Home Assistant tab calls
+``GET /api/auth/tokens`` on every config load to populate the bearer
+token list.  The endpoint required an authenticated session
+unconditionally, including when the global ``AUTH_ENABLED`` toggle is
+off (Docker / standalone default) — and the JS 401 fallback then
+bounced the browser to ``/login``.  The result was that operators
+who had auth disabled were forced to a login page after upgrading
+even though the toggle was still off.
+
+The token endpoints (and the CSRF guard they share with the rest of
+the auth blueprint) now treat "global auth gate off" as
+"requirement satisfied", so standalone/Docker deployments without
+``AUTH_ENABLED`` keep working unchanged.  HA addon mode is
+unaffected (Supervisor sessions are always present).  Regression
+test in ``test_auth_token_routes.py::test_token_endpoints_open_when_global_auth_disabled``.
+
 ### Changed — explicit clear path for the MQTT broker password
 
 The Settings → Home Assistant tab now distinguishes "I didn't touch

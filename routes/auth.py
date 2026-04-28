@@ -223,7 +223,20 @@ def _validate_csrf_token() -> bool:
     JSON-content-type endpoints (e.g. ``POST /api/auth/tokens``) cannot
     POST a form body, so they pass the same token through either the
     JSON envelope or an explicit ``X-CSRF-Token`` header.
+
+    When the global auth gate is OFF, no session exists, so no CSRF
+    token can be issued — treat the request as valid.  This mirrors
+    ``_require_authenticated_session`` and lets the Settings → Home
+    Assistant tab issue tokens on Docker / standalone deployments
+    without auth.
     """
+    try:
+        from web_interface import _auth_enabled
+
+        if not _auth_enabled:
+            return True
+    except Exception:
+        pass
     session_token = session.get("csrf_token", "")
     if not session_token:
         return False
@@ -841,9 +854,27 @@ def _require_authenticated_session() -> tuple[Response, int] | None:
 
     Used as the bearer for `/api/auth/tokens` issuance — we don't allow a
     token to mint another token, only the operator behind the web UI does.
+
+    When the global auth gate is OFF (Docker / standalone mode without
+    AUTH_ENABLED, no SUPERVISOR_TOKEN) sessions are never created in the
+    first place; treat those callers as authorised because the rest of
+    ``/api/*`` is already wide-open on this deployment.  Otherwise the
+    Settings → Home Assistant tab would 401 on load and bounce the
+    browser to ``/login`` even though auth is disabled (issue from
+    v2.65.0-rc.2 deployment).
     """
     if session.get("authenticated"):
         return None
+    # Allow when global auth is disabled — there's no concept of "needs
+    # session" if no session can ever exist.
+    try:
+        from web_interface import _auth_enabled
+
+        if not _auth_enabled:
+            return None
+    except Exception:
+        # Fall back to strict mode if the import fails for any reason.
+        pass
     return jsonify({"error": "Unauthorized"}), 401
 
 

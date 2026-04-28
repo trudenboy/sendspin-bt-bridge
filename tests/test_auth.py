@@ -307,11 +307,16 @@ def test_ma_validate_unreachable():
 
 
 @pytest.fixture()
-def csrf_client():
+def csrf_client(monkeypatch):
     """Flask test client with auth blueprint and proper template setup."""
     import os
 
+    # CSRF guard short-circuits when global auth is off (Docker / no-auth
+    # mode); these tests exercise the auth-on enforcement path, so simulate it.
+    import web_interface as _web
     from routes.auth import auth_bp
+
+    monkeypatch.setattr(_web, "_auth_enabled", True)
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     app = Flask(
