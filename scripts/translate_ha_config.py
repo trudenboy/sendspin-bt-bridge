@@ -114,6 +114,30 @@ def _optional_int_opt(opts: dict, key: str) -> int | None:
     return int(v)
 
 
+def _translate_ha_integration(block: dict) -> dict:
+    """Re-nest the flat ``ha_integration`` addon options into the structured
+    bridge config shape (``HA_INTEGRATION.mqtt.*``, ``HA_INTEGRATION.rest.*``)."""
+    if not isinstance(block, dict):
+        block = {}
+    return {
+        "enabled": bool(block.get("enabled", False)),
+        "mode": str(block.get("mode") or "off"),
+        "mqtt": {
+            "broker": str(block.get("mqtt_broker") or "auto"),
+            "port": int(block.get("mqtt_port") or 1883),
+            "username": str(block.get("mqtt_username") or ""),
+            "password": str(block.get("mqtt_password") or ""),
+            "discovery_prefix": str(block.get("mqtt_discovery_prefix") or "homeassistant"),
+            "tls": bool(block.get("mqtt_tls", False)),
+            "client_id": str(block.get("mqtt_client_id") or ""),
+        },
+        "rest": {
+            "advertise_mdns": bool(block.get("advertise_mdns", True)),
+            "supervisor_pair": bool(block.get("supervisor_pair", True)),
+        },
+    }
+
+
 def main() -> None:
     if not os.path.exists(OPTIONS_FILE):
         print(f"[translate_ha_config] {OPTIONS_FILE} not found — nothing to do")
@@ -152,6 +176,10 @@ def main() -> None:
         "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
         "DUPLICATE_DEVICE_CHECK": bool(opts.get("duplicate_device_check", True)),
         "UPDATE_CHANNEL": get_self_delivery_channel(),
+        # v2.65.0 — HA integration namespace.  The addon flattens the
+        # nested ``mqtt.*`` and ``rest.*`` blocks because Supervisor's
+        # schema validator dislikes deeply nested dicts; we re-nest here.
+        "HA_INTEGRATION": _translate_ha_integration(opts.get("ha_integration") or {}),
     }
 
     # Normalize: devices without explicit 'enabled' field default to True
@@ -208,6 +236,16 @@ def main() -> None:
         for key in ("MA_ACCESS_TOKEN", "MA_REFRESH_TOKEN"):
             if existing.get(key):
                 config[key] = existing[key]
+        # v2.65.0 — bearer tokens issued via /api/auth/tokens; treat as
+        # runtime state, never overwrite from addon options.
+        if "AUTH_TOKENS" in existing:
+            config["AUTH_TOKENS"] = existing["AUTH_TOKENS"]
+        # When the operator has no ha_integration block in their addon
+        # options yet (first run after upgrade), keep whatever the web UI
+        # may have written to config.json so a re-translation doesn't
+        # silently flip MQTT off.
+        if "ha_integration" not in opts and "HA_INTEGRATION" in existing:
+            config["HA_INTEGRATION"] = existing["HA_INTEGRATION"]
         # Preserve MA API credentials if not overridden via HA addon options
         for key in ("MA_API_URL", "MA_API_TOKEN"):
             if not config.get(key) and existing.get(key):

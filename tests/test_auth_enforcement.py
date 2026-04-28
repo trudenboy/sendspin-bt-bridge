@@ -59,7 +59,13 @@ def auth_client(monkeypatch):
     app.register_blueprint(status_bp)
     app.register_blueprint(auth_bp)
 
-    _PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
+    # Mirror the live ``_PUBLIC_PATHS`` from ``web_interface.py`` — keep
+    # in lockstep.  Adding a path here without updating the source module
+    # creates a false-positive test, so the test below also asserts the
+    # set is identical to the live module's.
+    from web_interface import _PUBLIC_PATHS as _LIVE_PUBLIC_PATHS
+
+    _PUBLIC_PATHS = set(_LIVE_PUBLIC_PATHS)
 
     @app.before_request
     def _check_auth():
@@ -135,6 +141,30 @@ def test_health_is_public(auth_client):
 def test_preflight_is_public(auth_client):
     resp = auth_client.get("/api/preflight")
     assert resp.status_code == 200
+
+
+def test_ha_pair_is_public_pre_auth(auth_client):
+    """``/api/auth/ha-pair`` MUST bypass the bearer-or-session gate so
+    the HA custom_component on HAOS can mint its first token before any
+    token exists.  The route itself enforces Supervisor-IP +
+    ``X-Ingress-Path`` as the real gate (see ``routes/auth.py``).
+
+    Caught by Copilot review on PR #214.
+    """
+    # No session, no bearer — the route's own IP/header check should
+    # produce 403, NOT a 401 from the auth middleware.  Receiving 401
+    # here means the middleware swallowed the request before the route
+    # could run, which would have made HAOS pairing unreachable.
+    resp = auth_client.post("/api/auth/ha-pair", environ_base={"REMOTE_ADDR": "192.168.1.50"})
+    assert resp.status_code != 401, "Auth middleware blocked the bootstrap pair endpoint"
+
+
+def test_public_paths_set_includes_ha_pair():
+    """Lockstep guard: the live ``_PUBLIC_PATHS`` must list
+    ``/api/auth/ha-pair`` alongside login/logout/health/preflight."""
+    from web_interface import _PUBLIC_PATHS
+
+    assert "/api/auth/ha-pair" in _PUBLIC_PATHS
 
 
 # ---------------------------------------------------------------------------

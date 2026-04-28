@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — HA custom_component pairing flow on HAOS was unreachable
+
+The HA bootstrap endpoint ``POST /api/auth/ha-pair`` exists to mint a
+long-lived bearer token for the custom_component on HAOS without
+operator input — but the auth middleware in ``web_interface.py`` saw
+it as a regular ``/api/*`` route and refused with 401 because no
+token / session existed yet.  Symptom: HACS install on HAOS would
+discover the bridge via mDNS, click "Configure", and silently fail
+to pair.  ``/api/auth/ha-pair`` is now in ``_PUBLIC_PATHS`` so it
+reaches the real gate (Supervisor-IP + ``X-Ingress-Path`` check in
+``routes/auth.py``).  A regression test
+(``test_auth_enforcement.py::test_ha_pair_is_public_pre_auth``) and
+a lockstep test against ``_PUBLIC_PATHS`` keep this from regressing.
+Caught by Copilot review on PR #214.
+
+### Fixed — `find_client_by_player_id` lookup matches its docstring
+
+The HA-side command dispatcher's ``find_client_by_player_id`` helper
+promised case-insensitive comparison in its docstring but only did
+exact-string matching.  Canonical bridge ``player_id`` values are
+lowercase UUID5 strings, but HA discovery payloads round-trip them
+through JSON / templates where a stray uppercase normalisation
+upstream could silently misroute commands.  Both sides now ``casefold``
+before comparing, with a regression test covering mixed case +
+whitespace.  Caught by Copilot review on PR #214.
+
+## [2.65.0-rc.1] - 2026-04-28
+
+### Added — Home Assistant integration (issue #205)
+
+Two parallel transports ship together for direct HA control of the
+bridge from dashboards and automations:
+
+**MQTT discovery (Path B).**  Enable in the new "Home Assistant"
+config block; on HAOS the broker is auto-detected via the official
+Mosquitto add-on.  The bridge publishes per-speaker entities under
+`homeassistant/<component>/sendspin_<player_id>/...` with
+`device.connections=[("bluetooth", mac)]` so HA's device registry
+**merges them into the same device card** that Music Assistant's
+integration already created for the speaker.  Result: one ENEBY20
+device card with `media_player.eneby20` (from MA) plus our
+`sensor.eneby20_rssi`, `sensor.eneby20_battery`, `binary_sensor.eneby20_streaming`,
+`button.eneby20_reconnect`, `select.eneby20_idle_mode`,
+`number.eneby20_static_delay`, etc.
+
+**custom_component over REST + SSE (Path A1).**  Same repo ships
+`custom_components/sendspin_bridge/` for HACS users.  HA's Zeroconf
+discovers the bridge's `_sendspin-bridge._tcp.local.` advertisement;
+on HAOS the integration auto-pairs via Supervisor, off-HAOS the user
+pastes a token they generate in the bridge web UI.  REST + SSE
+(`/api/ha/state`, `/api/status/events`) drive a `DataUpdateCoordinator`.
+
+**MA-deduplication contract.**  Neither transport exposes
+`media_player`, volume, mute, transport, queue, now-playing, or
+group state — those are owned by Music Assistant's official HA
+integration and would conflict if duplicated.  The bridge integration
+stays strictly to BT diagnostics (RSSI / battery / streaming /
+reanchor) and config knobs (idle mode / static delay / per-device
+enabled / BT management).
+
+### Added — Long-lived API bearer tokens
+
+`POST /api/auth/tokens` mints PBKDF2-SHA256-hashed bearer tokens for
+the HA custom_component.  `Authorization: Bearer <token>` is now
+accepted on all `/api/*` routes alongside the existing session-cookie
+auth.  HAOS users skip token generation entirely thanks to
+`POST /api/auth/ha-pair`, which validates the Supervisor proxy chain
+and mints a token without operator input.
+
+### Added — `aiomqtt` dependency
+
+The MQTT publisher uses `aiomqtt>=2.0` (an asyncio wrapper over
+`paho-mqtt`).  Both ship as wheels for amd64 / aarch64 / armv7.
+
 ## [2.64.3] - 2026-04-27
 
 ### Fixed — Group ID no longer overflows the device card

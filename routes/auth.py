@@ -27,12 +27,16 @@ import secrets
 import threading
 import time
 import urllib.request as _ur
+from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 from flask import Blueprint, Response, jsonify, redirect, render_template, request, session, url_for
 
 from config import check_password, load_config
+
+if TYPE_CHECKING:
+    from werkzeug.wrappers.response import Response as WerkzeugResponse
 
 logger = logging.getLogger(__name__)
 
@@ -214,12 +218,28 @@ def _generate_csrf_token() -> str:
 
 
 def _validate_csrf_token() -> bool:
-    """Validate CSRF token from form data against session."""
-    form_token = request.form.get("csrf_token", "")
+    """Validate CSRF token from form, JSON body, or X-CSRF-Token header.
+
+    JSON-content-type endpoints (e.g. ``POST /api/auth/tokens``) cannot
+    POST a form body, so they pass the same token through either the
+    JSON envelope or an explicit ``X-CSRF-Token`` header.
+    """
     session_token = session.get("csrf_token", "")
     if not session_token:
         return False
-    return hmac.compare_digest(form_token, session_token)
+    presented = request.form.get("csrf_token", "")
+    if not presented:
+        try:
+            payload = request.get_json(silent=True) or {}
+            if isinstance(payload, dict):
+                presented = str(payload.get("csrf_token") or "")
+        except Exception:
+            presented = ""
+    if not presented:
+        presented = request.headers.get("X-CSRF-Token", "")
+    if not presented:
+        return False
+    return hmac.compare_digest(presented, session_token)
 
 
 def _is_ha_addon() -> bool:
@@ -466,7 +486,7 @@ def _safe_next_url() -> str:
 
 def _handle_ma_login(
     client_ip: str,
-) -> tuple[str | None, Response | None]:
+) -> tuple[str | None, Response | WerkzeugResponse | str | None]:
     """Handle ``method == "ma"`` — Music Assistant credential validation."""
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
@@ -485,7 +505,7 @@ def _handle_ha_via_ma_login(
     client_ip: str,
     ha_mode: bool,
     auth_methods: list[str],
-) -> tuple[str | None, Response | None]:
+) -> tuple[str | None, Response | WerkzeugResponse | str | None]:
     """Handle ``method == "ha_via_ma"`` — remote HA Core login_flow with 2FA."""
     ha_url = _get_ha_core_url_from_ma()
     if not ha_url:
@@ -588,7 +608,7 @@ def _handle_ha_direct_login(
     client_ip: str,
     ha_mode: bool,
     auth_methods: list[str],
-) -> tuple[str | None, Response | None]:
+) -> tuple[str | None, Response | WerkzeugResponse | str | None]:
     """Handle ``method == "ha"`` — HA addon authentication with 2FA support."""
     step = request.form.get("step", "credentials")
 
@@ -709,7 +729,7 @@ def _handle_ha_direct_login(
 
 def _handle_local_password_login(
     client_ip: str,
-) -> tuple[str | None, Response | None]:
+) -> tuple[str | None, Response | WerkzeugResponse | str | None]:
     """Handle local password authentication via ``check_password``."""
     config = load_config()
     password = request.form.get("password", "")
@@ -803,3 +823,119 @@ def logout():
     if bucket:
         session["_lockout_client_id"] = bucket
     return redirect(url_for("auth.login"))
+
+
+# ---------------------------------------------------------------------------
+# Long-lived API bearer tokens (v2.65.0+)
+# ---------------------------------------------------------------------------
+#
+# Tokens issued via these endpoints are used by the HA custom_component to
+# authenticate REST/SSE calls without piggy-backing on a session cookie.
+# Endpoints require an authenticated session (or, for the Supervisor pair
+# variant, a valid SUPERVISOR_TOKEN that round-trips through Supervisor's
+# /auth endpoint).
+
+
+def _require_authenticated_session() -> tuple[Response, int] | None:
+    """Reject API token endpoints unless the caller has a UI session.
+
+    Used as the bearer for `/api/auth/tokens` issuance — we don't allow a
+    token to mint another token, only the operator behind the web UI does.
+    """
+    if session.get("authenticated"):
+        return None
+    return jsonify({"error": "Unauthorized"}), 401
+
+
+@auth_bp.route("/api/auth/tokens", methods=["GET"])
+def api_auth_tokens_list():
+    """List long-lived bearer tokens (no plaintext, no hashes)."""
+    blocked = _require_authenticated_session()
+    if blocked:
+        return blocked
+    from services.auth_tokens import list_tokens
+
+    return jsonify({"success": True, "tokens": [t.to_public_dict() for t in list_tokens()]})
+
+
+@auth_bp.route("/api/auth/tokens", methods=["POST"])
+def api_auth_tokens_create():
+    """Mint a new bearer token; the plaintext is returned ONCE."""
+    blocked = _require_authenticated_session()
+    if blocked:
+        return blocked
+    if not _validate_csrf_token():
+        return jsonify({"error": "Invalid CSRF token"}), 403
+    data = request.get_json(silent=True) or {}
+    label = str(data.get("label") or "ha-custom-component").strip()[:64]
+    if not label:
+        return jsonify({"success": False, "error": "label required"}), 400
+
+    from services.auth_tokens import issue_token
+
+    plain, record = issue_token(label)
+    return jsonify(
+        {
+            "success": True,
+            "token": plain,  # the only time the plaintext is ever sent
+            "record": record.to_public_dict(),
+        }
+    )
+
+
+@auth_bp.route("/api/auth/tokens/<token_id>", methods=["DELETE"])
+def api_auth_tokens_delete(token_id: str):
+    """Revoke a bearer token by id."""
+    blocked = _require_authenticated_session()
+    if blocked:
+        return blocked
+    from services.auth_tokens import revoke_token
+
+    removed = revoke_token(token_id)
+    if not removed:
+        return jsonify({"success": False, "error": "Unknown token id"}), 404
+    return jsonify({"success": True, "id": token_id})
+
+
+@auth_bp.route("/api/auth/ha-pair", methods=["POST"])
+def api_auth_ha_pair():
+    """One-shot pairing flow for HA custom_component on HAOS.
+
+    The custom_component invokes this endpoint *from the HA Supervisor
+    network*; the Supervisor proxies our /api/* paths through its ingress
+    so the request lands here with the caller's HA Core identity already
+    present in headers (X-Remote-User-Display-Name).  We mint a bearer
+    token labelled ``ha-custom-component`` and return it once.
+
+    Threat model: an attacker who can reach this endpoint from outside
+    the Supervisor network must NOT receive a token.  We trust the
+    Supervisor proxy chain by checking the immediate peer is in
+    ``_TRUSTED_PROXIES`` (same set used by ``_check_auth``) AND that the
+    request carries an ``X-Ingress-Path`` header — only Supervisor injects
+    that header.
+    """
+    peer = (request.remote_addr or "").strip()
+    if peer not in _TRUSTED_PROXY_DEFAULTS:
+        # Allow the operator-configurable proxy list as well so tests /
+        # split deployments work.
+        try:
+            cfg = load_config()
+            extra = cfg.get("TRUSTED_PROXIES") or []
+            if peer not in {str(p).strip() for p in extra}:
+                return jsonify({"success": False, "error": "Not allowed from this network"}), 403
+        except Exception:
+            return jsonify({"success": False, "error": "Not allowed from this network"}), 403
+
+    if not request.headers.get("X-Ingress-Path"):
+        return jsonify({"success": False, "error": "Supervisor ingress required"}), 403
+
+    from services.auth_tokens import issue_token
+
+    plain, record = issue_token("ha-custom-component")
+    return jsonify(
+        {
+            "success": True,
+            "token": plain,
+            "record": record.to_public_dict(),
+        }
+    )

@@ -1,0 +1,188 @@
+---
+title: Home Assistant Integration
+description: Control Sendspin BT Bridge from Home Assistant dashboards and automations.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Available in **v2.65.0+**.
+
+The bridge ships with two parallel transports for direct control from Home
+Assistant dashboards and automations — pick whichever fits your existing
+setup, or use both together.
+
+<Aside type="note">
+  This integration **does not duplicate** Music Assistant's media surface.
+  When sendspin-bt-bridge runs through Music Assistant, every Bluetooth
+  speaker is already exposed in HA as `media_player.<name>` by the
+  official Music Assistant integration.  Our integration only adds the
+  things MA doesn't know about: BT signal strength, battery, sync
+  health, idle behaviour, and BT-level commands like reconnect / wake /
+  full reset.
+</Aside>
+
+## Two transports, one data model
+
+|  | Path B — MQTT discovery | Path A1 — custom_component (HACS) |
+|---|---|---|
+| Lives in HA as | Auto-discovered via MQTT broker | HACS custom integration |
+| Setup on HAOS | One-click (Mosquitto auto-detect) | One-click (Supervisor pair) |
+| Setup off HAOS | Self-host MQTT (Mosquitto in Docker) | Generate token in bridge UI |
+| Transport | MQTT pub/sub, JSON state per device | REST + SSE (`/api/ha/state`, `/api/status/events`) |
+| Latency | Lowest | Low (SSE is push) |
+| Source of truth | Same `services/ha_state_projector` projection | Same projection |
+
+Both transports expose **the same set of entities**.  You'll see only
+one device card per speaker either way — entities declare
+`connections=[("bluetooth", mac)]` so HA's device registry merges them
+with MA's existing `media_player.<name>` card.
+
+## Entities exposed per speaker
+
+| Kind | Entity ID | Purpose |
+|---|---|---|
+| `binary_sensor` | `bluetooth_connected` | BlueZ link state |
+| `binary_sensor` | `audio_streaming` | A2DP active |
+| `binary_sensor` | `reanchoring` | Sync reanchoring in progress |
+| `binary_sensor` | `reconnecting` | Reconnect attempt active |
+| `binary_sensor` | `bt_standby`, `bt_power_save` | Idle states |
+| `sensor` | `rssi_dbm` | Live BT signal strength (dBm) |
+| `sensor` | `battery_level` | Battery % via `org.bluez.Battery1` |
+| `sensor` | `audio_format` | Active codec (SBC, AAC, …) |
+| `sensor` | `reanchor_count`, `last_sync_error_ms`, `reconnect_attempt`, `last_error` | Sync diagnostics |
+| `sensor` | `health_state` | Computed device health |
+| `switch` | `enabled` | Enable / disable device |
+| `switch` | `bt_management_enabled` | Release BT adapter to another bridge |
+| `select` | `idle_mode` | `default` / `power_save` / `auto_disconnect` / `keep_alive` |
+| `select` | `keep_alive_method` | `infrasound` / `silence` / `none` |
+| `number` | `static_delay_ms` | 0–5000 ms forward delay |
+| `number` | `power_save_delay_minutes` | Idle minutes before PA sink suspend |
+| `button` | `reconnect`, `disconnect`, `wake`, `standby` | BT-level transport |
+| `button` | `power_save_toggle`, `pair`, `claim_audio`, `reset_reconnect` | Recovery actions |
+
+Plus a single bridge-level device card with `version`,
+`ma_connected` binary sensor, `startup_phase` sensor, `update`
+entity, `restart` and `scan` buttons.
+
+## Path B — MQTT discovery
+
+### Setup on Home Assistant OS
+
+1. Install the official **Mosquitto broker** add-on if you don't have
+   one (Settings → Add-ons → Add-on Store → Mosquitto broker).
+2. Open the bridge web UI → **Home Assistant** panel.
+3. Click **Auto-detect MQTT add-on** — the broker host / port /
+   credentials are filled in automatically via the Supervisor API.
+4. Toggle **Enabled** → **mode: mqtt** → Save.
+5. Within seconds your speakers appear in HA under
+   *Settings → Devices → MQTT*, **merged into the same device card MA
+   already created**.
+
+### Setup with a self-hosted broker
+
+1. Run Mosquitto in Docker:
+
+   ```yaml
+   services:
+     mqtt:
+       image: eclipse-mosquitto:2
+       ports:
+         - "1883:1883"
+   ```
+
+2. In the bridge web UI → **Home Assistant** panel, set the broker
+   host:port and credentials manually, switch **mode** to `mqtt`, and
+   **Enable**.
+
+3. In Home Assistant, configure the MQTT integration to point at the
+   same broker (Settings → Devices → Add Integration → MQTT).
+
+### MQTT topic shape
+
+```
+homeassistant/<component>/sendspin_<player_id>/<object_id>/config   (discovery, retained)
+sendspin/<player_id>/state                                          (consolidated JSON, retained)
+sendspin/<player_id>/availability                                   (online/offline, LWT)
+sendspin/<player_id>/cmd/<command>                                  (subscribed)
+sendspin/bridge/state                                               (bridge-level state)
+sendspin/bridge/availability                                        (LWT)
+sendspin/bridge/cmd/<command>                                       (subscribed)
+```
+
+## Path A1 — custom_component (HACS)
+
+### Setup
+
+1. In HACS, add the bridge repository as a custom repository:
+   `https://github.com/trudenboy/sendspin-bt-bridge` (category:
+   *Integration*).
+2. Install **Sendspin BT Bridge**.
+3. Restart Home Assistant.
+4. HA auto-discovers the bridge via mDNS and offers
+   **"Sendspin BT Bridge discovered"** in *Settings → Devices*.
+5. **On HAOS** — click *Configure*; the integration mints a token via
+   the Supervisor pair endpoint with no further input.
+   **Off HAOS** — open the bridge web UI, *Home Assistant* panel, click
+   **Generate token**, copy it once, and paste into HA's confirmation
+   dialog.
+
+### What you can automate
+
+```yaml
+# Auto-disconnect a speaker that's been idle for an hour
+automation:
+  - alias: "Park ENEBY20 after 1h idle"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.eneby20_audio_streaming
+        to: "off"
+        for:
+          hours: 1
+    action:
+      - service: button.press
+        target:
+          entity_id: button.eneby20_standby
+
+# Force a full BT reset when reconnect attempts pile up
+  - alias: "Reset ENEBY20 on reconnect storm"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.eneby20_reconnect_attempt
+        above: 5
+    action:
+      - service: button.press
+        target:
+          entity_id: button.eneby20_reset_reconnect
+```
+
+## Authentication
+
+`POST /api/auth/tokens` mints PBKDF2-SHA256-hashed long-lived bearer
+tokens used by the custom_component.  The plaintext is returned **once**
+and never persisted — copy it immediately when you generate one in the
+bridge web UI.
+
+The `Authorization: Bearer <token>` header is accepted on every
+`/api/*` route alongside the existing session cookie.
+
+For HAOS users the integration uses `POST /api/auth/ha-pair`, which
+validates the Supervisor proxy chain (`X-Ingress-Path` header from a
+`172.30.32.2` source) and mints a token labelled `ha-custom-component`
+without operator input.
+
+## Disabling the integration
+
+* **Path B** — flip the **Enabled** toggle off in the bridge web UI.
+  The publisher tears down cleanly and HA marks the entities as
+  unavailable.
+* **Path A1** — *Settings → Devices → Sendspin BT Bridge → Delete*.
+  The integration is removed; revoke the corresponding token in the
+  bridge web UI to invalidate it permanently.
+
+## What's NOT here
+
+This integration deliberately does not expose `media_player`, volume,
+mute, transport, queue state, now-playing metadata, shuffle, repeat,
+or sync-group membership — those belong to Music Assistant's
+integration.  Duplicating them would create entity collisions and
+confuse automations (which `media_player` to target?).

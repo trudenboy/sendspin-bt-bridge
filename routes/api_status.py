@@ -94,7 +94,10 @@ VERSION = _CONFIG_VERSION
 
 _sse_count = 0
 _sse_lock = threading.Lock()
-_MAX_SSE = 4
+# v2.65.0: bumped from 4 to 6 because the HA custom_component coordinator
+# may open both /api/status/stream (snapshots) and /api/status/events
+# (typed events) per HA host.  4 was enough for the web UI alone.
+_MAX_SSE = 6
 _SSE_MAX_LIFETIME = 1800  # 30 minutes
 
 

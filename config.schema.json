@@ -314,6 +314,65 @@
       "type": "boolean",
       "default": false,
       "description": "Permit HSP/HFP service UUIDs in the pairing agent. Default false — most DSPs (Bose QC, AKG Y500) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Set true only for HFP-only headsets that A2DP-block at the peer."
+    },
+    "HA_INTEGRATION": {
+      "type": "object",
+      "default": {
+        "enabled": false,
+        "mode": "off",
+        "mqtt": {
+          "broker": "auto",
+          "port": 1883,
+          "username": "",
+          "password": "",
+          "discovery_prefix": "homeassistant",
+          "tls": false,
+          "client_id": ""
+        },
+        "rest": {
+          "advertise_mdns": true,
+          "supervisor_pair": true
+        }
+      },
+      "description": "Home Assistant integration: MQTT discovery (transport B) and/or mDNS-advertised REST surface for the custom_component (transport A1). Bridge-only entities — never duplicates Music Assistant's media_player.<name>.",
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "mode": {"type": "string", "enum": ["off", "mqtt", "rest", "both"], "default": "off"},
+        "mqtt": {
+          "type": "object",
+          "properties": {
+            "broker": {"type": "string", "description": "Broker host or 'auto' (Supervisor MQTT add-on auto-detect)."},
+            "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 1883},
+            "username": {"type": "string"},
+            "password": {"type": "string"},
+            "discovery_prefix": {"type": "string", "default": "homeassistant"},
+            "tls": {"type": "boolean", "default": false},
+            "client_id": {"type": "string", "description": "Optional MQTT client_id; empty = auto-derived from bridge_id."}
+          }
+        },
+        "rest": {
+          "type": "object",
+          "properties": {
+            "advertise_mdns": {"type": "boolean", "default": true, "description": "Publish _sendspin-bridge._tcp.local. so HA's Zeroconf discovery offers our integration."},
+            "supervisor_pair": {"type": "boolean", "default": true, "description": "On HAOS, allow the custom_component to obtain a long-lived bearer token via the SUPERVISOR_TOKEN round-trip pairing endpoint."}
+          }
+        }
+      }
+    },
+    "AUTH_TOKENS": {
+      "type": "array",
+      "default": [],
+      "description": "Long-lived API bearer tokens used by the HA custom_component. Plaintext tokens are returned only at issuance — the persisted form stores PBKDF2-SHA256 hashes.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "label": {"type": "string"},
+          "token_hash": {"type": "string"},
+          "created": {"type": "string"},
+          "last_used": {"type": ["string", "null"]}
+        }
+      }
     }
   },
   "$defs": {

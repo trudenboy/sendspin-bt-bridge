@@ -100,12 +100,13 @@ class _IngressMiddleware:
         return self._app(environ, start_response)
 
 
-app.wsgi_app = _IngressMiddleware(app.wsgi_app)
+app.wsgi_app = _IngressMiddleware(app.wsgi_app)  # type: ignore[method-assign]
 
 # Register blueprints (imported after app is created to avoid circular imports)
 from routes.api import api_bp  # noqa: E402
 from routes.api_bt import bt_bp  # noqa: E402
 from routes.api_config import config_bp  # noqa: E402
+from routes.api_ha import ha_bp  # noqa: E402
 from routes.api_ma import ma_bp  # noqa: E402
 from routes.api_status import status_bp  # noqa: E402
 from routes.api_transport import transport_bp  # noqa: E402
@@ -120,6 +121,7 @@ app.register_blueprint(ma_bp)
 app.register_blueprint(status_bp)
 app.register_blueprint(transport_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(ha_bp)
 
 # WebSocket endpoints stay disabled in v2.63.0-rc.4+.
 #
@@ -155,7 +157,7 @@ def inject_version():
 
     def asset_version(filename: str) -> str:
         try:
-            mtime = int(Path(app.static_folder, filename).stat().st_mtime)
+            mtime = int(Path(app.static_folder or "", filename).stat().st_mtime)
         except OSError:
             mtime = 0
         return f"{runtime_version}-{mtime}"
@@ -207,8 +209,20 @@ def _set_cache_headers(response):
     return response
 
 
-# Public paths that never require authentication
-_PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
+# Public paths that never require authentication.
+#
+# ``/api/auth/ha-pair`` is the bootstrap endpoint the HA custom_component
+# hits before any bearer token exists; the route itself enforces the real
+# gate (Supervisor-IP + ``X-Ingress-Path`` header check in
+# ``routes/auth.py``), so opening it here just lets the request reach
+# that handler.  Any future pre-auth bootstrap endpoint goes here too.
+_PUBLIC_PATHS = {
+    "/login",
+    "/logout",
+    "/api/health",
+    "/api/preflight",
+    "/api/auth/ha-pair",
+}
 
 # Cache for HA owner display name (resolved once per process lifetime)
 _ingress_user_cache: str | None = None
@@ -273,6 +287,26 @@ def _check_auth():
     # Active session
     if session.get("authenticated"):
         return
+
+    # Bearer-token authentication (used by the HA custom_component).  Tokens
+    # are issued via /api/auth/tokens and stored hashed in config.json.  A
+    # successful match grants ``authenticated`` for this request only — we
+    # don't promote it into the persistent session, so a leaked token
+    # never grants a UI cookie.
+    if request.path.startswith("/api/"):
+        try:
+            from services.auth_tokens import extract_bearer, find_matching_token
+
+            presented = extract_bearer(request.headers)
+            if presented:
+                record = find_matching_token(presented)
+                if record is not None:
+                    g.bearer_principal = f"bearer:{record.label}"
+                    return
+        except Exception:
+            # Auth-token machinery must never crash auth enforcement —
+            # fall through to the standard 401 path.
+            pass
 
     # Unauthenticated — return 401 for API calls, redirect to login for pages
     if request.path.startswith("/api/"):

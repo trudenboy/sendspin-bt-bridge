@@ -1,0 +1,17 @@
+{
+  "domain": "sendspin_bridge",
+  "name": "Sendspin BT Bridge",
+  "codeowners": ["@trudenboy"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/trudenboy/sendspin-bt-bridge",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/trudenboy/sendspin-bt-bridge/issues",
+  "loggers": ["custom_components.sendspin_bridge"],
+  "requirements": [],
+  "version": "2.65.0-rc.1",
+  "zeroconf": [
+    {"type": "_sendspin-bridge._tcp.local."}
+  ]
+}
