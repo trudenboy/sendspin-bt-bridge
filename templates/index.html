@@ -300,6 +300,7 @@
                 <button type="button" class="config-tab" data-config-tab="devices"><span class="config-tab-label">Devices</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="bluetooth"><span class="config-tab-label">Bluetooth</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="ma"><span class="config-tab-label">Music Assistant</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
+                <button type="button" class="config-tab" data-config-tab="ha"><span class="config-tab-label">Home Assistant</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
                 <button type="button" class="config-tab" data-config-tab="security"><span class="config-tab-label">Security</span><span class="config-tab-dirty-count ui-count-badge ui-count-badge--warning" hidden>0</span></button>
             </div>
             </div><!-- .config-tabs-wrap -->
@@ -926,6 +927,180 @@
                                 </span>
                             </label>
 
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="config-tab-panel" id="config-panel-ha" data-config-panel="ha">
+                <div class="config-group">
+                    <div class="config-group-heading ui-stack ui-stack--xs">
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span> Home Assistant integration</h4>
+                        <p class="config-group-subtitle">
+                            Direct control of the bridge from HA dashboards and automations. Bridge-only diagnostics
+                            (RSSI, battery, BT state) and BT-level commands (reconnect, wake, standby) — never
+                            duplicates Music Assistant's <code>media_player</code> surface.
+                        </p>
+                    </div>
+
+                    <div class="config-settings-grid">
+                        <div class="config-settings-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Transport</div>
+                                <p class="config-card-subtitle">
+                                    Pick MQTT for zero-install on HAOS (uses the Mosquitto add-on); REST for the
+                                    HACS custom_component; or Both to allow either path.
+                                </p>
+                            </div>
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Enable HA integration</strong>
+                                    <span class="form-hint">Master switch — turn off to stop publishing entities and to halt the mDNS advertisement.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="ha-integration-enabled">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Mode</strong>
+                                    <span class="form-hint">Which transports run. <code>off</code> = disabled, <code>mqtt</code> = MQTT only, <code>rest</code> = mDNS + REST/SSE only, <code>both</code> = both.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <select id="ha-integration-mode" class="config-inline-select">
+                                        <option value="off">off</option>
+                                        <option value="mqtt">mqtt</option>
+                                        <option value="rest">rest</option>
+                                        <option value="both">both</option>
+                                    </select>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="config-settings-card" id="ha-mqtt-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">MQTT broker</div>
+                                <p class="config-card-subtitle">
+                                    Used when mode is <code>mqtt</code> or <code>both</code>. On HAOS click
+                                    <em>Auto-detect</em> to fill these in from the Mosquitto add-on.
+                                </p>
+                            </div>
+                            <div class="form-inline-actions config-inline-row" style="margin-bottom: 0.75em;">
+                                <button type="button" class="btn btn-sm btn-secondary" data-action="ha-mqtt-autodetect">
+                                    <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span>
+                                    Auto-detect MQTT add-on
+                                </button>
+                                <span class="form-hint" id="ha-mqtt-autodetect-hint" style="margin-left: 0.5em;"></span>
+                            </div>
+                            <div class="config-form-grid">
+                                <div class="form-group">
+                                    <label>Broker host
+                                        <span class="form-hint">Hostname or IP. Use <code>auto</code> on HAOS to re-resolve from the Mosquitto add-on at startup.</span>
+                                    </label>
+                                    <input type="text" id="ha-mqtt-broker" placeholder="auto" autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label>Port</label>
+                                    <input type="number" id="ha-mqtt-port" min="1" max="65535" placeholder="1883">
+                                </div>
+                                <div class="form-group">
+                                    <label>Username</label>
+                                    <input type="text" id="ha-mqtt-username" autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label>Password</label>
+                                    <input type="password" id="ha-mqtt-password" autocomplete="new-password">
+                                </div>
+                                <div class="form-group">
+                                    <label>Discovery prefix
+                                        <span class="form-hint">HA's discovery topic prefix; default <code>homeassistant</code>.</span>
+                                    </label>
+                                    <input type="text" id="ha-mqtt-discovery-prefix" placeholder="homeassistant">
+                                </div>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>TLS</strong>
+                                    <span class="form-hint">Connect to broker over TLS (mTLS not supported).</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="ha-mqtt-tls">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <div class="config-inline-note" id="ha-mqtt-status" hidden>
+                                <span class="form-hint" id="ha-mqtt-status-text"></span>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card" id="ha-rest-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">REST + Zeroconf (custom_component)</div>
+                                <p class="config-card-subtitle">
+                                    Used by the HACS custom_component. mDNS advertises the bridge so HA's Zeroconf
+                                    discovery offers our integration automatically.
+                                </p>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Advertise via mDNS</strong>
+                                    <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for HA Zeroconf discovery.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="ha-rest-advertise-mdns" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Allow Supervisor pairing</strong>
+                                    <span class="form-hint">On HAOS, let the custom_component mint a token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" id="ha-rest-supervisor-pair" checked>
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                            <div class="config-inline-note" id="ha-mdns-status" hidden>
+                                <span class="form-hint" id="ha-mdns-status-text"></span>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card" id="ha-tokens-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Bearer tokens for HA custom_component</div>
+                                <p class="config-card-subtitle">
+                                    Long-lived tokens the HACS integration sends in <code>Authorization: Bearer …</code>.
+                                    On HAOS the custom_component mints one automatically via the Supervisor pair flow —
+                                    use this card only for manual setups.
+                                </p>
+                            </div>
+                            <div class="form-inline-actions config-inline-row">
+                                <input type="text" id="ha-token-label" class="config-inline-fill"
+                                       placeholder="Label (e.g. ha-custom-component)" autocomplete="off">
+                                <button type="button" class="btn btn-sm btn-primary" data-action="ha-token-create">Generate token</button>
+                            </div>
+                            <div class="config-inline-note" id="ha-token-once" hidden>
+                                <strong>Copy this token now — it's shown only once.</strong>
+                                <div class="form-inline-actions config-inline-row" style="margin-top: 0.5em;">
+                                    <code id="ha-token-once-value" class="config-inline-fill"
+                                          style="user-select: all; word-break: break-all;"></code>
+                                    <button type="button" class="btn btn-sm btn-secondary" data-action="ha-token-copy">Copy</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" data-action="ha-token-once-dismiss">Done</button>
+                                </div>
+                            </div>
+                            <div id="ha-tokens-list" class="config-form-grid" style="margin-top: 0.75em;">
+                                <span class="form-hint">No tokens issued yet.</span>
+                            </div>
                         </div>
                     </div>
                 </div>

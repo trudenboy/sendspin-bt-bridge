@@ -73,7 +73,16 @@ config_bp = Blueprint("api_config", __name__)
 # they cannot be overwritten by the web form.
 _ALLOWED_POST_CONFIG_KEYS = (
     CONFIG_ALLOWED_KEYS - SENSITIVE_CONFIG_KEYS - RUNTIME_STATE_CONFIG_KEYS - {"MA_AUTH_PROVIDER"}
-) | {"LAST_VOLUMES", "MA_API_TOKEN", "_new_device_default_volume"}
+) | {
+    "LAST_VOLUMES",
+    "MA_API_TOKEN",
+    # ``HA_INTEGRATION`` round-trips through the Settings → Home Assistant
+    # tab; it's in SENSITIVE_CONFIG_KEYS only because it nests an MQTT
+    # password.  POSTing the block back is fine because the password
+    # is redacted at download time (see ``_sanitize_download_config``).
+    "HA_INTEGRATION",
+    "_new_device_default_volume",
+}
 
 
 def _submit_loop_coroutine(loop, coro, *, description: str) -> bool:
@@ -119,6 +128,15 @@ def _sanitize_download_config(config: dict) -> dict:
     sanitized = dict(config)
     for key in _DOWNLOAD_REDACTED_KEYS:
         sanitized.pop(key, None)
+    # HA_INTEGRATION nests an MQTT password — redact only that leaf so the
+    # rest of the block survives a config-share/diagnostic dump.
+    ha_integration = sanitized.get("HA_INTEGRATION")
+    if isinstance(ha_integration, dict):
+        cloned = {k: (dict(v) if isinstance(v, dict) else v) for k, v in ha_integration.items()}
+        mqtt = cloned.get("mqtt")
+        if isinstance(mqtt, dict) and mqtt.get("password"):
+            mqtt["password"] = "***REDACTED***"
+        sanitized["HA_INTEGRATION"] = cloned
     return sanitized
 
 
@@ -170,6 +188,18 @@ def _build_config_get_response():
     config.pop("MA_REFRESH_TOKEN", None)
     config.pop("MA_TOKEN_INSTANCE_HOSTNAME", None)
     config.pop("MA_TOKEN_LABEL", None)
+    # HA_INTEGRATION carries an MQTT password — surface its presence
+    # without leaking the value.  Mirrors the MA_API_TOKEN pattern.
+    ha_integration = config.get("HA_INTEGRATION")
+    if isinstance(ha_integration, dict):
+        cloned = {k: (dict(v) if isinstance(v, dict) else v) for k, v in ha_integration.items()}
+        mqtt = cloned.get("mqtt")
+        if isinstance(mqtt, dict):
+            mqtt["password"] = "***REDACTED***" if mqtt.get("password") else ""
+        config["HA_INTEGRATION"] = cloned
+    # AUTH_TOKENS is sensitive — never include in GET response (the
+    # /api/auth/tokens endpoint returns the public form separately).
+    config.pop("AUTH_TOKENS", None)
     config["_password_set"] = has_password
     if runtime == "ha_addon":
         config["WEB_PORT"] = None
@@ -665,6 +695,31 @@ def api_config():
         config["HA_ADAPTER_AREA_MAP"] = _normalize_ha_adapter_area_map(config.get("HA_ADAPTER_AREA_MAP", {}))
     except ValueError as exc:
         return _error_response(str(exc))
+
+    # HA_INTEGRATION password round-trip semantics — the GET response
+    # surfaces an existing password as the marker ``***REDACTED***`` and
+    # the UI puts that marker into the input field on load.  Three cases:
+    #   * ``***REDACTED***`` (operator didn't touch the field) — keep existing
+    #   * ``""`` (operator cleared the field) — explicit clear, broker
+    #     switches to no-auth
+    #   * anything else — overwrite with the typed plaintext
+    # ``None``/whitespace inherit "keep existing" so a clumsy client
+    # submitting an unset field doesn't accidentally clear the password,
+    # but explicit ``""`` is honoured.
+    incoming_ha = config.get("HA_INTEGRATION")
+    if isinstance(incoming_ha, dict):
+        existing_full_config = load_config()
+        existing_ha = existing_full_config.get("HA_INTEGRATION") or {}
+        existing_mqtt = existing_ha.get("mqtt") if isinstance(existing_ha.get("mqtt"), dict) else {}
+        incoming_mqtt = incoming_ha.get("mqtt")
+        if isinstance(incoming_mqtt, dict):
+            pw = incoming_mqtt.get("password")
+            if pw == "***REDACTED***" or pw is None:
+                incoming_mqtt["password"] = existing_mqtt.get("password", "")
+            elif isinstance(pw, str) and pw.strip() == "" and pw != "":
+                # Whitespace-only — treat as untouched / unset, not clear.
+                incoming_mqtt["password"] = existing_mqtt.get("password", "")
+            # else: explicit "" → preserved as "" (clear), or non-empty → overwrite
 
     try:
         sendspin_port = _parse_optional_int(config.get("SENDSPIN_PORT"), "SENDSPIN_PORT", min_value=1, max_value=65535)
