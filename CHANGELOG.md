@@ -69,15 +69,6 @@ toggle or fire an automation on a Bluetooth speaker.
   attaches a slim ``sendspin_bridge.zip`` for HACS to fetch
   without pulling the whole bridge repo.
 
-### Upgrading from rc.1–rc.5
-
-If you wrote any HA automations against the rc.1
-``button.<player>_wake`` / ``standby`` / ``power_save_toggle`` or
-the ``binary_sensor.<player>_bt_standby`` / ``bt_power_save``,
-switch them over to the new ``switch.<player>_standby`` and
-``switch.<player>_power_save`` entities.  The state attribute has
-the same semantics as the old binary sensors.
-
 The detailed rc-cycle history (rc.1 → rc.6) follows below verbatim
 for traceability.
 
