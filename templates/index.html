@@ -923,7 +923,7 @@
             <section class="config-tab-panel" id="config-panel-ha" data-config-panel="ha">
                 <div class="config-group">
                     <div class="config-group-heading ui-stack ui-stack--xs">
-                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="ma" aria-hidden="true"></span> Home Assistant integration</h4>
+                        <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="ha" aria-hidden="true"></span> Home Assistant integration</h4>
                         <p class="config-group-subtitle">
                             Direct control of the bridge from HA dashboards and automations. Bridge-only diagnostics
                             (RSSI, battery, BT state) and BT-level commands (reconnect, wake, standby) — never
@@ -932,6 +932,27 @@
                     </div>
 
                     <div class="config-card-stack">
+                        <div class="config-settings-card" id="ha-naming-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Naming</div>
+                                <p class="config-card-subtitle">
+                                    Pull manual name suggestions for the bridge and Bluetooth adapters from the Home Assistant area registry, so devices line up with the rooms HA already knows about.
+                                </p>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Use Home Assistant area suggestions for names</strong>
+                                    <span class="form-hint">When on, the bridge name and adapter name fields surface a dropdown of HA areas. Suggestions only — nothing is renamed automatically. Defaults on in HA add-on mode.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" data-action="ha-area-assist-change" data-event="change">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+
                         <div id="ha-connect-panel" class="config-settings-card">
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div>
@@ -991,27 +1012,6 @@
                                         <option value="mqtt">MQTT — Mosquitto add-on</option>
                                         <option value="rest">REST — HACS custom_component</option>
                                     </select>
-                                </span>
-                            </label>
-                        </div>
-
-                        <div class="config-settings-card" id="ha-naming-card">
-                            <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Naming</div>
-                                <p class="config-card-subtitle">
-                                    Pull manual name suggestions for the bridge and Bluetooth adapters from the Home Assistant area registry, so devices line up with the rooms HA already knows about.
-                                </p>
-                            </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Use Home Assistant area suggestions for names</strong>
-                                    <span class="form-hint">When on, the bridge name and adapter name fields surface a dropdown of HA areas. Suggestions only — nothing is renamed automatically. Defaults on in HA add-on mode.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" data-action="ha-area-assist-change" data-event="change">
-                                        <span class="config-switch-track"></span>
-                                    </span>
                                 </span>
                             </label>
                         </div>

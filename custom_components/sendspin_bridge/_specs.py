@@ -72,22 +72,10 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:sync",
         availability_class="cumulative",
     ),
-    EntitySpec(
-        "bt_standby",
-        "binary_sensor",
-        "BT standby",
-        entity_category="diagnostic",
-        icon="mdi:power-sleep",
-        availability_class="cumulative",
-    ),
-    EntitySpec(
-        "bt_power_save",
-        "binary_sensor",
-        "BT power save",
-        entity_category="diagnostic",
-        icon="mdi:leaf",
-        availability_class="cumulative",
-    ),
+    # ``bt_standby`` and ``bt_power_save`` binary sensors removed in
+    # v2.65.0-rc.6 — replaced by the ``standby`` and ``power_save``
+    # switches below which expose both the current state AND the toggle
+    # action in one HA entity.
     # Diagnostic sensors
     EntitySpec(
         "rssi_dbm",
@@ -182,6 +170,24 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         availability_class="config",
     ),
     EntitySpec(
+        "standby",
+        "switch",
+        "Standby",
+        entity_category="config",
+        icon="mdi:power-sleep",
+        command="set_standby",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
+        "power_save",
+        "switch",
+        "Power save",
+        entity_category="config",
+        icon="mdi:leaf",
+        command="set_power_save",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
         "idle_mode",
         "select",
         "Idle mode",
@@ -244,32 +250,10 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         command="disconnect",
         availability_class="config",
     ),
-    EntitySpec(
-        "wake",
-        "button",
-        "Wake from standby",
-        icon="mdi:bluetooth-audio",
-        command="wake",
-        availability_class="config",
-    ),
-    EntitySpec(
-        "standby",
-        "button",
-        "Enter standby",
-        icon="mdi:power-sleep",
-        command="standby",
-        availability_class="config",
-    ),
-    EntitySpec(
-        "power_save_toggle",
-        "button",
-        "Toggle power save",
-        icon="mdi:leaf",
-        command="power_save_toggle",
-        availability_class="config",
-    ),
     # Pairing and reset_reconnect intentionally NOT exposed (see
     # services/ha_entity_model.py).
+    # ``wake`` / ``standby`` / ``power_save_toggle`` buttons removed in
+    # v2.65.0-rc.6 — see the ``standby`` and ``power_save`` switches above.
     EntitySpec(
         "claim_audio",
         "button",

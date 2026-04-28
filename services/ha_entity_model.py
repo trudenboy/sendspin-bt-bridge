@@ -295,24 +295,12 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:sync",
         availability_class="cumulative",  # meaningful when offline too
     ),
-    EntitySpec(
-        object_id="bt_standby",
-        kind=EntityKind.BINARY_SENSOR,
-        name="BT standby",
-        extractor=_d_bt_standby,
-        entity_category="diagnostic",
-        icon="mdi:power-sleep",
-        availability_class="cumulative",  # state we want HA to see during standby
-    ),
-    EntitySpec(
-        object_id="bt_power_save",
-        kind=EntityKind.BINARY_SENSOR,
-        name="BT power save",
-        extractor=_d_bt_power_save,
-        entity_category="diagnostic",
-        icon="mdi:leaf",
-        availability_class="cumulative",
-    ),
+    # ``bt_standby`` and ``bt_power_save`` used to be read-only binary
+    # sensors paired with separate ``wake`` / ``standby`` / ``power_save_toggle``
+    # buttons.  v2.65.0-rc.6 collapsed each pair into a single switch
+    # (``standby`` and ``power_save`` below) that exposes both the current
+    # state and the toggle action — strictly more useful in HA automations
+    # and removes 3 duplicate entities per device.
     # Diagnostics sensors -----------------------------------------------------
     EntitySpec(
         object_id="rssi_dbm",
@@ -417,6 +405,39 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         availability_class="config",
     ),
     EntitySpec(
+        # Standby switch: ON = device is in standby, OFF = active.  The
+        # toggle in HA wakes / parks the speaker; flipping is idempotent
+        # so an automation that re-asserts the target state does not
+        # produce 409 errors.  State mirrors the daemon's ``bt_standby``
+        # flag, so it also flips to ON automatically when the bridge
+        # enters standby on its own (e.g. ``idle_mode=auto_disconnect``).
+        # Lives in cumulative availability so the toggle stays usable
+        # while the BT link is down — that's exactly when an operator
+        # most wants to wake the speaker from a dashboard.
+        object_id="standby",
+        kind=EntityKind.SWITCH,
+        name="Standby",
+        extractor=_d_bt_standby,
+        entity_category="config",
+        icon="mdi:power-sleep",
+        command="set_standby",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
+        # Power-save switch: ON = PA sink suspended, OFF = active.
+        # Toggle is idempotent through ``command_power_save_toggle``.
+        # State mirrors ``bt_power_save`` so it also reflects the
+        # bridge entering power save on its own (idle_mode=power_save).
+        object_id="power_save",
+        kind=EntityKind.SWITCH,
+        name="Power save",
+        extractor=_d_bt_power_save,
+        entity_category="config",
+        icon="mdi:leaf",
+        command="set_power_save",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
         object_id="idle_mode",
         kind=EntityKind.SELECT,
         name="Idle mode",
@@ -484,30 +505,6 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         command="disconnect",
         availability_class="config",
     ),
-    EntitySpec(
-        object_id="wake",
-        kind=EntityKind.BUTTON,
-        name="Wake from standby",
-        icon="mdi:bluetooth-audio",
-        command="wake",
-        availability_class="config",
-    ),
-    EntitySpec(
-        object_id="standby",
-        kind=EntityKind.BUTTON,
-        name="Enter standby",
-        icon="mdi:power-sleep",
-        command="standby",
-        availability_class="config",
-    ),
-    EntitySpec(
-        object_id="power_save_toggle",
-        kind=EntityKind.BUTTON,
-        name="Toggle power save",
-        icon="mdi:leaf",
-        command="power_save_toggle",
-        availability_class="config",
-    ),
     # Pairing and reset_reconnect intentionally NOT exposed:
     #   - pair: one-shot interactive workflow needing the speaker in pairing
     #     mode (no safe HA-automation surface).
@@ -515,6 +512,11 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
     #     from the bridge web UI than from an HA automation that might fire
     #     it on a transient blip.
     # Bridge web UI keeps both.
+    #
+    # ``wake`` / ``standby`` / ``power_save_toggle`` buttons removed in
+    # v2.65.0-rc.6 — replaced by the ``standby`` and ``power_save``
+    # switches above which expose both the toggle action AND the current
+    # state in a single HA entity.
     EntitySpec(
         object_id="claim_audio",
         kind=EntityKind.BUTTON,
