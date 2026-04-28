@@ -208,6 +208,38 @@ def api_ha_mqtt_probe():
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/mosquitto/status — Mosquitto add-on install state
+# ---------------------------------------------------------------------------
+
+
+@ha_bp.route("/api/ha/mosquitto/status", methods=["GET"])
+def api_ha_mosquitto_status():
+    """Read-only snapshot of the Mosquitto add-on state on HAOS.
+
+    Used by the web UI to decide whether to show the "Install Mosquitto"
+    install banner, the "Start Mosquitto" hint, or the auto-configure
+    CTA.  Outside HA addon mode the response has ``available=false`` so
+    the UI hides the banner.
+    """
+    try:
+        from services.ha_addon import get_mosquitto_addon_state
+
+        return jsonify(get_mosquitto_addon_state())
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Mosquitto status query failed")
+        return jsonify(
+            {
+                "available": False,
+                "installed": False,
+                "started": False,
+                "slug": "core_mosquitto",
+                "install_url": "https://my.home-assistant.io/redirect/supervisor_addon/?addon=core_mosquitto",
+                "error": str(exc),
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mqtt/status — publisher diagnostics
 # ---------------------------------------------------------------------------
 

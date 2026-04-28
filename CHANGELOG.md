@@ -60,6 +60,44 @@ and disabled devices show ``"disabled"`` in the projection JSON, so HA
 dashboards can highlight parked / dormant speakers without parsing
 multiple binary sensors.
 
+### Changed — HA integration panel: dropdown-master + connected banner + Mosquitto guidance
+
+The HA integration tab (Settings → Home Assistant) gets a UX rebuild
+that mirrors the Music Assistant panel pattern:
+
+  - **Dropdown replaces toggle.** The "Enable HA integration" checkbox
+    is gone; the existing transport dropdown (off / mqtt / rest) is
+    now the single source of truth.  Picking a transport implicitly
+    enables the integration, picking ``off`` disables it — no two-step
+    flow where the master switch can disagree with the picked
+    transport.  Saved configs with an inconsistent ``enabled=true,
+    mode=off`` (or vice versa) load as ``off`` in the new dropdown so
+    the user makes the choice explicit on first save.
+  - **Connection-status banner.** A new card at the top of the panel
+    shows "Off / Connecting / Connected via MQTT to <broker> /
+    Configured for REST but not connected yet / Error: …" with the
+    same colour palette the MA panel uses.  Once the publisher is
+    ``connected`` the transport-specific cards collapse; the operator
+    sees only the banner with a "Reconfigure" button to expand the
+    form again.
+  - **Mosquitto guidance banner.** When in HA addon mode, the panel
+    detects the Mosquitto broker add-on state via the new
+    ``GET /api/ha/mosquitto/status`` endpoint:
+      * mode == ``mqtt`` and the add-on is missing or stopped →
+        shows install/start instructions with a deep-link to the
+        official Mosquitto add-on page (Supervisor add-on install
+        needs ``manager`` role, which our add-on doesn't request, so
+        the link rather than a one-click install is the safe path).
+      * mode == ``off`` and the add-on is installed and started →
+        offers a "Set up automatically" CTA that flips the dropdown
+        to ``mqtt``, leaves the broker on ``auto`` (Supervisor
+        auto-resolves credentials), saves, and hot-applies — one
+        click from "off" to "connected" without typing anything.
+
+The auto-config CTA is gated on the form being clean (no other
+unsaved changes elsewhere on the page) so saving doesn't silently
+flush unrelated dirty state.
+
 ### Fixed — HA "Claim audio" no longer breaks playback
 
 ``services.bt_commands.command_claim_audio`` was probing for a

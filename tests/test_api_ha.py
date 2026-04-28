@@ -114,6 +114,65 @@ def test_mqtt_probe_masks_password(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/mosquitto/status — Mosquitto add-on install state
+# ---------------------------------------------------------------------------
+
+
+def test_mosquitto_status_outside_ha_addon(client, monkeypatch):
+    """No SUPERVISOR_TOKEN → ``available=False`` so the UI hides the banner.
+
+    The other fields stay populated with safe defaults so the UI doesn't
+    have to special-case the response shape."""
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    resp = client.get("/api/ha/mosquitto/status")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["available"] is False
+    assert body["installed"] is False
+    assert body["started"] is False
+    assert body["slug"] == "core_mosquitto"
+    assert "my.home-assistant.io" in body["install_url"]
+
+
+def test_mosquitto_status_inside_ha_addon_not_installed(client, monkeypatch):
+    """Supervisor returns no info → installed=False, install_url present."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "stub-token")
+    monkeypatch.setattr("services.ha_addon.get_supervisor_addon_info", lambda *a, **kw: None)
+    resp = client.get("/api/ha/mosquitto/status")
+    body = resp.get_json()
+    assert body["available"] is True
+    assert body["installed"] is False
+    assert body["started"] is False
+    assert body["install_url"]
+
+
+def test_mosquitto_status_inside_ha_addon_started(client, monkeypatch):
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "stub-token")
+    monkeypatch.setattr(
+        "services.ha_addon.get_supervisor_addon_info",
+        lambda *a, **kw: {"slug": "core_mosquitto", "state": "started", "version": "6.4.1"},
+    )
+    resp = client.get("/api/ha/mosquitto/status")
+    body = resp.get_json()
+    assert body["available"] is True
+    assert body["installed"] is True
+    assert body["started"] is True
+
+
+def test_mosquitto_status_inside_ha_addon_stopped(client, monkeypatch):
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "stub-token")
+    monkeypatch.setattr(
+        "services.ha_addon.get_supervisor_addon_info",
+        lambda *a, **kw: {"slug": "core_mosquitto", "state": "stopped", "version": "6.4.1"},
+    )
+    resp = client.get("/api/ha/mosquitto/status")
+    body = resp.get_json()
+    assert body["available"] is True
+    assert body["installed"] is True
+    assert body["started"] is False
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mqtt/status
 # ---------------------------------------------------------------------------
 

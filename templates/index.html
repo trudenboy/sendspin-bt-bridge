@@ -943,38 +943,65 @@
                         </p>
                     </div>
 
-                    <div class="config-settings-grid">
-                        <div class="config-settings-card">
+                    <div class="config-card-stack">
+                        <div id="ha-connect-panel" class="config-settings-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div>
+                                    <div class="config-card-title">Connection status</div>
+                                    <p class="config-card-subtitle">Current Home Assistant integration state for this bridge. Reconfigure to expand the transport settings.</p>
+                                </div>
+                            </div>
+                            <div id="ha-status-bar" class="panel-status panel-status--neutral">
+                                <span id="ha-status-icon" class="panel-status-icon ui-icon-slot" data-ui-icon="status-neutral" aria-hidden="true"></span>
+                                <span id="ha-status-text" class="panel-status-text">Off — pick a transport below to connect.</span>
+                                <button type="button" id="ha-reconfigure" class="btn btn-sm btn-secondary panel-status-action" hidden data-action="ha-reconfigure">Reconfigure</button>
+                            </div>
+                        </div>
+
+                        <div id="ha-mosquitto-banner" class="config-settings-card" hidden>
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div>
+                                    <div class="config-card-title">Mosquitto MQTT broker</div>
+                                    <p class="config-card-subtitle" id="ha-mosquitto-banner-text">
+                                        The MQTT transport needs the official Mosquitto broker add-on. Install it from the Home Assistant add-on store, then come back to finish the setup.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="form-inline-actions config-inline-row">
+                                <a id="ha-mosquitto-install-link"
+                                   class="btn btn-sm btn-primary"
+                                   href="https://my.home-assistant.io/redirect/supervisor_addon/?addon=core_mosquitto"
+                                   target="_blank" rel="noopener">
+                                    <span class="btn-icon-slot ui-icon-slot" data-ui-icon="upload" aria-hidden="true"></span>
+                                    Open Mosquitto add-on in Home Assistant
+                                </a>
+                                <button type="button" id="ha-mosquitto-autoconfig"
+                                        class="btn btn-sm btn-primary" data-action="ha-auto-configure" hidden>
+                                    <span class="btn-icon-slot ui-icon-slot" data-ui-icon="plug" aria-hidden="true"></span>
+                                    Set up automatically
+                                </button>
+                                <span class="form-hint" id="ha-mosquitto-autoconfig-hint" style="margin-left: 0.5em;"></span>
+                            </div>
+                        </div>
+
+                        <div class="config-settings-card" id="ha-transport-card">
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Transport</div>
                                 <p class="config-card-subtitle">
-                                    Pick MQTT for zero-install on HAOS (uses the Mosquitto add-on); REST for the
-                                    HACS custom_component; or Both to allow either path.
+                                    Pick how Home Assistant reaches the bridge.  Off disables the integration entirely.
                                 </p>
                             </div>
                             <label class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Enable HA integration</strong>
-                                    <span class="form-hint">Master switch — turn off to stop publishing entities and to halt the mDNS advertisement.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="ha-integration-enabled">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Transport</strong>
-                                    <span class="form-hint">Pick one transport.  <code>mqtt</code> publishes discovery payloads to a broker (zero install in HA when Mosquitto is present).  <code>rest</code> advertises the bridge via mDNS so the HACS custom_component can attach over REST + SSE.  Pick the path that matches how you'll configure HA.</span>
+                                    <strong>Mode</strong>
+                                    <span class="form-hint"><code>MQTT</code> publishes discovery payloads to a broker — zero install in HA when the Mosquitto add-on is present.  <code>REST</code> advertises the bridge via mDNS so the HACS custom_component can attach over REST + SSE.  Pick the path that matches how you want to wire HA.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <select id="ha-integration-mode" class="config-inline-select"
                                             data-action="ha-integration-mode-change" data-event="change">
-                                        <option value="off">off</option>
-                                        <option value="mqtt">mqtt</option>
-                                        <option value="rest">rest</option>
+                                        <option value="off">Off — disabled</option>
+                                        <option value="mqtt">MQTT — Mosquitto add-on</option>
+                                        <option value="rest">REST — HACS custom_component</option>
                                     </select>
                                 </span>
                             </label>
@@ -984,8 +1011,7 @@
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">MQTT broker</div>
                                 <p class="config-card-subtitle">
-                                    Used when mode is <code>mqtt</code> or <code>both</code>. On HAOS click
-                                    <em>Auto-detect</em> to fill these in from the Mosquitto add-on.
+                                    On HAOS click <em>Auto-detect</em> to fill these in from the Mosquitto add-on, or set <code>auto</code> as the broker host to resolve at startup.
                                 </p>
                             </div>
                             <div class="form-inline-actions config-inline-row" style="margin-bottom: 0.75em;">
