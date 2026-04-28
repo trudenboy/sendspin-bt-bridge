@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.2] - 2026-04-28
+
 ### Added — Settings → Home Assistant tab
 
 The HA-integration controls promised by v2.65.0-rc.1's plan now have a
