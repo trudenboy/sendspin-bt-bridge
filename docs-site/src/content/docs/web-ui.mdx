@@ -91,7 +91,8 @@ The toolbar above the fleet view includes:
 - **Group filter** — show one Music Assistant sync group or all groups.
 - **Adapter filter** — narrow the view to a specific Bluetooth adapter.
 - **Status filter** — filter by playing, idle, standby, reconnecting, released, or error states.
-- **Selection controls** — select all visible devices, then apply group volume, mute, pause, reconnect, or release.
+- **Selection controls** — select all visible devices, then apply group volume, mute, or pause.
+- **Bulk actions** dropdown — runs against every device in the fleet, regardless of selection: **Reconnect all**, **Power save all** (suspend the PulseAudio sink), **Standby all** (disconnect Bluetooth), and **Release all** (hand the speakers back to the host without removing them from the saved fleet).
 - **Grid/List toggle** — switch between card view and table view.
 
 ### View modes
@@ -109,11 +110,21 @@ Devices are automatically sorted by activity: playing speakers appear first, the
 Each device exposes the same core information in both grid and list layouts:
 
 - **Player name** and playback animation.
-- **Bluetooth and Music Assistant state**.
-- **Track, artist, progress, and album art** when available.
+- **Status badge** — current device state: `Playing`, `Connecting`, `Stale stream`, `No sink`, `Standby`, `Disconnected`, `Stopping`, `Waking`, `Sink muted`, `Applying`, or `Buffering`.
+- **Track, artist, progress, and album art** when available. The progress bar is driven by the native sendspin daemon timeline (the older Music Assistant fallback path was removed in v2.64). Click the artwork to enlarge it.
 - **Volume and mute controls**.
-- **Sync badges** including re-anchor status and configured delay.
-- **Battery and adapter badges** when those signals are available.
+- **Sync badge** — shows `Sync` (green) or `Re-anchoring` (amber, pulsing) with the running drift in milliseconds and a re-anchor counter.
+- **Adapter chip** — Bluetooth icon plus the adapter's friendly name. The chip is colour-coded by health (success / warning / error / neutral) and clicking it jumps to the adapter row in **Configuration → Bluetooth**.
+- **Music Assistant chip** — MA icon, with an `API` tag when the bridge is talking to the MA REST/WebSocket API.
+- **Battery chip** — icon plus percentage, where available. Tiers are green (>25 %), amber (16–25 %), and red (≤15 %); the value is read from `org.bluez.Battery1`.
+- **RSSI chip** — four-bar signal indicator and live `Δ dB` readout, refreshed every 5 s. The value is the offset from the BR/EDR Golden Receive Power Range, so `0` is ideal and increasingly negative values are a degraded link. The chip greys out when no fresh sample arrived in the last 30 s. RSSI is on by default and can be turned off in **Configuration → Bluetooth → Show live signal-strength badges**.
+
+  ![Device row with API tag and a live RSSI chip showing -4 Δ dB](/sendspin-bt-bridge/screenshots/screenshot-rssi-badge.png)
+- **Group chip** — Music Assistant sync-group name. Unnamed groups fall back to a short `#suffix` (last few characters of the group UUID) so multiple unnamed groups still read distinctly. A `+N` decoration appears when the group has external (non-bridge) members. Click the chip to open the group's settings page in the MA web UI.
+- **Room chip** — appears when the device has a `room_name` / `room_id` set; styled in blue when the value was auto-resolved from a Home Assistant area.
+- **Transfer-readiness chip** — appears during a room handoff to indicate whether the next speaker is primed.
+- **Released / Auto-released badge** — overlay above the speaker icon when the device is currently outside the bridge's control.
+- **Standby badge** — `💤 Standby (Xm)` with elapsed minutes, when the device is parked.
 
 ![Hovered device card with extra routing details and quick actions](/sendspin-bt-bridge/screenshots/screenshot-device-card-hover.png)
 
@@ -121,9 +132,13 @@ Hovering a card or expanding a row reveals more context and quick actions, inclu
 
 - **Reconnect** and **Re-pair**.
 - **Release / Reclaim** for temporarily handing the speaker back to a phone or PC without deleting it from the bridge.
-- **Standby / Wake** for power-saving disconnect; the speaker stays in the fleet but Bluetooth is parked until you wake it.
-- **BT Info** modal for copyable diagnostics.
+- **Claim** — appears for AVRCP-multipoint speakers that are currently controlled by another source (a phone, for example). Pressing it tells the bridge to take over the AVRCP role.
+- **Standby** / **Wake** for power-saving disconnect; the speaker stays in the fleet but Bluetooth is parked until you wake it. **Wake** is shown only while the device is in standby.
+- **Disable** — danger-styled action that takes the device out of the active fleet without removing the saved configuration.
+- **BT Info** modal — copyable diagnostics. The modal renders the full `bluetoothctl info <MAC>` output including advertised service UUIDs.
 - **Settings gear** that jumps straight into the matching row in **Configuration → Devices**.
+
+When a control is disabled, the card shows up to two **blocked-action hints** (with `Why disabled?` remediation links), so you immediately see why a button cannot be pressed in the current state.
 
 A few action pairs look similar but mean different things:
 
@@ -132,6 +147,17 @@ A few action pairs look similar but mean different things:
 - **Re-pair** or paired-device reset tools are for broken host pairing/trust state, not day-to-day handoff.
 
 Group badges are interactive too: clicking a Music Assistant group badge opens the matching group settings page in the MA web UI.
+
+## Speaker hardware controls (MPRIS)
+
+The bridge registers a per-device MPRIS player on the system D-Bus and hands it to BlueZ via `Media1.RegisterPlayer`. That gives you a two-way connection between the speaker's physical buttons and Music Assistant:
+
+- **Speaker → bridge → MA** — pressing **Play / Pause / Next / Previous** or rotating the volume knob on the speaker is forwarded as an AVRCP keypress, mapped to the corresponding Music Assistant queue command for that device's sync group.
+- **MA → bridge → speaker** — when MA reports a track change, pause, or volume update, the bridge pushes the new playback state, title/artist metadata, and volume back through MPRIS so the speaker's display and indicator LEDs reflect what is actually playing.
+
+When a single Bluetooth adapter has more than one speaker connected, the bridge uses an HCI source monitor to figure out **which** speaker generated an AVRCP keypress, so a Next press on speaker A doesn't skip the track playing on speaker B. Multi-speaker correlation needs the `CAP_NET_RAW` capability inside the container; without it the bridge falls back to routing every keypress to the most recently active speaker on that adapter.
+
+There is no UI toggle for MPRIS itself — it is always on for connected speakers that advertise AVRCP target support.
 
 ## Configuration panel
 
@@ -160,7 +186,14 @@ Unsaved edits enable **Cancel**, mark the configuration area as dirty, and trigg
 
 ### General tab
 
-Beyond the core identity and policy fields listed in the table, the General tab includes an **Experimental features** toggle at the bottom. Enabling it reveals early-stage per-device settings — currently **Room name**, **Room ID**, and **Handoff mode** — that may change or be removed in future versions. The toggle is a UI-only preference stored in the browser and is not persisted to the config file.
+Beyond the core identity and policy fields listed in the table, the General tab includes a **Show experimental features** toggle at the bottom. The toggle is a UI-only preference stored in the browser and is not persisted to the config file. While it is on, the dashboard reveals early-stage settings that may change or be removed in future versions:
+
+- **General** — `HA_AREA_NAME_ASSIST_ENABLED` (auto-resolve Bluetooth-adapter friendly names from Home Assistant area names).
+- **Bluetooth** — an **Experimental features** card with `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`, `EXPERIMENTAL_PA_MODULE_RELOAD`, `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`, and `ALLOW_HFP_PROFILE` (see the [Bluetooth Adapters](/sendspin-bt-bridge/bluetooth-adapters/) page for what each one does).
+- **Bluetooth → Scan modal** — additional checkboxes for **Pause other speakers on same adapter** (peer-quiesce, a workaround for single-adapter setups that fail to pair while another A2DP ACL is active) and **NoInputNoOutput pair agent** (Just Works pairing for speakers that send no SSP confirmation).
+- **Devices → per-device details** — `room_name` and `room_id` fields used by the room-handoff workflow.
+
+Experimental rows are visually distinct (warning iconography on the section heading and amber accents on the `Show experimental features` row itself) so it stays obvious that you are looking at unstable surfaces.
 
 ### Audio tab
 
@@ -191,17 +224,45 @@ The **Bluetooth** tab now owns the bridge-side Bluetooth tools:
 - **Adapters** card for rename, refresh, reboot, and manual adapter rows. The **↻ Reboot** button power-cycles a single adapter (off → 3 s pause → on) without restarting the bridge.
 - **Paired devices** card for inventory, import, and repair/reset actions. Each row has a **ℹ️ Info** button that opens the BT device info modal with copyable diagnostics.
 - **Scan nearby** opens a dedicated Bluetooth scan modal from this tab.
-- **Connection recovery** settings cover BT check interval and auto-disable threshold.
+- **Show live signal-strength badges** (`RSSI_BADGE`) — controls whether the device cards display the live RSSI chip described above. Default on.
+- **Connection recovery** settings cover BT check interval, auto-disable threshold, and the rapid-reconnect churn-isolation thresholds (`BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`) used to auto-disable a device that is stuck in a reconnect loop.
+- **Experimental features** card (visible only with **Show experimental features** turned on) — see the table further down.
 
 The scan modal improves first-run discovery and troubleshooting:
 
 - choose **All adapters** or a specific adapter;
 - keep **Audio devices only** on for normal use, or turn it off when debugging non-audio candidates;
 - watch a live **countdown/progress bar** while the scan runs;
-- use **Add** or **Add & Pair** directly from the results;
+- use **Pair and Add** (primary action) for the normal case, or the **Add to fleet** dropdown alternative when the speaker is already paired with the host;
 - use **Rescan** after the cooldown without leaving the modal.
 
 The **Already paired devices** list is the faster option when the host already knows the speaker and you just want to import or repair it.
+
+Each scan result row carries its own context chips: an `Audio device` / `Other` tag, the adapter that saw the device, an RSSI chip, and a `⚠ Another bridge` warning when the device looks like it is already managed by another bridge instance.
+
+![Scan results with the Pair and Add split-button on a discovered audio device](/sendspin-bt-bridge/screenshots/screenshot-scan-pair-and-add.png)
+
+#### Experimental Bluetooth toggles
+
+Visible only with **Show experimental features** turned on:
+
+| Toggle | What it does |
+|---|---|
+| `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE` | Adds a profile-disconnect / reconnect dance after BlueZ misses the A2DP sink during connect. Workaround for the dual-role regression in BlueZ 5.86 ([bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922)). |
+| `EXPERIMENTAL_PA_MODULE_RELOAD` | Reloads `module-bluez5-device` if a sink is reported missing after connect. Slower but covers PulseAudio side races. |
+| `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` | Runs the progressive adapter-recovery ladder (HCI mgmt reset → rfkill → USB unbind/rebind) when an adapter stops responding. Requires Linux capabilities not always present in containers. |
+| `ALLOW_HFP_PROFILE` | Allows the bridge's pairing agent to authorize the HFP / HSP profile during pairing. Off by default — HFP is a frequent source of audio-quality regressions and is not used by the bridge for playback. |
+
+![The three experimental recovery toggles in the Bluetooth tab, each labelled with an EXPERIMENTAL chip](/sendspin-bt-bridge/screenshots/screenshot-experimental-bluetooth-toggles.png)
+
+Two more experimental switches live inside the **Scan nearby** modal and apply only to the next pair attempt:
+
+| Toggle | What it does |
+|---|---|
+| **Pause other speakers on same adapter** (peer-quiesce) | Temporarily holds audio on already-connected speakers on the same adapter so BlueZ can complete a fresh pair. Workaround for the BlueZ 5.78–5.86 single-adapter pairing regression. |
+| **NoInputNoOutput pair agent** | Switches the agent to a Just-Works capability for speakers that never send an SSP confirmation. Less secure — accept any pair request silently — so it is gated behind the experimental toggle. |
+
+![Scan nearby modal with the experimental peer-quiesce and NoInputNoOutput pair-agent toggles visible](/sendspin-bt-bridge/screenshots/screenshot-scan-modal-experimental.png)
 
 ### Music Assistant tab
 
@@ -284,7 +345,5 @@ Clicking the update badge opens a modal that summarizes:
 - Runtime-specific actions such as **Update Now**, **Release Notes**, or a manual update hint.
 
 The header **Report** link and the Diagnostics action both open the bug-report flow. The dialog now pre-fills the description with a **diagnostics-generated suggested summary**, lets you edit it before submission, and keeps the full auto-attached diagnostics report available in an expandable preview.
-
-![Bug report dialog with diagnostics-driven suggested description and auto-attached report preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)
 
 ![Bug report dialog with diagnostics-driven suggested description and auto-attached report preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)

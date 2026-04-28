@@ -158,6 +158,27 @@ DisablePlugins=hfp,hsp
 
 Для standalone-login важны и restart-applied параметры вроде включения auth и session timeout. Если вы меняли эти значения, используйте **Save & Restart** прежде чем делать вывод, что настройка не подхватилась.
 
+## Аппаратные кнопки колонки попадают не в ту колонку
+
+**Симптом.** Когда на одном Bluetooth-адаптере подключено две или больше колонок, нажатие **Next**, **Previous**, **Play** или **Pause** на колонке A фактически переключает / запускает / ставит на паузу музыку на колонке B.
+
+**Причина.** BlueZ пересылает каждое AVRCP-событие первому зарегистрированному media-плееру, не сообщая, на какой именно **ACL-связи** пришло нажатие. С точки зрения BlueZ есть только один MPRIS-плеер, поэтому все аппаратные кнопки сворачиваются на последнюю активную колонку.
+
+**Что делает bridge автоматически.** Bridge запускает HCI source monitor (`services/hci_avrcp_monitor.py`), который открывает raw-сокет `HCI_CHANNEL_MONITOR`, парсит проходящие через контроллер AVRCP passthrough opcodes и сопоставляет каждое нажатие с фактическим ACL connection handle (а значит, MAC конкретной колонки). Диспетчер пересылает команду только в MPRIS-плеер этой колонки.
+
+**Когда срабатывает fallback.** HCI monitor требует `CAP_NET_RAW` внутри контейнера. Если открыть monitor-сокет не удаётся — типично для урезанного Docker-окружения или жёстко confined LXC — bridge пишет warning при старте и направляет каждое AVRCP-нажатие в **последнюю активную** колонку этого адаптера. Для one-speaker-per-adapter этого достаточно, но при двух колонках на одном адаптере возникает описанный выше симптом.
+
+**Как проверить.**
+
+1. Откройте **Diagnostics → Advanced → Subprocess and runtime info** (или выполните `docker logs sendspin-client | grep -i hci_avrcp`).
+2. Ищите `hci_avrcp_monitor: started on hciN` (норма) против `hci_avrcp_monitor: missing CAP_NET_RAW, falling back to default-client routing` (деградировано).
+3. Если monitor не стартовал, добавьте недостающие capabilities:
+   - **Docker**: убедитесь, что в `docker-compose.yml` присутствует `cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]`.
+   - **HA addon**: addon-образ запрашивает эти caps по умолчанию; проверьте в **Supervisor → Addons → Sendspin BT Bridge → Info**.
+   - **LXC**: убедитесь, что в конфиге контейнера **не задано** `lxc.cap.drop: cap_net_raw`.
+
+**Когда это не нужно.** Multi-adapter раскладка (каждая колонка на своём `hciN`) полностью убирает причину неоднозначности — BlueZ видит по одной колонке на адаптер, и default-client fallback оказывается корректным. Маршрутизация аппаратных кнопок становится неоднозначной только когда две или больше колонок делят один адаптер.
+
 ## Mute или volume не совпадают с Music Assistant
 
 Проверьте вкладку **Music Assistant**:

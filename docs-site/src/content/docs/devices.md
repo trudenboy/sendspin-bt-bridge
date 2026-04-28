@@ -172,6 +172,10 @@ Use these per-device fields when tuning difficult speakers:
 - **`static_delay_ms`** — additional forward delay (0–5 000 ms) applied on top of sendspin 7.0+'s DAC-anchored sync. The daemon auto-compensates for most of the audio-pipeline latency on its own; `static_delay_ms` is a fine-tune on top. The web UI pre-fills **300 ms** for every newly added device because field reports showed that is a noticeably better baseline than `0` for A/V sync in two-speaker groups, especially on Ubuntu / PipeWire hosts. Raise the value for speakers that consistently play **ahead** of the rest of a group (audible as the others echoing them); leave it at the default when sync already feels right. Negative values are not accepted — sendspin 7.0+ rejects them, and any legacy negative value in an imported config is clamped to `0` at migration time.
 - **`keepalive_interval`** — periodically sends silence so some speakers do not fall asleep between tracks.
 - **`keepalive_silence`** — legacy boolean from older addon configs; keepalive is now effectively controlled by `keepalive_interval > 0`.
+- **`keep_alive_method`** — how the bridge keeps the speaker awake when keep-alive is active:
+  - `infrasound` (default) — emits a near-inaudible 2 Hz pulse train. Works on speakers that hard-mute regular silence as a power-save trick.
+  - `silence` — pushes plain digital silence. Lowest impact on quality but ineffective on speakers that mute the line on flat zero samples.
+  - `none` — disables the active emission entirely; equivalent to "keep the BT link up but stay quiet". Use this for speakers that never sleep on their own anyway.
 - **`preferred_format`** — can reduce resampling or CPU load depending on your MA output settings.
 
 ### Measuring per-speaker latency with MassDroid

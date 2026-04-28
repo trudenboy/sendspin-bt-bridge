@@ -82,7 +82,8 @@ import { Aside } from '@astrojs/starlight/components';
 - **Фильтр по группе** Music Assistant.
 - **Фильтр по адаптеру**.
 - **Фильтр по статусу** — playing, idle, standby, reconnecting, released, error.
-- **Групповые действия** — volume, mute, pause, reconnect, release для выбранных устройств.
+- **Групповые действия** — для выбранных устройств доступны volume, mute и pause.
+- **Bulk actions** dropdown — действия применяются ко всему fleet, независимо от выделения: **Reconnect all**, **Power save all** (suspend PulseAudio sink), **Standby all** (отключить Bluetooth) и **Release all** (вернуть все колонки хосту, не удаляя их из сохранённого fleet).
 - **Переключатель режима сетки/списка**.
 
 ### Сетка и список
@@ -104,11 +105,21 @@ import { Aside } from '@astrojs/starlight/components';
 В режимах сетки и списка устройство показывает один и тот же core-набор данных:
 
 - **Имя плеера** и анимацию воспроизведения.
-- **Статус Bluetooth и Music Assistant**.
-- **Трек, исполнителя, прогресс и обложку** при наличии.
+- **Status badge** — текущее состояние устройства: `Playing`, `Connecting`, `Stale stream`, `No sink`, `Standby`, `Disconnected`, `Stopping`, `Waking`, `Sink muted`, `Applying` или `Buffering`.
+- **Трек, исполнитель, прогресс и обложка** при наличии. Прогресс-бар управляется напрямую таймлайном демона sendspin (старая ветка fallback через Music Assistant удалена в v2.64). Клик по обложке увеличивает её.
 - **Громкость и mute**.
-- **Sync badges** с re-anchor status и delay.
-- **Battery и adapter badges**, когда эти данные доступны.
+- **Sync badge** — `Sync` (зелёный) или `Re-anchoring` (амбер, пульсирует) с текущим дрейфом в миллисекундах и счётчиком re-anchor.
+- **Adapter chip** — иконка Bluetooth и friendly name адаптера. Чип окрашен по состоянию (success / warning / error / neutral); клик открывает соответствующую строку в **Configuration → Bluetooth**.
+- **Music Assistant chip** — иконка MA, с тегом `API`, когда bridge общается с MA REST/WebSocket API.
+- **Battery chip** — иконка и процент, если доступны. Тиеры: зелёный (>25 %), амбер (16–25 %), красный (≤15 %); значение читается из `org.bluez.Battery1`.
+- **RSSI chip** — индикатор уровня сигнала (4 столбика) и live-значение `Δ dB`, обновляется раз в 5 с. Это смещение от Golden Receive Power Range (BR/EDR), поэтому `0` — идеал, а всё более отрицательные значения означают деградацию связи. Чип становится серым, если за последние 30 с не пришло свежей выборки. RSSI включён по умолчанию; выключить — в **Configuration → Bluetooth → Show live signal-strength badges**.
+
+  ![Строка устройства с тегом API и live RSSI-чипом, показывающим -4 Δ dB](/sendspin-bt-bridge/screenshots/screenshot-rssi-badge.png)
+- **Group chip** — имя sync-группы Music Assistant. Безымянные группы получают короткий `#suffix` (последние символы UUID), чтобы несколько безымянных групп всё равно различались. Декорация `+N` появляется, когда в группе есть внешние (не bridge) участники. Клик открывает страницу настроек группы в MA web UI.
+- **Room chip** — появляется, если у устройства задано `room_name` / `room_id`; синяя расцветка означает, что значение автоматически получено из Home Assistant area.
+- **Transfer-readiness chip** — появляется во время room handoff и показывает, готова ли следующая колонка к приёму.
+- **Бейдж Released / Auto-released** — overlay над иконкой колонки, когда устройство сейчас вне управления bridge.
+- **Бейдж Standby** — `💤 Standby (Xm)` с количеством минут, когда устройство запарковано.
 
 ![Карточка устройства при наведении с routing details и быстрыми действиями](/sendspin-bt-bridge/screenshots/screenshot-device-card-hover.png)
 
@@ -116,13 +127,28 @@ import { Aside } from '@astrojs/starlight/components';
 
 - **Reconnect** и **Re-pair**.
 - **Release / Reclaim** для временной передачи колонки другому источнику.
-- **Standby / Wake** для энергосберегающего отключения Bluetooth; колонка остаётся в fleet, но соединение ставится на паузу до пробуждения.
-- **BT Info** modal с данными для копирования.
+- **Claim** — появляется для AVRCP-multipoint колонок, которые сейчас управляются другим источником (например, телефоном). Нажатие говорит bridge перехватить роль AVRCP.
+- **Standby** / **Wake** для энергосберегающего отключения Bluetooth; колонка остаётся в fleet, но соединение ставится на паузу до пробуждения. **Wake** показывается только когда устройство в standby.
+- **Disable** — действие danger-стиля, исключающее устройство из активного fleet без удаления сохранённой конфигурации.
+- **BT Info** modal — данные для копирования. Модалка теперь рендерит полный вывод `bluetoothctl info <MAC>`, включая список advertised service UUIDs.
 - **Шестерёнка settings**, которая переводит прямо в соответствующую строку **Configuration → Devices**.
+
+Если контрол отключён, на карточке появляются до двух **blocked-action hints** со ссылками `Why disabled?` — сразу видно, почему конкретная кнопка сейчас не нажимается.
 
 Бейдж группы Music Assistant тоже кликабелен — он открывает настройки этой sync group в MA.
 
 **Release** здесь намеренно временный: bridge перестаёт активно перехватывать колонку, чтобы ею мог воспользоваться телефон или ПК. **Disable** исключает устройство из bridge startup, а **Unpair** меняет Bluetooth trust state на уровне хоста.
+
+## Аппаратные кнопки колонки (MPRIS)
+
+Bridge регистрирует per-device MPRIS-плеер на системной D-Bus и отдаёт его BlueZ через `Media1.RegisterPlayer`. Получается двусторонняя связь между физическими кнопками колонки и Music Assistant:
+
+- **Колонка → bridge → MA** — нажатие **Play / Pause / Next / Previous** или поворот ручки громкости отправляется как AVRCP keypress и преобразуется в соответствующую команду очереди Music Assistant для sync-группы устройства.
+- **MA → bridge → колонка** — когда MA сообщает о смене трека, паузе или изменении громкости, bridge возвращает новый playback state, метаданные title/artist и громкость через MPRIS, чтобы экран и индикаторы колонки отражали реально играющее.
+
+Если на одном Bluetooth-адаптере подключено больше одной колонки, bridge использует HCI source monitor, чтобы определить, **какая именно** колонка сгенерировала AVRCP-нажатие — нажатие Next на колонке A не переключит трек, играющий на колонке B. Для multi-speaker correlation требуется capability `CAP_NET_RAW` внутри контейнера; без неё bridge fallback’ом маршрутизирует все нажатия на последнюю активную колонку этого адаптера.
+
+Отдельного UI-переключателя для MPRIS нет — он всегда включён для подключённых колонок, заявляющих поддержку AVRCP target.
 
 ## Панель Configuration
 
@@ -151,7 +177,14 @@ import { Aside } from '@astrojs/starlight/components';
 
 ### Вкладка General
 
-Помимо основных полей идентификации и политик, перечисленных в таблице, в нижней части вкладки General есть переключатель **Experimental features**. Его включение открывает доступ к ранним per-device настройкам — на данный момент **Room name**, **Room ID** и **Handoff mode** — которые могут измениться или быть удалены в будущих версиях. Переключатель — это UI-only настройка, хранящаяся в браузере, и она не сохраняется в config-файл.
+Помимо основных полей идентификации и политик, перечисленных в таблице, в нижней части вкладки General есть переключатель **Show experimental features**. Это UI-only настройка, хранящаяся в браузере, она не сохраняется в config-файл. Когда переключатель включён, dashboard показывает ранние настройки, которые могут измениться или быть удалены в будущих версиях:
+
+- **General** — `HA_AREA_NAME_ASSIST_ENABLED` (автоматически подставлять friendly names адаптеров из имён areas Home Assistant).
+- **Bluetooth** — карточка **Experimental features** с переключателями `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`, `EXPERIMENTAL_PA_MODULE_RELOAD`, `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` и `ALLOW_HFP_PROFILE` (что делает каждый — см. [Bluetooth-адаптеры](/sendspin-bt-bridge/ru/bluetooth-adapters/)).
+- **Bluetooth → Scan modal** — дополнительные чекбоксы **Pause other speakers on same adapter** (peer-quiesce, обходное решение для одноадаптерных установок, где BlueZ не может допарить вторую колонку, пока активен ACL первой) и **NoInputNoOutput pair agent** (Just Works pairing для колонок, которые не присылают SSP-подтверждение).
+- **Devices → per-device details** — поля `room_name` и `room_id`, используемые workflow room-handoff.
+
+Экспериментальные строки визуально выделены (warning-иконка в заголовке секции и амберовый акцент на самой строке `Show experimental features`), чтобы было понятно, что это нестабильные поверхности.
 
 ### Вкладка Audio
 
@@ -184,9 +217,47 @@ import { Aside } from '@astrojs/starlight/components';
 - Refresh inventory.
 - Кнопка **↻ Reboot** — перезагрузка одного адаптера (off → 3 с пауза → on) без перезапуска bridge.
 - **Paired devices** — inventory, import и repair/reset действия. Каждая строка имеет кнопку **ℹ️ Info**, открывающую BT device info modal с данными для копирования.
-- Настройку **BT check interval** и **auto-disable threshold**.
+- **Show live signal-strength badges** (`RSSI_BADGE`) — управляет тем, показывают ли карточки устройств live RSSI chip, описанный выше. По умолчанию включено.
+- Настройки **BT check interval**, **auto-disable threshold** и пороги rapid-reconnect churn-isolation (`BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`), используемые для авто-отключения устройства, застрявшего в reconnect-loop.
+- Карточка **Experimental features** (видна только при включённом **Show experimental features**) — таблица ниже.
 
 Глубокие ссылки из dashboard и empty state теперь попадают сразу в эту вкладку и подсвечивают нужную строку адаптера.
+
+Scan modal улучшает first-run discovery и troubleshooting:
+
+- выбор **All adapters** или конкретного адаптера;
+- **Audio devices only** оставьте включённым в обычном режиме, отключите при отладке non-audio кандидатов;
+- live **countdown / прогресс-бар** на время сканирования;
+- основная кнопка **Pair and Add** для типового случая или **Add to fleet** через выпадающий список, когда колонка уже сопряжена с хостом;
+- **Rescan** после кулдауна без выхода из модалки.
+
+Список **Already paired devices** — более быстрый путь, когда хост уже знает колонку и нужно только импортировать или починить запись.
+
+Каждая строка результата сканирования несёт собственные context chips: тег `Audio device` / `Other`, адаптер, который видел устройство, RSSI chip и предупреждение `⚠ Another bridge`, когда устройство выглядит уже управляемым другим bridge.
+
+![Результаты сканирования со split-кнопкой Pair and Add на найденной audio-колонке](/sendspin-bt-bridge/screenshots/screenshot-scan-pair-and-add.png)
+
+#### Экспериментальные Bluetooth-переключатели
+
+Видны только при включённом **Show experimental features**:
+
+| Переключатель | Что делает |
+|---|---|
+| `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE` | Добавляет profile-disconnect / reconnect dance, если BlueZ пропустил A2DP sink при connect. Обход dual-role регрессии BlueZ 5.86 ([bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922)). |
+| `EXPERIMENTAL_PA_MODULE_RELOAD` | Перезагружает `module-bluez5-device`, если sink сообщён как отсутствующий после connect. Медленнее, но покрывает гонки на стороне PulseAudio. |
+| `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` | Запускает progressive ladder восстановления адаптера (HCI mgmt reset → rfkill → USB unbind/rebind), когда адаптер перестаёт отвечать. Требует Linux capabilities, не всегда доступных в контейнерах. |
+| `ALLOW_HFP_PROFILE` | Позволяет pairing-агенту bridge авторизовать профиль HFP / HSP во время сопряжения. По умолчанию выключено — HFP часто становится источником регрессий качества звука и не используется bridge для воспроизведения. |
+
+![Три экспериментальных recovery-переключателя в Bluetooth tab, каждый помечен EXPERIMENTAL chip](/sendspin-bt-bridge/screenshots/screenshot-experimental-bluetooth-toggles.png)
+
+Ещё два экспериментальных переключателя живут внутри модалки **Scan nearby** и применяются только к следующей попытке сопряжения:
+
+| Переключатель | Что делает |
+|---|---|
+| **Pause other speakers on same adapter** (peer-quiesce) | Временно ставит на паузу аудио уже подключённых колонок на том же адаптере, чтобы BlueZ мог завершить новое сопряжение. Обход регрессии single-adapter pairing в BlueZ 5.78–5.86. |
+| **NoInputNoOutput pair agent** | Переключает агент в Just-Works для колонок, которые никогда не отправляют SSP-подтверждение. Менее безопасно — pair-запросы принимаются молча — поэтому скрыто за experimental toggle. |
+
+![Модалка Scan nearby с видимыми экспериментальными тогглами peer-quiesce и NoInputNoOutput pair-agent](/sendspin-bt-bridge/screenshots/screenshot-scan-modal-experimental.png)
 
 ### Вкладка Music Assistant
 
@@ -264,7 +335,5 @@ Empty-state действия были приведены в соответств
 Ссылка **Report** в шапке и действие в Diagnostics открывают flow bug-report, который добавляет diagnostics и помогает подготовить GitHub issue.
 
 Теперь bug-report dialog также заранее заполняет **редактируемое suggested description** на основе замаскированной диагностики. В нём кратко собираются recent issue-worthy logs, состояние Bluetooth/устройств, здоровье daemon/subprocess и статус Music Assistant, чтобы issue не начинался с пустого поля.
-
-![Bug report dialog с diagnostics-driven suggested description и auto-attached preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)
 
 ![Bug report dialog с diagnostics-driven suggested description и auto-attached preview](/sendspin-bt-bridge/screenshots/screenshot-bug-report-dialog.png)

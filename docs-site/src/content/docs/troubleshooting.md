@@ -177,6 +177,27 @@ If you see the yellow warning banner, local auth is disabled. Use its shortcut t
 
 Standalone login also depends on restart-applied settings such as auth enablement and session timeout. If you changed those values, use **Save & Restart** before concluding that the setting did not apply.
 
+## Speaker hardware buttons hit the wrong speaker
+
+**Symptom.** With two or more speakers on the **same** Bluetooth adapter, pressing **Next**, **Previous**, **Play**, or **Pause** on speaker A actually skips, plays, or pauses the music on speaker B.
+
+**Root cause.** BlueZ forwards every AVRCP target event to its first registered media player without telling the listener which **ACL connection** the keypress arrived on. From BlueZ's point of view there is only one MPRIS player to address, so all hardware buttons collapse onto the most recently active speaker.
+
+**What the bridge does automatically.** The bridge runs an HCI source monitor (`services/hci_avrcp_monitor.py`) that opens a raw `HCI_CHANNEL_MONITOR` socket, parses the AVRCP passthrough opcodes coming through the controller, and maps each keypress back to the actual ACL connection handle (and therefore the actual speaker MAC). The dispatcher then forwards the command to that speaker's MPRIS player only.
+
+**When this falls back.** The HCI monitor needs `CAP_NET_RAW` inside the container. If it cannot open the monitor socket — typically a stripped Docker setup or a tightly seccomp-confined LXC — the bridge logs a warning at startup and routes every AVRCP keypress to the **most recently active** speaker on that adapter. That is good enough for one-speaker-per-adapter setups but produces the wrong-speaker symptom above as soon as you have two.
+
+**How to verify.**
+
+1. Open **Diagnostics → Advanced → Subprocess and runtime info** (or run `docker logs sendspin-client | grep -i hci_avrcp`).
+2. Look for `hci_avrcp_monitor: started on hciN` (good) vs. `hci_avrcp_monitor: missing CAP_NET_RAW, falling back to default-client routing` (degraded).
+3. If the monitor never started, add the missing capability:
+   - **Docker**: ensure the `cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]` block is present in `docker-compose.yml`.
+   - **HA addon**: the addon image already requests these caps; verify in **Supervisor → Addons → Sendspin BT Bridge → Info**.
+   - **LXC**: confirm `lxc.cap.drop: cap_net_raw` is **not** set in the container config.
+
+**When you do not need this.** A multi-adapter layout (each speaker on its own `hciN`) avoids the underlying ambiguity entirely — BlueZ then sees one speaker per adapter and the default-client fallback is correct. Hardware-button routing is only ambiguous when two or more speakers share one adapter.
+
 ## Mute or volume state does not match Music Assistant
 
 Check the **Music Assistant** configuration tab:

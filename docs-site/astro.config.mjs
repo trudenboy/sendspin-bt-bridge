@@ -28,15 +28,9 @@ export default defineConfig({
       ],
       sidebar: [
         { label: 'Home', translations: { ru: 'Главная' }, link: '/' },
-        { label: 'Project Stats', translations: { ru: 'Статистика проекта' }, link: '/stats/' },
         {
           label: 'Installation', translations: { ru: 'Установка' },
           autogenerate: { directory: 'installation' },
-        },
-        {
-          label: 'Journey log',
-          translations: { ru: 'Бортжурнал' },
-          autogenerate: { directory: 'journey-log' },
         },
         { label: 'Configuration', translations: { ru: 'Настройка' }, slug: 'configuration' },
         { label: 'Web UI', translations: { ru: 'Веб-интерфейс' }, slug: 'web-ui' },
@@ -47,6 +41,13 @@ export default defineConfig({
         { label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' }, slug: 'troubleshooting' },
         { label: 'Test Stand', translations: { ru: 'Тестовый стенд' }, slug: 'test-stand' },
         { label: 'Contributing', translations: { ru: 'Разработка' }, slug: 'contributing' },
+        { label: 'Project Stats', translations: { ru: 'Статистика проекта' }, link: '/stats/' },
+        {
+          label: 'Journey log',
+          translations: { ru: 'Бортжурнал' },
+          autogenerate: { directory: 'journey-log' },
+          collapsed: true,
+        },
       ],
     }),
   ],
