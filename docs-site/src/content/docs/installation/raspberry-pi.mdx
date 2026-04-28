@@ -120,6 +120,17 @@ docker compose pull
 docker compose up -d
 ```
 
+## Prefer 5 GHz WiFi when using a USB BT dongle
+
+If you drive multiple speakers from a Pi 4 / Pi 5 with a USB Bluetooth dongle, connect the host to a **5 GHz** WiFi network rather than 2.4 GHz. The Pi's onboard WiFi shares the 2.4 GHz ISM band with Bluetooth, and on a 2.4 GHz link the radios contend on the same air, which can show up as climbing `Tx excessive retries` in `iwconfig`, audio dropouts, and BlueZ-induced D-Bus freezes. Switching the connection to 5 GHz typically removes the contention:
+
+```bash
+nmcli connection modify "<your-wifi-name>" wifi.band a
+nmcli connection up "<your-wifi-name>"
+```
+
+If the host has to stay on 2.4 GHz (older router, range constraints), consider wiring it over Ethernet instead. The community report behind this guidance is [#212](https://github.com/trudenboy/sendspin-bt-bridge/issues/212), and the full diagnostic is in [Troubleshooting → Audio stuttering and D-Bus freezes on Raspberry Pi](/sendspin-bt-bridge/troubleshooting/#audio-stuttering-and-d-bus-freezes-on-raspberry-pi-with-a-usb-bt-dongle).
+
 ## Bluetooth not working on fresh Raspberry Pi OS Lite
 
 Some fresh Raspberry Pi OS Lite images — Trixie in particular — ship with Bluetooth soft-blocked by `rfkill` or without `bluetoothd` enabled at boot. Symptoms: `bluetoothctl` cannot find an adapter, the web UI shows no scan results, or pairing fails with "No default controller available". Run these once before starting the bridge:

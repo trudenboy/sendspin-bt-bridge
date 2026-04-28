@@ -120,6 +120,17 @@ docker compose pull
 docker compose up -d
 ```
 
+## Предпочитайте 5 GHz WiFi при использовании USB BT-донгла
+
+Если вы запускаете несколько колонок с Pi 4 / Pi 5 через USB Bluetooth-донгл, подключайте хост к **5 GHz** WiFi-сети, а не к 2.4 GHz. Встроенный WiFi Pi делит ISM-диапазон 2.4 GHz с Bluetooth, и на 2.4 GHz-линке оба радио конкурируют за один и тот же эфир — это проявляется как растущий счётчик `Tx excessive retries` в `iwconfig`, провалы звука и зависания D-Bus, вызванные блокировкой BlueZ. Переключение соединения на 5 GHz, как правило, снимает конкуренцию:
+
+```bash
+nmcli connection modify "<имя-вашей-wifi>" wifi.band a
+nmcli connection up "<имя-вашей-wifi>"
+```
+
+Если хост обязан оставаться на 2.4 GHz (старый роутер, ограничения по дальности), рассмотрите подключение через Ethernet. Источник этой рекомендации — отчёт сообщества [#212](https://github.com/trudenboy/sendspin-bt-bridge/issues/212); полная диагностика — в разделе [Troubleshooting → Звук рассыпается и D-Bus подвисает на Raspberry Pi](/sendspin-bt-bridge/ru/troubleshooting/#звук-рассыпается-и-d-bus-подвисает-на-raspberry-pi-с-usb-bt-донглом).
+
 ## Примечания
 
 - `network_mode: host` обязателен для управления Bluetooth и автообнаружения Music Assistant.

@@ -127,6 +127,12 @@ Home Assistant.
 | 4 | EDUP EP-B3536 | RTL8761BUV | 5.1 | ≥ 5.8 | ~$11 | ⭐⭐⭐⭐ |
 | 5 | Zexmte BT 5.0 | RTL8761B | 5.0 | ≥ 5.8 | ~$9 | ⭐⭐⭐ |
 
+## Coexistence USB BT-донгла со встроенным WiFi на Raspberry Pi
+
+:::caution[2.4 GHz coexistence на Pi 4 / Pi 5]
+Встроенный WiFi (BCM43455) и любой USB BT-донгл делят ISM-диапазон 2.4 GHz. Если хост подключён к 2.4 GHz сети, конкуренция за эфир может приводить к росту счётчика `Tx excessive retries` в `iwconfig`, зависанию BlueZ, заиканию звука и подвисанию D-Bus-клиентов (например, `btop`). Если роутер поддерживает 5 GHz — переведите хост на 5 GHz. Подробности и команда `nmcli` — в разделе [Звук рассыпается и D-Bus подвисает на Raspberry Pi](/sendspin-bt-bridge/ru/troubleshooting/#звук-рассыпается-и-d-bus-подвисает-на-raspberry-pi-с-usb-bt-донглом) на странице Troubleshooting.
+:::
+
 ## Программные обходы регрессий адаптера / BlueZ
 
 Bridge содержит несколько **экспериментальных тогглов**, рассчитанных на конкретное поведение ядра / BlueZ / PulseAudio, а не на конкретную модель железа. Они находятся в **Configuration → Bluetooth → Experimental features** и спрятаны до тех пор, пока не включить **Show experimental features** на вкладке General. Подробное описание со скриншотами — на [странице Web UI](/sendspin-bt-bridge/ru/web-ui/#экспериментальные-bluetooth-переключатели); таблица ниже — короткая карта «что наблюдается на адаптере → какой тоггл может помочь»:

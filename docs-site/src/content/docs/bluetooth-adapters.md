@@ -145,6 +145,16 @@ concurrent A2DP audio stream**. To drive multiple speakers you **must**
 add one or more USB Bluetooth dongles (see recommended adapters above).
 :::
 
+:::caution[2.4 GHz coexistence with onboard WiFi]
+On Pi 4 / Pi 5, the onboard WiFi (BCM43455) and any USB BT dongle share
+the 2.4 GHz ISM band. When the host is connected to a 2.4 GHz WiFi
+network, contention can produce climbing `Tx excessive retries`,
+BlueZ stalls, audio dropouts and frozen D-Bus clients (e.g. `btop`).
+If the router supports it, prefer 5 GHz on the host. See
+[Audio stuttering and D-Bus freezes on Raspberry Pi](/sendspin-bt-bridge/troubleshooting/#audio-stuttering-and-d-bus-freezes-on-raspberry-pi-with-a-usb-bt-dongle)
+in the Troubleshooting page for the diagnostic and the `nmcli` fix.
+:::
+
 :::tip[rfkill on Raspberry Pi]
 On some Pi OS installations the on-board Bluetooth is soft-blocked by
 default. The bridge automatically runs `rfkill unblock bluetooth` at

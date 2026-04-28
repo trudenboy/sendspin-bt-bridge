@@ -67,6 +67,35 @@ Then restart the addon. This is a temporary measure — updating is the correct 
 
 **HAOS** is not affected — it uses a minimal security policy that does not restrict Bluetooth.
 
+## Audio stuttering and D-Bus freezes on Raspberry Pi with a USB BT dongle
+
+**Symptoms.** On a Raspberry Pi 4 / 5 with an external USB Bluetooth dongle (e.g. ASUS USB-BT500, TP-Link UB500), playback starts cleanly but then degrades within minutes:
+
+- audio stutters or drops out across one or more speakers;
+- `btop` or other tools that walk the system D-Bus freeze for several seconds at a time;
+- `iwconfig wlan0` shows the **Tx excessive retries** counter climbing rapidly (often into the thousands).
+
+**Likely cause.** 2.4 GHz coexistence between the Pi's onboard WiFi (BCM43455 on Pi 4 / Pi 5) and the USB BT dongle. Both radios share the 2.4 GHz ISM band; when WiFi traffic and BT ACL packets contend on the same air, the BT controller starts retransmitting, BlueZ blocks on the busy controller, and any client that issues synchronous D-Bus calls (the bridge daemon, `btop`, `bluetoothctl`) stalls along with it.
+
+**Quick diagnostic.** Watch the WiFi retry counter while playback is running:
+
+```bash
+iwconfig wlan0 | grep -i "Tx excessive retries"
+```
+
+If that number is increasing during playback, coexistence is a strong suspect.
+
+**Fix that has been confirmed by a community report ([#212](https://github.com/trudenboy/sendspin-bt-bridge/issues/212)).** Move the Pi to a 5 GHz WiFi network if the router supports it:
+
+```bash
+nmcli connection modify "<your-wifi-name>" wifi.band a
+nmcli connection up "<your-wifi-name>"
+```
+
+After the switch, `Tx excessive retries` should stay at `0` during playback and the audio dropouts and `btop` freezes should disappear.
+
+If you cannot move the host to 5 GHz, you may need to look into wiring the Pi over Ethernet, switching the BT dongle to a different physical setup, or accepting that single-speaker playback is the practical ceiling on a 2.4 GHz-only Pi.
+
 ## Bluetooth does not connect
 
 1. Confirm the speaker is paired at the host level.
