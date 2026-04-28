@@ -368,6 +368,15 @@ def publish_internal_event(
     )
 
 
+def get_internal_event_publisher() -> InternalEventPublisher:
+    """Public accessor for subscribers (HA MQTT publisher, custom_component bridge).
+
+    Returns the module-level singleton.  External callers ``subscribe()``
+    / ``unsubscribe()`` against this — never construct their own publisher.
+    """
+    return _internal_event_publisher
+
+
 def publish_device_event(
     device_id: str,
     event_type: str | DeviceEventType,

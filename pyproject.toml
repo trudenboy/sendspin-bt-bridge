@@ -83,4 +83,6 @@ show_error_codes = true
 exclude = [
     "sendspin-cli/",
     "scripts/",
+    # HA-specific code; ships separately via HACS, mypy doesn't have HA stubs.
+    "custom_components/",
 ]

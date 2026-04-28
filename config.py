@@ -47,8 +47,8 @@ from config_network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.64.3"
-BUILD_DATE = "2026-04-27"
+VERSION = "2.65.0-rc.1"
+BUILD_DATE = "2026-04-28"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
 __all__ = [
@@ -156,6 +156,33 @@ DEFAULT_CONFIG = {
     # when both are accepted, dropping the speaker to an 8 kHz mono call
     # codec. Enable only for HFP-only headsets that A2DP-block at the peer.
     "ALLOW_HFP_PROFILE": False,
+    # v2.65.0 — Home Assistant integration.  Two transports share one
+    # config namespace; ``mode`` selects which is active.  See
+    # ``services/ha_mqtt_publisher.py`` (B-path) and the
+    # ``custom_components/sendspin_bridge/`` HACS integration (A1-path).
+    # ``mqtt.broker == "auto"`` triggers Supervisor-side auto-detect of
+    # the Mosquitto add-on (see ``services.ha_addon.get_mqtt_addon_credentials``).
+    "HA_INTEGRATION": {
+        "enabled": False,
+        "mode": "off",  # off | mqtt | rest | both
+        "mqtt": {
+            "broker": "auto",
+            "port": 1883,
+            "username": "",
+            "password": "",
+            "discovery_prefix": "homeassistant",
+            "tls": False,
+            "client_id": "",
+        },
+        "rest": {
+            "advertise_mdns": True,
+            "supervisor_pair": True,
+        },
+    },
+    # Long-lived API tokens (Bearer auth) used by the HA custom_component.
+    # Each entry: {"id", "token_hash", "label", "created", "last_used"}.
+    # Plain tokens are returned once at issuance and never persisted.
+    "AUTH_TOKENS": [],
 }
 
 logger = logging.getLogger(__name__)
@@ -174,6 +201,11 @@ SENSITIVE_CONFIG_KEYS = frozenset(
         "MA_API_TOKEN",
         "MA_ACCESS_TOKEN",
         "MA_REFRESH_TOKEN",
+        # AUTH_TOKENS persists hashes only, but the list as a whole is
+        # security-sensitive — bug-report dumps must mask it.
+        "AUTH_TOKENS",
+        # HA_INTEGRATION carries an MQTT broker password.
+        "HA_INTEGRATION",
     )
 )
 

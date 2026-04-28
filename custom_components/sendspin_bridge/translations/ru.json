@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Подключение к Sendspin BT Bridge",
+        "description": "Укажите адрес моста, порт и долгоживущий bearer-токен (сгенерируйте в веб-интерфейсе моста: Настройки → Home Assistant).",
+        "data": {
+          "host": "Хост",
+          "port": "Порт",
+          "token": "Bearer-токен",
+          "use_https": "Использовать HTTPS"
+        }
+      },
+      "pair": {
+        "title": "Найден Sendspin BT Bridge: {host}:{port}",
+        "description": "Вставьте долгоживущий bearer-токен из веб-интерфейса моста (Настройки → Home Assistant → Сгенерировать токен).",
+        "data": {
+          "token": "Bearer-токен",
+          "use_https": "Использовать HTTPS"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Повторная аутентификация Sendspin BT Bridge",
+        "description": "Bearer-токен отклонён. Создайте новый в веб-интерфейсе моста и вставьте сюда.",
+        "data": {
+          "token": "Bearer-токен"
+        }
+      }
+    },
+    "error": {
+      "auth_failed": "Токен отклонён — убедитесь, что он только что выпущен и не отозван."
+    },
+    "abort": {
+      "already_configured": "Этот мост уже настроен.",
+      "missing_host_id": "В mDNS-объявлении моста отсутствует TXT-запись host_id.",
+      "reauth_successful": "Токен успешно обновлён."
+    }
+  }
+}

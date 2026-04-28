@@ -55,6 +55,48 @@ def get_self_addon_info(timeout: float = 5.0) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def get_mqtt_addon_credentials(timeout: float = 5.0) -> dict[str, Any] | None:
+    """Auto-detect a Mosquitto add-on broker on HAOS via Supervisor API.
+
+    Supervisor exposes installed services at ``/services/<service_type>``;
+    when the user has the official Mosquitto add-on installed and started,
+    ``GET /services/mqtt`` returns broker credentials in ``data.<…>``.
+
+    Returns a dict ``{"host", "port", "username", "password", "ssl"}`` on
+    success, ``None`` when the service is unavailable (no Supervisor token,
+    no MQTT add-on installed, or running outside HAOS).  Callers — the
+    publisher and the web UI auto-fill button — must surface a
+    user-actionable hint ("install Mosquitto add-on") when this returns
+    ``None`` and ``HA_INTEGRATION.mqtt.broker == "auto"``.
+    """
+    payload = _get_supervisor_payload("/services/mqtt", timeout=timeout)
+    if not payload:
+        return None
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+    # Normalise the keys we care about; Supervisor sometimes wraps service
+    # data under nested objects depending on which integration registered
+    # the service.  Be lenient and look for both shapes.
+    inner = data.get("services", {})
+    if isinstance(inner, dict) and "mqtt" in inner and isinstance(inner["mqtt"], dict):
+        data = inner["mqtt"]
+    host = data.get("host") or data.get("addon_address")
+    port = data.get("port") or 1883
+    username = data.get("username") or ""
+    password = data.get("password") or ""
+    ssl = bool(data.get("ssl", False))
+    if not host:
+        return None
+    return {
+        "host": str(host),
+        "port": int(port),
+        "username": str(username),
+        "password": str(password),
+        "ssl": ssl,
+    }
+
+
 def detect_delivery_channel_from_slug(slug: str) -> str | None:
     normalized = str(slug or "").strip().lower()
     if not normalized:

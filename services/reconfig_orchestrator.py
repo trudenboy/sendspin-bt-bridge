@@ -45,6 +45,7 @@ class ReconfigSummary:
     bt_removed: list[dict[str, Any]] = field(default_factory=list)
     started: list[dict[str, Any]] = field(default_factory=list)
     stopped: list[dict[str, Any]] = field(default_factory=list)
+    ha_integration_reloaded: list[dict[str, Any]] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,6 +58,7 @@ class ReconfigSummary:
             "bt_removed": self.bt_removed,
             "started": self.started,
             "stopped": self.stopped,
+            "ha_integration_reloaded": self.ha_integration_reloaded,
             "errors": self.errors,
         }
 
@@ -72,6 +74,7 @@ class ReconfigSummary:
                 self.bt_removed,
                 self.started,
                 self.stopped,
+                self.ha_integration_reloaded,
             )
         )
 
@@ -173,6 +176,8 @@ class ReconfigOrchestrator:
             self._apply_global_restart(action, clients_by_mac, summary)
         elif kind is ActionKind.RESTART_REQUIRED:
             summary.restart_required.append(action.to_summary())
+        elif kind is ActionKind.HA_INTEGRATION_LIFECYCLE:
+            self._apply_ha_integration_lifecycle(action, summary)
 
     # -- individual kinds ------------------------------------------------
 
@@ -593,6 +598,44 @@ class ReconfigOrchestrator:
                 description=f"global_restart:{getattr(client, 'player_name', '?')}",
             )
         summary.global_restart.append(action.to_summary())
+
+    def _apply_ha_integration_lifecycle(self, action: ReconfigAction, summary: ReconfigSummary) -> None:
+        """Reload the HA integration subsystem (MQTT publisher / mDNS).
+
+        Routes through the dedicated lifecycle holder.  No client touched.
+        """
+        try:
+            from services.ha_integration_lifecycle import get_default_lifecycle
+        except Exception as exc:  # pragma: no cover
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"lifecycle import failed ({type(exc).__name__})",
+                }
+            )
+            return
+        lifecycle = get_default_lifecycle()
+        if lifecycle is None or self._loop is None:
+            # Not yet wired (early boot or non-runtime context) — record as
+            # a pending reload so the orchestrator caller can re-trigger
+            # once startup completes.
+            summary.ha_integration_reloaded.append(action.to_summary())
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(lifecycle.reload(), self._loop)
+        except RuntimeError as exc:
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"lifecycle reload schedule failed ({type(exc).__name__})",
+                }
+            )
+            return
+        summary.ha_integration_reloaded.append(action.to_summary())
 
     # -- helpers ---------------------------------------------------------
 

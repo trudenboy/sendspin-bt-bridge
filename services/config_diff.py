@@ -124,6 +124,31 @@ _IGNORED_FIELDS: frozenset[str] = frozenset(
         # spurious reconfig actions on save.
         "VOLUME_VIA_MA",
         "MUTE_VIA_MA",
+        # v2.65.0 — token list mutated only via /api/auth/tokens routes.
+        # Treat like MA_ACCESS_TOKEN: a /api/config save that round-trips
+        # the list must not produce any reconfig action.
+        "AUTH_TOKENS",
+    }
+)
+
+
+# v2.65.0 — HA integration namespace classification.  Nested dict; each
+# leaf maps to one of the buckets below.  All produce a single
+# HA_INTEGRATION_LIFECYCLE action so the orchestrator can route to a
+# dedicated handler (no client subprocess involvement).
+_HA_INTEGRATION_LIFECYCLE_PATHS: frozenset[str] = frozenset(
+    {
+        "enabled",
+        "mode",
+        "mqtt.broker",
+        "mqtt.port",
+        "mqtt.username",
+        "mqtt.password",
+        "mqtt.discovery_prefix",
+        "mqtt.tls",
+        "mqtt.client_id",
+        "rest.advertise_mdns",
+        "rest.supervisor_pair",
     }
 )
 
@@ -142,6 +167,9 @@ class ActionKind(str, Enum):
     BT_REMOVE = "bt_remove"
     STOP_CLIENT = "stop_client"
     START_CLIENT = "start_client"
+    # v2.65.0 — HA integration subsystem (MQTT publisher / mDNS).  Routes
+    # to ``HaIntegrationLifecycle`` instead of touching device subprocesses.
+    HA_INTEGRATION_LIFECYCLE = "ha_integration_lifecycle"
 
 
 @dataclass
@@ -392,7 +420,57 @@ def _diff_global(old: dict[str, Any], new: dict[str, Any]) -> list[ReconfigActio
             )
         )
 
+    # HA integration subsystem (MQTT publisher / mDNS) — single nested
+    # block.  Any change in its dotted-path leafs produces one
+    # HA_INTEGRATION_LIFECYCLE action; the executor decides whether to
+    # restart the publisher task or just re-register mDNS.  When the old
+    # config predates v2.65.0 (no HA_INTEGRATION block) we substitute the
+    # *new* defaults block on the old side so a fresh save with all-default
+    # values doesn't produce a spurious lifecycle action.
+    _ha_default_off = {"enabled": False, "mode": "off", "mqtt": {}, "rest": {}}
+    ha_old = old.get("HA_INTEGRATION")
+    if ha_old is None:
+        ha_old = _ha_default_off
+    ha_new = new.get("HA_INTEGRATION")
+    if ha_new is None:
+        ha_new = _ha_default_off
+    ha_changed_paths = _diff_ha_integration(ha_old, ha_new)
+    if ha_changed_paths:
+        actions.append(
+            ReconfigAction(
+                kind=ActionKind.HA_INTEGRATION_LIFECYCLE,
+                mac=None,
+                fields=ha_changed_paths,
+                payload={"target": dict(new.get("HA_INTEGRATION") or {})},
+                label="ha_integration",
+            )
+        )
+
     return actions
+
+
+def _diff_ha_integration(old_ha: dict[str, Any], new_ha: dict[str, Any]) -> list[str]:
+    """Return changed dotted-paths under ``HA_INTEGRATION`` (e.g. ``mqtt.broker``)."""
+    changed: list[str] = []
+    # Top-level scalars
+    for key in ("enabled", "mode"):
+        if _normalize_scalar(old_ha.get(key)) != _normalize_scalar(new_ha.get(key)):
+            changed.append(key)
+    # Nested mqtt + rest objects
+    for parent in ("mqtt", "rest"):
+        old_inner = old_ha.get(parent) or {}
+        new_inner = new_ha.get(parent) or {}
+        if not isinstance(old_inner, dict):
+            old_inner = {}
+        if not isinstance(new_inner, dict):
+            new_inner = {}
+        keys = set(old_inner.keys()) | set(new_inner.keys())
+        for key in sorted(keys):
+            if _normalize_scalar(old_inner.get(key)) != _normalize_scalar(new_inner.get(key)):
+                path = f"{parent}.{key}"
+                if path in _HA_INTEGRATION_LIFECYCLE_PATHS:
+                    changed.append(path)
+    return sorted(changed)
 
 
 def diff_configs(old: dict[str, Any] | None, new: dict[str, Any] | None) -> list[ReconfigAction]:

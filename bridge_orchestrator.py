@@ -574,12 +574,112 @@ class BridgeOrchestrator:
 
         update_checker_fn = run_update_checker_fn or run_update_checker
         tasks.append(asyncio.create_task(update_checker_fn(version)))
+
+        # HA integration (MQTT publisher) — best-effort start.  Failures
+        # here MUST NOT abort runtime assembly: the bridge core must keep
+        # running even if HA's broker is unreachable or aiomqtt missing.
+        ha_task = self._start_ha_integration(version=version)
+        if ha_task is not None:
+            tasks.append(ha_task)
+
         self.lifecycle_state.complete_startup(
             active_clients=clients,
             demo_mode=demo_mode,
             monitor_enabled=bool(ma_monitor_task),
         )
         return tasks
+
+    def _start_ha_integration(self, *, version: str) -> asyncio.Task[Any] | None:
+        """Construct + start the HA integration lifecycle.  Returns the
+        publisher's main task so ``assemble_runtime_tasks`` can include it
+        in the gather() set.
+
+        Also kicks off the mDNS advertiser when ``HA_INTEGRATION.rest.advertise_mdns``
+        is enabled — this is fire-and-forget and not part of the gather()
+        set because it's an asyncio.Event-based registration that lives
+        for the bridge's lifetime.
+        """
+        try:
+            from services.ha_integration_lifecycle import (
+                HaIntegrationLifecycle,
+                set_default_lifecycle,
+            )
+            from services.ha_state_projector import project_snapshot
+            from services.status_snapshot import build_bridge_snapshot
+            from state import get_clients_snapshot, get_internal_event_publisher
+        except Exception as exc:  # pragma: no cover — import-time guard
+            logger.info("HA integration unavailable (import failed): %s", exc)
+            return None
+
+        try:
+            event_publisher = get_internal_event_publisher()
+        except Exception as exc:
+            logger.info("HA integration: internal event publisher unavailable (%s)", exc)
+            return None
+
+        bridge_name = ensure_bridge_name(load_config())
+        # Stable bridge_id derived from bridge_name; HA's MQTT discovery
+        # uses this in object_id slugs that must not collide with another
+        # Sendspin Bridge running on the same broker.
+        import hashlib
+
+        bridge_id = hashlib.sha1(bridge_name.encode("utf-8")).hexdigest()[:12]
+
+        # mDNS advertisement (Path A1) — fire-and-forget.  Errors are
+        # logged inside the advertiser; the bridge keeps running either way.
+        self._start_mdns_advertiser(bridge_name=bridge_name, version=version)
+
+        def _projection_provider():
+            snapshot = build_bridge_snapshot(get_clients_snapshot())
+            return project_snapshot(
+                snapshot,
+                bridge_id=bridge_id,
+                bridge_name=bridge_name,
+                runtime_extras={"version": version},
+            )
+
+        lifecycle = HaIntegrationLifecycle(
+            event_publisher=event_publisher,
+            projection_provider=_projection_provider,
+            bridge_id_provider=lambda: bridge_id,
+            bridge_name_provider=lambda: bridge_name,
+        )
+        set_default_lifecycle(lifecycle)
+        publisher = lifecycle.start()
+        if publisher is None:
+            return None
+        return publisher._task
+
+    def _start_mdns_advertiser(self, *, bridge_name: str, version: str) -> None:
+        try:
+            from config import resolve_web_port
+            from services.bridge_mdns import BridgeMdnsAdvertiser, set_default_advertiser
+        except Exception as exc:  # pragma: no cover
+            logger.info("mDNS advertiser unavailable (import failed): %s", exc)
+            return
+
+        config = load_config()
+        block = config.get("HA_INTEGRATION") or {}
+        rest_block = block.get("rest") or {}
+        if not rest_block.get("advertise_mdns", True):
+            return
+
+        web_port = resolve_web_port() or 8080
+        ingress_active = bool(os.environ.get("SUPERVISOR_TOKEN"))
+
+        adv = BridgeMdnsAdvertiser(
+            bridge_name=bridge_name,
+            version=version,
+            web_port=web_port,
+            ingress_active=ingress_active,
+        )
+        set_default_advertiser(adv)
+        # Kick the registration onto the running loop.  We don't await
+        # it because zeroconf's registration is itself async-fire-and-forget.
+        try:
+            asyncio.create_task(adv.start(), name="bridge_mdns_register")
+        except RuntimeError as exc:
+            logger.debug("mDNS register: no running loop (%s)", exc)
 
     async def run_runtime(
         self,

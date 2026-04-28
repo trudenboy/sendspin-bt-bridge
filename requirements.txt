@@ -22,6 +22,11 @@ bluetooth-auto-recovery==1.5.3
 # services.bt_rssi_mgmt catches ImportError and returns None on non-Linux.
 btsocket==0.3.0
 
+# Home Assistant MQTT discovery transport (services/ha_mqtt_publisher.py).
+# Async wrapper over paho-mqtt; the bridge's parent-process asyncio loop
+# owns the publisher task.  v2.65.0+.
+aiomqtt>=2.0
+
 # ── Transitive minimum-version pins for security fixes ────────────────
 # These packages aren't direct deps — they come in via aiosendspin /
 # music-assistant-client / aiohttp.  Pinning a >= floor forces the
