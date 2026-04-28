@@ -120,6 +120,22 @@ Heavy recovery action better triggered manually from the bridge web UI
 than from an HA automation that might fire it on a transient blip.
 Catalog reduces from 26 → 25 per-device entities.  Bridge web UI
 keeps the button.
+### Fixed — HA addon Configuration tab kept showing stale `ha_integration`
+
+When operators saved ``HA_INTEGRATION`` changes through the bridge web
+UI on a HA addon deployment, the bridge applied them immediately
+(hot-apply via the reconfig orchestrator) but ``_sync_ha_options``
+did NOT mirror the block back to Supervisor.  Symptoms: HAOS
+Configuration tab kept showing the old broker / mode / toggle
+values, and the next addon restart wrote those stale values back
+over the live config — silently undoing the change.
+
+``_sync_ha_options`` now mirrors the full ``ha_integration`` block in
+the flat shape Supervisor's options schema expects (the inverse of
+``translate_ha_config._translate_ha_integration``).  Five regression
+tests in ``test_sync_ha_options_ha_integration.py`` cover full
+mirror, missing-block defaults, partial-block defaults, corrupted
+``HA_INTEGRATION`` values, and the no-op branch outside addon mode.
 
 ## [2.65.0-rc.3] - 2026-04-28
 

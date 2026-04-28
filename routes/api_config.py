@@ -485,6 +485,32 @@ def _sync_ha_options(config: dict) -> None:
         }
         if config.get("BASE_LISTEN_PORT") is not None:
             options["base_listen_port"] = int(config["BASE_LISTEN_PORT"])
+
+        # Mirror the HA_INTEGRATION block back to Supervisor in the flat
+        # shape the addon options schema expects (translate_ha_config does
+        # the inverse on addon startup).  Without this the HAOS
+        # Configuration tab keeps showing stale values after operators
+        # change them in the bridge web UI, and the next addon restart
+        # writes those stale values back over the live config.
+        ha_integration = config.get("HA_INTEGRATION") or {}
+        if isinstance(ha_integration, dict):
+            raw_mqtt = ha_integration.get("mqtt")
+            mqtt_block: dict = raw_mqtt if isinstance(raw_mqtt, dict) else {}
+            raw_rest = ha_integration.get("rest")
+            rest_block: dict = raw_rest if isinstance(raw_rest, dict) else {}
+            options["ha_integration"] = {
+                "enabled": bool(ha_integration.get("enabled", False)),
+                "mode": str(ha_integration.get("mode") or "off"),
+                "mqtt_broker": str(mqtt_block.get("broker") or "auto"),
+                "mqtt_port": int(mqtt_block.get("port") or 1883),
+                "mqtt_username": str(mqtt_block.get("username") or ""),
+                "mqtt_password": str(mqtt_block.get("password") or ""),
+                "mqtt_discovery_prefix": str(mqtt_block.get("discovery_prefix") or "homeassistant"),
+                "mqtt_tls": bool(mqtt_block.get("tls", False)),
+                "advertise_mdns": bool(rest_block.get("advertise_mdns", True)),
+                "supervisor_pair": bool(rest_block.get("supervisor_pair", True)),
+            }
+
         sup_opts = {"options": options}
         body = json.dumps(sup_opts).encode()
         req = _ur.Request(
