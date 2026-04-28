@@ -209,12 +209,14 @@ class HaCommandDispatcher:
 _BUTTON_HANDLER_NAMES: dict[str, str] = {
     "reconnect": "command_reconnect",
     "disconnect": "command_disconnect",
-    "pair": "command_pair",
     "wake": "command_wake",
     "standby": "command_standby",
     "power_save_toggle": "command_power_save_toggle",
     "claim_audio": "command_claim_audio",
     "reset_reconnect": "command_reset_reconnect",
+    # ``pair`` is intentionally absent — pairing requires the speaker in
+    # pairing mode and produces a one-shot result; no safe HA-automation
+    # surface for it (see services/ha_entity_model.py).
 }
 
 
@@ -288,7 +290,11 @@ def _bridge_scan(_value: Any) -> CommandResult:
 
 _BRIDGE_HANDLERS = {
     "restart": _bridge_restart,
-    "scan": _bridge_scan,
+    # ``scan`` is intentionally absent from the HA dispatcher — scan
+    # results only matter inside the bridge web UI's pair-flow modal,
+    # which HA can't open (see services/ha_entity_model.py).  The
+    # ``_bridge_scan`` helper above stays in the module so future
+    # surfaces (e.g. a programmatic API) can reuse it.
 }
 
 

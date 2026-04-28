@@ -47,7 +47,6 @@ def dispatcher_with_calls(monkeypatch, fake_client):
     for name in [
         "command_reconnect",
         "command_disconnect",
-        "command_pair",
         "command_wake",
         "command_standby",
         "command_power_save_toggle",
@@ -129,7 +128,6 @@ def test_missing_command_rejected(dispatcher_with_calls):
     [
         ("reconnect", "command_reconnect"),
         ("disconnect", "command_disconnect"),
-        ("pair", "command_pair"),
         ("wake", "command_wake"),
         ("standby", "command_standby"),
         ("claim_audio", "command_claim_audio"),
@@ -141,6 +139,23 @@ def test_button_command_routes_to_helper(dispatcher_with_calls, command, expecte
     result = d.dispatch_device("player-aaa", command)
     assert result.success, result.error
     assert any(name == expected_helper for name, *_ in calls), f"{expected_helper} not called"
+
+
+def test_pair_command_not_exposed_via_dispatcher(dispatcher_with_calls):
+    """Pairing intentionally NOT routable from HA — see PR #216 discussion."""
+    d, _ = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "pair")
+    assert not result.success
+    assert result.code == 404
+
+
+def test_scan_command_not_exposed_via_bridge_dispatcher():
+    """Bridge-level scan intentionally NOT routable from HA — pure no-op
+    without the bridge UI's pair-flow modal."""
+    d = M.HaCommandDispatcher()
+    result = d.dispatch_bridge("scan")
+    assert not result.success
+    assert result.code == 404
 
 
 def test_power_save_toggle_routes_to_helper(dispatcher_with_calls):
@@ -273,19 +288,6 @@ def test_bridge_unknown_command_returns_404():
     result = d.dispatch_bridge("nuke")
     assert not result.success
     assert result.code == 404
-
-
-def test_bridge_scan_acks(monkeypatch):
-    """Even without a job pipeline, scan must ack with success."""
-    # Force the import inside _bridge_scan to fail so we hit the fallback.
-    import sys
-
-    monkeypatch.delitem(sys.modules, "routes.api_bt", raising=False)
-    monkeypatch.setitem(sys.modules, "routes.api_bt", None)
-    d = M.HaCommandDispatcher()
-    result = d.dispatch_bridge("scan")
-    assert result.success
-    assert "scan" in result.message.lower() or "acknowledged" in result.message.lower()
 
 
 # ---------------------------------------------------------------------------

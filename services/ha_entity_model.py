@@ -469,14 +469,11 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:restart-alert",
         command="reset_reconnect",
     ),
-    EntitySpec(
-        object_id="pair",
-        kind=EntityKind.BUTTON,
-        name="Pair",
-        entity_category="diagnostic",
-        icon="mdi:bluetooth-settings",
-        command="pair",
-    ),
+    # Pairing intentionally NOT exposed as an HA button — it's a one-shot
+    # workflow that needs the speaker in pairing mode and produces a
+    # secret on success.  Triggering it from an HA automation has no
+    # safe failure path; bridge web UI keeps the button.  See PR #216
+    # discussion for the rationale.
     EntitySpec(
         object_id="claim_audio",
         kind=EntityKind.BUTTON,
@@ -543,14 +540,10 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:restart",
         command="restart",
     ),
-    EntitySpec(
-        object_id="scan",
-        kind=EntityKind.BUTTON,
-        name="Scan for devices",
-        entity_category="diagnostic",
-        icon="mdi:bluetooth-search",
-        command="scan",
-    ),
+    # ``Scan for devices`` intentionally NOT exposed — scan results
+    # only mean anything inside the bridge web UI's pair-flow modal,
+    # which HA can't open.  Triggering a bare scan from an automation
+    # produces no observable effect.
 )
 
 

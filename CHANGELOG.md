@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.65.0-rc.3] - 2026-04-28
 
+### Removed — `pair` (per device) and `scan` (bridge-level) HA buttons
+
+Both buttons were noise rather than signal in HA's automation
+context.  ``pair`` is a one-shot interactive workflow — the speaker
+must be in pairing mode at the right moment, and the bridge UI's
+pair-flow modal is the right surface for it; pressing it from an
+HA automation has no safe failure path.  ``scan`` returns a list
+of nearby BT devices that's only meaningful inside the same modal,
+so triggering it from HA produces no observable effect.  The bridge
+web UI keeps both controls.  Catalog reduces from 28 → 27 per-device
+entities and 7 → 6 bridge entities.
+
 ### Added — Settings → Home Assistant: conditional fields by transport
 
 The Settings → Home Assistant tab now hides fields that aren't
