@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.2] - 2026-04-28
+
+### Added — Settings → Home Assistant tab
+
+The HA-integration controls promised by v2.65.0-rc.1's plan now have a
+dedicated UI surface: open the Configuration drawer and switch to the
+**Home Assistant** tab.  From here operators can:
+
+- Toggle the master ``HA_INTEGRATION.enabled`` flag and pick
+  ``mode`` (``off`` / ``mqtt`` / ``rest`` / ``both``).
+- Auto-detect the HAOS Mosquitto add-on (one click; populates broker
+  host / port / username / TLS).
+- Edit broker URL / port / username / password / discovery prefix /
+  TLS for self-hosted brokers.
+- Toggle mDNS advertisement and Supervisor pair acceptance for the
+  REST + custom_component path.
+- See live publisher state (idle / connected / error) and discovery
+  payload count.
+- Mint long-lived bearer tokens for the custom_component (label,
+  reveal-once, copy button); list issued tokens and revoke any of
+  them in place.
+
+The MQTT password masking pattern matches Music Assistant's:
+``GET /api/config`` reports ``***REDACTED***`` whenever a password is
+set (and an empty string when none), and a POST that echoes back the
+redacted marker preserves the existing password instead of clearing
+it.  ``AUTH_TOKENS`` is dropped from the GET payload entirely; the UI
+fetches it from ``/api/auth/tokens`` so the bearer-token list never
+flows through the config form.
+
+Round-trip tests in ``tests/test_api_config_ha_integration.py`` cover
+the redaction, password preservation, explicit overwrite, and the
+per-config-key download sanitization.
+
+### Fixed — HA custom_component pairing flow on HAOS was unreachable
+
+The HA bootstrap endpoint ``POST /api/auth/ha-pair`` exists to mint a
+long-lived bearer token for the custom_component on HAOS without
+operator input — but the auth middleware in ``web_interface.py`` saw
+it as a regular ``/api/*`` route and refused with 401 because no
+token / session existed yet.  Symptom: HACS install on HAOS would
+discover the bridge via mDNS, click "Configure", and silently fail
+to pair.  ``/api/auth/ha-pair`` is now in ``_PUBLIC_PATHS`` so it
+reaches the real gate (Supervisor-IP + ``X-Ingress-Path`` check in
+``routes/auth.py``).  A regression test
+(``test_auth_enforcement.py::test_ha_pair_is_public_pre_auth``) and
+a lockstep test against ``_PUBLIC_PATHS`` keep this from regressing.
+Caught by Copilot review on PR #214.
+
+### Fixed — `find_client_by_player_id` lookup matches its docstring
+
+The HA-side command dispatcher's ``find_client_by_player_id`` helper
+promised case-insensitive comparison in its docstring but only did
+exact-string matching.  Canonical bridge ``player_id`` values are
+lowercase UUID5 strings, but HA discovery payloads round-trip them
+through JSON / templates where a stray uppercase normalisation
+upstream could silently misroute commands.  Both sides now ``casefold``
+before comparing, with a regression test covering mixed case +
+whitespace.  Caught by Copilot review on PR #214.
+
 ## [2.65.0-rc.1] - 2026-04-28
 
 ### Added — Home Assistant integration (issue #205)
