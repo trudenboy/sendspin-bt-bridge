@@ -1,0 +1,52 @@
+[
+  {
+    "referrer": "github.com",
+    "count": 163,
+    "uniques": 62
+  },
+  {
+    "referrer": "Google",
+    "count": 94,
+    "uniques": 27
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 63,
+    "uniques": 14
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 58,
+    "uniques": 44
+  },
+  {
+    "referrer": "DuckDuckGo",
+    "count": 20,
+    "uniques": 12
+  },
+  {
+    "referrer": "Bing",
+    "count": 15,
+    "uniques": 6
+  },
+  {
+    "referrer": "l.facebook.com",
+    "count": 4,
+    "uniques": 4
+  },
+  {
+    "referrer": "search.brave.com",
+    "count": 4,
+    "uniques": 2
+  },
+  {
+    "referrer": "music-assistant.io",
+    "count": 3,
+    "uniques": 3
+  },
+  {
+    "referrer": "link.jscheuren.com",
+    "count": 3,
+    "uniques": 1
+  }
+]
