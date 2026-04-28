@@ -209,8 +209,20 @@ def _set_cache_headers(response):
     return response
 
 
-# Public paths that never require authentication
-_PUBLIC_PATHS = {"/login", "/logout", "/api/health", "/api/preflight"}
+# Public paths that never require authentication.
+#
+# ``/api/auth/ha-pair`` is the bootstrap endpoint the HA custom_component
+# hits before any bearer token exists; the route itself enforces the real
+# gate (Supervisor-IP + ``X-Ingress-Path`` header check in
+# ``routes/auth.py``), so opening it here just lets the request reach
+# that handler.  Any future pre-auth bootstrap endpoint goes here too.
+_PUBLIC_PATHS = {
+    "/login",
+    "/logout",
+    "/api/health",
+    "/api/preflight",
+    "/api/auth/ha-pair",
+}
 
 # Cache for HA owner display name (resolved once per process lifetime)
 _ingress_user_cache: str | None = None

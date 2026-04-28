@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — HA custom_component pairing flow on HAOS was unreachable
+
+The HA bootstrap endpoint ``POST /api/auth/ha-pair`` exists to mint a
+long-lived bearer token for the custom_component on HAOS without
+operator input — but the auth middleware in ``web_interface.py`` saw
+it as a regular ``/api/*`` route and refused with 401 because no
+token / session existed yet.  Symptom: HACS install on HAOS would
+discover the bridge via mDNS, click "Configure", and silently fail
+to pair.  ``/api/auth/ha-pair`` is now in ``_PUBLIC_PATHS`` so it
+reaches the real gate (Supervisor-IP + ``X-Ingress-Path`` check in
+``routes/auth.py``).  A regression test
+(``test_auth_enforcement.py::test_ha_pair_is_public_pre_auth``) and
+a lockstep test against ``_PUBLIC_PATHS`` keep this from regressing.
+Caught by Copilot review on PR #214.
+
 ### Fixed — `find_client_by_player_id` lookup matches its docstring
 
 The HA-side command dispatcher's ``find_client_by_player_id`` helper
