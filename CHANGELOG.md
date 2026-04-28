@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `find_client_by_player_id` lookup matches its docstring
+
+The HA-side command dispatcher's ``find_client_by_player_id`` helper
+promised case-insensitive comparison in its docstring but only did
+exact-string matching.  Canonical bridge ``player_id`` values are
+lowercase UUID5 strings, but HA discovery payloads round-trip them
+through JSON / templates where a stray uppercase normalisation
+upstream could silently misroute commands.  Both sides now ``casefold``
+before comparing, with a regression test covering mixed case +
+whitespace.  Caught by Copilot review on PR #214.
+
 ## [2.65.0-rc.1] - 2026-04-28
 
 ### Added — Home Assistant integration (issue #205)

@@ -96,6 +96,24 @@ def test_find_client_by_player_id_no_match(monkeypatch, fake_client):
     assert M.find_client_by_player_id("player-other") is None
 
 
+def test_find_client_by_player_id_case_insensitive(monkeypatch, fake_client):
+    """Casing-stable lookup — see Copilot review on PR #214.
+
+    Canonical player_ids are lowercase UUID5 strings, but a round-trip
+    through HA JSON / templates can capitalise them; commands must still
+    route to the right client.
+    """
+    monkeypatch.setattr(
+        M,
+        "get_device_registry_snapshot",
+        lambda: SimpleNamespace(active_clients=[fake_client]),
+    )
+    assert M.find_client_by_player_id("PLAYER-AAA") is fake_client
+    assert M.find_client_by_player_id("Player-AAA") is fake_client
+    # Whitespace + mixed case combined.
+    assert M.find_client_by_player_id("  Player-Aaa  ") is fake_client
+
+
 # ---------------------------------------------------------------------------
 # command_reconnect / disconnect / pair (thread-spawning)
 # ---------------------------------------------------------------------------

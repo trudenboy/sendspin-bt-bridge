@@ -72,18 +72,21 @@ def _err(error: str, *, code: int = 400, **details: Any) -> CommandResult:
 
 
 def find_client_by_player_id(player_id: str) -> Any | None:
-    """Return the running ``SendspinClient`` whose player_id matches.
+    """Return the running ``SendspinClient`` whose ``player_id`` matches.
 
-    Returns ``None`` if no match.  Trims and matches case-insensitively for
-    safety: HA discovery payloads tend to round-trip the player_id through
-    JSON, and a casing mismatch should not silently misroute commands.
+    Returns ``None`` if no match.  Both sides are stripped and compared
+    case-insensitively: ``_player_id_from_mac`` produces canonical
+    lowercase UUID5 strings, but HA discovery payloads round-trip
+    ``player_id`` through JSON / templates and we don't want a stray
+    uppercase normalization upstream to silently misroute commands.
     """
-    target = str(player_id or "").strip()
+    target = str(player_id or "").strip().casefold()
     if not target:
         return None
     snapshot = get_device_registry_snapshot().active_clients
     for client in snapshot:
-        if str(getattr(client, "player_id", "") or "").strip() == target:
+        candidate = str(getattr(client, "player_id", "") or "").strip().casefold()
+        if candidate == target:
             return client
     return None
 
