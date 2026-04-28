@@ -128,8 +128,6 @@ def test_missing_command_rejected(dispatcher_with_calls):
     [
         ("reconnect", "command_reconnect"),
         ("disconnect", "command_disconnect"),
-        ("wake", "command_wake"),
-        ("standby", "command_standby"),
         ("claim_audio", "command_claim_audio"),
     ],
 )
@@ -138,6 +136,19 @@ def test_button_command_routes_to_helper(dispatcher_with_calls, command, expecte
     result = d.dispatch_device("player-aaa", command)
     assert result.success, result.error
     assert any(name == expected_helper for name, *_ in calls), f"{expected_helper} not called"
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["wake", "standby", "power_save_toggle"],
+)
+def test_legacy_button_commands_no_longer_exposed(dispatcher_with_calls, command):
+    """v2.65.0-rc.6 dropped the wake / standby / power_save_toggle buttons
+    in favour of the standby and power_save switches."""
+    d, _ = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", command)
+    assert not result.success
+    assert result.code == 404
 
 
 def test_pair_command_not_exposed_via_dispatcher(dispatcher_with_calls):
@@ -167,11 +178,61 @@ def test_scan_command_not_exposed_via_bridge_dispatcher():
     assert result.code == 404
 
 
-def test_power_save_toggle_routes_to_helper(dispatcher_with_calls):
+# ---------------------------------------------------------------------------
+# Standby / power-save switches (replaced wake/standby/power_save_toggle
+# buttons in v2.65.0-rc.6)
+# ---------------------------------------------------------------------------
+
+
+def test_set_standby_on_when_active_calls_command_standby(dispatcher_with_calls, fake_client):
+    fake_client.status["bt_standby"] = False
     d, calls = dispatcher_with_calls
-    result = d.dispatch_device("player-aaa", "power_save_toggle")
+    result = d.dispatch_device("player-aaa", "set_standby", "ON")
+    assert result.success, result.error
+    assert any(name == "command_standby" for name, *_ in calls)
+
+
+def test_set_standby_off_when_in_standby_calls_command_wake(dispatcher_with_calls, fake_client):
+    fake_client.status["bt_standby"] = True
+    d, calls = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "set_standby", "OFF")
+    assert result.success, result.error
+    assert any(name == "command_wake" for name, *_ in calls)
+
+
+def test_set_standby_idempotent_no_409_when_already_in_target(dispatcher_with_calls, fake_client):
+    """The dispatcher absorbs the no-op so HA automations don't see a
+    409 when re-asserting the target state.  Underlying ``command_standby``
+    / ``command_wake`` would 409 otherwise."""
+    fake_client.status["bt_standby"] = True
+    d, calls = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "set_standby", "ON")
     assert result.success
-    assert any(name == "command_power_save_toggle" for name, *_ in calls)
+    assert not any(name in ("command_standby", "command_wake") for name, *_ in calls)
+
+
+def test_set_power_save_routes_to_toggle_with_explicit_target(dispatcher_with_calls, fake_client):
+    fake_client.status["bt_power_save"] = False
+    d, calls = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "set_power_save", "ON")
+    assert result.success, result.error
+    matches = [c for c in calls if c[0] == "command_power_save_toggle"]
+    assert matches
+    # ``enter`` keyword must be threaded through so the switch flips
+    # in the desired direction (no surprise inversions).
+    _, _, kwargs = matches[-1]
+    assert kwargs.get("enter") is True
+
+
+def test_set_power_save_off_passes_enter_false(dispatcher_with_calls, fake_client):
+    fake_client.status["bt_power_save"] = True
+    d, calls = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "set_power_save", "OFF")
+    assert result.success
+    matches = [c for c in calls if c[0] == "command_power_save_toggle"]
+    assert matches
+    _, _, kwargs = matches[-1]
+    assert kwargs.get("enter") is False
 
 
 # ---------------------------------------------------------------------------

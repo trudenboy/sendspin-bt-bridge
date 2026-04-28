@@ -142,6 +142,29 @@ class HaCommandDispatcher:
                 return _call_bt_helper("apply_device_enabled", player_id, target)
             if command == "set_bt_management":
                 return _call_bt_helper("command_set_bt_management", client, target)
+            if command == "set_standby":
+                # Idempotent at this layer because ``command_standby`` /
+                # ``command_wake`` return 409 when already in the target
+                # state — surfacing a 409 to HA would scare automations.
+                if client is None:
+                    return _err(f"Unknown player_id: {player_id}", code=404)
+                currently_standby = bool(client.status.get("bt_standby"))
+                if target == currently_standby:
+                    return CommandResult(
+                        success=True,
+                        message="Standby unchanged",
+                        details={"state": "standby" if currently_standby else "active"},
+                    )
+                if target:
+                    return _call_bt_helper("command_standby", client)
+                return _call_bt_helper("command_wake", client)
+            if command == "set_power_save":
+                # ``command_power_save_toggle`` already collapses
+                # already-in-state requests into a no-op success when
+                # called with an explicit ``enter`` flag.
+                if client is None:
+                    return _err(f"Unknown player_id: {player_id}", code=404)
+                return _call_bt_helper("command_power_save_toggle", client, enter=target)
             return _err(f"No handler for switch {command}", code=501)
 
         # Selects -----------------------------------------------------------
@@ -209,13 +232,13 @@ class HaCommandDispatcher:
 _BUTTON_HANDLER_NAMES: dict[str, str] = {
     "reconnect": "command_reconnect",
     "disconnect": "command_disconnect",
-    "wake": "command_wake",
-    "standby": "command_standby",
-    "power_save_toggle": "command_power_save_toggle",
     "claim_audio": "command_claim_audio",
-    # ``pair`` and ``reset_reconnect`` intentionally absent — both are
-    # heavy / interactive actions better triggered manually from the
-    # bridge web UI than from HA automations (see services/ha_entity_model.py).
+    # ``wake`` / ``standby`` / ``power_save_toggle`` are no longer
+    # buttons — see the ``standby`` and ``power_save`` switches in
+    # ``services/ha_entity_model.py``.  ``pair`` and ``reset_reconnect``
+    # intentionally absent — both are heavy / interactive actions
+    # better triggered manually from the bridge web UI than from HA
+    # automations.
 }
 
 

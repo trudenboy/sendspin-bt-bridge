@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — HA: standby + power-save switches replace button + binary-sensor pairs
+
+Per-device buttons ``wake`` / ``standby`` / ``power_save_toggle`` and
+their paired read-only binary sensors ``bt_standby`` / ``bt_power_save``
+are gone, replaced by two switches that combine state and action:
+
+- ``switch.<player>_standby`` — ON = device is in standby, OFF = active.
+  Toggle wakes / parks the speaker; flipping is idempotent so an
+  automation that re-asserts the target state never produces a 409.
+  State mirrors the daemon's ``bt_standby`` flag, so it also flips
+  to ON automatically when the bridge enters standby on its own
+  (e.g. ``idle_mode=auto_disconnect``).
+- ``switch.<player>_power_save`` — ON = PA sink suspended, OFF =
+  active. Toggle drives ``command_power_save_toggle(enter=…)``
+  with the target value; same idempotent semantics.
+
+Net entity count drops by 3 per device: -2 binary sensors, -3
+buttons, +2 switches. HA automations that used to read
+``binary_sensor.<player>_bt_standby`` should switch to the
+``switch.<player>_standby`` ``state``; same for power-save.
+
+Both switches use the ``cumulative`` availability gate so they
+remain controllable while the BT link is down — exactly when an
+operator is most likely to wake a speaker from a dashboard.
+
+The legacy buttons shipped in v2.65.0-rc.1 only two days ago, so the
+removal is a clean rc-cycle change without operator-facing
+deprecation noise.
+
+### UI — HA tab: Naming card moves above Connection status, section icon switches to HA logomark
+
+Cosmetic re-shuffling of the Home Assistant settings tab. The Naming
+preference (a small bridge-wide knob: "Use Home Assistant area
+suggestions for names") now sits at the top of the card stack, above
+the Connection status banner, so operators reach it without
+scrolling past live-state surface they don't need to touch once the
+integration is configured. The section heading also gets a proper
+HA-shaped logomark instead of the Music Assistant glyph that was
+serving as a placeholder.
+
 ## [2.65.0-rc.5] - 2026-04-28
 
 ### Fixed — Copilot review on PR #218 (v2.65.0-rc.4)
