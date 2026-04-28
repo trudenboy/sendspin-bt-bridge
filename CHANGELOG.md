@@ -7,6 +7,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0] - 2026-04-28
+
+Stable release rolling up everything that landed across rc.1-rc.6.
+Headline: **direct Home Assistant integration** (issue #205) without
+duplicating Music Assistant's surface, plus a UX-rebuilt Settings →
+Home Assistant tab.  All rc-cycle CHANGELOG sections below are
+preserved verbatim for traceability.
+
+### Added — Home Assistant integration
+
+Two parallel transports for direct HA control of the bridge from
+dashboards and automations.  Both register entities under the same
+HA device card MA already created for the speaker (merge by
+``connections=[("bluetooth", mac)]``), so the operator sees one
+device with MA's ``media_player.<player>`` plus the bridge's
+diagnostics + BT-level controls.
+
+- **MQTT discovery** — bridge publishes per-speaker entities under
+  ``homeassistant/<component>/sendspin_<player_id>/...``.  On HAOS
+  the broker is auto-detected from the official Mosquitto add-on
+  (Supervisor ``services: ['mqtt:want']`` declared on all three
+  addon variants).
+- **HACS custom_component** — ``custom_components/sendspin_bridge/``
+  ships in-tree.  HA Zeroconf discovers the bridge via
+  ``_sendspin-bridge._tcp.local.`` advertisement; on HAOS the
+  integration auto-pairs via Supervisor, off-HAOS the user pastes
+  a token generated in the bridge web UI.  REST + SSE
+  (``/api/ha/state``, ``/api/status/events``) drive a
+  ``DataUpdateCoordinator``.
+
+**MA-deduplication contract.**  Neither transport exposes
+``media_player``, volume, mute, transport, queue, now-playing, or
+group state — those are owned by Music Assistant's official HA
+integration and would conflict if duplicated.  The bridge integration
+stays strictly to BT diagnostics (RSSI / battery / streaming /
+reanchor) and config knobs (idle mode / static delay / per-device
+enabled / BT management).
+
+**Long-lived API bearer tokens.** ``POST /api/auth/tokens`` mints
+PBKDF2-SHA256-hashed bearer tokens for the HA custom_component.
+``Authorization: Bearer <token>`` is now accepted on all ``/api/*``
+routes alongside the existing session-cookie auth.  HAOS users skip
+token generation entirely thanks to ``POST /api/auth/ha-pair``,
+which validates the Supervisor proxy chain and mints a token without
+operator input.
+
+**Fleet-based visibility + per-class entity availability.**  Standby
+and disabled devices stay visible in HA — the projector iterates
+both active and disabled fleet members.  Each entity declares one
+of three availability classes (``config`` / ``runtime`` /
+``cumulative``) routed to two per-device MQTT availability topics
+(``.../availability/config``, ``.../availability/runtime``); the
+legacy single-channel topic stays in step for HA caches from rc.1
+through rc.3.  Toggles + buttons stay live during link drops; live
+telemetry goes ``unavailable`` as expected.
+
+**Standby + power-save switches.**  ``switch.<player>_standby`` and
+``switch.<player>_power_save`` combine state and action — toggle
+to wake/park or enter/exit power save, state mirrors the daemon's
+flags, and re-asserting the target state is a no-op (no 409 in HA
+logs).  Replaced the rc.1 wake / standby / power_save_toggle
+buttons + bt_standby / bt_power_save binary sensors (net -3
+entities per device).
+
+### Added — Settings → Home Assistant tab
+
+Dedicated UI surface in the Configuration drawer.  Mode dropdown
+(off / mqtt / rest) is the master — picking a transport implicitly
+enables the integration.  A connection-status banner mirrors the MA
+panel pattern: collapses the transport-specific cards once the
+publisher is connected, "Reconfigure" reveals them again.  In HA
+addon mode a Mosquitto guidance banner detects the broker add-on
+state and either deep-links to the install page or offers a
+one-click "Set up automatically" CTA that flips mode→mqtt with
+``broker=auto``, saves, and hot-applies.  HA-area naming toggle
+(previously gated behind the experimental flag) moved into a
+"Naming" card at the top of this tab.  Section heading uses a
+proper HA logomark instead of the MA placeholder.
+
+### Added — `aiomqtt` dependency
+
+The MQTT publisher uses ``aiomqtt>=2.0`` (asyncio wrapper over
+``paho-mqtt``).  Both ship as wheels for amd64 / aarch64 / armv7.
+
+### Removed — `pair`, `scan`, `reset_reconnect` from HA catalog
+
+Heavy / interactive recovery actions stay in the bridge web UI
+only — exposing them to HA automations had no safe failure path.
+
+### Fixed — HA "Claim audio" no longer breaks playback
+
+Pressing ``button.<player>_claim_audio`` from HA used to fall
+through to a full reconnect (probe for a non-existent
+``MprisPlayer.assert_active_source`` attribute).  Now mirrors the
+web-UI path — looks up the player in ``MprisRegistry`` and
+schedules ``set_playback_status("Playing")`` so BlueZ propagates
+the source claim over AVRCP without disturbing the BT link.
+
+### Fixed — HA addon Configuration tab kept showing stale `ha_integration`
+
+When operators saved ``HA_INTEGRATION`` changes through the bridge
+web UI on a HA addon deployment, the bridge applied them
+immediately but ``_sync_ha_options`` did NOT mirror the block back
+to Supervisor.  Symptoms: HAOS Configuration tab kept showing the
+old broker / mode / toggle values, and the next addon restart
+wrote those stale values back over the live config.  Now mirrored
+in the flat shape Supervisor's options schema expects.
+
+### Fixed — Settings tab redirected to /login on Docker / standalone after rc.2 upgrade
+
+The new Settings → Home Assistant tab calls ``GET /api/auth/tokens``
+on every config load.  The endpoint required an authenticated
+session unconditionally, including when ``AUTH_ENABLED`` is off
+(Docker / standalone default), forcing operators to a login page
+even though auth was disabled.  Token endpoints now treat "global
+auth gate off" as "requirement satisfied".
+
+### Fixed — Copilot review issues from PRs #214–#218
+
+Multiple smaller fixes caught during review (auth gate via
+``current_app.config``, dropped dead ``mode == "both"`` branch,
+explicit clear path for the MQTT broker password, conditional
+fields by transport, legacy availability topic mirror on full +
+delta publish, disabled-device config knob carry-through,
+``GET /api/ha/mosquitto/status`` exception fallback that keeps the
+banner visible, runtime availability gated on daemon liveness,
+``enabled=false, mode=mqtt`` no longer auto-enables on UI load).
+See the rc-cycle sections below for the per-issue detail.
+
+---
+
+The detailed rc-cycle history (rc.1 → rc.6) follows below verbatim
+for traceability.
+
 ## [2.65.0-rc.6] - 2026-04-28
 
 ### Changed — HA: standby + power-save switches replace button + binary-sensor pairs
