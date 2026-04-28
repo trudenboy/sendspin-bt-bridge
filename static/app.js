@@ -961,6 +961,7 @@ function _uiIconSvg(kind, className) {
     if (kind === 'check') return _checkIconSvg(className);
     if (kind === 'bt') return _bluetoothIconSvg(className);
     if (kind === 'ma') return _maIconSvg(className);
+    if (kind === 'ha') return _haIconSvg(className);
     if (kind === 'lock') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>' +
@@ -1860,6 +1861,16 @@ function _trashIconSvg(className) {
 function _maIconSvg(className) {
     var cls = className ? ' class="' + className + '"' : '';
     return '<svg' + cls + ' viewBox="0 0 240 240" fill="currentColor" aria-hidden="true"><path d="M109.394 4.38C115.242-1.46 124.788-1.46 130.606 4.38L229.394 103.27C235.242 109.11 240 120.64 240 128.91V219.02L239.995 219.37C239.789 227.46 233.114 234 225 234H15C6.758 234 0 227.22 0 218.99V128.88C0 120.61 4.788 109.08 10.606 103.24L109.394 4.38ZM36 120C31.582 120 28 123.58 28 128V206H44V128C44 123.58 40.418 120 36 120ZM68 120C63.582 120 60 123.58 60 128V206H76V128C76 123.58 72.418 120 68 120ZM100 120C95.582 120 92 123.58 92 128V206H108V128C108 123.58 104.418 120 100 120ZM158.393 120.43C154.2 119.03 149.671 121.3 148.275 125.49L121.479 206H138.342L163.456 130.54C164.851 126.35 162.584 121.82 158.393 120.43ZM188.708 125.49C187.313 121.3 182.783 119.03 178.591 120.43C174.399 121.82 172.131 126.35 173.526 130.54L198.642 206H215.504L188.708 125.49Z"/></svg>';
+}
+
+function _haIconSvg(className) {
+    // Stylised Home Assistant mark: rounded house silhouette with the
+    // characteristic central hub (the HA logomark uses a single dot at
+    // the centroid of the roof triangle).  Single-colour ``currentColor``
+    // so it inherits from the section heading like the other ui-icon
+    // entries do.
+    var cls = className ? ' class="' + className + '"' : '';
+    return '<svg' + cls + ' viewBox="0 0 240 240" fill="currentColor" aria-hidden="true"><path d="M120 18 L21 117c-3 3-5 7-5 11v82c0 7 6 12 12 12h184c7 0 12-5 12-12v-82c0-4-2-8-5-11L120 18Zm0 28 80 80v66h-50v-46H90v46H40v-66l80-80Zm0 60a8 8 0 100 16 8 8 0 000-16Z"/></svg>';
 }
 
 function _getSyncStatusMeta(dev, i) {
