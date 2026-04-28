@@ -5143,10 +5143,15 @@ function _populateHaIntegrationForm(block) {
     if (username) username.value = mqtt.username || '';
     var password = document.getElementById('ha-mqtt-password');
     if (password) {
-        // Don't surface an existing password (it's already masked server-side).
-        // Empty input = "keep existing"; non-empty = overwrite.
-        password.value = '';
-        password.placeholder = mqtt.password ? '•••••••• (set; leave blank to keep)' : '';
+        // The GET response masks an existing password as ``***REDACTED***``;
+        // populate the field with that marker so leaving it untouched
+        // preserves the value, while explicitly clearing the field saves
+        // an empty password (broker switched to no-auth).  See the round
+        // trip semantics in routes/api_config.py.
+        password.value = mqtt.password === '***REDACTED***' || (mqtt.password && mqtt.password.length)
+            ? '***REDACTED***'
+            : '';
+        password.placeholder = mqtt.password ? '' : '(no password)';
     }
     var prefix = document.getElementById('ha-mqtt-discovery-prefix');
     if (prefix) prefix.value = mqtt.discovery_prefix || 'homeassistant';
@@ -5163,10 +5168,13 @@ function _readHaIntegrationFromForm(existingBlock) {
     var existingMqtt = existing.mqtt || {};
     var pwField = document.getElementById('ha-mqtt-password');
     var pwValue = pwField ? pwField.value : '';
-    // The GET response masks the password as ``***REDACTED***``; never
-    // round-trip that back to the server — leaving the field empty in
-    // the payload tells the server "keep existing" via translate_ha_config
-    // / config_diff (no-op).
+    // Password handling — three cases the bridge POST handler distinguishes
+    // (see ``routes/api_config.py:api_config``):
+    //   * ``***REDACTED***`` (the marker we populate from GET) — keep existing
+    //   * ``""`` (operator cleared the field) — explicit clear (broker
+    //     switches to no-auth)
+    //   * anything else — overwrite with the typed plaintext
+    // The merge happens server-side, not via translate_ha_config / config_diff.
     var pwToSend = pwValue;
     return {
         enabled: !!(document.getElementById('ha-integration-enabled') || {}).checked,
@@ -5284,8 +5292,8 @@ async function _refreshHaTokensList() {
             label.style.flex = '1';
             label.style.minWidth = '0';
             var lastUsed = tok.last_used ? (' · last used ' + new Date(tok.last_used).toLocaleString()) : ' · never used';
-            label.innerHTML = '<strong>' + _escapeHtml(tok.label || tok.id) + '</strong>'
-                + ' <span class="form-hint">' + _escapeHtml(tok.id) + lastUsed + '</span>';
+            label.innerHTML = '<strong>' + escHtml(tok.label || tok.id) + '</strong>'
+                + ' <span class="form-hint">' + escHtml(tok.id) + lastUsed + '</span>';
             var revoke = document.createElement('button');
             revoke.type = 'button';
             revoke.className = 'btn btn-sm btn-danger';
@@ -5299,12 +5307,6 @@ async function _refreshHaTokensList() {
     } catch (exc) {
         listEl.innerHTML = '<span class="form-hint">Failed to load tokens.</span>';
     }
-}
-
-function _escapeHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function _haTokenCreate() {

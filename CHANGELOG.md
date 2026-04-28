@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — explicit clear path for the MQTT broker password
+
+The Settings → Home Assistant tab now distinguishes "I didn't touch
+this field" from "I want to drop the password".  When the form loads
+the password input is pre-populated with the marker
+``***REDACTED***`` (instead of staying empty); leaving the marker in
+place keeps the existing password, while clearing the field saves an
+empty value so an operator can switch a broker from auth → no-auth
+from the UI without hand-editing ``config.json``.  ``None`` and
+whitespace-only payloads are still treated as "untouched" so a
+clumsy client can't accidentally clear the password.  Caught by
+Copilot review on PR #215.
+
+### Changed — reuse existing `escHtml()` helper in HA token list
+
+The HA token list rendering used a private duplicate of the
+HTML-escape helper.  Now uses the project-wide ``escHtml()`` from
+``static/app.js`` for consistency with every other rendered string.
+Caught by Copilot review on PR #215.
+
+### Fixed — comment in `_readHaIntegrationFromForm` matches reality
+
+The inline comment claimed the bridge's "keep existing" semantics
+lived in ``translate_ha_config`` / ``config_diff``; the real merge
+happens in the ``POST /api/config`` handler in ``routes/api_config.py``.
+Updated the comment so future maintainers debug round-trips at the
+right layer.  Caught by Copilot review on PR #215.
+
 ## [2.65.0-rc.2] - 2026-04-28
 
 ### Added — Settings → Home Assistant tab

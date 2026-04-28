@@ -696,9 +696,16 @@ def api_config():
     except ValueError as exc:
         return _error_response(str(exc))
 
-    # HA_INTEGRATION: empty / placeholder password means "keep the existing
-    # value" — the GET response only ever surfaces a redacted marker, so a
-    # round-trip would otherwise blank a working broker password.
+    # HA_INTEGRATION password round-trip semantics — the GET response
+    # surfaces an existing password as the marker ``***REDACTED***`` and
+    # the UI puts that marker into the input field on load.  Three cases:
+    #   * ``***REDACTED***`` (operator didn't touch the field) — keep existing
+    #   * ``""`` (operator cleared the field) — explicit clear, broker
+    #     switches to no-auth
+    #   * anything else — overwrite with the typed plaintext
+    # ``None``/whitespace inherit "keep existing" so a clumsy client
+    # submitting an unset field doesn't accidentally clear the password,
+    # but explicit ``""`` is honoured.
     incoming_ha = config.get("HA_INTEGRATION")
     if isinstance(incoming_ha, dict):
         existing_full_config = load_config()
@@ -707,8 +714,12 @@ def api_config():
         incoming_mqtt = incoming_ha.get("mqtt")
         if isinstance(incoming_mqtt, dict):
             pw = incoming_mqtt.get("password")
-            if pw == "***REDACTED***" or pw is None or (isinstance(pw, str) and not pw.strip()):
+            if pw == "***REDACTED***" or pw is None:
                 incoming_mqtt["password"] = existing_mqtt.get("password", "")
+            elif isinstance(pw, str) and pw.strip() == "" and pw != "":
+                # Whitespace-only — treat as untouched / unset, not clear.
+                incoming_mqtt["password"] = existing_mqtt.get("password", "")
+            # else: explicit "" → preserved as "" (clear), or non-empty → overwrite
 
     try:
         sendspin_port = _parse_optional_int(config.get("SENDSPIN_PORT"), "SENDSPIN_PORT", min_value=1, max_value=65535)

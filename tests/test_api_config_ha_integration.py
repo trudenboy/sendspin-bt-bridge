@@ -127,7 +127,13 @@ def _read_persisted(cfg_file):
     return json.loads(cfg_file.read_text())
 
 
-def test_post_preserves_password_when_blank(client):
+def test_post_clears_password_when_explicit_empty(client):
+    """Empty string is an explicit clear (broker switching to no-auth).
+
+    Regression: earlier rev treated empty-string as "keep existing",
+    which made it impossible to drop an MQTT password without
+    hand-editing config.json.  Caught by Copilot review on PR #215.
+    """
     cl, cfg_file = client
     payload = {
         "HA_INTEGRATION": {
@@ -137,7 +143,63 @@ def test_post_preserves_password_when_blank(client):
                 "broker": "broker.local",
                 "port": 1883,
                 "username": "u",
-                "password": "",  # blank from form → keep existing
+                "password": "",  # explicit clear
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    persisted = _read_persisted(cfg_file)
+    assert persisted["HA_INTEGRATION"]["mqtt"]["password"] == ""
+
+
+def test_post_preserves_password_when_field_omitted_or_none(client):
+    cl, cfg_file = client
+    # Both omitted-key and explicit None are "untouched" — nothing should
+    # change.  Empty string is the only explicit clear path.
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "broker.local",
+                "port": 1883,
+                "username": "u",
+                "password": None,
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    persisted = _read_persisted(cfg_file)
+    assert persisted["HA_INTEGRATION"]["mqtt"]["password"] == "supersecret"
+
+
+def test_post_preserves_password_on_whitespace(client):
+    """Whitespace-only — treat as untouched, not clear.  Empty literal is
+    the only explicit clear path."""
+    cl, cfg_file = client
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "broker.local",
+                "port": 1883,
+                "username": "u",
+                "password": "   ",
                 "discovery_prefix": "homeassistant",
                 "tls": False,
                 "client_id": "",
