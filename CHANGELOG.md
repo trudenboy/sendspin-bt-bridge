@@ -60,15 +60,6 @@ toggle or fire an automation on a Bluetooth speaker.
   experimental flag) moved to the top of this tab and is now on
   by default in HA add-on mode.
 
-### Heads-up
-
-- ``pair``, ``scan``, and ``reset_reconnect`` are intentionally not
-  exposed to HA — they're heavy / interactive workflows that need
-  the bridge web UI's pair-flow modal.  Both surfaces keep them.
-- The HACS custom_component sits in-tree; the release artifact
-  attaches a slim ``sendspin_bridge.zip`` for HACS to fetch
-  without pulling the whole bridge repo.
-
 The detailed rc-cycle history (rc.1 → rc.6) follows below verbatim
 for traceability.
 
