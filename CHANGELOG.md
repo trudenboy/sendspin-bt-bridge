@@ -15,50 +15,34 @@ toggle or fire an automation on a Bluetooth speaker.
 
 ### What you get
 
-- **Each speaker shows up in HA on the same device card MA already
-  made for it.**  RSSI, battery, audio codec, BT-link status, last
-  error, sync health — all visible without leaving the room view.
-  Nothing duplicates what MA already exposes (no extra
-  ``media_player``, no second volume slider).
-- **Switches for the things you actually want to automate:**
-  ``switch.<player>_enabled`` (drop a speaker out of the fleet),
-  ``switch.<player>_standby`` (wake or park),
-  ``switch.<player>_power_save``, ``switch.<player>_bt_management``.
-  Toggle them, read their state in conditions — works the same as
-  any other HA switch.
-- **Buttons for one-shot recovery actions** the bridge can do that
-  MA can't: reconnect, disconnect, claim audio (steal a multipoint
-  speaker back from a phone).  "Claim audio" now does the right
-  thing — the rc.1 version tore down the BT link by accident.
-- **Per-device config knobs** writable from HA: idle mode, keep-alive
-  method, static delay, power-save delay.  Set them once from a
-  dashboard, no need to open the bridge web UI.
-- **Standby + disabled speakers stay reachable.**  Even when a
-  speaker is parked or globally disabled, the toggle to wake or
-  re-enable it stays live in HA.
+- Every speaker shows up in HA on the same device card Music
+  Assistant already made for it — signal strength, battery, audio
+  codec, link status, sync health, last error.  Nothing duplicates
+  what MA already exposes.
+- Switches for the things you'd actually automate: enable, standby,
+  power save, BT management.  Toggle them, read their state in
+  conditions, like any other HA switch.
+- Buttons for one-shot actions: reconnect, disconnect, claim audio
+  (steal a multipoint speaker back from a phone).
+- Per-device config writable from HA: idle mode, keep-alive method,
+  static delay, power-save delay.
+- Disabled or sleeping speakers stay reachable — the toggle to wake
+  or re-enable a speaker is always live.
 
 ### Two ways to wire it up — pick one
 
-- **MQTT (zero install on HAOS).**  Install the official
-  Mosquitto add-on, open Settings → Home Assistant in the bridge
-  web UI, pick **MQTT**.  On HAOS the broker is auto-detected
-  (or one click "Set up automatically" if Mosquitto is already
-  running).  Speakers appear in HA via MQTT discovery.
-- **REST + Zeroconf (HACS install).**  Add this repo to HACS,
-  install "Sendspin BT Bridge".  HA discovers the bridge over
-  mDNS, on HAOS it auto-pairs via Supervisor, otherwise paste a
-  token you generate in the bridge UI.
+- **MQTT.**  Install the official Mosquitto add-on, then open
+  Settings → Home Assistant in the bridge web UI and pick **MQTT**.
+  On HAOS the broker is auto-detected — one click and you're done.
+- **HACS custom_component.**  Add this repo to HACS, install
+  "Sendspin BT Bridge".  HA discovers the bridge automatically; on
+  HAOS it auto-pairs, otherwise paste a token from the bridge UI.
 
 ### New Settings → Home Assistant tab
 
-- Mode dropdown (off / MQTT / REST) is the single source of truth.
-- Status banner at the top tells you whether the integration is
-  connected, connecting, or showing an error.
-- When connected, the configuration cards collapse — hit
-  Reconfigure to expand them.
-- HA-area naming suggestions (previously hidden behind the
-  experimental flag) moved to the top of this tab and is now on
-  by default in HA add-on mode.
+A dedicated tab in the bridge web UI: mode picker, live connection
+status, broker / token settings.  Once connected the config cards
+collapse out of the way.
 
 The detailed rc-cycle history (rc.1 → rc.6) follows below verbatim
 for traceability.
