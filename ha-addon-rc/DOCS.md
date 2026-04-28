@@ -244,6 +244,28 @@ standalone-only **Auto-get token on UI open** helper is intentionally hidden
 outside the addon/Ingress path because silent token bootstrap depends on a live
 Home Assistant browser session.
 
+## Home Assistant integration (v2.65.0+)
+
+Two transports for direct HA control:
+
+- **MQTT discovery** — install the official Mosquitto add-on, then in
+  the bridge **Home Assistant** panel click *Auto-detect MQTT add-on*,
+  toggle **Enabled** with `mode: mqtt`. Speakers appear in HA under
+  *Settings → Devices → MQTT*, automatically merged into the same
+  device card Music Assistant already created.
+- **Custom integration via HACS** — add this repository as a HACS
+  custom repository (category *Integration*), install **Sendspin BT
+  Bridge**, restart HA. mDNS auto-discovers the bridge and on HAOS the
+  pairing is one-click via the Supervisor proxy.
+
+Neither transport duplicates Music Assistant's `media_player` surface
+— they only add what MA doesn't know about: BT signal strength,
+battery, sync health, idle behaviour, and BT-level commands like
+reconnect / wake / full reset.
+
+See the full [Home Assistant Integration documentation](https://trudenboy.github.io/sendspin-bt-bridge/home-assistant-integration/)
+for the entity catalog and example automations.
+
 ## Onboarding, recovery, and support
 
 - The onboarding checklist walks through Bluetooth access, audio backend

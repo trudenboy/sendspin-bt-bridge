@@ -55,6 +55,17 @@ options:
   ma_auto_silent_auth: true
   bluetooth_devices: []
   bluetooth_adapters: []
+  ha_integration:
+    enabled: false
+    mode: "off"
+    mqtt_broker: "auto"
+    mqtt_port: 1883
+    mqtt_username: ""
+    mqtt_password: ""
+    mqtt_discovery_prefix: "homeassistant"
+    mqtt_tls: false
+    advertise_mdns: true
+    supervisor_pair: true
 
 schema:
   sendspin_server: str
@@ -92,3 +103,14 @@ schema:
     - id: str
       mac: str?
       name: str?
+  ha_integration:
+    enabled: bool?
+    mode: "list(off|mqtt|rest|both)?"
+    mqtt_broker: str?
+    mqtt_port: port?
+    mqtt_username: str?
+    mqtt_password: password?
+    mqtt_discovery_prefix: str?
+    mqtt_tls: bool?
+    advertise_mdns: bool?
+    supervisor_pair: bool?

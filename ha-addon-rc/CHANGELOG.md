@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.1] - 2026-04-28
+
+### Added — Home Assistant integration (issue #205)
+
+Two parallel transports ship together for direct HA control of the
+bridge from dashboards and automations:
+
+**MQTT discovery (Path B).**  Enable in the new "Home Assistant"
+config block; on HAOS the broker is auto-detected via the official
+Mosquitto add-on.  The bridge publishes per-speaker entities under
+`homeassistant/<component>/sendspin_<player_id>/...` with
+`device.connections=[("bluetooth", mac)]` so HA's device registry
+**merges them into the same device card** that Music Assistant's
+integration already created for the speaker.  Result: one ENEBY20
+device card with `media_player.eneby20` (from MA) plus our
+`sensor.eneby20_rssi`, `sensor.eneby20_battery`, `binary_sensor.eneby20_streaming`,
+`button.eneby20_reconnect`, `select.eneby20_idle_mode`,
+`number.eneby20_static_delay`, etc.
+
+**custom_component over REST + SSE (Path A1).**  Same repo ships
+`custom_components/sendspin_bridge/` for HACS users.  HA's Zeroconf
+discovers the bridge's `_sendspin-bridge._tcp.local.` advertisement;
+on HAOS the integration auto-pairs via Supervisor, off-HAOS the user
+pastes a token they generate in the bridge web UI.  REST + SSE
+(`/api/ha/state`, `/api/status/events`) drive a `DataUpdateCoordinator`.
+
+**MA-deduplication contract.**  Neither transport exposes
+`media_player`, volume, mute, transport, queue, now-playing, or
+group state — those are owned by Music Assistant's official HA
+integration and would conflict if duplicated.  The bridge integration
+stays strictly to BT diagnostics (RSSI / battery / streaming /
+reanchor) and config knobs (idle mode / static delay / per-device
+enabled / BT management).
+
+### Added — Long-lived API bearer tokens
+
+`POST /api/auth/tokens` mints PBKDF2-SHA256-hashed bearer tokens for
+the HA custom_component.  `Authorization: Bearer <token>` is now
+accepted on all `/api/*` routes alongside the existing session-cookie
+auth.  HAOS users skip token generation entirely thanks to
+`POST /api/auth/ha-pair`, which validates the Supervisor proxy chain
+and mints a token without operator input.
+
+### Added — `aiomqtt` dependency
+
+The MQTT publisher uses `aiomqtt>=2.0` (an asyncio wrapper over
+`paho-mqtt`).  Both ship as wheels for amd64 / aarch64 / armv7.
+
 ## [2.63.2-rc.1] - 2026-04-27
 
 ### Review follow-ups (Copilot on PR #206)
