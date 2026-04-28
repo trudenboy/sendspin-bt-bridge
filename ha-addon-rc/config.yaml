@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge (RC)"
-version: "2.65.0-rc.2"
+version: "2.65.0-rc.3"
 slug: "sendspin_bt_bridge_rc"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (RC channel)"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
@@ -24,6 +24,10 @@ privileged:
 devices:
   - /dev/bus/usb
 audio: true
+# Declare MQTT as an optional Supervisor service so the bridge can read
+# Mosquitto broker credentials via /services/mqtt for the
+# ha_integration.mqtt_broker = "auto" auto-detect path.  ``mqtt:want``
+# means "we'd like it if it's installed", not "we require it".
 services:
   - mqtt:want
 apparmor: true

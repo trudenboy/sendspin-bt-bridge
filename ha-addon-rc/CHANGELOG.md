@@ -7,6 +7,126 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.0-rc.3] - 2026-04-28
+
+### Changed — auth-gate read switched to `current_app.config`
+
+``_require_authenticated_session`` and ``_validate_csrf_token`` in
+``routes/auth.py`` previously reached for ``web_interface._auth_enabled``
+(private global, hard import dependency, swallowed broad
+``except Exception``).  They now read ``current_app.config["AUTH_ENABLED"]``
+to mirror the pattern used in ``routes/views.py`` / ``routes/api_status.py``,
+which keeps the blueprint decoupled from the app entrypoint module
+and lets test fixtures set ``app.config["AUTH_ENABLED"]`` directly
+instead of monkeypatching a private global.  Caught by Copilot review
+on PR #216.
+
+### Changed — dropped dead `mode == "both"` branch in mDNS gating
+
+``bridge_orchestrator._start_mdns_advertiser`` checked
+``mode in ("rest", "both")`` "for the upgrade window", but
+``load_config()`` already runs the migration that coerces ``"both"``
+→ ``"mqtt"`` before this code sees it.  Simplified to
+``mode == "rest"`` and updated the comment.  Caught by Copilot
+review on PR #216.
+
+### Removed — `pair` (per device) and `scan` (bridge-level) HA buttons
+
+Both buttons were noise rather than signal in HA's automation
+context.  ``pair`` is a one-shot interactive workflow — the speaker
+must be in pairing mode at the right moment, and the bridge UI's
+pair-flow modal is the right surface for it; pressing it from an
+HA automation has no safe failure path.  ``scan`` returns a list
+of nearby BT devices that's only meaningful inside the same modal,
+so triggering it from HA produces no observable effect.  The bridge
+web UI keeps both controls.  Catalog reduces from 28 → 27 per-device
+entities and 7 → 6 bridge entities.
+
+### Added — Settings → Home Assistant: conditional fields by transport
+
+The Settings → Home Assistant tab now hides fields that aren't
+relevant to the chosen transport, mirroring the rest of the form.
+``off`` shows only the master toggle + transport selector;
+``mqtt`` adds the broker card; ``rest`` adds the mDNS / Supervisor-pair
+card and the bearer-token list.  No more typing into a card whose
+fields the publisher won't read.
+
+### Removed — `HA_INTEGRATION.mode = "both"`
+
+``both`` shipped briefly in rc.1 / rc.2 but was a footgun: running
+the MQTT publisher AND the REST custom_component path against the
+same HA produced **two copies of every entity**.  Both transports
+publish ``sensor.<player>_rssi``, ``button.<player>_reconnect``,
+etc. with the same ``unique_id``; HA's entity registry keys on
+``(domain, platform, unique_id)`` and the platforms differ
+(``mqtt`` vs ``sendspin_bridge``), so the second set lands as
+``sensor.<player>_rssi_2``.  The mode selector now offers
+``off / mqtt / rest`` only.  Saved configs still containing
+``"both"`` are normalised to ``"mqtt"`` on load (config_migration
+``_normalize_ha_integration``) so an upgrade can't silently disable
+publishing — operators who actually wanted REST flip the mode back
+manually after upgrading.  Tests:
+``test_ha_integration_mode_migration.py`` and
+``test_resolve_mqtt_config_legacy_both_mode_normalised_to_mqtt``.
+
+### Fixed — Settings tab redirected to /login on Docker / standalone (no-auth) deployments after upgrading to v2.65.0-rc.2
+
+The new Settings → Home Assistant tab calls
+``GET /api/auth/tokens`` on every config load to populate the bearer
+token list.  The endpoint required an authenticated session
+unconditionally, including when the global ``AUTH_ENABLED`` toggle is
+off (Docker / standalone default) — and the JS 401 fallback then
+bounced the browser to ``/login``.  The result was that operators
+who had auth disabled were forced to a login page after upgrading
+even though the toggle was still off.
+
+The token endpoints (and the CSRF guard they share with the rest of
+the auth blueprint) now treat "global auth gate off" as
+"requirement satisfied", so standalone/Docker deployments without
+``AUTH_ENABLED`` keep working unchanged.  HA addon mode is
+unaffected (Supervisor sessions are always present).  Regression
+test in ``test_auth_token_routes.py::test_token_endpoints_open_when_global_auth_disabled``.
+
+### Fixed — MQTT broker auto-detect failed on HAOS
+
+The HA addon manifest didn't declare ``services: ['mqtt:want']``,
+so Supervisor refused queries to ``/services/mqtt`` with
+``"No access to mqtt service!"`` and the bridge's
+``ha_integration.mqtt_broker = "auto"`` path silently fell through
+to "publisher disabled".  All three addon variants (stable / RC /
+beta) now declare the optional service so the auto-detect populates
+host / port / username from the Mosquitto add-on without the
+operator typing them manually.  ``mqtt:want`` (not ``mqtt:need``)
+keeps the addon installable when no MQTT broker is present.
+
+### Changed — explicit clear path for the MQTT broker password
+
+The Settings → Home Assistant tab now distinguishes "I didn't touch
+this field" from "I want to drop the password".  When the form loads
+the password input is pre-populated with the marker
+``***REDACTED***`` (instead of staying empty); leaving the marker in
+place keeps the existing password, while clearing the field saves an
+empty value so an operator can switch a broker from auth → no-auth
+from the UI without hand-editing ``config.json``.  ``None`` and
+whitespace-only payloads are still treated as "untouched" so a
+clumsy client can't accidentally clear the password.  Caught by
+Copilot review on PR #215.
+
+### Changed — reuse existing `escHtml()` helper in HA token list
+
+The HA token list rendering used a private duplicate of the
+HTML-escape helper.  Now uses the project-wide ``escHtml()`` from
+``static/app.js`` for consistency with every other rendered string.
+Caught by Copilot review on PR #215.
+
+### Fixed — comment in `_readHaIntegrationFromForm` matches reality
+
+The inline comment claimed the bridge's "keep existing" semantics
+lived in ``translate_ha_config`` / ``config_diff``; the real merge
+happens in the ``POST /api/config`` handler in ``routes/api_config.py``.
+Updated the comment so future maintainers debug round-trips at the
+right layer.  Caught by Copilot review on PR #215.
+
 ## [2.65.0-rc.2] - 2026-04-28
 
 ### Added — Settings → Home Assistant tab
