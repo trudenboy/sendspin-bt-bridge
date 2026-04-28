@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Settings → Home Assistant tab
+
+The HA-integration controls promised by v2.65.0-rc.1's plan now have a
+dedicated UI surface: open the Configuration drawer and switch to the
+**Home Assistant** tab.  From here operators can:
+
+- Toggle the master ``HA_INTEGRATION.enabled`` flag and pick
+  ``mode`` (``off`` / ``mqtt`` / ``rest`` / ``both``).
+- Auto-detect the HAOS Mosquitto add-on (one click; populates broker
+  host / port / username / TLS).
+- Edit broker URL / port / username / password / discovery prefix /
+  TLS for self-hosted brokers.
+- Toggle mDNS advertisement and Supervisor pair acceptance for the
+  REST + custom_component path.
+- See live publisher state (idle / connected / error) and discovery
+  payload count.
+- Mint long-lived bearer tokens for the custom_component (label,
+  reveal-once, copy button); list issued tokens and revoke any of
+  them in place.
+
+The MQTT password masking pattern matches Music Assistant's:
+``GET /api/config`` reports ``***REDACTED***`` whenever a password is
+set (and an empty string when none), and a POST that echoes back the
+redacted marker preserves the existing password instead of clearing
+it.  ``AUTH_TOKENS`` is dropped from the GET payload entirely; the UI
+fetches it from ``/api/auth/tokens`` so the bearer-token list never
+flows through the config form.
+
+Round-trip tests in ``tests/test_api_config_ha_integration.py`` cover
+the redaction, password preservation, explicit overwrite, and the
+per-config-key download sanitization.
+
 ### Fixed — HA custom_component pairing flow on HAOS was unreachable
 
 The HA bootstrap endpoint ``POST /api/auth/ha-pair`` exists to mint a

@@ -5096,6 +5096,299 @@ function _buildHaAreaOptionsHtml(selectedAreaId) {
     return html;
 }
 
+// ─── HA integration (MQTT + REST custom_component) ───────────────────────
+//
+// Backend lives at:
+//   GET  /api/ha/mqtt/probe   — Supervisor MQTT auto-detect
+//   GET  /api/ha/mqtt/status  — publisher diagnostics
+//   GET  /api/ha/mdns/status  — mDNS advertiser diagnostics
+//   GET  /api/auth/tokens     — list bearer tokens
+//   POST /api/auth/tokens     — mint one (returns plaintext once)
+//   DELETE /api/auth/tokens/<id>
+//
+// The HA_INTEGRATION block in config persists transport state; tokens are
+// runtime-mutated via the auth endpoints, not via the config form.
+
+var _haIntegrationDefaults = {
+    enabled: false,
+    mode: 'off',
+    mqtt: {
+        broker: 'auto',
+        port: 1883,
+        username: '',
+        password: '',
+        discovery_prefix: 'homeassistant',
+        tls: false,
+        client_id: ''
+    },
+    rest: {
+        advertise_mdns: true,
+        supervisor_pair: true
+    }
+};
+
+function _populateHaIntegrationForm(block) {
+    block = block || _haIntegrationDefaults;
+    var mqtt = block.mqtt || {};
+    var rest = block.rest || {};
+    var enabled = document.getElementById('ha-integration-enabled');
+    if (enabled) enabled.checked = !!block.enabled;
+    var mode = document.getElementById('ha-integration-mode');
+    if (mode) mode.value = block.mode || 'off';
+    var broker = document.getElementById('ha-mqtt-broker');
+    if (broker) broker.value = mqtt.broker == null ? 'auto' : String(mqtt.broker);
+    var port = document.getElementById('ha-mqtt-port');
+    if (port) port.value = mqtt.port == null ? 1883 : mqtt.port;
+    var username = document.getElementById('ha-mqtt-username');
+    if (username) username.value = mqtt.username || '';
+    var password = document.getElementById('ha-mqtt-password');
+    if (password) {
+        // Don't surface an existing password (it's already masked server-side).
+        // Empty input = "keep existing"; non-empty = overwrite.
+        password.value = '';
+        password.placeholder = mqtt.password ? '•••••••• (set; leave blank to keep)' : '';
+    }
+    var prefix = document.getElementById('ha-mqtt-discovery-prefix');
+    if (prefix) prefix.value = mqtt.discovery_prefix || 'homeassistant';
+    var tls = document.getElementById('ha-mqtt-tls');
+    if (tls) tls.checked = !!mqtt.tls;
+    var advertise = document.getElementById('ha-rest-advertise-mdns');
+    if (advertise) advertise.checked = rest.advertise_mdns !== false;
+    var supervisorPair = document.getElementById('ha-rest-supervisor-pair');
+    if (supervisorPair) supervisorPair.checked = rest.supervisor_pair !== false;
+}
+
+function _readHaIntegrationFromForm(existingBlock) {
+    var existing = existingBlock || {};
+    var existingMqtt = existing.mqtt || {};
+    var pwField = document.getElementById('ha-mqtt-password');
+    var pwValue = pwField ? pwField.value : '';
+    // The GET response masks the password as ``***REDACTED***``; never
+    // round-trip that back to the server — leaving the field empty in
+    // the payload tells the server "keep existing" via translate_ha_config
+    // / config_diff (no-op).
+    var pwToSend = pwValue;
+    return {
+        enabled: !!(document.getElementById('ha-integration-enabled') || {}).checked,
+        mode: (document.getElementById('ha-integration-mode') || {}).value || 'off',
+        mqtt: {
+            broker: ((document.getElementById('ha-mqtt-broker') || {}).value || 'auto').trim() || 'auto',
+            port: parseInt((document.getElementById('ha-mqtt-port') || {}).value, 10) || 1883,
+            username: ((document.getElementById('ha-mqtt-username') || {}).value || '').trim(),
+            password: pwToSend,
+            discovery_prefix: ((document.getElementById('ha-mqtt-discovery-prefix') || {}).value || 'homeassistant').trim() || 'homeassistant',
+            tls: !!(document.getElementById('ha-mqtt-tls') || {}).checked,
+            client_id: existingMqtt.client_id || ''
+        },
+        rest: {
+            advertise_mdns: !!(document.getElementById('ha-rest-advertise-mdns') || {}).checked,
+            supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked
+        }
+    };
+}
+
+async function _haMqttAutoDetect() {
+    var hint = document.getElementById('ha-mqtt-autodetect-hint');
+    if (hint) hint.textContent = 'Probing Supervisor…';
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/mqtt/probe');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json();
+        if (!body || !body.found) {
+            if (hint) hint.textContent = body && body.hint
+                ? body.hint
+                : 'No Mosquitto add-on detected (Supervisor unavailable or not on HAOS).';
+            return;
+        }
+        var broker = document.getElementById('ha-mqtt-broker');
+        if (broker) broker.value = body.host || 'auto';
+        var port = document.getElementById('ha-mqtt-port');
+        if (port) port.value = body.port || 1883;
+        var username = document.getElementById('ha-mqtt-username');
+        if (username) username.value = body.username || '';
+        var tls = document.getElementById('ha-mqtt-tls');
+        if (tls) tls.checked = !!body.ssl;
+        if (hint) {
+            hint.textContent = body.password_present
+                ? 'Filled host/port/user. Password not exposed by Supervisor — paste it manually if needed.'
+                : 'Filled host/port/user (broker has no password set).';
+        }
+        _markConfigDirty();
+    } catch (exc) {
+        if (hint) hint.textContent = 'Probe failed: ' + (exc && exc.message ? exc.message : exc);
+    }
+}
+
+async function _refreshHaIntegrationStatus() {
+    // Fire both probes in parallel; failure is non-fatal — the form still
+    // works for editing config without a live publisher / mDNS.
+    try {
+        var [mqttResp, mdnsResp] = await Promise.all([
+            fetch(API_BASE + '/api/ha/mqtt/status').catch(function() { return null; }),
+            fetch(API_BASE + '/api/ha/mdns/status').catch(function() { return null; })
+        ]);
+        if (mqttResp && mqttResp.ok) {
+            var mqttBody = await mqttResp.json();
+            var node = document.getElementById('ha-mqtt-status');
+            var text = document.getElementById('ha-mqtt-status-text');
+            if (node && text) {
+                if (mqttBody && mqttBody.state && mqttBody.state !== 'idle') {
+                    var parts = ['MQTT publisher: ' + mqttBody.state];
+                    if (mqttBody.broker) parts.push('broker=' + mqttBody.broker);
+                    if (mqttBody.discovery_payload_count) parts.push(mqttBody.discovery_payload_count + ' discovery payloads');
+                    if (mqttBody.last_error) parts.push('last error: ' + mqttBody.last_error);
+                    text.textContent = parts.join(' · ');
+                    node.hidden = false;
+                } else {
+                    node.hidden = true;
+                }
+            }
+        }
+        if (mdnsResp && mdnsResp.ok) {
+            var mdnsBody = await mdnsResp.json();
+            var mdnsNode = document.getElementById('ha-mdns-status');
+            var mdnsText = document.getElementById('ha-mdns-status-text');
+            if (mdnsNode && mdnsText) {
+                if (mdnsBody && mdnsBody.advertised) {
+                    var portTxt = mdnsBody.port ? (':' + mdnsBody.port) : '';
+                    mdnsText.textContent = 'mDNS: advertised as ' + (mdnsBody.host_id || 'sendspin-bridge') + portTxt;
+                    mdnsNode.hidden = false;
+                } else {
+                    mdnsNode.hidden = true;
+                }
+            }
+        }
+    } catch (exc) {
+        // Silent — diagnostics are best-effort.
+    }
+}
+
+async function _refreshHaTokensList() {
+    var listEl = document.getElementById('ha-tokens-list');
+    if (!listEl) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/auth/tokens');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json();
+        var tokens = (body && body.tokens) || [];
+        if (!tokens.length) {
+            listEl.innerHTML = '<span class="form-hint">No tokens issued yet.</span>';
+            return;
+        }
+        listEl.innerHTML = '';
+        tokens.forEach(function(tok) {
+            var row = document.createElement('div');
+            row.className = 'form-inline-actions config-inline-row';
+            row.style.alignItems = 'center';
+            var label = document.createElement('span');
+            label.style.flex = '1';
+            label.style.minWidth = '0';
+            var lastUsed = tok.last_used ? (' · last used ' + new Date(tok.last_used).toLocaleString()) : ' · never used';
+            label.innerHTML = '<strong>' + _escapeHtml(tok.label || tok.id) + '</strong>'
+                + ' <span class="form-hint">' + _escapeHtml(tok.id) + lastUsed + '</span>';
+            var revoke = document.createElement('button');
+            revoke.type = 'button';
+            revoke.className = 'btn btn-sm btn-danger';
+            revoke.textContent = 'Revoke';
+            revoke.dataset.tokenId = tok.id;
+            revoke.dataset.action = 'ha-token-revoke';
+            row.appendChild(label);
+            row.appendChild(revoke);
+            listEl.appendChild(row);
+        });
+    } catch (exc) {
+        listEl.innerHTML = '<span class="form-hint">Failed to load tokens.</span>';
+    }
+}
+
+function _escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function _haTokenCreate() {
+    var labelInput = document.getElementById('ha-token-label');
+    var label = labelInput ? labelInput.value.trim() : '';
+    if (!label) label = 'ha-custom-component';
+    try {
+        var csrf = (window._csrfToken || '').toString();
+        var resp = await fetch(API_BASE + '/api/auth/tokens', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrf
+            },
+            body: JSON.stringify({label: label, csrf_token: csrf})
+        });
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json();
+        if (!body.success) {
+            showToast(body.error || 'Token creation failed', 'error');
+            return;
+        }
+        // Reveal once.
+        var once = document.getElementById('ha-token-once');
+        var value = document.getElementById('ha-token-once-value');
+        if (once && value) {
+            value.textContent = body.token;
+            once.hidden = false;
+        }
+        if (labelInput) labelInput.value = '';
+        await _refreshHaTokensList();
+    } catch (exc) {
+        showToast('Token creation failed: ' + exc, 'error');
+    }
+}
+
+async function _haTokenRevoke(tokenId) {
+    if (!tokenId) return;
+    if (!confirm('Revoke this token? Any HA integration using it will stop working until re-paired.')) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/auth/tokens/' + encodeURIComponent(tokenId), {
+            method: 'DELETE'
+        });
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        if (!resp.ok) {
+            var body = await resp.json().catch(function() { return null; });
+            showToast((body && body.error) || 'Revoke failed', 'error');
+            return;
+        }
+        showToast('Token revoked', 'success');
+        await _refreshHaTokensList();
+    } catch (exc) {
+        showToast('Revoke failed: ' + exc, 'error');
+    }
+}
+
+function _haTokenCopy() {
+    var value = document.getElementById('ha-token-once-value');
+    if (!value) return;
+    var text = value.textContent || '';
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showToast('Token copied', 'success');
+        }, function() {
+            showToast('Copy failed; select and copy manually', 'error');
+        });
+    } else {
+        // Fallback: select the text so the user can ⌘C / Ctrl+C.
+        var range = document.createRange();
+        range.selectNodeContents(value);
+        var sel = window.getSelection();
+        if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+        showToast('Selected — copy with Ctrl+C', 'info');
+    }
+}
+
+function _haTokenOnceDismiss() {
+    var once = document.getElementById('ha-token-once');
+    var value = document.getElementById('ha-token-once-value');
+    if (once) once.hidden = true;
+    if (value) value.textContent = '';
+}
+
 function _isHaAreaAssistEnabled() {
     return !!_haAreaAssistEnabled;
 }
@@ -7308,6 +7601,9 @@ function _buildConfigPayload(options) {
     config.HA_ADAPTER_AREA_MAP = config.HA_AREA_NAME_ASSIST_ENABLED
         ? _collectHaAdapterAreaMapFromDom()
         : _normalizeHaAdapterAreaMap(_haAdapterAreaMap);
+    // HA integration block — preserves the previously-loaded snapshot so any
+    // keys the form doesn't render (e.g. ``mqtt.client_id``) survive a save.
+    config.HA_INTEGRATION = _readHaIntegrationFromForm(window._lastHaIntegrationBlock);
     return config;
 }
 
@@ -9245,7 +9541,7 @@ var _configDirty = false;
 var _configLoading = false;
 var _configCleanSnapshot = null;
 var _configDirtyKeySeq = 0;
-var _configTabOrder = ['general', 'devices', 'bluetooth', 'ma', 'security'];
+var _configTabOrder = ['general', 'devices', 'bluetooth', 'ma', 'ha', 'security'];
 
 function _nextConfigDirtyKey(prefix) {
     _configDirtyKeySeq += 1;
@@ -9855,6 +10151,13 @@ async function loadConfig(options) {
             haAreaAssistCheck.checked = config.HA_AREA_NAME_ASSIST_ENABLED !== false;
             _setHaAreaAssistEnabled(haAreaAssistCheck.checked);
         }
+        // HA integration block — populate the dedicated tab + cache snapshot
+        // so save round-trips preserve any unrendered fields.
+        window._lastHaIntegrationBlock = config.HA_INTEGRATION || _haIntegrationDefaults;
+        _populateHaIntegrationForm(window._lastHaIntegrationBlock);
+        // Status panel + token list refresh fire-and-forget.
+        _refreshHaIntegrationStatus();
+        _refreshHaTokensList();
         var authPw = document.getElementById('auth-password-fields');
         if (authPw && authCheck) authPw.hidden = !authCheck.checked;
         window._passwordSet = !!config._password_set;
@@ -12731,6 +13034,12 @@ const _ACTION_REGISTRY = {
     'ma-ha-connect':            maHaConnect,
     'ma-login':                 maLogin,
     'set-password':             setPassword,
+    // HA integration tab
+    'ha-mqtt-autodetect':       () => { _haMqttAutoDetect(); return false; },
+    'ha-token-create':          () => { _haTokenCreate(); return false; },
+    'ha-token-revoke':          (el) => { _haTokenRevoke(el && el.dataset && el.dataset.tokenId); return false; },
+    'ha-token-copy':            () => { _haTokenCopy(); return false; },
+    'ha-token-once-dismiss':    () => { _haTokenOnceDismiss(); return false; },
     'save-and-restart':         saveAndRestart,
     'cancel-config-changes':    cancelConfigChanges,
     'download-config':          () => { window.location.href = API_BASE + '/api/config/download'; },
