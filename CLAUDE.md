@@ -23,7 +23,7 @@ docker logs -f sendspin-client
 docker exec -it sendspin-client bluetoothctl
 ```
 
-Unit tests: `pytest` (see `tests/`). 965+ tests across 68+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `pytest` (see `tests/`). 1566+ tests across 115+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION change to `main` triggers `release.yml` which runs lint+pytest, updates `config.py`, creates the git tag, builds Docker images (amd64+arm64), syncs HA addon directories, creates a GitHub Release (stable only), and builds armv7 (stable only). Regular development pushes and PRs trigger `ci.yml` (lint+test only).
 
@@ -51,7 +51,7 @@ Use **red/green TDD** for all new features and bug fixes:
 - After sending `kill`, verify that the exact PID you targeted is actually gone before starting a replacement.
 - Account for OS-specific command syntax and behavior when managing the demo process, especially on macOS.
 
-## Architecture (v2.61.0)
+## Architecture (v2.64.3)
 
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
@@ -65,20 +65,47 @@ main process (Flask API, BT manager, web UI)
 IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON lines on stdin (`set_volume`, `set_mute`, `stop`, `pause`, `play`, `reconnect`, `set_log_level`, `set_static_delay_ms`, `transport`, `set_standby`).
 
 **`sendspin_client.py`** — core orchestration per device:
-- `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`)
-- `SendspinClient` — manages the per-device subprocess lifecycle. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
+- `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`). Includes `rssi_dbm`, `reanchoring`, `reanchor_count`, `last_sync_error_ms`, `last_reanchor_at`.
+- `SendspinClient` — manages the per-device subprocess lifecycle. Implements the `BluetoothManagerHost` Protocol from `bt_types.py`. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
 - `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation
-- `idle_mode` — per-device enum (`default`|`power_save`|`auto_disconnect`|`keep_alive`). Dispatches idle behavior: power_save suspends PA sink, auto_disconnect enters standby, keep_alive sends 2 Hz infrasound bursts
+- `idle_mode` — per-device enum (`default`|`power_save`|`auto_disconnect`|`keep_alive`). Dispatches idle behavior: power_save suspends PA sink, auto_disconnect enters standby, keep_alive sends 2 Hz infrasound bursts (or silence/none, see `keep_alive_method`)
 - `_start_power_save_timer()` / `_enter_power_save()` / `_exit_power_save()` — PA sink suspend/resume for power_save mode
 - `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
 - `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
 - `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `save_device_volume()`
 - `_read_subprocess_stderr()` — async task: forwards subprocess stderr to `logger.warning`
-- `main()` — loads config, instantiates `BluetoothManager` + `SendspinClient` per device, starts Waitress server in daemon thread, runs async event loop
+- `_RingLogHandler` — bounded in-memory log ring (maxlen=2000) with `subscribe_with_snapshot()` / `unsubscribe()` API. Used by the SSE log endpoint and the dormant `routes/api_ws.py:log_stream_iter`.
+- `main()` — entry point. Delegates startup/shutdown to `BridgeOrchestrator` (see below).
 
-**`bluetooth_manager.py`** — BT connection management:
-- `BluetoothManager` — pairing/connection via `bluetoothctl`. Auto-reconnects every 10 s. Detects PipeWire (`bluez_output.MAC.1`) and PulseAudio (`bluez_sink.MAC.a2dp_sink`) sinks.
-- `configure_bluetooth_audio()` — finds the correct PulseAudio sink name for the connected device
+**`bridge_orchestrator.py`** — startup/shutdown layer (extracted from `sendspin_client.py:main()` in the v2.62→v2.64 cycle):
+- `BridgeOrchestrator` — owns the boot sequence. Methods: `initialize_runtime()` (config load, PA hardening, executor sizing), `initialize_devices()` (per-device factory loop via `device_activation.activate_device()`), `initialize_ma_integration()` (MA bootstrap), `start_web_server()` (Waitress in daemon thread), `install_signal_handlers()`, `graceful_shutdown()`.
+- PA hardening: ensures null-sink `sendspin_fallback` exists as the default sink to prevent PA from auto-routing audio to the wrong sink at startup; optionally unloads `module-rescue-streams` if `DISABLE_PA_RESCUE_STREAMS=true`.
+- Runs in the asyncio event loop on the parent process. Does not own per-device runtime state — that lives in `SendspinClient`.
+
+**`bt_types.py`** — `Protocol` interface `BluetoothManagerHost` consumed by `BluetoothManager` and implemented by `SendspinClient`. Removes circular import between `bluetooth_manager` and `sendspin_client`.
+
+**`exceptions.py`** — typed exception hierarchy: `BridgeError → BluetoothError | PulseAudioError | MusicAssistantError | ConfigError | IPCError`. Replaces bare `Exception` raises across the codebase.
+
+**`bluetooth_manager.py`** — BT connection management. Split across helper modules in v2.62–v2.64:
+- `BluetoothManager` — orchestrates pairing/connection. Pair flow now uses native `PairingAgent` (`services/pairing_agent.py`) instead of `bluetoothctl agent on`. Auto-reconnect monitor loop lives in `bt_monitor.py`. Provides callbacks `on_connected` / `on_disconnected` (wire MprisPlayer registration) and `on_rssi_update` (drives `DeviceStatus.rssi_dbm`).
+- `_connected_state_lock` (threading.Lock) — guards `_apply_connected_state()` from double-fire on rapid connect/disconnect events.
+- `run_rssi_refresh_loop()` — 5 s cadence; gated by `bt_operation_lock` so it doesn't collide with pair/scan/reconnect.
+- `pair_device()` — uses `PairingAgent` context manager; allowlist of A2DP_SINK + AVRCP UUIDs (HFP gated by `ALLOW_HFP_PROFILE`).
+
+**`bt_audio.py`** — audio routing helpers split out of `bluetooth_manager.py`:
+- `configure_bluetooth_audio()` — finds the correct PA/PipeWire sink name for the connected device
+- `_force_sbc_codec()` — forces SBC codec (`prefer_sbc_codec`)
+- `_switch_card_profile_to_a2dp()` / `_cycle_card_profile_for_mac()` — A2DP profile auto-switch (works around BlueZ 5.82 regression where some headsets land on `headset_head_unit` instead of `a2dp_sink`)
+
+**`bt_dbus.py`** — synchronous D-Bus helpers via `dbus-python`:
+- `_dbus_get_device_property()` / `_dbus_get_battery_level()` / `_dbus_call_device_method()` / `_dbus_get_device_uuids()`
+- `_dbus_wait_services_resolved()` — waits for `Device1.ServicesResolved=true` before audio configure (prevents race on fast connects)
+- `_dbus_connect_profile()` — explicit `ConnectProfile(A2DP_SINK_UUID)` workaround for [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922) where A2DP profile fails to start after reconnect
+
+**`bt_monitor.py`** — async BT monitor loop split out of `bluetooth_manager.py`:
+- `monitor_and_reconnect()` — main asyncio task launched via `BluetoothManager.start_monitoring()`
+- `_monitor_dbus()` / `_monitor_polling()` — D-Bus PropertiesChanged path (preferred) vs `bluetoothctl info` polling fallback
+- Tracks BT churn (`BT_CHURN_THRESHOLD` / `BT_CHURN_WINDOW`) and auto-disables devices stuck in reconnect loops
 
 **`config.py`** — configuration layer:
 - `CONFIG_FILE: Path` — single source of truth for config path (replaces old `_CONFIG_PATH` string)
@@ -86,9 +113,10 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `load_config()`, `_player_id_from_mac()`, `save_device_volume()`, `save_device_sink()`, `update_config()`, `write_config_file()`, `migrate_config_payload()`
 - `ensure_bridge_name()` — auto-populates BRIDGE_NAME from hostname on first startup
 - `ensure_secret_key()` — generates and persists SECRET_KEY if absent
-- `get_runtime_version()` — returns version from `.release-ref` file or falls back to `VERSION`
-- `VERSION = "2.61.0"`, `BUILD_DATE = "2026-04-22"` — set by CI from `VERSION` file
+- `get_runtime_version()` / `get_installed_version_ref()` — returns version from `.release-ref` file or falls back to `VERSION`
+- `VERSION = "2.64.3"`, `BUILD_DATE = "2026-04-27"` — set by CI from `VERSION` file
 - Re-exports from `config_auth.py` (password hashing), `config_migration.py` (schema migration, normalization), `config_network.py` (port resolution, HA addon detection)
+- New keys (v2.62→v2.64): `BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`, `BRUTE_FORCE_PROTECTION`, `BRUTE_FORCE_MAX_ATTEMPTS`, `BRUTE_FORCE_WINDOW_MINUTES`, `BRUTE_FORCE_LOCKOUT_MINUTES`, `STARTUP_BANNER_GRACE_SECONDS`, `RECOVERY_BANNER_GRACE_SECONDS`, `RSSI_BADGE` (stable, migrated from `EXPERIMENTAL_RSSI_BADGE`), `ALLOW_HFP_PROFILE`, `DISABLE_PA_RESCUE_STREAMS`, `TRUSTED_PROXIES`, `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`, `EXPERIMENTAL_PAIR_JUST_WORKS`, `VOLUME_VIA_MA`, `MUTE_VIA_MA`. Per-device: `keep_alive_method` (`infrasound`/`silence`/`none`), `power_save_delay_minutes` (migrated from `power_save_delay_seconds`), `room_id`/`room_name` (HA area context).
 
 **`services/` module (core):**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
@@ -106,6 +134,15 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `subprocess_ipc.py` — parses daemon stdout JSON-line messages, dispatches status/error/log envelopes
 - `subprocess_stderr.py` — classifies daemon stderr severity and mirrors crash-like output into device status
 - `subprocess_stop.py` — handles reader-task cancellation and graceful daemon stop/kill flow with configurable timeouts
+
+**`services/` module (BT advanced control — added v2.62→v2.64):**
+- `pairing_agent.py` — native `org.bluez.Agent1` implemented via `dbus_fast`. Used as a context manager around each pair attempt. Auto-confirms SSP (`DisplayYesNo`), supplies PIN, authorizes service UUIDs from an allowlist (A2DP sink + AVRCP). HFP gated by `ALLOW_HFP_PROFILE` (default false). Logs `method_calls`, `authorized_services`, `rejected_services` for diagnostics.
+- `mpris_player.py` — per-device `org.mpris.MediaPlayer2.Player` registered via `Media1.RegisterPlayer` on `/org/bluez/hciN` at connect, unregistered at disconnect. Bidirectional: speaker buttons → BlueZ → MPRIS methods → MA queue command; MA playback state → `set_playback_status` / `set_metadata` / `set_volume` → BlueZ → speaker display. Echo guard prevents volume feedback loop. `MprisPlayerRegistry` (singleton) — thread-safe by-MAC + by-player_id lookup.
+- `avrcp_source_tracker.py` — singleton `AvrcpSourceTracker` mapping `{MAC → monotonic_ts}` of last AVRCP key-press activity. Thread-safe writes from BT monitor thread; asyncio-aware `wait_for_next_activity()` consumed by inbound MPRIS dispatcher.
+- `hci_avrcp_monitor.py` — asyncio task opening `HCI_CHANNEL_MONITOR` raw socket, parsing HCI traffic to extract ACL connection-handle → MAC mapping at AVRCP passthrough op_id. Required because BlueZ forwards all CT events to `players[0]`, breaking multi-speaker-on-same-adapter routing. Requires `CAP_NET_RAW`; degrades gracefully (falls back to default_client) when unavailable.
+- `device_activation.py` — factory pairing `SendspinClient + BluetoothManager`. `DeviceActivationContext` dataclass + `activate_device()`. Wires `MprisPlayer` D-Bus registration via `Media1.RegisterPlayer`, builds transport/volume callbacks with AVRCP source correlation. Called by `BridgeOrchestrator.initialize_devices()` and `reconfig_orchestrator` (online add).
+- `bt_rssi_mgmt.py` — live RSSI via kernel mgmt opcode `0x0031` (`MGMT_OP_GET_CONN_INFO`) over `AF_BLUETOOTH` raw socket. Returns delta from BR/EDR Golden Receive Power Range. Runs in asyncio executor.
+- `bt_operation_lock.py` — singleton `threading.Lock` serializing all blocking `bluetoothctl` calls (pair/reconnect/scan/RSSI). API: `try_acquire_bt_operation() → bool` / `release_bt_operation()`.
 
 **`services/` module (Music Assistant):**
 - `ma_discovery.py` — mDNS-based Music Assistant server discovery
@@ -164,8 +201,9 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `ma_auth.py` — MA OAuth/token routes (`/api/ma/login`, `/api/ma/ha-*`) and helpers for secure token exchange and HA integration
 - `ma_groups.py` — MA discovery and groups routes (`/api/ma/discover*`, `/api/ma/groups`, `/api/ma/rediscover*`, `/api/ma/reload`, `/api/debug/ma`)
 - `ma_playback.py` — MA playback control routes (`/api/ma/queue/*`, `/api/ma/nowplaying`, `/api/ma/artwork`) and queue command helpers
+- `api_ws.py` — **dormant** WebSocket scaffold from v2.63.0-rc.3. Blueprint is **not registered** in `web_interface.py` and `flask-sock` is **not** in `requirements.txt`. Kept in-tree (with `status_ws_iter` / `log_stream_iter` generators and tests) for future revival if the bridge moves to an ASGI server (waitress can't satisfy the WS upgrade — needs raw socket access). The HA Supervisor ingress problem it was meant to solve was instead fixed in rc.4 via `Cache-Control: no-cache, no-transform` + `Content-Encoding: identity` on the SSE response in `api_status.py`. Active streaming runs over SSE on `/api/status/stream`.
 - `views.py` — HTML page renders
-- `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (5 attempts / 5 min)
+- `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (configurable via `BRUTE_FORCE_*` keys, defaults: 5 attempts / 1 min window / 5 min lockout)
 - `_helpers.py` — shared route helpers for MAC/adapter validation and device lookup by player_name
 
 **`state.py`** — shared runtime state:
@@ -187,6 +225,21 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 **`static/app.js`** — frontend logic: `_showBtInfoModal()` (BT device info modal), `rebootAdapter()` (adapter power cycle), `_startScanCooldown()` (scan button cooldown timer), `uploadConfig()` (config file upload).
 
 **Docs site:** `docs-site/` — Astro Starlight, deployed to GitHub Pages at `https://trudenboy.github.io/sendspin-bt-bridge`
+
+## Recent feature highlights (v2.62.0 → v2.64.3)
+
+Beyond the per-module notes above, these features shipped in the v2.62→v2.64 cycle and are referenced from elsewhere in the docs/UI:
+
+- **Native BlueZ pairing agent** (`services/pairing_agent.py`) — replaces the brittle `bluetoothctl agent on` flow; rejects HFP by default.
+- **Bidirectional MPRIS** (`services/mpris_player.py`) — speaker hard-keys drive MA queue (Play/Pause/Next/Prev/Volume); MA now-playing pushes title/artist/artwork to the speaker display.
+- **AVRCP source correlation** (`services/avrcp_source_tracker.py` + `services/hci_avrcp_monitor.py`) — fixes multi-speaker-on-one-adapter routing by reading raw HCI to identify which ACL handle generated the AVRCP keypress.
+- **Live RSSI badge** (`services/bt_rssi_mgmt.py` + `RSSI_BADGE` config) — colored signal-strength chip on each device card.
+- **A2DP profile auto-switch** (`bt_audio.py:_cycle_card_profile_for_mac()`) — works around BlueZ 5.82 regression where some headsets land on `headset_head_unit` instead of `a2dp_sink`.
+- **BT churn isolation** (`BT_CHURN_THRESHOLD` / `BT_CHURN_WINDOW`) — auto-disables a device that reconnect-loops, surfacing actionable guidance instead of letting it thrash forever.
+- **HA Supervisor ingress fix for SSE** (`routes/api_status.py:/api/status/stream`) — `Cache-Control: no-cache, no-transform` + `Content-Encoding: identity` headers stop ingress's deflate from corrupting `text/event-stream` payloads. The rc.3 WebSocket migration (`routes/api_ws.py`) was reverted in v2.63.0-rc.4 because waitress can't satisfy the WS upgrade; the WS scaffold is kept dormant for a future ASGI move.
+- **Battery level** via `org.bluez.Battery1` — queried per heartbeat cycle; shown on device card.
+- **PA hardening** at startup (`bridge_orchestrator.py`) — null-sink `sendspin_fallback` becomes default; optional unload of `module-rescue-streams`.
+- **Sendspin AudioPlayer runtime guards** (`services/daemon_process.py`) — monkey-patch protecting against `memoryview` crash on re-anchor and PyAV<13 `nb_channels` compat.
 
 ## Key Environment Variables
 
