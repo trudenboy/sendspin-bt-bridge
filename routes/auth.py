@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-from flask import Blueprint, Response, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from config import check_password, load_config
 
@@ -228,15 +228,12 @@ def _validate_csrf_token() -> bool:
     token can be issued — treat the request as valid.  This mirrors
     ``_require_authenticated_session`` and lets the Settings → Home
     Assistant tab issue tokens on Docker / standalone deployments
-    without auth.
+    without auth.  Reads the gate via ``current_app.config`` (mirrors
+    the pattern in ``routes/views.py`` / ``routes/api_status.py``)
+    instead of importing ``web_interface`` directly.
     """
-    try:
-        from web_interface import _auth_enabled
-
-        if not _auth_enabled:
-            return True
-    except Exception:
-        pass
+    if not current_app.config.get("AUTH_ENABLED", False):
+        return True
     session_token = session.get("csrf_token", "")
     if not session_token:
         return False
@@ -861,20 +858,14 @@ def _require_authenticated_session() -> tuple[Response, int] | None:
     ``/api/*`` is already wide-open on this deployment.  Otherwise the
     Settings → Home Assistant tab would 401 on load and bounce the
     browser to ``/login`` even though auth is disabled (issue from
-    v2.65.0-rc.2 deployment).
+    v2.65.0-rc.2 deployment).  Reads the gate via ``current_app.config``
+    (mirrors ``routes/views.py`` / ``routes/api_status.py``) so the
+    blueprint stays decoupled from the ``web_interface`` module.
     """
     if session.get("authenticated"):
         return None
-    # Allow when global auth is disabled — there's no concept of "needs
-    # session" if no session can ever exist.
-    try:
-        from web_interface import _auth_enabled
-
-        if not _auth_enabled:
-            return None
-    except Exception:
-        # Fall back to strict mode if the import fails for any reason.
-        pass
+    if not current_app.config.get("AUTH_ENABLED", False):
+        return None
     return jsonify({"error": "Unauthorized"}), 401
 
 

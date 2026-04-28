@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.65.0-rc.3] - 2026-04-28
 
+### Changed — auth-gate read switched to `current_app.config`
+
+``_require_authenticated_session`` and ``_validate_csrf_token`` in
+``routes/auth.py`` previously reached for ``web_interface._auth_enabled``
+(private global, hard import dependency, swallowed broad
+``except Exception``).  They now read ``current_app.config["AUTH_ENABLED"]``
+to mirror the pattern used in ``routes/views.py`` / ``routes/api_status.py``,
+which keeps the blueprint decoupled from the app entrypoint module
+and lets test fixtures set ``app.config["AUTH_ENABLED"]`` directly
+instead of monkeypatching a private global.  Caught by Copilot review
+on PR #216.
+
+### Changed — dropped dead `mode == "both"` branch in mDNS gating
+
+``bridge_orchestrator._start_mdns_advertiser`` checked
+``mode in ("rest", "both")`` "for the upgrade window", but
+``load_config()`` already runs the migration that coerces ``"both"``
+→ ``"mqtt"`` before this code sees it.  Simplified to
+``mode == "rest"`` and updated the comment.  Caught by Copilot
+review on PR #216.
+
 ### Removed — `pair` (per device) and `scan` (bridge-level) HA buttons
 
 Both buttons were noise rather than signal in HA's automation
@@ -48,8 +69,7 @@ manually after upgrading.  Tests:
 ``test_ha_integration_mode_migration.py`` and
 ``test_resolve_mqtt_config_legacy_both_mode_normalised_to_mqtt``.
 
-### Fixed — Settings tab redirected to /login on Docker / standalone
-###          (no-auth) deployments after upgrading to v2.65.0-rc.2
+### Fixed — Settings tab redirected to /login on Docker / standalone (no-auth) deployments after upgrading to v2.65.0-rc.2
 
 The new Settings → Home Assistant tab calls
 ``GET /api/auth/tokens`` on every config load to populate the bearer

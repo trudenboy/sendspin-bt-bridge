@@ -29,18 +29,15 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)
     monkeypatch.setattr(M, "load_config", lambda: json.loads(cfg_file.read_text()))
 
-    # Simulate "auth enforcement on" so the tokens endpoints exercise the
-    # session-required path.  Without this, _require_authenticated_session
-    # would short-circuit because the global gate is off (Docker default).
-    import web_interface as _web
-
-    monkeypatch.setattr(_web, "_auth_enabled", True)
-
     from routes.auth import auth_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
     app.config["TESTING"] = True
+    # Simulate "auth enforcement on" so the tokens endpoints exercise the
+    # session-required path.  Without this flag, _require_authenticated_session
+    # short-circuits because the global gate is treated as off.
+    app.config["AUTH_ENABLED"] = True
     app.register_blueprint(auth_bp)
     yield app.test_client()
 
@@ -184,16 +181,14 @@ def test_token_endpoints_open_when_global_auth_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)
     monkeypatch.setattr(M, "load_config", lambda: json.loads(cfg_file.read_text()))
 
-    # Critical part of the test — global auth gate is OFF.
-    import web_interface as _web
-
-    monkeypatch.setattr(_web, "_auth_enabled", False)
-
     from routes.auth import auth_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
     app.config["TESTING"] = True
+    # Critical part of the test — global auth gate is OFF.  Default is
+    # already off, but set explicitly for clarity.
+    app.config["AUTH_ENABLED"] = False
     app.register_blueprint(auth_bp)
     cl = app.test_client()
 
