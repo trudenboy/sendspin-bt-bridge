@@ -342,10 +342,19 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         # adapter's ``device_class`` override, not press "Re-pair".
         # Detected at pair time by ``classify_pair_failure`` and
         # written to ``DeviceStatus.pair_failure_kind``.
+        #
+        # Defence-in-depth: ``bluetooth_manager.pair_device`` clears
+        # this fingerprint at the start of every pair attempt (and on
+        # success) so a stale match doesn't outlive the failure it
+        # described.  We *also* gate the card on the device being
+        # currently disconnected and unpaired here — if the speaker
+        # is now connected and streaming, no diagnosis card should
+        # cover it regardless of what a past pair-attempt fingerprint
+        # said.
         pair_failure_kind = (
             bluetooth.get("pair_failure_kind") if bluetooth else _device_extra(device).get("pair_failure_kind")
         )
-        if pair_failure_kind == "samsung_cod_filter":
+        if pair_failure_kind == "samsung_cod_filter" and not bluetooth_connected:
             adapter_mac = (
                 bluetooth.get("pair_failure_adapter_mac")
                 if bluetooth

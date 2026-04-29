@@ -458,6 +458,23 @@ class BluetoothManager:
             return False
 
         logger.info("Pairing with %s...", mac)
+        # Clear any pair-failure fingerprint left by a previous attempt
+        # before we run the new one — otherwise a stale
+        # ``samsung_cod_filter`` from last time can outlive a different
+        # failure shape (or even a successful re-pair before the
+        # next ``ok`` branch runs) and keep the recovery card lit.  Any
+        # match this attempt produces will overwrite these back below.
+        if self.host is not None:
+            try:
+                self.host.update_status(
+                    {
+                        "pair_failure_kind": None,
+                        "pair_failure_adapter_mac": None,
+                        "pair_failure_at": None,
+                    }
+                )
+            except Exception as exc:
+                logger.debug("[%s] pair_failure clear-on-entry failed: %s", self.device_name, exc)
         if self._reconnect_cancelled():
             logger.info("[%s] Pairing skipped because reconnect was cancelled", self.device_name)
             return False

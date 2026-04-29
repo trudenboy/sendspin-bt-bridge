@@ -32,6 +32,12 @@ The card takes precedence over the generic `repair_required` / `disconnected` ca
 
 - New troubleshooting section: **Samsung Q-series soundbar refuses to pair** in `docs-site/src/content/docs/troubleshooting.md`.
 
+### Code-review polish
+
+- `bluetooth_manager.pair_device` now clears `pair_failure_kind` / `pair_failure_adapter_mac` / `pair_failure_at` at the start of every attempt, so a previous run's `samsung_cod_filter` fingerprint never outlives a successful re-pair or a different failure shape.
+- `recovery_assistant` additionally gates the Samsung CoD card on the device being currently disconnected, so a stale fingerprint from before the operator applied the workaround can't keep the banner lit on a working speaker.
+- Adapter-row "?" help affordance is a real `<button type="button">` with `aria-label`, reachable from keyboard and announced by screen readers.
+
 ## [2.65.0] - 2026-04-28
 
 **Sendspin BT Bridge now talks to Home Assistant directly.**  No more

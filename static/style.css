@@ -4491,11 +4491,18 @@ body {
             width: 14px;
             height: 14px;
             margin-left: 4px;
+            padding: 0;
             border-radius: 50%;
             border: 1px solid var(--divider-color);
+            background: transparent;
+            font: inherit;
             font-size: 9px;
             color: var(--secondary-text-color);
             cursor: help;
+        }
+        .adapter-cod-help:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 1px;
         }
         .adapter-cod-controls {
             display: flex;

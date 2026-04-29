@@ -471,6 +471,45 @@ def test_recovery_assistant_surfaces_samsung_cod_filter_card():
     assert "pair_device" in secondary_keys
 
 
+def test_recovery_assistant_suppresses_samsung_cod_filter_when_device_connected():
+    """Defence-in-depth: even if a stale ``pair_failure_kind`` lingers
+    on the device (e.g. operator hot-fixed the CoD on the host without
+    waiting for the bridge to clear the fingerprint, then the speaker
+    reconnected), the card must NOT cover a device that is currently
+    connected.  Surfacing it would tell operators their working setup
+    is broken — exactly the kind of false positive that erodes trust
+    in the recovery banner."""
+    devices = [
+        SimpleNamespace(
+            player_name="Q910B",
+            bt_management_enabled=True,
+            bluetooth_connected=True,  # <- now connected; old fingerprint must NOT fire
+            has_sink=True,
+            server_connected=True,
+            static_delay_ms=0.0,
+            recent_events=[],
+            health_summary={"state": "ready", "severity": "info", "summary": "Connected and ready."},
+            extra={
+                "pair_failure_kind": "samsung_cod_filter",
+                "pair_failure_adapter_mac": "F4:4E:FC:C1:E0:31",
+            },
+        ),
+    ]
+
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "1C:86:9A:71:E0:F5"}], "PULSE_LATENCY_MSEC": 300},
+        devices=devices,
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "running", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    issue_keys = [i["key"] for i in data["issues"]]
+    assert "samsung_cod_filter" not in issue_keys, (
+        "Samsung CoD filter card must not surface for a currently-connected device — the past failure has been resolved"
+    )
+
+
 def test_recovery_assistant_samsung_cod_filter_takes_precedence_over_repair():
     """An unpaired device that ALSO carries the Samsung CoD-filter
     fingerprint must surface the specific card, not the generic

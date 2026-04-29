@@ -5794,9 +5794,17 @@ function _buildAdapterClassOfDeviceHtml(currentValue) {
     var current = String(currentValue || '').toLowerCase();
     var presetValue = current === '0x00010c' ? '0x00010c' : (current ? 'custom' : '');
     var customValue = current && current !== '0x00010c' ? current : '';
+    var helpText = 'Override the Bluetooth Class of Device this adapter advertises. Default leaves the kernel value untouched. Use 0x00010c (Computer/Laptop) when pairing Samsung Q-series soundbars — they reject other CoDs (bluez/bluez#1025).';
     return '<div class="adapter-cod-override">' +
         '<span class="adapter-cod-copy">Class of Device' +
-            ' <span class="adapter-cod-help" title="Override the Bluetooth Class of Device this adapter advertises. Default leaves the kernel value untouched. Use 0x00010c (Computer/Laptop) when pairing Samsung Q-series soundbars — they reject other CoDs (bluez/bluez#1025).">?</span>' +
+            // Real <button> instead of <span> so keyboard users can
+            // reach the help affordance and screen readers announce
+            // it.  ``aria-label`` mirrors the tooltip so the same
+            // text is exposed to AT regardless of how the button is
+            // discovered.  ``type="button"`` prevents accidental
+            // form submit when the override sits inside the wider
+            // settings form.
+            ' <button type="button" class="adapter-cod-help" aria-label="' + escHtmlAttr(helpText) + '" title="' + escHtmlAttr(helpText) + '">?</button>' +
         '</span>' +
         '<div class="adapter-cod-controls">' +
             '<select class="adp-cod-preset">' +
