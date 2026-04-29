@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services.guidance_issue_registry import ISSUE_REGISTRY
+from sendspin_bridge.services.diagnostics.guidance_issue_registry import ISSUE_REGISTRY
 
 
 def test_sink_system_muted_issue_definition_exists():

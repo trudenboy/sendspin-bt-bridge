@@ -25,20 +25,20 @@ from routes.api_ma import (
     _ma_host_from_sendspin_clients,
     ma_bp,
 )
-from services.bridge_runtime_state import get_main_loop
-from services.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
-from services.ma_monitor import reload_monitor_credentials
-from services.ma_runtime_state import (
-    get_ma_api_credentials,
-    set_ma_api_credentials,
-    set_ma_groups,
-)
-from services.url_safety import (
+from sendspin_bridge.services.ha.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
+from sendspin_bridge.services.infrastructure.url_safety import (
     SafeHTTPConnection,
     SafeHTTPSConnection,
     is_safe_external_url,
     safe_build_opener,
     safe_urlopen,
+)
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
+from sendspin_bridge.services.music_assistant.ma_monitor import reload_monitor_credentials
+from sendspin_bridge.services.music_assistant.ma_runtime_state import (
+    get_ma_api_credentials,
+    set_ma_api_credentials,
+    set_ma_groups,
 )
 
 logger = logging.getLogger(__name__)
@@ -231,7 +231,7 @@ async def _rediscover_after_login(
 ) -> None:
     """Background task: rediscover MA groups after successful login."""
     try:
-        from services.ma_client import discover_ma_groups
+        from sendspin_bridge.services.music_assistant.ma_client import discover_ma_groups
 
         id_map, all_groups = await discover_ma_groups(ma_url, ma_token, bridge_players)
         set_ma_groups(id_map, all_groups)
@@ -1188,7 +1188,7 @@ def api_ma_login():
     # Auto-discover MA URL if not provided
     if not ma_url:
         # Try deriving from already-known sources before mDNS
-        from services.ma_discovery import validate_ma_url
+        from sendspin_bridge.services.music_assistant.ma_discovery import validate_ma_url
 
         ma_url_candidate = ""
 
@@ -1220,7 +1220,7 @@ def api_ma_login():
         # Last resort: mDNS scan
         if not ma_url:
             try:
-                from services.ma_discovery import discover_ma_servers
+                from sendspin_bridge.services.music_assistant.ma_discovery import discover_ma_servers
 
                 fut = asyncio.run_coroutine_threadsafe(discover_ma_servers(timeout=5.0), loop)
                 servers = fut.result(timeout=10.0)

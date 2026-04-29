@@ -875,7 +875,7 @@ def api_auth_tokens_list():
     blocked = _require_authenticated_session()
     if blocked:
         return blocked
-    from services.auth_tokens import list_tokens
+    from sendspin_bridge.services.diagnostics.auth_tokens import list_tokens
 
     return jsonify({"success": True, "tokens": [t.to_public_dict() for t in list_tokens()]})
 
@@ -893,7 +893,7 @@ def api_auth_tokens_create():
     if not label:
         return jsonify({"success": False, "error": "label required"}), 400
 
-    from services.auth_tokens import issue_token
+    from sendspin_bridge.services.diagnostics.auth_tokens import issue_token
 
     plain, record = issue_token(label)
     return jsonify(
@@ -911,7 +911,7 @@ def api_auth_tokens_delete(token_id: str):
     blocked = _require_authenticated_session()
     if blocked:
         return blocked
-    from services.auth_tokens import revoke_token
+    from sendspin_bridge.services.diagnostics.auth_tokens import revoke_token
 
     removed = revoke_token(token_id)
     if not removed:
@@ -951,7 +951,7 @@ def api_auth_ha_pair():
     if not request.headers.get("X-Ingress-Path"):
         return jsonify({"success": False, "error": "Supervisor ingress required"}), 403
 
-    from services.auth_tokens import issue_token
+    from sendspin_bridge.services.diagnostics.auth_tokens import issue_token
 
     plain, record = issue_token("ha-custom-component")
     return jsonify(

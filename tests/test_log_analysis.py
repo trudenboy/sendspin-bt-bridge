@@ -1,4 +1,4 @@
-from services.log_analysis import is_issue_worthy_log_line, summarize_issue_logs
+from sendspin_bridge.services.diagnostics.log_analysis import is_issue_worthy_log_line, summarize_issue_logs
 
 
 def test_temporary_bt_connect_failure_warning_is_not_issue_worthy():

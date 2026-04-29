@@ -60,8 +60,8 @@ async def test_correct_other_devices_routing_skips_triggering_manager(bt_manager
 
     with (
         patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("services.device_registry.get_active_clients_snapshot", return_value=[client]),
-        patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
+        patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
+        patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
     ):
         await _correct_other_devices_routing(bt_manager)
 
@@ -82,8 +82,10 @@ async def test_correct_other_devices_routing_moves_other_clients(bt_manager):
 
     with (
         patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("services.device_registry.get_active_clients_snapshot", return_value=[client]),
-        patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=1) as mock_move,
+        patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
+        patch(
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=1
+        ) as mock_move,
     ):
         await _correct_other_devices_routing(bt_manager)
 
@@ -102,8 +104,8 @@ async def test_correct_other_devices_routing_skips_client_without_pid(bt_manager
 
     with (
         patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("services.device_registry.get_active_clients_snapshot", return_value=[client]),
-        patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
+        patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
+        patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
     ):
         await _correct_other_devices_routing(bt_manager)
 
@@ -122,8 +124,8 @@ async def test_correct_other_devices_routing_skips_client_without_sink(bt_manage
 
     with (
         patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("services.device_registry.get_active_clients_snapshot", return_value=[client]),
-        patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
+        patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
+        patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
     ):
         await _correct_other_devices_routing(bt_manager)
 
@@ -143,8 +145,12 @@ async def test_correct_other_devices_routing_handles_move_exception(bt_manager):
 
     with (
         patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("services.device_registry.get_active_clients_snapshot", return_value=[client]),
-        patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, side_effect=RuntimeError("PA dead")),
+        patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
+        patch(
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("PA dead"),
+        ),
     ):
         # Should not raise
         await _correct_other_devices_routing(bt_manager)
@@ -162,8 +168,10 @@ async def test_correct_other_devices_routing_handles_none_bt_manager(bt_manager)
 
     with (
         patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("services.device_registry.get_active_clients_snapshot", return_value=[client]),
-        patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=0) as mock_move,
+        patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
+        patch(
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=0
+        ) as mock_move,
     ):
         await _correct_other_devices_routing(bt_manager)
 
@@ -526,7 +534,7 @@ def test_check_reconnect_churn_disables_management_at_threshold(bt_manager):
     now = time.monotonic()
     bt_manager._reconnect_timestamps = [now - 2, now - 1, now]
 
-    with patch("services.bluetooth.persist_device_released"):
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
         result = bt_manager._check_reconnect_churn()
 
     assert result is True

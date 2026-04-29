@@ -64,7 +64,7 @@ def _make_client(
 
 
 def test_quiesce_pauses_matching_adapter(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter_a = "AA:BB:CC:DD:EE:01"
     adapter_b = "AA:BB:CC:DD:EE:02"
@@ -74,7 +74,7 @@ def test_quiesce_pauses_matching_adapter(fake_clients_state):
     fake_clients_state.extend([c1, c2, c3])
 
     with (
-        patch("services.pairing_quiesce.time.sleep") as sleep_mock,
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep") as sleep_mock,
         quiesce_adapter_peers(adapter_a) as paused,
     ):
         pass
@@ -93,7 +93,7 @@ def test_quiesce_pauses_matching_adapter(fake_clients_state):
 
 
 def test_quiesce_excludes_target_mac(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     target = "99:99:99:99:99:99"
@@ -102,7 +102,7 @@ def test_quiesce_excludes_target_mac(fake_clients_state):
     fake_clients_state.extend([peer, self_device])
 
     with (
-        patch("services.pairing_quiesce.time.sleep"),
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep"),
         quiesce_adapter_peers(adapter, exclude_mac=target) as paused,
     ):
         pass
@@ -113,7 +113,7 @@ def test_quiesce_excludes_target_mac(fake_clients_state):
 
 
 def test_quiesce_skips_disconnected_peer(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     live = _make_client("11:11:11:11:11:11", adapter, connected=True)
@@ -121,7 +121,7 @@ def test_quiesce_skips_disconnected_peer(fake_clients_state):
     fake_clients_state.extend([live, dead])
 
     with (
-        patch("services.pairing_quiesce.time.sleep"),
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep"),
         quiesce_adapter_peers(adapter) as paused,
     ):
         pass
@@ -132,7 +132,7 @@ def test_quiesce_skips_disconnected_peer(fake_clients_state):
 
 
 def test_quiesce_restores_on_exception(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     c1 = _make_client("11:11:11:11:11:11", adapter)
@@ -143,7 +143,7 @@ def test_quiesce_restores_on_exception(fake_clients_state):
         pass
 
     with (
-        patch("services.pairing_quiesce.time.sleep"),
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep"),
         pytest.raises(_Boom),
         quiesce_adapter_peers(adapter),
     ):
@@ -155,7 +155,7 @@ def test_quiesce_restores_on_exception(fake_clients_state):
 
 
 def test_quiesce_restore_order_reversed(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     c1 = _make_client("11:11:11:11:11:11", adapter, name="first")
@@ -168,7 +168,7 @@ def test_quiesce_restore_order_reversed(fake_clients_state):
         client.bt_manager.allow_reconnect.side_effect = lambda name=client.bt_manager.device_name: order.append(name)
 
     with (
-        patch("services.pairing_quiesce.time.sleep"),
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep"),
         quiesce_adapter_peers(adapter),
     ):
         pass
@@ -177,7 +177,7 @@ def test_quiesce_restore_order_reversed(fake_clients_state):
 
 
 def test_quiesce_settle_sleep_only_when_paused(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     # No peers on this adapter.
@@ -185,7 +185,7 @@ def test_quiesce_settle_sleep_only_when_paused(fake_clients_state):
     fake_clients_state.append(other)
 
     with (
-        patch("services.pairing_quiesce.time.sleep") as sleep_mock,
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep") as sleep_mock,
         quiesce_adapter_peers(adapter) as paused,
     ):
         pass
@@ -195,7 +195,7 @@ def test_quiesce_settle_sleep_only_when_paused(fake_clients_state):
 
 
 def test_quiesce_swallows_peer_disconnect_exception(fake_clients_state):
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     bad = _make_client(
@@ -207,7 +207,7 @@ def test_quiesce_swallows_peer_disconnect_exception(fake_clients_state):
     fake_clients_state.extend([bad, good])
 
     with (
-        patch("services.pairing_quiesce.time.sleep"),
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep"),
         quiesce_adapter_peers(adapter) as paused,
     ):
         pass
@@ -232,7 +232,7 @@ def test_quiesce_does_not_rollback_when_cancel_reconnect_itself_raises(fake_clie
     allow_reconnect() must not be called in that case — it could flip the
     peer into a weirder state than we found it in.
     """
-    from services.pairing_quiesce import quiesce_adapter_peers
+    from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 
     adapter = "AA:BB:CC:DD:EE:01"
     c = _make_client("11:11:11:11:11:11", adapter)
@@ -240,7 +240,7 @@ def test_quiesce_does_not_rollback_when_cancel_reconnect_itself_raises(fake_clie
     fake_clients_state.append(c)
 
     with (
-        patch("services.pairing_quiesce.time.sleep"),
+        patch("sendspin_bridge.services.bluetooth.pairing_quiesce.time.sleep"),
         quiesce_adapter_peers(adapter) as paused,
     ):
         pass

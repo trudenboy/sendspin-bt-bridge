@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.device_activation import (
+from sendspin_bridge.services.bluetooth.device_activation import (
     ActivationResult,
     DeviceActivationContext,
     activate_device,
@@ -259,7 +259,7 @@ def test_mpris_object_path_is_per_device_unique_for_bluez_register_player():
     to it via Media1.RegisterPlayer, and system-bus name requests are
     ACL-blocked by default anyway.  See CHANGELOG rc.6 entry.
     """
-    from services.device_activation import _mpris_dbus_path
+    from sendspin_bridge.services.bluetooth.device_activation import _mpris_dbus_path
 
     a = _mpris_dbus_path("AA:BB:CC:DD:EE:FF")
     b = _mpris_dbus_path("11:22:33:44:55:66")
@@ -276,7 +276,7 @@ def test_bluez_adapter_path_returns_org_bluez_hci_form():
     into the BlueZ object-path form."""
     from types import SimpleNamespace
 
-    from services.device_activation import _bluez_adapter_path
+    from sendspin_bridge.services.bluetooth.device_activation import _bluez_adapter_path
 
     assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci0")) == "/org/bluez/hci0"
     assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci1")) == "/org/bluez/hci1"
@@ -303,9 +303,9 @@ async def test_transport_callback_dispatches_to_resolved_source_client():
     """
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_transport_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
 
     eneby_client = SimpleNamespace(
         player_name="ENEBY",
@@ -331,8 +331,8 @@ async def test_transport_callback_dispatches_to_resolved_source_client():
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     cb = _build_mpris_transport_callback(eneby_client)
     with (
@@ -361,9 +361,9 @@ async def test_transport_callback_falls_back_to_default_when_ambiguous():
     """
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_transport_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
 
     c1 = SimpleNamespace(
         player_name="A",
@@ -389,8 +389,8 @@ async def test_transport_callback_falls_back_to_default_when_ambiguous():
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     cb = _build_mpris_transport_callback(c1)
     with (
@@ -412,9 +412,9 @@ async def test_volume_callback_dispatches_to_resolved_source_client():
     """
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_volume_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_volume_callback
 
     default = SimpleNamespace(
         player_name="default",
@@ -443,8 +443,8 @@ async def test_volume_callback_dispatches_to_resolved_source_client():
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     cb = _build_mpris_volume_callback(default)
     with (
@@ -468,9 +468,9 @@ async def test_transport_callback_skips_wait_when_single_player_on_adapter():
     """
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_transport_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
 
     eneby_client = SimpleNamespace(
         player_name="ENEBY",
@@ -491,8 +491,8 @@ async def test_transport_callback_skips_wait_when_single_player_on_adapter():
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     cb = _build_mpris_transport_callback(eneby_client)
     with (
@@ -515,9 +515,9 @@ async def test_transport_callback_skips_wait_for_one_speaker_per_adapter_multi_a
     """
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_transport_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
 
     eneby = SimpleNamespace(
         player_name="ENEBY",
@@ -544,8 +544,8 @@ async def test_transport_callback_skips_wait_for_one_speaker_per_adapter_multi_a
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     with (
         _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
@@ -567,9 +567,9 @@ async def test_transport_callback_uses_hci_wait_when_multi_speakers_same_adapter
     """
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_transport_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
 
     eneby = SimpleNamespace(
         player_name="ENEBY",
@@ -599,8 +599,8 @@ async def test_transport_callback_uses_hci_wait_when_multi_speakers_same_adapter
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     cb = _build_mpris_transport_callback(eneby)  # default_client = ENEBY
     with (
@@ -632,9 +632,9 @@ async def test_transport_callback_waits_for_hci_monitor_to_populate_tracker():
     import asyncio
     from unittest.mock import AsyncMock
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.device_activation import _build_mpris_transport_callback
-    from services.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
 
     eneby_client = SimpleNamespace(
         player_name="ENEBY",
@@ -663,8 +663,8 @@ async def test_transport_callback_waits_for_hci_monitor_to_populate_tracker():
 
     import unittest.mock as _mock
 
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     cb = _build_mpris_transport_callback(eneby_client)
     with (

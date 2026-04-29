@@ -4,7 +4,7 @@ import threading
 import uuid
 
 import state
-from services.device_registry import set_active_clients
+from sendspin_bridge.services.bluetooth.device_registry import set_active_clients
 
 
 def test_get_status_version_initial():

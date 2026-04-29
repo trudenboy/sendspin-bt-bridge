@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from services.ipc_protocol import IPC_PROTOCOL_VERSION
-from services.subprocess_ipc import SubprocessIpcService
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
+from sendspin_bridge.services.ipc.subprocess_ipc import SubprocessIpcService
 
 # ---------------------------------------------------------------------------
 # Malformed JSON in IPC messages

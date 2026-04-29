@@ -458,7 +458,7 @@ def test_resolve_web_port_uses_ingress_port_from_supervisor_api():
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
     }
     with patch(
-        "services.ha_addon.get_self_addon_info",
+        "sendspin_bridge.services.ha.ha_addon.get_self_addon_info",
         return_value={"ingress_port": 38745},
     ):
         assert resolve_web_port(env=env) == 38745
@@ -473,7 +473,7 @@ def test_resolve_web_port_falls_back_to_channel_default_without_ingress_port():
         "SUPERVISOR_TOKEN": "token",
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge",
     }
-    with patch("services.ha_addon.get_self_addon_info", return_value=None):
+    with patch("sendspin_bridge.services.ha.ha_addon.get_self_addon_info", return_value=None):
         assert resolve_web_port(env=env) == 8080
 
 
@@ -487,7 +487,7 @@ def test_resolve_web_port_ingress_port_zero_falls_back_to_channel_default():
         "HOSTNAME": "85b1ecde-sendspin-bt-bridge-rc",
     }
     with patch(
-        "services.ha_addon.get_self_addon_info",
+        "sendspin_bridge.services.ha.ha_addon.get_self_addon_info",
         return_value={"ingress_port": 0},
     ):
         assert resolve_web_port(env=env) == 8081

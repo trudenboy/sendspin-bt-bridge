@@ -28,87 +28,87 @@ def _mon_frame(opcode: int, payload: bytes) -> bytes:
 
 class TestParseConnectionComplete:
     def test_acl_link_success_returns_handle_and_mac(self):
-        from services.hci_avrcp_monitor import _parse_connection_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_connection_complete
 
         result = _parse_connection_complete(CONN_COMPLETE_ACL)
         assert result == (0x0042, "FC:58:FA:EB:08:6C")
 
     def test_sco_link_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_connection_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_connection_complete
 
         assert _parse_connection_complete(CONN_COMPLETE_SCO) is None
 
     def test_nonzero_status_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_connection_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_connection_complete
 
         assert _parse_connection_complete(CONN_COMPLETE_FAIL) is None
 
     def test_too_short_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_connection_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_connection_complete
 
         assert _parse_connection_complete(b"\x00\x42") is None
 
 
 class TestParseDisconnectComplete:
     def test_success_returns_handle(self):
-        from services.hci_avrcp_monitor import _parse_disconnect_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_disconnect_complete
 
         assert _parse_disconnect_complete(DISC_COMPLETE) == 0x0042
 
     def test_nonzero_status_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_disconnect_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_disconnect_complete
 
         assert _parse_disconnect_complete(DISC_COMPLETE_FAIL) is None
 
     def test_too_short_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_disconnect_complete
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_disconnect_complete
 
         assert _parse_disconnect_complete(b"\x00") is None
 
 
 class TestParseAvrcpPassthrough:
     def test_play_pressed_returns_op_id(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVRCP_PLAY_PRESSED) == 0x44
 
     def test_next_pressed_returns_op_id(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVRCP_NEXT_PRESSED) == 0x4B
 
     def test_released_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVRCP_PLAY_RELEASED) is None
 
     def test_wrong_pid_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVCTP_WRONG_PID) is None
 
     def test_response_cr_bit_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVCTP_RESPONSE) is None
 
     def test_invalid_pid_flag_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVCTP_INVALID_PID) is None
 
     def test_wrong_subunit_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVC_WRONG_SUBUNIT) is None
 
     def test_wrong_opcode_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(AVC_WRONG_OPCODE) is None
 
     def test_too_short_returns_none(self):
-        from services.hci_avrcp_monitor import _parse_avrcp_passthrough
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _parse_avrcp_passthrough
 
         assert _parse_avrcp_passthrough(b"\x00\x11\x0e") is None
 
@@ -124,7 +124,7 @@ class TestProcessPacket:
     def test_connection_complete_adds_to_handle_map(self):
         from unittest.mock import MagicMock
 
-        from services.hci_avrcp_monitor import _OPCODE_EVENT_PKT, _process_packet
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _OPCODE_EVENT_PKT, _process_packet
 
         event_payload = bytes([0x03, len(CONN_COMPLETE_ACL)]) + CONN_COMPLETE_ACL
         frame = _mon_frame(_OPCODE_EVENT_PKT, event_payload)
@@ -135,7 +135,7 @@ class TestProcessPacket:
     def test_disconnect_complete_removes_from_handle_map(self):
         from unittest.mock import MagicMock
 
-        from services.hci_avrcp_monitor import _OPCODE_EVENT_PKT, _process_packet
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _OPCODE_EVENT_PKT, _process_packet
 
         event_payload = bytes([0x05, len(DISC_COMPLETE)]) + DISC_COMPLETE
         frame = _mon_frame(_OPCODE_EVENT_PKT, event_payload)
@@ -146,7 +146,7 @@ class TestProcessPacket:
     def test_avrcp_play_calls_note_activity(self):
         from unittest.mock import MagicMock
 
-        from services.hci_avrcp_monitor import _process_packet
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _process_packet
 
         h2m = {0x0042: "FC:58:FA:EB:08:6C"}
         tracker = MagicMock()
@@ -156,7 +156,7 @@ class TestProcessPacket:
     def test_avrcp_unknown_handle_does_not_call_tracker(self):
         from unittest.mock import MagicMock
 
-        from services.hci_avrcp_monitor import _process_packet
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _process_packet
 
         tracker = MagicMock()
         _process_packet(self._full_acl_frame(), {}, tracker)
@@ -165,14 +165,14 @@ class TestProcessPacket:
     def test_too_short_frame_does_not_raise(self):
         from unittest.mock import MagicMock
 
-        from services.hci_avrcp_monitor import _process_packet
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _process_packet
 
         _process_packet(b"\x03\x00", {}, MagicMock())  # must not raise
 
     def test_unknown_opcode_is_ignored(self):
         from unittest.mock import MagicMock
 
-        from services.hci_avrcp_monitor import _process_packet
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _process_packet
 
         frame = _mon_frame(0x0099, b"\x00" * 8)
         tracker = MagicMock()
@@ -185,13 +185,13 @@ class TestHciAvrcpMonitorLifecycle:
     async def test_start_creates_background_task(self):
         from unittest.mock import MagicMock, patch
 
-        from services.hci_avrcp_monitor import HciAvrcpMonitor
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import HciAvrcpMonitor
 
         mon = HciAvrcpMonitor()
         mock_sock = MagicMock()
         mock_sock.recv.side_effect = OSError("closed")
         with patch(
-            "services.hci_avrcp_monitor._open_hci_monitor_socket",
+            "sendspin_bridge.services.bluetooth.hci_avrcp_monitor._open_hci_monitor_socket",
             return_value=mock_sock,
         ):
             await mon.start()
@@ -203,7 +203,7 @@ class TestHciAvrcpMonitorLifecycle:
         import asyncio
         from unittest.mock import MagicMock, patch
 
-        from services.hci_avrcp_monitor import HciAvrcpMonitor
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import HciAvrcpMonitor
 
         mon = HciAvrcpMonitor()
         mock_sock = MagicMock()
@@ -213,7 +213,7 @@ class TestHciAvrcpMonitorLifecycle:
 
         with (
             patch(
-                "services.hci_avrcp_monitor._open_hci_monitor_socket",
+                "sendspin_bridge.services.bluetooth.hci_avrcp_monitor._open_hci_monitor_socket",
                 return_value=mock_sock,
             ),
             patch("asyncio.to_thread", new=_block),
@@ -227,11 +227,11 @@ class TestHciAvrcpMonitorLifecycle:
         import asyncio
         from unittest.mock import patch
 
-        from services.hci_avrcp_monitor import HciAvrcpMonitor
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import HciAvrcpMonitor
 
         mon = HciAvrcpMonitor()
         with patch(
-            "services.hci_avrcp_monitor._open_hci_monitor_socket",
+            "sendspin_bridge.services.bluetooth.hci_avrcp_monitor._open_hci_monitor_socket",
             side_effect=OSError("EPERM"),
         ):
             await mon.start()
@@ -242,11 +242,11 @@ class TestHciAvrcpMonitorLifecycle:
     async def test_double_start_is_noop(self):
         from unittest.mock import patch
 
-        from services.hci_avrcp_monitor import HciAvrcpMonitor
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import HciAvrcpMonitor
 
         mon = HciAvrcpMonitor()
         with patch(
-            "services.hci_avrcp_monitor._open_hci_monitor_socket",
+            "sendspin_bridge.services.bluetooth.hci_avrcp_monitor._open_hci_monitor_socket",
             side_effect=OSError,
         ):
             await mon.start()
@@ -255,7 +255,7 @@ class TestHciAvrcpMonitorLifecycle:
             assert mon._task is task1
 
     def test_get_monitor_returns_singleton(self):
-        from services.hci_avrcp_monitor import get_monitor
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import get_monitor
 
         assert get_monitor() is get_monitor()
 
@@ -272,7 +272,7 @@ class TestSeedHandleMapFromKernel:
     def test_seed_populates_handles_from_ioctl(self):
         from unittest.mock import patch
 
-        from services.hci_avrcp_monitor import _seed_handle_map_from_kernel
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _seed_handle_map_from_kernel
 
         # Fake ioctl returns 2 connections on hci0, no devices on hci1+
         def fake_ioctl(fd, request, req):
@@ -298,9 +298,9 @@ class TestSeedHandleMapFromKernel:
 
         h2m: dict[int, str] = {}
         with (
-            patch("services.hci_avrcp_monitor.sys.platform", "linux"),
-            patch("services.hci_avrcp_monitor.socket.socket"),
-            patch("services.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor.sys.platform", "linux"),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor.socket.socket"),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
         ):
             _seed_handle_map_from_kernel(h2m)
 
@@ -314,7 +314,7 @@ class TestSeedHandleMapFromKernel:
         L2CAP on ACL only."""
         from unittest.mock import patch
 
-        from services.hci_avrcp_monitor import _seed_handle_map_from_kernel
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _seed_handle_map_from_kernel
 
         def fake_ioctl(fd, request, req):
             if request == 0x800448D2:
@@ -331,9 +331,9 @@ class TestSeedHandleMapFromKernel:
 
         h2m: dict[int, str] = {}
         with (
-            patch("services.hci_avrcp_monitor.sys.platform", "linux"),
-            patch("services.hci_avrcp_monitor.socket.socket"),
-            patch("services.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor.sys.platform", "linux"),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor.socket.socket"),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
         ):
             _seed_handle_map_from_kernel(h2m)
 
@@ -345,16 +345,16 @@ class TestSeedHandleMapFromKernel:
         rely on Connection Complete events for new connections."""
         from unittest.mock import patch
 
-        from services.hci_avrcp_monitor import _seed_handle_map_from_kernel
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import _seed_handle_map_from_kernel
 
         def fake_ioctl(fd, request, req):
             return -1
 
         h2m: dict[int, str] = {}
         with (
-            patch("services.hci_avrcp_monitor.sys.platform", "linux"),
-            patch("services.hci_avrcp_monitor.socket.socket"),
-            patch("services.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor.sys.platform", "linux"),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor.socket.socket"),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor._hci_ioctl", side_effect=fake_ioctl),
         ):
             _seed_handle_map_from_kernel(h2m)  # must not raise
 

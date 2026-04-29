@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.recovery_timeline import (
+from sendspin_bridge.services.diagnostics.recovery_timeline import (
     RECOVERY_TIMELINE_VISIBLE_ENTRIES,
     build_recovery_timeline,
 )

@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
-from services import url_safety
-from services.url_safety import (
+from sendspin_bridge.services.infrastructure import url_safety
+from sendspin_bridge.services.infrastructure.url_safety import (
     SafeHTTPConnection,
     UnsafePeerError,
     _verify_peer_safe,

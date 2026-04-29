@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.operator_check_runner import run_safe_check
+from sendspin_bridge.services.diagnostics.operator_check_runner import run_safe_check
 
 
 def test_run_safe_check_reports_preflight_failure(monkeypatch):
-    import services.operator_check_runner as runner
+    import sendspin_bridge.services.diagnostics.operator_check_runner as runner
 
     monkeypatch.setattr(
         runner,
@@ -30,7 +30,7 @@ def test_run_safe_check_config_writable_ok(monkeypatch):
     """Re-run check button on the recovery banner: when the operator
     has fixed the chown, this returns ``ok`` so the card flips green
     immediately without a full diagnostics page reload."""
-    import services.operator_check_runner as runner
+    import sendspin_bridge.services.diagnostics.operator_check_runner as runner
 
     monkeypatch.setattr(
         runner,
@@ -62,7 +62,7 @@ def test_run_safe_check_config_writable_error_includes_remediation(monkeypatch):
     """Issue #190 path: re-run check after the dir is still root-owned
     must surface the chown command in the summary string so the
     operator's next click is informed."""
-    import services.operator_check_runner as runner
+    import sendspin_bridge.services.diagnostics.operator_check_runner as runner
 
     monkeypatch.setattr(
         runner,
@@ -92,8 +92,8 @@ def test_run_safe_check_config_writable_error_includes_remediation(monkeypatch):
 
 
 def test_run_safe_check_revalidates_ma_groups(monkeypatch):
-    import services.operator_check_runner as runner
-    from services.device_registry import DeviceRegistrySnapshot
+    import sendspin_bridge.services.diagnostics.operator_check_runner as runner
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     captured = {}
     monkeypatch.setattr(
@@ -126,8 +126,8 @@ def test_run_safe_check_revalidates_ma_groups(monkeypatch):
 
 
 def test_run_safe_check_rechecks_connected_sinks(monkeypatch):
-    import services.operator_check_runner as runner
-    from services.device_registry import DeviceRegistrySnapshot
+    import sendspin_bridge.services.diagnostics.operator_check_runner as runner
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     client = SimpleNamespace(player_name="Kitchen")
     client.bt_manager = SimpleNamespace(configure_bluetooth_audio=lambda: True)

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import errno
 
-from services.preflight_status import collect_preflight_status
+from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 
 
 def _stub_collectors():
@@ -88,7 +88,7 @@ def test_preflight_config_writable_degraded_with_chown_hint_when_permission_deni
     # may itself be root and bypass mode bits.
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
 
-    import services.preflight_status as preflight_module
+    import sendspin_bridge.services.diagnostics.preflight_status as preflight_module
 
     def _fake_writable(_dir):
         raise PermissionError(errno.EACCES, "Permission denied", str(tmp_path))
@@ -113,7 +113,7 @@ def test_preflight_overall_status_flips_to_degraded_on_writable_failure(tmp_path
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
 
-    import services.preflight_status as preflight_module
+    import sendspin_bridge.services.diagnostics.preflight_status as preflight_module
 
     def _fake_writable(_dir):
         raise PermissionError(errno.EACCES, "Permission denied", str(tmp_path))

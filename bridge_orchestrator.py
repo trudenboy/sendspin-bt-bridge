@@ -18,14 +18,17 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
 from config import detect_ha_addon_channel, ensure_bridge_name, load_config, resolve_base_listen_port, resolve_web_port
-from services.bridge_runtime_state import set_activation_context
-from services.device_activation import DeviceActivationContext, activate_device
-from services.device_registry import get_device_registry_snapshot
-from services.lifecycle_state import BridgeLifecycleState
-from services.ma_integration_service import BridgeMaIntegrationService
-from services.port_bind_probe import is_port_available
-from services.sendspin_compat import format_dependency_versions, get_runtime_dependency_versions
-from services.update_checker import run_update_checker
+from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext, activate_device
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.diagnostics.sendspin_compat import (
+    format_dependency_versions,
+    get_runtime_dependency_versions,
+)
+from sendspin_bridge.services.diagnostics.update_checker import run_update_checker
+from sendspin_bridge.services.infrastructure.port_bind_probe import is_port_available
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import set_activation_context
+from sendspin_bridge.services.lifecycle.lifecycle_state import BridgeLifecycleState
+from sendspin_bridge.services.music_assistant.ma_integration_service import BridgeMaIntegrationService
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +145,8 @@ def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> Non
 
     # Lazy-imported to avoid pulling sysfs / btsocket at module import
     # time on non-Linux dev boxes.
-    from services.bluetooth import build_hci_map
-    from services.bt_class_of_device import apply_device_class_for_hex
+    from sendspin_bridge.services.bluetooth import build_hci_map
+    from sendspin_bridge.services.bluetooth.bt_class_of_device import apply_device_class_for_hex
 
     hci_map: dict[str, str] | None = None
     for entry in adapters:
@@ -385,12 +388,12 @@ class BridgeOrchestrator:
         logger.info("Received shutdown signal — muting sinks before exit...")
         mute_sink_fn = mute_sink
         if mute_sink_fn is None:
-            from services.pulse import aset_sink_mute as imported_mute_sink
+            from sendspin_bridge.services.audio.pulse import aset_sink_mute as imported_mute_sink
 
             mute_sink_fn = imported_mute_sink
         get_sink_volume_fn = get_sink_volume
         if get_sink_volume_fn is None:
-            from services.pulse import aget_sink_volume as imported_get_sink_volume
+            from sendspin_bridge.services.audio.pulse import aget_sink_volume as imported_get_sink_volume
 
             get_sink_volume_fn = imported_get_sink_volume
         save_volume_fn = save_volume
@@ -486,7 +489,7 @@ class BridgeOrchestrator:
             return
         bridge_name = str(config.get("BRIDGE_NAME") or "").strip()
         try:
-            from services.duplicate_device_check import find_duplicate_devices
+            from sendspin_bridge.services.bluetooth.duplicate_device_check import find_duplicate_devices
             from state import set_duplicate_device_warnings
 
             warnings = await loop.run_in_executor(None, find_duplicate_devices, config, bridge_name)
@@ -702,12 +705,12 @@ class BridgeOrchestrator:
         for the bridge's lifetime.
         """
         try:
-            from services.ha_integration_lifecycle import (
+            from sendspin_bridge.services.ha.ha_integration_lifecycle import (
                 HaIntegrationLifecycle,
                 set_default_lifecycle,
             )
-            from services.ha_state_projector import project_snapshot
-            from services.status_snapshot import build_bridge_snapshot
+            from sendspin_bridge.services.ha.ha_state_projector import project_snapshot
+            from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
             from state import get_clients_snapshot, get_internal_event_publisher
         except Exception as exc:  # pragma: no cover — import-time guard
             logger.info("HA integration unavailable (import failed): %s", exc)
@@ -755,7 +758,7 @@ class BridgeOrchestrator:
     def _start_mdns_advertiser(self, *, bridge_name: str, version: str) -> None:
         try:
             from config import resolve_web_port
-            from services.bridge_mdns import BridgeMdnsAdvertiser, set_default_advertiser
+            from sendspin_bridge.services.ipc.bridge_mdns import BridgeMdnsAdvertiser, set_default_advertiser
         except Exception as exc:  # pragma: no cover
             logger.info("mDNS advertiser unavailable (import failed): %s", exc)
             return
@@ -842,13 +845,13 @@ class BridgeOrchestrator:
         clients = device_bootstrap.clients
 
         # Start PA sink state monitor (idle disconnect ground truth).
-        from services.sink_monitor import SinkMonitor
+        from sendspin_bridge.services.audio.sink_monitor import SinkMonitor
 
         sink_monitor = SinkMonitor()
         for client in clients:
             client._sink_monitor = sink_monitor
 
-        from services.hci_avrcp_monitor import get_monitor as _get_hci_monitor
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import get_monitor as _get_hci_monitor
 
         hci_monitor = _get_hci_monitor()
 

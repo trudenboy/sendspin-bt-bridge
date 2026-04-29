@@ -9,10 +9,10 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-import services.ma_monitor as ma_monitor
+import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
 import state
-from services.device_registry import DeviceRegistrySnapshot
-from services.ma_monitor import (
+from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+from sendspin_bridge.services.music_assistant.ma_monitor import (
     MaMonitor,
     _build_now_playing,
     _find_solo_player_queues,

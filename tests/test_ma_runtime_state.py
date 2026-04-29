@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-import services.ma_runtime_state as ma_runtime_state
+import sendspin_bridge.services.music_assistant.ma_runtime_state as ma_runtime_state
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +21,7 @@ def test_set_ma_groups_logs_info_when_cache_changes(caplog):
     all_groups = [{"id": "syncgroup_1", "name": "Kitchen", "members": []}]
 
     caplog.clear()
-    with caplog.at_level(logging.DEBUG, logger="services.ma_runtime_state"):
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.music_assistant.ma_runtime_state"):
         ma_runtime_state.set_ma_groups(mapping, all_groups)
 
     assert any(
@@ -38,7 +38,7 @@ def test_set_ma_groups_logs_debug_when_cache_is_unchanged(caplog):
     ma_runtime_state.set_ma_groups(mapping, all_groups)
 
     caplog.clear()
-    with caplog.at_level(logging.DEBUG, logger="services.ma_runtime_state"):
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.music_assistant.ma_runtime_state"):
         ma_runtime_state.set_ma_groups(mapping, all_groups)
 
     assert any(

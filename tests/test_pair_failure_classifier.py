@@ -11,7 +11,7 @@ not retry / re-pair / press a passkey)."""
 
 from __future__ import annotations
 
-from services.bluetooth import classify_pair_failure
+from sendspin_bridge.services.bluetooth import classify_pair_failure
 
 # ── positive matches: every wording shape we've seen on the wire ───────
 

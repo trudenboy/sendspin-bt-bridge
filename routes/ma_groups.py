@@ -24,11 +24,11 @@ from routes.api_ma import (
     _ma_host_from_sendspin_clients,
     ma_bp,
 )
-from services.async_job_state import create_async_job, finish_async_job, get_async_job
-from services.bridge_runtime_state import get_main_loop
-from services.ha_addon import get_ma_addon_discovery_candidates
-from services.ma_monitor import reload_monitor_credentials
-from services.ma_runtime_state import (
+from sendspin_bridge.services.ha.ha_addon import get_ma_addon_discovery_candidates
+from sendspin_bridge.services.lifecycle.async_job_state import create_async_job, finish_async_job, get_async_job
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
+from sendspin_bridge.services.music_assistant.ma_monitor import reload_monitor_credentials
+from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_api_credentials,
     get_ma_groups,
     get_ma_now_playing_cache_snapshot,
@@ -59,7 +59,7 @@ def _schedule_ma_rediscover_job(loop, ma_url: str, ma_token: str) -> str:
 
 def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
     """Resolve Music Assistant discovery in a background thread and store the result."""
-    from services.ma_discovery import discover_ma_servers, validate_ma_url
+    from sendspin_bridge.services.music_assistant.ma_discovery import discover_ma_servers, validate_ma_url
 
     def _annotate_server(server: dict[str, object] | None, *, source: str, summary: str) -> dict[str, object] | None:
         if not isinstance(server, dict):
@@ -187,7 +187,7 @@ def _run_ma_discover_job(job_id: str, loop, is_addon: bool) -> None:
 def _run_ma_rediscover_job(job_id: str, loop, ma_url: str, ma_token: str, player_info: list[dict[str, str]]) -> None:
     """Refresh MA groups in a background thread and store the result."""
     try:
-        from services.ma_client import discover_ma_groups
+        from sendspin_bridge.services.music_assistant.ma_client import discover_ma_groups
 
         result = _await_loop_result(
             loop,

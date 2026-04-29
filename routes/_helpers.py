@@ -10,7 +10,7 @@ import re
 
 from flask import jsonify
 
-from services.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 
 logger = logging.getLogger(__name__)
 

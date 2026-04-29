@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.sink_monitor import SinkMonitor, extract_mac_from_sink
+from sendspin_bridge.services.audio.sink_monitor import SinkMonitor, extract_mac_from_sink
 
 # ── MAC extraction ────────────────────────────────────────────────────────
 
@@ -375,7 +375,7 @@ class TestGracefulFallback:
     @pytest.mark.asyncio
     async def test_start_without_pulsectl_is_noop(self):
         mon = SinkMonitor()
-        with patch("services.sink_monitor._PULSECTL_AVAILABLE", False):
+        with patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", False):
             await mon.start()
         assert mon._task is None
 
@@ -386,10 +386,10 @@ class TestGracefulFallback:
 
     def test_available_property(self):
         mon = SinkMonitor()
-        with patch("services.sink_monitor._PULSECTL_AVAILABLE", True):
+        with patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True):
             # Not started yet — not available even if pulsectl exists
             assert mon.available is False
-        with patch("services.sink_monitor._PULSECTL_AVAILABLE", False):
+        with patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", False):
             assert mon.available is False
 
 
@@ -403,7 +403,7 @@ class TestMonitorLoop:
     async def test_start_creates_task(self):
         mon = SinkMonitor()
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(mon, "_monitor_loop", new_callable=AsyncMock),
         ):
             await mon.start()
@@ -608,7 +608,7 @@ class TestMonitorLoopFailureBehavior:
     @pytest.mark.asyncio
     async def test_initial_connect_failures_disable_after_threshold(self, caplog):
         """After _INITIAL_FAILURE_THRESHOLD initial failures, the loop returns."""
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         exc = ConnectionRefusedError("no server")
@@ -617,10 +617,10 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectFail(exc)
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
-            caplog.at_level("DEBUG", logger="services.sink_monitor"),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("DEBUG", logger="sendspin_bridge.services.audio.sink_monitor"),
         ):
             await mon.start()
             await asyncio.wait_for(mon._task, timeout=2.0)
@@ -639,7 +639,7 @@ class TestMonitorLoopFailureBehavior:
 
     @pytest.mark.asyncio
     async def test_diagnose_file_not_found_reports_socket_missing(self, caplog):
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         exc = FileNotFoundError(2, "No such file")
@@ -648,10 +648,10 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectFail(exc)
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
-            caplog.at_level("WARNING", logger="services.sink_monitor"),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="sendspin_bridge.services.audio.sink_monitor"),
         ):
             await mon.start()
             await asyncio.wait_for(mon._task, timeout=2.0)
@@ -662,7 +662,7 @@ class TestMonitorLoopFailureBehavior:
 
     @pytest.mark.asyncio
     async def test_diagnose_permission_error_reports_uid_mismatch(self, caplog):
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         exc = PermissionError(13, "Permission denied")
@@ -671,10 +671,10 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectFail(exc)
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
-            caplog.at_level("WARNING", logger="services.sink_monitor"),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="sendspin_bridge.services.audio.sink_monitor"),
         ):
             await mon.start()
             await asyncio.wait_for(mon._task, timeout=2.0)
@@ -685,7 +685,7 @@ class TestMonitorLoopFailureBehavior:
 
     @pytest.mark.asyncio
     async def test_diagnose_unknown_exception_falls_back_to_generic(self, caplog):
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         exc = RuntimeError("weird")
@@ -694,10 +694,10 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectFail(exc)
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
-            caplog.at_level("WARNING", logger="services.sink_monitor"),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="sendspin_bridge.services.audio.sink_monitor"),
         ):
             await mon.start()
             await asyncio.wait_for(mon._task, timeout=2.0)
@@ -709,7 +709,7 @@ class TestMonitorLoopFailureBehavior:
     @pytest.mark.asyncio
     async def test_successful_connect_resets_counter(self, caplog):
         """First two attempts fail, third succeeds → no 'disabled' WARNING."""
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         attempts: list[int] = []
@@ -721,10 +721,10 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectSuccessThenCancel()
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
-            caplog.at_level("WARNING", logger="services.sink_monitor"),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            caplog.at_level("WARNING", logger="sendspin_bridge.services.audio.sink_monitor"),
         ):
             await mon.start()
             with contextlib.suppress(asyncio.CancelledError):
@@ -738,7 +738,7 @@ class TestMonitorLoopFailureBehavior:
     @pytest.mark.asyncio
     async def test_post_success_transient_uses_backoff_and_demotes_log(self, caplog):
         """After one success, transient failures log WARNING once, then DEBUG."""
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         state = {"count": 0}
@@ -757,10 +757,10 @@ class TestMonitorLoopFailureBehavior:
                 raise asyncio.CancelledError()
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", side_effect=_record_sleep),
-            caplog.at_level("DEBUG", logger="services.sink_monitor"),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", side_effect=_record_sleep),
+            caplog.at_level("DEBUG", logger="sendspin_bridge.services.audio.sink_monitor"),
         ):
             await mon.start()
             with contextlib.suppress(asyncio.CancelledError):
@@ -782,7 +782,7 @@ class TestMonitorLoopFailureBehavior:
     @pytest.mark.asyncio
     async def test_start_after_self_disable_resets_counters_and_restarts(self):
         """After self-disable, calling start() again must reset counters and run a fresh loop."""
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
         state = {"attempt": 0}
@@ -796,9 +796,9 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectSuccessThenCancel()
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
         ):
             await mon.start()
             await asyncio.wait_for(mon._task, timeout=2.0)
@@ -817,7 +817,7 @@ class TestMonitorLoopFailureBehavior:
     @pytest.mark.asyncio
     async def test_cancel_during_reconnect_exits_cleanly(self):
         """Cancelling during backoff sleep must not raise."""
-        import services.sink_monitor as sm_mod
+        import sendspin_bridge.services.audio.sink_monitor as sm_mod
 
         mon = SinkMonitor()
 
@@ -825,9 +825,9 @@ class TestMonitorLoopFailureBehavior:
             return _ConnectFail(ConnectionRefusedError("nope"))
 
         with (
-            patch("services.sink_monitor._PULSECTL_AVAILABLE", True),
+            patch("sendspin_bridge.services.audio.sink_monitor._PULSECTL_AVAILABLE", True),
             patch.object(sm_mod, "pulsectl_asyncio", MagicMock(PulseAsync=_factory), create=True),
-            patch("services.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
+            patch("sendspin_bridge.services.audio.sink_monitor.asyncio.sleep", new_callable=AsyncMock),
         ):
             await mon.start()
             # Cancel almost immediately; should not raise.
@@ -840,21 +840,21 @@ class TestDescribePAFailure:
     """Direct unit tests for _describe_pa_failure."""
 
     def test_file_not_found(self):
-        from services.sink_monitor import _describe_pa_failure
+        from sendspin_bridge.services.audio.sink_monitor import _describe_pa_failure
 
         label, hint = _describe_pa_failure(FileNotFoundError(2, "x"))
         assert label == "socket-missing"
         assert "PULSE_SERVER" in hint
 
     def test_permission_error(self):
-        from services.sink_monitor import _describe_pa_failure
+        from sendspin_bridge.services.audio.sink_monitor import _describe_pa_failure
 
         label, hint = _describe_pa_failure(PermissionError(13, "x"))
         assert label == "permission-denied"
         assert "AUDIO_UID" in hint
 
     def test_connection_refused(self):
-        from services.sink_monitor import _describe_pa_failure
+        from sendspin_bridge.services.audio.sink_monitor import _describe_pa_failure
 
         label, hint = _describe_pa_failure(ConnectionRefusedError("x"))
         assert label == "server-not-listening"
@@ -863,7 +863,7 @@ class TestDescribePAFailure:
     def test_protocol_error_econnreset(self):
         import errno as _errno
 
-        from services.sink_monitor import _describe_pa_failure
+        from sendspin_bridge.services.audio.sink_monitor import _describe_pa_failure
 
         exc = OSError(_errno.ECONNRESET, "reset")
         label, hint = _describe_pa_failure(exc)
@@ -871,7 +871,7 @@ class TestDescribePAFailure:
         assert "pipewire-pulse version" in hint
 
     def test_unknown_exception(self):
-        from services.sink_monitor import _describe_pa_failure
+        from sendspin_bridge.services.audio.sink_monitor import _describe_pa_failure
 
         label, hint = _describe_pa_failure(RuntimeError("weird"))
         assert label == "unknown"

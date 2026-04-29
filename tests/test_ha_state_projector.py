@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from services.ha_entity_model import DEVICE_ENTITIES, EntityKind
-from services.ha_state_projector import (
+from sendspin_bridge.services.ha.ha_entity_model import DEVICE_ENTITIES, EntityKind
+from sendspin_bridge.services.ha.ha_state_projector import (
     EntityState,
     HAStateProjection,
     StateDelta,
     compute_delta,
     project_snapshot,
 )
-from services.status_snapshot import (
+from sendspin_bridge.services.lifecycle.status_snapshot import (
     BridgeSnapshot,
     DeviceSnapshot,
     StartupProgressSnapshot,

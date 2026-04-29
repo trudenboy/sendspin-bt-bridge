@@ -18,8 +18,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from services.ma_monitor import push_now_playing_to_mpris
-from services.mpris_player import MprisPlayer, MprisRegistry
+from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+from sendspin_bridge.services.music_assistant.ma_monitor import push_now_playing_to_mpris
 
 
 def _player_for(mac: str, player_id: str) -> MprisPlayer:

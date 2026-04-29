@@ -1,6 +1,6 @@
 """Unit tests for services.ha_core_api."""
 
-from services.ha_core_api import build_adapter_area_matches, fetch_ha_area_catalog
+from sendspin_bridge.services.ha.ha_core_api import build_adapter_area_matches, fetch_ha_area_catalog
 
 
 def test_build_adapter_area_matches_uses_exact_mac_match():
@@ -45,7 +45,7 @@ def test_build_adapter_area_matches_skips_ambiguous_areas():
 
 
 def test_fetch_ha_area_catalog_normalizes_payload(monkeypatch):
-    import services.ha_core_api as ha_core_api
+    import sendspin_bridge.services.ha.ha_core_api as ha_core_api
 
     monkeypatch.setattr(
         ha_core_api,

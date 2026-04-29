@@ -37,7 +37,7 @@ def _release_bt_operation_lock_after_each_test():
     semantics.
     """
     yield
-    from services.bt_operation_lock import _bt_operation_lock
+    from sendspin_bridge.services.bluetooth.bt_operation_lock import _bt_operation_lock
 
     if _bt_operation_lock.locked():
         try:

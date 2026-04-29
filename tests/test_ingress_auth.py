@@ -32,7 +32,7 @@ def _allow_localhost_urls(monkeypatch):
     ``tests/test_ma_auth_ssrf.py``.
     """
     from routes import ma_auth as _ma_auth
-    from services import url_safety as _url_safety
+    from sendspin_bridge.services.infrastructure import url_safety as _url_safety
 
     monkeypatch.setattr(_ma_auth, "is_safe_external_url", lambda _u: True)
     # safe_urlopen performs its own is_safe_external_url check internally —

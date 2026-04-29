@@ -31,10 +31,9 @@ from bt_dbus import (
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
 )
-from services import bt_operation_lock as _bt_op_lock
-from services import bt_rssi_mgmt
-from services.bluetooth import classify_pair_failure, describe_pair_failure
-from services.pairing_agent import PairingAgent
+from sendspin_bridge.services.bluetooth import bt_operation_lock as _bt_op_lock
+from sendspin_bridge.services.bluetooth import bt_rssi_mgmt, classify_pair_failure, describe_pair_failure
+from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 
 
 def _load_allow_hfp() -> bool:
@@ -65,7 +64,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from bt_types import BluetoothManagerHost
-    from services.internal_events import DeviceEventType
+    from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 UTC = timezone.utc
 
@@ -1046,7 +1045,7 @@ class BluetoothManager:
         ``services.pulse.areload_bluez5_discover_module``.
         """
         try:
-            from services.pulse import reload_bluez5_discover_module
+            from sendspin_bridge.services.audio.pulse import reload_bluez5_discover_module
         except Exception as exc:  # pragma: no cover — defensive
             logger.debug("[%s] PA module reload import failed: %s", self.device_name, exc)
             return False
@@ -1138,7 +1137,7 @@ class BluetoothManager:
                 }
             )
         try:
-            from services.bluetooth import persist_device_released
+            from sendspin_bridge.services.bluetooth import persist_device_released
 
             persist_device_released(self.device_name, True)
         except Exception as _e:
@@ -1187,7 +1186,7 @@ class BluetoothManager:
                 }
             )
         try:
-            from services.bluetooth import persist_device_released
+            from sendspin_bridge.services.bluetooth import persist_device_released
 
             persist_device_released(self.device_name, True)
         except Exception as _e:
@@ -1215,7 +1214,7 @@ class BluetoothManager:
             return False
         hci_index = int(m.group(1))
         try:
-            from services.adapter_recovery import recover_adapter_blocking
+            from sendspin_bridge.services.bluetooth.adapter_recovery import recover_adapter_blocking
         except Exception as _e:
             logger.debug("[%s] adapter_recovery module unavailable: %s", self.device_name, _e)
             return False

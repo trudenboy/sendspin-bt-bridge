@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.pa_volume_controller import PulseVolumeController
+from sendspin_bridge.services.audio.pa_volume_controller import PulseVolumeController
 
 
 @pytest.fixture
@@ -18,8 +18,16 @@ def controller():
 @pytest.mark.asyncio
 async def test_set_state_calls_pa_helpers(controller):
     with (
-        patch("services.pa_volume_controller.aset_sink_volume", new_callable=AsyncMock, return_value=True) as mock_vol,
-        patch("services.pa_volume_controller.aset_sink_mute", new_callable=AsyncMock, return_value=True) as mock_mute,
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aset_sink_volume",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_vol,
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aset_sink_mute",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_mute,
     ):
         await controller.set_state(75, muted=False)
         mock_vol.assert_awaited_once_with("bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink", 75)
@@ -29,8 +37,16 @@ async def test_set_state_calls_pa_helpers(controller):
 @pytest.mark.asyncio
 async def test_set_state_clamps_volume(controller):
     with (
-        patch("services.pa_volume_controller.aset_sink_volume", new_callable=AsyncMock, return_value=True),
-        patch("services.pa_volume_controller.aset_sink_mute", new_callable=AsyncMock, return_value=True),
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aset_sink_volume",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aset_sink_mute",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
     ):
         await controller.set_state(150, muted=False)
         state = await _get_cached_state(controller)
@@ -44,8 +60,16 @@ async def test_set_state_clamps_volume(controller):
 @pytest.mark.asyncio
 async def test_get_state_reads_from_pa(controller):
     with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=42),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=True),
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aget_sink_volume",
+            new_callable=AsyncMock,
+            return_value=42,
+        ),
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aget_sink_mute",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
     ):
         vol, muted = await controller.get_state()
         assert vol == 42
@@ -55,8 +79,16 @@ async def test_get_state_reads_from_pa(controller):
 @pytest.mark.asyncio
 async def test_get_state_falls_back_to_cached_on_none(controller):
     with (
-        patch("services.pa_volume_controller.aget_sink_volume", new_callable=AsyncMock, return_value=None),
-        patch("services.pa_volume_controller.aget_sink_mute", new_callable=AsyncMock, return_value=None),
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aget_sink_volume",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "sendspin_bridge.services.audio.pa_volume_controller.aget_sink_mute",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         vol, muted = await controller.get_state()
         assert vol == 100  # default
@@ -86,7 +118,11 @@ async def test_handle_sink_event_fires_callback_on_external_change(controller):
     controller._muted = False
 
     pulse = object()  # opaque sentinel — aread_sink_state is mocked
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(42, True)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(42, True),
+    ):
         await controller._handle_sink_event(pulse)
 
     assert received == [(42, True)]
@@ -108,7 +144,11 @@ async def test_handle_sink_event_suppresses_echo_from_set_state(controller):
     controller._muted = False
 
     pulse = object()
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(75, False)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(75, False),
+    ):
         await controller._handle_sink_event(pulse)
 
     assert received == []  # echo suppressed
@@ -125,7 +165,11 @@ async def test_handle_sink_event_skips_when_sink_unreachable(controller):
     controller._muted = False
 
     pulse = object()
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(None, None)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(None, None),
+    ):
         await controller._handle_sink_event(pulse)
 
     assert received == []
@@ -152,7 +196,11 @@ async def test_external_change_tap_fires_alongside_callback(controller):
     controller._muted = False
 
     pulse = object()
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(42, True)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(42, True),
+    ):
         await controller._handle_sink_event(pulse)
 
     assert sendspin_received == [(42, True)]
@@ -176,7 +224,11 @@ async def test_external_change_tap_isolated_from_callback_failure(controller):
     controller._muted = False
 
     pulse = object()
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(55, False)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(55, False),
+    ):
         await controller._handle_sink_event(pulse)
 
     assert bridge_received == [(55, False)]
@@ -193,7 +245,11 @@ async def test_handle_sink_event_swallows_callback_exception(controller):
     controller._muted = False
 
     pulse = object()
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(60, False)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(60, False),
+    ):
         # Must not raise.
         await controller._handle_sink_event(pulse)
 
@@ -210,7 +266,11 @@ async def test_handle_sink_event_no_callback_still_updates_cache(controller):
     controller._muted = True
 
     pulse = object()
-    with patch("services.pa_volume_controller.aread_sink_state", new_callable=AsyncMock, return_value=(80, False)):
+    with patch(
+        "sendspin_bridge.services.audio.pa_volume_controller.aread_sink_state",
+        new_callable=AsyncMock,
+        return_value=(80, False),
+    ):
         await controller._handle_sink_event(pulse)
 
     assert controller._volume == 80
@@ -222,7 +282,7 @@ async def test_subscribe_loop_skips_when_pulsectl_unavailable(controller):
     # The dev/test boxes (macOS, containers without libpulse) must
     # tolerate a missing pulsectl_asyncio cleanly — the loop returns
     # immediately, no exception escapes ``start_monitoring``.
-    with patch("services.pulse._PULSECTL_AVAILABLE", new=False):
+    with patch("sendspin_bridge.services.audio.pulse._PULSECTL_AVAILABLE", new=False):
         await controller._subscribe_loop()  # must return cleanly
 
 
@@ -244,7 +304,7 @@ async def test_start_monitoring_replaces_callback_without_restarting_task(contro
     def cb_b(v, m):
         pass
 
-    with patch("services.pulse._PULSECTL_AVAILABLE", new=False):
+    with patch("sendspin_bridge.services.audio.pulse._PULSECTL_AVAILABLE", new=False):
         await controller.start_monitoring(cb_a)
         first_task = controller._monitor_task
         # Subscribe task may have already finished (since pulsectl is

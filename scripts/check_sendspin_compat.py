@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.sendspin_compat import (
+from sendspin_bridge.services.diagnostics.sendspin_compat import (
     analyze_audio_api_compatibility,
     analyze_daemon_args_compatibility,
     get_runtime_dependency_versions,

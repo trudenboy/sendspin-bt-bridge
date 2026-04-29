@@ -6,8 +6,8 @@ import socket
 
 import pytest
 
-from services import url_safety
-from services.url_safety import is_safe_external_url
+from sendspin_bridge.services.infrastructure import url_safety
+from sendspin_bridge.services.infrastructure.url_safety import is_safe_external_url
 
 
 def _fake_getaddrinfo(addr_map: dict[str, list[str]]):

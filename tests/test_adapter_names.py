@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import config
-from services import adapter_names
+from sendspin_bridge.services.bluetooth import adapter_names
 
 
 def _write_config(path, payload) -> None:

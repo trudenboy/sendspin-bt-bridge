@@ -418,8 +418,10 @@ async def test_initialize_ma_integration_discovers_groups_and_starts_monitor(mon
             monitor_started.set()
             await asyncio.sleep(3600)
 
-    monkeypatch.setattr("services.ma_client.discover_ma_groups", fake_discover)
-    monkeypatch.setattr("services.ma_monitor.start_monitor", lambda _url, _token: FakeMonitor())
+    monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_client.discover_ma_groups", fake_discover)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_monitor.start_monitor", lambda _url, _token: FakeMonitor()
+    )
     clients = [SimpleNamespace(player_id="sendspin-kitchen", player_name="Kitchen")]
 
     bootstrap = await orchestrator.initialize_ma_integration(
@@ -459,7 +461,7 @@ async def test_initialize_ma_integration_delegates_state_publication(monkeypatch
             [{"id": "syncgroup_1", "name": "Kitchen Group", "members": []}],
         )
 
-    monkeypatch.setattr("services.ma_client.discover_ma_groups", fake_discover)
+    monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_client.discover_ma_groups", fake_discover)
 
     await orchestrator.initialize_ma_integration(
         {

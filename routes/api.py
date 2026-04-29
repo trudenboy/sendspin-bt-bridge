@@ -18,15 +18,15 @@ from flask import Blueprint, jsonify, request
 
 from config import save_device_volume
 from routes.api_config import _detect_runtime
-from services.bridge_runtime_state import get_main_loop
-from services.device_registry import get_device_registry_snapshot
-from services.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
-from services.pulse import (
+from sendspin_bridge.services.audio.pulse import (
     get_sink_mute,
     set_sink_mute,
     set_sink_volume,
 )
-from services.status_snapshot import build_device_snapshot_pairs
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
+from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
+from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
 
 logger = logging.getLogger(__name__)
 
@@ -428,7 +428,7 @@ def pause_all():
                     if sid not in seen_ma_syncgroups:
                         seen_ma_syncgroups.add(sid)
                         try:
-                            from services.ma_client import ma_group_play
+                            from sendspin_bridge.services.music_assistant.ma_client import ma_group_play
 
                             fut = asyncio.run_coroutine_threadsafe(ma_group_play(ma_url, ma_token, sid), loop)
                             if fut.result(timeout=10.0):
@@ -503,7 +503,7 @@ def api_group_pause():
             ma_group = get_ma_group_for_player(getattr(target, "player_id", ""))
             if ma_group:
                 try:
-                    from services.ma_client import ma_group_play
+                    from sendspin_bridge.services.music_assistant.ma_client import ma_group_play
 
                     fut = asyncio.run_coroutine_threadsafe(ma_group_play(ma_url, ma_token, ma_group["id"]), loop)
                     ok = fut.result(timeout=10.0)

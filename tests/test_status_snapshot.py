@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import state
-from services.status_snapshot import (
+from sendspin_bridge.services.lifecycle.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,
     build_device_snapshot_pairs,
@@ -102,7 +102,7 @@ def test_build_device_snapshot_includes_recent_events_and_health_summary():
 def test_build_device_snapshot_includes_global_enabled_flag(monkeypatch):
     client = _make_client(player_name="Kitchen @ LXC")
     monkeypatch.setattr(
-        "services.status_snapshot.load_config",
+        "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
         lambda: {"BLUETOOTH_DEVICES": [{"player_name": "Kitchen", "enabled": False}]},
     )
 
@@ -117,7 +117,7 @@ def test_build_device_snapshot_includes_room_context_and_transfer_readiness(monk
     client = _make_client()
     client.status.update({"reconnecting": True})
     monkeypatch.setattr(
-        "services.status_snapshot.load_config",
+        "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
         lambda: {
             "BLUETOOTH_DEVICES": [
                 {
@@ -325,7 +325,7 @@ def test_build_group_snapshots_merges_ma_syncgroup_members():
 
 def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
     from config import CONFIG_SCHEMA_VERSION
-    from services.ipc_protocol import IPC_PROTOCOL_VERSION
+    from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     state.set_disabled_devices([{"player_name": "Disabled", "enabled": False}])
     state.set_ma_api_credentials("http://ma.local:8095", "token")

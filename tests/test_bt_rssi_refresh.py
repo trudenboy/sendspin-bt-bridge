@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from services import bt_operation_lock
+from sendspin_bridge.services.bluetooth import bt_operation_lock
 
 
 @pytest.fixture(autouse=True)
@@ -100,7 +100,7 @@ async def test_tick_writes_rssi_via_callback_on_success():
     cb = MagicMock()
     mgr.on_rssi_update = cb
 
-    with patch("services.bt_rssi_mgmt.read_conn_info", return_value=-50) as read:
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info", return_value=-50) as read:
         await mgr._rssi_refresh_tick()
 
     read.assert_called_once_with(0, "AA:BB:CC:DD:EE:FF")
@@ -117,7 +117,7 @@ async def test_tick_skips_read_when_not_connected():
     cb = MagicMock()
     mgr.on_rssi_update = cb
 
-    with patch("services.bt_rssi_mgmt.read_conn_info") as read:
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info") as read:
         await mgr._rssi_refresh_tick()
 
     read.assert_not_called()
@@ -138,7 +138,7 @@ async def test_tick_skips_when_bt_operation_lock_busy():
 
     assert bt_operation_lock.try_acquire_bt_operation()  # simulate pair in flight
 
-    with patch("services.bt_rssi_mgmt.read_conn_info") as read:
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info") as read:
         await mgr._rssi_refresh_tick()
 
     read.assert_not_called()
@@ -155,7 +155,7 @@ async def test_tick_does_not_invoke_callback_when_read_returns_none():
     cb = MagicMock()
     mgr.on_rssi_update = cb
 
-    with patch("services.bt_rssi_mgmt.read_conn_info", return_value=None):
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info", return_value=None):
         await mgr._rssi_refresh_tick()
 
     cb.assert_not_called()
@@ -170,7 +170,7 @@ async def test_tick_releases_lock_even_when_read_raises():
     mgr.connected = True
     mgr.on_rssi_update = MagicMock()
 
-    with patch("services.bt_rssi_mgmt.read_conn_info", side_effect=RuntimeError("boom")):
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info", side_effect=RuntimeError("boom")):
         await mgr._rssi_refresh_tick()
 
     # Lock is free again — verify by re-acquiring without blocking.
@@ -189,7 +189,7 @@ async def test_tick_skips_lock_and_executor_when_no_callback_registered():
     mgr.connected = True
     mgr.on_rssi_update = None  # no consumer
 
-    with patch("services.bt_rssi_mgmt.read_conn_info") as read:
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info") as read:
         await mgr._rssi_refresh_tick()
 
     read.assert_not_called()
@@ -208,7 +208,7 @@ async def test_tick_skips_lock_and_executor_when_adapter_index_unresolvable():
     mgr.connected = True
     mgr.on_rssi_update = MagicMock()
 
-    with patch("services.bt_rssi_mgmt.read_conn_info") as read:
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info") as read:
         await mgr._rssi_refresh_tick()
 
     read.assert_not_called()
@@ -226,6 +226,6 @@ async def test_tick_swallows_callback_exceptions():
     mgr.connected = True
     mgr.on_rssi_update = MagicMock(side_effect=ValueError("ui state corrupt"))
 
-    with patch("services.bt_rssi_mgmt.read_conn_info", return_value=-60):
+    with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info", return_value=-60):
         # Must not raise.
         await mgr._rssi_refresh_tick()

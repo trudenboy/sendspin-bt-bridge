@@ -52,7 +52,7 @@ def test_api_bt_adapters_resolves_kernel_hci_via_sysfs(tmp_path, monkeypatch, cl
     (sysfs / "hci0" / "address").write_text("A0:AD:9F:6E:B2:D5\n")
     (sysfs / "hci1").mkdir()
     (sysfs / "hci1" / "address").write_text("88:A2:9E:C0:07:0D\n")
-    monkeypatch.setattr("services.bluetooth._BT_SYSFS_DIR", sysfs)
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", sysfs)
 
     monkeypatch.setattr("routes.api_bt.list_bt_adapters", lambda: macs)
 
@@ -81,7 +81,7 @@ def test_api_bt_adapters_falls_back_to_index_label_without_sysfs(tmp_path, monke
     # Non-Linux / containerised dev environments without /sys mounted —
     # the endpoint must still respond with usable labels rather than
     # erroring out.
-    monkeypatch.setattr("services.bluetooth._BT_SYSFS_DIR", tmp_path / "nonexistent")
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "nonexistent")
     monkeypatch.setattr("routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:01"])
     monkeypatch.setattr("routes.api_bt.get_adapter_alias", lambda mac, **_: ("Some Controller", True))
 
@@ -95,7 +95,7 @@ def test_api_bt_adapters_uses_explicit_show_form_for_alias(tmp_path, monkeypatch
     # Direct end-to-end check that the endpoint goes through
     # ``get_adapter_alias`` (which uses ``show <MAC>``) — not the legacy
     # ``select <MAC>; show`` path that produced the alias swap in #193.
-    monkeypatch.setattr("services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
     monkeypatch.setattr("routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:FF"])
 
     captured: dict[str, object] = {}
@@ -109,7 +109,7 @@ def test_api_bt_adapters_uses_explicit_show_form_for_alias(tmp_path, monkeypatch
         captured["input"] = input
         return _Completed()
 
-    with patch("services.bluetooth.subprocess.run", side_effect=_fake_run):
+    with patch("sendspin_bridge.services.bluetooth.subprocess.run", side_effect=_fake_run):
         response = client.get("/api/bt/adapters")
 
     assert response.status_code == 200

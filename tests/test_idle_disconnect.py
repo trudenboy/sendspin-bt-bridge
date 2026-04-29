@@ -296,7 +296,9 @@ class TestWakeFromStandby:
             sm._sink_states = {"bluez_sink.AA_BB.a2dp_sink": "suspended"}
             client._sink_monitor = sm
 
-            with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=0):
+            with patch(
+                "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=0
+            ):
                 await client._reroute_to_bt_sink()
 
             # bt_standby cleared

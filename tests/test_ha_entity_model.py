@@ -12,7 +12,7 @@ import inspect
 
 import pytest
 
-from services import ha_entity_model as M
+from sendspin_bridge.services.ha import ha_entity_model as M
 
 # ---------------------------------------------------------------------------
 # Catalog uniqueness & coverage

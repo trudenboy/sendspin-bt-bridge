@@ -120,7 +120,7 @@ def test_status_ws_iter_captures_version_before_initial_snapshot(monkeypatch):
     change frame (not heartbeat).
     """
     from routes.api_status import _build_status_payload as _real_build
-    from services import bridge_runtime_state as _brs
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state as _brs
 
     # Replace the snapshot builder with a spy that bumps the status
     # version synchronously (bypassing the 100 ms debounce — we go

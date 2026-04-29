@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from services.event_hooks import EventHookRegistry
-from services.internal_events import InternalEvent
+from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry
+from sendspin_bridge.services.diagnostics.internal_events import InternalEvent
 
 
 def _allow_public_example(monkeypatch):
@@ -37,7 +37,7 @@ def test_event_hook_registry_delivers_matching_events(monkeypatch):
         )
         return _Response()
 
-    monkeypatch.setattr("services.event_hooks.urllib.request.urlopen", _fake_urlopen)
+    monkeypatch.setattr("sendspin_bridge.services.diagnostics.event_hooks.urllib.request.urlopen", _fake_urlopen)
     hook = registry.register(url="https://example.com/hook", categories=["bridge_event"])
 
     count = registry.dispatch(
@@ -66,7 +66,7 @@ def test_event_hook_registry_records_delivery_failures(monkeypatch):
     def _fake_urlopen(_request, timeout=0):
         raise OSError(f"timeout after {timeout}s")
 
-    monkeypatch.setattr("services.event_hooks.urllib.request.urlopen", _fake_urlopen)
+    monkeypatch.setattr("sendspin_bridge.services.diagnostics.event_hooks.urllib.request.urlopen", _fake_urlopen)
     registry.register(url="https://example.com/hook", event_types=["device.event.recorded"], timeout_sec=1.5)
 
     count = registry.dispatch(

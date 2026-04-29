@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services import bt_commands as M
-from services.bt_commands import CommandResult
+from sendspin_bridge.services.bluetooth import bt_commands as M
+from sendspin_bridge.services.bluetooth.bt_commands import CommandResult
 
 
 @pytest.fixture
@@ -145,11 +145,11 @@ def test_command_pair_acquires_op_lock(fake_client, monkeypatch):
     release_calls: list[bool] = []
 
     monkeypatch.setattr(
-        "services.bt_operation_lock.try_acquire_bt_operation",
+        "sendspin_bridge.services.bluetooth.bt_operation_lock.try_acquire_bt_operation",
         lambda: (acquire_calls.append(True), True)[1],
     )
     monkeypatch.setattr(
-        "services.bt_operation_lock.release_bt_operation",
+        "sendspin_bridge.services.bluetooth.bt_operation_lock.release_bt_operation",
         lambda: release_calls.append(True),
     )
     result = M.command_pair(fake_client)
@@ -160,7 +160,7 @@ def test_command_pair_acquires_op_lock(fake_client, monkeypatch):
 
 
 def test_command_pair_returns_409_when_lock_held(fake_client, monkeypatch):
-    monkeypatch.setattr("services.bt_operation_lock.try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth.bt_operation_lock.try_acquire_bt_operation", lambda: False)
     result = M.command_pair(fake_client)
     assert not result.success
     assert result.code == 409
@@ -225,7 +225,7 @@ def test_command_set_bt_management_calls_client_method(fake_client):
 def test_command_claim_audio_pushes_playing_via_mpris(fake_client, monkeypatch):
     """Claim must reach the MprisPlayer via set_playback_status('Playing'),
     not bounce through reconnect — the old fallback interrupted playback."""
-    from services.mpris_player import get_registry
+    from sendspin_bridge.services.audio.mpris_player import get_registry
 
     scheduled: list[str] = []
 
@@ -260,7 +260,9 @@ def test_command_claim_audio_pushes_playing_via_mpris(fake_client, monkeypatch):
 def test_command_claim_audio_returns_409_when_speaker_not_connected(fake_client, monkeypatch):
     """When no MprisPlayer is registered for the MAC the speaker isn't
     reachable — fail loud (409) instead of falling through to reconnect."""
-    monkeypatch.setattr("services.mpris_player.get_registry", lambda: SimpleNamespace(get=lambda mac: None))
+    monkeypatch.setattr(
+        "sendspin_bridge.services.audio.mpris_player.get_registry", lambda: SimpleNamespace(get=lambda mac: None)
+    )
 
     result = M.command_claim_audio(fake_client)
 
@@ -300,7 +302,7 @@ def test_apply_device_config_change_rejects_unknown_player(monkeypatch):
 
 
 def test_schedule_coroutine_no_loop_returns_503(monkeypatch):
-    import services.bt_commands as bt
+    import sendspin_bridge.services.bluetooth.bt_commands as bt
     import state as live_state
 
     monkeypatch.setattr(live_state, "get_main_loop", lambda: None)

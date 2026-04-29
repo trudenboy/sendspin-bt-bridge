@@ -38,8 +38,8 @@ ha_bp = Blueprint("ha_integration", __name__)
 def _build_projection_for_request():
     """Build a fresh ``HAStateProjection`` from the live bridge snapshot."""
     from config import ensure_bridge_name, get_runtime_version, load_config
-    from services.ha_state_projector import project_snapshot
-    from services.status_snapshot import build_bridge_snapshot
+    from sendspin_bridge.services.ha.ha_state_projector import project_snapshot
+    from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
     from state import get_clients_snapshot
 
     config = load_config()
@@ -180,7 +180,7 @@ def api_ha_mqtt_probe():
     after a save) and a ``found`` flag.
     """
     try:
-        from services.ha_addon import get_mqtt_addon_credentials
+        from sendspin_bridge.services.ha.ha_addon import get_mqtt_addon_credentials
 
         creds = get_mqtt_addon_credentials()
     except Exception as exc:  # pragma: no cover
@@ -222,7 +222,7 @@ def api_ha_mosquitto_status():
     the UI hides the banner.
     """
     try:
-        from services.ha_addon import get_mosquitto_addon_state
+        from sendspin_bridge.services.ha.ha_addon import get_mosquitto_addon_state
 
         return jsonify(get_mosquitto_addon_state())
     except Exception as exc:  # pragma: no cover
@@ -234,7 +234,7 @@ def api_ha_mosquitto_status():
         # actionable hint and just sees a silent missing banner.
         import os as _os
 
-        from services.ha_addon import MOSQUITTO_ADDON_DEEP_LINK, MOSQUITTO_ADDON_SLUG
+        from sendspin_bridge.services.ha.ha_addon import MOSQUITTO_ADDON_DEEP_LINK, MOSQUITTO_ADDON_SLUG
 
         return jsonify(
             {
@@ -257,8 +257,8 @@ def api_ha_mosquitto_status():
 def api_ha_mqtt_status():
     """Read-only snapshot of the MQTT publisher state for the UI."""
     try:
-        from services.ha_integration_lifecycle import get_default_lifecycle
-        from services.ha_mqtt_publisher import publisher_status
+        from sendspin_bridge.services.ha.ha_integration_lifecycle import get_default_lifecycle
+        from sendspin_bridge.services.ha.ha_mqtt_publisher import publisher_status
 
         lifecycle = get_default_lifecycle()
         publisher = lifecycle.publisher if lifecycle is not None else None
@@ -300,7 +300,7 @@ def api_ha_command_device():
     if not command:
         return jsonify({"success": False, "error": "command required"}), 400
 
-    from services.ha_command_dispatcher import get_default_dispatcher
+    from sendspin_bridge.services.ha.ha_command_dispatcher import get_default_dispatcher
 
     result = get_default_dispatcher().dispatch_device(player_id, command, value)
     return jsonify(result.to_dict()), result.code if not result.success else 200
@@ -315,7 +315,7 @@ def api_ha_command_bridge():
     if not command:
         return jsonify({"success": False, "error": "command required"}), 400
 
-    from services.ha_command_dispatcher import get_default_dispatcher
+    from sendspin_bridge.services.ha.ha_command_dispatcher import get_default_dispatcher
 
     result = get_default_dispatcher().dispatch_bridge(command, value)
     return jsonify(result.to_dict()), result.code if not result.success else 200
@@ -324,7 +324,7 @@ def api_ha_command_bridge():
 @ha_bp.route("/api/ha/mdns/status", methods=["GET"])
 def api_ha_mdns_status():
     try:
-        from services.bridge_mdns import get_default_advertiser
+        from sendspin_bridge.services.ipc.bridge_mdns import get_default_advertiser
 
         adv = get_default_advertiser()
         if adv is None or adv.advertisement is None:

@@ -18,7 +18,7 @@ from __future__ import annotations
 import struct
 from unittest.mock import MagicMock
 
-from services import bt_rssi_mgmt
+from sendspin_bridge.services.bluetooth import bt_rssi_mgmt
 
 # ── public API: read_conn_info → int | None ─────────────────────────
 

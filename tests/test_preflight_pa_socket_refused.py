@@ -11,7 +11,7 @@ implementation swallows connect errors and returns "not available").
 
 from __future__ import annotations
 
-from services.preflight_status import collect_preflight_status
+from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 
 
 def _runtime_version_stub() -> str:

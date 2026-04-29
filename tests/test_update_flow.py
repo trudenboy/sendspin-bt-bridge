@@ -28,7 +28,7 @@ def config_client(tmp_path, monkeypatch):
 
 
 def test_start_upgrade_job_passes_release_tag(monkeypatch):
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     calls = []
 
@@ -52,7 +52,7 @@ def test_start_upgrade_job_passes_release_tag(monkeypatch):
 
 
 def test_start_upgrade_job_returns_running_state(monkeypatch):
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     def fake_run(cmd, capture_output, text, timeout):
         assert cmd[:2] == ["systemctl", "show"]
@@ -72,14 +72,14 @@ def test_start_upgrade_job_returns_running_state(monkeypatch):
 
 
 def test_parse_version_orders_beta_rc_and_stable():
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     assert update_checker._parse_version("v2.41.0-beta.2") < update_checker._parse_version("v2.41.0-rc.1")
     assert update_checker._parse_version("v2.41.0-rc.1") < update_checker._parse_version("v2.41.0")
 
 
 def test_select_latest_release_filters_by_channel():
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     releases = [
         {"tag_name": "v2.41.0-beta.2", "prerelease": True, "draft": False},
@@ -94,7 +94,7 @@ def test_select_latest_release_filters_by_channel():
 
 
 def test_select_latest_tag_filters_by_channel():
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     tags = [
         {"name": "v2.41.0-beta.2"},
@@ -109,7 +109,7 @@ def test_select_latest_tag_filters_by_channel():
 
 
 def test_check_latest_version_uses_releases_for_stable(monkeypatch):
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     update_checker = importlib.reload(update_checker)
 
@@ -146,7 +146,7 @@ def test_check_latest_version_uses_releases_for_stable(monkeypatch):
 
 
 def test_check_latest_version_uses_tags_for_prerelease(monkeypatch):
-    import services.update_checker as update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
 
     update_checker = importlib.reload(update_checker)
 

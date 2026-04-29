@@ -200,7 +200,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 2. Patch services.bluetooth
     # ------------------------------------------------------------------
-    import services.bluetooth as _sbt
+    import sendspin_bridge.services.bluetooth as _sbt
 
     _original_bt_remove_device = _sbt.bt_remove_device
     _original_list_bt_adapters = _sbt.list_bt_adapters
@@ -233,7 +233,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 3. Patch services.pulse (sync wrappers used by routes/api.py)
     # ------------------------------------------------------------------
-    import services.pulse as _sp
+    import sendspin_bridge.services.audio.pulse as _sp
 
     def _demo_status_for(mac: str) -> dict[str, Any]:
         status = DEMO_DEVICE_STATUS.get(mac)
@@ -927,7 +927,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 9. Patch MA client (discover_ma_groups)
     # ------------------------------------------------------------------
-    import services.ma_client as _ma_client
+    import sendspin_bridge.services.music_assistant.ma_client as _ma_client
 
     async def _demo_discover_ma_groups(
         ma_url: str,
@@ -953,7 +953,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 10. Patch MA monitor (start_monitor, send_queue_cmd)
     # ------------------------------------------------------------------
-    import services.ma_monitor as _ma_monitor
+    import sendspin_bridge.services.music_assistant.ma_monitor as _ma_monitor
 
     def _seconds_value_to_ms(value: object, default: int | None) -> int | None:
         if value is None:
@@ -1098,8 +1098,8 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 11. Patch MA discovery (validate_ma_url, discover_ma_servers)
     # ------------------------------------------------------------------
-    import services.ma_discovery as _ma_disc
-    import services.update_checker as _update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as _update_checker
+    import sendspin_bridge.services.music_assistant.ma_discovery as _ma_disc
 
     async def _demo_validate_ma_url(url: str) -> dict | None:
         return dict(DEMO_MA_SERVER_INFO)

@@ -40,15 +40,15 @@ _STUB_MODULES = [
     "dbus.mainloop.glib",
     "gi",
     "gi.repository",
-    "services.bridge_daemon",
-    "services.pulse",
+    "sendspin_bridge.services.ipc.bridge_daemon",
+    "sendspin_bridge.services.audio.pulse",
 ]
 
 for _mod in _STUB_MODULES:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
-from services.daemon_process import (  # noqa: E402
+from sendspin_bridge.services.ipc.daemon_process import (  # noqa: E402
     _VALID_LOG_LEVELS,
     _emit_error,
     _emit_status,
@@ -56,13 +56,13 @@ from services.daemon_process import (  # noqa: E402
     _patch_sendspin_audio_player_runtime_guards,
     _read_commands,
 )
-from services.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _reset_last_status():
     """Clear the module-level dedup cache between tests."""
-    import services.daemon_process as dp
+    import sendspin_bridge.services.ipc.daemon_process as dp
 
     dp._last_status_json = ""
     yield

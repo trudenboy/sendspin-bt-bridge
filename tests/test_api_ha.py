@@ -85,7 +85,7 @@ def test_ha_state_handles_internal_errors_gracefully(client, monkeypatch):
 
 
 def test_mqtt_probe_returns_not_found_when_no_supervisor(client, monkeypatch):
-    monkeypatch.setattr("services.ha_addon.get_mqtt_addon_credentials", lambda: None)
+    monkeypatch.setattr("sendspin_bridge.services.ha.ha_addon.get_mqtt_addon_credentials", lambda: None)
     resp = client.get("/api/ha/mqtt/probe")
     assert resp.status_code == 200
     body = resp.get_json()
@@ -95,7 +95,7 @@ def test_mqtt_probe_returns_not_found_when_no_supervisor(client, monkeypatch):
 
 def test_mqtt_probe_masks_password(client, monkeypatch):
     monkeypatch.setattr(
-        "services.ha_addon.get_mqtt_addon_credentials",
+        "sendspin_bridge.services.ha.ha_addon.get_mqtt_addon_credentials",
         lambda: {
             "host": "core-mosquitto",
             "port": 1883,
@@ -137,7 +137,7 @@ def test_mosquitto_status_outside_ha_addon(client, monkeypatch):
 def test_mosquitto_status_inside_ha_addon_not_installed(client, monkeypatch):
     """Supervisor returns no info → installed=False, install_url present."""
     monkeypatch.setenv("SUPERVISOR_TOKEN", "stub-token")
-    monkeypatch.setattr("services.ha_addon.get_supervisor_addon_info", lambda *a, **kw: None)
+    monkeypatch.setattr("sendspin_bridge.services.ha.ha_addon.get_supervisor_addon_info", lambda *a, **kw: None)
     resp = client.get("/api/ha/mosquitto/status")
     body = resp.get_json()
     assert body["available"] is True
@@ -149,7 +149,7 @@ def test_mosquitto_status_inside_ha_addon_not_installed(client, monkeypatch):
 def test_mosquitto_status_inside_ha_addon_started(client, monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "stub-token")
     monkeypatch.setattr(
-        "services.ha_addon.get_supervisor_addon_info",
+        "sendspin_bridge.services.ha.ha_addon.get_supervisor_addon_info",
         lambda *a, **kw: {"slug": "core_mosquitto", "state": "started", "version": "6.4.1"},
     )
     resp = client.get("/api/ha/mosquitto/status")
@@ -162,7 +162,7 @@ def test_mosquitto_status_inside_ha_addon_started(client, monkeypatch):
 def test_mosquitto_status_inside_ha_addon_stopped(client, monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "stub-token")
     monkeypatch.setattr(
-        "services.ha_addon.get_supervisor_addon_info",
+        "sendspin_bridge.services.ha.ha_addon.get_supervisor_addon_info",
         lambda *a, **kw: {"slug": "core_mosquitto", "state": "stopped", "version": "6.4.1"},
     )
     resp = client.get("/api/ha/mosquitto/status")
@@ -179,7 +179,7 @@ def test_mosquitto_status_inside_ha_addon_stopped(client, monkeypatch):
 
 def test_mqtt_status_when_no_publisher(client, monkeypatch):
     """When the lifecycle holder is uninitialised, status is "idle"."""
-    monkeypatch.setattr("services.ha_integration_lifecycle.get_default_lifecycle", lambda: None)
+    monkeypatch.setattr("sendspin_bridge.services.ha.ha_integration_lifecycle.get_default_lifecycle", lambda: None)
     resp = client.get("/api/ha/mqtt/status")
     assert resp.status_code == 200
     body = resp.get_json()
@@ -193,7 +193,7 @@ def test_mqtt_status_when_no_publisher(client, monkeypatch):
 
 
 def test_mdns_status_when_not_advertised(client, monkeypatch):
-    monkeypatch.setattr("services.bridge_mdns.get_default_advertiser", lambda: None)
+    monkeypatch.setattr("sendspin_bridge.services.ipc.bridge_mdns.get_default_advertiser", lambda: None)
     resp = client.get("/api/ha/mdns/status")
     assert resp.status_code == 200
     body = resp.get_json()
@@ -201,7 +201,7 @@ def test_mdns_status_when_not_advertised(client, monkeypatch):
 
 
 def test_mdns_status_when_advertised(client, monkeypatch):
-    from services.bridge_mdns import BridgeMdnsAdvertiser, MdnsAdvertisement
+    from sendspin_bridge.services.ipc.bridge_mdns import BridgeMdnsAdvertiser, MdnsAdvertisement
 
     adv = BridgeMdnsAdvertiser(bridge_name="X", version="2.65.0", web_port=8080, ingress_active=False)
     adv._advertisement = MdnsAdvertisement(
@@ -210,7 +210,7 @@ def test_mdns_status_when_advertised(client, monkeypatch):
         port=8080,
         txt_records={"version": "2.65.0", "auth": "bearer"},
     )
-    monkeypatch.setattr("services.bridge_mdns.get_default_advertiser", lambda: adv)
+    monkeypatch.setattr("sendspin_bridge.services.ipc.bridge_mdns.get_default_advertiser", lambda: adv)
     resp = client.get("/api/ha/mdns/status")
     body = resp.get_json()
     assert body["advertised"] is True

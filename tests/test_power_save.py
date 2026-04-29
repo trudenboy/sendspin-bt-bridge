@@ -42,7 +42,9 @@ class TestEnterPowerSave:
     @pytest.mark.asyncio
     async def test_enter_power_save_suspends_sink(self):
         client = _make_client()
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock, return_value=True) as mock_suspend:
+        with patch(
+            "sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock, return_value=True
+        ) as mock_suspend:
             await client._enter_power_save()
             mock_suspend.assert_awaited_once_with("bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink", True)
             assert client.status["bt_power_save"] is True
@@ -51,7 +53,7 @@ class TestEnterPowerSave:
     async def test_enter_power_save_noop_if_already_in_power_save(self):
         client = _make_client()
         client.status.update({"bt_power_save": True})
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             await client._enter_power_save()
             mock_suspend.assert_not_awaited()
 
@@ -59,7 +61,7 @@ class TestEnterPowerSave:
     async def test_enter_power_save_noop_if_no_sink(self):
         client = _make_client()
         client.bluetooth_sink_name = None
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             await client._enter_power_save()
             mock_suspend.assert_not_awaited()
             assert client.status["bt_power_save"] is False
@@ -67,7 +69,7 @@ class TestEnterPowerSave:
     @pytest.mark.asyncio
     async def test_enter_power_save_failure_does_not_set_flag(self):
         client = _make_client()
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock, return_value=False):
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock, return_value=False):
             await client._enter_power_save()
             assert client.status["bt_power_save"] is False
 
@@ -79,7 +81,9 @@ class TestExitPowerSave:
     async def test_exit_power_save_resumes_sink(self):
         client = _make_client()
         client.status.update({"bt_power_save": True})
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock, return_value=True) as mock_suspend:
+        with patch(
+            "sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock, return_value=True
+        ) as mock_suspend:
             await client._exit_power_save()
             mock_suspend.assert_awaited_once_with("bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink", False)
             assert client.status["bt_power_save"] is False
@@ -87,7 +91,7 @@ class TestExitPowerSave:
     @pytest.mark.asyncio
     async def test_exit_power_save_noop_if_not_in_power_save(self):
         client = _make_client()
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             await client._exit_power_save()
             mock_suspend.assert_not_awaited()
 
@@ -106,7 +110,9 @@ class TestPowerSaveTimer:
     @pytest.mark.asyncio
     async def test_timer_schedules_suspend_after_delay(self):
         client = _make_client(power_save_delay=0)
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock, return_value=True) as mock_suspend:
+        with patch(
+            "sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock, return_value=True
+        ) as mock_suspend:
             client._start_power_save_timer()
             await asyncio.sleep(0.1)
             mock_suspend.assert_awaited_once_with("bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink", True)
@@ -115,7 +121,7 @@ class TestPowerSaveTimer:
     @pytest.mark.asyncio
     async def test_timer_cancel_prevents_suspend(self):
         client = _make_client(power_save_delay=1)
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             client._start_power_save_timer()
             client._cancel_power_save_timer()
             await asyncio.sleep(0.1)
@@ -125,7 +131,7 @@ class TestPowerSaveTimer:
     async def test_timer_skips_if_playing(self):
         client = _make_client(power_save_delay=0)
         client.status.update({"playing": True})
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             client._start_power_save_timer()
             await asyncio.sleep(0.1)
             mock_suspend.assert_not_awaited()
@@ -134,7 +140,7 @@ class TestPowerSaveTimer:
     async def test_timer_skips_if_standby(self):
         client = _make_client(power_save_delay=0)
         client.status.update({"bt_standby": True})
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             client._start_power_save_timer()
             await asyncio.sleep(0.1)
             mock_suspend.assert_not_awaited()
@@ -143,7 +149,7 @@ class TestPowerSaveTimer:
     async def test_timer_skips_if_mode_changed(self):
         client = _make_client(power_save_delay=0)
         client.idle_mode = "default"
-        with patch("services.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
+        with patch("sendspin_bridge.services.audio.pulse.asuspend_sink", new_callable=AsyncMock) as mock_suspend:
             client._start_power_save_timer()
             await asyncio.sleep(0.1)
             mock_suspend.assert_not_awaited()

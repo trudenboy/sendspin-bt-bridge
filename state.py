@@ -10,30 +10,35 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
-from services import adapter_names as _adapter_names
-from services import async_job_state as _async_job_state
-from services import bridge_runtime_state as _bridge_runtime_state
-from services import ma_runtime_state as _ma_runtime_state
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth import adapter_names as _adapter_names
+from sendspin_bridge.services.bluetooth.device_registry import (
     get_active_clients_snapshot as _get_registry_active_clients_snapshot,
 )
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth.device_registry import (
     get_device_registry_snapshot as _get_device_registry_snapshot,
 )
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth.device_registry import (
     get_disabled_devices_snapshot as _get_registry_disabled_devices_snapshot,
 )
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth.device_registry import (
     register_registry_listener as _register_registry_listener,
 )
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth.device_registry import (
     set_active_clients as _set_registry_active_clients,
 )
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth.device_registry import (
     set_disabled_devices as _set_registry_disabled_devices,
 )
-from services.event_hooks import dispatch_internal_event_to_hooks
-from services.internal_events import DeviceEventType, InternalEvent, InternalEventPublisher, normalize_device_event
+from sendspin_bridge.services.diagnostics.event_hooks import dispatch_internal_event_to_hooks
+from sendspin_bridge.services.diagnostics.internal_events import (
+    DeviceEventType,
+    InternalEvent,
+    InternalEventPublisher,
+    normalize_device_event,
+)
+from sendspin_bridge.services.lifecycle import async_job_state as _async_job_state
+from sendspin_bridge.services.lifecycle import bridge_runtime_state as _bridge_runtime_state
+from sendspin_bridge.services.music_assistant import ma_runtime_state as _ma_runtime_state
 
 if TYPE_CHECKING:
     import asyncio
@@ -111,7 +116,7 @@ def _detect_runtime_type() -> str:
 def get_bridge_system_info() -> dict:
     """Return hostname, IP, uptime and version — always available."""
     from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, get_runtime_version
-    from services.ipc_protocol import IPC_PROTOCOL_VERSION
+    from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     uptime = datetime.now(tz=timezone.utc) - bridge_start_time
     from config import get_local_ip
@@ -280,7 +285,7 @@ def _build_device_event_context(device_id: str) -> dict[str, Any]:
     if client is None:
         return {}
     try:
-        from services.status_snapshot import build_device_snapshot
+        from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot
 
         snapshot = build_device_snapshot(client)
     except Exception as exc:

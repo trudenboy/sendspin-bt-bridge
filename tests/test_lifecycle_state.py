@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import state
-from services.lifecycle_state import BridgeLifecycleState
+from sendspin_bridge.services.lifecycle.lifecycle_state import BridgeLifecycleState
 
 
 @pytest.fixture(autouse=True)

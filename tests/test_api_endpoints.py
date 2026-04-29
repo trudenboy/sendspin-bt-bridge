@@ -820,7 +820,7 @@ def test_run_standalone_pair_retries_with_next_popular_pin_after_rejection(monke
     must re-invoke the inner pair with the next PIN from
     ``COMMON_BT_PAIR_PINS`` rather than surfacing the first failure."""
     import routes.api_bt as api_bt_mod
-    from services.bluetooth import COMMON_BT_PAIR_PINS
+    from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS
 
     first_pin, second_pin = COMMON_BT_PAIR_PINS[0], COMMON_BT_PAIR_PINS[1]
     fake_inner, calls = _make_pin_inner_stub(
@@ -885,7 +885,7 @@ def test_run_standalone_pair_exhausts_all_pins_and_logs_summary(monkeypatch, cap
     import logging
 
     import routes.api_bt as api_bt_mod
-    from services.bluetooth import COMMON_BT_PAIR_PINS
+    from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS
 
     outcomes = {
         pin: {
@@ -917,7 +917,7 @@ def test_run_standalone_pair_succeeds_on_first_pin_without_extra_attempts(monkey
     """SSP pairing (no PIN prompt) must finish with exactly one inner
     invocation — no unnecessary retries eating a scan window."""
     import routes.api_bt as api_bt_mod
-    from services.bluetooth import COMMON_BT_PAIR_PINS
+    from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS
 
     fake_inner, calls = _make_pin_inner_stub({})  # default stub → success, no pin
     finish_job = MagicMock()
@@ -1120,7 +1120,7 @@ def test_set_volume_with_invalid_player_names(client):
 
 def test_set_volume_uses_registry_snapshot_for_player_lookup(client, monkeypatch):
     import routes.api as api_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     updates = []
     fake_client = SimpleNamespace(
@@ -1244,7 +1244,7 @@ def test_read_log_lines_docker_uses_root_logger_ring_buffer(monkeypatch):
 
 def test_api_group_pause_uses_registry_snapshot_for_group_lookup(client, monkeypatch):
     import routes.api as api_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     sent = []
 
@@ -1292,7 +1292,7 @@ def test_api_group_pause_uses_registry_snapshot_for_group_lookup(client, monkeyp
 
 def test_api_pause_uses_registry_snapshot_for_player_lookup(client, monkeypatch):
     import routes.api as api_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     sent = []
 
@@ -1338,7 +1338,7 @@ def test_api_pause_uses_registry_snapshot_for_player_lookup(client, monkeypatch)
 
 def test_api_pause_does_not_require_future_result(client, monkeypatch):
     import routes.api as api_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     sent = []
 
@@ -1629,7 +1629,7 @@ def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatc
 def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
     import routes.api_config as api_config_mod
     from config import CONFIG_SCHEMA_VERSION
-    from services.ipc_protocol import IPC_PROTOCOL_VERSION
+    from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     monkeypatch.setattr(
         api_config_mod,
@@ -1684,7 +1684,7 @@ def test_api_config_get_reports_fixed_ha_ingress_web_port(client, monkeypatch):
 
 def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(
@@ -1722,7 +1722,7 @@ def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path
 
 def test_api_config_get_uses_snapshot_ip_address_for_listen_host_fallback(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(
@@ -2099,7 +2099,7 @@ def test_api_ha_areas_returns_bridge_suggestions_and_adapter_matches(client, mon
 
 def test_api_ha_areas_returns_helper_error(client, monkeypatch):
     import routes.api_config as api_config_mod
-    from services.ha_core_api import HaCoreApiError
+    from sendspin_bridge.services.ha.ha_core_api import HaCoreApiError
 
     monkeypatch.setattr(
         api_config_mod,
@@ -2166,7 +2166,7 @@ def test_api_ma_discover_reports_invalid_saved_token(client, monkeypatch):
     import routes.api_ma as api_ma
     import routes.ma_auth as ma_auth
     import routes.ma_groups as ma_groups
-    import services.ma_discovery as ma_discovery
+    import sendspin_bridge.services.music_assistant.ma_discovery as ma_discovery
 
     class _ImmediateThread:
         def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
@@ -2246,7 +2246,7 @@ def test_api_ma_discover_reports_connected_runtime_when_saved_token_validation_f
     import routes.api_ma as api_ma
     import routes.ma_auth as ma_auth
     import routes.ma_groups as ma_groups
-    import services.ma_discovery as ma_discovery
+    import sendspin_bridge.services.music_assistant.ma_discovery as ma_discovery
 
     class _ImmediateThread:
         def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
@@ -2371,7 +2371,7 @@ def test_api_config_post_rejects_duplicate_effective_listen_ports(client):
 
 def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_path, monkeypatch):
     import routes.api_config as api_config_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(
@@ -2748,7 +2748,7 @@ def test_config_upload_preserves_ma_token_metadata(client, tmp_path, monkeypatch
 
 def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch):
     import routes.api_config as api_config_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     sent = []
 
@@ -2798,7 +2798,7 @@ def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch)
 
 def test_api_set_log_level_does_not_require_future_result(client, monkeypatch):
     import routes.api_config as api_config_mod
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     sent = []
 
@@ -3106,7 +3106,7 @@ def test_status_includes_ma_syncgroup_id(client, monkeypatch):
         is_running=lambda: True,
     )
 
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     monkeypatch.setattr(
         api_status,
@@ -3158,7 +3158,7 @@ def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
         is_running=lambda: True,
     )
 
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     monkeypatch.setattr(
         api_status,
@@ -3261,7 +3261,7 @@ def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
 
 def test_api_bridge_telemetry_includes_resource_and_hook_data(client, monkeypatch):
     import routes.api_status as api_status
-    from services.event_hooks import EventHookRegistry, get_event_hook_registry
+    from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry, get_event_hook_registry
 
     registry = get_event_hook_registry()
     registry.clear()
@@ -3301,7 +3301,7 @@ def test_api_bridge_telemetry_includes_resource_and_hook_data(client, monkeypatc
 
 
 def test_api_hooks_register_list_and_delete(client, monkeypatch):
-    from services.event_hooks import EventHookRegistry, get_event_hook_registry
+    from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry, get_event_hook_registry
 
     registry = get_event_hook_registry()
     registry.clear()
@@ -3344,7 +3344,7 @@ def test_api_hooks_reject_invalid_url(client):
 
 
 def test_api_hooks_reject_private_network_targets(client, monkeypatch):
-    from services.event_hooks import EventHookRegistry
+    from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry
 
     monkeypatch.setattr(
         EventHookRegistry,
@@ -3375,7 +3375,7 @@ def test_api_hooks_reject_non_numeric_timeout_values(client):
 
 def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     import routes.api_status as api_status
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     monkeypatch.setattr(
         api_status,
@@ -3644,9 +3644,9 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     import routes.api_status as api_status
     import state
     from config import CONFIG_SCHEMA_VERSION
-    from services.device_registry import DeviceRegistrySnapshot
-    from services.event_hooks import EventHookRegistry, get_event_hook_registry
-    from services.ipc_protocol import IPC_PROTOCOL_VERSION
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry, get_event_hook_registry
+    from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     fake_client = SimpleNamespace(
         player_name="Kitchen",
@@ -3816,7 +3816,7 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
 
     import routes.api_status as api_status
     import state
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     fake_client = SimpleNamespace(
         player_name="Kitchen",
@@ -3870,7 +3870,7 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
 def test_device_enabled_toggle(client, tmp_path, monkeypatch):
     """POST /api/device/enabled returns success with restart_required."""
     import routes.api_bt as api_bt_mod
-    import services.bluetooth as _bt_mod
+    import sendspin_bridge.services.bluetooth as _bt_mod
 
     # Seed config with a device and patch _CONFIG_FILE for persist
     cfg = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Test", "enabled": True}]}
@@ -3962,7 +3962,7 @@ def test_ha_auth_page_accepts_empty_url(client):
 
 def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
     import state
-    from services.ma_artwork import sign_artwork_url
+    from sendspin_bridge.services.music_assistant.ma_artwork import sign_artwork_url
 
     class _FakeHeaders:
         def get(self, key, default=None):
@@ -4014,7 +4014,7 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
 
 def test_ma_artwork_proxy_rejects_unsupported_scheme(client):
     import state
-    from services.ma_artwork import sign_artwork_url
+    from sendspin_bridge.services.music_assistant.ma_artwork import sign_artwork_url
 
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
@@ -4044,7 +4044,7 @@ def test_ma_artwork_proxy_rejects_unsigned_external_provider_artwork(client):
 def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_token(client):
     """External (non-MA-origin) artwork URLs with valid sig are proxied without Bearer token."""
     import state
-    from services.ma_artwork import sign_artwork_url
+    from sendspin_bridge.services.music_assistant.ma_artwork import sign_artwork_url
 
     raw_url = "https://avatars.yandex.net/get-music-content/49876/ab027f9c.a.37173-2/1000x1000"
     state.set_ma_api_credentials("http://ma:8095", "token123")
@@ -4079,7 +4079,7 @@ def test_ma_artwork_proxy_rejects_invalid_signature(client):
 
 def test_ma_host_from_sendspin_clients_uses_registry_snapshot(monkeypatch):
     import routes.api_ma as api_ma
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     snapshot = DeviceRegistrySnapshot(
         active_clients=[
@@ -4095,9 +4095,9 @@ def test_ma_host_from_sendspin_clients_uses_registry_snapshot(monkeypatch):
 def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_path, monkeypatch):
     import routes.api_ma as api_ma
     import routes.ma_groups as ma_groups
-    import services.ma_client as ma_client
+    import sendspin_bridge.services.music_assistant.ma_client as ma_client
     import state
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
     captured = {}
@@ -4165,9 +4165,9 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
 def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeypatch):
     import routes.api_ma as api_ma
     import routes.ma_groups as ma_groups
-    import services.ma_client as ma_client
+    import sendspin_bridge.services.music_assistant.ma_client as ma_client
     import state
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
     captured = {}
@@ -4246,7 +4246,7 @@ def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeyp
 def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
     import routes.api_ma as api_ma
     import state
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     state.clear_ma_now_playing()
     state.set_ma_groups({}, [])
@@ -4282,7 +4282,7 @@ def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
 def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
     import routes.api_ma as api_ma
     import routes.ma_playback as ma_playback
-    import services.ma_monitor as ma_monitor
+    import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import state
 
     class _FakeMonitor:
@@ -4375,7 +4375,7 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
 def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypatch):
     import routes.api_ma as api_ma
     import routes.ma_playback as ma_playback
-    import services.ma_monitor as ma_monitor
+    import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import state
 
     class _FakeMonitor:
@@ -4472,7 +4472,7 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
 def test_ma_queue_cmd_refreshes_actual_accepted_solo_queue(client, monkeypatch):
     import routes.api_ma as api_ma
     import routes.ma_playback as ma_playback
-    import services.ma_monitor as ma_monitor
+    import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import state
 
     class _FakeMonitor:
@@ -4636,7 +4636,7 @@ def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeyp
     import routes.api_ma as api_ma
     import routes.ma_playback as ma_playback
     import state
-    from services.device_registry import DeviceRegistrySnapshot
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     fake_client = SimpleNamespace(
         player_id="sendspin-yandex-mini-2---lxc",
@@ -4686,7 +4686,7 @@ def test_resolve_target_queue_keeps_legacy_universal_queue_for_uuid_player_id():
 
 def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):
     import routes.ma_playback as ma_playback
-    import services.ma_monitor as ma_monitor
+    import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import state
 
     class _FakeMonitor:

@@ -18,9 +18,8 @@ from flask import Blueprint, jsonify, request
 
 from config import CONFIG_FILE, config_lock, load_config
 from routes._helpers import get_client_or_error, validate_adapter, validate_mac
-from services import persist_device_enabled as _persist_device_enabled
-from services.async_job_state import create_scan_job, finish_scan_job, get_scan_job, is_scan_running
-from services.bluetooth import (
+from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
+from sendspin_bridge.services.bluetooth import (
     _AUDIO_UUIDS,
     COMMON_BT_PAIR_PINS,
     build_hci_map,
@@ -29,10 +28,16 @@ from services.bluetooth import (
     is_pin_rejection,
     list_bt_adapters,
 )
-from services.bluetooth import bt_remove_device as _bt_remove_device
-from services.bluetooth import persist_device_released as _persist_device_released
-from services.pairing_agent import PairingAgent
-from services.pairing_quiesce import quiesce_adapter_peers
+from sendspin_bridge.services.bluetooth import bt_remove_device as _bt_remove_device
+from sendspin_bridge.services.bluetooth import persist_device_released as _persist_device_released
+from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
+from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
+from sendspin_bridge.services.lifecycle.async_job_state import (
+    create_scan_job,
+    finish_scan_job,
+    get_scan_job,
+    is_scan_running,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +96,13 @@ def _bt_operation_conflict_response():
 # on it without importing routes/api_bt.  These thin wrappers preserve
 # the existing call sites within this file.
 def _try_acquire_bt_operation() -> bool:
-    from services.bt_operation_lock import try_acquire_bt_operation
+    from sendspin_bridge.services.bluetooth.bt_operation_lock import try_acquire_bt_operation
 
     return try_acquire_bt_operation()
 
 
 def _release_bt_operation() -> None:
-    from services.bt_operation_lock import release_bt_operation
+    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation
 
     release_bt_operation()
 
@@ -127,8 +132,8 @@ def api_bt_claim(mac: str):
         return jsonify({"success": False, "error": "Invalid MAC address"}), 400
     mac = canonical_mac
 
-    from services.bridge_runtime_state import get_main_loop
-    from services.mpris_player import get_registry
+    from sendspin_bridge.services.audio.mpris_player import get_registry
+    from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
 
     player = get_registry().get(mac)
     if player is None:
@@ -1326,7 +1331,7 @@ def _annotate_scan_conflicts(devices: list[dict]) -> None:
         macs = [d["mac"] for d in devices if d.get("mac")]
         if not macs:
             return
-        from services.duplicate_device_check import find_scan_device_conflicts
+        from sendspin_bridge.services.bluetooth.duplicate_device_check import find_scan_device_conflicts
 
         conflicts = find_scan_device_conflicts(macs, ma_url, ma_token, bridge_name)
         for d in devices:

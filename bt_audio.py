@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from config import CONFIG_FILE, save_device_sink
 from config import config_lock as config_lock
-from services.pulse import (
+from sendspin_bridge.services.audio.pulse import (
     cycle_card_profile,
     get_sink_volume,
     list_cards,
@@ -325,7 +325,7 @@ def _warn_pipewire_session(known_sink_names: set[str]) -> None:
     so the operator doesn't have to dig through generic "sink not found" logs.
     """
     try:
-        from services.pulse import get_server_name
+        from sendspin_bridge.services.audio.pulse import get_server_name
 
         server = get_server_name()
     except Exception:

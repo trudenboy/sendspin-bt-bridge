@@ -10,8 +10,8 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from services.bridge_runtime_state import get_main_loop
-from services.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
 
 logger = logging.getLogger(__name__)
 

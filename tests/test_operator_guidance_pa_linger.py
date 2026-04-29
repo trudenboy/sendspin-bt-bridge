@@ -67,8 +67,8 @@ def _audio_unreachable_onboarding() -> dict:
 
 
 def test_pa_socket_refused_emits_linger_issue_in_standalone(monkeypatch):
-    import services.operator_guidance as module
-    from services.operator_guidance import build_operator_guidance_snapshot
+    import sendspin_bridge.services.diagnostics.operator_guidance as module
+    from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
 
     monkeypatch.setattr(module, "is_ha_addon_runtime", lambda: False)
 
@@ -93,8 +93,8 @@ def test_pa_socket_refused_emits_linger_issue_in_standalone(monkeypatch):
 
 
 def test_pa_socket_refused_suppressed_in_ha_addon(monkeypatch):
-    import services.operator_guidance as module
-    from services.operator_guidance import build_operator_guidance_snapshot
+    import sendspin_bridge.services.diagnostics.operator_guidance as module
+    from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
 
     monkeypatch.setattr(module, "is_ha_addon_runtime", lambda: True)
 
@@ -113,8 +113,8 @@ def test_pa_socket_refused_suppressed_in_ha_addon(monkeypatch):
 
 def test_audio_unavailable_without_reason_code_uses_generic_issue(monkeypatch):
     """Regression: pre-existing audio_unavailable behaviour unchanged."""
-    import services.operator_guidance as module
-    from services.operator_guidance import build_operator_guidance_snapshot
+    import sendspin_bridge.services.diagnostics.operator_guidance as module
+    from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
 
     monkeypatch.setattr(module, "is_ha_addon_runtime", lambda: False)
 

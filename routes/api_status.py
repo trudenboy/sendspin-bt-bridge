@@ -33,52 +33,52 @@ from config import (
 from config import (
     VERSION as _CONFIG_VERSION,
 )
-from services.bridge_runtime_state import (
+from sendspin_bridge.services.audio.pulse import get_server_name, list_cards, list_sinks
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.diagnostics.event_hooks import get_event_hook_registry
+from sendspin_bridge.services.diagnostics.log_analysis import summarize_issue_logs
+from sendspin_bridge.services.diagnostics.onboarding_assistant import build_onboarding_assistant_snapshot
+from sendspin_bridge.services.diagnostics.operator_check_runner import run_safe_check
+from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
+from sendspin_bridge.services.diagnostics.preflight_status import (
+    collect_preflight_status as _shared_collect_preflight_status,
+)
+from sendspin_bridge.services.diagnostics.preflight_status import (
+    collection_error_payload as _shared_collection_error_payload,
+)
+from sendspin_bridge.services.diagnostics.preflight_status import (
+    collection_status_payload as _shared_collection_status_payload,
+)
+from sendspin_bridge.services.diagnostics.recovery_assistant import build_recovery_assistant_snapshot
+from sendspin_bridge.services.diagnostics.recovery_timeline import (
+    build_recovery_timeline_csv,
+    build_recovery_timeline_excerpt,
+    build_recovery_timeline_text,
+)
+from sendspin_bridge.services.diagnostics.sendspin_compat import get_runtime_dependency_versions, query_audio_devices
+from sendspin_bridge.services.ipc.bridge_state_model import build_bridge_state_model
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import (
     get_bridge_uptime,
     get_bridge_uptime_seconds,
     get_bridge_uptime_text,
     get_status_version,
     wait_for_status_change,
 )
-from services.bridge_state_model import build_bridge_state_model
-from services.device_registry import get_device_registry_snapshot
-from services.event_hooks import get_event_hook_registry
-from services.ipc_protocol import IPC_PROTOCOL_VERSION
-from services.log_analysis import summarize_issue_logs
-from services.ma_runtime_state import (
-    get_ma_api_credentials,
-    get_ma_groups,
-    get_ma_now_playing_for_group,
-    get_ma_server_version,
-    is_ma_connected,
-)
-from services.onboarding_assistant import build_onboarding_assistant_snapshot
-from services.operator_check_runner import run_safe_check
-from services.operator_guidance import build_operator_guidance_snapshot
-from services.preflight_status import (
-    collect_preflight_status as _shared_collect_preflight_status,
-)
-from services.preflight_status import (
-    collection_error_payload as _shared_collection_error_payload,
-)
-from services.preflight_status import (
-    collection_status_payload as _shared_collection_status_payload,
-)
-from services.pulse import get_server_name, list_cards, list_sinks
-from services.recovery_assistant import build_recovery_assistant_snapshot
-from services.recovery_timeline import (
-    build_recovery_timeline_csv,
-    build_recovery_timeline_excerpt,
-    build_recovery_timeline_text,
-)
-from services.sendspin_compat import get_runtime_dependency_versions, query_audio_devices
-from services.status_snapshot import (
+from sendspin_bridge.services.lifecycle.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,
     build_device_snapshot_pairs,
     build_group_snapshots,
     build_mock_runtime_snapshot,
     build_startup_progress_snapshot,
+)
+from sendspin_bridge.services.music_assistant.ma_runtime_state import (
+    get_ma_api_credentials,
+    get_ma_groups,
+    get_ma_now_playing_for_group,
+    get_ma_server_version,
+    is_ma_connected,
 )
 
 UTC = timezone.utc
@@ -1868,7 +1868,7 @@ def api_preflight():
 @status_bp.route("/api/bugreport/proxy-available")
 def api_bugreport_proxy_available():
     """Check if the GitHub issue creation proxy is available."""
-    from services.github_issue_proxy import get_issue_proxy
+    from sendspin_bridge.services.diagnostics.github_issue_proxy import get_issue_proxy
 
     proxy = get_issue_proxy()
     return jsonify({"available": proxy.available})
@@ -1877,7 +1877,7 @@ def api_bugreport_proxy_available():
 @status_bp.route("/api/bugreport/submit", methods=["POST"])
 def api_bugreport_submit():
     """Create a GitHub issue via the App proxy (for users without GitHub accounts)."""
-    from services.github_issue_proxy import get_issue_proxy
+    from sendspin_bridge.services.diagnostics.github_issue_proxy import get_issue_proxy
 
     proxy = get_issue_proxy()
     if not proxy.available:

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.config_diff import ActionKind, ReconfigAction
-from services.reconfig_orchestrator import ReconfigOrchestrator
+from sendspin_bridge.services.infrastructure.config_diff import ActionKind, ReconfigAction
+from sendspin_bridge.services.lifecycle.reconfig_orchestrator import ReconfigOrchestrator
 
 
 class _FakeSnapshot:
@@ -67,7 +67,7 @@ def test_apply_hot_reports_timeout_as_error_not_applied(monkeypatch):
             return _ThrowingFuture(FutureTimeoutError("simulated timeout"))
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             _raising,
         )
 
@@ -194,7 +194,7 @@ def test_apply_hot_closes_coroutine_when_scheduling_fails(monkeypatch):
             raise RuntimeError("loop is closed")
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             _raise_runtime,
         )
 

@@ -5,8 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from services.ipc_protocol import IPC_PROTOCOL_VERSION, build_log_envelope
-from services.subprocess_ipc import SubprocessIpcService
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION, build_log_envelope
+from sendspin_bridge.services.ipc.subprocess_ipc import SubprocessIpcService
 
 
 class _FakeStdout:

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from services import auth_tokens as M
+from sendspin_bridge.services.diagnostics import auth_tokens as M
 
 
 @pytest.fixture(autouse=True)

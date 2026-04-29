@@ -6,9 +6,9 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from services.config_diff import ActionKind, ReconfigAction
-from services.device_activation import ActivationResult, DeviceActivationContext
-from services.reconfig_orchestrator import ReconfigOrchestrator
+from sendspin_bridge.services.bluetooth.device_activation import ActivationResult, DeviceActivationContext
+from sendspin_bridge.services.infrastructure.config_diff import ActionKind, ReconfigAction
+from sendspin_bridge.services.lifecycle.reconfig_orchestrator import ReconfigOrchestrator
 
 
 class _FakeSnapshot:
@@ -72,7 +72,7 @@ def _patch_registry(monkeypatch, initial: list | None = None) -> list:
 
     monkeypatch.setattr("state.set_clients", _set_clients)
     monkeypatch.setattr("state.get_clients_snapshot", _get_snapshot)
-    monkeypatch.setattr("services.device_registry.mutate_active_clients", _mutate)
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_registry.mutate_active_clients", _mutate)
     return live
 
 
@@ -110,7 +110,7 @@ def test_start_client_activates_via_factory_and_appends_to_registry(monkeypatch)
                 listen_port=8928,
             )
         )
-        monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", activate_mock)
         live = _patch_registry(monkeypatch)
 
         schedule_calls: list[object] = []
@@ -127,7 +127,7 @@ def test_start_client_activates_via_factory_and_appends_to_registry(monkeypatch)
             return fut
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             _fake_schedule,
         )
 
@@ -175,7 +175,7 @@ def test_start_client_handles_factory_exception(monkeypatch):
         def _raising(*args, **kwargs):
             raise RuntimeError("adapter missing")
 
-        monkeypatch.setattr("services.device_activation.activate_device", _raising)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", _raising)
         live = _patch_registry(monkeypatch)
 
         summary = orch.apply([_make_new_device_action()])
@@ -202,7 +202,7 @@ def test_start_client_idempotent_when_mac_already_active(monkeypatch):
             activation_context=_make_context(),
         )
         activate_mock = MagicMock()
-        monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", activate_mock)
 
         summary = orch.apply([_make_new_device_action()])
 
@@ -235,7 +235,7 @@ def test_start_client_reclaims_bt_management_for_live_disabled_client(monkeypatc
             activation_context=_make_context(),
         )
         activate_mock = MagicMock()
-        monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", activate_mock)
 
         summary = orch.apply([_make_new_device_action()])
 
@@ -262,7 +262,7 @@ def test_start_client_reports_error_when_reclaim_raises(monkeypatch):
             activation_context=_make_context(),
         )
         activate_mock = MagicMock()
-        monkeypatch.setattr("services.device_activation.activate_device", activate_mock)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", activate_mock)
 
         summary = orch.apply([_make_new_device_action()])
 
@@ -307,14 +307,14 @@ def test_start_client_accumulates_multiple_devices_in_single_apply(monkeypatch):
                 listen_port=8928 + index,
             )
 
-        monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", _fake_activate)
 
         class _StubFuture:
             def add_done_callback(self, cb):
                 pass
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             lambda coro, _loop: (coro.close(), _StubFuture())[1],
         )
 
@@ -362,7 +362,7 @@ def test_start_client_uses_context_default_player_name_when_device_has_none(monk
                 listen_port=8928,
             )
 
-        monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", _fake_activate)
         _patch_registry(monkeypatch)
 
         class _StubFuture:
@@ -370,7 +370,7 @@ def test_start_client_uses_context_default_player_name_when_device_has_none(monk
                 pass
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             lambda coro, _loop: (coro.close(), _StubFuture())[1],
         )
 
@@ -413,7 +413,7 @@ def test_start_client_uses_device_index_from_payload(monkeypatch):
                 listen_port=8928 + index,
             )
 
-        monkeypatch.setattr("services.device_activation.activate_device", _fake_activate)
+        monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", _fake_activate)
         _patch_registry(monkeypatch)
 
         class _StubFuture:
@@ -421,7 +421,7 @@ def test_start_client_uses_device_index_from_payload(monkeypatch):
                 pass
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             lambda coro, _loop: (coro.close(), _StubFuture())[1],
         )
 
@@ -449,7 +449,7 @@ def test_start_client_rollback_on_run_task_failure(monkeypatch):
             bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
         )
         monkeypatch.setattr(
-            "services.device_activation.activate_device",
+            "sendspin_bridge.services.bluetooth.device_activation.activate_device",
             lambda *a, **k: ActivationResult(
                 client=fake_client,
                 bt_manager=fake_client.bt_manager,
@@ -476,7 +476,7 @@ def test_start_client_rollback_on_run_task_failure(monkeypatch):
             return _StubFuture()
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             _fake_schedule,
         )
 
@@ -522,7 +522,7 @@ def test_start_client_atomic_mutate_drops_duplicate_when_peer_request_won_race(m
         # at apply() entry — ours was empty.  But by the time we hit the
         # mutator, the live registry already has the peer's client.
         monkeypatch.setattr(
-            "services.device_activation.activate_device",
+            "sendspin_bridge.services.bluetooth.device_activation.activate_device",
             lambda *a, **k: ActivationResult(
                 client=our_client,
                 bt_manager=our_client.bt_manager,
@@ -543,7 +543,7 @@ def test_start_client_atomic_mutate_drops_duplicate_when_peer_request_won_race(m
             return schedule_calls[-1]
 
         monkeypatch.setattr(
-            "services.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
             _fake_schedule,
         )
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services import bridge_mdns as M
+from sendspin_bridge.services.ipc import bridge_mdns as M
 
 
 def test_derive_host_id_is_stable():
@@ -32,7 +32,7 @@ async def test_start_registers_zeroconf_service_with_expected_txt():
     with (
         patch.object(M, "AsyncZeroconf", create=True)
         if False
-        else patch("services.bridge_mdns.socket.gethostbyname", return_value="192.168.1.10")
+        else patch("sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname", return_value="192.168.1.10")
     ):
         adv = M.BridgeMdnsAdvertiser(
             bridge_name="HAOS Bridge",

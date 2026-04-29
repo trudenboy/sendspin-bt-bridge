@@ -7,7 +7,7 @@ import socket
 
 import pytest
 
-from services.port_bind_probe import (
+from sendspin_bridge.services.infrastructure.port_bind_probe import (
     DEFAULT_MAX_ATTEMPTS,
     find_available_bind_port,
     is_port_available,

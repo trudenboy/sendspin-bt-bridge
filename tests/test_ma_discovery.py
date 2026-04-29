@@ -15,7 +15,7 @@ async def test_discover_no_zeroconf():
     import importlib
 
     with patch.dict("sys.modules", {"zeroconf": None, "zeroconf.asyncio": None}):
-        import services.ma_discovery as mod
+        import sendspin_bridge.services.music_assistant.ma_discovery as mod
 
         importlib.reload(mod)
         result = await mod.discover_ma_servers(timeout=0.1)
@@ -27,7 +27,7 @@ async def test_validate_ma_url_unreachable():
     """Returns None when MA is unreachable."""
     import importlib
 
-    import services.ma_discovery as mod
+    import sendspin_bridge.services.music_assistant.ma_discovery as mod
 
     mock_mac = MagicMock()
     mock_mac.get_server_info = AsyncMock(side_effect=ConnectionRefusedError("refused"))
@@ -43,7 +43,7 @@ async def test_validate_ma_url_success():
     """Returns server info when MA is reachable."""
     import importlib
 
-    import services.ma_discovery as mod
+    import sendspin_bridge.services.music_assistant.ma_discovery as mod
 
     mock_info = MagicMock()
     mock_info.server_version = "2.5.0"
@@ -72,7 +72,7 @@ async def test_validate_ma_url_success():
 @pytest.mark.asyncio
 async def test_login_url_normalization():
     """URL without scheme gets http:// prepended by _normalize_ma_url."""
-    from services.ma_client import _normalize_ma_url
+    from sendspin_bridge.services.music_assistant.ma_client import _normalize_ma_url
 
     assert await _normalize_ma_url("192.168.1.100:8095") == "http://192.168.1.100:8095"
     assert await _normalize_ma_url("ma.local") == "http://ma.local"
@@ -81,7 +81,7 @@ async def test_login_url_normalization():
 @pytest.mark.asyncio
 async def test_login_url_with_scheme_unchanged():
     """URL with scheme is not modified by _normalize_ma_url."""
-    from services.ma_client import _normalize_ma_url
+    from sendspin_bridge.services.music_assistant.ma_client import _normalize_ma_url
 
     assert await _normalize_ma_url("https://ma.local:8095") == "https://ma.local:8095"
     assert await _normalize_ma_url("http://192.168.1.1:8095") == "http://192.168.1.1:8095"

@@ -38,31 +38,40 @@ from config import (
     update_config,
     write_config_file,
 )
-from services import (
+from sendspin_bridge.services import (
     bt_remove_device as _bt_remove_device,
 )
-from services.adapter_names import refresh_adapter_name_cache
-from services.async_job_state import (
+from sendspin_bridge.services.bluetooth import _MAC_RE
+from sendspin_bridge.services.bluetooth.adapter_names import refresh_adapter_name_cache
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.diagnostics.log_analysis import summarize_issue_logs
+from sendspin_bridge.services.diagnostics.sendspin_compat import get_runtime_dependency_versions
+from sendspin_bridge.services.diagnostics.update_checker import (
+    _is_newer_version,
+    _start_upgrade_job,
+    channel_image_tag,
+    check_latest_version,
+)
+from sendspin_bridge.services.ha.ha_addon import (
+    detect_delivery_channel_from_slug,
+    get_self_addon_info,
+    get_self_delivery_channel,
+)
+from sendspin_bridge.services.ha.ha_core_api import HaCoreApiError, fetch_ha_area_catalog
+from sendspin_bridge.services.infrastructure.config_diff import diff_configs
+from sendspin_bridge.services.infrastructure.config_validation import validate_uploaded_config
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
+from sendspin_bridge.services.lifecycle.async_job_state import (
     create_async_job,
     finish_async_job,
     get_async_job,
     get_update_available,
     set_update_available,
 )
-from services.bluetooth import _MAC_RE
-from services.bridge_runtime_state import get_activation_context, get_main_loop
-from services.config_diff import diff_configs
-from services.config_validation import validate_uploaded_config
-from services.device_registry import get_device_registry_snapshot
-from services.ha_addon import detect_delivery_channel_from_slug, get_self_addon_info, get_self_delivery_channel
-from services.ha_core_api import HaCoreApiError, fetch_ha_area_catalog
-from services.ipc_protocol import IPC_PROTOCOL_VERSION
-from services.log_analysis import summarize_issue_logs
-from services.ma_client import fetch_all_players_snapshot
-from services.reconfig_orchestrator import ReconfigOrchestrator
-from services.sendspin_compat import get_runtime_dependency_versions
-from services.status_snapshot import build_device_snapshot
-from services.update_checker import _is_newer_version, _start_upgrade_job, channel_image_tag, check_latest_version
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_activation_context, get_main_loop
+from sendspin_bridge.services.lifecycle.reconfig_orchestrator import ReconfigOrchestrator
+from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot
+from sendspin_bridge.services.music_assistant.ma_client import fetch_all_players_snapshot
 
 logger = logging.getLogger(__name__)
 

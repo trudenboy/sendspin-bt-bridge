@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.device_registry import (
+from sendspin_bridge.services.bluetooth.device_registry import (
     build_device_registry_snapshot,
     get_device_registry_snapshot,
     set_active_clients,

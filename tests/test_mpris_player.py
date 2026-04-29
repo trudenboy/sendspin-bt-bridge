@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from services.mpris_player import MprisPlayer, _build_player_iface
+from sendspin_bridge.services.audio.mpris_player import MprisPlayer, _build_player_iface
 
 
 def _make_player(transport_cb=None, volume_cb=None):
@@ -268,7 +268,7 @@ def test_registry_register_then_get_returns_same_player():
     and by the MA monitor reverse hook to find the right MprisPlayer for a
     player_id arriving from MA.
     """
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     player = _make_player()
@@ -280,7 +280,7 @@ def test_registry_register_then_get_returns_same_player():
 def test_registry_get_normalizes_mac_case_and_separators():
     """Lookup must be MAC-case-insensitive and tolerate ``-`` vs ``:`` so the
     Claim Audio endpoint works regardless of how the operator typed the URL."""
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     player = _make_player()
@@ -292,7 +292,7 @@ def test_registry_get_normalizes_mac_case_and_separators():
 
 def test_registry_unregister_drops_player():
     """unregister(mac) removes the player; subsequent get() returns None."""
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     player = _make_player()
@@ -305,7 +305,7 @@ def test_registry_unregister_drops_player():
 def test_registry_unregister_unknown_mac_is_silent_noop():
     """unregister() must tolerate an already-removed MAC (race with disconnect
     transition firing twice or operator double-clicking Release)."""
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     reg.unregister("AA:BB:CC:DD:EE:FF")  # must not raise
@@ -315,7 +315,7 @@ def test_registry_get_by_player_id_lookup():
     """The MA monitor reverse hook starts with a player_id (MA-side identifier)
     and needs to find the corresponding MprisPlayer.  Reverse lookup is keyed
     on the player_id stored on the MprisPlayer instance."""
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     player = _make_player()  # player_id="aabbccddeeff"
@@ -329,7 +329,7 @@ def test_registry_register_replaces_existing_player_for_same_mac():
     """If a previous MprisPlayer is still registered (e.g. transition fired
     twice without intervening unregister), register() must replace cleanly —
     no AssertionError, no leak.  The previous player is silently dropped."""
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     first = _make_player()
@@ -375,7 +375,7 @@ async def test_build_player_iface_emit_wraps_metadata_values_in_variant():
 def test_registry_active_macs_lists_currently_registered():
     """The Claim Audio UI button needs to know which MACs have an active
     MprisPlayer (so it can hide the button for offline devices)."""
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock())
@@ -399,8 +399,8 @@ def test_resolver_returns_client_for_recently_active_mac():
     consults the resolver, the resolver sees WH's MAC was the most
     recent MediaPlayer1.PropertiesChanged source, and returns WH's client.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     wh_client = object()  # opaque sentinel — resolver doesn't introspect it
     eneby_client = object()
@@ -426,8 +426,8 @@ def test_resolver_falls_back_to_default_client_when_no_recent_source():
     device was streaming.  Default_client (first-registered, same as
     BlueZ's AVRCP dispatch target) is the correct fallback.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     default_client = SimpleNamespace(status={"audio_streaming": False})
     other_client = SimpleNamespace(status={"audio_streaming": True})
@@ -451,8 +451,8 @@ def test_resolver_returns_none_when_no_recent_and_multiple_streaming():
     the wrong device (the operator will press the button again or see
     no effect — clearer signal than the wrong speaker doing the wrong
     thing)."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     c1 = SimpleNamespace(status={"audio_streaming": True})
     c2 = SimpleNamespace(status={"audio_streaming": True})
@@ -471,8 +471,8 @@ def test_resolver_returns_none_when_no_recent_and_multiple_streaming():
 
 def test_resolver_returns_none_when_no_streaming_and_no_recent_source():
     """No activity AND no streaming clients → nothing to do.  Drop."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     quiet = SimpleNamespace(status={"audio_streaming": False})
     p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=quiet)
@@ -496,8 +496,8 @@ def test_resolver_falls_back_to_default_client_when_paused_and_no_tracker():
     device instead of being silently dropped — the pre-fix behaviour was
     to route to default_client unconditionally, and we must not regress it.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     eneby_client = SimpleNamespace(status={"audio_streaming": False})  # paused
     p = MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client)
@@ -517,8 +517,8 @@ def test_resolver_skips_recent_mac_with_no_registered_player():
     resolver must fall through to default_client rather than return None
     on the tracker miss.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     active = SimpleNamespace(status={"audio_streaming": True})
     p1 = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=active)
@@ -538,8 +538,8 @@ def test_resolver_skips_recent_mac_with_player_but_no_client():
     """A registered player whose client field is None (not yet set, or
     cleared during teardown) — must not return None just because the
     correlation hit landed on it; fall through to default_client."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
-    from services.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     orphan = MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=None)
     other_client = SimpleNamespace(status={"audio_streaming": True})
@@ -566,9 +566,9 @@ def test_resolver_uses_module_singletons_when_called_without_args():
     ``device_activation`` (registry on connect, tracker via
     MediaPlayer1 subscription).
     """
-    from services import avrcp_source_tracker as tracker_mod
-    from services import mpris_player as player_mod
-    from services.mpris_player import MprisPlayer, resolve_avrcp_source_client
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, resolve_avrcp_source_client
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
 
     # Patch BOTH module-level singletons so the call uses our test
     # instances instead of the real process-wide ones (which other tests
@@ -606,7 +606,7 @@ def test_registry_concurrent_register_and_iterate_does_not_raise():
     """
     import threading
 
-    from services.mpris_player import MprisRegistry
+    from sendspin_bridge.services.audio.mpris_player import MprisRegistry
 
     reg = MprisRegistry()
     seed = MprisPlayer("AA:BB:CC:DD:EE:00", "seed", AsyncMock(), AsyncMock())

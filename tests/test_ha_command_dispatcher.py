@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from services import ha_command_dispatcher as M
-from services.bt_commands import CommandResult
+from sendspin_bridge.services.bluetooth.bt_commands import CommandResult
+from sendspin_bridge.services.ha import ha_command_dispatcher as M
 
 # ---------------------------------------------------------------------------
 # Test scaffolding
@@ -75,7 +75,7 @@ def test_dispatcher_exposes_every_command_in_catalog():
     """Every spec with a ``command`` field must be reachable through the
     dispatcher.  Catches drift where someone adds a spec but forgets to
     add a handler — silent feature gap."""
-    from services.ha_entity_model import (
+    from sendspin_bridge.services.ha.ha_entity_model import (
         BRIDGE_ENTITIES,
         DEVICE_ENTITIES,
     )

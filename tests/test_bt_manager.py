@@ -301,7 +301,7 @@ def test_warn_pipewire_session_emits_on_pipewire_without_bt_sinks():
     import bt_audio
 
     with (
-        patch("services.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
         patch.object(bt_audio.logger, "warning") as mock_warn,
     ):
         bt_audio._warn_pipewire_session({"sendspin_fallback"})
@@ -316,7 +316,7 @@ def test_warn_pipewire_session_silent_on_pulseaudio():
     import bt_audio
 
     with (
-        patch("services.pulse.get_server_name", return_value="pulseaudio 17.0"),
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="pulseaudio 17.0"),
         patch.object(bt_audio.logger, "warning") as mock_warn,
     ):
         bt_audio._warn_pipewire_session(set())
@@ -330,7 +330,7 @@ def test_warn_pipewire_session_silent_when_bt_sinks_present():
 
     sinks = {"bluez_output.AA_BB_CC_DD_EE_FF.1", "sendspin_fallback"}
     with (
-        patch("services.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
         patch.object(bt_audio.logger, "warning") as mock_warn,
     ):
         bt_audio._warn_pipewire_session(sinks)
@@ -343,7 +343,7 @@ def test_warn_pipewire_session_also_checks_wireplumber_logind():
     import bt_audio
 
     with (
-        patch("services.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
         patch.object(bt_audio, "_warn_wireplumber_logind") as mock_logind,
         patch.object(bt_audio.logger, "warning"),
     ):
@@ -491,7 +491,7 @@ def test_check_reconnect_churn_disables_management(bt_manager):
 
     with (
         patch("bluetooth_manager.time.monotonic", return_value=100.0),
-        patch("services.bluetooth.persist_device_released") as persist_released,
+        patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released,
     ):
         assert bt_manager._check_reconnect_churn() is True
 
@@ -986,7 +986,7 @@ def test_handle_reconnect_failure_releases_after_threshold(bt_manager):
     bt_manager.host = MagicMock()
     bt_manager.host.bt_management_enabled = True
 
-    with patch("services.bluetooth.persist_device_released"):
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
         released = bt_manager._handle_reconnect_failure(3)
 
     assert released is True
@@ -1023,8 +1023,8 @@ def test_handle_reconnect_failure_skips_adapter_recovery_when_flag_off(bt_manage
     bt_manager.adapter_hci_name = "hci0"
 
     with (
-        patch("services.bluetooth.persist_device_released"),
-        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+        patch("sendspin_bridge.services.bluetooth.persist_device_released"),
+        patch("sendspin_bridge.services.bluetooth.adapter_recovery.recover_adapter_blocking") as mock_rec,
     ):
         released = bt_manager._handle_reconnect_failure(3)
 
@@ -1045,8 +1045,8 @@ def test_handle_reconnect_failure_runs_adapter_recovery_when_flag_on(bt_manager)
     bt_manager.adapter_hci_name = "hci1"
 
     with (
-        patch("services.bluetooth.persist_device_released"),
-        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+        patch("sendspin_bridge.services.bluetooth.persist_device_released"),
+        patch("sendspin_bridge.services.bluetooth.adapter_recovery.recover_adapter_blocking") as mock_rec,
     ):
         mock_rec.return_value = False  # recovery failed → still release
         released = bt_manager._handle_reconnect_failure(3)
@@ -1067,8 +1067,8 @@ def test_handle_reconnect_failure_keeps_management_when_recovery_succeeds(bt_man
     bt_manager.adapter_hci_name = "hci0"
 
     with (
-        patch("services.bluetooth.persist_device_released") as mock_persist,
-        patch("services.adapter_recovery.recover_adapter_blocking", return_value=True),
+        patch("sendspin_bridge.services.bluetooth.persist_device_released") as mock_persist,
+        patch("sendspin_bridge.services.bluetooth.adapter_recovery.recover_adapter_blocking", return_value=True),
     ):
         released = bt_manager._handle_reconnect_failure(3)
 
@@ -1090,8 +1090,8 @@ def test_handle_reconnect_failure_skips_recovery_when_no_adapter_mac(bt_manager)
     bt_manager.adapter_hci_name = ""
 
     with (
-        patch("services.bluetooth.persist_device_released"),
-        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+        patch("sendspin_bridge.services.bluetooth.persist_device_released"),
+        patch("sendspin_bridge.services.bluetooth.adapter_recovery.recover_adapter_blocking") as mock_rec,
     ):
         released = bt_manager._handle_reconnect_failure(3)
 
@@ -1116,8 +1116,8 @@ def test_handle_reconnect_failure_runs_adapter_recovery_for_default_adapter_devi
     bt_manager.adapter_hci_name = "hci0"  # resolved via sysfs
 
     with (
-        patch("services.bluetooth.persist_device_released"),
-        patch("services.adapter_recovery.recover_adapter_blocking") as mock_rec,
+        patch("sendspin_bridge.services.bluetooth.persist_device_released"),
+        patch("sendspin_bridge.services.bluetooth.adapter_recovery.recover_adapter_blocking") as mock_rec,
     ):
         mock_rec.return_value = True
         released = bt_manager._handle_reconnect_failure(3)

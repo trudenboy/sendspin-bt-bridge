@@ -15,7 +15,7 @@ import pytest
 from flask import Flask
 
 from routes.api_bt import bt_bp
-from services.mpris_player import MprisPlayer, get_registry
+from sendspin_bridge.services.audio.mpris_player import MprisPlayer, get_registry
 
 
 @pytest.fixture

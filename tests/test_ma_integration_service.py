@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from services.ma_integration_service import BridgeMaIntegrationService
+from sendspin_bridge.services.music_assistant.ma_integration_service import BridgeMaIntegrationService
 
 
 @pytest.mark.asyncio
@@ -47,8 +47,10 @@ async def test_initialize_discovers_groups_and_starts_monitor(monkeypatch):
             monitor_started.set()
             await asyncio.sleep(3600)
 
-    monkeypatch.setattr("services.ma_client.discover_ma_groups", fake_discover)
-    monkeypatch.setattr("services.ma_monitor.start_monitor", lambda _url, _token: FakeMonitor())
+    monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_client.discover_ma_groups", fake_discover)
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_monitor.start_monitor", lambda _url, _token: FakeMonitor()
+    )
 
     resolved = await service.initialize(
         {

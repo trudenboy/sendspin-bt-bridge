@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from services.subprocess_stderr import SubprocessStderrService
+from sendspin_bridge.services.ipc.subprocess_stderr import SubprocessStderrService
 
 UTC = timezone.utc
 

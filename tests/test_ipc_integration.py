@@ -1,7 +1,6 @@
 """IPC protocol integration tests — roundtrip envelope build/parse correctness."""
 
-from sendspin_client import _IPC_ALLOWED_KEYS
-from services.ipc_protocol import (
+from sendspin_bridge.services.ipc.ipc_protocol import (
     IPC_PROTOCOL_VERSION,
     IPC_PROTOCOL_VERSION_KEY,
     build_command_envelope,
@@ -13,6 +12,7 @@ from services.ipc_protocol import (
     parse_log_envelope,
     parse_status_envelope,
 )
+from sendspin_client import _IPC_ALLOWED_KEYS
 
 # ---------------------------------------------------------------------------
 # Status envelope roundtrip

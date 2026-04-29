@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import state
-from services.internal_events import DeviceEventType, InternalEventPublisher, normalize_device_event
+from sendspin_bridge.services.diagnostics.internal_events import (
+    DeviceEventType,
+    InternalEventPublisher,
+    normalize_device_event,
+)
 
 
 def test_internal_event_publisher_notifies_subscribers():
@@ -79,7 +83,7 @@ def test_publish_device_event_enriches_details_with_room_and_readiness_context(m
         is_running=lambda: True,
     )
     monkeypatch.setattr(
-        "services.status_snapshot.load_config",
+        "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
         lambda: {
             "BLUETOOTH_DEVICES": [
                 {

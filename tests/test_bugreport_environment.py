@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 
 from routes import api_status
-from services import ma_runtime_state
+from sendspin_bridge.services.music_assistant import ma_runtime_state
 
 
 @pytest.fixture(autouse=True)

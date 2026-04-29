@@ -47,7 +47,7 @@ class TestGetClientOrError:
     def test_valid_player_name(self, app, monkeypatch):
         """Returns the matching client when player_name matches."""
         import routes._helpers as helpers
-        from services.device_registry import DeviceRegistrySnapshot
+        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
         target = _make_client("kitchen")
         monkeypatch.setattr(
@@ -65,7 +65,7 @@ class TestGetClientOrError:
     def test_invalid_player_name(self, app, monkeypatch):
         """Returns 400 with 'Unknown player' for a non-existent name."""
         import routes._helpers as helpers
-        from services.device_registry import DeviceRegistrySnapshot
+        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
         monkeypatch.setattr(
             helpers,
@@ -85,7 +85,7 @@ class TestGetClientOrError:
     def test_no_name_single_client(self, app, monkeypatch):
         """With no player_name and one client, returns that client."""
         import routes._helpers as helpers
-        from services.device_registry import DeviceRegistrySnapshot
+        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
         only = _make_client("solo")
         monkeypatch.setattr(
@@ -103,7 +103,7 @@ class TestGetClientOrError:
     def test_no_name_multiple_clients(self, app, monkeypatch):
         """With no player_name and multiple clients, returns 400."""
         import routes._helpers as helpers
-        from services.device_registry import DeviceRegistrySnapshot
+        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
         monkeypatch.setattr(
             helpers,
@@ -122,7 +122,7 @@ class TestGetClientOrError:
     def test_no_clients(self, app, monkeypatch):
         """With no clients configured, returns 503."""
         import routes._helpers as helpers
-        from services.device_registry import DeviceRegistrySnapshot
+        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
         monkeypatch.setattr(
             helpers,

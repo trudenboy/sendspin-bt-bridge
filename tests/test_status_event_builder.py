@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services.status_event_builder import StatusEventBuilder
+from sendspin_bridge.services.lifecycle.status_event_builder import StatusEventBuilder
 
 
 def test_build_emits_expected_event_sequence_for_transition_batch():

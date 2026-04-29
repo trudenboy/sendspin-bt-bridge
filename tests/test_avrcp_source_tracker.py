@@ -16,7 +16,7 @@ import pytest
 
 
 def test_note_activity_then_get_recent_active_returns_mac():
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("AA:BB:CC:DD:EE:FF", now=100.0)
@@ -25,7 +25,7 @@ def test_note_activity_then_get_recent_active_returns_mac():
 
 
 def test_get_recent_active_returns_none_when_nothing_recorded():
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     assert tracker.get_recent_active(window_s=2.0, now=100.0) is None
@@ -35,7 +35,7 @@ def test_get_recent_active_drops_entries_outside_window():
     """Window expiration is the whole point — without it the most-recent
     speaker would be sticky forever and a button press from another speaker
     would still mis-route."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("AA:BB:CC:DD:EE:FF", now=100.0)
@@ -51,7 +51,7 @@ def test_get_recent_active_returns_most_recent_when_multiple():
     simultaneously and a user taps a button on one of them — its
     MediaPlayer1.Status update will be the freshest signal.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("AA:BB:CC:DD:EE:01", now=100.0)
@@ -65,7 +65,7 @@ def test_note_activity_normalizes_mac_to_uppercase():
     code may pass either form.  Normalising at the boundary keeps the
     lookup table single-keyed and avoids silent misses on case
     mismatch (which would silently degrade routing, not crash)."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("aa:bb:cc:dd:ee:ff", now=100.0)
@@ -76,7 +76,7 @@ def test_note_activity_normalizes_mac_to_uppercase():
 def test_note_activity_empty_mac_is_silent_noop():
     """Defensive: never store an empty key — would alias to other empty
     activity reports and confuse correlation."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("", now=100.0)
@@ -87,7 +87,7 @@ def test_note_activity_empty_mac_is_silent_noop():
 def test_note_activity_overwrites_previous_for_same_mac():
     """Repeated activity from the same speaker bumps the timestamp so
     the entry stays fresh."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("AA:BB:CC:DD:EE:FF", now=100.0)
@@ -101,7 +101,7 @@ def test_clear_drops_entry_for_mac():
     """On disconnect we want to forget this speaker's activity so a
     stale recent-activity record doesn't mis-route a fresh command
     after the device is gone."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("AA:BB:CC:DD:EE:FF", now=100.0)
@@ -113,7 +113,7 @@ def test_clear_drops_entry_for_mac():
 def test_clear_unknown_mac_is_silent_noop():
     """Disconnect hook may fire twice (BT manager + reconfig) — clear()
     must tolerate the second call cleanly."""
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.clear("AA:BB:CC:DD:EE:FF")  # must not raise
@@ -124,7 +124,7 @@ def test_get_tracker_returns_process_singleton():
     BluetoothManager subscription threads, the inbound MPRIS dispatch
     on the asyncio loop, and the disconnect hook all need to see the
     same tracker instance."""
-    from services.avrcp_source_tracker import get_tracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker
 
     assert get_tracker() is get_tracker()
 
@@ -136,7 +136,7 @@ async def test_wait_for_next_activity_returns_when_note_activity_called():
     source MAC, instead of guessing a fixed sleep.  Returns True when
     activity arrived during the wait.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
 
@@ -158,7 +158,7 @@ async def test_wait_for_next_activity_returns_false_on_timeout():
     either, the callback can't hang forever.  Returns False after the
     cap so the resolver falls back to default_client.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
 
@@ -174,7 +174,7 @@ async def test_wait_for_next_activity_only_wakes_on_NEW_activity():
     correlated with the current dispatch, not whatever happens to be
     cached.  Only a *new* note_activity call fires the waiter.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     tracker.note_activity("AA:BB:CC:DD:EE:01")  # pre-existing stale entry
@@ -190,7 +190,7 @@ async def test_wait_for_next_activity_supports_multiple_concurrent_waiters():
     racing, or two rapid presses) must both wake on a single
     note_activity call — neither should starve the other.
     """
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
 
@@ -216,7 +216,7 @@ async def test_wait_for_next_activity_cross_thread_signal():
     import threading
     import time as _time
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
 
@@ -245,7 +245,7 @@ def test_concurrent_note_and_query_does_not_raise():
     """
     import threading
 
-    from services.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
 
     tracker = AvrcpSourceTracker()
     errors: list[BaseException] = []

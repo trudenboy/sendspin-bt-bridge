@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.pairing_agent import PairingAgent, _build_agent_iface
+from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent, _build_agent_iface
 
 
 def test_rejects_invalid_capability():

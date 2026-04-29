@@ -35,20 +35,20 @@ from config import (
     get_runtime_version,
     save_device_volume,
 )
-from services.internal_events import DeviceEventType
-from services.ipc_protocol import (
+from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
+from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
+from sendspin_bridge.services.diagnostics.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
+from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
+from sendspin_bridge.services.infrastructure.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
+from sendspin_bridge.services.ipc.ipc_protocol import (
     with_protocol_version,
 )
-from services.ma_artwork import build_artwork_proxy_url
-from services.playback_health import PlaybackHealthMonitor
-from services.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
-from services.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
-from services.sendspin_port_probe import probe_sendspin_port
-from services.status_event_builder import StatusEventBuilder
-from services.subprocess_command import SubprocessCommandService
-from services.subprocess_ipc import SubprocessIpcService
-from services.subprocess_stderr import SubprocessStderrService
-from services.subprocess_stop import SubprocessStopService
+from sendspin_bridge.services.ipc.subprocess_command import SubprocessCommandService
+from sendspin_bridge.services.ipc.subprocess_ipc import SubprocessIpcService
+from sendspin_bridge.services.ipc.subprocess_stderr import SubprocessStderrService
+from sendspin_bridge.services.ipc.subprocess_stop import SubprocessStopService
+from sendspin_bridge.services.lifecycle.status_event_builder import StatusEventBuilder
+from sendspin_bridge.services.music_assistant.ma_artwork import build_artwork_proxy_url
 
 UTC = timezone.utc
 
@@ -864,7 +864,7 @@ class SendspinClient:
         sink = self.bluetooth_sink_name
         if not sink:
             return
-        from services.pulse import asuspend_sink
+        from sendspin_bridge.services.audio.pulse import asuspend_sink
 
         ok = await asuspend_sink(sink, True)
         if ok:
@@ -881,7 +881,7 @@ class SendspinClient:
         if not sink:
             self._update_status({"bt_power_save": False})
             return
-        from services.pulse import asuspend_sink
+        from sendspin_bridge.services.audio.pulse import asuspend_sink
 
         ok = await asuspend_sink(sink, False)
         self._update_status({"bt_power_save": False})
@@ -907,7 +907,7 @@ class SendspinClient:
                 sink = self.bluetooth_sink_name
                 if not sink:
                     return
-                from services.pulse import aset_sink_mute
+                from sendspin_bridge.services.audio.pulse import aset_sink_mute
 
                 ok = await aset_sink_mute(sink, False)
                 if ok:
@@ -959,7 +959,7 @@ class SendspinClient:
         # Move daemon streams to null sink instead of killing daemon
         daemon_pid = self._daemon_proc.pid if self._daemon_proc else None
         if daemon_pid:
-            from services.pulse import STANDBY_SINK_NAME, aensure_null_sink, amove_pid_sink_inputs
+            from sendspin_bridge.services.audio.pulse import STANDBY_SINK_NAME, aensure_null_sink, amove_pid_sink_inputs
 
             if await aensure_null_sink():
                 # Redirect PULSE_SINK so new streams go to null sink (not missing BT sink)
@@ -1040,7 +1040,7 @@ class SendspinClient:
         daemon_pid = self._daemon_proc.pid if self._daemon_proc else None
         if not daemon_pid or not self.bluetooth_sink_name:
             return False
-        from services.pulse import amove_pid_sink_inputs
+        from sendspin_bridge.services.audio.pulse import amove_pid_sink_inputs
 
         # Restore PULSE_SINK to BT sink before rerouting so future streams target it
         await self._send_subprocess_command({"cmd": "set_standby"})
@@ -1420,7 +1420,7 @@ class SendspinClient:
             self._daemon_proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "services.daemon_process",
+                "sendspin_bridge.services.ipc.daemon_process",
                 params,
                 stdout=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.PIPE,
@@ -1539,7 +1539,7 @@ class SendspinClient:
         unconditionally because the local ``status["muted"]`` flag does
         not reflect MA's view at that moment.
         """
-        from services.ma_runtime_state import is_ma_connected
+        from sendspin_bridge.services.music_assistant.ma_runtime_state import is_ma_connected
 
         if not is_ma_connected():
             return
@@ -1549,7 +1549,7 @@ class SendspinClient:
         if not pid:
             return
         try:
-            from services.ma_monitor import send_player_cmd
+            from sendspin_bridge.services.music_assistant.ma_monitor import send_player_cmd
 
             ok = await send_player_cmd("players/cmd/volume_mute", {"player_id": pid, "muted": False})
             if ok:
@@ -2008,7 +2008,7 @@ async def main():
     bootstrap = await orchestrator.initialize_runtime()
 
     try:
-        from services.bluetooth import persist_device_enabled as _persist_enabled
+        from sendspin_bridge.services.bluetooth import persist_device_enabled as _persist_enabled
     except ImportError:
         _persist_enabled = None
 

@@ -81,7 +81,7 @@ def resolve_web_port(*, env: Mapping[str, str] | None = None, hostname: str | No
             return configured_port
     # HA addon: query Supervisor API for dynamically assigned ingress port
     try:
-        from services.ha_addon import get_self_addon_info
+        from sendspin_bridge.services.ha.ha_addon import get_self_addon_info
 
         addon_info = get_self_addon_info(timeout=3.0)
         if addon_info:

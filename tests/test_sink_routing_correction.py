@@ -34,11 +34,11 @@ async def test_skips_triggering_device():
 
     with (
         patch(
-            "services.device_registry.get_active_clients_snapshot",
+            "sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot",
             return_value=[client_a, client_b],
         ),
         patch(
-            "services.pulse.amove_pid_sink_inputs",
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
             new_callable=AsyncMock,
             return_value=0,
         ) as mock_move,
@@ -60,11 +60,11 @@ async def test_corrects_misrouted_stream():
 
     with (
         patch(
-            "services.device_registry.get_active_clients_snapshot",
+            "sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot",
             return_value=[client_a, client_b],
         ),
         patch(
-            "services.pulse.amove_pid_sink_inputs",
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
             new_callable=AsyncMock,
             return_value=1,
         ) as mock_move,
@@ -85,11 +85,11 @@ async def test_skips_client_without_subprocess():
 
     with (
         patch(
-            "services.device_registry.get_active_clients_snapshot",
+            "sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot",
             return_value=[client],
         ),
         patch(
-            "services.pulse.amove_pid_sink_inputs",
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
             new_callable=AsyncMock,
         ) as mock_move,
     ):
@@ -109,11 +109,11 @@ async def test_skips_client_without_sink():
 
     with (
         patch(
-            "services.device_registry.get_active_clients_snapshot",
+            "sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot",
             return_value=[client],
         ),
         patch(
-            "services.pulse.amove_pid_sink_inputs",
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
             new_callable=AsyncMock,
         ) as mock_move,
     ):
@@ -133,11 +133,11 @@ async def test_handles_pulse_error_gracefully():
 
     with (
         patch(
-            "services.device_registry.get_active_clients_snapshot",
+            "sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot",
             return_value=[client],
         ),
         patch(
-            "services.pulse.amove_pid_sink_inputs",
+            "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
             new_callable=AsyncMock,
             side_effect=RuntimeError("PA connection lost"),
         ),

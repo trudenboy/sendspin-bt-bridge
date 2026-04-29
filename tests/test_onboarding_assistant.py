@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.onboarding_assistant import build_onboarding_assistant_snapshot
+from sendspin_bridge.services.diagnostics.onboarding_assistant import build_onboarding_assistant_snapshot
 
 
 def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code():

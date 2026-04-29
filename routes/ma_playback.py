@@ -16,12 +16,13 @@ import uuid
 from flask import Response, jsonify, request
 
 from routes.api_ma import _await_loop_result, ma_bp
-from services.async_job_state import create_async_job, finish_async_job, get_async_job
-from services.bridge_runtime_state import get_main_loop
-from services.device_registry import get_device_registry_snapshot
-from services.ma_artwork import has_valid_artwork_signature
-from services.ma_monitor import solo_queue_candidates
-from services.ma_runtime_state import (
+from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.lifecycle.async_job_state import create_async_job, finish_async_job, get_async_job
+from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
+from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
+from sendspin_bridge.services.music_assistant.ma_artwork import has_valid_artwork_signature
+from sendspin_bridge.services.music_assistant.ma_monitor import solo_queue_candidates
+from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     apply_ma_now_playing_prediction,
     fail_ma_pending_op,
     get_ma_api_credentials,
@@ -31,7 +32,6 @@ from services.ma_runtime_state import (
     get_ma_now_playing,
     is_ma_connected,
 )
-from services.status_snapshot import build_device_snapshot_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ def _run_ma_queue_cmd_job(
 ) -> None:
     """Execute an MA queue command in the background and store its result."""
     try:
-        from services.ma_monitor import request_queue_refresh, send_queue_cmd
+        from sendspin_bridge.services.music_assistant.ma_monitor import request_queue_refresh, send_queue_cmd
 
         result = _await_loop_result(
             loop,
@@ -369,7 +369,7 @@ def api_ma_queue_cmd():
 
     op_id = uuid.uuid4().hex
     try:
-        from services.ma_monitor import get_monitor
+        from sendspin_bridge.services.music_assistant.ma_monitor import get_monitor
 
         monitor = get_monitor()
         if monitor is None or not monitor.is_connected():

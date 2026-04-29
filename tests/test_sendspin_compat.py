@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from services.sendspin_compat import (
+from sendspin_bridge.services.diagnostics.sendspin_compat import (
     SendspinAudioApi,
     analyze_audio_api_compatibility,
     analyze_daemon_args_compatibility,
@@ -180,7 +180,7 @@ def test_load_sendspin_audio_api_prefers_audio_devices_module(monkeypatch):
             return legacy_audio_mod
         raise ModuleNotFoundError(name)
 
-    monkeypatch.setattr("services.sendspin_compat.importlib.import_module", _fake_import)
+    monkeypatch.setattr("sendspin_bridge.services.diagnostics.sendspin_compat.importlib.import_module", _fake_import)
 
     audio_api = load_sendspin_audio_api()
 

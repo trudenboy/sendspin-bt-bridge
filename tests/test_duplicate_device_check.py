@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from services.duplicate_device_check import (
+from sendspin_bridge.services.bluetooth.duplicate_device_check import (
     DuplicateDeviceWarning,
     _is_own_bridge_player,
     find_duplicate_devices,
@@ -53,7 +53,7 @@ def _make_config(
     }
 
 
-@patch("services.ma_client.fetch_all_players_snapshot")
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_duplicate_devices_detects_conflict(mock_fetch):
     from config import _player_id_from_mac
 
@@ -70,7 +70,7 @@ def test_find_duplicate_devices_detects_conflict(mock_fetch):
     assert warnings[0].device_name == "ENEBY20"
 
 
-@patch("services.ma_client.fetch_all_players_snapshot")
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_duplicate_devices_no_conflict_own_bridge(mock_fetch):
     from config import _player_id_from_mac
 
@@ -84,7 +84,7 @@ def test_find_duplicate_devices_no_conflict_own_bridge(mock_fetch):
     assert warnings == []
 
 
-@patch("services.ma_client.fetch_all_players_snapshot")
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_duplicate_devices_no_conflict_unknown_player(mock_fetch):
     mock_fetch.return_value = [{"player_id": "unknown-id", "display_name": "Kitchen"}]
 
@@ -112,7 +112,10 @@ def test_find_duplicate_devices_no_devices():
     assert warnings == []
 
 
-@patch("services.ma_client.fetch_all_players_snapshot", side_effect=ConnectionError("no MA"))
+@patch(
+    "sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot",
+    side_effect=ConnectionError("no MA"),
+)
 def test_find_duplicate_devices_api_failure(mock_fetch):
     cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "name": "Speaker"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
@@ -124,7 +127,7 @@ def test_find_duplicate_devices_api_failure(mock_fetch):
 # ---------------------------------------------------------------------------
 
 
-@patch("services.ma_client.fetch_all_players_snapshot")
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_scan_device_conflicts_detects_conflict(mock_fetch):
     from config import _player_id_from_mac
 
@@ -138,7 +141,7 @@ def test_find_scan_device_conflicts_detects_conflict(mock_fetch):
     assert "Other Bridge" in conflicts[mac]
 
 
-@patch("services.ma_client.fetch_all_players_snapshot")
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_scan_device_conflicts_no_conflict(mock_fetch):
     mock_fetch.return_value = []
 
@@ -152,7 +155,7 @@ def test_find_scan_device_conflicts_no_credentials():
     assert conflicts == {}
 
 
-@patch("services.ma_client.fetch_all_players_snapshot", side_effect=Exception("fail"))
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot", side_effect=Exception("fail"))
 def test_find_scan_device_conflicts_api_failure(mock_fetch):
     conflicts = find_scan_device_conflicts(["AA:BB:CC:DD:EE:FF"], "http://ma:8095", "tok", "HAOS")
     assert conflicts == {}
@@ -164,7 +167,10 @@ def test_find_scan_device_conflicts_api_failure(mock_fetch):
 
 
 def test_state_storage_roundtrip():
-    from services.ma_runtime_state import get_duplicate_device_warnings, set_duplicate_device_warnings
+    from sendspin_bridge.services.music_assistant.ma_runtime_state import (
+        get_duplicate_device_warnings,
+        set_duplicate_device_warnings,
+    )
 
     w = DuplicateDeviceWarning(
         mac="AA:BB:CC:DD:EE:FF", device_name="Speaker", other_bridge_name="Other", player_id="p1"
@@ -183,9 +189,9 @@ def test_state_storage_roundtrip():
 # ---------------------------------------------------------------------------
 
 
-@patch("services.ma_runtime_state.get_duplicate_device_warnings")
+@patch("sendspin_bridge.services.music_assistant.ma_runtime_state.get_duplicate_device_warnings")
 def test_recovery_issue_for_duplicate_device(mock_get):
-    from services.recovery_assistant import _build_duplicate_device_issues
+    from sendspin_bridge.services.diagnostics.recovery_assistant import _build_duplicate_device_issues
 
     mock_get.return_value = [
         DuplicateDeviceWarning(
@@ -205,9 +211,9 @@ def test_recovery_issue_for_duplicate_device(mock_get):
     assert issues[0].primary_action is not None
 
 
-@patch("services.ma_runtime_state.get_duplicate_device_warnings")
+@patch("sendspin_bridge.services.music_assistant.ma_runtime_state.get_duplicate_device_warnings")
 def test_recovery_issue_empty_when_no_warnings(mock_get):
-    from services.recovery_assistant import _build_duplicate_device_issues
+    from sendspin_bridge.services.diagnostics.recovery_assistant import _build_duplicate_device_issues
 
     mock_get.return_value = []
     issues = _build_duplicate_device_issues()
@@ -220,7 +226,7 @@ def test_recovery_issue_empty_when_no_warnings(mock_get):
 
 
 def test_guidance_registry_has_duplicate_device():
-    from services.guidance_issue_registry import ISSUE_REGISTRY
+    from sendspin_bridge.services.diagnostics.guidance_issue_registry import ISSUE_REGISTRY
 
     defn = ISSUE_REGISTRY.get("duplicate_device")
     assert defn is not None
@@ -235,7 +241,7 @@ def test_guidance_registry_has_duplicate_device():
 
 
 @patch("routes.api_bt.load_config")
-@patch("services.duplicate_device_check.find_scan_device_conflicts")
+@patch("sendspin_bridge.services.bluetooth.duplicate_device_check.find_scan_device_conflicts")
 def test_annotate_scan_conflicts_adds_warning(mock_conflicts, mock_load):
     from routes.api_bt import _annotate_scan_conflicts
 

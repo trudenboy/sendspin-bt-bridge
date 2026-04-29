@@ -461,7 +461,7 @@ def _configured_device_matches(
         return True
     configured_name = str(device_config.get("player_name") or "").strip()
     if player_name and configured_name:
-        from services.bluetooth import _match_player_name
+        from sendspin_bridge.services.bluetooth import _match_player_name
 
         return bool(_match_player_name(configured_name, player_name))
     return False

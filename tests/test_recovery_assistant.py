@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.recovery_assistant import build_recovery_assistant_snapshot
+from sendspin_bridge.services.diagnostics.recovery_assistant import build_recovery_assistant_snapshot
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +16,7 @@ def _isolate_config_writable_check(monkeypatch):
     here; tests that exercise the card explicitly mock
     ``collect_preflight_status`` themselves and bypass this fixture
     via direct monkeypatch ordering."""
-    import services.recovery_assistant as recovery_module
+    import sendspin_bridge.services.diagnostics.recovery_assistant as recovery_module
 
     monkeypatch.setattr(
         recovery_module,
@@ -106,7 +106,7 @@ def test_recovery_assistant_surfaces_config_writable_failure_as_issue(monkeypatc
     summary, and an error severity.  This is what makes the failure
     visible in the Diagnostics panel without operators reading
     container logs."""
-    import services.recovery_assistant as recovery_module
+    import sendspin_bridge.services.diagnostics.recovery_assistant as recovery_module
 
     monkeypatch.setattr(
         recovery_module,
@@ -147,7 +147,7 @@ def test_recovery_assistant_omits_config_writable_card_when_ok(monkeypatch):
     """Happy path: when preflight is clean, the recovery snapshot
     must not introduce noise.  Pin this so a future refactor doesn't
     accidentally always-render the card."""
-    import services.recovery_assistant as recovery_module
+    import sendspin_bridge.services.diagnostics.recovery_assistant as recovery_module
 
     monkeypatch.setattr(
         recovery_module,

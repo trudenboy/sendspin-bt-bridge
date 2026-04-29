@@ -13,8 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.ha_entity_model import BRIDGE_ENTITIES, DEVICE_ENTITIES, EntityKind
-from services.ha_mqtt_publisher import (
+from sendspin_bridge.services.ha.ha_entity_model import BRIDGE_ENTITIES, DEVICE_ENTITIES, EntityKind
+from sendspin_bridge.services.ha.ha_mqtt_publisher import (
     HaMqttPublisher,
     MqttPublisherConfig,
     build_bridge_state_payload,
@@ -23,7 +23,7 @@ from services.ha_mqtt_publisher import (
     publisher_status,
     resolve_mqtt_config,
 )
-from services.ha_state_projector import (
+from sendspin_bridge.services.ha.ha_state_projector import (
     BridgeMeta,
     DeviceMeta,
     EntityState,
@@ -510,7 +510,7 @@ def test_delta_runtime_change_mirrors_to_legacy_topic(cfg, projection):
     also reach the legacy topic so HA caches that still subscribe to it
     receive the transition.  Without this mirror, an entity that went
     offline would stay stuck at the last retained ``online`` value."""
-    from services.ha_state_projector import StateDelta
+    from sendspin_bridge.services.ha.ha_state_projector import StateDelta
 
     publisher = HaMqttPublisher(
         config_provider=lambda: cfg,

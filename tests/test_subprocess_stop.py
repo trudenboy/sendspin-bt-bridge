@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from services.subprocess_stop import SubprocessStopService
+from sendspin_bridge.services.ipc.subprocess_stop import SubprocessStopService
 
 
 @pytest.mark.asyncio

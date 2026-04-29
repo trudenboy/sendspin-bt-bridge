@@ -4,7 +4,7 @@ from flask import Blueprint, current_app, render_template, session
 
 from config import BUILD_DATE, detect_ha_addon_channel, get_runtime_version, resolve_web_port
 from routes.auth import _generate_csrf_token
-from services.ha_addon import get_ma_addon_ui_url
+from sendspin_bridge.services.ha.ha_addon import get_ma_addon_ui_url
 
 views_bp = Blueprint("views", __name__)
 

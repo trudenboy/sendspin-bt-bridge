@@ -72,9 +72,9 @@ class _StubClientListener:
 _client_mod = sys.modules["aiosendspin.client"]
 _client_mod.ClientListener = _StubClientListener  # type: ignore[attr-defined]
 
-sys.modules.pop("services.bridge_daemon", None)
+sys.modules.pop("sendspin_bridge.services.ipc.bridge_daemon", None)
 
-from services.bridge_daemon import BridgeDaemon  # noqa: E402
+from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon  # noqa: E402
 
 
 def _make_bridge_daemon(status: dict | None = None) -> BridgeDaemon:
@@ -209,7 +209,7 @@ class TestClientHelloRoles:
         # ClientHello parsing) and NOT the ARTWORK role (binary-frame relay
         # was dropped in 2.62.0-rc.9 — UI sources artwork from MA's image_url
         # via /api/ma/artwork instead).
-        import services.sendspin_compat as compat_mod
+        import sendspin_bridge.services.diagnostics.sendspin_compat as compat_mod
 
         daemon = _make_bridge_daemon()
         daemon._audio_handler = SimpleNamespace(volume=25, muted=False)

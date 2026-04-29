@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from config import CONFIG_SCHEMA_VERSION
-from services.config_validation import validate_uploaded_config
+from sendspin_bridge.services.infrastructure.config_validation import validate_uploaded_config
 
 
 def test_validate_uploaded_config_adds_schema_version_warning_when_missing():

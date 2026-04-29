@@ -33,7 +33,7 @@ def _load_specs_module():
 
 
 cc_specs = _load_specs_module()
-from services.ha_entity_model import (  # noqa: E402
+from sendspin_bridge.services.ha.ha_entity_model import (  # noqa: E402
     BRIDGE_ENTITIES,
     DEVICE_ENTITIES,
 )

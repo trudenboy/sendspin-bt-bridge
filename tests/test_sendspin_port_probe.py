@@ -6,13 +6,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.sendspin_port_probe import probe_sendspin_port
+from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
 
 
 @pytest.mark.asyncio
 async def test_probe_returns_default_port_when_it_responds():
     """When the default port accepts TCP, return it immediately."""
-    with patch("services.sendspin_port_probe._tcp_probe", new_callable=AsyncMock) as mock_probe:
+    with patch(
+        "sendspin_bridge.services.diagnostics.sendspin_port_probe._tcp_probe", new_callable=AsyncMock
+    ) as mock_probe:
         mock_probe.return_value = True
         result = await probe_sendspin_port("192.168.1.10", default_port=9000)
         assert result == 9000
@@ -26,7 +28,7 @@ async def test_probe_returns_alternative_when_default_fails():
     async def _probe_side_effect(host, port, timeout):
         return port == 8927
 
-    with patch("services.sendspin_port_probe._tcp_probe", side_effect=_probe_side_effect):
+    with patch("sendspin_bridge.services.diagnostics.sendspin_port_probe._tcp_probe", side_effect=_probe_side_effect):
         result = await probe_sendspin_port("192.168.1.10", default_port=9000)
         assert result == 8927
 
@@ -34,7 +36,9 @@ async def test_probe_returns_alternative_when_default_fails():
 @pytest.mark.asyncio
 async def test_probe_returns_none_when_no_port_responds():
     """When no candidate port responds, return None."""
-    with patch("services.sendspin_port_probe._tcp_probe", new_callable=AsyncMock) as mock_probe:
+    with patch(
+        "sendspin_bridge.services.diagnostics.sendspin_port_probe._tcp_probe", new_callable=AsyncMock
+    ) as mock_probe:
         mock_probe.return_value = False
         result = await probe_sendspin_port("192.168.1.10", default_port=9000)
         assert result is None
@@ -56,7 +60,7 @@ async def test_probe_deduplicates_default_port():
         calls.append(port)
         return False
 
-    with patch("services.sendspin_port_probe._tcp_probe", side_effect=_probe_side_effect):
+    with patch("sendspin_bridge.services.diagnostics.sendspin_port_probe._tcp_probe", side_effect=_probe_side_effect):
         await probe_sendspin_port("192.168.1.10", default_port=9000, candidates=(9000, 8927))
     assert calls == [9000, 8927]
 

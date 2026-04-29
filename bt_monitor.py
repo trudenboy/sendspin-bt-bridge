@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from bt_dbus import _dbus_get_battery_level
-from services.internal_events import DeviceEventType
+from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 if TYPE_CHECKING:
     from bluetooth_manager import BluetoothManager
@@ -50,8 +50,8 @@ async def _correct_other_devices_routing(triggering_mgr: BluetoothManager) -> No
     """
     await asyncio.sleep(_SINK_CORRECTION_DELAY)
 
-    from services.device_registry import get_active_clients_snapshot
-    from services.pulse import amove_pid_sink_inputs
+    from sendspin_bridge.services.audio.pulse import amove_pid_sink_inputs
+    from sendspin_bridge.services.bluetooth.device_registry import get_active_clients_snapshot
 
     clients = get_active_clients_snapshot()
     for client in clients:

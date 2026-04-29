@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from services.operator_guidance import build_operator_guidance_snapshot
+from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
 
 
 def test_operator_guidance_reports_empty_state_onboarding():

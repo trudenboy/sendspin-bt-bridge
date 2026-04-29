@@ -17,7 +17,7 @@ from __future__ import annotations
 import struct
 from unittest.mock import MagicMock
 
-from services import bt_class_of_device
+from sendspin_bridge.services.bluetooth import bt_class_of_device
 
 # ── parse_class_hex ────────────────────────────────────────────────────
 

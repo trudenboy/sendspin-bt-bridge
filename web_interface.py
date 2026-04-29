@@ -295,7 +295,7 @@ def _check_auth():
     # never grants a UI cookie.
     if request.path.startswith("/api/"):
         try:
-            from services.auth_tokens import extract_bearer, find_matching_token
+            from sendspin_bridge.services.diagnostics.auth_tokens import extract_bearer, find_matching_token
 
             presented = extract_bearer(request.headers)
             if presented:

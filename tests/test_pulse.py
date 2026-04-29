@@ -10,10 +10,10 @@ sys.modules.setdefault("pulsectl_asyncio", MagicMock())
 
 # Another test file (test_daemon_process) may stub services.pulse with a
 # MagicMock at module-import time.  Force-reload the real module here.
-sys.modules.pop("services.pulse", None)
+sys.modules.pop("sendspin_bridge.services.audio.pulse", None)
 
-import services.pulse as _pulse_mod  # noqa: E402
-from services.pulse import _fallback_set_volume  # noqa: E402
+import sendspin_bridge.services.audio.pulse as _pulse_mod  # noqa: E402
+from sendspin_bridge.services.audio.pulse import _fallback_set_volume  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # _fallback_set_volume clamping
@@ -128,7 +128,7 @@ Card #3
 
 def test_fallback_list_cards_parses_name_and_active_profile():
     """`pactl list cards` output → list of dicts with name, driver, active_profile."""
-    from services.pulse import _fallback_list_cards
+    from sendspin_bridge.services.audio.pulse import _fallback_list_cards
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=0, stdout=_PACTL_LIST_CARDS_SAMPLE)
@@ -145,7 +145,7 @@ def test_fallback_list_cards_parses_name_and_active_profile():
 
 def test_fallback_list_cards_collects_available_profiles():
     """Each card dict lists available profile names."""
-    from services.pulse import _fallback_list_cards
+    from sendspin_bridge.services.audio.pulse import _fallback_list_cards
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=0, stdout=_PACTL_LIST_CARDS_SAMPLE)
@@ -159,7 +159,7 @@ def test_fallback_list_cards_collects_available_profiles():
 
 def test_fallback_list_cards_handles_pactl_error():
     """Non-zero returncode returns empty list."""
-    from services.pulse import _fallback_list_cards
+    from sendspin_bridge.services.audio.pulse import _fallback_list_cards
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=1, stdout="")
@@ -170,7 +170,7 @@ def test_fallback_list_cards_handles_subprocess_exception():
     """subprocess errors return empty list rather than crashing."""
     import subprocess as _sp
 
-    from services.pulse import _fallback_list_cards
+    from sendspin_bridge.services.audio.pulse import _fallback_list_cards
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.SubprocessError = _sp.SubprocessError
@@ -185,7 +185,7 @@ def test_fallback_list_cards_handles_subprocess_exception():
 
 def test_fallback_set_card_profile_success():
     """pactl returncode 0 → True."""
-    from services.pulse import _fallback_set_card_profile
+    from sendspin_bridge.services.audio.pulse import _fallback_set_card_profile
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=0)
@@ -201,7 +201,7 @@ def test_fallback_set_card_profile_success():
 
 def test_fallback_set_card_profile_failure():
     """pactl returncode non-zero → False."""
-    from services.pulse import _fallback_set_card_profile
+    from sendspin_bridge.services.audio.pulse import _fallback_set_card_profile
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=1, stderr="Failed")
@@ -215,7 +215,7 @@ def test_fallback_set_card_profile_failure():
 
 def test_fallback_cycle_card_profile_sets_off_then_target():
     """Cycle runs `pactl set-card-profile <card> off`, sleeps, then sets target."""
-    from services.pulse import _fallback_cycle_card_profile
+    from sendspin_bridge.services.audio.pulse import _fallback_cycle_card_profile
 
     with (
         patch.object(_pulse_mod, "subprocess") as mock_sub,
@@ -235,7 +235,7 @@ def test_fallback_cycle_card_profile_continues_when_off_set_fails():
     """Cycle does not abort if the `off` step errors — final target still attempted."""
     import subprocess as _sp
 
-    from services.pulse import _fallback_cycle_card_profile
+    from sendspin_bridge.services.audio.pulse import _fallback_cycle_card_profile
 
     call_results = [_sp.SubprocessError("off failed"), MagicMock(returncode=0)]
 
@@ -263,7 +263,7 @@ def _reset_bluez5_reload_cooldown():
 
 def test_reload_bluez5_discover_module_cooldown_throttles_calls():
     """Second reload within the 60s window returns False without hitting pactl."""
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
     _pulse_mod._LAST_BLUEZ5_RELOAD_TS = 1000.0
@@ -276,7 +276,7 @@ def test_reload_bluez5_discover_module_cooldown_throttles_calls():
 
 def test_reload_bluez5_discover_module_returns_false_when_module_not_loaded():
     """If `pactl list modules short` shows no module-bluez5-discover, return False."""
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
 
@@ -299,7 +299,7 @@ def test_reload_bluez5_discover_module_returns_false_when_module_not_loaded():
 
 def test_reload_bluez5_discover_module_unloads_and_loads_when_present():
     """When module is found, pactl unload + load are issued in order."""
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
 
@@ -340,7 +340,7 @@ def test_reload_bluez5_discover_module_propagates_cancellation():
     Suppressing cancellation here can hang shutdown/restart. The function
     must let the cancel propagate so the outer task can unwind cleanly.
     """
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
 
@@ -364,7 +364,7 @@ def test_reload_bluez5_discover_module_does_not_burn_cooldown_on_trivial_failure
     successful reload attempt is needlessly blocked. Cooldown should only
     fire after a reload actually completes.
     """
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
     assert _pulse_mod._LAST_BLUEZ5_RELOAD_TS == 0.0
@@ -389,7 +389,7 @@ def test_reload_bluez5_discover_module_does_not_burn_cooldown_on_trivial_failure
 
 def test_reload_bluez5_discover_module_does_not_burn_cooldown_when_module_absent():
     """If module-bluez5-discover isn't loaded, cooldown must NOT be burned."""
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
 
@@ -419,7 +419,7 @@ def test_reload_bluez5_discover_module_serializes_concurrent_callers():
     promised one. Second concurrent caller must observe "in progress" and
     return False without issuing its own ``unload-module`` call.
     """
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
 
@@ -474,7 +474,7 @@ def test_reload_bluez5_discover_module_serializes_concurrent_callers():
 
 def test_reload_bluez5_discover_module_burns_cooldown_after_success():
     """On successful unload+load, the cooldown timestamp must be updated."""
-    from services.pulse import areload_bluez5_discover_module
+    from sendspin_bridge.services.audio.pulse import areload_bluez5_discover_module
 
     _reset_bluez5_reload_cooldown()
 

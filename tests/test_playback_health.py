@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services.playback_health import PlaybackHealthMonitor
+from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 
 
 def test_observe_status_update_tracks_play_session_and_streaming():

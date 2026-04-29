@@ -53,13 +53,13 @@ class TestNullSink:
     """services.pulse null sink management."""
 
     def test_standby_sink_name_constant(self):
-        from services.pulse import STANDBY_SINK_NAME
+        from sendspin_bridge.services.audio.pulse import STANDBY_SINK_NAME
 
         assert STANDBY_SINK_NAME == "sendspin_fallback"
 
-    @patch("services.pulse.subprocess")
+    @patch("sendspin_bridge.services.audio.pulse.subprocess")
     def test_fallback_load_creates_sink(self, mock_subprocess):
-        from services.pulse import _fallback_load_null_sink
+        from sendspin_bridge.services.audio.pulse import _fallback_load_null_sink
 
         # First call: list shows sink doesn't exist
         list_result = MagicMock(returncode=0, stdout="alsa_output.default\t...\n")
@@ -69,9 +69,9 @@ class TestNullSink:
 
         assert _fallback_load_null_sink() is True
 
-    @patch("services.pulse.subprocess")
+    @patch("sendspin_bridge.services.audio.pulse.subprocess")
     def test_fallback_load_already_exists(self, mock_subprocess):
-        from services.pulse import STANDBY_SINK_NAME, _fallback_load_null_sink
+        from sendspin_bridge.services.audio.pulse import STANDBY_SINK_NAME, _fallback_load_null_sink
 
         list_result = MagicMock(
             returncode=0,
@@ -83,9 +83,9 @@ class TestNullSink:
         # Only one call (list), no load-module needed
         assert mock_subprocess.run.call_count == 1
 
-    @patch("services.pulse.subprocess")
+    @patch("sendspin_bridge.services.audio.pulse.subprocess")
     def test_remove_null_sink_no_module(self, mock_subprocess):
-        import services.pulse as pulse_mod
+        import sendspin_bridge.services.audio.pulse as pulse_mod
 
         pulse_mod._null_sink_module_id = None
         assert pulse_mod.remove_null_sink() is True
@@ -103,8 +103,8 @@ class TestStandbyDaemonAlive:
         """Daemon stays alive; streams are moved to null sink."""
         with (
             patch("sendspin_client._state") as state_mock,
-            patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock,
-            patch("services.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
+            patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock,
+            patch("sendspin_bridge.services.audio.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
         ):
             ensure_mock.return_value = True
             move_mock.return_value = 1
@@ -124,8 +124,8 @@ class TestStandbyDaemonAlive:
         """Falls back to stopping daemon when null sink cannot be created."""
         with (
             patch("sendspin_client._state") as state_mock,
-            patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock),
-            patch("services.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
+            patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock),
+            patch("sendspin_bridge.services.audio.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
         ):
             ensure_mock.return_value = False  # null sink creation failed
             client = _make_client(daemon_alive=True)
@@ -188,7 +188,7 @@ class TestRerouteToBtSink:
 
     @pytest.mark.asyncio
     async def test_reroute_moves_streams_and_sends_reanchor(self):
-        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+        with patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 2
             client = _make_client(daemon_alive=True)
             client._send_subprocess_command = AsyncMock()
@@ -226,7 +226,7 @@ class TestRerouteToBtSink:
 
     @pytest.mark.asyncio
     async def test_reroute_zero_moved_sends_reconnect(self):
-        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+        with patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 0  # nothing to move
             client = _make_client(daemon_alive=True)
             client._send_subprocess_command = AsyncMock()
@@ -249,7 +249,7 @@ class TestStartSendspinReroute:
     @pytest.mark.asyncio
     async def test_start_sendspin_reroutes_if_daemon_alive(self):
         """When daemon is already running, _start_sendspin_inner reroutes to BT sink."""
-        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+        with patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 1
             client = _make_client(daemon_alive=True)
             client._send_subprocess_command = AsyncMock()
@@ -263,7 +263,7 @@ class TestStartSendspinReroute:
     @pytest.mark.asyncio
     async def test_start_sendspin_reconnects_if_reroute_finds_zero_streams(self):
         """When reroute finds 0 streams, daemon sends MA reconnect (no full restart)."""
-        with patch("services.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
+        with patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock:
             move_mock.return_value = 0  # no streams to reroute
             client = _make_client(daemon_alive=True)
             client._send_subprocess_command = AsyncMock()

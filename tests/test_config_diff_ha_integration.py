@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from services.config_diff import ActionKind, diff_configs
+from sendspin_bridge.services.infrastructure.config_diff import ActionKind, diff_configs
 
 
 def _base_cfg(ha_block):

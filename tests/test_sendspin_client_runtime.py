@@ -11,9 +11,9 @@ from unittest.mock import patch
 import pytest
 
 import state
+from sendspin_bridge.services.diagnostics.log_analysis import classify_subprocess_stderr_level
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 from sendspin_client import SendspinClient, _filter_duplicate_bluetooth_devices
-from services.ipc_protocol import IPC_PROTOCOL_VERSION
-from services.log_analysis import classify_subprocess_stderr_level
 
 
 class _RaceyStdin:
@@ -579,8 +579,8 @@ async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
-        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+        patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
         await client._read_subprocess_output()
 
@@ -617,8 +617,8 @@ async def test_sink_unmute_skipped_when_ma_not_connected():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("services.ma_runtime_state.is_ma_connected", return_value=False),
-        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+        patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=False),
+        patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
         await client._read_subprocess_output()
 
@@ -664,8 +664,8 @@ async def test_sink_unmute_force_pushes_to_ma_even_when_local_status_says_unmute
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
-        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+        patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
         await client._read_subprocess_output()
 
@@ -689,8 +689,8 @@ async def test_sync_unmute_to_ma_without_force_skips_when_already_unmuted():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
-        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+        patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
         await client._sync_unmute_to_ma()  # default force=False
 
@@ -724,8 +724,8 @@ async def test_sink_unmute_not_synced_without_reconnect_flag():
 
     with (
         patch("sendspin_client._state.notify_status_changed"),
-        patch("services.ma_runtime_state.is_ma_connected", return_value=True),
-        patch("services.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+        patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
         await client._read_subprocess_output()
 
@@ -798,7 +798,7 @@ async def test_start_sendspin_inner_auto_shifts_listen_port_when_taken(monkeypat
             return 0
 
     async def _fake_exec(*args, **kwargs):
-        # args = (python, '-m', 'services.daemon_process', params, ...)
+        # args = (python, '-m', 'sendspin_bridge.services.ipc.daemon_process', params, ...)
         captured_params.append(args[3])
         return _FakeProc()
 
