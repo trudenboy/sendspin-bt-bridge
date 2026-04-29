@@ -29,7 +29,7 @@ def test_begin_startup_sets_runtime_mode_and_progress():
     progress = state.get_startup_progress()
     runtime_info = state.get_runtime_mode_info()
     assert progress["status"] == "running"
-    assert progress["phase"] == "config"
+    assert progress["phase"] == "sendspin_bridge.config"
     assert progress["total_steps"] == 7
     assert progress["details"]["demo_mode"] is True
     assert runtime_info["mode"] == "demo"

@@ -8,7 +8,7 @@ def tmp_config(tmp_path):
     """Provide a temporary config file and set CONFIG_FILE/CONFIG_DIR."""
     config_file = tmp_path / "config.json"
     config_file.write_text("{}")
-    import config as _cfg
+    import sendspin_bridge.config as _cfg
 
     original_file = _cfg.CONFIG_FILE
     original_dir = _cfg.CONFIG_DIR

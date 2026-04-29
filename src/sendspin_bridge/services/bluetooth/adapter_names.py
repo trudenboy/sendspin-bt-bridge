@@ -6,7 +6,7 @@ import json
 import logging
 import threading
 
-import config
+import sendspin_bridge.config as config
 
 logger = logging.getLogger(__name__)
 

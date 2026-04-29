@@ -41,7 +41,7 @@ def config_write_error_response(exc: OSError, context: str | None = None):
     if exc_filename:
         config_dir = str(_os_path.dirname(exc_filename) or exc_filename)
     else:
-        from config import CONFIG_DIR as _live_config_dir
+        from sendspin_bridge.config import CONFIG_DIR as _live_config_dir
 
         config_dir = str(_live_config_dir)
     runtime_uid = os.getuid()

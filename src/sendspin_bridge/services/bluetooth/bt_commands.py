@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import state
-from config import CONFIG_FILE, config_lock, load_config, write_config_file
+from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config, write_config_file
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.infrastructure.config_diff import diff_configs
 
@@ -408,7 +408,7 @@ def apply_device_enabled(player_id: str, enabled: bool) -> CommandResult:
                 break
             # Fallback: match by player_id derived from MAC if active client lookup failed.
             if target_mac is None:
-                from config import _player_id_from_mac
+                from sendspin_bridge.config import _player_id_from_mac
 
                 if _player_id_from_mac(mac_upper) == player_id:
                     target = dev

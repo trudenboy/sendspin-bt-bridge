@@ -38,7 +38,7 @@ class _SendspinSelect(SendspinDeviceEntity, SelectEntity):
         self._spec = spec
         self._attr_icon = spec.icon
         self._attr_options = list(spec.options)
-        if spec.entity_category == "config":
+        if spec.entity_category == "sendspin_bridge.config":
             self._attr_entity_category = EntityCategory.CONFIG
 
     @property

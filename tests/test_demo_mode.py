@@ -12,7 +12,6 @@ from types import SimpleNamespace
 import pytest
 from flask import Flask
 
-from config import VERSION
 from demo.bt_manager import DemoBluetoothManager
 from demo.fixtures import (
     DEMO_ADAPTERS,
@@ -29,6 +28,7 @@ from demo.fixtures import (
     demo_player_id_for_name,
 )
 from demo.simulator import run_simulator
+from sendspin_bridge.config import VERSION
 from sendspin_bridge.web.routes.auth import auth_bp
 from sendspin_bridge.web.routes.views import views_bp
 
@@ -292,8 +292,8 @@ async def test_demo_simulator_keeps_group_members_on_same_track(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypatch, request):
-    import config as config_module
     import demo
+    import sendspin_bridge.config as config_module
     import state
 
     class StubSendspinClient:

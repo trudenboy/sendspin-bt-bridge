@@ -681,10 +681,10 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 7. Inject demo devices + MA credentials into config
     # ------------------------------------------------------------------
-    from config import load_config
+    from sendspin_bridge.config import load_config
 
     _cfg = load_config()
-    import config as _config_mod
+    import sendspin_bridge.config as _config_mod
 
     _original_load = _config_mod.load_config
     _original_write_config_file = _config_mod.write_config_file
@@ -801,7 +801,7 @@ def install() -> None:
         time.sleep(0.35)
         reset_startup_progress(6, message="Demo startup initiated")
         update_startup_progress(
-            "config",
+            "sendspin_bridge.config",
             "Loading demo configuration",
             current_step=1,
             details={"demo_mode": True, "emulated_restart": True},

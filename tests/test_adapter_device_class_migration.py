@@ -16,8 +16,8 @@ config by hand or via the UI dropdown:
 
 from __future__ import annotations
 
-from config import DEFAULT_CONFIG
-from config_migration import _normalize_loaded_config
+from sendspin_bridge.config import DEFAULT_CONFIG
+from sendspin_bridge.config.migration import _normalize_loaded_config
 
 
 def test_samsung_compat_value_passes_through():

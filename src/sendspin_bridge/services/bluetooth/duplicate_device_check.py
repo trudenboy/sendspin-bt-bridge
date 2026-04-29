@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from config import _player_id_from_mac
+from sendspin_bridge.config import _player_id_from_mac
 
 logger = logging.getLogger(__name__)
 

@@ -41,7 +41,7 @@ def _load_allow_hfp() -> bool:
     import at module load — keeps test fixtures cheap and lets late config
     edits take effect on the next pair attempt."""
     try:
-        from config import load_config
+        from sendspin_bridge.config import load_config
 
         return bool(load_config().get("ALLOW_HFP_PROFILE", False))
     except Exception:

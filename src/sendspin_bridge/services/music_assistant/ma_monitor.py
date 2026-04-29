@@ -519,7 +519,7 @@ class MaMonitor:
             is_addon = server_info.get("server_info", server_info).get("homeassistant_addon")
             if not is_addon:
                 return
-            from config import load_config, update_config
+            from sendspin_bridge.config import load_config, update_config
 
             cfg = load_config()
             if cfg.get("MA_AUTH_PROVIDER") == "ha":
@@ -628,7 +628,7 @@ class MaMonitor:
         """
         import socket as _socket
 
-        from config import VERSION
+        from sendspin_bridge.config import VERSION
 
         expected_product = f"Sendspin BT Bridge v{VERSION}"
         expected_host = _socket.gethostname()

@@ -80,7 +80,7 @@ class _FakeSelector:
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
     """Redirect config to a temp directory so the web app can start."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
@@ -281,7 +281,7 @@ def test_config_validate_returns_normalized_preview(client):
 
 def test_config_validate_warns_when_new_mac_already_exists_in_ma(client, tmp_path, monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
@@ -313,7 +313,7 @@ def test_config_validate_warns_when_new_mac_already_exists_in_ma(client, tmp_pat
 
 def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, tmp_path, monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     mac = "AA:BB:CC:DD:EE:FF"
@@ -1628,7 +1628,7 @@ def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatc
 
 def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
-    from config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
     from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     monkeypatch.setattr(
@@ -1917,7 +1917,7 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     assert saved["BRUTE_FORCE_MAX_ATTEMPTS"] == 4
     assert saved["STARTUP_BANNER_GRACE_SECONDS"] == 0
     assert saved["RECOVERY_BANNER_GRACE_SECONDS"] == 15
-    from config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
 
     assert saved["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
     assert saved["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
@@ -2579,7 +2579,7 @@ def test_api_config_post_returns_validation_warnings(client, tmp_path, monkeypat
 
 def test_api_config_post_includes_ma_duplicate_warning(client, tmp_path, monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
@@ -2673,7 +2673,7 @@ def test_api_config_post_preserves_ma_token_metadata(client, tmp_path, monkeypat
 
 def test_config_upload_includes_ma_duplicate_warning(client, tmp_path, monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
@@ -3534,7 +3534,7 @@ def test_recovery_timeline_download_returns_csv(client, monkeypatch):
 
 
 def test_latency_apply_persists_config(client, tmp_path, monkeypatch):
-    import config
+    import sendspin_bridge.config as config
     import sendspin_bridge.web.routes.api_status as api_status
 
     config_path = tmp_path / "config.json"
@@ -3643,7 +3643,7 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     """GET /api/diagnostics should expose playing state and parsed sink-input metadata."""
     import sendspin_bridge.web.routes.api_status as api_status
     import state
-    from config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
     from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry, get_event_hook_registry
     from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION

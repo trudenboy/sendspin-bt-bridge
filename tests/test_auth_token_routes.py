@@ -18,7 +18,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(json.dumps({"AUTH_TOKENS": []}))
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
@@ -170,7 +170,7 @@ def test_token_endpoints_open_when_global_auth_disabled(tmp_path, monkeypatch):
     monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(json.dumps({"AUTH_TOKENS": []}))
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)

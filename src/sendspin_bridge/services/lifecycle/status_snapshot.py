@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import state
-from config import BUILD_DATE, get_runtime_version, load_config, resolve_device_room_context
+from sendspin_bridge.config import BUILD_DATE, get_runtime_version, load_config, resolve_device_room_context
 from sendspin_bridge.services.bluetooth import _match_player_name
 from sendspin_bridge.services.bluetooth.device_health_state import (
     build_device_capabilities,

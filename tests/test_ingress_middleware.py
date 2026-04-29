@@ -32,7 +32,7 @@ for _mod_name in (
 @pytest.fixture(autouse=True)
 def _mock_config(tmp_path, monkeypatch):
     """Ensure config points at a temp directory so web_interface can import."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
@@ -163,7 +163,7 @@ def test_ipv6_trusted():
 
 
 def test_session_timeout_loaded_from_config(tmp_path, monkeypatch):
-    import config
+    import sendspin_bridge.config as config
     import web_interface
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)

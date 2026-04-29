@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from config import CONFIG_SCHEMA_VERSION
+from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
 from sendspin_bridge.services.infrastructure.config_validation import validate_uploaded_config
 
 

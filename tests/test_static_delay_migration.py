@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import config_migration
-from config_migration import _normalize_bluetooth_devices
+import sendspin_bridge.config.migration as config_migration
+from sendspin_bridge.config.migration import _normalize_bluetooth_devices
 
 _DEFAULTS: dict[str, list[dict[str, str]]] = {"BLUETOOTH_DEVICES": []}
 
@@ -70,7 +70,7 @@ class TestStaticDelayMigration:
     def test_migration_logs_warning(self, caplog):
         _clear_dedup_state()
         caplog.clear()
-        with caplog.at_level("WARNING", logger="config_migration"):
+        with caplog.at_level("WARNING", logger="sendspin_bridge.config.migration"):
             config = {
                 "BLUETOOTH_DEVICES": [
                     {"mac": "FC:58:FA:EB:08:6C", "static_delay_ms": -600},
@@ -100,7 +100,7 @@ class TestStaticDelayMigration:
     def test_non_numeric_logs_warning(self, caplog):
         _clear_dedup_state()
         caplog.clear()
-        with caplog.at_level("WARNING", logger="config_migration"):
+        with caplog.at_level("WARNING", logger="sendspin_bridge.config.migration"):
             config = {
                 "BLUETOOTH_DEVICES": [
                     {"mac": "11:22:33:44:55:66", "static_delay_ms": "not_a_number"},
@@ -112,7 +112,7 @@ class TestStaticDelayMigration:
     def test_exceeds_5000_logs_warning(self, caplog):
         _clear_dedup_state()
         caplog.clear()
-        with caplog.at_level("WARNING", logger="config_migration"):
+        with caplog.at_level("WARNING", logger="sendspin_bridge.config.migration"):
             config = {
                 "BLUETOOTH_DEVICES": [
                     {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 9999},

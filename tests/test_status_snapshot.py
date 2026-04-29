@@ -324,7 +324,7 @@ def test_build_group_snapshots_merges_ma_syncgroup_members():
 
 
 def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
-    from config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
     from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     state.set_disabled_devices([{"player_name": "Disabled", "enabled": False}])

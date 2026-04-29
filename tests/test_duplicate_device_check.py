@@ -55,7 +55,7 @@ def _make_config(
 
 @patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_duplicate_devices_detects_conflict(mock_fetch):
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     mac = "AA:BB:CC:DD:EE:FF"
     pid = _player_id_from_mac(mac)
@@ -72,7 +72,7 @@ def test_find_duplicate_devices_detects_conflict(mock_fetch):
 
 @patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_duplicate_devices_no_conflict_own_bridge(mock_fetch):
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     mac = "AA:BB:CC:DD:EE:FF"
     pid = _player_id_from_mac(mac)
@@ -129,7 +129,7 @@ def test_find_duplicate_devices_api_failure(mock_fetch):
 
 @patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_scan_device_conflicts_detects_conflict(mock_fetch):
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     mac = "AA:BB:CC:DD:EE:FF"
     pid = _player_id_from_mac(mac)

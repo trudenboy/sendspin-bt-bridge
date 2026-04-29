@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from urllib.parse import quote
 
-from config import VERSION
+from sendspin_bridge.config import VERSION
 
 DEMO_DISPLAY_VERSION = f"{VERSION}-demo"
 

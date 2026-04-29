@@ -8,7 +8,7 @@ import urllib.parse as _up
 from functools import lru_cache
 
 import state
-from config import ensure_secret_key, load_config
+from sendspin_bridge.config import ensure_secret_key, load_config
 
 
 @lru_cache(maxsize=1)

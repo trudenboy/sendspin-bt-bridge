@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from config_migration import _normalize_bluetooth_devices
+from sendspin_bridge.config.migration import _normalize_bluetooth_devices
 
 _DEFAULTS: dict[str, list[dict[str, str]]] = {"BLUETOOTH_DEVICES": []}
 

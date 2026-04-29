@@ -17,7 +17,13 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
-from config import detect_ha_addon_channel, ensure_bridge_name, load_config, resolve_base_listen_port, resolve_web_port
+from sendspin_bridge.config import (
+    detect_ha_addon_channel,
+    ensure_bridge_name,
+    load_config,
+    resolve_base_listen_port,
+    resolve_web_port,
+)
 from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext, activate_device
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
@@ -398,7 +404,7 @@ class BridgeOrchestrator:
             get_sink_volume_fn = imported_get_sink_volume
         save_volume_fn = save_volume
         if save_volume_fn is None:
-            from config import save_device_volume as imported_save_volume
+            from sendspin_bridge.config import save_device_volume as imported_save_volume
 
             save_volume_fn = imported_save_volume
 
@@ -757,7 +763,7 @@ class BridgeOrchestrator:
 
     def _start_mdns_advertiser(self, *, bridge_name: str, version: str) -> None:
         try:
-            from config import resolve_web_port
+            from sendspin_bridge.config import resolve_web_port
             from sendspin_bridge.services.ipc.bridge_mdns import BridgeMdnsAdvertiser, set_default_advertiser
         except Exception as exc:  # pragma: no cover
             logger.info("mDNS advertiser unavailable (import failed): %s", exc)

@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from config import load_config
+from sendspin_bridge.config import load_config
 from sendspin_bridge.services.ha.ha_addon import get_mqtt_addon_credentials
 from sendspin_bridge.services.ha.ha_command_dispatcher import get_default_dispatcher
 from sendspin_bridge.services.ha.ha_mqtt_publisher import HaMqttPublisher, resolve_mqtt_config

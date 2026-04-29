@@ -115,11 +115,11 @@ def _detect_runtime_type() -> str:
 
 def get_bridge_system_info() -> dict:
     """Return hostname, IP, uptime and version — always available."""
-    from config import BUILD_DATE, CONFIG_SCHEMA_VERSION, get_runtime_version
+    from sendspin_bridge.config import BUILD_DATE, CONFIG_SCHEMA_VERSION, get_runtime_version
     from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
     uptime = datetime.now(tz=timezone.utc) - bridge_start_time
-    from config import get_local_ip
+    from sendspin_bridge.config import get_local_ip
 
     ip = get_local_ip()
     return {

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from config_network import is_ha_addon_runtime
+from sendspin_bridge.config.network import is_ha_addon_runtime
 from sendspin_bridge.services.diagnostics.guidance_issue_registry import build_issue_context, issue_sort_priority
 from sendspin_bridge.services.diagnostics.recovery_assistant import RecoveryAction, build_recovery_issue_actions
 from sendspin_bridge.services.infrastructure._helpers import (

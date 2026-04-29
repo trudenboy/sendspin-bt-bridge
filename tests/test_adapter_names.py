@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-import config
+import sendspin_bridge.config as config
 from sendspin_bridge.services.bluetooth import adapter_names
 
 

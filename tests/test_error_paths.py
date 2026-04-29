@@ -81,7 +81,7 @@ def test_handle_message_with_empty_status_envelope():
 
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")

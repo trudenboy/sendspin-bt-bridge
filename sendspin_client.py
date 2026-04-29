@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 import state as _state
 from bluetooth_manager import BluetoothManager
 from bridge_orchestrator import BridgeOrchestrator
-from config import (
+from sendspin_bridge.config import (
     CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,
     _player_id_from_mac,
@@ -1137,7 +1137,7 @@ class SendspinClient:
 
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
-        from config import get_local_ip
+        from sendspin_bridge.config import get_local_ip
 
         return get_local_ip() or "unknown"
 

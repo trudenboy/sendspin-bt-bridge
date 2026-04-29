@@ -222,7 +222,7 @@ def _disabled_device_meta(disabled_dict: dict[str, Any]) -> DeviceMeta | None:
     if not mac:
         return None
     # Lazy import — keeps ha_state_projector import-cycle-free.
-    from config import _player_id_from_mac
+    from sendspin_bridge.config import _player_id_from_mac
 
     player_id = _player_id_from_mac(mac)
     if not player_id:

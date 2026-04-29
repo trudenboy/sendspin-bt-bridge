@@ -5,7 +5,7 @@ import threading
 from unittest.mock import MagicMock, patch
 
 import state
-from config import update_config
+from sendspin_bridge.config import update_config
 
 # ---------------------------------------------------------------------------
 # Concurrent _update_status() calls

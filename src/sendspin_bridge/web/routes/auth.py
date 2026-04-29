@@ -33,7 +33,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
-from config import check_password, load_config
+from sendspin_bridge.config import check_password, load_config
 
 if TYPE_CHECKING:
     from werkzeug.wrappers.response import Response as WerkzeugResponse

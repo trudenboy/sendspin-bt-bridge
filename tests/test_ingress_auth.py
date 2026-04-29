@@ -17,7 +17,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
     """Redirect config to a temp directory so the web app can start."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")

@@ -157,16 +157,25 @@ def _replacement_patterns(old: str, new: str) -> list[tuple[re.Pattern[str], str
         (re.compile(rf"^(\s*import\s+){old_re}(\.[A-Za-z_])", re.MULTILINE), rf"\1{new}\2"),
         # `import <old> as alias`
         (re.compile(rf"^(\s*import\s+){old_re}(\s+as\s)", re.MULTILINE), rf"\1{new}\2"),
-        # `import <old>` (bare, end of line)
-        (re.compile(rf"^(\s*import\s+){old_re}(\s*$)", re.MULTILINE), rf"\1{new}\2"),
+        # `import <old>` (bare, end of line). When old is a top-level name
+        # being rewritten to a dotted path (`config` → `sendspin_bridge.config`),
+        # the dotted form binds the leftmost component (`sendspin_bridge`),
+        # losing the original `config` binding. Add `as <old>` to preserve it.
+        (
+            re.compile(rf"^(\s*import\s+){old_re}(\s*$)", re.MULTILINE),
+            rf"\1{new} as {old}\2" if "." not in old else rf"\1{new}\2",
+        ),
         # `importlib.import_module("<old>...")` and `__import__("<old>...")`
         (re.compile(rf'(import_module\(\s*["\']){old_re}(["\.])'), rf"\1{new}\2"),
         (re.compile(rf'(__import__\(\s*["\']){old_re}(["\.])'), rf"\1{new}\2"),
-        # Any quoted module path: `"<old>.X"` or `"<old>"` exactly. Used by
-        # @patch("...") / monkeypatch.setattr("...") / logger names. Conservative:
-        # only matches when the next char is `.`, `"` or `'` (avoiding false matches
-        # against words that just happen to start with the old prefix).
-        (re.compile(rf'(["\']){old_re}([\."\'])'), rf"\1{new}\2"),
+        # Quoted module path: `"<old>.X"` or `"<old>"` exactly, used by
+        # @patch("...") / monkeypatch.setattr("...") / logger names.
+        # Bounded: trailing char must be `"` or `'` (closing quote — bare
+        # module ref) OR `.<identifier>` (submodule continuation). This
+        # avoids matching string literals like `"config.json"` where
+        # what follows the dot is a file extension, not a Python module.
+        (re.compile(rf'(["\']){old_re}(\.[A-Za-z_])'), rf"\1{new}\2"),
+        (re.compile(rf'(["\']){old_re}(["\'])'), rf"\1{new}\2"),
     ]
 
     # Special case: when old is `services.X` (a leaf submodule of services), also rewrite

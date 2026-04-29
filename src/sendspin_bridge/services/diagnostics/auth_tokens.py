@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from config import CONFIG_FILE, config_lock, load_config
+from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 
 logger = logging.getLogger(__name__)
 

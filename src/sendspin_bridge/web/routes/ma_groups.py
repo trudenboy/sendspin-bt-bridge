@@ -14,7 +14,7 @@ import uuid
 
 from flask import jsonify
 
-from config import load_config
+from sendspin_bridge.config import load_config
 from sendspin_bridge.services.ha.ha_addon import get_ma_addon_discovery_candidates
 from sendspin_bridge.services.lifecycle.async_job_state import create_async_job, finish_async_job, get_async_job
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop

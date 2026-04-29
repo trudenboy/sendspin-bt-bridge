@@ -57,7 +57,7 @@ def client(tmp_path, monkeypatch):
         )
     )
 
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)

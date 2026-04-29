@@ -17,7 +17,7 @@ def isolated_config(tmp_path, monkeypatch):
     cfg_file = cfg_dir / "config.json"
     cfg_file.write_text(json.dumps({"AUTH_TOKENS": []}))
 
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
     monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)

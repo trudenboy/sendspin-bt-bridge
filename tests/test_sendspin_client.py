@@ -35,7 +35,7 @@ class _ReadlineStdout:
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
     """Redirect config to a temp directory for every test."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
@@ -245,7 +245,7 @@ class TestFilterDuplicateBluetoothDevices:
 
 class TestLoadSavedDeviceVolume:
     def test_returns_saved_volume(self, tmp_path):
-        import config
+        import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 42}}))
         from sendspin_client import _load_saved_device_volume
@@ -254,7 +254,7 @@ class TestLoadSavedDeviceVolume:
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") == 42
 
     def test_returns_none_for_missing_mac(self, tmp_path):
-        import config
+        import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {}}))
         from sendspin_client import _load_saved_device_volume
@@ -263,7 +263,7 @@ class TestLoadSavedDeviceVolume:
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
     def test_returns_none_for_out_of_range(self, tmp_path):
-        import config
+        import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 150}}))
         from sendspin_client import _load_saved_device_volume
@@ -272,7 +272,7 @@ class TestLoadSavedDeviceVolume:
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
     def test_returns_none_on_corrupted_file(self, tmp_path):
-        import config
+        import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text("{bad json")
         from sendspin_client import _load_saved_device_volume
@@ -591,7 +591,7 @@ class TestSetBtManagementEnabled:
 class TestClientInit:
     def test_player_id_derived_from_mac(self, client):
         """player_id should be a UUID5 derived from the BT MAC."""
-        from config import _player_id_from_mac
+        from sendspin_bridge.config import _player_id_from_mac
 
         expected = _player_id_from_mac("AA:BB:CC:DD:EE:FF")
         assert client.player_id == expected

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify, request
 
-from config import (
+from sendspin_bridge.config import (
     BUILD_DATE,
     CONFIG_ALLOWED_KEYS,
     CONFIG_FILE,
@@ -955,7 +955,7 @@ def api_set_password():
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
 
-    from config import hash_password as _hash_pw
+    from sendspin_bridge.config import hash_password as _hash_pw
 
     pw_hash = _hash_pw(password)
 

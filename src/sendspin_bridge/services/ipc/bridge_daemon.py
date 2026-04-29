@@ -31,7 +31,7 @@ from aiosendspin.models.core import (
 from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 
-from config import VERSION as _BRIDGE_VERSION
+from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
 
 UTC = timezone.utc
 

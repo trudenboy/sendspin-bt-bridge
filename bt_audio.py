@@ -14,8 +14,8 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
-from config import CONFIG_FILE, save_device_sink
-from config import config_lock as config_lock
+from sendspin_bridge.config import CONFIG_FILE, save_device_sink
+from sendspin_bridge.config import config_lock as config_lock
 from sendspin_bridge.services.audio.pulse import (
     cycle_card_profile,
     get_sink_volume,

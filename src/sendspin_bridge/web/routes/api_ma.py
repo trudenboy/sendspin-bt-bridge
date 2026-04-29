@@ -13,7 +13,7 @@ import logging
 
 from flask import Blueprint
 
-from config import load_config
+from sendspin_bridge.config import load_config
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
 from sendspin_bridge.services.music_assistant.ma_runtime_state import is_ma_connected

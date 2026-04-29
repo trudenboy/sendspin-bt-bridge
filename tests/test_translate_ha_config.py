@@ -152,7 +152,7 @@ def test_runtime_state_preserved(tmp_path):
         main()
 
     cfg = _read_json(tmp_path / "config.json")
-    from config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
 
     assert cfg["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
     assert cfg["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 50}
@@ -239,7 +239,7 @@ def test_basic_translation(tmp_path):
 
     cfg = _read_json(tmp_path / "config.json")
 
-    from config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
 
     assert cfg["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
     assert cfg["SENDSPIN_SERVER"] == "10.0.0.5"

@@ -19,7 +19,7 @@ import urllib.request as _ur
 
 from flask import Response, g, jsonify, request, session
 
-from config import load_config, update_config
+from sendspin_bridge.config import load_config, update_config
 from sendspin_bridge.services.ha.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
 from sendspin_bridge.services.infrastructure.url_safety import (
     SafeHTTPConnection,

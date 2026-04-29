@@ -55,7 +55,7 @@ def is_ha_addon_runtime(*, env: Mapping[str, str] | None = None) -> bool:
 
 def detect_ha_addon_channel(*, env: Mapping[str, str] | None = None, hostname: str | None = None) -> str:
     """Infer the installed HA addon delivery channel from the container hostname."""
-    from config_migration import DEFAULT_UPDATE_CHANNEL
+    from sendspin_bridge.config.migration import DEFAULT_UPDATE_CHANNEL
 
     environ = os.environ if env is None else env
     if not is_ha_addon_runtime(env=environ):
@@ -74,7 +74,7 @@ def resolve_web_port(*, env: Mapping[str, str] | None = None, hostname: str | No
         explicit_port = environ.get("WEB_PORT")
         if explicit_port not in (None, ""):
             return _coerce_port(explicit_port, DEFAULT_WEB_PORT)
-        from config import load_config  # late import to avoid circular dependency
+        from sendspin_bridge.config import load_config  # late import to avoid circular dependency
 
         configured_port = _configured_port_override(load_config(), "WEB_PORT", DEFAULT_WEB_PORT)
         if configured_port is not None:
@@ -113,7 +113,7 @@ def resolve_base_listen_port(*, env: Mapping[str, str] | None = None, hostname: 
     explicit_port = environ.get("BASE_LISTEN_PORT")
     if explicit_port not in (None, ""):
         return _coerce_port(explicit_port, default_port)
-    from config import load_config  # late import to avoid circular dependency
+    from sendspin_bridge.config import load_config  # late import to avoid circular dependency
 
     configured_port = _configured_port_override(load_config(), "BASE_LISTEN_PORT", default_port)
     if configured_port is not None:

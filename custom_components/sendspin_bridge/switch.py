@@ -37,7 +37,7 @@ class _SendspinSwitch(SendspinDeviceEntity, SwitchEntity):
         super().__init__(coordinator, player_id, spec.object_id, spec.name, availability_class=spec.availability_class)
         self._spec = spec
         self._attr_icon = spec.icon
-        if spec.entity_category == "config":
+        if spec.entity_category == "sendspin_bridge.config":
             self._attr_entity_category = EntityCategory.CONFIG
 
     @property

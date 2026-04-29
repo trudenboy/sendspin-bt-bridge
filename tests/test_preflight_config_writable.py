@@ -52,7 +52,7 @@ def test_preflight_payload_includes_config_writable_key(tmp_path, monkeypatch):
     """The returned dict must have a top-level ``config_writable``
     entry alongside ``audio`` / ``bluetooth`` / ``dbus`` / ``memory_mb``
     so ``api_status`` can render it without conditional null checks."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
 
@@ -65,7 +65,7 @@ def test_preflight_payload_includes_config_writable_key(tmp_path, monkeypatch):
 def test_preflight_config_writable_ok_for_writable_dir(tmp_path, monkeypatch):
     """Happy path: tmp_path is writable → status ok, writable=True,
     no remediation hint."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
 
@@ -81,7 +81,7 @@ def test_preflight_config_writable_degraded_with_chown_hint_when_permission_deni
     current process.  Status flips to ``degraded``, error code is
     ``permission_denied`` (canonical from ``collection_error_payload``),
     and a ``remediation`` string carries the chown command."""
-    import config
+    import sendspin_bridge.config as config
 
     # Make the path read-only for the test process by patching os.access
     # — much more reliable than chmod 555 in CI where the test runner
@@ -109,7 +109,7 @@ def test_preflight_overall_status_flips_to_degraded_on_writable_failure(tmp_path
     top-level ``status`` must still be ``degraded`` so the existing
     UI banner triggers — operators don't have to drill into the
     payload to know something is wrong."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
 
@@ -133,7 +133,7 @@ def test_preflight_config_writable_classifies_mkdir_failure_as_degraded(tmp_path
     pointing at the right path.  Earlier tolerance (returning ``ok``
     silently) was a false positive that masked the gap entirely on
     operator machines that bind-mount a read-only parent."""
-    import config
+    import sendspin_bridge.config as config
 
     nonexistent = tmp_path / "child"
     monkeypatch.setattr(config, "CONFIG_DIR", nonexistent)
@@ -156,7 +156,7 @@ def test_preflight_config_writable_records_path_and_uid(tmp_path, monkeypatch):
     the runtime UID so a bug-report attached blob makes the
     misconfiguration self-evident — no need to ask the operator
     "what does ls -la /config show"."""
-    import config
+    import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
 

@@ -21,7 +21,7 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
-from config import (
+from sendspin_bridge.config import (
     BUILD_DATE,
     CONFIG_SCHEMA_VERSION,
     RUNTIME_STATE_CONFIG_KEYS,
@@ -30,7 +30,7 @@ from config import (
     load_config,
     update_config,
 )
-from config import (
+from sendspin_bridge.config import (
     VERSION as _CONFIG_VERSION,
 )
 from sendspin_bridge.services.audio.pulse import get_server_name, list_cards, list_sinks
@@ -1406,7 +1406,7 @@ def api_bugreport():
             "diagnostics": diag,
             "subprocesses": subprocs,
             "bt_device_info": bt_device_info,
-            "config": config_info,
+            "sendspin_bridge.config": config_info,
             "recent_issue_logs": issue_summary["issue_lines"],
             "logs": log_lines,
         }
@@ -1675,7 +1675,7 @@ def _build_full_text_report(
     full.append("")
 
     # Config
-    config = masked.get("config")
+    config = masked.get("sendspin_bridge.config")
     if config:
         full.append(sep)
         full.append("  CONFIG (sanitized)")
@@ -1734,7 +1734,7 @@ def api_diagnostics_download():
             "environment": diag.get("environment", {}),
             "diagnostics": diag,
             "subprocesses": diag.get("subprocesses", []),
-            "config": config_info,
+            "sendspin_bridge.config": config_info,
             "recent_issue_logs": issue_summary["issue_lines"],
             "logs": log_lines,
         }

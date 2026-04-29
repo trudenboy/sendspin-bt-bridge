@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from config import ConfigMigrationIssue, ConfigMigrationResult
+    from sendspin_bridge.config import ConfigMigrationIssue, ConfigMigrationResult
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +302,7 @@ def _normalize_adapter_area_map(config: dict, *, defaults: Mapping[str, Any]) ->
 
 
 def _normalize_ha_area_name_assist_enabled(config: dict, *, defaults: Mapping[str, Any]) -> None:
-    from config_network import is_ha_addon_runtime
+    from sendspin_bridge.config.network import is_ha_addon_runtime
 
     default_enabled = is_ha_addon_runtime()
     raw_value = config.get("HA_AREA_NAME_ASSIST_ENABLED", defaults["HA_AREA_NAME_ASSIST_ENABLED"])
@@ -526,7 +526,7 @@ def _filter_allowed_config_keys(config: dict[str, Any], *, allowed_keys: frozens
 
 
 def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[str]) -> ConfigMigrationResult:
-    from config import ConfigMigrationIssue, ConfigMigrationResult
+    from sendspin_bridge.config import ConfigMigrationIssue, ConfigMigrationResult
 
     normalized = _filter_allowed_config_keys(config, allowed_keys=allowed_keys)
     warnings: list[ConfigMigrationIssue] = []

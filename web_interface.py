@@ -20,7 +20,13 @@ from pathlib import Path
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory, session, url_for
 from waitress import serve  # type: ignore[import-untyped]
 
-from config import ensure_secret_key, get_runtime_version, load_config, resolve_additional_web_port, resolve_web_port
+from sendspin_bridge.config import (
+    ensure_secret_key,
+    get_runtime_version,
+    load_config,
+    resolve_additional_web_port,
+    resolve_web_port,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -241,7 +247,7 @@ def _resolve_ingress_user() -> str:
 
     # 1. Use MA_USERNAME saved during MA auth setup (most reliable)
     try:
-        from config import load_config
+        from sendspin_bridge.config import load_config
 
         cfg = load_config()
         username = cfg.get("MA_USERNAME", "")

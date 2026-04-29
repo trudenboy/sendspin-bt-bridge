@@ -13,8 +13,8 @@ import tempfile
 import threading
 from pathlib import Path
 
-from config import CONFIG_FILE as _CONFIG_FILE
-from config import config_lock as _config_lock
+from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
+from sendspin_bridge.config import config_lock as _config_lock
 
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")

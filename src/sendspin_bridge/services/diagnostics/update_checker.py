@@ -11,7 +11,7 @@ import subprocess
 from typing import Any
 from urllib.parse import quote
 
-from config import DEFAULT_UPDATE_CHANNEL, load_config, normalize_update_channel
+from sendspin_bridge.config import DEFAULT_UPDATE_CHANNEL, load_config, normalize_update_channel
 
 logger = logging.getLogger(__name__)
 

@@ -37,7 +37,7 @@ ha_bp = Blueprint("ha_integration", __name__)
 
 def _build_projection_for_request():
     """Build a fresh ``HAStateProjection`` from the live bridge snapshot."""
-    from config import ensure_bridge_name, get_runtime_version, load_config
+    from sendspin_bridge.config import ensure_bridge_name, get_runtime_version, load_config
     from sendspin_bridge.services.ha.ha_state_projector import project_snapshot
     from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
     from state import get_clients_snapshot

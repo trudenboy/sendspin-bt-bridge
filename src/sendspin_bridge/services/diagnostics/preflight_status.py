@@ -9,7 +9,7 @@ import socket as _socket
 import subprocess
 from typing import Any
 
-from config import get_runtime_version
+from sendspin_bridge.config import get_runtime_version
 from sendspin_bridge.services.audio.pulse import get_server_name, list_sinks
 
 
@@ -292,7 +292,7 @@ def collect_preflight_status(
     # PermissionError → handler returns generic 500.  Surfacing this
     # in preflight makes it visible in the Diagnostics panel without
     # operators reading container logs.
-    from config import CONFIG_DIR
+    from sendspin_bridge.config import CONFIG_DIR
 
     config_writable_payload = _build_config_writable_payload(CONFIG_DIR)
     if config_writable_payload["status"] == "degraded":

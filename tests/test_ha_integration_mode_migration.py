@@ -10,7 +10,7 @@ the mode back to "rest" with one click after upgrade.
 
 from __future__ import annotations
 
-from config_migration import _normalize_ha_integration
+from sendspin_bridge.config.migration import _normalize_ha_integration
 
 
 def test_both_normalised_to_mqtt():

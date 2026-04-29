@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from config import (
+from sendspin_bridge.config import (
     CONFIG_SCHEMA_VERSION,
     DEFAULT_LISTEN_PORT_BASE,
     DEFAULT_UPDATE_CHANNEL,

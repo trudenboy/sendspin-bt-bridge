@@ -12,7 +12,7 @@ import pytest
 def config_client(tmp_path, monkeypatch):
     from flask import Flask
 
-    import config
+    import sendspin_bridge.config as config
     import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)

@@ -16,7 +16,7 @@ import time
 
 from flask import Blueprint, jsonify, request
 
-from config import save_device_volume
+from sendspin_bridge.config import save_device_volume
 from sendspin_bridge.services.audio.pulse import (
     get_sink_mute,
     set_sink_mute,

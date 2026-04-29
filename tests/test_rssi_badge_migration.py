@@ -9,8 +9,8 @@ explicitly enabled it stays enabled.
 
 from __future__ import annotations
 
-from config import DEFAULT_CONFIG
-from config_migration import _normalize_loaded_config
+from sendspin_bridge.config import DEFAULT_CONFIG
+from sendspin_bridge.config.migration import _normalize_loaded_config
 
 
 def test_legacy_key_with_true_migrates_to_new_key():

@@ -16,7 +16,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from config import CONFIG_FILE, config_lock, load_config
+from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
     _AUDIO_UUIDS,
