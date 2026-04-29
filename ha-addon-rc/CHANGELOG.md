@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.65.1-rc.1] - 2026-04-29
+
+### Added — Per-adapter Class of Device override (Samsung Q-series workaround)
+
+Samsung HW-Q910B / Q990B / similar Q-series soundbars reject incoming BR/EDR connections whose initiator Class of Device they don't recognise — see [bluez/bluez#1025](https://github.com/bluez/bluez/issues/1025) and tracking [#210](https://github.com/trudenboy/sendspin-bt-bridge/issues/210). The on-the-wire signature is `HCI Connect Complete status=0x0d` → `MGMT No Resources (0x07)` → `org.bluez.Error.AuthenticationCanceled`, identical across different USB BT adapter chipsets.
+
+This release adds an opt-in CoD override per adapter:
+
+- **Configuration → Bluetooth → adapter row → Class of Device dropdown.** Choose **Computer/Laptop (0x00010c) — Samsung-compat** (the value documented in the BlueZ thread) or pick **Custom hex** for a different override. Default leaves the kernel/bluetoothd value untouched.
+- The override is applied at bridge startup via the kernel mgmt API (`MGMT_OP_SET_DEV_CLASS`, opcode `0x002C`). Runtime-only, non-persistent across host reboots — the bridge reapplies it on every start.
+- New helper `services/bt_class_of_device.py` shares the raw mgmt-socket transport with `services/bt_rssi_mgmt`. No new capability beyond the `CAP_NET_ADMIN` the bridge already holds.
+- New config field `BLUETOOTH_ADAPTERS[].device_class` (six-hex-digit form, e.g. `"0x00010c"`). Empty default. Migration accepts existing configs without injecting the field.
+
+### Added — Pair-failure fingerprint surfaced as operator guidance
+
+When a pair attempt fails, the bridge now classifies the captured `bluetoothctl` output and `PairingAgent.telemetry`. A confident match against the Samsung Q-series fingerprint (AuthenticationCanceled + "No Resources" / `status 0x0d` + zero pairing-agent method calls) writes `pair_failure_kind="samsung_cod_filter"` to the device status and surfaces a targeted recovery card in the operator-guidance panel:
+
+> Pair rejected by Class of Device filter — set `device_class` to `0x00010c` on this adapter in Settings → Bluetooth and re-pair.
+
+The card takes precedence over the generic `repair_required` / `disconnected` cards because the operator action is different (set CoD, not re-pair).
+
+### Docs
+
+- New troubleshooting section: **Samsung Q-series soundbar refuses to pair** in `docs-site/src/content/docs/troubleshooting.md`.
+
+### Code-review polish
+
+- `bluetooth_manager.pair_device` now clears `pair_failure_kind` / `pair_failure_adapter_mac` / `pair_failure_at` at the start of every attempt, so a previous run's `samsung_cod_filter` fingerprint never outlives a successful re-pair or a different failure shape.
+- `recovery_assistant` additionally gates the Samsung CoD card on the device being currently disconnected, so a stale fingerprint from before the operator applied the workaround can't keep the banner lit on a working speaker.
+- Adapter-row "?" help affordance is a real `<button type="button">` with `aria-label`, reachable from keyboard and announced by screen readers.
+
 ## [2.65.0-rc.6] - 2026-04-28
 
 ### Changed — HA: standby + power-save switches replace button + binary-sensor pairs
