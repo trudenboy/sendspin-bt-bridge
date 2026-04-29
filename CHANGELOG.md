@@ -7,61 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### ⚠️ Breaking — repository structure migration to PyPA src-layout
-
-The Python source tree moved from a flat layout (every module at the
-repo root) into `src/sendspin_bridge/{bridge,bluetooth,config,services,
-web}/`. Production functionality is unchanged; this is a structural
-refactor enabling `pip install .` and a single canonical entry-point
-`python -m sendspin_bridge`.
-
-User-visible side effects:
-
-- **Docker / HA Add-on** — image rebuild handles the migration; no
-  user action needed.
-- **HACS integration (`custom_components/sendspin_bridge/`)** — unaffected.
-- **LXC installations** — pre-2.66 `upgrade.sh` cannot apply this
-  release (it copies `*.py` from the snapshot root, which no longer
-  exists). Run the one-shot bootstrap helper **once**, then the
-  normal upgrade flow continues working:
-
-      curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/migrate-to-src-layout.sh | sh
-
-  The systemd unit file changed (`ExecStart=/opt/sendspin-client/sendspin-client`,
-  a thin shim that calls `python3 -m sendspin_bridge`).
-
-Other deployment scripts (proxmox VM, Raspberry Pi) moved into
-`deployment/{proxmox,raspberry-pi}/` for clarity. Direct script callers
-should update their paths.
-
-### Changed — internal
-
-- `pyproject.toml` now declares `[build-system]` (hatchling) and reads
-  the version dynamically from the `VERSION` file (PEP 621).
+### Changed
+- **⚠️ Breaking — repository moved to PyPA src-layout.** The Python
+  source tree moved from the flat repo-root layout into
+  `src/sendspin_bridge/`. Runtime behaviour is unchanged; only the
+  install / upgrade path is affected. **Docker** and **HA Add-on**
+  users — no action, the image rebuild handles it. **LXC users** —
+  the pre-2.66 `upgrade.sh` cannot apply this release; run the
+  one-shot bootstrap helper once, then resume normal upgrades:
+  `curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/migrate-to-src-layout.sh | sh`.
+  The canonical entry point is now `python -m sendspin_bridge`.
+- Build system declared via PEP 621 with version sourced from
+  `VERSION`; `pip install .` and `pip install -e .` now work without
+  side files.
 - Dependency management migrated to [uv](https://docs.astral.sh/uv/).
-  `uv.lock` is the single source of truth for resolved versions across
-  Linux/macOS/Windows on Python ≥ 3.12; `requirements.txt` is now an
-  artefact regenerated from `uv.lock` via `uv export` (header documents
-  the canonical regen command). The legacy `scripts/sync_requirements.py`
-  diff guard and `dev-requirements.txt` shim are removed; CI parity is
-  enforced by `uv lock --check` + a `uv export` diff and the
-  `astral-sh/uv-pre-commit` hooks (`uv-lock`, `uv-export`).
-- CI workflows `_lint.yml` and `_test.yml` install dependencies via
-  `astral-sh/setup-uv@v4` + `uv sync --frozen --extra dev` (≈3-8 s vs
-  the previous ~30-45 s pip flow). pip-audit runs via `uv run --with
-  pip-audit pip-audit` so it scans the actual synced project venv
-  (rather than pip-audit's own tool sandbox) without permanently adding
-  the auditor to the lockfile. Dockerfile uv pin bumped 0.5.31 → 0.9.27.
-- `pytest-cov` moved from an ad-hoc CI install into
-  `[project.optional-dependencies].dev`, so `uv run pytest --cov=...`
-  works locally too.
-- 67 `services/*.py` modules grouped into 8 semantic subpackages
-  (`bluetooth/`, `audio/`, `music_assistant/`, `ha/`, `ipc/`,
-  `lifecycle/`, `diagnostics/`, `infrastructure/`).
-- 132 flat tests reorganised under `tests/unit/{bridge,bluetooth,
-  config,services/<subpkg>,web/routes}/` and `tests/integration/`.
-- HA add-on `ha-addon-rc/` and `ha-addon-beta/` directories are now
-  CI-verified for drift against the `ha-addon/` template.
+  Local development uses `uv venv` + `uv sync --frozen --extra dev`;
+  `uv.lock` is the canonical resolved-deps file. CI install drops from
+  ~30-45 s to 3-8 s. Pre-commit + CI guardrails enforce that
+  `requirements.txt` stays a regenerated artefact of `uv.lock`.
+- pip-audit now runs via `uv run --with pip-audit pip-audit` so the
+  CVE scan sees the actual installed project venv.
+
+### Removed
+- `dev-requirements.txt` and `scripts/sync_requirements.py` — replaced
+  by `uv sync --extra dev` and the `astral-sh/uv-pre-commit` hooks.
 
 ## [2.65.1-rc.1] - 2026-04-29
 
