@@ -1,12 +1,14 @@
 # Large dirs not needed in Docker build context
 docs-site/
+docs/
 .git/
-lxc/
+deployment/
 ha-addon/
 ha-addon-beta/
 ha-addon-rc/
 ha-addon-assets/
 .github/
+.scratch/
 patches/
 .playwright-mcp/
 .wrangler/
@@ -60,6 +62,9 @@ docker-compose.yml
 .gitattributes
 .pre-commit-config.yaml
 .hadolint.yaml
-pyproject.toml
-render.yaml
+# pyproject.toml is REQUIRED in the build context (B9 of src-layout
+# migration: Dockerfile does `COPY pyproject.toml /app/` and then
+# `pip install -e /app` so `python -m sendspin_bridge` resolves).
+# Do NOT add pyproject.toml here.
 repository.yaml
+hacs.json
