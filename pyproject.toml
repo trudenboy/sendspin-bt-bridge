@@ -39,9 +39,10 @@ path = "VERSION"
 pattern = "^(?P<version>.+)$"
 
 [tool.hatch.build.targets.wheel]
-# Pre-src-layout: explicit packages list. Updated to a single
-# src/sendspin_bridge package in B1 of the structure migration.
-packages = ["routes", "services"]
+# Mid-migration: both the legacy flat packages (routes/, services/) and the
+# new src/sendspin_bridge/ skeleton are packaged. As modules migrate (B2–B6),
+# the flat entries get removed; B6 leaves only ["src/sendspin_bridge"].
+packages = ["routes", "services", "src/sendspin_bridge"]
 # Top-level *.py modules picked up automatically by hatchling.
 
 [project.optional-dependencies]
