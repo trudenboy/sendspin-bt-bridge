@@ -211,9 +211,9 @@ ENV GITHUB_APP_PRIVATE_KEY=${BUGREPORTER_PRIVATE_KEY}
 # Expose web interface port
 EXPOSE 8080
 
-# Health check — verify only that the web UI is reachable (BT disconnected is normal)
+# Health check — hit /api/health directly via curl (no Python import; survives src-layout move)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import urllib.request; from config import resolve_web_port; urllib.request.urlopen(f'http://localhost:{resolve_web_port()}/api/health')" || exit 1
+    CMD curl -fsS "http://localhost:${WEB_PORT:-8080}/api/health" >/dev/null || exit 1
 
 # S6 init wrapper — /init permissions are set at build time (line 94).
 RUN printf '#!/bin/sh\nexec /init "$@"\n' > /s6-init && \

@@ -423,8 +423,9 @@ KERNEL_VERSION=$(uname -r 2>/dev/null || echo "unknown")
 PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
 [ -z "$PYTHON_VERSION" ] && PYTHON_VERSION="unknown"
 
-# Get version from Python
-VERSION=$(python3 -c "from config import VERSION; print(VERSION)" 2>/dev/null || echo "unknown")
+# Get version: prefer the entry-point's --version short-circuit (cheap, no deps),
+# fall back to /app/VERSION file, finally "unknown".
+VERSION=$(python3 /app/sendspin_client.py --version 2>/dev/null || cat /app/VERSION 2>/dev/null || echo "unknown")
 
 # MA server setting
 MA_SERVER="${SENDSPIN_SERVER:-auto}"

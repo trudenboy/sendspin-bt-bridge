@@ -2026,5 +2026,15 @@ async def main():
         logger.info("Client shutting down...")
 
 
+def _handle_cli_short_circuits() -> None:
+    """Handle CLI flags that should exit before the full async runtime starts."""
+    import sys
+
+    if "--version" in sys.argv or "-V" in sys.argv:
+        print(get_runtime_version())
+        sys.exit(0)
+
+
 if __name__ == "__main__":
+    _handle_cli_short_circuits()
     asyncio.run(main())
