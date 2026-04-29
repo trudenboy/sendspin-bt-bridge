@@ -190,10 +190,11 @@ RUN chmod +x entrypoint.sh && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/run && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/finish
 
-# Copy application files
-COPY *.py ./
-COPY routes/ routes/
-COPY services/ services/
+# Copy application source (src-layout) + manifests; install editable so
+# `python -m sendspin_bridge` and the `sendspin-bridge` console script work.
+COPY src/ /app/src/
+COPY pyproject.toml VERSION /app/
+RUN pip install --no-deps --no-cache-dir -e /app
 # scripts/ is intentionally narrowed to runtime + CI smoke-test entrypoints:
 #   translate_ha_config.py   — called by entrypoint.sh when /data/options.json exists (HA addon mode)
 #   check_sendspin_compat.py — invoked inside the image by release.yml post-build
@@ -201,8 +202,7 @@ COPY services/ services/
 # Dev tooling (proxmox-vm-*, rpi-*, generate_ha_addon_variants, release_notes,
 # translate_landing) runs on the host and has no business in the image.
 COPY scripts/translate_ha_config.py scripts/check_sendspin_compat.py scripts/check_container_runtime.py scripts/
-COPY templates/ templates/
-COPY static/ static/
+# Templates / static / config schema travel inside src/sendspin_bridge/ via the editable install above.
 
 # GitHub App private key for bug report proxy (base64-encoded PEM)
 ARG BUGREPORTER_PRIVATE_KEY=""
@@ -211,9 +211,9 @@ ENV GITHUB_APP_PRIVATE_KEY=${BUGREPORTER_PRIVATE_KEY}
 # Expose web interface port
 EXPOSE 8080
 
-# Health check — verify only that the web UI is reachable (BT disconnected is normal)
+# Health check — hit /api/health directly via curl (no Python import; survives src-layout move)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import urllib.request; from config import resolve_web_port; urllib.request.urlopen(f'http://localhost:{resolve_web_port()}/api/health')" || exit 1
+    CMD curl -fsS "http://localhost:${WEB_PORT:-8080}/api/health" >/dev/null || exit 1
 
 # S6 init wrapper — /init permissions are set at build time (line 94).
 RUN printf '#!/bin/sh\nexec /init "$@"\n' > /s6-init && \

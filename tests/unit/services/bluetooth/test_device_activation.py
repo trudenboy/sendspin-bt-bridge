@@ -1,0 +1,681 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+
+from sendspin_bridge.services.bluetooth.device_activation import (
+    ActivationResult,
+    DeviceActivationContext,
+    activate_device,
+)
+
+
+def _fake_client(player_name: str, *args, **kwargs) -> SimpleNamespace:
+    """Factory stub mimicking SendspinClient's ctor keyword surface."""
+    status: dict[str, object] = {}
+
+    def update_status(delta: dict[str, object]) -> None:
+        status.update(delta)
+
+    client = SimpleNamespace(
+        player_name=player_name,
+        listen_port=kwargs.get("listen_port"),
+        preferred_format=kwargs.get("preferred_format"),
+        bt_manager=None,
+        bluetooth_sink_name=None,
+        status=status,
+        _sink_monitor=None,
+        _update_status=update_status,
+        set_bt_management_enabled=MagicMock(),
+        _on_sink_active=lambda: None,
+        _on_sink_idle=lambda: None,
+    )
+    return client
+
+
+def _fake_bt_manager_factory(bt_available: bool = True):
+    captured: dict[str, object] = {}
+
+    def factory(mac: str, **kwargs) -> SimpleNamespace:
+        captured.update(kwargs)
+        captured["mac"] = mac
+        mgr = SimpleNamespace(
+            mac_address=mac,
+            check_bluetooth_available=lambda: bt_available,
+            on_sink_found=kwargs.get("on_sink_found"),
+        )
+        return mgr
+
+    return factory, captured
+
+
+def _make_context(
+    *,
+    bt_available: bool = True,
+    load_saved_volume_fn=None,
+    persist_enabled_fn=None,
+    base_listen_port: int = 8928,
+    effective_bridge: str = "",
+    enable_rssi_badge: bool = False,
+) -> tuple[DeviceActivationContext, dict[str, object]]:
+    bt_factory, captured = _fake_bt_manager_factory(bt_available=bt_available)
+    ctx = DeviceActivationContext(
+        server_host="auto",
+        server_port=9000,
+        effective_bridge=effective_bridge,
+        prefer_sbc=True,
+        bt_check_interval=15,
+        bt_max_reconnect_fails=10,
+        bt_churn_threshold=0,
+        bt_churn_window=300.0,
+        enable_a2dp_sink_recovery_dance=False,
+        enable_pa_module_reload=False,
+        enable_adapter_auto_recovery=False,
+        base_listen_port=base_listen_port,
+        client_factory=_fake_client,
+        bt_manager_factory=bt_factory,
+        load_saved_volume_fn=load_saved_volume_fn,
+        persist_enabled_fn=persist_enabled_fn,
+        enable_rssi_badge=enable_rssi_badge,
+    )
+    return ctx, captured
+
+
+def test_activate_device_wires_bt_manager_and_sink_monitor_callback():
+    ctx, captured = _make_context()
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    assert isinstance(result, ActivationResult)
+    assert result.bt_manager is not None
+    assert result.bt_available is True
+    assert result.client.bt_manager is result.bt_manager
+    assert result.client.status["bluetooth_available"] is True
+
+    # _on_sink_found closure should register the sink name + call sink_monitor
+    sink_monitor = MagicMock()
+    result.client._sink_monitor = sink_monitor
+    on_sink_found = captured["on_sink_found"]
+    on_sink_found("bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink")
+    assert result.client.bluetooth_sink_name == "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
+    sink_monitor.register.assert_called_once()
+
+
+def test_activate_device_without_mac_skips_bt_manager():
+    ctx, _ = _make_context()
+    device = {"mac": "", "player_name": "Silent"}
+
+    result = activate_device(device, index=2, context=ctx, default_player_name="Fallback")
+
+    assert result.bt_manager is None
+    assert result.bt_available is False
+    assert result.client.bt_manager is None
+    assert result.listen_port == 8928 + 2  # base + index fallback
+
+
+def test_activate_device_restores_saved_volume_when_load_fn_provided():
+    load_fn = MagicMock(return_value=42)
+    ctx, _ = _make_context(load_saved_volume_fn=load_fn)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    load_fn.assert_called_once_with("AA:BB:CC:DD:EE:FF")
+    assert result.client.status.get("volume") == 42
+
+
+def test_activate_device_degrades_when_bt_adapter_unavailable():
+    ctx, _ = _make_context(bt_available=False)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Unreachable"}
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    assert result.bt_manager is not None
+    assert result.bt_available is False
+    assert result.client.status["bluetooth_available"] is False
+
+
+def test_activate_device_respects_explicit_listen_port():
+    ctx, _ = _make_context(base_listen_port=8928)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "listen_port": 9999}
+
+    result = activate_device(device, index=5, context=ctx, default_player_name="Fallback")
+
+    assert result.listen_port == 9999  # explicit wins over base + index
+
+
+def test_activate_device_falls_back_to_base_port_plus_index():
+    ctx, _ = _make_context(base_listen_port=8928)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0"}
+
+    result = activate_device(device, index=3, context=ctx, default_player_name="Fallback")
+
+    assert result.listen_port == 8928 + 3
+
+
+def test_activate_device_honours_effective_bridge_suffix():
+    ctx, captured = _make_context(effective_bridge="Home")
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    # Verify the effective_bridge suffix is applied to device_name passed into
+    # the BT manager factory (so the BT manager logs and sink lookups stay
+    # consistent with what the client uses as its player_name).
+    assert captured["device_name"] == "Kitchen @ Home"
+
+
+def test_activate_device_restores_released_state_when_flagged():
+    ctx, _ = _make_context()
+    device = {
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "adapter": "hci0",
+        "player_name": "Shelf",
+        "released": True,
+    }
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    result.client.set_bt_management_enabled.assert_called_once_with(False)
+
+
+def test_activate_device_clamps_tiny_keepalive_interval_up_to_30():
+    ctx, _ = _make_context()
+    captured_client_kwargs: dict[str, object] = {}
+
+    def recording_factory(player_name: str, *args, **kwargs) -> SimpleNamespace:
+        captured_client_kwargs.update(kwargs)
+        return _fake_client(player_name, *args, **kwargs)
+
+    ctx = DeviceActivationContext(**{**ctx.__dict__, "client_factory": recording_factory})
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "keepalive_interval": 5}
+
+    activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    assert captured_client_kwargs["keepalive_enabled"] is True
+    assert captured_client_kwargs["keepalive_interval"] == 30
+
+
+def test_activate_device_leaves_rssi_callback_unset_when_flag_off():
+    """``RSSI_BADGE`` defaults to True since v2.64.0, but operators can
+    still disable it.  When disabled, the BT manager must not receive
+    an ``on_rssi_update`` callback so the periodic refresh tick
+    short-circuits before it ever touches the BT operation lock or
+    the kernel mgmt socket — keeps the off path truly overhead-free."""
+    ctx, captured = _make_context(enable_rssi_badge=False)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    assert captured.get("on_rssi_update") is None
+
+
+def test_activate_device_wires_rssi_callback_when_flag_on():
+    """Default-on path: the callback must reach the BT manager so
+    periodic refresh ticks forward fresh RSSI into the client status
+    pipeline."""
+    ctx, captured = _make_context(enable_rssi_badge=True)
+    device = {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    cb = captured.get("on_rssi_update")
+    assert callable(cb)
+
+    # And the callback writes through to the client's status dict
+    # (rssi_dbm + rssi_at_ts) so SSE consumers see the value.
+    cb(-55)
+    assert result.client.status.get("rssi_dbm") == -55
+    assert isinstance(result.client.status.get("rssi_at_ts"), float)
+
+
+def test_activate_context_is_frozen():
+    # @dataclass(frozen=True) guarantees the runtime-captured factories aren't
+    # swapped out by a later caller (important because the same context is
+    # shared across startup and all online-activation invocations).
+    from dataclasses import FrozenInstanceError
+
+    ctx, _ = _make_context()
+    with pytest.raises(FrozenInstanceError):
+        ctx.server_host = "tamper"  # type: ignore[misc]
+
+
+# ── MPRIS export contract — per-device path + adapter resolution ────────
+
+
+def test_mpris_object_path_is_per_device_unique_for_bluez_register_player():
+    """v2.63.0-rc.6: each device must have a UNIQUE D-Bus object path
+    because multiple speakers on the same adapter all register via
+    ``org.bluez.Media1.RegisterPlayer(path, props)`` — one shared path
+    would clash on the second registration.  MAC colons map to ``_``
+    because D-Bus paths must be ``[A-Za-z0-9_/]``.
+
+    Earlier rcs (1-5) tried the canonical ``/org/mpris/MediaPlayer2``
+    path + a per-device well-known bus name, but BlueZ's AVRCP
+    forwarder doesn't scan bus names — it only routes to paths handed
+    to it via Media1.RegisterPlayer, and system-bus name requests are
+    ACL-blocked by default anyway.  See CHANGELOG rc.6 entry.
+    """
+    from sendspin_bridge.services.bluetooth.device_activation import _mpris_dbus_path
+
+    a = _mpris_dbus_path("AA:BB:CC:DD:EE:FF")
+    b = _mpris_dbus_path("11:22:33:44:55:66")
+    assert a != b, "MAC-derived path must differ per device"
+    assert a.startswith("/org/sendspin/players/")
+    assert ":" not in a  # D-Bus path constraint
+    assert a.endswith("AA_BB_CC_DD_EE_FF")
+
+
+def test_bluez_adapter_path_returns_org_bluez_hci_form():
+    """``Media1.RegisterPlayer`` must be called on the adapter where the
+    device is connected, not arbitrarily on hci0.  The helper resolves
+    ``BluetoothManager.adapter_hci_name`` (sysfs-derived at startup)
+    into the BlueZ object-path form."""
+    from types import SimpleNamespace
+
+    from sendspin_bridge.services.bluetooth.device_activation import _bluez_adapter_path
+
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci0")) == "/org/bluez/hci0"
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="hci1")) == "/org/bluez/hci1"
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="")) is None
+    assert _bluez_adapter_path(SimpleNamespace(adapter_hci_name="bogus")) is None
+
+
+# ── AVRCP source correlation — transport callback dispatches via resolver ──
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_dispatches_to_resolved_source_client():
+    """The transport callback returned by ``_build_mpris_transport_callback``
+    must NOT dispatch to its captured ``default_client`` directly — it
+    must consult ``resolve_avrcp_source_client``, which uses
+    ``AvrcpSourceTracker`` to identify which speaker actually pressed the
+    button.
+
+    Reproduces the VM 105 mis-route: BlueZ forwards the AVRCP Next from
+    WH speaker to ENEBY's exported MprisPlayer (ENEBY is BlueZ's chosen
+    addressed player on the adapter).  ENEBY's MprisPlayer was built
+    with ``default_client=eneby_client``, but the resolver sees recent
+    MediaPlayer1 activity from WH's MAC and returns wh_client instead.
+    """
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
+
+    eneby_client = SimpleNamespace(
+        player_name="ENEBY",
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh_client = SimpleNamespace(
+        player_name="WH",
+        send_transport_command=AsyncMock(return_value=True),
+        status={"audio_streaming": True},
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh_client),
+    )
+    fresh_tracker.note_activity("80:99:E7:C2:0B:D3")
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    cb = _build_mpris_transport_callback(eneby_client)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("eneby-id", "next")
+
+    assert result is True
+    # The actual command went to WH (the source), not ENEBY (the captured default).
+    wh_client.send_transport_command.assert_awaited_once_with("next")
+    eneby_client.send_transport_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_falls_back_to_default_when_ambiguous():
+    """No recent tracker activity, multiple streaming clients (ambiguous source)
+    → resolver falls back to default_client (Strategy 3).
+
+    default_client is the client whose MprisPlayer BlueZ chose to dispatch to
+    (always the first registered).  Routing to it is the correct BlueZ-default
+    behaviour for buttons pressed on the first-registered device — better than
+    silently dropping the command and leaving the user with an unresponsive
+    button.  Strategy 1 (tracker) handles other devices when their Status
+    changes fire before the AVRCP command reaches us.
+    """
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
+
+    c1 = SimpleNamespace(
+        player_name="A",
+        send_transport_command=AsyncMock(return_value=True),
+        status={"audio_streaming": True},
+    )
+    c2 = SimpleNamespace(
+        player_name="B",
+        send_transport_command=AsyncMock(return_value=True),
+        status={"audio_streaming": True},
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:01",
+        MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=c1),
+    )
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:02",
+        MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=c2),
+    )
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    cb = _build_mpris_transport_callback(c1)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("1", "next")
+
+    # Strategy 3 returns default_client (c1) → command dispatched
+    assert result is True
+    c1.send_transport_command.assert_awaited_once_with("next")
+    c2.send_transport_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_volume_callback_dispatches_to_resolved_source_client():
+    """Volume from speaker → MPRIS Volume property → BlueZ → us — same
+    correlation problem as transport, same solution.
+    """
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_volume_callback
+
+    default = SimpleNamespace(
+        player_name="default",
+        _send_subprocess_command=AsyncMock(return_value=None),
+        _update_status=lambda _delta: None,
+        status={"audio_streaming": False},
+    )
+    source = SimpleNamespace(
+        player_name="source",
+        _send_subprocess_command=AsyncMock(return_value=None),
+        _update_status=lambda _delta: None,
+        status={"audio_streaming": True},
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:01",
+        MprisPlayer("AA:BB:CC:DD:EE:01", "1", AsyncMock(), AsyncMock(), client=default),
+    )
+    fresh_registry.register(
+        "AA:BB:CC:DD:EE:02",
+        MprisPlayer("AA:BB:CC:DD:EE:02", "2", AsyncMock(), AsyncMock(), client=source),
+    )
+    fresh_tracker.note_activity("AA:BB:CC:DD:EE:02")
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    cb = _build_mpris_volume_callback(default)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("1", 75)
+
+    assert result is True
+    source._send_subprocess_command.assert_awaited_once_with({"cmd": "set_volume", "value": 75})
+    default._send_subprocess_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_skips_wait_when_single_player_on_adapter():
+    """Single-speaker setup — the only MprisPlayer registered for this
+    adapter is the one BlueZ would dispatch to.  Source correlation is
+    unambiguous by construction; no need to wait for HCI.  Saves up to
+    1s of safety-cap latency in degraded modes and cuts steady-state
+    latency to sub-ms.
+    """
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
+
+    eneby_client = SimpleNamespace(
+        player_name="ENEBY",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client),
+    )
+
+    # Spy on wait_for_next_activity so we can assert the fast path
+    # didn't go through it.
+    fresh_tracker.wait_for_next_activity = AsyncMock(return_value=True)
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    cb = _build_mpris_transport_callback(eneby_client)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        result = await cb("eneby-id", "play")
+
+    assert result is True
+    eneby_client.send_transport_command.assert_awaited_once_with("play")
+    # Fast path — no HCI wait, no tracker correlation needed.
+    fresh_tracker.wait_for_next_activity.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_skips_wait_for_one_speaker_per_adapter_multi_adapter():
+    """Two adapters, one speaker on each — each adapter is a single-speaker
+    setup independently.  BlueZ on hciN dispatches to the only MprisPlayer
+    on hciN; HCI correlation is unnecessary on either side.
+    """
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
+
+    eneby = SimpleNamespace(
+        player_name="ENEBY",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh = SimpleNamespace(
+        player_name="WH",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci1"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh),
+    )
+    fresh_tracker.wait_for_next_activity = AsyncMock(return_value=True)
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        await _build_mpris_transport_callback(eneby)("eneby-id", "play")
+        await _build_mpris_transport_callback(wh)("wh-id", "pause")
+
+    eneby.send_transport_command.assert_awaited_once_with("play")
+    wh.send_transport_command.assert_awaited_once_with("pause")
+    fresh_tracker.wait_for_next_activity.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_uses_hci_wait_when_multi_speakers_same_adapter():
+    """Two speakers on the SAME adapter → BlueZ may forward either's
+    AVRCP to the other's MprisPlayer (the players[0] race).  The HCI
+    wait is required to correlate the actual source.
+    """
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
+
+    eneby = SimpleNamespace(
+        player_name="ENEBY",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh = SimpleNamespace(
+        player_name="WH",
+        bt_manager=SimpleNamespace(adapter_hci_name="hci0"),  # same adapter as ENEBY
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh),
+    )
+    # Pre-populate tracker so the resolver returns immediately and the
+    # wait completes via the same path the fast path is meant to skip.
+    fresh_tracker.note_activity("80:99:E7:C2:0B:D3")
+    fresh_tracker.wait_for_next_activity = AsyncMock(return_value=True)
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    cb = _build_mpris_transport_callback(eneby)  # default_client = ENEBY
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        await cb("eneby-id", "pause")
+
+    # HCI wait was needed because both speakers share hci0.
+    fresh_tracker.wait_for_next_activity.assert_awaited_once()
+    # And the resolver picked WH over the captured default.
+    wh.send_transport_command.assert_awaited_once_with("pause")
+    eneby.send_transport_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_transport_callback_waits_for_hci_monitor_to_populate_tracker():
+    """The HCI monitor records source MAC into the tracker ~5-10ms AFTER
+    BlueZ's D-Bus AVRCP dispatch arrives at our process — observed empirically
+    on VM 105 from kernel HCI_CHANNEL_MONITOR copies racing the user-space
+    BlueZ → D-Bus path.  Without a brief await, the resolver runs against an
+    empty tracker and falls back to ``default_client`` (the wrong speaker).
+
+    Reproduces that race by leaving the tracker empty when ``cb`` is called,
+    scheduling ``note_activity`` for the source MAC ~10ms later (mimicking
+    the HCI monitor), and asserting the resolver routes to the source — not
+    the captured default.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from sendspin_bridge.services.audio.mpris_player import MprisPlayer, MprisRegistry
+    from sendspin_bridge.services.bluetooth.avrcp_source_tracker import AvrcpSourceTracker
+    from sendspin_bridge.services.bluetooth.device_activation import _build_mpris_transport_callback
+
+    eneby_client = SimpleNamespace(
+        player_name="ENEBY",
+        send_transport_command=AsyncMock(return_value=True),
+    )
+    wh_client = SimpleNamespace(
+        player_name="WH",
+        send_transport_command=AsyncMock(return_value=True),
+    )
+
+    fresh_registry = MprisRegistry()
+    fresh_tracker = AvrcpSourceTracker()
+    fresh_registry.register(
+        "6C:5C:3D:35:17:99",
+        MprisPlayer("6C:5C:3D:35:17:99", "eneby-id", AsyncMock(), AsyncMock(), client=eneby_client),
+    )
+    fresh_registry.register(
+        "80:99:E7:C2:0B:D3",
+        MprisPlayer("80:99:E7:C2:0B:D3", "wh-id", AsyncMock(), AsyncMock(), client=wh_client),
+    )
+    # NOTE: tracker is intentionally empty when cb starts — that is the race.
+
+    async def _delayed_hci_record():
+        await asyncio.sleep(0.010)  # HCI monitor lag observed at ~10ms
+        fresh_tracker.note_activity("80:99:E7:C2:0B:D3")
+
+    import unittest.mock as _mock
+
+    from sendspin_bridge.services.audio import mpris_player as player_mod
+    from sendspin_bridge.services.bluetooth import avrcp_source_tracker as tracker_mod
+
+    cb = _build_mpris_transport_callback(eneby_client)
+    with (
+        _mock.patch.object(player_mod, "_REGISTRY", fresh_registry),
+        _mock.patch.object(tracker_mod, "_TRACKER", fresh_tracker),
+    ):
+        # Fire the simulated HCI monitor write concurrently with cb.
+        hci_task = asyncio.create_task(_delayed_hci_record())
+        result = await cb("eneby-id", "pause")
+        await hci_task
+
+    assert result is True
+    wh_client.send_transport_command.assert_awaited_once_with("pause")
+    eneby_client.send_transport_command.assert_not_awaited()

@@ -1,0 +1,229 @@
+"""PulseAudio volume controller implementing the sendspin VolumeController protocol.
+
+Routes volume/mute commands to a specific PA/PipeWire sink via pulsectl-asyncio,
+enabling atomic volume control for Bluetooth speakers.  Used as the
+``volume_controller`` argument to ``DaemonArgs`` on sendspin ≥ 5.5.0.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import TYPE_CHECKING
+
+from sendspin_bridge.services.audio.pulse import (
+    aget_sink_mute,
+    aget_sink_volume,
+    aread_sink_state,
+    aset_sink_mute,
+    aset_sink_volume,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    # Callback signature: (volume: int, muted: bool) -> None
+    VolumeChangeCallback = Callable[[int, bool], None]
+
+logger = logging.getLogger(__name__)
+
+
+class PulseVolumeController:
+    """VolumeController backed by a PulseAudio/PipeWire sink.
+
+    Implements the four-method protocol expected by sendspin ≥ 5.5.0::
+
+        async def set_state(volume, *, muted) -> None
+        async def get_state() -> tuple[int, bool]
+        async def start_monitoring(callback) -> None
+        async def stop_monitoring() -> None
+
+    ``start_monitoring`` subscribes to PulseAudio sink change events via
+    ``pulsectl_asyncio.PulseAsync.subscribe_events('sink')`` so any
+    externally-driven volume / mute change (a separate ``pactl`` call,
+    a physical knob on the BT speaker, the bridge's own
+    ``/api/volume`` direct-pactl path, ...) is pushed to sendspin (and
+    thereby to Music Assistant) without waiting for the next periodic
+    ``get_state()`` poll.  Echo events from our own ``set_state`` calls
+    are suppressed by comparing the new sink state against the values
+    we just applied.
+    """
+
+    def __init__(self, sink_name: str) -> None:
+        self._sink_name = sink_name
+        self._volume = 100
+        self._muted = False
+        self._callback: VolumeChangeCallback | None = None
+        # Parallel observer for the *bridge* — sendspin lib owns ``_callback``
+        # and uses it to forward to MA; the tap lets the bridge daemon
+        # mirror sink-side volume changes into its own status dict so the
+        # web UI slider tracks the speaker's physical volume knob.
+        self._external_change_tap: VolumeChangeCallback | None = None
+        self._monitor_task: asyncio.Task | None = None
+
+    def set_external_change_tap(self, tap: VolumeChangeCallback | None) -> None:
+        """Install (or clear) a parallel observer for external sink state.
+
+        Fires from the same place as ``_callback`` but isolated from it:
+        an exception in either path must not block the other.
+        """
+        self._external_change_tap = tap
+
+    async def set_state(self, volume: int, *, muted: bool) -> None:
+        """Apply volume and mute state to the PA sink."""
+        vol = max(0, min(100, volume))
+        ok_vol = await aset_sink_volume(self._sink_name, vol)
+        ok_mute = await aset_sink_mute(self._sink_name, muted)
+        if ok_vol or ok_mute:
+            self._volume = vol
+            self._muted = muted
+            logger.debug("PA sink %s → vol=%d%% muted=%s", self._sink_name, vol, muted)
+
+    async def get_state(self) -> tuple[int, bool]:
+        """Read current volume and mute state from the PA sink."""
+        vol = await aget_sink_volume(self._sink_name)
+        muted = await aget_sink_mute(self._sink_name)
+        if vol is not None:
+            self._volume = vol
+        if muted is not None:
+            self._muted = muted
+        return (self._volume, self._muted)
+
+    async def start_monitoring(self, callback: VolumeChangeCallback) -> None:
+        """Begin reporting external sink-state changes to *callback*.
+
+        Idempotent: a second call replaces the callback but reuses the
+        running subscribe task.  Sendspin invokes this once during
+        daemon initialisation.
+        """
+        self._callback = callback
+        if self._monitor_task is None or self._monitor_task.done():
+            self._monitor_task = asyncio.create_task(
+                self._subscribe_loop(),
+                name=f"pa-volume-monitor:{self._sink_name}",
+            )
+
+    async def stop_monitoring(self) -> None:
+        """Stop the PA event subscription and clear the callback."""
+        task = self._monitor_task
+        self._monitor_task = None
+        self._callback = None
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                # Subscribe-loop crash during shutdown shouldn't block teardown,
+                # but it shouldn't be silent either — log so the post-mortem
+                # has something to go on.
+                logger.debug(
+                    "PA volume monitor: task for %s exited with %s during stop",
+                    self._sink_name,
+                    exc,
+                )
+
+    async def _subscribe_loop(self) -> None:
+        """Run the pulsectl_asyncio sink-event subscription.
+
+        Each ``change`` event for any sink triggers a fresh ``get_state``
+        read — we look up our sink by name on every event so the loop
+        is robust to PA renumbering on BT reconnect.  ``new`` / ``remove``
+        events are tolerated quietly: ``aget_sink_*`` returns ``None``
+        when our sink is gone, which collapses to no-op.
+
+        Echo suppression: ``set_state`` updates ``self._volume`` /
+        ``self._muted`` *after* writing to PA.  When PA echoes the
+        change back to us via this loop, the read state matches the
+        cached values and we skip the callback — preventing a
+        sendspin → controller → MA → controller infinite loop.
+        """
+        # Lazy import: keep ``services.pa_volume_controller`` importable
+        # on dev hosts that don't ship ``pulsectl_asyncio``.
+        try:
+            from sendspin_bridge.services.audio.pulse import _CLIENT_NAME, _PULSECTL_AVAILABLE
+
+            if not _PULSECTL_AVAILABLE:
+                logger.debug("PA volume monitor: pulsectl_asyncio unavailable, skipping subscription")
+                return
+            import pulsectl_asyncio  # type: ignore[import-untyped]
+        except Exception as exc:
+            logger.debug("PA volume monitor: import failed (%s) — skipping", exc)
+            return
+
+        client_name = f"{_CLIENT_NAME}.volctl-{self._sink_name[:32]}"
+        while True:
+            try:
+                async with pulsectl_asyncio.PulseAsync(client_name) as pulse:
+                    logger.info(
+                        "PA volume monitor: subscribed to sink events for %s",
+                        self._sink_name,
+                    )
+                    async for event in pulse.subscribe_events("sink"):
+                        if getattr(event, "facility", None) != "sink":
+                            continue
+                        # Event index addresses A sink — we read state by NAME
+                        # to stay robust to PA index renumbering on BT reconnect.
+                        # Reuse the already-open ``pulse`` connection so the
+                        # subscribe loop doesn't spawn a fresh PulseAsync per
+                        # event under frequent sink updates.
+                        await self._handle_sink_event(pulse)
+            except asyncio.CancelledError:
+                logger.debug("PA volume monitor: cancelled for %s", self._sink_name)
+                raise
+            except Exception as exc:
+                # Subscribe loop drops on PA disconnect or transient errors.
+                # Wait briefly and reconnect — never give up so the bridge can
+                # heal after pulseaudio restart / BT-stack hiccup.
+                logger.warning(
+                    "PA volume monitor: subscription dropped for %s (%s) — reconnecting in 2s",
+                    self._sink_name,
+                    exc,
+                )
+                await asyncio.sleep(2.0)
+
+    async def _handle_sink_event(self, pulse) -> None:
+        """Read sink state via *pulse* and fire the callback when it diverges from cache.
+
+        *pulse* is the already-open ``PulseAsync`` instance from
+        :meth:`_subscribe_loop` — we reuse it instead of opening a fresh
+        connection per event (the one-shot ``aget_sink_volume`` /
+        ``aget_sink_mute`` helpers each open + close their own
+        ``PulseAsync``, which would cause noticeable connection churn
+        under frequent sink events).
+        """
+        try:
+            new_vol, new_muted = await aread_sink_state(pulse, self._sink_name)
+        except Exception as exc:
+            logger.debug("PA volume monitor: get_state failed (%s)", exc)
+            return
+        if new_vol is None or new_muted is None:
+            return  # sink gone or unreachable — wait for next event
+        if (new_vol, new_muted) == (self._volume, self._muted):
+            return  # echo from our own set_state — suppress
+        prev_vol, prev_muted = self._volume, self._muted
+        self._volume, self._muted = new_vol, new_muted
+        logger.info(
+            "PA volume monitor: external change on %s → vol=%d%% muted=%s (was vol=%d%% muted=%s)",
+            self._sink_name,
+            new_vol,
+            new_muted,
+            prev_vol,
+            prev_muted,
+        )
+        # Tap fires first and is isolated from callback failures so a bad
+        # downstream on either path doesn't block the other.
+        tap = self._external_change_tap
+        if tap is not None:
+            try:
+                tap(new_vol, new_muted)
+            except Exception as exc:
+                logger.warning("external_change_tap raised: %s", exc)
+        callback = self._callback
+        if callback is None:
+            return
+        try:
+            callback(new_vol, new_muted)
+        except Exception as exc:
+            logger.warning("VolumeChangeCallback raised: %s", exc)

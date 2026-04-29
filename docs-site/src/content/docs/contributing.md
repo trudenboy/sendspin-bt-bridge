@@ -112,5 +112,5 @@ This project grew out of [loryanstrant/Sendspin-client](https://github.com/lorya
 ## Further reading
 
 - [Architecture](/sendspin-bt-bridge/architecture/) — deep dive into the process model, IPC protocol, audio routing, Bluetooth state machine, MA integration, authentication, and graceful degradation
-- [HISTORY.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.md) — narrative history of the project's evolution (v1 → v2, key design decisions)
+- [docs/history/v1-v2.0.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/docs/history/v1-v2.0.md) — narrative history of the project's evolution (v1 → v2, key design decisions)
 - [CHANGELOG.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md) — full version history

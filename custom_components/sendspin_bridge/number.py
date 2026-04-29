@@ -42,7 +42,7 @@ class _SendspinNumber(SendspinDeviceEntity, NumberEntity):
         self._attr_native_step = spec.step or 1
         self._attr_native_unit_of_measurement = spec.unit
         self._attr_mode = NumberMode.BOX
-        if spec.entity_category == "config":
+        if spec.entity_category == "sendspin_bridge.config":
             self._attr_entity_category = EntityCategory.CONFIG
 
     @property

@@ -1,0 +1,31 @@
+[Unit]
+Description=Sendspin Client (Music Assistant Player with Bluetooth)
+Documentation=https://github.com/trudenboy/sendspin-bt-bridge
+After=network-online.target dbus.service pulseaudio-system.service avahi-daemon.service
+Wants=network-online.target
+Requires=pulseaudio-system.service dbus.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/environment
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/root
+Environment=PULSE_SERVER=unix:/var/run/pulse/native
+# Use the host's D-Bus socket (bind-mounted at /bt-dbus) for Bluetooth control
+Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=/bt-dbus/system_bus_socket
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStartPre=/bin/bash -c 'i=0; while [ $i -lt 30 ]; do [ -S /var/run/pulse/native ] && [ -e /bt-dbus/system_bus_socket ] && exit 0; sleep 1; i=$((i+1)); done; echo "Timeout waiting for PulseAudio/D-Bus sockets" >&2; exit 1'
+ExecStart=/opt/sendspin-client/sendspin-client
+WorkingDirectory=/opt/sendspin-client
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=15
+KillMode=mixed
+NoNewPrivileges=yes
+PrivateTmp=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sendspin-client
+
+[Install]
+WantedBy=multi-user.target

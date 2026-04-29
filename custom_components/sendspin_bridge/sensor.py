@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 def _entity_category(spec: EntitySpec) -> EntityCategory | None:
     if spec.entity_category == "diagnostic":
         return EntityCategory.DIAGNOSTIC
-    if spec.entity_category == "config":
+    if spec.entity_category == "sendspin_bridge.config":
         return EntityCategory.CONFIG
     return None
 

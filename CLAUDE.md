@@ -350,8 +350,8 @@ Docker-based test deployment matching reporter environments (Ubuntu + PipeWire):
 - Bridge runs via `docker compose` (same as end-user deployment)
 - Config dir: `/etc/docker/Sendspin/config.json`
 - Web UI: `http://192.168.10.105:8080`
-- Created with: `scripts/proxmox-vm-create.sh` (on Proxmox host)
-- Deploy/update: `scripts/proxmox-vm-deploy.sh` (from Mac)
+- Created with: `deployment/proxmox/vm-create.sh` (on Proxmox host)
+- Deploy/update: `deployment/proxmox/vm-deploy.sh` (from Mac)
 
 ## Agent Operations
 
@@ -410,7 +410,7 @@ ssh sendspin-test "docker logs -f sendspin-client"
 ssh sendspin-test "docker restart sendspin-client"
 
 # Redeploy / update bridge
-bash scripts/proxmox-vm-deploy.sh
+bash deployment/proxmox/vm-deploy.sh
 
 # BT debugging inside container
 ssh sendspin-test "docker exec -it sendspin-client bluetoothctl"

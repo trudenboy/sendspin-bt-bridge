@@ -36,8 +36,8 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 1. Patch BluetoothManager class
     # ------------------------------------------------------------------
-    import bluetooth_manager
-    import state as _st
+    import sendspin_bridge.bluetooth.manager as bluetooth_manager
+    import sendspin_bridge.bridge.state as _st
     from demo.bt_manager import DemoBluetoothManager
     from demo.fixtures import (
         DEMO_ADAPTER_NAMES,
@@ -200,7 +200,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 2. Patch services.bluetooth
     # ------------------------------------------------------------------
-    import services.bluetooth as _sbt
+    import sendspin_bridge.services.bluetooth as _sbt
 
     _original_bt_remove_device = _sbt.bt_remove_device
     _original_list_bt_adapters = _sbt.list_bt_adapters
@@ -233,7 +233,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 3. Patch services.pulse (sync wrappers used by routes/api.py)
     # ------------------------------------------------------------------
-    import services.pulse as _sp
+    import sendspin_bridge.services.audio.pulse as _sp
 
     def _demo_status_for(mac: str) -> dict[str, Any]:
         status = DEMO_DEVICE_STATUS.get(mac)
@@ -280,13 +280,13 @@ def install() -> None:
     _sp.get_server_name = lambda: "pulseaudio (demo)"
 
     # Also patch names already imported into routes.api (from X import Y binds locally)
-    import routes.api as _api_mod
+    import sendspin_bridge.web.routes.api as _api_mod
 
     _api_mod.set_sink_volume = _sp_set_volume
     _api_mod.set_sink_mute = _sp_set_mute
     _api_mod.get_sink_mute = _sp_get_mute
 
-    import routes.api_status as _api_status_mod
+    import sendspin_bridge.web.routes.api_status as _api_status_mod
 
     _api_status_mod.get_server_name = _sp.get_server_name
     _api_status_mod.list_sinks = _sp.list_sinks
@@ -412,7 +412,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 5. Patch routes.api_bt (scan, paired, adapters)
     # ------------------------------------------------------------------
-    import routes.api_bt as _abt
+    import sendspin_bridge.web.routes.api_bt as _abt
 
     _original_run_bt_scan = _abt._run_bt_scan
     _original_run_standalone_pair = _abt._run_standalone_pair
@@ -421,7 +421,7 @@ def install() -> None:
         if not _demo_enabled():
             _original_run_bt_scan(job_id, adapter, audio_only)
             return
-        from state import finish_scan_job
+        from sendspin_bridge.bridge.state import finish_scan_job
 
         time.sleep(1.5)
         selected_adapter = str(get_demo_adapter(adapter)["id"]) if adapter else ""
@@ -472,7 +472,7 @@ def install() -> None:
             )
             return
         del quiesce, no_input_no_output_agent  # demo mode ignores per-pair flags
-        from state import finish_scan_job
+        from sendspin_bridge.bridge.state import finish_scan_job
 
         del adapter
         nonlocal _demo_runtime_paired_devices, _demo_runtime_bt_device_info
@@ -669,7 +669,13 @@ def install() -> None:
     _sbt.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_status_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
-    _original_api_detect_runtime = _api_mod._detect_runtime
+    # Fall back to api_config's _detect_runtime if a prior test's monkeypatch
+    # teardown stripped the re-imported alias from the api module (the
+    # `from X import Y` binding can disappear under pytest's restore logic
+    # if a sibling test set it with raising=False).
+    import sendspin_bridge.web.routes.api_config as _api_config_for_runtime
+
+    _original_api_detect_runtime = getattr(_api_mod, "_detect_runtime", _api_config_for_runtime._detect_runtime)
     _api_mod._detect_runtime = lambda: "systemd" if _demo_enabled() else _original_api_detect_runtime()  # type: ignore[assignment]
     _abt._last_scan_completed = 0.0
 
@@ -681,10 +687,10 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 7. Inject demo devices + MA credentials into config
     # ------------------------------------------------------------------
-    from config import load_config
+    from sendspin_bridge.config import load_config
 
     _cfg = load_config()
-    import config as _config_mod
+    import sendspin_bridge.config as _config_mod
 
     _original_load = _config_mod.load_config
     _original_write_config_file = _config_mod.write_config_file
@@ -758,8 +764,8 @@ def install() -> None:
     _config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
     _config_mod.update_config = _demo_update_config  # type: ignore[assignment]
     _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
-    import bridge_orchestrator as _bridge_orchestrator
-    import routes.api_config as _api_config_mod
+    import sendspin_bridge.bridge.orchestrator as _bridge_orchestrator
+    import sendspin_bridge.web.routes.api_config as _api_config_mod
 
     _bridge_orchestrator.load_config = _demo_load_config
     if hasattr(_bridge_orchestrator, "CONFIG_FILE"):
@@ -786,7 +792,11 @@ def install() -> None:
     def _simulate_demo_restart() -> None:
         if not _demo_enabled():
             return
-        from state import complete_startup_progress, reset_startup_progress, update_startup_progress
+        from sendspin_bridge.bridge.state import (
+            complete_startup_progress,
+            reset_startup_progress,
+            update_startup_progress,
+        )
 
         reset_startup_progress(6, message="Demo restart initiated")
         update_startup_progress(
@@ -801,7 +811,7 @@ def install() -> None:
         time.sleep(0.35)
         reset_startup_progress(6, message="Demo startup initiated")
         update_startup_progress(
-            "config",
+            "sendspin_bridge.config",
             "Loading demo configuration",
             current_step=1,
             details={"demo_mode": True, "emulated_restart": True},
@@ -927,7 +937,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 9. Patch MA client (discover_ma_groups)
     # ------------------------------------------------------------------
-    import services.ma_client as _ma_client
+    import sendspin_bridge.services.music_assistant.ma_client as _ma_client
 
     async def _demo_discover_ma_groups(
         ma_url: str,
@@ -953,7 +963,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 10. Patch MA monitor (start_monitor, send_queue_cmd)
     # ------------------------------------------------------------------
-    import services.ma_monitor as _ma_monitor
+    import sendspin_bridge.services.music_assistant.ma_monitor as _ma_monitor
 
     def _seconds_value_to_ms(value: object, default: int | None) -> int | None:
         if value is None:
@@ -1098,8 +1108,8 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 11. Patch MA discovery (validate_ma_url, discover_ma_servers)
     # ------------------------------------------------------------------
-    import services.ma_discovery as _ma_disc
-    import services.update_checker as _update_checker
+    import sendspin_bridge.services.diagnostics.update_checker as _update_checker
+    import sendspin_bridge.services.music_assistant.ma_discovery as _ma_disc
 
     async def _demo_validate_ma_url(url: str) -> dict | None:
         return dict(DEMO_MA_SERVER_INFO)

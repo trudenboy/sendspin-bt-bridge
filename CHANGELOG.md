@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚠️ Breaking — repository structure migration to PyPA src-layout
+
+The Python source tree moved from a flat layout (every module at the
+repo root) into `src/sendspin_bridge/{bridge,bluetooth,config,services,
+web}/`. Production functionality is unchanged; this is a structural
+refactor enabling `pip install .` and a single canonical entry-point
+`python -m sendspin_bridge`.
+
+User-visible side effects:
+
+- **Docker / HA Add-on** — image rebuild handles the migration; no
+  user action needed.
+- **HACS integration (`custom_components/sendspin_bridge/`)** — unaffected.
+- **LXC installations** — pre-2.66 `upgrade.sh` cannot apply this
+  release (it copies `*.py` from the snapshot root, which no longer
+  exists). Run the one-shot bootstrap helper **once**, then the
+  normal upgrade flow continues working:
+
+      curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/migrate-to-src-layout.sh | sh
+
+  The systemd unit file changed (`ExecStart=/opt/sendspin-client/sendspin-client`,
+  a thin shim that calls `python3 -m sendspin_bridge`).
+
+Other deployment scripts (proxmox VM, Raspberry Pi) moved into
+`deployment/{proxmox,raspberry-pi}/` for clarity. Direct script callers
+should update their paths.
+
+### Changed — internal
+
+- `pyproject.toml` now declares `[build-system]` (hatchling) and reads
+  the version dynamically from the `VERSION` file (PEP 621).
+- `requirements.txt` is now mirrored from `pyproject.toml`'s
+  `[project.dependencies]` (CI guardrail enforces parity).
+- 67 `services/*.py` modules grouped into 8 semantic subpackages
+  (`bluetooth/`, `audio/`, `music_assistant/`, `ha/`, `ipc/`,
+  `lifecycle/`, `diagnostics/`, `infrastructure/`).
+- 132 flat tests reorganised under `tests/unit/{bridge,bluetooth,
+  config,services/<subpkg>,web/routes}/` and `tests/integration/`.
+- HA add-on `ha-addon-rc/` and `ha-addon-beta/` directories are now
+  CI-verified for drift against the `ha-addon/` template.
+
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)

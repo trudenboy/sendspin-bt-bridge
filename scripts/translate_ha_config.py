@@ -28,8 +28,8 @@ def _load_config_helpers() -> Callable[[], str]:
     repo_root = Path(__file__).resolve().parents[1]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    from config import CONFIG_SCHEMA_VERSION
-    from services.ha_addon import get_self_delivery_channel
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
+    from sendspin_bridge.services.ha.ha_addon import get_self_delivery_channel
 
     globals()["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
     return get_self_delivery_channel
@@ -52,7 +52,7 @@ def _mac_to_hci(mac: str) -> str:
     keeps working when invoked outside the bridge runtime.
     """
     try:
-        from services.bluetooth import resolve_hci_for_mac
+        from sendspin_bridge.services.bluetooth import resolve_hci_for_mac
     except Exception as exc:
         logger.debug("sysfs adapter lookup helper import failed: %s", exc)
         return ""

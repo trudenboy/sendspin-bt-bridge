@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: "Version to inject into config.py before testing (empty = skip)"
+        description: "Version to inject into sendspin_bridge/config/__init__.py before testing (empty = skip)"
         required: false
         type: string
         default: ""
@@ -28,13 +28,13 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
 
-      - name: Inject version into config.py
+      - name: Inject version into sendspin_bridge.config
         if: inputs.version != ''
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
-          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" config.py
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" src/sendspin_bridge/config/__init__.py
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" src/sendspin_bridge/config/__init__.py
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -46,7 +46,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r dev-requirements.txt pytest-cov
+        run: |
+          pip install -r requirements.txt -r dev-requirements.txt pytest-cov
+          # Install the bridge package itself (no deps — they're already pinned
+          # via requirements.txt above) so `python -m sendspin_bridge` and
+          # `from sendspin_bridge import ...` resolve in scripts and tests.
+          pip install --no-deps -e .
 
       - name: Audit dependencies for CVEs
         # Audit the already-installed venv (no -r flag) so pip-audit
@@ -73,7 +78,7 @@ jobs:
         run: python scripts/check_sendspin_compat.py
 
       - name: Run tests
-        run: python -m pytest tests/ --cov=. --cov-report=term-missing --cov-fail-under=50 -q
+        run: python -m pytest tests/ --cov=src/sendspin_bridge --cov-report=term-missing --cov-fail-under=50 -q
 
       - name: Check test modifications are intentional
         if: github.event_name == 'pull_request'
@@ -91,7 +96,7 @@ jobs:
           echo "$changed_tests"
           echo "::endgroup::"
           # Count non-test source files changed alongside tests
-          changed_src=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.py' ':!tests/' || true)
+          changed_src=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- 'src/**/*.py' 'scripts/**/*.py' ':!tests/' || true)
           test_count=$(echo "$changed_tests" | wc -l | tr -d ' ')
           src_count=$(echo "$changed_src" | wc -l | tr -d ' ')
           # Warn when tests change without source, or many tests change at once

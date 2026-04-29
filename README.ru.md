@@ -159,4 +159,4 @@ Bridge уже рассматривает несколько runtime-поверх
 - [История изменений](CHANGELOG.md)
 - [Политика безопасности](SECURITY.md)
 - [Кодекс поведения](CODE_OF_CONDUCT.md)
-- [История проекта](HISTORY.ru.md)
+- [История проекта](docs/history/v1-v2.0.ru.md)

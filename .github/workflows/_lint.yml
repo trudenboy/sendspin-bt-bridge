@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: "Version to inject into config.py before linting (empty = skip)"
+        description: "Version to inject into sendspin_bridge/config/__init__.py before linting (empty = skip)"
         required: false
         type: string
         default: ""
@@ -20,13 +20,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Inject version into config.py
+      - name: Inject version into sendspin_bridge.config
         if: inputs.version != ''
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
-          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" config.py
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" src/sendspin_bridge/config/__init__.py
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" src/sendspin_bridge/config/__init__.py
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -46,7 +46,13 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy
-        run: mypy --config-file pyproject.toml *.py routes/ services/
+        run: mypy --config-file pyproject.toml src/sendspin_bridge/
+
+      - name: Verify HA addon variants are in sync with template
+        run: python scripts/generate_ha_addon_variants.py check-current-repo
+
+      - name: Verify requirements.txt and pyproject.toml deps are in sync
+        run: python scripts/sync_requirements.py --check
 
       - name: Lint Dockerfiles
         run: |

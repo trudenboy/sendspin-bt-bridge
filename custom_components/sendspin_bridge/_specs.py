@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-AVAILABILITY_CLASSES = ("config", "runtime", "cumulative")
+AVAILABILITY_CLASSES = ("sendspin_bridge.config", "runtime", "cumulative")
 
 
 @dataclass(frozen=True)
@@ -155,25 +155,25 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         "enabled",
         "switch",
         "Enabled",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         icon="mdi:check-circle-outline",
         command="set_enabled",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "bt_management_enabled",
         "switch",
         "BT management",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         icon="mdi:tools",
         command="set_bt_management",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "standby",
         "switch",
         "Standby",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         icon="mdi:power-sleep",
         command="set_standby",
         availability_class="cumulative",
@@ -182,7 +182,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         "power_save",
         "switch",
         "Power save",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         icon="mdi:leaf",
         command="set_power_save",
         availability_class="cumulative",
@@ -191,47 +191,47 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         "idle_mode",
         "select",
         "Idle mode",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         icon="mdi:power-sleep",
         options=("default", "power_save", "auto_disconnect", "keep_alive"),
         command="set_idle_mode",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "keep_alive_method",
         "select",
         "Keep-alive method",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         icon="mdi:waveform",
         options=("infrasound", "silence", "none"),
         command="set_keep_alive_method",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "static_delay_ms",
         "number",
         "Static delay",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         unit="ms",
         min_value=0,
         max_value=5000,
         step=10,
         icon="mdi:timer-cog",
         command="set_static_delay_ms",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "power_save_delay_minutes",
         "number",
         "Power save delay",
-        entity_category="config",
+        entity_category="sendspin_bridge.config",
         unit="min",
         min_value=0,
         max_value=60,
         step=1,
         icon="mdi:timer-outline",
         command="set_power_save_delay_minutes",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     # Buttons — always pressable while in fleet
     EntitySpec(
@@ -240,7 +240,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         "Reconnect",
         icon="mdi:bluetooth-connect",
         command="reconnect",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "disconnect",
@@ -248,7 +248,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         "Disconnect",
         icon="mdi:bluetooth-off",
         command="disconnect",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     # Pairing and reset_reconnect intentionally NOT exposed (see
     # services/ha_entity_model.py).
@@ -261,7 +261,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:hand-back-right",
         command="claim_audio",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
 )
 
@@ -273,7 +273,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         "Version",
         entity_category="diagnostic",
         icon="mdi:tag-outline",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "ma_connected",
@@ -282,7 +282,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         device_class="connectivity",
         entity_category="diagnostic",
         icon="mdi:music",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "startup_phase",
@@ -290,7 +290,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         "Startup phase",
         entity_category="diagnostic",
         icon="mdi:rocket-launch",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "runtime_mode",
@@ -298,7 +298,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         "Runtime mode",
         entity_category="diagnostic",
         icon="mdi:cog-outline",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "update_available",
@@ -306,7 +306,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         "Update",
         entity_category="diagnostic",
         icon="mdi:package-up",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     EntitySpec(
         "restart",
@@ -315,7 +315,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:restart",
         command="restart",
-        availability_class="config",
+        availability_class="sendspin_bridge.config",
     ),
     # Scan intentionally NOT exposed (see services/ha_entity_model.py).
 )

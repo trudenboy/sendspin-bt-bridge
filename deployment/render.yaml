@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: sendspin-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: python -m sendspin_bridge
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: WEB_PORT
+        value: "10000"
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+    healthCheckPath: /api/health
