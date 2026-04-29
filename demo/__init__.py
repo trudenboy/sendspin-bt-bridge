@@ -669,7 +669,13 @@ def install() -> None:
     _sbt.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_status_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
     _api_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
-    _original_api_detect_runtime = _api_mod._detect_runtime
+    # Fall back to api_config's _detect_runtime if a prior test's monkeypatch
+    # teardown stripped the re-imported alias from the api module (the
+    # `from X import Y` binding can disappear under pytest's restore logic
+    # if a sibling test set it with raising=False).
+    import sendspin_bridge.web.routes.api_config as _api_config_for_runtime
+
+    _original_api_detect_runtime = getattr(_api_mod, "_detect_runtime", _api_config_for_runtime._detect_runtime)
     _api_mod._detect_runtime = lambda: "systemd" if _demo_enabled() else _original_api_detect_runtime()  # type: ignore[assignment]
     _abt._last_scan_completed = 0.0
 

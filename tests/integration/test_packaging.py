@@ -85,7 +85,7 @@ def test_docker_compose_passes_audio_uid_to_container():
 
 
 def test_rpi_check_mentions_container_uid_audio_troubleshooting():
-    script = (Path(__file__).resolve().parents[2] / "scripts" / "rpi-check.sh").read_text()
+    script = (Path(__file__).resolve().parents[2] / "deployment" / "raspberry-pi" / "check.sh").read_text()
 
     assert "auto-run the bridge process as AUDIO_UID" in script
     assert "docker exec sendspin-client ps -o user:20,pid,command -C python3" in script
