@@ -50,6 +50,7 @@ packages = ["src/sendspin_bridge"]
 dev = [
     "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
+    "pytest-xdist>=3.6.0,<4.0",
     "ruff==0.15.12",
     "mypy>=1.20.2,<2.0",
 ]
@@ -101,7 +102,25 @@ timeout = 60
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = ["--strict-markers", "--tb=short"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    # Parallel execution (pytest-xdist). Cuts the local full-suite run
+    # from 191s → 17s on a 4-core box. Override with `pytest -n0` to
+    # debug a single test or trace state pollution.
+    "-n=auto",
+    # `loadfile` distribution: every test in a given file runs in the
+    # same worker. Required because some test files share monkey-patched
+    # module state across their tests (e.g. demo/__init__.py module-level
+    # patches), and the default `loadscope` was breaking those by
+    # splitting the file across workers. With loadfile the files
+    # parallelize across workers but each file is internally serial.
+    "--dist=loadfile",
+    # NOTE: coverage (`--cov=src/sendspin_bridge ...`) is intentionally
+    # NOT in addopts — it adds ~30% overhead and isn't useful locally.
+    # CI's _test.yml passes the cov flags explicitly when it wants the
+    # report.
+]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests requiring external services",
