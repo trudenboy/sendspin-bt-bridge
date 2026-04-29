@@ -35,10 +35,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Layer 1: All dependencies except sendspin — cached across releases.
 # SENDSPIN_VERSION is intentionally declared later so version bumps never
 # invalidate this expensive layer (numpy/PyAV compile from source on armv7).
+#
+# Wheel preference (was `pip install --prefer-binary` pre-uv migration):
+# uv prefers wheels over sdists by default, so no equivalent flag is
+# needed — see https://docs.astral.sh/uv/pip/compatibility/#prefer-binary.
+# On the armv7 path we additionally pass `--only-binary :all:` so the
+# build fails FAST if any dep lacks a piwheels wheel, instead of silently
+# spending 30+ minutes compiling numpy / PyAV from source. piwheels
+# coverage is comprehensive for our pinned versions; if a future bump
+# adds an sdist-only package, drop the flag for that one package.
 COPY requirements.txt /tmp/
 RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
     if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
         uv pip install --system --no-cache --prefix=/install \
+            --only-binary :all: \
             --extra-index-url https://www.piwheels.org/simple \
             -r /tmp/requirements-deps.txt \
             "aiosendspin-mpris~=2.1.1" \
