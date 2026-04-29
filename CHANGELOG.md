@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.0] - 2026-04-29
+
 ### Changed
 - **⚠️ Breaking — repository moved to PyPA src-layout.** The Python
   source tree moved from the flat repo-root layout into
