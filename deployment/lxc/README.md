@@ -79,12 +79,12 @@ If you prefer to create the container via the Proxmox web UI:
 
    **Option A — one-liner:**
    ```bash
-   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
+   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/install.sh)
    ```
 
    **Option B — download and review:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh -o install.sh
+   curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/install.sh -o install.sh
    less install.sh
    bash install.sh
    ```

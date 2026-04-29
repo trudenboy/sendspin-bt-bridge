@@ -395,13 +395,20 @@ def test_api_update_apply_in_ha_addon_returns_matching_variant_guidance(config_c
 
 
 def test_lxc_scripts_sync_repo_snapshot_recursively():
+    """LXC install/upgrade scripts must download a snapshot, copy the
+    src-layout package + manifests, and record the release ref.
+
+    Post-2.66 the scripts ship the src/ tree wholesale rather than
+    iterating per-file in the repo root.
+    """
     repo_root = Path(__file__).resolve().parents[4]
 
-    for relative_path in ("lxc/install.sh", "lxc/upgrade.sh"):
+    for relative_path in ("deployment/lxc/install.sh", "deployment/lxc/upgrade.sh"):
         text = (repo_root / relative_path).read_text()
         assert "ARCHIVE_URL=" in text
         assert "download_repo_snapshot()" in text
-        assert 'find "${src_root}" -maxdepth 1 -type f' in text
-        assert "for dir in services routes templates static lxc scripts; do" in text
+        # src-layout: package source travels as a tree, manifests as files.
+        assert 'cp -a "${src_root}/src" "${dest_root}/src"' in text
+        assert 'cp -a "${src_root}/pyproject.toml"' in text
         assert "record_release_ref()" in text
         assert ".release-ref" in text

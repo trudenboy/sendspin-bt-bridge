@@ -114,16 +114,24 @@ sync_app_tree() {
   local dest_root="$2"
 
   mkdir -p "${dest_root}"
-  find "${src_root}" -maxdepth 1 -type f \( -name '*.py' -o -name 'requirements.txt' \) -exec cp -a {} "${dest_root}/" \;
+  cp -a "${src_root}/pyproject.toml" "${dest_root}/"
+  cp -a "${src_root}/requirements.txt" "${dest_root}/"
+  cp -a "${src_root}/VERSION" "${dest_root}/"
+  rm -rf "${dest_root}/src"
+  cp -a "${src_root}/src" "${dest_root}/src"
 
-  for dir in services routes templates static lxc scripts; do
+  for dir in scripts deployment; do
     if [[ -d "${src_root}/${dir}" ]]; then
       rm -rf "${dest_root}/${dir}"
       cp -a "${src_root}/${dir}" "${dest_root}/${dir}"
     fi
   done
 
-  chmod +x "${dest_root}/sendspin_client.py"
+  cat > "${dest_root}/sendspin-client" <<'EOF'
+#!/bin/sh
+exec /usr/bin/python3 -m sendspin_bridge "$@"
+EOF
+  chmod +x "${dest_root}/sendspin-client"
 }
 
 record_release_ref() {
@@ -133,6 +141,7 @@ record_release_ref() {
 
 update_python_dependencies() {
   local requirements_file="$1"
+  local app_root="$2"
   local arch
 
   arch=$(uname -m)
@@ -140,12 +149,16 @@ update_python_dependencies() {
     # armv7l: sendspin requires av>=14 which doesn't compile on armhf.
     # Keep av==12.3.0 and install sendspin with --no-deps.
     # The FLAC decoder API difference (nb_channels missing in av<13) is handled by
-    # a monkey-patch in services/daemon_process.py at startup.
+    # a monkey-patch in src/sendspin_bridge/services/ipc/daemon_process.py at startup.
     pip3 install --break-system-packages -q --no-deps -U 'sendspin>=5.3.0,<6' 2>/dev/null || true
     grep -v '^sendspin' "${requirements_file}" | \
       pip3 install --break-system-packages -q -r /dev/stdin 2>/dev/null || true
   else
     pip3 install --break-system-packages -q -r "${requirements_file}" 2>/dev/null || true
+  fi
+  # Reinstall the bridge package against the new src tree.
+  if [[ -n "${app_root}" && -f "${app_root}/pyproject.toml" ]]; then
+    pip3 install --break-system-packages -q --no-deps -e "${app_root}" 2>/dev/null || true
   fi
 }
 
@@ -157,14 +170,15 @@ import os
 import sys
 
 app_root = os.environ["APP_ROOT"]
-sys.path = [app_root] + [p for p in sys.path if p not in ("", app_root)]
+src_root = os.path.join(app_root, "src")
+sys.path = [src_root, app_root] + [p for p in sys.path if p not in ("", src_root, app_root)]
 for module_name in (
-    "config",
-    "state",
-    "services.ma_artwork",
-    "services.ma_monitor",
-    "routes.api_ma",
-    "web_interface",
+    "sendspin_bridge.config",
+    "sendspin_bridge.bridge.state",
+    "sendspin_bridge.services.music_assistant.ma_artwork",
+    "sendspin_bridge.services.music_assistant.ma_monitor",
+    "sendspin_bridge.web.routes.api_ma",
+    "sendspin_bridge.web.interface",
 ):
     importlib.import_module(module_name)
 print("import-ok")
@@ -236,12 +250,9 @@ msg "Sendspin Client Upgrade"
 msg "Repo: ${GITHUB_REPO}  Branch: ${GITHUB_BRANCH}"
 
 # Save current version
-OLD_VERSION=$(python3 -c "
-import sys; sys.path.insert(0, '${APP_DIR}')
-try:
-    from config import VERSION; print(VERSION)
-except: print('unknown')
-" 2>/dev/null || echo "unknown")
+OLD_VERSION=$(python3 -m sendspin_bridge --version 2>/dev/null \
+  || cat "${APP_DIR}/VERSION" 2>/dev/null \
+  || echo "unknown")
 msg "Current version: ${OLD_VERSION}"
 echo ""
 
@@ -257,16 +268,11 @@ sync_app_tree "${SNAPSHOT_ROOT}" "${STAGE_APP}"
 record_release_ref "${STAGE_APP}"
 ok "Application files downloaded"
 
-NEW_VERSION=$(python3 -c "
-import sys; sys.path.insert(0, '${STAGE_APP}')
-try:
-    from config import VERSION; print(VERSION)
-except: print('unknown')
-" 2>/dev/null || echo "unknown")
+NEW_VERSION=$(cat "${STAGE_APP}/VERSION" 2>/dev/null || echo "unknown")
 
 # ─── 2. Update Python dependencies ───────────────────────────────────────────
 msg "Updating Python dependencies..."
-update_python_dependencies "${STAGE_APP}/requirements.txt"
+update_python_dependencies "${STAGE_APP}/requirements.txt" "${STAGE_APP}"
 ok "Python dependencies updated"
 
 # ─── 3. Validate staged tree ──────────────────────────────────────────────────

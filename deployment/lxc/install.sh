@@ -52,16 +52,28 @@ sync_app_tree() {
   local dest_root="$2"
 
   mkdir -p "${dest_root}"
-  find "${src_root}" -maxdepth 1 -type f \( -name '*.py' -o -name 'requirements.txt' \) -exec cp -a {} "${dest_root}/" \;
+  # Bridge runs as a real Python package post src-layout (v2.66+).
+  # Bring across the package source, manifests, runtime scripts, and
+  # legacy deployment helpers.
+  cp -a "${src_root}/pyproject.toml" "${dest_root}/"
+  cp -a "${src_root}/requirements.txt" "${dest_root}/"
+  cp -a "${src_root}/VERSION" "${dest_root}/"
+  rm -rf "${dest_root}/src"
+  cp -a "${src_root}/src" "${dest_root}/src"
 
-  for dir in services routes templates static lxc scripts; do
+  for dir in scripts deployment; do
     if [[ -d "${src_root}/${dir}" ]]; then
       rm -rf "${dest_root}/${dir}"
       cp -a "${src_root}/${dir}" "${dest_root}/${dir}"
     fi
   done
 
-  chmod +x "${dest_root}/sendspin_client.py"
+  # Wrapper script so systemd unit doesn't have to know the entry-point path.
+  cat > "${dest_root}/sendspin-client" <<'EOF'
+#!/bin/sh
+exec /usr/bin/python3 -m sendspin_bridge "$@"
+EOF
+  chmod +x "${dest_root}/sendspin-client"
 }
 
 record_release_ref() {
@@ -134,6 +146,8 @@ if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
 else
   pip3 install --break-system-packages -q -r /opt/sendspin-client/requirements.txt
 fi
+# Install the bridge package itself so `python3 -m sendspin_bridge` resolves.
+pip3 install --break-system-packages -q --no-deps -e /opt/sendspin-client
 ok "Python dependencies installed"
 
 # ─── 4. Config directory ──────────────────────────────────────────────────────

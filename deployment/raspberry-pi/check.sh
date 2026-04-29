@@ -2,7 +2,7 @@
 # rpi-check.sh — Pre-flight diagnostics for Sendspin Bluetooth Bridge
 #
 # Run on the Docker host BEFORE starting the container:
-#   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/raspberry-pi/check.sh | bash
 #
 # Checks: Docker, Bluetooth, audio system, UID, memory, architecture.
 # Outputs recommended .env values for docker-compose.yml.
