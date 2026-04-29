@@ -89,15 +89,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = [
-    "config",
-    "state",
-    "web_interface",
-    "sendspin_client",
-    "bluetooth_manager",
-    "routes",
-    "services",
-]
+known-first-party = ["sendspin_bridge"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/translate_landing.py" = ["RUF001"]  # Cyrillic strings are intentional

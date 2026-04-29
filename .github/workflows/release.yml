@@ -27,7 +27,7 @@ concurrency:
 #   prepare
 #     ├── lint  (reusable _lint.yml)
 #     └── test  (reusable _test.yml)
-#           └── release  (commit config.py + create tag)
+#           └── release  (commit sendspin_bridge.config + create tag)
 #                 └── docker-build  (amd64 + arm64 matrix)
 #                       └── docker-merge  (create manifest)
 #                             ├── addon-sync  (update ha-addon*/ dirs)
@@ -147,7 +147,7 @@ jobs:
     with:
       version: ${{ needs.prepare.outputs.version }}
 
-  # ── 4. Release (commit config.py + tag) ──────────────────────────
+  # ── 4. Release (commit sendspin_bridge.config + tag) ──────────────────────────
   release:
     needs: [prepare, lint, test]
     runs-on: ubuntu-latest
@@ -177,18 +177,19 @@ jobs:
           git fetch origin "${SOURCE_BRANCH}"
           git rebase "origin/${SOURCE_BRANCH}"
 
-          # Update config.py with version and build date
+          # Update sendspin_bridge.config module with version and build date
           BUILD_DATE="$(date -u +%Y-%m-%d)"
-          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" config.py
-          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"${BUILD_DATE}\"/" config.py
-          echo "Updated config.py: VERSION=${VERSION}, BUILD_DATE=${BUILD_DATE}"
-          grep -E '^(VERSION|BUILD_DATE)' config.py
+          CONFIG_FILE="src/sendspin_bridge/config/__init__.py"
+          sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" "${CONFIG_FILE}"
+          sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"${BUILD_DATE}\"/" "${CONFIG_FILE}"
+          echo "Updated ${CONFIG_FILE}: VERSION=${VERSION}, BUILD_DATE=${BUILD_DATE}"
+          grep -E '^(VERSION|BUILD_DATE)' "${CONFIG_FILE}"
 
-          git add config.py
+          git add "${CONFIG_FILE}"
           if git diff --cached --quiet; then
-            echo "config.py already up to date"
+            echo "${CONFIG_FILE} already up to date"
           else
-            git commit -m "release: ${TAG} — update config.py version"
+            git commit -m "release: ${TAG} — update sendspin_bridge.config version"
           fi
 
           git tag -a "${TAG}" -m "Release ${VERSION}"

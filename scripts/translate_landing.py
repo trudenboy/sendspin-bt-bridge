@@ -20,7 +20,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 import deepl
 from bs4 import BeautifulSoup, Comment, NavigableString
@@ -164,7 +163,7 @@ def _unprotect_brands(text: str) -> str:
     return re.sub(r"<keep>(.*?)</keep>", r"\1", text)
 
 
-def apply_override(text: str) -> Optional[str]:
+def apply_override(text: str) -> str | None:
     """Check manual overrides (case-insensitive)."""
     for en, ru in MANUAL_OVERRIDES.items():
         if en.lower() in text.lower():
