@@ -1944,3 +1944,85 @@ def test_apply_connected_state_called_by_dbus_props_changed_path():
     assert "_apply_connected_state" in Path(bt_monitor.__file__).read_text(), (
         "bt_monitor must call _apply_connected_state for the on_connected hook to fire"
     )
+
+
+# ---------------------------------------------------------------------------
+# CoD override: __init__ pre-validation and pre-pair hook
+# ---------------------------------------------------------------------------
+
+
+def _make_cod_manager(cod_override_enabled: bool, adapter_device_class_hex: str, adapter: str = "hci0"):
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    with patch("subprocess.check_output", return_value=""):
+        return BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="TestSpeaker",
+            cod_override_enabled=cod_override_enabled,
+            adapter_device_class_hex=adapter_device_class_hex,
+            adapter=adapter,
+        )
+
+
+def test_cod_valid_hex_pre_parsed_to_int():
+    mgr = _make_cod_manager(True, "0x00010c")
+    assert mgr._cod_override_int == 0x00010C
+
+
+def test_cod_invalid_hex_pre_parsed_to_none_and_override_int_is_none():
+    with patch("subprocess.check_output", return_value=""):
+        import logging
+
+        with patch.object(logging.getLogger("sendspin_bridge.bluetooth.manager"), "warning") as mock_warn:
+            mgr = _make_cod_manager(True, "not-valid-hex")
+    assert mgr._cod_override_int is None
+    mock_warn.assert_called_once()
+
+
+def test_cod_flag_off_skips_parse_and_leaves_none():
+    mgr = _make_cod_manager(False, "0x00010c")
+    assert mgr._cod_override_int is None
+
+
+def test_pre_pair_hook_calls_set_device_class_with_int(monkeypatch):
+    mgr = _make_cod_manager(True, "0x00010c", adapter="hci2")
+    mgr.adapter_hci_name = "hci2"
+
+    calls = []
+
+    def fake_set_device_class(adapter_index, cod):
+        calls.append((adapter_index, cod))
+        return True
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.bt_class_of_device.set_device_class",
+        fake_set_device_class,
+    )
+    mgr._maybe_apply_cod_override_pre_pair()
+    assert calls == [(2, 0x00010C)]
+
+
+def test_pre_pair_hook_no_op_when_cod_override_int_is_none(monkeypatch):
+    mgr = _make_cod_manager(True, "invalid")
+    mgr.adapter_hci_name = "hci0"
+
+    calls = []
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.bt_class_of_device.set_device_class",
+        lambda *a: calls.append(a) or True,
+    )
+    mgr._maybe_apply_cod_override_pre_pair()
+    assert calls == []
+
+
+def test_pre_pair_hook_no_op_when_flag_off(monkeypatch):
+    mgr = _make_cod_manager(False, "0x00010c")
+    mgr.adapter_hci_name = "hci0"
+
+    calls = []
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.bt_class_of_device.set_device_class",
+        lambda *a: calls.append(a) or True,
+    )
+    mgr._maybe_apply_cod_override_pre_pair()
+    assert calls == []

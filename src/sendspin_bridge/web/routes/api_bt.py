@@ -446,13 +446,20 @@ def api_bt_adapters():
             # after a USB stick hotplug.  Falls back to the synthetic
             # ``hci{i}`` label only when /sys/class/bluetooth isn't mounted
             # (non-Linux dev box, container missing /sys).
-            kernel_hci = hci_map.get(mac.upper().replace(":", "")) or f"hci{i}"
+            kernel_hci_sysfs = hci_map.get(mac.upper().replace(":", ""))
+            kernel_hci = kernel_hci_sysfs or f"hci{i}"
             # Use ``show <MAC>`` instead of ``select <MAC>; show`` — the
             # latter is unreliable in piped-stdin mode and surfaced the wrong
             # adapter's alias when default and selected differed (issue #193).
             alias, powered = get_adapter_alias(mac)
-            hci_index = int(kernel_hci[3:]) if kernel_hci.startswith("hci") and kernel_hci[3:].isdigit() else None
-            live_cod = _read_device_class(hci_index) if hci_index is not None else None
+            # Only read live CoD when we have a sysfs-confirmed hci index.
+            # The synthetic fallback ``hci{i}`` uses the bluetoothctl list
+            # order which may not match kernel numbering, so the index could
+            # address the wrong controller.
+            if kernel_hci_sysfs and kernel_hci_sysfs.startswith("hci") and kernel_hci_sysfs[3:].isdigit():
+                live_cod = _read_device_class(int(kernel_hci_sysfs[3:]))
+            else:
+                live_cod = None
             adapters.append(
                 {
                     "id": kernel_hci,

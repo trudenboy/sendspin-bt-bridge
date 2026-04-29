@@ -173,8 +173,25 @@ class BluetoothManager:
         # outbound Connect so the soundbar's CoD filter (Samsung Q-series)
         # sees Major=Computer at the moment it inspects, even if
         # bluetoothd power-cycled the adapter between startup and pair.
+        # Pre-parse hex once so the pre-pair hook never emits a WARNING on
+        # every pair attempt for a bad value that was already bad at init.
         self._cod_override_enabled = bool(cod_override_enabled)
-        self._adapter_device_class_hex = str(adapter_device_class_hex or "").strip()
+        hex_raw = str(adapter_device_class_hex or "").strip()
+        if hex_raw and self._cod_override_enabled:
+            try:
+                from sendspin_bridge.services.bluetooth.bt_class_of_device import parse_class_hex as _parse_class_hex
+
+                parsed = _parse_class_hex(hex_raw)
+            except Exception:
+                parsed = None
+            if parsed is None:
+                logger.warning(
+                    "CoD override: device_class=%r is not a valid 6-hex-digit value — override disabled for this manager",
+                    hex_raw,
+                )
+            self._cod_override_int: int | None = parsed
+        else:
+            self._cod_override_int = None
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -295,12 +312,12 @@ class BluetoothManager:
         """Re-apply ``device_class`` to the resolved adapter just before pair.
 
         No-op unless ``EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`` is on AND
-        an adapter ``device_class`` hex was passed to ``__init__``. Failures
-        are logged at DEBUG (not WARNING) — this is a defence-in-depth
-        re-apply on top of the startup applier; if it fails the bridge
-        falls back to whatever CoD was already in place.
+        a valid ``device_class`` was set at ``__init__`` (pre-validated to an
+        int there). Calls ``set_device_class`` directly so failures are logged
+        at WARNING only once — not on every pair attempt for an already-known
+        bad hex value (which was already warned at init time).
         """
-        if not self._cod_override_enabled or not self._adapter_device_class_hex:
+        if not self._cod_override_enabled or self._cod_override_int is None:
             return
         hci_name = self.adapter_hci_name or ""
         if not hci_name.startswith("hci"):
@@ -319,11 +336,9 @@ class BluetoothManager:
             )
             return
         try:
-            from sendspin_bridge.services.bluetooth.bt_class_of_device import (
-                apply_device_class_for_hex,
-            )
+            from sendspin_bridge.services.bluetooth.bt_class_of_device import set_device_class
 
-            apply_device_class_for_hex(adapter_index, self._adapter_device_class_hex)
+            set_device_class(adapter_index, self._cod_override_int)
         except Exception as exc:
             logger.debug(
                 "[%s] Pre-pair CoD apply failed (non-fatal): %s",
