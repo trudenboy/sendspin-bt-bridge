@@ -2,50 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ## [2.65.0] - 2026-04-28
-
 **Sendspin BT Bridge now talks to Home Assistant directly.**  No more
 running everything through Music Assistant just to reach a dashboard
 toggle or fire an automation on a Bluetooth speaker.
 
 ### What you get
-
-- Every speaker shows up in HA on the same device card Music
-  Assistant already made for it — signal strength, battery, audio
-  codec, link status, sync health, last error.  Nothing duplicates
-  what MA already exposes.
-- Switches for the things you'd actually automate: enable, standby,
-  power save, BT management.  Toggle them, read their state in
-  conditions, like any other HA switch.
-- Buttons for one-shot actions: reconnect, disconnect, claim audio
-  (steal a multipoint speaker back from a phone).
-- Per-device config writable from HA: idle mode, keep-alive method,
-  static delay, power-save delay.
-- Disabled or sleeping speakers stay reachable — the toggle to wake
-  or re-enable a speaker is always live.
+- Every speaker shows up in HA on the same device card Music Assistant already made for it — signal strength, battery, audio codec, link status, sync health, last error.  Nothing duplicates what MA already exposes.
+- Switches for the things you'd actually automate: enable, standby, power save, BT management.  Toggle them, read their state in conditions, like any other HA switch.
+- Buttons for one-shot actions: reconnect, disconnect, claim audio (steal a multipoint speaker back from a phone).
+- Per-device config writable from HA: idle mode, keep-alive method, static delay, power-save delay.
+- Disabled or sleeping speakers stay reachable — the toggle to wake or re-enable a speaker is always live.
 
 ### Two ways to wire it up — pick one
+- **MQTT.**  Install the official Mosquitto add-on, then open Settings → Home Assistant in the bridge web UI and pick **MQTT**. On HAOS the broker is auto-detected — one click and you're done.
+- **HACS custom_component.**  Add this repo to HACS, install "Sendspin BT Bridge".  HA discovers the bridge automatically; on HAOS it auto-pairs, otherwise paste a token from the bridge UI.
 
-- **MQTT.**  Install the official Mosquitto add-on, then open
-  Settings → Home Assistant in the bridge web UI and pick **MQTT**.
-  On HAOS the broker is auto-detected — one click and you're done.
-- **HACS custom_component.**  Add this repo to HACS, install
-  "Sendspin BT Bridge".  HA discovers the bridge automatically; on
-  HAOS it auto-pairs, otherwise paste a token from the bridge UI.
+### Added — Settings → Home Assistant tab
+- Toggle the master ``HA_INTEGRATION.enabled`` flag and pick ``mode`` (``off`` / ``mqtt`` / ``rest`` / ``both``).
+- Auto-detect the HAOS Mosquitto add-on (one click; populates broker host / port / username / TLS).
+- Edit broker URL / port / username / password / discovery prefix / TLS for self-hosted brokers.
+- Toggle mDNS advertisement and Supervisor pair acceptance for the REST + custom_component path.
+- See live publisher state (idle / connected / error) and discovery payload count.
+- Mint long-lived bearer tokens for the custom_component (label, reveal-once, copy button); list issued tokens and revoke any of them in place. The MQTT password masking pattern matches Music Assistant's: ``GET /api/config`` reports ``***REDACTED***`` whenever a password is set (and an empty string when none), and a POST that echoes back the redacted marker preserves the existing password instead of clearing it.  ``AUTH_TOKENS`` is dropped from the GET payload entirely; the UI fetches it from ``/api/auth/tokens`` so the bearer-token list never flows through the config form. Round-trip tests in ``tests/test_api_config_ha_integration.py`` cover the redaction, password preservation, explicit overwrite, and the per-config-key download sanitization.
 
-### New Settings → Home Assistant tab
+### Changed — HA: fleet-based visibility + per-class entity availability
+- ``config``: online whenever the device is in the fleet.  Used for the ``enabled`` switch, all command buttons (``reconnect``, ``wake``, ``standby``, ``power_save_toggle``, ``claim_audio``), and every config knob (``idle_mode``, ``static_delay_ms``, etc.).
+- ``runtime``: online only when the BT link is up.  Used for live diagnostics whose values are meaningless when the speaker is unreachable (``rssi_dbm``, ``battery_level``, ``audio_format``, ``audio_streaming``, ``reanchoring``).
+- ``cumulative``: shares the ``config`` availability gate so HA dashboards keep showing last-known values through standby. Used for counters and last-error fields (``reanchor_count``, ``last_error``, ``health_state``, ``bt_standby``, ``bt_power_save``). MQTT discovery payloads now route each entity to one of two per-device availability topics: ``sendspin/<pid>/availability/config`` and ``sendspin/<pid>/availability/runtime``.  The legacy ``sendspin/<pid>/availability`` topic is still published (and now tracks runtime) for backwards compat with rc.1–rc.3 HA caches. The HACS custom_component coordinator gains parallel ``device_runtime_available`` / ``device_config_available`` / ``device_lifecycle`` accessors; the entity base picks the right one via ``availability_class``. Side benefit: standby devices now show ``device_lifecycle="standby"`` and disabled devices show ``"disabled"`` in the projection JSON, so HA dashboards can highlight parked / dormant speakers without parsing multiple binary sensors.
 
-A dedicated tab in the bridge web UI: mode picker, live connection
-status, broker / token settings.  Once connected the config cards
-collapse out of the way.
+### Changed — HA integration panel: dropdown-master + connected banner + Mosquitto guidance
+- **Dropdown replaces toggle.** The "Enable HA integration" checkbox is gone; the existing transport dropdown (off / mqtt / rest) is now the single source of truth.  Picking a transport implicitly enables the integration, picking ``off`` disables it — no two-step flow where the master switch can disagree with the picked transport.  Saved configs with an inconsistent ``enabled=true, mode=off`` (or vice versa) load as ``off`` in the new dropdown so the user makes the choice explicit on first save.
+- **Connection-status banner.** A new card at the top of the panel shows "Off / Connecting / Connected via MQTT to <broker> / Configured for REST but not connected yet / Error: …" with the same colour palette the MA panel uses.  Once the publisher is ``connected`` the transport-specific cards collapse; the operator sees only the banner with a "Reconfigure" button to expand the form again.
+- **Mosquitto guidance banner.** When in HA addon mode, the panel detects the Mosquitto broker add-on state via the new ``GET /api/ha/mosquitto/status`` endpoint: * mode == ``mqtt`` and the add-on is missing or stopped → shows install/start instructions with a deep-link to the official Mosquitto add-on page (Supervisor add-on install needs ``manager`` role, which our add-on doesn't request, so the link rather than a one-click install is the safe path). * mode == ``off`` and the add-on is installed and started → offers a "Set up automatically" CTA that flips the dropdown to ``mqtt``, leaves the broker on ``auto`` (Supervisor auto-resolves credentials), saves, and hot-applies — one click from "off" to "connected" without typing anything. The auto-config CTA is gated on the form being clean (no other unsaved changes elsewhere on the page) so saving doesn't silently flush unrelated dirty state.
 
-The detailed rc-cycle history (rc.1 → rc.6) follows below verbatim
-for traceability.
+### Fixed — Copilot review on PR #218 (v2.65.0-rc.4)
+- **Legacy availability topic stuck on stale value.** ``services/ha_mqtt_publisher.py`` only published the legacy ``sendspin/<pid>/availability`` topic on device removal — the full / delta paths skipped it.  HA caches from rc.1–rc.3 that still subscribe to the legacy topic kept the last retained value forever. ``_publish_full_state`` and ``_publish_delta`` now mirror the runtime channel into the legacy topic so older caches stay in sync.
+- **Disabled-device entities showed hard-coded defaults.** ``services/ha_state_projector._project_disabled_device`` synthesised ``idle_mode=default``, ``static_delay_ms=0``, etc., regardless of what the operator had saved — so HA displayed misleading values for disabled devices and a write-back from HA could silently overwrite the saved settings.  ``bridge_orchestrator.initialize_devices`` now enriches each ``disabled_devices`` entry with the saved per-device config knobs (``idle_mode``, ``keep_alive_method``, ``static_delay_ms``, ``power_save_delay_minutes``, ``bt_management_enabled``, ``preferred_format``, ``room_id``, ``room_name``); the projector uses what's there and falls back to defaults only for legacy entries that pre-date the enrichment.
+- **``GET /api/ha/mosquitto/status`` exception path hid the banner.** The 500 fallback hardcoded ``available=False``, which made the UI silently drop the install banner inside HA addon mode — exactly when the operator most needed actionable hints.  Now derives ``available`` from ``SUPERVISOR_TOKEN`` even on the error branch and reuses the ``MOSQUITTO_ADDON_SLUG`` / ``MOSQUITTO_ADDON_DEEP_LINK`` constants from ``services.ha_addon`` instead of duplicating them.
+- **Runtime availability ignored daemon liveness.** ``availability_runtime`` only mirrored ``device.bluetooth_connected``, so a dead daemon subprocess with BlueZ still reporting the link up would leave RSSI / battery / audio_format reading the last cached value forever.  Now gated on ``device.connected AND device.bluetooth_connected`` — if either is false, runtime entities go ``unavailable``.
+- **Legacy ``enabled=false, mode=mqtt`` auto-enabled on UI load.** ``static/app.js:_populateHaIntegrationForm`` populated the dropdown from ``block.mode`` regardless of ``block.enabled``, so a saved config where the operator had toggled the master off but left the transport at ``mqtt`` would silently re-enable on the first save through the new UI.  Now treats ``enabled=false`` as off in *both* directions: ``enabled=true, mode=off`` stays off, and ``enabled=false, mode=mqtt|rest`` is also forced off — the operator must explicitly pick a transport to opt back in.
+
+### Changed — HA: standby + power-save switches replace button + binary-sensor pairs
+- ``switch.<player>_standby`` — ON = device is in standby, OFF = active. Toggle wakes / parks the speaker; flipping is idempotent so an automation that re-asserts the target state never produces a 409. State mirrors the daemon's ``bt_standby`` flag, so it also flips to ON automatically when the bridge enters standby on its own (e.g. ``idle_mode=auto_disconnect``).
+- ``switch.<player>_power_save`` — ON = PA sink suspended, OFF = active. Toggle drives ``command_power_save_toggle(enter=…)`` with the target value; same idempotent semantics. Net entity count drops by 3 per device: -2 binary sensors, -3 buttons, +2 switches. HA automations that used to read ``binary_sensor.<player>_bt_standby`` should switch to the ``switch.<player>_standby`` ``state``; same for power-save. Both switches use the ``cumulative`` availability gate so they remain controllable while the BT link is down — exactly when an operator is most likely to wake a speaker from a dashboard. The legacy buttons shipped in v2.65.0-rc.1 only two days ago, so the removal is a clean rc-cycle change without operator-facing deprecation noise.
 
 ## [2.64.3] - 2026-04-27
 
@@ -206,7 +211,6 @@ restored once every LXC in the wild has updated past that script
 (realistically after the next major release cycle).
 
 ## [2.63.0] - 2026-04-26
-
 Stable release promoting rc.1 → rc.9 from main.  Headline themes
 (see the per-rc sections below for the full diff per fix):
 
@@ -272,8 +276,149 @@ Stable release promoting rc.1 → rc.9 from main.  Headline themes
   ``on_connected`` hook (rc.1 MPRIS regression); shared
   ``bt_operation_lock`` promoted from per-module singletons.
 
-## [2.62.0] - 2026-04-25
+### Changed
+- ``BluetoothManager`` gains ``on_connected`` / ``on_disconnected`` transition callbacks (false→true, true→false) which fire exactly once per transition; existing callers without these kwargs keep working unchanged.
+- ``bluetooth_manager._run_rssi_burst`` removed.  External callers inside the project: none.
+- ``btsocket==0.3.0`` added to ``requirements.txt``.  Linux-only transitively; ``services.bt_rssi_mgmt`` catches ``ImportError`` so developer macOS test runs stay green without it.
+- ``bluetooth_manager.py`` rc.6 docblock replaced; ``asyncio`` lifted out of the ``TYPE_CHECKING`` block (now used at runtime by ``run_rssi_refresh_loop``).
 
+### Tests
+- ``tests/test_bt_manager.py`` — 8 new tests covering connect / disconnect transition fires, idempotency, and exception isolation.
+- ``tests/test_mpris_player.py`` — 7 new tests for ``MprisRegistry`` (lookup, MAC-case normalisation, replace semantics) + 1 Variant wrapping regression + 1 concurrent register/iterate stress test.
+- ``tests/test_ma_monitor_mpris_bridge.py`` — solo + syncgroup → MPRIS bridging, idle→Stopped state mapping, MA→xesam metadata translation.
+- ``tests/test_api_bt_claim.py`` — Claim Audio endpoint contract (success, no-player → 404, malformed MAC → 400, MAC-case tolerance, dash / no-separator MAC normalisation).
+- ``tests/test_device_activation.py`` — 2 new tests fixing the MPRIS object path to the canonical ``/org/mpris/MediaPlayer2`` and asserting per-device well-known bus names.
+- ``tests/test_bt_scan_rssi.py`` — 8 new tests covering both bluetoothctl RSSI formats, the ``_extract_rssi_from_info`` helper, legacy active-MAC contract preservation, and ``DeviceStatus`` field defaults.
+- ``tests/test_pairing_agent.py`` — 7 new tests for the HFP gate (default-rejects all four UUIDs, opt-in accepts, A2DP unaffected either way).
+- ``tests/test_standby_daemon.py`` — 4 new tests for ``_generate_keepalive_buffer`` (infrasound parity, silence is zeros, none is empty, unknown falls back).
+- ``tests/test_ma_runtime_state.py`` — 5 new tests covering the multi-syncgroup lookup contract (active-state preference, paused preferred over idle, all-idle falls back to cached mapping, single-group case unchanged, unknown player returns ``None``).
+- ``tests/test_status_ws.py`` — 11 new tests covering the ``status_ws_iter`` and ``log_stream_iter`` generators (initial snapshot, change pushes, heartbeats, max iterations / lifetime, subscriber cleanup, atomic subscribe-with-snapshot, bounded queue).
+- ``tests/test_ring_log_handler_subscribe.py`` — 10 new tests for the ring buffer subscribe/unsubscribe/snapshot API + multi-subscriber fan-out + bad-subscriber isolation + concurrent snapshot/emit stress + atomicity of ``subscribe_with_snapshot``.
+- ``tests/test_bt_rssi_refresh.py`` — 9 new tests for the parser and the ``run_rssi_refresh`` orchestration (push on hit, no-op on miss, skip on user scan, swallow burst failures).
+- ``tests/test_bt_manager.py`` — 3 new tests for ``_apply_connected_state`` (transition fire, thread-safety stress, AST-based ``bt_monitor`` source audit).
+- ``tests/test_bt_rssi_refresh.py`` — 4 tests rewired to mock ``_run_bluetoothctl`` for the new info-query path; 1 new test asserting ``info <MAC>`` is the actual command issued.
+- ``read_conn_info`` is the public API — sentinel/sign handling. Mocked at ``_query_rssi_byte`` to feed it specific raw bytes.
+- ``_query_rssi_byte`` is the syscall layer — mocked at ``_open_mgmt_socket`` with a fake socket that replays pre-baked ``CommandComplete`` blobs, exercising the wire-format parser and the event-skipping loop. 14 cases in ``tests/test_bt_rssi_mgmt.py`` (was 9 in rc.7) cover: the wire-byte parse, opcode/index/addr-type packet shape, the event-skipping loop, ``CommandStatus`` failures, non-zero ``CommandComplete`` status, ``ImportError`` and other open failures, malformed MAC, plus the original sentinel/sign/short-circuit logic.
+
+### Fixes from initial review (PR #195)
+- **``services/mpris_player.py``** — wrap MPRIS ``Metadata`` values in ``Variant`` before ``emit_properties_changed``; previous code forwarded a flat dict and would have crashed dbus_fast on the ``a{sv}`` signature.
+- **``services/mpris_player.py``** — guard ``MprisRegistry`` with a ``threading.Lock`` and iterate over snapshots; the singleton is touched by BT manager threads, Flask request threads, and the asyncio loop simultaneously.
+- **``routes/api_bt.py``** — canonicalise MAC before validation in ``POST /api/bt/claim/<mac>`` so dash-separated and compact (no separator) forms match the registry's normalisation.
+- **``services/device_activation.py``** — claim a per-device well-known ``org.mpris.MediaPlayer2.sendspin_<MAC>`` bus name and export at the canonical ``/org/mpris/MediaPlayer2`` object path; without the well-known name BlueZ' MPRIS bridge and other MPRIS clients can't discover the player.
+
+### Added — RSSI / signal strength badge (plan item 3)
+- ``routes/api_bt.py`` — ``_parse_scan_output`` now returns a ``rssi_by_mac: dict[str, int]`` alongside the existing tuple, capturing every ``[CHG] Device <MAC> RSSI: <dB>`` event.  Both modern decimal (``-43``) and legacy parenthesised hex (``0xff... (-43)``) formats parse to the same signed int.  ``_extract_rssi_from_info`` reads the matching ``RSSI:`` line out of ``bluetoothctl info <MAC>`` for already connected peers that don't appear in the live scan stream.
+- ``sendspin_client.py:DeviceStatus`` — new ``rssi_dbm`` and ``rssi_at_ts`` fields.  Status snapshots include them by default; the values come back as ``None`` when no reading has been captured yet.
+- ``static/app.js`` — new ``_renderRssiChip`` helper renders the colour bands (green ≥ -65, yellow -75…-65, red ≤ -75, grey when stale > 90 s) on both scan-result rows and per-device cards (``drssi-N`` slot). ``static/style.css`` — matching ``rssi-good`` / ``rssi-fair`` / ``rssi-bad`` / ``rssi-stale`` palette.
+
+### Added — Block HSP/HFP profiles by default (plan item 7)
+- ``services/pairing_agent.py`` — split out a new ``_HFP_SERVICE_UUIDS`` frozenset (HSP Headset / HSP AG / HFP Hands-Free / HFP AG) and gate it behind a per-agent ``allow_hfp`` flag (default ``False``).  Some DSPs (Bose QC, AKG Y500) prefer HFP over A2DP when both are accepted, collapsing the link to an 8 kHz mono call codec — block by default to preserve A2DP stereo.
+- ``config.py:DEFAULT_CONFIG`` — new ``ALLOW_HFP_PROFILE`` boolean (default ``False``).  Set to ``True`` to restore the pre-rc.2 behaviour for HFP-only headphones (rare).
+- ``bluetooth_manager.py``, ``routes/api_bt.py`` — every ``PairingAgent(...)`` construction reads the live config flag and threads it into the agent.
+
+### Added — keep_alive_method enum (plan item 8 polish)
+- ``sendspin_client.py:_generate_keepalive_buffer(method)`` selects the PCM payload for the keepalive burst: ``infrasound`` (default — existing 2 Hz subsonic stereo at -50 dB), ``silence`` (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), or ``none`` (skip — let the speaker time out naturally).  Unknown values fall back to ``infrasound`` so a typo in per-device config can't silently disable keepalive.
+- ``services/device_activation.py`` — reads ``keep_alive_method`` from per-device config and threads it into ``SendspinClient``.
+- ``config.schema.json`` — new ``keep_alive_method`` device option with the three-value enum.
+
+### Fixed
+- ``services/ma_runtime_state.py:get_ma_group_for_player_id`` — when a bridge player is a member of multiple MA syncgroups simultaneously, the lookup now walks ``_ma_all_groups`` and prefers whichever syncgroup has an active now-playing state (``playing`` / ``paused`` / ``buffering``) over an idle sibling.  Falls back to the first-write-wins ``_ma_groups`` mapping when none are active. Symptom on VM 105: ENEBY Portable @ DOCKER (member of both "Sendspin BT" and "Sendspin RC") was permanently labelled "Sendspin BT" with no track metadata even while the speaker was actively streaming as part of the "Sendspin RC" syncgroup.
+- ``routes/api_status.py`` — set ``Cache-Control: no-transform`` (RFC 7234 §5.2.2.4) + ``Content-Encoding: identity`` on the SSE response so HA Supervisor ingress no longer applies deflate compression that corrupts ``text/event-stream`` payloads.
+- **MPRIS ``on_connected`` hook never fired** (rc.1 regression). ``bluetooth_manager.py`` and ``bt_monitor.py`` mutated ``self.connected`` / ``mgr.connected`` directly in ~10 sites (D-Bus PropertiesChanged path, reconnect loop, dance recovery, ``_connect_device_inner``), bypassing ``_fire_connection_transition``.  The on_connected callback — the path that registers the per-device MprisPlayer — silently never ran on the primary D-Bus connect signal, so physical AVRCP buttons on connected speakers had no effect in production. Fix: introduce ``BluetoothManager._apply_connected_state(value)`` as the single setter that bookkeeps both the cached state and the transition fire.  Replaced every direct assignment with a call to this helper.  Regression test ``test_apply_connected_state_called_by_dbus_props_changed_path`` parses ``bt_monitor.py`` source and asserts no remaining direct ``mgr.connected = X`` sites — kills this whole class of drift in future patches.
+- **RSSI background refresh always returned ``None``** (rc.3 design flaw).  ``_run_rssi_burst`` ran ``bluetoothctl scan bredr`` for 5 s then parsed ``[CHG] Device <MAC> RSSI:`` events.  Already- connected BR/EDR peers stop advertising after the ACL link is established, so the burst window saw zero events for our MAC and the parser returned ``None`` every tick — connected device cards never showed an RSSI badge despite the loop running every 60 s. Fix: read RSSI from ``bluetoothctl info <MAC>`` instead, which exposes the live ACL link RSSI from BlueZ's connection cache. New parser ``_parse_rssi_from_info`` handles both bluetoothctl formats (decimal + parenthesised hex).  ``_run_rssi_burst`` removed (was dead code after the switch).  The kernel mgmt-socket ``MGMT_OP_GET_CONN_INFO`` would be the cleanest source long-term but adds raw-socket complexity not justified for this rc.
+
+### Fixes from initial review (PR #196)
+- ``static/app.js:_renderRssiChip`` — relabel chip + tooltip to ``dBm`` (Bluetooth RSSI is dBm by spec, was rendering as ``dB``).
+- ``sendspin_client.py:DeviceStatus`` — rewrite the ``rssi_dbm`` / ``rssi_at_ts`` field comment to reflect that scan-path population is the only writer in rc.2; the periodic background refresh that keeps connected device cards warm is deferred to rc.3.  Behaviour unchanged.
+- ``config.schema.json`` — declare top-level ``ALLOW_HFP_PROFILE`` boolean so the schema documents the runtime config key added in this rc.  ``tests/test_config.py`` gains a regression test that asserts every ``DEFAULT_CONFIG`` key (other than the internal ``CONFIG_SCHEMA_VERSION``) is declared in ``config.schema.json``, catching this whole class of drift in future rcs.
+
+### Added — WebSocket status stream
+- ``routes/api_ws.py:status_ws_iter`` — pure generator yielding the initial snapshot, then per-change snapshots, then heartbeats on idle ticks; matches the SSE 30-min lifetime cap.
+- ``routes/api_ws.py:register_ws_routes`` registers ``/api/status/ws`` on a ``flask-sock`` ``Sock(app)`` instance wired in ``web_interface.py`` (best-effort: SSE keeps serving on dev hosts without the dep).
+- ``static/app.js`` — UI prefers WS first, falls back to the existing SSE handler then 2 s polling, with capped retry / backoff.
+- ``requirements.txt`` — new ``flask-sock>=0.7.0,<1.0`` (pulls ``simple-websocket`` / ``wsproto`` / ``h11``).
+
+### Added — Live log stream
+- ``sendspin_client._RingLogHandler.subscribe`` / ``unsubscribe`` /  ``snapshot`` — the in-process ring buffer now fans out per-emit lines to subscribed queues so the WS endpoint can push new log lines without polling.
+- ``routes/api_ws.py:log_stream_iter`` — yields a ``snapshot`` frame on connect (full ring contents), then ``append`` frames per emit; unsubscribes via ``finally`` so closed clients can't leak fan-out work.
+- ``routes/api_ws.py`` registers ``/api/logs/stream``.
+- ``static/app.js:startLogsWebsocket`` /  ``stopLogsWebsocket`` — Auto-Refresh toggle now drives a WS subscription for real-time appends and falls back to a 5 s safety-net poll (was 2 s) only if WS connect fails.
+
+### Added — Periodic RSSI refresh (rc.2 follow-up)
+- ``bluetooth_manager.py:_parse_own_rssi_from_burst`` — pure parser for the most-recent ``[CHG] Device <MAC> RSSI: <dB>`` event in a ``bluetoothctl`` burst window (handles modern decimal + legacy parenthesised hex formats).
+- ``bluetooth_manager.BluetoothManager.run_rssi_refresh`` runs a 5 s ``scan bredr`` burst, parses our MAC's most recent RSSI, pushes ``rssi_dbm`` + ``rssi_at_ts`` onto host status.  Skips when a user-triggered scan owns BlueZ discovery (via ``services.async_job_state.is_scan_running``).
+- ``run_rssi_refresh_loop`` is the async wrapper, spawned alongside ``monitor_and_reconnect`` from ``sendspin_client._run_async`` so the interval ticks every 60 s for every connected speaker.
+
+### Fixes from initial review (PR #197)
+- ``sendspin_client._RingLogHandler`` — single ``self._lock`` now guards both ``records`` and ``_subscribers`` so ``snapshot()`` no longer races ``emit()`` (Copilot flagged the deque-iteration hazard).  New ``subscribe_with_snapshot()`` exposes an atomic take-snapshot-then-register pair so the WS log stream cannot drop lines emitted in the gap between the two ops.
+- ``routes/api_ws.log_stream_iter`` — uses ``subscribe_with_snapshot`` (no race), bounds the per-client queue at ``LOG_STREAM_QUEUE_MAXSIZE`` (newest line drops at the ``put_nowait`` step when a stalled browser tab fills the queue; the ring buffer covers the gap on the client's next reconnect).
+- ``routes/api_ws._api_logs_stream`` — explicit ``stream.close()`` in ``finally`` so the generator's unsubscribe hook always runs even when ``ws.send`` raises on client disconnect (no leaked subscribers).
+- ``web_interface.py`` — narrow the WS-import soft-fallback to ``ImportError``/``ModuleNotFoundError``; any other exception now surfaces via ``logger.exception`` and re-raise so real bugs in ``routes/api_ws`` aren't silently swallowed.
+- ``static/app.js`` — single ``beforeunload`` handler (was added on every reconnect, leaking duplicate listeners); status WS ``session_expired`` now closes the current socket and lets ``onclose`` drive reconnect (no overlapping sockets); logs WS tracks its reconnect timer id and clears it in ``stopLogsWebsocket`` so toggling Auto-Refresh off can't reconnect later.
+
+### Second-round review fixes (PR #197)
+- ``routes/api_ws.py`` — both WS handlers now catch ``simple_websocket.ConnectionClosed`` explicitly (debug-logged) and route any other exception through ``logger.exception`` so real bugs (JSON encoding errors, payload build errors) surface in production instead of being silently swallowed.  ``LOG_STREAM_QUEUE_MAXSIZE`` comment rewritten to describe the actual drop-newest-at-producer policy (the previous wording mistakenly described drop-oldest).
+- ``web_interface.py`` — drop redundant ``ModuleNotFoundError`` from the WS-import except clause (it's a subclass of ``ImportError``).
+- ``tests/test_status_ws.py`` — fixture ``_reset_status_version`` now waits for ``notify_status_changed``'s 100 ms debounce timer to flush before yielding so the heartbeat-vs-change tests don't race the timer under load.  Renamed ``test_log_stream_iter_queue_is_bounded_drops_oldest_on_overflow`` → ``..._drops_newest_when_full`` to match the actual implementation.
+
+### Third-round review fixes (PR #197)
+- ``routes/api_ws.py:status_ws_iter`` — capture ``get_status_version`` BEFORE building the initial snapshot.  The previous order let a status change landing between snapshot build and version capture silently slip through: ``last_version`` would already record the post-change number, so ``wait_for_status_change`` never fired for it and clients silently saw stale state until the next change.  Regression test injects a notify during snapshot construction and asserts the next yield is a change frame.
+- ``services/bt_operation_lock.py`` (new) — extracts the ``_bt_operation_lock`` previously private to ``routes/api_bt.py`` into a shared module so background callers can also acquire it. ``BluetoothManager.run_rssi_refresh`` now acquires it non-blocking and skips the burst when held — its 60 s cadence makes a missed tick cheap, and it can no longer corrupt a parallel pair / reset / standalone-scan session by sharing BlueZ's discovery state.
+- ``static/app.js`` — reset ``_logsWsRetries`` in both ``startLogsWebsocket`` and ``stopLogsWebsocket`` so a previous exhausted retry budget can't silently block reconnect when the user toggles Auto-Refresh off then back on.
+
+### Reverted from rc.3
+- ``web_interface.py`` — drop ``Sock(app)`` + ``register_ws_routes``; ``flask-sock`` dropped from ``requirements.txt``.
+- ``static/app.js`` — UI back to SSE-only for status, polling-only for logs.
+
+### Kept
+- ``services/bt_operation_lock.py`` shared lock + RSSI background refresh + ``_RingLogHandler.subscribe_with_snapshot`` API.  All work without WS and stay tested.  ``routes/api_ws.py`` generators kept as dormant contracts for a future ASGI revival.
+
+### Fixes from initial review (PR #199)
+- ``bluetooth_manager._apply_connected_state`` — guard the check-then-set sequence with ``self._connected_state_lock`` so the asyncio D-Bus monitor thread and the BT executor thread cannot both observe ``self.connected==False``, both pass the check, and both fire ``on_connected`` (would surface as duplicate MprisPlayer D-Bus exports).  Callback runs OUTSIDE the lock so a slow callback can't block a concurrent disconnect handler.
+- ``bluetooth_manager.py`` — rewrite the misleading ``_RSSI_LINE_RE`` doc-comment that referenced ``routes/api_bt.py`` (which keeps its own near-identical regex rather than importing this one).
+- ``tests/test_bt_manager.py`` — replace the substring-based ``bt_monitor`` source-audit with an ``ast``-based walk that catches ``Assign`` / ``AugAssign`` / ``AnnAssign`` nodes targeting ``mgr.connected``; immune to false positives in docstrings / log strings and to false negatives from non-standard whitespace.
+
+### Fixed — MPRIS AVRCP forwarding actually works now
+- Drop the well-known name request entirely (was failing silently and not needed).
+- Per-device path moved to a unique ``/org/sendspin/players/<MAC>`` so multiple speakers on the same adapter can each register without clashing.
+- After ``bus.export(...)``, call ``org.bluez.Media1.RegisterPlayer(path, properties)`` on the device's adapter (``/org/bluez/<hciN>``).  The properties dict carries the AVRCP advertisement (PlaybackStatus, CanPlay, etc). BlueZ then routes inbound AVRCP passthrough commands to the exported MPRIS Player methods.
+- Symmetric ``Media1.UnregisterPlayer`` on the disconnect hook before un-exporting, so BlueZ doesn't keep a dangling pointer.
+- ``services/mpris_player.py`` ``_on_play`` / ``_on_pause`` / ``_on_play_pause`` / ``_on_stop`` / ``_on_next`` / ``_on_previous`` now log INFO ``MprisPlayer[<MAC>]: AVRCP <command>`` so support has a single grep to confirm the round-trip lands. Verified end-to-end on VM 105: pressing Pause on the ENEBY Portable's physical button produces an ``MprisPlayer[6C:5C:...]: AVRCP Pause`` log line and the bridge forwards the transport command to MA. Tests: ``test_mpris_object_path_is_per_device_unique_for_bluez_register_player`` and ``test_bluez_adapter_path_returns_org_bluez_hci_form`` lock the new contract.  ``_mpris_well_known_name`` removed (test for it deleted).
+
+### Removed — periodic RSSI background refresh
+- ``BluetoothManager.run_rssi_refresh`` / ``run_rssi_refresh_loop`` deleted.
+- ``_RSSI_LINE_RE`` / ``_RSSI_INFO_LINE_RE`` / ``_parse_own_rssi_from_burst`` / ``_parse_rssi_from_info`` / ``_RSSI_REFRESH_INTERVAL_S`` deleted.
+- ``rssi_task`` spawn in ``sendspin_client._run_async`` removed.
+- ``tests/test_bt_rssi_refresh.py`` deleted (parsers were only exercised here; scan-time RSSI in ``routes/api_bt.py`` keeps its own independent parser + tests). Kept: ``DeviceStatus.rssi_dbm`` / ``rssi_at_ts`` fields, the UI ``_renderRssiChip`` helper, and the scan-time RSSI population in ``routes/api_bt.py``.  All work without WS dependencies and stay ready for the future mgmt-socket revival to fill them in for connected devices.
+
+### Added — connected-device RSSI via kernel mgmt socket
+- ``services/bt_rssi_mgmt.read_conn_info(adapter_index, mac)`` — sync wrapper, returns signed dBm or ``None``.  Every failure mode (peer not connected, EPERM, ENODEV, status != Success, sentinel 127, btsocket missing on non-Linux test envs, garbage adapter index) collapses to ``None`` so callers' contract is "fresh value or keep last known — never propagate an exception".
+- ``BluetoothManager.run_rssi_refresh_loop`` (every 30 s) + ``_rssi_refresh_tick`` — short-circuits when the link is down, when the shared ``bt_operation_lock`` is held by a pair / scan / reconnect, or when the adapter index can't be resolved from ``adapter_hci_name``.  Spawned alongside ``monitor_and_reconnect`` in ``sendspin_client._run_async``.
+- ``BluetoothManager.__init__`` gains an ``on_rssi_update`` callback; ``services/device_activation.activate_device`` wires it to ``SendspinClient._update_status({"rssi_dbm": …, "rssi_at_ts": …})`` so values flow through the existing SSE pipeline into the UI chip (``_renderRssiChip``) that's been there since rc.2. Tests: ``tests/test_bt_rssi_mgmt.py`` (8 cases pinning every short-circuit and the unsigned→signed byte fold); ``tests/test_bt_rssi_refresh.py`` (9 cases covering adapter-index resolution and every refresh-tick branch including lock contention and callback exceptions).
+
+### Fixed — preserve CAP_NET_ADMIN across UID drop
+- ``--reuid`` / ``--regid`` perform the UID drop
+- ``--inh-caps=+net_admin`` puts ``CAP_NET_ADMIN`` in the inheritable set
+- ``--ambient-caps=+net_admin`` puts it in the ambient set so it survives both ``execve`` and the ``setresuid`` Result: the Python process runs as UID 1000 with ``CapEff=0x1000`` (``CAP_NET_ADMIN`` only — every other cap dropped, no escalation beyond the strict minimum).  ``gosu`` is kept as a fall-back when ``setpriv`` is unavailable; in that case RSSI degrades to the existing fail-soft "no fresh value, keep last known". Verified end-to-end on VM 105: bridge process ``CapEff=0000000000001000``, mgmt socket bound trusted, ``CommandComplete`` arrives with the expected payload, ``DeviceStatus.rssi_dbm`` populates and flows through SSE to the UI chip.
+
+### Fixed — HA addon: web-UI-only settings now survive restart
+- `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`, `EXPERIMENTAL_PA_MODULE_RELOAD`, `EXPERIMENTAL_PAIR_JUST_WORKS`, `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`, `EXPERIMENTAL_RSSI_BADGE` — the entire experimental-flags family.
+- `AUTH_ENABLED`, `BRUTE_FORCE_PROTECTION` — auth toggles.
+- `MA_WEBSOCKET_MONITOR` — MA real-time sync toggle.
+- `AUTO_UPDATE`, `CHECK_UPDATES`, `SMOOTH_RESTART` — update / restart behaviour.
+- `ALLOW_HFP_PROFILE` — HFP/HSP authorisation override.
+- `TRUSTED_PROXIES` — X-Forwarded-For accept list. Two new tests in `tests/test_translate_ha_config.py` pin the experimental-flags group and the broader web-UI-only group so a future field added to either family doesn't silently regress on addon-mode restarts.
+
+### Diagnostics — surface MA server version
+- `routes/api_status._collect_environment` — new `ma_server_version` key, sourced from the cached value populated at WS handshake; falls back to `"unknown"` if the bridge hasn't connected to MA yet (matches the existing `bluez` / `audio_server` pattern so the key always appears in the markdown body).
+- `services/ma_monitor` — emits one INFO line right after the handshake in the form `MA server: version=<x> schema=<y> url=<z>` so operators can grep for it without trawling subprocess logs.  Mirrors the `entrypoint.sh` banner's style (the entrypoint can't include the version because it runs before any Python / WS connection). Three new tests in `tests/test_bugreport_environment.py` pin both the present-when-known and unknown-when-pre-handshake branches plus the existing runtime-deps key.
+
+### UI follow-ups on rc.8 RSSI badge
+- ``_getRssiBadgeRenderData`` / ``_renderRssiBadgeHtml`` gain a ``mode`` argument so the chip label matches the underlying measurement.  Connected-link RSSI from mgmt 0x0031 is BR/EDR delta-from-Golden-Receive-Power-Range — labelled "Δ dB". Scan-result RSSI from BlueZ inquiry stays absolute "dBm".  Tooltip spells out the unit either way.
+- Stale ``_renderRssiChip`` reference scrubbed from the ``services/bt_rssi_mgmt`` module docstring; now points at the current UI helpers.
+- Default RSSI refresh interval gated by ``EXPERIMENTAL_RSSI_BADGE`` remains opt-in (no behaviour change in this section).
+
+## [2.62.0] - 2026-04-25
 Stable release promoting rc.5 → rc.13 from main.  Headline themes
 (see the per-rc sections below for the full diff per fix):
 
@@ -345,13 +490,105 @@ Stable release promoting rc.5 → rc.13 from main.  Headline themes
   inside a running container.
 
 ### Changed since 2.61.1
-- Test suite: 1494 → 1547 tests, +53 net new across the rc cycle
-  (28 deletions of obsolete tests covered by rc.8/rc.9 removals,
-  plus new coverage for build_hci_map, aread_sink_state, HA addon
-  schema sync, etc.).
+- Test suite: 1494 → 1547 tests, +53 net new across the rc cycle (28 deletions of obsolete tests covered by rc.8/rc.9 removals, plus new coverage for build_hci_map, aread_sink_state, HA addon schema sync, etc.).
+
+### Added
+- **Native BlueZ authentication agent** (`services/pairing_agent.py`) — a ``PairingAgent`` context manager that exports ``org.bluez.Agent1`` on the system bus via ``dbus-fast``. All 8 Agent1 methods are implemented; ``RequestConfirmation`` auto-confirms SSP Numeric Comparison passkeys directly from the BlueZ callback, eliminating the bluetoothctl-stdout parse/answer race that lost to BlueZ's internal agent timeout on slow-advertising speakers.
+- **DisplayYesNo default capability** — matches what manual ``bluetoothctl`` advertises (the path that reached ``Bonded: yes`` in the #168 reproduction). ``EXPERIMENTAL_PAIR_JUST_WORKS`` still forces ``NoInputNoOutput`` for Just-Works callers.
+- **Native agent now wired into every pair path** — the scope-guard that left ``bluetooth_manager.pair_device`` (monitor-loop re-pair after bond loss) and ``routes/api_bt._run_reset_reconnect`` (Reset & Reconnect button) on the legacy stdin-``yes`` agent is gone. All three pair sites now construct a ``PairingAgent`` with ``DisplayYesNo`` capability before spawning ``bluetoothctl``, fall back to the legacy agent on hosts where ``dbus-fast`` / SystemBus isn't reachable, and expose the same telemetry shape.
+- **Pair-agent telemetry** — ``PairingAgent.telemetry`` property returns a stable-keys snapshot (capability, ordered method-call list, last passkey shown, authorized/rejected service UUIDs, peer-cancel flag). Each pair site logs a structured one-liner with this data and attaches it to the scan-job result payload so future support-triage can answer "which IO capability won on this device?" without a DEBUG log. Foundation for the roadmap's full pair-trace timeline (see ``ROADMAP.bluez-agent.md`` #10).
+- **AuthorizeService scope** — the agent's ``AuthorizeService`` callback used to auto-authorize any UUID the peer asked for. Now it accepts only audio profiles (A2DP Source/Sink, AVRCP Controller/Target, HSP, HFP, their AG counterparts) plus universally-advertised accessory services (GAP, GATT, Device Information, Battery) and raises ``org.bluez.Error.Rejected`` on everything else. Rejected UUIDs are logged and surfaced via the telemetry channel. Expands device support for multi-profile peers (some DSPs preferred HFP over A2DP when both were blanket- authorized); adds a small security scope-guard against unexpected service binds.
+- **Online activation of newly-added devices** — saving a config with a just-added ``BLUETOOTH_DEVICES`` entry now wires up the ``SendspinClient`` + ``BluetoothManager`` pair, registers it in the device registry, and schedules ``client.run()`` on the main loop without a bridge restart. ``ReconfigSummary.started`` is surfaced in the UI as a green "Live added: <name>" toast; ``restart_required`` stays empty for the add-device case.
+- **Live re-enable of disabled devices** — toggling a device's ``enabled`` flag back to ``true`` at runtime now reclaims BT management on the existing client instead of trying to construct a duplicate one. ``config_diff`` emits ``START_CLIENT`` for the ``false → true`` transition; ``_apply_start_client`` detects the existing released client by MAC and calls ``set_bt_management_enabled(True)`` — same path the ``/api/bt/management`` route uses — instead of running the factory. Without this the UI's re-enable toggle silently no-op'd after the online-activation patch.
+- **`services/device_activation.py`** — reusable factory (``DeviceActivationContext`` + ``activate_device``) shared between ``bridge_orchestrator.initialize_devices`` and the new ``ReconfigOrchestrator._apply_start_client`` path, so both entry points apply the same port math, keepalive clamps, sink-monitor wiring, and volume restore semantics.
+- **`services/bridge_runtime_state.set_activation_context` / `get_activation_context`** — cross-thread handoff so Flask request threads can reach the startup-captured factories.
+
+### Changed
+- **`_run_standalone_pair_inner` uses the native agent by default** — when the D-Bus agent registers successfully, ``agent on`` / ``default-agent`` are no longer sent to bluetoothctl (avoids two competing agents). If ``dbus-fast`` is missing or ``RegisterAgent`` fails, the pair flow logs a warning and falls back to the legacy bluetoothctl stdin-agent path unchanged — the patch is safe on hosts without a reachable SystemBus.
+- **`ReconfigOrchestrator.__init__` accepts an optional `activation_context`** — needed to materialize new clients online. Old callers (unit tests, dev scripts) can keep passing just ``(loop, snapshot)``; START_CLIENT actions then fall back to the legacy ``restart_required`` behaviour.
+- **`bridge_orchestrator.initialize_devices` now delegates per-device wiring to `services.device_activation.activate_device`** and publishes the factory context via `set_activation_context` so the reconfig path can reuse it. Behaviour-preserving refactor — all existing `test_bridge_orchestrator` assertions hold.
+- ``POST /api/volume`` and ``POST /api/mute`` always take the direct pactl path now.  Sendspin's ``PulseVolumeController`` subscribes to PA sink change events and pushes any external state change to MA via the volume_controller callback, so MA's UI stays in sync without the bridge round-tripping through ``players/cmd/volume_set``.
+- ``sendspin_client._sync_unmute_to_ma`` no longer reads ``get_mute_via_ma`` (toggle removed); only checks ``is_ma_connected`` before pushing.  Kept as belt-and-suspenders for the post-spawn initial sync because sendspin's controller-callback path takes a short window to settle on first connection.
+- ``scripts/translate_ha_config.py`` no longer reads ``volume_via_ma`` from Supervisor options.
+- ``BridgeDaemon._handle_server_command`` is now a thin status mirror: it forwards the call to ``super()._handle_server_command`` (so sendspin's ``PulseVolumeController`` is invoked) and then copies ``volume`` / ``muted`` into ``bridge_status``.  No more branching on whether an upstream controller exists.
+- ``GET /api/bt/adapters`` no longer walks ``/sys/class/bluetooth`` once per adapter.  New ``services.bluetooth.build_hci_map()`` scans sysfs once per request and returns a ``{normalised_mac: hciN}`` map, dropping the endpoint from O(n²) to O(n) in the number of adapters.  ``resolve_hci_for_mac`` now thinly wraps the same helper so its single-MAC use cases (``scripts/translate_ha_config.py``) stay backward-compatible.
+- ``services.pa_volume_controller._handle_sink_event`` now takes the already-open ``PulseAsync`` connection from the subscribe loop and reads sink state via the new ``services.pulse.aread_sink_state`` helper.  Each PA sink event used to spawn a fresh ``PulseAsync`` client through the one-shot ``aget_sink_volume`` / ``aget_sink_mute`` helpers — under frequent updates that meant noticeable connection churn against the PA daemon.  The subscribe loop's own connection now serves both the event stream and the per-event read.
+- ``PulseVolumeController.stop_monitoring`` no longer swallows every exception when awaiting the cancelled monitor task.  ``CancelledError`` is still treated as the expected outcome; any other exception is logged at DEBUG so a subscribe-loop crash during shutdown leaves a trace instead of disappearing silently.
+- ``cryptography`` floor in ``requirements.txt``: ``>=3.4.0`` → ``>=46.0.7``.  Production dependency, transitively used by PyJWT (HA login_flow / TOTP) and ``music-assistant-client``.  The 3.4.x series (2021) carries multiple known CVEs (e.g. CVE-2023-50782, CVE-2024-26130); raising the floor forces fresh installs onto a patched version while keeping the upper bound open.  armv7 compatibility verified: ``cryptography==46.0.7`` ships ``manylinux_2_31_armv7l`` wheels which install cleanly on the bridge's ``python:3.12-slim`` (Debian Bookworm, glibc 2.36) base used for both the standalone Docker image and the HA addon armv7 build.
+- ``pytest`` floor: ``>=8.0.0`` → ``>=9.0.3`` (dev only).
+- ``pytest-asyncio`` floor: ``>=0.23.0`` → ``>=1.3.0`` (dev only; major-version bump through the 1.0 break, fully validated by the existing 1547-test suite that has been green on ``1.3.0`` locally for the rc cycle).
+- ``mypy`` floor: ``>=1.20.1`` → ``>=1.20.2`` (dev only).
+- ``ruff`` exact pin in ``pyproject.toml``: ``==0.15.10`` → ``==0.15.12`` (Dependabot picked the freshest patch during the rebase window).
+- ``static/app.js`` — replaced the four-step regex strip in ``_showUpdateDialog`` (``replace(/^## .+/)``, ``replace(/^### .+/g)`` …) with a small DOM-building markdown renderer ``_renderReleaseNotes(md, container)``.  Handles ``##`` and ``###`` headings (rendered as section labels instead of erased), single and double backtick code spans, ``**bold**``, ``[text](url)`` links, and ``- `` bullets with multi-line continuation (continuation lines indented 2+ spaces fold into the preceding ``<li>``).  Also skips the auto-generated "🤖 Generated with Claude Code" footer.
+- ``static/style.css`` — added classes for the new DOM: ``.update-modal-md-h2``, ``.update-modal-md-h3``, ``.update-modal-md-p``, ``.update-modal-md-list``, ``.update-modal-inline-code``.  Dropped ``white-space: pre-line`` from ``.update-modal-release-copy`` (the renderer now controls whitespace via semantic blocks) but kept it on ``.update-modal-instructions-copy`` where the textContent path still renders.
+
+### Fixed
+- **Scan-add no longer creates silent duplicate device rows** — the backend validator correctly rejected ``POST /api/config`` when two ``BLUETOOTH_DEVICES`` entries shared a MAC, but the UI only showed a single toast with no visual cue to which rows collided. Now:
+- ``addFromScan`` / ``addFromPaired`` short-circuit when a row for the MAC already exists: the scan modal closes, the existing row is highlighted, and a warning toast reports ``Already in device list: <name>``.
+- On a ``Duplicate MAC address: ...`` validation error at save time the client parses the ``errors[]`` payload and applies a red ``duplicate-conflict`` pulse to **every** matching row (not just the first), then scrolls the first offender into view.
+- **Multi-device START_CLIENT data loss** — when the config diff produced several ``START_CLIENT`` actions in a single ``POST /api/config`` (user adds three speakers at once), each call read ``existing_clients`` from the snapshot captured at the top of ``apply()`` and wrote ``set_clients([*snapshot, new])`` — silently overwriting any clients appended by earlier iterations. Orchestrator now re-reads the live registry on every iteration and keeps ``clients_by_mac`` in sync, so all added devices land.
+- **Start-client ``base_listen_port + index`` mismatch** — the fallback used ``len(existing_clients)`` as the device index, which could differ from the device's position in ``BLUETOOTH_DEVICES`` when disabled devices sit in front of the new one. Fixed by passing ``device_index`` through the action payload from ``config_diff`` and preferring it over the live-registry length. Avoids port collisions on setups with disabled devices.
+- **PairingAgent cleanup on registration failure** — ``_thread_main`` exited early when ``_register()`` raised (e.g. ``AgentManager1.RegisterAgent`` refused because another agent held the default), leaking the SystemBus connection and asyncio loop per failed attempt. Now always runs through a ``try/finally`` that closes the loop and best-effort unregisters if ``_bus`` was set.
+- **Agent leak when ``bluetoothctl`` subprocess fails to launch** — in both ``_run_standalone_pair_inner`` and ``_run_reset_reconnect`` the native-agent cleanup lived inside a ``finally`` that only ran after ``subprocess.Popen`` succeeded. ``PairingAgent.__exit__`` is now in an outer ``finally`` that always runs, guaranteeing the agent thread / SystemBus socket is torn down even when bluetoothctl can't start.
+- **Stale activation context at shutdown** — ``publish_shutdown_complete`` now calls ``set_activation_context(None)`` alongside the existing ``set_main_loop(None)`` so Flask threads that outlive the bridge process in tests / graceful shutdown can't materialize new clients against torn-down factories.
+- **Empty assertion in ``test_activate_device_honours_effective_bridge_suffix``** — the test's comment promised "verify the suffix was applied" but didn't actually assert anything. Added the explicit ``captured["device_name"] == "Kitchen @ Home"`` check so the suffix wiring is properly regression-tested.
+- **Default-player-name inconsistency between startup and online activation** — when a ``BLUETOOTH_DEVICES`` entry omitted ``player_name``, the startup path defaulted to ``Sendspin-<hostname>`` (or ``$SENDSPIN_NAME`` / caller-override), but online activation hardcoded ``"Sendspin"``.  The client would rename itself on the next bridge restart, breaking the MA/UI identity mapping for that device.  ``DeviceActivationContext`` now carries ``default_player_name`` captured at startup, and ``_apply_start_client`` uses it — so live-add and restart produce the same name.
+- **``PairingAgent.RequestPasskey`` ignored the configured PIN** — method used to return a hardcoded ``0`` and never mark ``pin_attempted``.  The legacy bluetoothctl path already handled both "enter pin code" and "enter passkey" prompts by writing the configured PIN, so devices that drove ``RequestPasskey`` instead of ``RequestPinCode`` failed under the native agent where the legacy path succeeded.  Agent now parses ``self.pin`` as an int, validates the 0–999999 range BlueZ requires, and returns it (or falls back to ``0`` with a warning if the PIN is non-numeric / out of range).  ``pin_attempted`` is marked either way so ``_run_standalone_pair_inner``'s popular-PIN retry loop still kicks in.
+- **Race in ``PairingAgent.__enter__`` error path** — when ``_register()`` raised, ``__enter__`` called ``_force_stop()`` which ran ``loop.stop()`` while the agent thread was already inside its ``finally`` running ``loop.run_until_complete(_unregister())``.  The stop interrupted the cleanup with "Event loop stopped before Future completed", leaking the SystemBus connection and the exported agent object.  Now ``_force_stop`` only calls ``loop.stop()`` while the thread is in ``run_forever()`` (tracked via a new ``_running_forever`` flag), and the ``__enter__`` error path waits on ``self._thread.join()`` to let cleanup finish naturally instead of forcing a stop.
+- **Read-modify-write race on the active-clients registry** — ``_apply_start_client`` snapshotted ``state.get_clients_snapshot()`` then ``state.set_clients([*snapshot, new])``.  Two parallel ``POST /api/config`` request threads (Waitress runs ``WEB_THREADS=8`` by default) could each diff a different new device and clobber each other's append.  Replaced with a new ``services.device_registry.mutate_active_clients(fn)`` that takes the registry lock and runs the mutator atomically.  ``rollback`` paths use the same primitive — atomic remove-by-identity instead of overwriting with a stale snapshot.
+- **Cross-request duplicate guard** — even with the atomic mutate, two parallel saves could both target the same MAC.  The mutator now also checks for an existing client with the same MAC inside the lock and drops the just-built duplicate so the registry never holds two clients fighting for one adapter.  The dropped attempt skips ``client.run()`` scheduling so the daemon-spawn race is avoided too.
+- **Adapter alias swap on multi-adapter hosts** (#193) — the ``GET /api/bt/adapters`` endpoint pieced together ``bluetoothctl select <MAC>; show`` per adapter and grabbed the **first** ``Alias:`` line it found in the combined stdout.  In piped-stdin mode ``bluetoothctl`` interleaves the **default** controller's info ahead of the freshly-selected block, so the parser surfaced the wrong controller's alias for every non-default adapter.  Two-adapter systems (e.g. Pi built-in BT + USB BT500 stick) saw the alias of one adapter shown next to the MAC of the other. Replaced with the explicit ``show <MAC>`` form via the new ``services.bluetooth.get_adapter_alias`` helper — one targeted bluetoothctl invocation per MAC, no ``select``, no default-vs- selected ambiguity.
+- **``hciN`` labels track BlueZ list order, not the kernel** (#193) — ``api_bt_adapters`` previously labelled adapters as ``f"hci{enumerate-index}"`` against the order returned by ``bluetoothctl list``.  That order is BlueZ's registration order and disagrees with the kernel ``hciN`` numbering when adapters hot-plug (very visible after attaching a USB stick to a Pi that has built-in BT). New ``services.bluetooth.resolve_hci_for_mac`` reads ``/sys/class/bluetooth/hciN/address`` (the canonical kernel mapping BlueZ honours) and returns the real ``hciN`` per MAC.  Endpoint uses it; falls back to the synthetic index label only when sysfs isn't mounted (non-Linux dev box, container without ``/sys``).
+- **HA addon: ``Disable PA rescue-streams`` toggle silently reset on every restart** (user report).  ``routes.api_config._sync_ha_options`` POSTs ``disable_pa_rescue_streams`` to Supervisor on every config save, but the option was missing from all three ``ha-addon*/config.yaml`` schemas.  Supervisor strips unknown options, so on the next addon restart ``scripts/translate_ha_config.py`` read the missing key as ``False`` and the bridge re-enabled ``module-rescue-streams``.  Added the option (default ``false``) and its schema type (``bool?``) to ``ha-addon/``, ``ha-addon-rc/``, and ``ha-addon-beta/`` ``config.yaml``.
+- **MA shows bridge players as muted even though audio is playing** (user-report on the HA community thread).  The daemon mutes its PulseAudio sink during startup to hide format-probe and routing glitches (``services/daemon_process.py:685``).  MA's first ``volume_controller.get_state()`` poll happens during that ~15-second window, reads ``(100, True)``, and records ``player.volume_muted=True`` in its state.  When the startup-unmute watcher later releases the PA sink mute, the bridge's local ``status["muted"]`` flag is — and always was — ``False``, so the existing post-spawn unmute sync short-circuited at "already in sync" and never pushed the unmute back to MA.  Result: HA's MA UI kept the volume slider greyed out and the player labelled muted forever (until the user manually clicked Unmute), while audio continued playing normally. Fix: ``_sync_unmute_to_ma`` now accepts ``force=True``.  The post-spawn caller in ``_read_subprocess_output`` passes it because it knows the local ``status["muted"]`` doesn't reflect MA's view at that point (MA polled while we were startup-muted; we never intended to be muted ourselves).  The non-force code path keeps the original safety guard against double-unmuting after explicit user mute (#155).
+- ``CHANGELOG.md`` rc.9 section dated ``2026-04-24`` while rc.8 was dated ``2026-04-25`` — corrected to ``2026-04-25``.
+
+### Scope guard
+- Online activation covers the **add-device** case only. Re-enabling a previously-disabled device, changing the adapter on an existing one, and all other edits that already had hot/warm paths keep the paths they had before.
+- Further BlueZ-agent work (UI passkey modal, per-device capability override, full D-Bus pair pipeline replacing ``bluetoothctl``, LE Audio) is tracked in ``ROADMAP.bluez-agent.md`` for 2.63+.
+
+### Tests
+- ``tests/test_pairing_agent.py`` — capability validation, PIN plumbing, ``RequestConfirmation`` / ``Cancel`` state capture, full register → request_default_agent → unregister lifecycle against a mocked ``MessageBus``, and ``__enter__`` error propagation when SystemBus connect fails.
+- ``tests/test_config_validation.py`` — additional case pinning the per-index ``BLUETOOTH_DEVICES[N].mac`` field path for 3+ duplicate MACs so the UI's conflict-row highlighter keeps parsing backend errors correctly as the validator evolves.
+- ``tests/test_device_activation.py`` (10 cases) — factory covers BT-manager wiring, sink-monitor callback, missing-MAC/disabled- adapter degradation, volume restore, explicit vs fallback listen port, effective-bridge suffix, released-state restore, keepalive clamping, and context immutability.
+- ``tests/test_reconfig_orchestrator_start_client.py`` (8 cases) — registry append + run-task schedule, fallback to ``restart_required`` when context or loop absent, factory-exception error surface, MAC idempotency guard for already-active clients, **live re-enable of a released client and error surfacing when the reclaim call fails**, and registry rollback when the scheduled ``run()`` exits with an exception.
+- ``tests/test_reconfig_orchestrator_start_client.py`` — three-device ``apply()`` call appends all three (regression for multi-device data-loss) and ``device_index`` from payload overrides the live registry length.
+- ``tests/test_config_diff.py`` — ``device_index`` is attached to START_CLIENT payload; reflects position in ``BLUETOOTH_DEVICES`` even when disabled devices precede the added one.
+- ``tests/test_pairing_agent.py`` — ``RequestPasskey`` marks the attempt and still falls back cleanly on an invalid (non-numeric) PIN.
+- ``tests/test_reconfig_orchestrator_start_client.py`` — ``_apply_start_client`` falls through to ``context.default_player_name`` (not a hardcoded ``"Sendspin"``) when the device payload has no ``player_name``.
+- ``tests/test_reconfig_orchestrator_start_client.py`` — concurrent peer-request append wins; our duplicate is dropped inside the atomic mutate and ``client.run()`` is not scheduled.
+- Existing tests refactored onto a shared ``_patch_registry`` helper so the live-list assertions exercise the new ``mutate_active_clients`` path.
+- the endpoint labels adapters by their kernel ``hciN`` even when ``bluetoothctl list`` returns the USB stick first,
+- each adapter's alias is the alias of its actual MAC (not the default controller's), and
+- the bluetoothctl input is the explicit ``show <MAC>\n`` form — never ``select <MAC>; show``.
+- every key ``_sync_ha_options`` POSTs is present in both ``options:`` defaults and the ``schema:`` block, so the same kind of silent-reset regression can't slip in again,
+- intentionally-unmapped keys (``auth_enabled`` — HA mode hardcodes auth on, no round-trip) stay out of the schema, with the exemption list documented in-test for review.
+
+### Refactor
+- ``scripts/translate_ha_config.py:_mac_to_hci`` is now a thin wrapper around ``services.bluetooth.resolve_hci_for_mac`` so HA-addon config translation and the live adapter endpoint share the same sysfs walker (DRY).
+
+### Removed
+- ``Route volume through MA`` and ``Route mute through MA`` toggles in the General settings card.  Their underlying config keys ``VOLUME_VIA_MA`` and ``MUTE_VIA_MA`` are dropped from ``config.py`` defaults, removed from the Supervisor options sync (``ha-addon*/config.yaml`` no longer carry ``volume_via_ma``), and added to the diff-config IGNORED set so old ``config.json`` files carrying them don't trigger spurious reconfig actions on save.
+- ``routes.api._set_volume_via_ma`` / ``_set_mute_via_ma`` proxy helpers and the ``force_local`` request flag (no longer needed — the local pactl path is always taken).
+- ``routes.api_config.get_volume_via_ma`` / ``get_mute_via_ma`` and the cached module-level ``_volume_via_ma`` / ``_mute_via_ma`` globals.
+- ``services.config_diff._GLOBAL_BROADCAST_FIELDS`` no longer lists the two keys.
+- ``static/app.js`` ``_isMaConfigured`` / ``_refreshMaDependentToggles`` helpers and the ``data-ma-dependent`` row machinery added in rc.6 — the toggles they greyed out are gone.
+- ``.config-setting-row--inactive`` CSS rule (sole user gone).
+- ``tests/test_volume_routing.py`` (147 LoC dedicated to the removed proxy paths).
+- **Sendspin artwork binary-frame relay**.  ``BridgeDaemon`` no longer monkey-patches the sendspin client's ``_handle_binary_message`` to intercept ``ArtworkFrame`` payloads (``_patch_artwork_handler``, ``_on_artwork_frame``, ``Roles.ARTWORK`` advertisement, ``ArtworkChannel`` / ``ClientHelloArtworkSupport`` imports, ``base64`` import).  The web UI already uses MA's ``image_url`` via the HMAC-signed ``/api/ma/artwork`` proxy, so this ~80 LoC of fragile monkey-patched code never reached the user.
+- **Legacy sendspin <5.5.0 fallback** in ``BridgeDaemon``.  Removed ``_has_upstream_volume_controller`` / ``_sync_bt_sink_volume`` manual ``aset_sink_volume`` path, the ``on_volume_save`` callback parameter, and the ``_background_tasks`` book-keeping set.  The pinned sendspin always provides ``PulseVolumeController.set_state``, so ``_handle_server_command`` only mirrors the value into ``bridge_status`` and notifies SSE listeners.
+- **Legacy ``use_hardware_volume`` filter** in ``daemon_process``. ``DaemonArgs`` always accepts ``volume_controller`` on sendspin 7.0.0; the kwarg-based fallback the bridge used to keep when ``volume_controller`` wasn't supported is gone.  The generic ``_filter_supported_daemon_args_kwargs`` helper still drops any unknown keys (kept tested by ``test_daemon_process.py``), so forward-compat with future sendspin signatures is unchanged.
+- ``daemon._sync_bt_sink_volume(vol)`` call from the IPC ``set_volume`` handler in ``services/daemon_process.py:_read_commands`` (the method no longer exists).  PulseVolumeController already drives the actual sink volume from inside sendspin.
+- Removed test classes ``TestArtworkCallback``, ``TestArtworkMonkeyPatch`` and ``TestUpstreamVolumeController`` from ``tests/test_bridge_daemon_features.py`` (covered code is gone). ``TestClientHelloRoles`` renamed to ``test_create_client_advertises_only_supported_roles`` and now asserts that neither ``visualizer_support`` nor ``artwork_support`` kwargs are passed.
+
+### Removed (Dockerfile runtime stage)
+- ``/usr/local/lib/python3.12/site-packages/pip`` and ``/usr/local/bin/pip*`` (6.6 MB).  The builder stage strips pip from ``/install``, but the runtime ``python:3.12-slim`` base ships its own pip in ``/usr/local`` which the ``COPY --from=builder`` merges over without removing — leftover pip then survived into the final image.
+- ``/usr/lib/udev/hwdb.bin`` and ``/usr/lib/udev/hwdb.d`` (22 MB). No ``udevd`` runs inside the container — BlueZ and PulseAudio consume udev events from the host via D-Bus, so the in-container hardware database is never queried.
+- ``/usr/lib/systemd`` (5.6 MB).  s6-overlay handles PID 1 / signal forwarding; systemd unit files and helpers are unreachable.
+- ``/usr/share/doc/*``, ``/usr/share/man/*``, ``/usr/share/info/*`` (~4.4 MB).  Standard slim-image practice — package documentation pulled in by apt-installed runtime deps has no consumer.
+- ``pulsectl/tests``, ``qrcode/tests``, ``numpy/doc`` inside ``site-packages`` (~80 KB).  Test suites and module docs from installed wheels.
 
 ## [2.61.0] - 2026-04-22
-
 Promotes the 2.61.0-rc line to stable. No code changes beyond the
 version string — this release is `2.61.0-rc.7` made official. The line
 as a whole covers BlueZ 5.86 pair/connect hardening, opt-in adapter
@@ -359,53 +596,59 @@ recovery, scan/pair UX improvements, and a new experimental-toggle
 visual treatment in the web UI.
 
 ### Highlights
-- **BlueZ 5.86 A2DP dual-role hardening** — explicit `ConnectProfile(A2DP_SINK_UUID)`
-  right after pair succeeds (bluez/bluez#1922 workaround).
-- **Opt-in adapter auto-recovery ladder** — new
-  `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` flag runs mgmt reset → rfkill →
-  USB rebind via [`bluetooth-auto-recovery`](https://github.com/bluetooth-devices/bluetooth-auto-recovery)
-  when reconnects hit `BT_MAX_RECONNECT_FAILS`. Per-adapter 60 s cooldown.
-  Settings UI toggle included.
-- **Popular-PIN retry for legacy BT pairing** — `POST /api/bt/pair_new`
-  now re-runs with `0000, 1234, 1111, 8888, 1212, 9999` on
-  `AuthenticationFailed`.
-- **Clearer pair-failure logs** — rejected PIN annotated in error messages
-  via a new `describe_pair_failure()` helper.
-- **BR/EDR-only scan during pairing** — `scan bredr` replaces
-  `scan on` at all five pair/scan sites (bluez/bluez#826).
-- **Stale BlueZ device cache cleared on remove** — `bt_remove_device`
-  now deletes `/var/lib/bluetooth/<adapter>/cache/<device>` to prevent
-  `Protocol not available` on re-pair.
-- **Experimental sink-recovery flags + UI wiring** —
-  `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`,
-  `EXPERIMENTAL_PA_MODULE_RELOAD`,
-  `EXPERIMENTAL_PAIR_JUST_WORKS`, plus scan-modal toggle for the
-  NoInputNoOutput pair agent (`no_input_no_output_agent` per-request
-  override on `/api/bt/pair_new`).
-- **Event-driven standalone pair** — `pair <mac>` fires on
-  `[NEW] Device` instead of a fixed 12 s sleep (issue #168). Full
-  stdout in debug log on FAIL.
-- **Tri-state `_dbus_wait_services_resolved`** — `True` / `False` /
-  `None` (can't check), with corrected `wait_with_cancel` contract
-  handling.
-- **Post-pair audio-profile sanity check** — surfaces
-  `last_error = "no_audio_profiles_advertised"` when a freshly paired
-  device advertises no audio UUIDs.
-- **Scan-filter drop reasons** — machine-readable `reason` labels on
-  dropped scan results; telemetry aggregated for support triage.
-- **`cycle_card_profile` helper** — forces PA to re-publish a missing
-  sink without kicking other active BT streams (milder than the
-  PA module reload).
-- **Red visual treatment for experimental UI toggles** — `data-experimental`
-  rows now render with red tint + "EXPERIMENTAL" text badge so
-  unsupported/volatile toggles are distinguishable from merely unsaved
-  settings.
-- **Docker build hygiene** — `.dockerignore` trims the UI dev tree,
-  `__pycache__`, and dev screenshots from the build context;
-  `Dockerfile` narrows the scripts copy to the three runtime helpers.
+- **BlueZ 5.86 A2DP dual-role hardening** — explicit `ConnectProfile(A2DP_SINK_UUID)` right after pair succeeds (bluez/bluez#1922 workaround).
+- **Opt-in adapter auto-recovery ladder** — new `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` flag runs mgmt reset → rfkill → USB rebind via [`bluetooth-auto-recovery`](https://github.com/bluetooth-devices/bluetooth-auto-recovery) when reconnects hit `BT_MAX_RECONNECT_FAILS`. Per-adapter 60 s cooldown. Settings UI toggle included.
+- **Popular-PIN retry for legacy BT pairing** — `POST /api/bt/pair_new` now re-runs with `0000, 1234, 1111, 8888, 1212, 9999` on `AuthenticationFailed`.
+- **Clearer pair-failure logs** — rejected PIN annotated in error messages via a new `describe_pair_failure()` helper.
+- **BR/EDR-only scan during pairing** — `scan bredr` replaces `scan on` at all five pair/scan sites (bluez/bluez#826).
+- **Stale BlueZ device cache cleared on remove** — `bt_remove_device` now deletes `/var/lib/bluetooth/<adapter>/cache/<device>` to prevent `Protocol not available` on re-pair.
+- **Experimental sink-recovery flags + UI wiring** — `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`, `EXPERIMENTAL_PA_MODULE_RELOAD`, `EXPERIMENTAL_PAIR_JUST_WORKS`, plus scan-modal toggle for the NoInputNoOutput pair agent (`no_input_no_output_agent` per-request override on `/api/bt/pair_new`).
+- **Event-driven standalone pair** — `pair <mac>` fires on `[NEW] Device` instead of a fixed 12 s sleep (issue #168). Full stdout in debug log on FAIL.
+- **Tri-state `_dbus_wait_services_resolved`** — `True` / `False` / `None` (can't check), with corrected `wait_with_cancel` contract handling.
+- **Post-pair audio-profile sanity check** — surfaces `last_error = "no_audio_profiles_advertised"` when a freshly paired device advertises no audio UUIDs.
+- **Scan-filter drop reasons** — machine-readable `reason` labels on dropped scan results; telemetry aggregated for support triage.
+- **`cycle_card_profile` helper** — forces PA to re-publish a missing sink without kicking other active BT streams (milder than the PA module reload).
+- **Red visual treatment for experimental UI toggles** — `data-experimental` rows now render with red tint + "EXPERIMENTAL" text badge so unsupported/volatile toggles are distinguishable from merely unsaved settings.
+- **Docker build hygiene** — `.dockerignore` trims the UI dev tree, `__pycache__`, and dev screenshots from the build context; `Dockerfile` narrows the scripts copy to the three runtime helpers. See the `2.61.0-rc.1` through `2.61.0-rc.7` entries below for per-change detail.
 
-See the `2.61.0-rc.1` through `2.61.0-rc.7` entries below for
-per-change detail.
+### Added
+- **`EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`** — opt-in flag gating the disconnect→2 s wait→reconnect dance in `BluetoothManager` when no sink appears after a successful connect. Previously unconditional; the dance helps on some headless PipeWire/BlueZ 5.86 setups but hurts others (see forum #78, related to #174), so it's now opt-in.
+- **`EXPERIMENTAL_PA_MODULE_RELOAD`** — opt-in flag gating the last-resort `pactl unload-module / load-module module-bluez5-discover` escalation when `bluez_card.*` fails to register. Disruptive (drops every other active BT sink), globally throttled to once per 60 s across the bridge, and now serialized so two concurrent callers can never run the reload back-to-back.
+- **`EXPERIMENTAL_PAIR_JUST_WORKS`** — opt-in flag (issue #168) that registers bluetoothctl's agent as `NoInputNoOutput` so Secure Simple Pairing runs Just-Works (no passkey exchange). Workaround for audio sinks that cancel authentication under the default `KeyboardDisplay` agent. Read via `load_config()` on every pair attempt — no restart.
+- **Post-pair audio-profile sanity check** — if a freshly paired device advertises no audio UUIDs (`A2DP`, `HFP`, `Headset`), the bridge now surfaces `last_error = "no_audio_profiles_advertised"` on device status so the UI can show a targeted banner instead of a generic sink-not-found error. Backed by new `bt_dbus._dbus_get_device_uuids` and `AUDIO_SINK_UUIDS` constant.
+- **Scan-filter drop reasons** — `_classify_audio_capability` in `routes/api_bt.py` now returns a machine-readable `reason` label (`audio_class_of_device` / `non_audio_class_of_device` / `audio_uuid` / `no_audio_class_no_uuid` / `no_class_info_defaults_audio`). Scan telemetry aggregates the drop reasons so support can answer "why doesn't my speaker show up" without guessing.
+- **`services.pulse.cycle_card_profile` / `acycle_card_profile`** — helper that cycles `bluez_card.*` `off → a2dp_sink` to force PA to re-publish a missing sink without kicking other active BT streams. Milder than the module reload, no flag needed.
+- **Scan-modal toggle for the NoInputNoOutput pair agent** — the `EXPERIMENTAL_PAIR_JUST_WORKS` config flag shipped in rc.1 with full config/schema/diff support, but the UI had no control for it, so users had to hand-edit `config.json` or `options.json` to try Just-Works SSP pairing. A new "NoInputNoOutput pair agent (experimental)" switch now appears in the scan-modal toolbar next to "Pause other speakers on same adapter", guarded by "Show experimental features". Because registering the BlueZ agent is a per-pair runtime decision (not a persisted setting), it lives with scan/pair context rather than under Settings and takes effect on the next pair attempt only. The toggle is only included in the `pair_new` POST body when the user explicitly ticks it — an unchecked toggle falls through to the persisted `EXPERIMENTAL_PAIR_JUST_WORKS` config key, which remains a usable fallback for hand-edited `config.json` / `options.json`.
+- **`no_input_no_output_agent` per-request override in `POST /api/bt/pair_new`** — the scan-modal toggle sends this field on the pair request; when present, it wins over the persisted `EXPERIMENTAL_PAIR_JUST_WORKS` config key. The server accepts only JSON booleans here — non-bool payloads (e.g. the string `"false"`) are ignored rather than being coerced via `bool()`, so they fall through to the config key instead of silently forcing NoInputNoOutput.
+- **Popular-PIN retry for legacy BT pairing** — when a BT 2.x device asks for a numeric PIN and rejects the bridge's default `0000` with `AuthenticationFailed`, the standalone pair flow (`POST /api/bt/pair_new`) now re-runs with the next popular PIN (`0000, 1234, 1111, 8888, 1212, 9999`) before giving up. Non-PIN failures (connection errors, timeouts) still stop the loop immediately — retrying against an unreachable device wasted ~20s per attempt. The list is intentionally short: each extra attempt adds a BlueZ auth-fail timeout to total pair time.
+- **Experimental adapter auto-recovery ladder (opt-in)** — new `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` flag (default off). When the reconnect loop hits `BT_MAX_RECONNECT_FAILS` consecutive failures and the flag is on, the bridge now runs the [`bluetooth-auto-recovery`](https://github.com/bluetooth-devices/bluetooth-auto-recovery) ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the adapter as a last-ditch before auto-releasing BT management. If recovery succeeds, management stays enabled and the reconnect loop continues. A per-adapter 60 s cooldown prevents thrashing when multiple devices on the same controller hit the threshold together. Requires `CAP_NET_ADMIN`, `/dev/rfkill`, and `/sys/bus/usb` access (Docker privileged or matching capabilities) — the USB step briefly disconnects every device on that controller, hence opt-in.
+- **UI toggle for `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`** — the flag added in rc.5 was only settable by hand-editing `config.json`. The Settings tab now exposes it as a standard experimental row (gated behind the "Show experimental features" master switch) with the full recovery-ladder description in its tooltip.
+
+### Fixed
+- **#168 — standalone pair unreliable on slow SSP speakers** — three improvements to `_run_standalone_pair_inner`:
+- **Event-driven pair trigger**: `pair <mac>` fires as soon as `[NEW] Device <mac>` shows up on scan (typical 1–3 s), replacing the fixed 12 s sleep so the peer is still accepting when `pair` lands. Falls back to the hard cap if the device never advertises.
+- **Full stdout on FAIL** in debug log (was `out[-800:]`, which routinely cut off the passkey/agent prompt needed to diagnose).
+- Optional Just-Works SSP agent (see Added).
+- **`_dbus_wait_services_resolved` pre-audio gate** — polls BlueZ `Device1.ServicesResolved` (≤10 s) after `Connect()` returns, so downstream profile/sink work doesn't race an uninitialized Device1. Tri-state return (`True` / `False` / `None`): `None` means "could not check" (dbus-python missing or no device path) and the caller skips the misleading "did not reach True within 10s" warning.
+- **`areload_bluez5_discover_module` — asyncio.CancelledError** propagation: the helper now catches `OSError` only, so task cancellation unwinds cleanly on shutdown/restart (previously suppressed alongside OSError).
+- **`areload_bluez5_discover_module` — cooldown burn on failure**: `_LAST_BLUEZ5_RELOAD_TS` is now written only after a full successful `unload-module` + `load-module`. Trivial failures (pactl unavailable, non-zero rc, module not loaded) no longer block a later healthy attempt.
+- **`areload_bluez5_discover_module` — concurrent caller race**: added `_BLUEZ5_RELOAD_IN_PROGRESS` flag under the existing `threading.Lock` + `try/finally` so two concurrent callers can't both pass the cooldown check and run the reload back-to-back.
+- **`_dbus_wait_services_resolved` wait_with_cancel contract** (03c4d8a0): the helper now treats `wait_with_cancel` returning `True` as "waited uninterrupted" and keeps polling, matching `BluetoothManager._wait_with_cancel`'s convention. Previously the contract was inverted and the helper exited after the first non-True property read.
+- **`__pycache__` no longer leaks into the image** — `/app/routes/`, `/app/services/`, and `/app/scripts/` previously shipped stale bytecode from the developer's local interpreter runs. Addressed via the `.dockerignore` additions above.
+- **Stale BlueZ device cache cleared on remove** — after `bluetoothctl remove`, `bt_remove_device` now also deletes `/var/lib/bluetooth/<adapter>/cache/<device>` when an adapter MAC is known. BlueZ leaves stale `ServiceRecords` / `Endpoints` entries in that file, which on re-pair surface as `org.bluez.Error.Failed — Protocol not available` on A2DP sinks (bluez/bluez#191, #348, #698). Silent if the file is absent; cleanup only runs when the adapter is known to avoid walking the BlueZ tree blindly.
+
+### Changed
+- `_cycle_card_profile_for_mac` docstring now states True only when the full off → `a2dp_sink` cycle (including the final switch) completes successfully.
+- **Docker build context trimmed** — `.dockerignore` now excludes the `ui/` dev UI source (215 MB of `node_modules`), `sendspin-cli/`, `rnd/`, every `__pycache__/`, `*.pyc`/`*.pyo`, the usual linter/test caches, and the dev-screenshot PNG families that weren't already covered (`stats-*`, `ru-*`, `ghpages-*`, `social-*`, `landing-*`, `config-*`, `mobile-nav-*`). Fresh CI runners no longer pay to ship the UI dev tree into the builder.
+- **Image payload narrowed** — `Dockerfile` replaces the blanket `COPY scripts/ scripts/` with an explicit list of the three scripts that actually run inside the container: `translate_ha_config.py` (called by `entrypoint.sh` in HA addon mode) and `check_sendspin_compat.py` / `check_container_runtime.py` (invoked by `release.yml` post-build smoke tests). Eight dev-only scripts (`rpi-*.sh`, `proxmox-vm-*.sh`, `generate_ha_addon_variants.py`, `release_notes.py`, `translate_landing.py`) are no longer packaged.
+- **Clearer pairing-failure logs** — both the scan-modal pair flow and the long-running reconnect pair flow now annotate the failure log with the rejected PIN when the device auto-prompted for one and `AuthenticationFailed` was seen (`… — device rejected PIN 0000`). A new `describe_pair_failure()` helper centralises the rule so operators see the root cause without grepping for `AuthenticationFailed`. Non-auth failures are logged verbatim as before.
+- **Scan narrowed to BR/EDR during pairing** — `bluetoothctl scan on` replaced with `scan bredr` at all five pair/scan sites (reset & reconnect, standalone pair, background BT scan, runtime pair-device loop). Excluding LE-only advertisers keeps the scan window responsive on adapters shared with BLE traffic and avoids interleaved BR/EDR discovery delays seen on BlueZ 5.85 (bluez/bluez#826). Safe on bluetoothctl ≥ 5.65.
+- **Explicit A2DP Sink profile request right after pair succeeds** — `pair_device` now issues an explicit `org.bluez.Device1.ConnectProfile(A2DP_SINK_UUID)` via D-Bus immediately after bluetoothctl reports `Pairing successful`, before returning to the connect loop. On BlueZ 5.86 the generic `Connect()` that follows can auto-negotiate the wrong profile under the dual-role regression (bluez/bluez#1922), leaving the device bonded but with no A2DP sink published. Calling ConnectProfile while the device is still fresh from pair narrows that window — on a healthy stack an `org.bluez.Error.AlreadyConnected` response from the underlying D-Bus call is treated as benign, so the helper is effectively a cheap no-op. Best-effort: if the D-Bus call fails, the pair result is still reported as success and `_connect_device_inner` will retry the same hint after its own `Connect()`.
+- **Red visual treatment for experimental toggles** — rows marked `data-experimental` (both `.config-setting-row` in Settings and `.bt-scan-toggle` in the scan modal) now render with a red tinted background, red inset border, and an "EXPERIMENTAL" badge in the top-right corner. Mirrors the amber dirty-row pattern but uses red so unsupported/volatile toggles are distinguishable from merely unsaved settings; the text badge keeps the signal legible for colour-blind and high-contrast users.
+
+### Tests
+- `tests/test_ui_experimental_toggles.py` — regression coverage for the Settings-page experimental toggles (A2DP sink-recovery dance, PA module reload) **and** the scan-modal NoInputNoOutput pair-agent toggle: asserts template checkboxes exist under the right `data-experimental` container, asserts the Settings toggles are wired into `buildConfig` and populate-on-load, and asserts the scan-modal toggle is passed as `no_input_no_output_agent` in the `pair_new` request body only when the checkbox is ticked (i.e. not baked into the body literal unconditionally) and is never persisted via `buildConfig`. Would have caught the rc.1 omission immediately.
+- `tests/test_api_endpoints.py` — five new tests covering the per-request override precedence (override beats config both ways), endpoint forwarding of the new body field, `None`-fallback when the field is omitted, and strict bool validation (non-bool payloads do not get coerced).
 
 ## [2.60.4] - 2026-04-21
 
@@ -609,55 +852,30 @@ exposed — root cause is the card landing in `headset_head_unit` profile with
   `pactl set-card-profile` intervention.
 
 ## [2.59.0] - 2026-04-17
-
 Stable rollup of the rc.1 → rc.2 series. Headline themes: **operational
 resilience** for PulseAudio and port-collision failure modes surfaced on
 Raspberry Pi 4 / pipewire-pulse deployments, and a **CSP nonce-only
 migration** completing the hardening tracked as a known issue in 2.58.0.
 
 ### Security
-- **CSP `script-src` is nonce-only** — `'unsafe-inline'` dropped. Every inline
-  `on*=` handler in Jinja templates and HTML strings produced by
-  `static/app.js` migrated to a delegated dispatcher keyed on `data-action` /
-  `data-arg`. Non-bubbling `<details>` toggle events handled via capture-phase
-  listener to cover dynamically inserted DOM. Regression test scans shipped
-  templates and `app.js` so future PRs can't reintroduce inline handlers.
+- **CSP `script-src` is nonce-only** — `'unsafe-inline'` dropped. Every inline `on*=` handler in Jinja templates and HTML strings produced by `static/app.js` migrated to a delegated dispatcher keyed on `data-action` / `data-arg`. Non-bubbling `<details>` toggle events handled via capture-phase listener to cover dynamically inserted DOM. Regression test scans shipped templates and `app.js` so future PRs can't reintroduce inline handlers.
 
 ### Added
-- **`services/port_bind_probe.py`** — `is_port_available()` +
-  `find_available_bind_port()` host-side TCP bind probe (SO_REUSEADDR only).
-  `DEFAULT_MAX_ATTEMPTS=10`.
-- **Port auto-shift on EADDRINUSE** — `SendspinClient._start_sendspin_inner`
-  preflights the listen port before spawning the daemon subprocess; on
-  collision auto-shifts within `DEFAULT_MAX_ATTEMPTS` and records
-  `port_collision: True` + `active_listen_port` on device status. After 5
-  consecutive bind failures the restart loop halts (with an `lsof -i :<port>`
-  hint); halt state auto-clears once the daemon is observed alive.
-- **Preflight port-collision warning** at orchestrator startup
-  (`bridge_orchestrator.py`).
-- **EADDRINUSE stderr classifier** — `services/subprocess_stderr.py` detects
-  `errno 98` / `address already in use` / `eaddrinuse` and extracts the port
-  (1–65535) so the surfaced hint names the actual port.
+- **`services/port_bind_probe.py`** — `is_port_available()` + `find_available_bind_port()` host-side TCP bind probe (SO_REUSEADDR only). `DEFAULT_MAX_ATTEMPTS=10`.
+- **Port auto-shift on EADDRINUSE** — `SendspinClient._start_sendspin_inner` preflights the listen port before spawning the daemon subprocess; on collision auto-shifts within `DEFAULT_MAX_ATTEMPTS` and records `port_collision: True` + `active_listen_port` on device status. After 5 consecutive bind failures the restart loop halts (with an `lsof -i :<port>` hint); halt state auto-clears once the daemon is observed alive.
+- **Preflight port-collision warning** at orchestrator startup (`bridge_orchestrator.py`).
+- **EADDRINUSE stderr classifier** — `services/subprocess_stderr.py` detects `errno 98` / `address already in use` / `eaddrinuse` and extracts the port (1–65535) so the surfaced hint names the actual port.
 
 ### Fixed
-- **#156 — SinkMonitor log flood**: `services/sink_monitor.py` now diagnoses
-  the PA connection failure (`socket-missing` / `permission-denied` /
-  `server-not-listening` / `protocol-error` / `unknown`) with an actionable
-  hint on the first WARNING, demotes subsequent attempts to DEBUG, and
-  self-disables after 3 consecutive initial failures so callers fall back to
-  daemon-flag idle detection. Post-success transients use exponential backoff
-  5→10→20→40→60s. `start()` resets state so the monitor can be revived after
-  the operator fixes PA.
+- **#156 — SinkMonitor log flood**: `services/sink_monitor.py` now diagnoses the PA connection failure (`socket-missing` / `permission-denied` / `server-not-listening` / `protocol-error` / `unknown`) with an actionable hint on the first WARNING, demotes subsequent attempts to DEBUG, and self-disables after 3 consecutive initial failures so callers fall back to daemon-flag idle detection. Post-success transients use exponential backoff 5→10→20→40→60s. `start()` resets state so the monitor can be revived after the operator fixes PA.
 - **#157 — daemon crash on port collision**: see "Port auto-shift" above.
+- **`services/subprocess_stderr.py`** — `_PORT_NUMBER_RE` widened to `\d{1,5}` with an explicit `1..65535` range check so low-range ports (80, 443, …) appear in the `lsof -i :<port>` hint and out-of-range numbers fall back to the generic hint.
+- **`sendspin_client.py`** — `DEFAULT_MAX_ATTEMPTS` imported from `services.port_bind_probe` and used for both the probe call and the error hint range so tuning the constant in one place keeps them in sync.
 
 ### Notes
-- `find_available_bind_port()` is called with `host="0.0.0.0"` (wildcard) to
-  match the daemon's actual bind behaviour — the subprocess receives only
-  `listen_port` (no `listen_host`), so probing a specific interface would miss
-  collisions on other interfaces.
+- `find_available_bind_port()` is called with `host="0.0.0.0"` (wildcard) to match the daemon's actual bind behaviour — the subprocess receives only `listen_port` (no `listen_host`), so probing a specific interface would miss collisions on other interfaces.
 
 ## [2.58.0] - 2026-04-17
-
 Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter correctness** across every Bluetooth flow the UI exposes, plus a security-hardening pass on the MA auth surface.
 
 ### Security
@@ -670,11 +888,14 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Logout hardened — `POST /logout` requires CSRF and does a full `session.clear()`; `GET /logout` returns 405 with a small HTML page
 - X-Forwarded-For hardening — rate-limit client ID now uses the rightmost hop that is *not* a trusted proxy
 - X-Frame-Options: SAMEORIGIN in standalone mode; HA-addon mode keeps it off for Ingress framing
+- **SSRF guard on MA auth routes** — `/api/ma/login`, `/api/ma/ha-auth-page`, `/api/ma/ha-silent-auth`, and `/api/ma/ha-login` now validate every user-supplied `ma_url`/`ha_url` through the new `services.url_safety.is_safe_external_url`, which resolves the host via DNS and rejects link-local (cloud metadata / APIPA), reserved, multicast, unspecified addresses, and non-`http(s)` schemes. Loopback and RFC1918 are allowed by default because the bridge is intended to run on home LANs and HAOS — set `SENDSPIN_STRICT_SSRF=1` to also block them (recommended when the bridge is exposed on an untrusted network). In HA addon mode the Supervisor proxy network (`172.30.32.0/23`) and the internal `supervisor`/`hassio`/`homeassistant` hostnames remain allowlisted even in strict mode
+- **X-Frame-Options: SAMEORIGIN** in standalone (non-HA-addon) mode; HA addon mode still omits it because Ingress needs to frame the UI (CSP `frame-ancestors 'self'` covers that case)
 
 ### Added
 - **Multi-adapter paired-device management** — `/api/bt/paired` enumerates every adapter via `list_bt_adapters()` and merges results so each device carries `adapters: [<mac>, ...]`. Bonds on a non-default controller are now visible in the UI for the first time
 - **Per-adapter unpair** — `/api/bt/remove` accepts optional `adapter_mac`; the "Already paired" list renders an `hciN`/MAC badge per device
 - **Targeted "enable-linger" hint for headless PipeWire** — preflight audio probe distinguishes "socket path not mounted" from "socket mounted but server refused the connection", and the latter surfaces a dedicated operator-guidance issue with the exact fix (`sudo loginctl enable-linger <user>` + reboot) and a docs link. Gated by `is_ha_addon_runtime()` so HA add-on users (where Supervisor owns audio) still see the generic guidance (fixes #151)
+- **Multi-adapter paired-device management** — `/api/bt/paired` now enumerates every known adapter via `list_bt_adapters()` and queries each with `select <mac>\ndevices Paired`, merging results so each device carries `adapters: [<mac>, ...]`. Previously bonds on a non-default controller were invisible in the UI
 
 ### Fixed
 - **Reset & Reconnect now honours the adapter the device is bonded with** — `/api/bt/reset_reconnect` always threaded `select <adapter>` through remove/power-cycle/pair/trust/connect, but both UI call sites invoked `resetAndReconnect` without an adapter, so bonds on a non-default radio could never be rebuilt through the UI. Fleet row now reads `.bt-adapter`; the "Already paired" list passes `d.adapters[0]`. The backend resolves `hciN` → controller MAC before any `bluetoothctl select` (HAOS/LXC reject raw `select hciN` with `Controller hciN not available`)
@@ -698,7 +919,6 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - **Removed unused `delay_ms` from config schema** — only `static_delay_ms` is used by the codebase; the stale `delay_ms` field could silently pass validation but was ignored at runtime
 
 ## [2.57.0] - 2026-04-16
-
 ### Changed
 - **Upgrade sendspin 5.9.0 → 7.0.0 and aiosendspin 4.4.0 → 5.1.0** — DAC-anchored sync (#226) auto-compensates for audio hardware latency, remote per-player delay (#185), multi-server daemon support, and several playback bugfixes
 - **`static_delay_ms` now accepts only 0–5000 ms** — negative values are no longer valid. DAC-anchored sync removes the need for the old large negative offsets (−300…−600 ms). Existing negative values are auto-migrated to `0` on first load; re-tune with small positive values (e.g. 50 ms) only if needed
@@ -706,10 +926,12 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Config schema version bumped to 2 (auto-migrated from v1)
 - **numpy upgraded to 2.x** — amd64 CPU baseline now requires X86_V2 (SSE3 / SSSE3 / SSE4.1 / SSE4.2). Hosts running on QEMU `cpu: qemu64` or `kvm64` fail at startup with `RuntimeError: NumPy was built with baseline optimizations: (X86_V2)`. Switch the VM CPU type to `host` (Proxmox: `qm set <vmid> --cpu host`) or a modern named model (`Haswell`, `Skylake-Client`, …)
 - armv7 image may compile numpy from source on first build (piwheels has no cp312 wheels for numpy 2.x); subsequent releases reuse the cached layer
+- **numpy upgraded to 2.x (no upper pin)** — dropped the previous `numpy<2.0` compatibility cap. sendspin 7 only requires `numpy>=1.26`, but pip now resolves numpy 2.x and a hard compatibility pin would have required a constraint file with `[extras]`, which pip rejects
 
 ### Fixed
 - **Album artwork not rendering under HA Ingress** — daemon-reported `artwork_url` points directly at the MA server and fails the same-origin check under Ingress; UI now falls back to the signed same-origin MA proxy URL when a device has MA context
 - **Migration warning log spam every 15 s** — HA Supervisor rewrites `config.json` from `options.json` on each poll, so pre-existing negative `static_delay_ms` triggered the clamp warning repeatedly. Warnings are now deduplicated per MAC per process, and the options.json → config.json translator clamps negatives at source
+- **Dependency conflict blocking sendspin 7.0.0** — `aiosendspin` updated from 4.4.0 to 5.1.0 (`[server]` extra) to satisfy sendspin 7's `aiosendspin~=5.1` requirement
 
 ## [2.56.3] - 2026-04-14
 
@@ -722,15 +944,14 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - **armv7 Docker build timing out in CI** — split Dockerfile pip install into two layers so heavy native deps (numpy, PyAV, dbus-python) are cached across releases and not recompiled on every version bump. Added piwheels.org as extra index for pre-built ARM wheels. Increased armv7 build timeout from 45 to 90 min for cold builds
 
 ## [2.56.1] - 2026-04-13
-
 ### Fixed
 - **Sourceplugin metadata mixing MA data from wrong track** — when daemon provides track title but not artist/album/artwork (typical for sourceplugin/ynison), the UI was falling back to MA now-playing for those fields, showing metadata from a completely different song. Now suppresses MA fallback for artist, album, and artwork when daemon already has a track title, preventing cross-track metadata mixing
 
 ## [2.56.0] - 2026-04-13
-
 ### Fixed
 - **HA addon ingress port conflict with Matter/Thread** (#138) — switched all addon channels from hardcoded `ingress_port` (8080/8081/8082) to dynamic `ingress_port: 0`. HA Supervisor now auto-assigns a free port via its REST API, eliminating conflicts with other host-network addons. Channel defaults retained as fallback for older Supervisor versions
 - **Incorrect track metadata with sourceplugin providers** — when playing via sourceplugin (e.g. Yandex ynison), MA now-playing returned metadata from its own queue item instead of the actual playing track. Changed metadata priority to daemon-first with MA fallback, matching the existing correct behavior in list view. Affects track title, artist, album, and artwork in all views
+- **HA addon 502 on ingress** — `INGRESS_PORT` is not an env var; Supervisor communicates the dynamic port via its REST API. Replaced env var lookup with Supervisor API query (`/addons/self/info`) to read the assigned `ingress_port`
 
 ## [2.55.3] - 2026-04-09
 
@@ -759,16 +980,20 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - **Docker troubleshooting docs** — added "WirePlumber `with-logind` endpoint churn" and "Headless PipeWire: Bluetooth sinks not appearing after reboot" troubleshooting sections with diagnostic steps and fix instructions
 
 ## [2.55.0] - 2026-04-06
-
 ### Added
 - **Per-device idle mode** — new `idle_mode` enum replaces the old dual `keepalive_interval` + `idle_disconnect_minutes` settings. Four mutually-exclusive modes per device:
-  - **`default`** — no action; speaker's hardware timer decides when to sleep
-  - **`power_save`** — suspend PulseAudio sink after configurable delay → releases A2DP transport → speaker enters hardware sleep while Bluetooth stays connected → instant resume on next play (no reconnect latency)
-  - **`auto_disconnect`** — full Bluetooth disconnect + daemon→null-sink after timeout (original standby behavior)
-  - **`keep_alive`** — stream periodic infrasound bursts (2 Hz sine at −50 dB) to keep A2DP transport active; below human hearing but prevents speakers that ignore digital silence from disconnecting
+- **`default`** — no action; speaker's hardware timer decides when to sleep
+- **`power_save`** — suspend PulseAudio sink after configurable delay → releases A2DP transport → speaker enters hardware sleep while Bluetooth stays connected → instant resume on next play (no reconnect latency)
+- **`auto_disconnect`** — full Bluetooth disconnect + daemon→null-sink after timeout (original standby behavior)
+- **`keep_alive`** — stream periodic infrasound bursts (2 Hz sine at −50 dB) to keep A2DP transport active; below human hearing but prevents speakers that ignore digital silence from disconnecting
 - **PulseAudio sink suspend/resume** — new `asuspend_sink()` / `suspend_sink()` helpers in `services/pulse.py` for power save mode; native pulsectl API with automatic `pactl` fallback
 - **SinkMonitor idle detection** — PulseAudio/PipeWire sink state events (`running` → `idle` → `suspended`) are now the primary idle detection authority; daemon playback flags serve as dual-authority fallback for PipeWire environments that don't emit sink events for BT sinks
 - **WebSocket heartbeat keepalive** — 30-second ping/pong on Sendspin server-initiated connections prevents silent proxy/firewall drops
+- `power_save` — suspend PA sink after configurable delay (`power_save_delay_minutes`, 0-60, default 1); releases A2DP transport so speaker can sleep while BT stays connected; auto-resumes on next play
+- `auto_disconnect` — full BT disconnect + daemon→null-sink after `idle_disconnect_minutes` (existing standby behavior)
+- `keep_alive` — stream periodic infrasound bursts at configurable interval (existing keepalive)
+- **Infrasound keepalive** — keepalive bursts now use a 2 Hz sine wave at -50 dB instead of pure digital silence. Below human hearing threshold but non-zero PCM data keeps A2DP transport active on speakers that ignore digital silence.
+- **Status API** — `idle_mode` and `bt_power_save` fields are now exposed in `/api/status` per-device responses.
 
 ### Changed
 - **Idle parameter UI redesigned** — single "Idle mode" dropdown replaces two independent numeric inputs; selecting a mode reveals only the relevant sub-field (suspend delay / disconnect timeout / keepalive interval)
@@ -777,6 +1002,12 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - **Unified branding** — all logos, favicons, and HA addon icons replaced with the landing page wave-bridge design (two pillars + three wave curves); channel color differentiation preserved (stable=teal-purple, rc=gold, beta=red); total asset size reduced from ~310 KB to ~55 KB
 - **Dependency updates** — `dbus-fast` 4.0.0→4.0.4, `ruff` 0.11.13→0.15.8
 - **CI updates** — `docker/build-push-action` v6→v7, `actions/download-artifact` v4→v8, `actions/upload-pages-artifact` v3→v4
+- **Legacy UI** — device detail row now shows a single "Idle mode" dropdown instead of two separate numeric inputs; mode-specific fields (delay, standby minutes, keepalive interval) are shown/hidden based on selected mode.
+- **HA addon schemas** — `idle_mode` and `power_save_delay_minutes` options added to all three addon configs (stable, beta, rc).
+- **Config migration** — old configs with `keepalive_interval > 0` auto-migrate to `idle_mode: keep_alive`; `idle_disconnect_minutes > 0` to `auto_disconnect`; both zero to `default`. Explicit `idle_mode` values are never overwritten.
+- **Docker image size −37%** (916 → ~580 MB) — removed redundant system FFmpeg libraries on amd64/arm64; PyAV wheels bundle their own FFmpeg in `av.libs/`. System FFmpeg retained for armv7 only (compiled from source)
+- **pip package cleanup** — strip `__pycache__`, numpy test suite, pygments, pip from runtime image
+- **Docker image −51%** (916 → ~450 MB) — force-remove transitive FFmpeg/GStreamer/codec deps pulled by PulseAudio on amd64/arm64 (pactl works without them); strip debug symbols from native .so files; remove unused Python stdlib modules (ensurepip, idlelib, lib2to3, pydoc_data, turtledemo, test)
 
 ### Fixed
 - **Idle standby during active playback** (#120) — dual-authority model (SinkMonitor + daemon flags) prevents false standby on PipeWire where PA sink events may not be delivered for BT sinks; firing-time safety net checks all sources before entering standby
@@ -784,6 +1015,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - **Subprocess crash on PipeWire** — keep `libasound2-plugins` (ALSA→PulseAudio bridge) required by sounddevice/PortAudio
 - **Config download 404 in HA addon ingress mode** — use `API_BASE` prefix for download URLs
 - **Idle mode dropdown unstyled** — added CSS rules matching existing input styling
+- **Config download 404 in HA addon ingress mode** — hardcoded `/api/config/download` path in the download button bypassed the ingress `SCRIPT_NAME` prefix; now uses `API_BASE` like all other download endpoints
 
 ### Improved
 - **Auto-expand device detail row on CTA navigation** — clicking "Configure" from onboarding auto-expands the target device row
@@ -812,7 +1044,6 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - **Built-in adapter docs** — new "Built-in adapters (Raspberry Pi)" section in Bluetooth Adapters guide documenting the single-stream A2DP limitation of Pi 4/5 on-board Bluetooth and recommending USB dongles for multi-speaker setups
 
 ## [2.54.0] - 2026-04-04
-
 ### Added
 - **PA sink state monitoring** — PulseAudio/PipeWire sink state (`running`/`idle`/`suspended`) is now the sole authority for idle disconnect, replacing the fragile 3-tier daemon-flag + MA-monitor + event-history system (#120)
 - `SinkMonitor` module: subscribes to PA sink events via `pulsectl_asyncio`, tracks state for all Bluetooth sinks, fires callbacks on `running ↔ idle` transitions; initial sink scan on PA connect/reconnect to populate state cache
@@ -957,7 +1188,6 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Actually pin `numpy<2.0` in requirements.txt and Dockerfile to fix X86_V2 crash on older CPUs (#109). The v2.50.0 changelog documented the fix but the pin was missing from the build.
 
 ## [2.50.0] - 2026-03-27
-
 ### Changed
 - Bump websockets 13.1 → 16.0 (async API migrated to `websockets.asyncio.client`)
 - Bump waitress 2.1.2 → 3.0.2
@@ -1021,7 +1251,6 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Pin `aiosendspin==4.3.2` directly in `requirements.txt` so runtime dependency resolution stays consistent across architectures and rebuilds instead of drifting via `sendspin` transitive dependencies.
 
 ## [2.48.1] - 2026-03-25
-
 ### Fixed
 - Avoid `sendspin.audio` callback crashes after ALSA underrun / re-anchor recovery. The bridge now guards against stale cached output-frame state inside the subprocess runtime so a reused frame from an older format or correction cycle is reset instead of exploding with `ValueError: memoryview assignment: lvalue and rvalue have different structures`.
 - Avoid false `lost bridge transport` guidance while audio is already playing. Recovery and operator guidance now treat active audio streaming as authoritative during brief Sendspin control reconnects, so transient `server_connected=false` windows no longer raise a transport-loss warning when the speaker is still streaming.
@@ -1029,16 +1258,26 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Avoid false `lost bridge transport` states after a successful replacement reconnect. The bridge now publishes `server_connected` only after the new Sendspin websocket handshake succeeds, so the old session's disconnect callback cannot overwrite the fresh connection state back to disconnected.
 
 ## [2.48.0] - 2026-03-25
-
 ### Added
 - Native Sendspin transport commands via Controller role (`POST /api/transport/cmd`) for play, pause, stop, next, previous, shuffle, repeat, mute, and volume, with transport UI fallback to Music Assistant queue commands when native transport is unavailable.
 - Extended metadata forwarding from the Sendspin protocol, including album, album artist, artwork URL, year, track number, shuffle state, repeat mode, and controller state updates such as `supported_commands`, `group_volume`, and `group_muted`.
 - Cross-bridge duplicate Bluetooth device detection, startup/recovery warnings for conflicts, and BT scan confirmation prompts when another bridge instance already owns the device.
 - Separate `RECOVERY_BANNER_GRACE_SECONDS` setting so recovery banners can remain hidden for a configurable delay after the startup/finalizing lockout ends.
+- Native Sendspin transport commands via Controller role (`POST /api/transport/cmd`). Play, pause, stop, next, previous, shuffle, repeat, and volume commands are sent directly over the Sendspin WebSocket — bypassing the Music Assistant REST API for lower latency.
+- Extended metadata forwarding from Sendspin protocol: album, album artist, artwork URL, year, track number, shuffle state, and repeat mode are now included in device status.
+- Controller state listener: `supported_commands`, `group_volume`, and `group_muted` are forwarded from the MA server's controller role updates.
+- Web UI uses native shuffle/repeat/album/artwork as fallback when Music Assistant API is unavailable.
+- Web UI transport buttons prefer native Sendspin commands when supported, falling back to MA queue commands for seek and when native transport is unavailable.
+- Cross-bridge duplicate device detection. When multiple bridge instances (e.g. stable + RC addons) share the same host, the bridge now detects devices already registered under another instance at startup and during BT scans.
+- Startup warning + recovery banner when a configured device conflicts with another bridge (via existing RecoveryIssue / operator guidance system).
+- BT scan results annotated with ⚠ warning chip when a discovered device is already registered on another bridge. Add/Pair buttons show a confirmation prompt.
+- `DUPLICATE_DEVICE_CHECK` config option (default: enabled) to control cross-bridge detection.
 
 ### Changed
 - Startup and audio defaults are now tuned for more reliable first-run behavior: startup grace defaults to `5` seconds, recovery-banner grace defaults to `15` seconds, `PULSE_LATENCY_MSEC` defaults to `600`, and newly added Bluetooth devices default to `static_delay_ms = -300`.
 - Pin direct runtime dependencies, including `sendspin==5.8.0`, to the CI-validated versions so rebuilds do not silently pick up incompatible upstream changes.
+- Startup finalizing grace now defaults to `5` seconds, and the new recovery-banner grace defaults to `15` seconds.
+- Pin direct runtime dependencies in `requirements.txt` to the CI-validated versions so future upstream releases do not silently change the runtime API surface on new installs or image rebuilds.
 
 ### Fixed
 - Restore compatibility with the current Sendspin audio API layout (`sendspin.audio_devices`) while preserving fallback support for legacy `sendspin.audio` installs.
@@ -1047,6 +1286,14 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Avoid false Bluetooth device removal during `Save & Restart` when the default adapter is represented differently in saved config vs. web UI payload.
 - Harden stale `device_info` recovery around startup by deferring automatic reconnects until the player is up, and then holding them back behind an additional startup grace window.
 - Make native Sendspin `shuffle`/`repeat` buttons update immediately in the web UI after a successful command, matching the snappier Music Assistant queue-command UX.
+- Restore daemon startup with sendspin builds that no longer export `parse_audio_format` from `sendspin.audio`. Preferred format resolution now falls back to `detect_supported_audio_formats()` instead of crashing the subprocess on import.
+- Complete sendspin 5.8.0 audio API compatibility. The bridge now resolves `query_devices`, `parse_audio_format`, and `detect_supported_audio_formats` from either `sendspin.audio_devices` (new layout) or legacy `sendspin.audio`, and adapts to the new `detect_supported_audio_formats(audio_device)` signature.
+- Restore diagnostics and demo-mode PortAudio device reporting with the new sendspin audio module layout.
+- Make sendspin compatibility tests order-independent by cleaning up mocked audio modules consistently.
+- Avoid false `repair required` states after bridge restarts when BlueZ temporarily reports the speaker device as unavailable. The bridge now treats the pairing state as unknown in that window, retries a normal reconnect first, and only falls back to re-pair when BlueZ explicitly reports `Paired: no`.
+- Avoid intermittent post-restart idle/stuck players when Music Assistant reports stale `device_info` before the Sendspin subprocess is fully ready. Stale-metadata reconnects are now deferred until the player subprocess is running and connected, instead of being sent too early and getting lost during startup.
+- Avoid the remaining startup race in stale `device_info` recovery. Automatic metadata reconnects are now held back for an additional startup grace window after the player first becomes ready, so they do not interrupt the initial post-restart handshake and leave the speaker idling.
+- Make native Sendspin `shuffle`/`repeat` buttons feel immediate again. The web UI now applies the same kind of optimistic local state update it already used for Music Assistant queue commands, instead of waiting several seconds for the backend status round-trip before changing the button state.
 
 ## [2.47.3] - 2026-03-24
 
@@ -1145,7 +1392,6 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - New test files: `test_pa_volume_controller.py` (5 tests), `test_bridge_daemon_features.py` (10 tests).
 
 ## [2.46.0] - 2026-03-23
-
 ### Added
 - Bridge-backed Bluetooth devices can now carry stable room metadata (`room_name`, `room_id`, source/confidence) and expose it through status snapshots, making Music Assistant / Home Assistant / MassDroid room mapping much easier to reason about.
 - Device snapshots now include a compact `transfer_readiness` contract so operators and automations can see whether a speaker is truly ready for a fast room handoff.
@@ -1157,20 +1403,25 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Runtime device events are now enriched with room and readiness context, and the web UI surfaces new room / transfer badges plus manual room assignment controls in device settings.
 - Home Assistant add-on config sync/translation now preserves the new room and handoff fields across supervisor round-trips and restarts.
 - Startup diagnostics, the Raspberry Pi pre-flight checker, and Docker docs now distinguish init UID vs app UID, explain the split-privileges model, and make user-scoped PipeWire/PulseAudio failures much easier to diagnose.
+- Docker/Raspberry Pi startup diagnostics now report the runtime UID/GID, selected host audio socket path, socket ownership/mode, and a live `pactl info` probe result so PipeWire/PulseAudio access problems are much easier to diagnose from container logs.
+- The Raspberry Pi pre-flight checker and Docker docs now explain `AUDIO_UID` more clearly, include copy-paste audio troubleshooting commands, and document a temporary `user:` override test for confirming user-scoped PipeWire/PulseAudio UID mismatches.
+- Startup diagnostics, the Raspberry Pi pre-flight checker, and Docker docs now distinguish init UID vs app UID, explain the new split-privileges model, and treat a global Compose `user:` override as an older-image diagnostic fallback instead of the preferred deployment path.
 
 ## [2.45.0] - 2026-03-23
-
 ### Added
 - Home Assistant ingress sessions can now fetch the HA area registry into the config UI, so `Bridge name` offers one-click room suggestions and Bluetooth adapters can surface exact area matches from the HA device registry.
 - Diagnostics recovery tooling now includes a deeper retained recovery timeline with advanced severity, scope, source, and window filters for power-user trace review.
+- Bluetooth adapter settings now support optional HA area mapping by adapter MAC, including exact device-registry matches and a `Use area name` shortcut for adapter custom names without touching existing names automatically.
 
 ### Changed
 - Music Assistant runtime can now reload after URL or token changes without forcing a full bridge restart, so MA auth refreshes and rediscovery can be applied in place.
 - Operator guidance is calmer and more actionable: onboarding stays out of the notice stack on non-empty installs by default, grouped actions preview affected devices before execution, and dense recovery issue pills collapse into `+N more`.
 - Home Assistant area-based naming suggestions for `Bridge name` and Bluetooth adapter names are now configurable and stay enabled by default in HA add-on mode.
+- The onboarding checklist now stays out of the main notice stack on non-empty installs until the operator expands it, so recovery guidance owns the top-level next-action surface during day-to-day runtime issues.
+- Grouped guidance actions now show an affected-device preview before bulk reconnect, Bluetooth-management, or safe-check reruns are queued.
+- Recovery issue pills now collapse dense attention states into a calmer `+N more` summary, and row-level blocked hints suppress duplicate remediation copy when the same action is already explained by top-level guidance.
 
 ## [2.42.3] - 2026-03-22
-
 ### Added
 - The bug report dialog now pre-fills an editable description generated from attached diagnostics, summarizing recent errors, Bluetooth/device health, daemon status, and Music Assistant connectivity so issue reports start with more useful context.
 
@@ -1186,7 +1437,6 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - The `Auto-get token on UI open` Music Assistant setting is now hidden outside Home Assistant add-on mode, matching the runtime behavior where silent token bootstrap only works through HA ingress.
 
 ## [2.42.2] - 2026-03-22
-
 ### Added
 - The Bluetooth scan modal now exposes adapter selection, an explicit audio-only filter, and a dedicated rescan action so multi-adapter discovery is easier to control.
 - Onboarding now recognizes when every configured speaker has been manually released and offers direct reclaim actions so playback can be resumed without hunting through the configuration screens first.
@@ -1195,6 +1445,14 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - The compact UI system is now much more consistent across the live app, including the login screen: primary/secondary/icon actions, media transport controls, table-like rows, empty states, badges, chips, and guidance surfaces now follow a clearer shared design language instead of mixing several older styles.
 - Shared design-system foundations are now more explicit across notices, configuration, toolbars, and guidance surfaces: spacing, typography, focus-ring, layout, count-badge, action-menu, configuration-header, and notice-copy shells are reused instead of being defined as scattered local overrides.
 - Bluetooth discovery and management surfaces now present richer scan metadata and a more coherent workflow, with the scan dialog and paired-device actions aligned to the shared compact modal/action system used elsewhere in the interface.
+- Configuration, diagnostics, discovery, and device list surfaces now use denser data-row and placeholder treatments, keeping the current information architecture while making the interface feel more coherent and Home Assistant-aligned.
+- The login screen now follows the same refreshed compact styling as the main application, reducing the visual jump between authentication and the dashboard.
+- Bluetooth discovery now reports richer scan metadata to the frontend, letting the modal show timed progress, countdown state, and clearer result context without turning the workflow into a permanent page block.
+- Badge and chip styling now follows a much more unified system across the live dashboard, device fleet, scan progress, onboarding, and recovery surfaces, reducing visual drift between list, grid, and configuration views.
+- The compact UI now exposes a clearer shared design-system layer: spacing, typography, focus-ring, layout, count-badge, and action-menu primitives are reused across notice, configuration, toolbar, and guidance surfaces instead of being defined as scattered local overrides.
+- Configuration headers, notice copy blocks, and unsaved-count indicators now share the same structural shells, improving hierarchy and reducing visual drift across dashboard and settings flows.
+- The Bluetooth scan dialog now follows the shared compact modal system instead of the older bug-report shell, with a more consistent accent header, modal layout, scan controls, progress section, and results framing.
+- Bluetooth scan and paired-device actions now speak the same design language as the rest of the interface, including the bluetooth-icon `Tools` trigger in device rows and a simpler static paired-devices header without leftover disclosure styling.
 
 ### Fixed
 - Scan results now stay aligned with the selected discovery scope, non-audio Bluetooth candidates are surfaced more honestly when the audio-only filter is disabled, and the modal copy now explains the real operator workflow more clearly.
@@ -1202,6 +1460,9 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Demo mode regains compatibility with the refreshed UI preview workflow, so local demo validation continues to work against the current Bluetooth manager behavior.
 - Home Assistant login failures against Music Assistant now return the actual MA-side bootstrap reason when HA OAuth is unavailable, and the UI guidance now tells operators to switch to direct Music Assistant authentication when HA login is not configured there.
 - Standalone Home Assistant login against Music Assistant add-ons now completes again after TOTP by falling back to direct HA login flow, resolving MA ingress through HA Supervisor APIs, and creating the final MA token with an `ingress_session` cookie instead of a plain HA bearer token.
+- Interactive and passive badges now use more consistent borders, hover feedback, and cursor behavior throughout the interface, and the `BT tools` menu now matches the compact control typography used elsewhere.
+- Guidance cards that opt into `show_by_default` now auto-open consistently from the header entry point instead of only doing so for the empty-state scenario.
+- The scan modal copy now explains the actual operator workflow — choose an adapter, scan nearby devices, then add or pair speakers — instead of describing the internal implementation of the page.
 
 ## [2.42.1] - 2026-03-20
 
@@ -1218,25 +1479,48 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - Guidance edge cases are corrected for `All devices disabled` installs and latency review actions, so operators are sent to the correct settings and shown copy that matches the real system state.
 
 ## [2.40.6] - 2026-03-19
-
 ### Changed
 - GitHub Releases are now a stable-only surface: RC/Beta update discovery uses Git tags plus the tagged `CHANGELOG.md`, while Home Assistant add-on directory sync runs directly on every stable/RC/beta tag push without depending on a prerelease GitHub release object.
 - High-frequency bridge control routes and long-running Music Assistant/update actions now avoid blocking Flask request threads: MA discovery/rediscovery, update checks, and queue commands use async job polling or optimistic completion flows instead of waiting synchronously in the request path.
 - Home Assistant add-on mode now treats the web UI ingress port and installed delivery track as fixed channel properties, so the configuration UI presents them as read-only channel information instead of editable update-track settings.
+- The theme switcher now has an explicit three-mode cycle (`Auto`, `Light`, `Dark`) instead of only manual light/dark toggling, and both the login page and the main dashboard now bootstrap the same saved theme mode consistently.
+- Top-of-page warnings now use a shared stacked notice-card layout with consistent icon/title/body/CTA structure, so security and Music Assistant notices match the rest of the dashboard card system and stack cleanly on mobile.
+- The local demo now defaults to a more realistic signed-in header state, showing a user/logout block plus a Music Assistant token notice so preview screenshots better reflect the intended top-bar layout and onboarding guidance.
+- Home Assistant add-on update track selection is now tied to the installed add-on slug, so the add-on options no longer expose `update_channel` switching and the bridge UI treats track/update guidance as read-only information.
+- Home Assistant add-on mode now treats the web UI port as a fixed ingress property of the installed track and shows that port as read-only in Configuration, while leaving `base_listen_port` configurable for Sendspin player listeners.
 
 ### Fixed
 - Existing LXC installs can update onto the prerelease tag-based channel flow again: runtime update checking no longer imports `scripts.release_notes`, and the LXC install/upgrade snapshot sync now copies the `scripts/` directory so staged validations keep matching the real application tree.
 - Music Assistant beta transport compatibility is restored across solo players and groups: `next` / `previous` prefer player-level commands where supported, and solo `shuffle` / `repeat` now fall back to legacy `up...` queue ids while treating MA `error_code` responses as real command rejections.
 - Home Assistant and standalone UI polish: add-on profile/group-settings links use ingress-safe URLs, the signed-in user link opens in a normal new tab, and the standalone `Web UI port` helper text is short enough to stay on one line.
+- The Music Assistant warning notice no longer appears when the runtime bridge integration is already connected, even if the saved-token validation probe disagrees.
+- Header action links in the top-right corner once again keep visible spacing between their icons and labels.
+- The theme switcher's `Auto` icon now renders as a visible circled `A` instead of collapsing into a filled circle in the header button.
+- Hidden notice cards now stay truly hidden even when the shared notice layout applies `display: grid`, preventing duplicate Music Assistant notices from appearing in demo.
+- The header utility area now includes a visible divider between the theme toggle and the user/logout controls, so the top-right actions read as distinct groups again.
+- The update-available badge no longer reuses RC/beta channel tinting; prerelease text coloring remains on the current-version badge only.
+- Password and backend log-level settings no longer report success when config persistence fails; runtime log-level propagation is only attempted after the config write succeeds.
+- Login rate-limiting behind trusted Home Assistant ingress proxies now uses validated forwarded client identity instead of collapsing all users into the proxy IP bucket.
+- Home Assistant add-on sessions now hide the logout button and route Music Assistant profile/group-settings links through add-on ingress instead of direct host/IP URLs.
+- Music Assistant beta transport skip controls now prefer player-level `next` / `previous` commands for normal player IDs while keeping the legacy queue fallback, so solo-player skip actions work again against newer MA beta builds.
+- Home Assistant add-on polish: the ingress port field is now clearly read-only/shaded, its helper copy is shorter, and clicking the signed-in username opens the profile in a normal new browser tab instead of a popup-style window.
+- Music Assistant beta queue mode controls now work again for solo bridge players: `shuffle` / `repeat` treat MA `error_code` replies as real rejections and fall back from modern solo player ids to legacy `up...` queue ids when that is the actual queue target.
+- Standalone Configuration now uses a shorter `Web UI port` helper so the port description fits on one line without wrapping.
+
+### Added
+- Home Assistant add-on ingress sessions can now try to obtain a long-lived Music Assistant token automatically when the UI opens, with a default-enabled opt-out toggle in Configuration → Music Assistant.
+- The web UI now shows a warning banner when Music Assistant is discoverable but the bridge integration is still missing or using an invalid token, with a shortcut into the Music Assistant configuration section.
 
 ## [2.40.5] - 2026-03-18
-
 ### Added
 - Bridge config, web UI, and Home Assistant add-on options now support manual top-level `WEB_PORT` and `BASE_LISTEN_PORT` overrides. In Home Assistant add-on mode, `WEB_PORT` opens an additional direct host-network listener while the fixed ingress endpoint keeps using the channel default port.
 
 ### Changed
 - Home Assistant release engineering now supports safer multi-track distribution: prerelease add-on variants use distinct default ingress/player port ranges, manual startup defaults, channel-specific branding, and HA-safe prerelease notices so parallel stable/RC/beta installs are easier to distinguish and safer to run on one HAOS host.
 - The GitHub release workflow now builds the release body from the matching `CHANGELOG.md` section and uses GitHub-generated notes only as an optional supplement, preventing empty autogenerated releases.
+- Header version badges and discovered-update badges now highlight prerelease channels directly in the UI: RC builds use yellow styling and beta builds use red styling
+- Home Assistant add-on channel variants can now run side by side on the same HAOS host because stable, RC, and beta installs use distinct default ingress ports and Sendspin listener port ranges while still honoring explicit port overrides
+- RC and beta Home Assistant add-on variants now default to manual startup and use channel-specific branding in the store/sidebar so prerelease tracks are easier to distinguish from the stable add-on
 
 ### Fixed
 - Music Assistant album artwork now loads correctly through Home Assistant ingress because artwork proxy URLs stay relative to the active add-on origin instead of escaping to the Home Assistant root.
@@ -3947,7 +4231,406 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0-rc.5...HEAD
+[2.65.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0...v2.65.1-rc.1
+[2.65.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0-rc.6...v2.65.0
+[2.65.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0-rc.5...v2.65.0-rc.6
+[2.65.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.65.0-rc.5
+[2.65.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0-rc.2...v2.65.0-rc.3
+[2.65.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0-rc.1...v2.65.0-rc.2
+[2.65.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.3...v2.65.0-rc.1
+[2.64.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.2...v2.64.3
+[2.64.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.1...v2.64.2
+[2.64.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.0...v2.64.1
+[2.64.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.2-rc.1...v2.64.0
+[2.63.2-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.1...v2.63.2-rc.1
+[2.63.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0...v2.63.1
+[2.63.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.9...v2.63.0
+[2.63.0-rc.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.8...v2.63.0-rc.9
+[2.63.0-rc.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.7...v2.63.0-rc.8
+[2.63.0-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.6...v2.63.0-rc.7
+[2.63.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.5...v2.63.0-rc.6
+[2.63.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.4...v2.63.0-rc.5
+[2.63.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.3...v2.63.0-rc.4
+[2.63.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.2...v2.63.0-rc.3
+[2.63.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.63.0-rc.1...v2.63.0-rc.2
+[2.63.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.62.0...v2.63.0-rc.1
+[2.62.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.62.0-rc.13...v2.62.0
+[2.62.0-rc.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.62.0-rc.12...v2.62.0-rc.13
+[2.62.0-rc.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.62.0-rc.11...v2.62.0-rc.12
+[2.62.0-rc.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.62.0-rc.10...v2.62.0-rc.11
+[2.62.0-rc.10]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.62.0-rc.10
+[2.62.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.62.0-rc.4
+[2.61.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.7...v2.61.0
+[2.61.0-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.6...v2.61.0-rc.7
+[2.61.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.5...v2.61.0-rc.6
+[2.61.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.4...v2.61.0-rc.5
+[2.61.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.3...v2.61.0-rc.4
+[2.61.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.2...v2.61.0-rc.3
+[2.61.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.61.0-rc.1...v2.61.0-rc.2
+[2.61.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.60.5-rc.1...v2.61.0-rc.1
+[2.60.5-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.60.4...v2.60.5-rc.1
+[2.60.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.60.3...v2.60.4
+[2.60.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.60.2...v2.60.3
+[2.60.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.60.1...v2.60.2
+[2.60.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.59.1...v2.60.1
+[2.59.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.59.0...v2.59.1
+[2.59.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.59.0-rc.2...v2.59.0
+[2.59.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.59.0-rc.2
+[2.58.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.58.0-rc.5...v2.58.0
+[2.58.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.58.0-rc.4...v2.58.0-rc.5
+[2.58.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.58.0-rc.3...v2.58.0-rc.4
+[2.58.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.58.0-rc.2...v2.58.0-rc.3
+[2.58.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.58.0-rc.1...v2.58.0-rc.2
+[2.58.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.57.1...v2.58.0-rc.1
+[2.57.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.57.0...v2.57.1
+[2.57.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.57.0-rc.4...v2.57.0
+[2.57.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.57.0-rc.2...v2.57.0-rc.4
+[2.57.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.57.0-rc.1...v2.57.0-rc.2
+[2.57.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.3...v2.57.0-rc.1
+[2.56.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.2...v2.56.3
+[2.56.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.1...v2.56.2
+[2.56.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.1-rc.1...v2.56.1
+[2.56.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.0...v2.56.1-rc.1
+[2.56.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.0-rc.3...v2.56.0
+[2.56.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.0-rc.2...v2.56.0-rc.3
+[2.56.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.56.0-rc.1...v2.56.0-rc.2
+[2.56.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.3...v2.56.0-rc.1
+[2.55.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.2-rc.1...v2.55.3
+[2.55.2-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.1...v2.55.2-rc.1
+[2.55.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0...v2.55.1
+[2.55.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.12...v2.55.0
+[2.55.0-rc.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.11...v2.55.0-rc.12
+[2.55.0-rc.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.10...v2.55.0-rc.11
+[2.55.0-rc.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.9...v2.55.0-rc.10
+[2.55.0-rc.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.7...v2.55.0-rc.9
+[2.55.0-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.6...v2.55.0-rc.7
+[2.55.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.5...v2.55.0-rc.6
+[2.55.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.4...v2.55.0-rc.5
+[2.55.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.3...v2.55.0-rc.4
+[2.55.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.2...v2.55.0-rc.3
+[2.55.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.55.0-rc.1...v2.55.0-rc.2
+[2.55.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.2...v2.55.0-rc.1
+[2.54.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.1...v2.54.2
+[2.54.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0...v2.54.1
+[2.54.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0-rc.6...v2.54.0
+[2.54.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0-rc.5...v2.54.0-rc.6
+[2.54.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0-rc.4...v2.54.0-rc.5
+[2.54.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0-rc.3...v2.54.0-rc.4
+[2.54.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0-rc.2...v2.54.0-rc.3
+[2.54.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.54.0-rc.1...v2.54.0-rc.2
+[2.54.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.53.0-rc.2...v2.54.0-rc.1
+[2.53.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.53.0-rc.1...v2.53.0-rc.2
+[2.53.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.52.5-rc.1...v2.53.0-rc.1
+[2.52.5-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.52.4...v2.52.5-rc.1
+[2.52.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.52.3...v2.52.4
+[2.52.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.52.2...v2.52.3
+[2.52.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.52.1...v2.52.2
+[2.52.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.52.0...v2.52.1
+[2.52.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.51.0...v2.52.0
+[2.51.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.4...v2.51.0
+[2.50.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.3...v2.50.4
+[2.50.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.2...v2.50.3
+[2.50.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.1...v2.50.2
+[2.50.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.1
+[2.49.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.0-rc.1...v2.49.1
+[2.50.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.49.0...v2.50.0-rc.1
+[2.49.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.2...v2.49.0
+[2.48.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1...v2.48.2
+[2.48.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1-rc.4...v2.48.1
+[2.48.1-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1-rc.3...v2.48.1-rc.4
+[2.48.1-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1-rc.2...v2.48.1-rc.3
+[2.48.1-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1-rc.1...v2.48.1-rc.2
+[2.48.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0...v2.48.1-rc.1
+[2.48.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.11...v2.48.0
+[2.48.0-rc.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.10...v2.48.0-rc.11
+[2.48.0-rc.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.9...v2.48.0-rc.10
+[2.48.0-rc.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.8...v2.48.0-rc.9
+[2.48.0-rc.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.7...v2.48.0-rc.8
+[2.48.0-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.6...v2.48.0-rc.7
+[2.48.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.5...v2.48.0-rc.6
+[2.48.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.4...v2.48.0-rc.5
+[2.48.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.3...v2.48.0-rc.4
+[2.48.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.2...v2.48.0-rc.3
+[2.48.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0-rc.1...v2.48.0-rc.2
+[2.48.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.48.0-rc.1
+[2.47.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.47.1...v2.47.2
+[2.47.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.47.0...v2.47.1
+[2.47.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.7...v2.47.0
+[2.46.1-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.6...v2.46.1-rc.7
+[2.46.1-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.5...v2.46.1-rc.6
+[2.46.1-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.4...v2.46.1-rc.5
+[2.46.1-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.3...v2.46.1-rc.4
+[2.46.1-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.2...v2.46.1-rc.3
+[2.46.1-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.1-rc.1...v2.46.1-rc.2
+[2.46.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.0...v2.46.1-rc.1
+[2.46.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.0-rc.3...v2.46.0
+[2.46.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.0-rc.2...v2.46.0-rc.3
+[2.46.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.46.0-rc.1...v2.46.0-rc.2
+[2.46.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.45.0...v2.46.0-rc.1
+[2.45.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.45.0-rc.3...v2.45.0
+[2.45.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.45.0-rc.2...v2.45.0-rc.3
+[2.45.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.45.0-rc.1...v2.45.0-rc.2
+[2.45.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.44.0-rc.2...v2.45.0-rc.1
+[2.44.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.44.0-rc.1...v2.44.0-rc.2
+[2.44.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.43.0-rc.5...v2.44.0-rc.1
+[2.43.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.43.0-rc.4...v2.43.0-rc.5
+[2.43.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.43.0-rc.3...v2.43.0-rc.4
+[2.43.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.43.0-rc.2...v2.43.0-rc.3
+[2.43.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.43.0-rc.1...v2.43.0-rc.2
+[2.43.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.4-rc.5...v2.43.0-rc.1
+[2.42.4-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.4-rc.4...v2.42.4-rc.5
+[2.42.4-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.4-rc.3...v2.42.4-rc.4
+[2.42.4-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.4-rc.2...v2.42.4-rc.3
+[2.42.4-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.4-rc.1...v2.42.4-rc.2
+[2.42.4-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.3...v2.42.4-rc.1
+[2.42.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.3-rc.3...v2.42.3
+[2.42.3-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.3-rc.2...v2.42.3-rc.3
+[2.42.3-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.3-rc.1...v2.42.3-rc.2
+[2.42.3-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2...v2.42.3-rc.1
+[2.42.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.7...v2.42.2
+[2.42.2-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.6...v2.42.2-rc.7
+[2.42.2-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.5...v2.42.2-rc.6
+[2.42.2-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.4...v2.42.2-rc.5
+[2.42.2-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.3...v2.42.2-rc.4
+[2.42.2-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.2...v2.42.2-rc.3
+[2.42.2-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.2-rc.1...v2.42.2-rc.2
+[2.42.2-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.1...v2.42.2-rc.1
+[2.42.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.23...v2.42.1
+[2.42.0-rc.23]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.22...v2.42.0-rc.23
+[2.42.0-rc.22]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.21...v2.42.0-rc.22
+[2.42.0-rc.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.20...v2.42.0-rc.21
+[2.42.0-rc.20]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.19...v2.42.0-rc.20
+[2.42.0-rc.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.18...v2.42.0-rc.19
+[2.42.0-rc.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.17...v2.42.0-rc.18
+[2.42.0-rc.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.16...v2.42.0-rc.17
+[2.42.0-rc.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.15...v2.42.0-rc.16
+[2.42.0-rc.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.14...v2.42.0-rc.15
+[2.42.0-rc.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.13...v2.42.0-rc.14
+[2.42.0-rc.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.12...v2.42.0-rc.13
+[2.42.0-rc.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.11...v2.42.0-rc.12
+[2.42.0-rc.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.10...v2.42.0-rc.11
+[2.42.0-rc.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.9...v2.42.0-rc.10
+[2.42.0-rc.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.8...v2.42.0-rc.9
+[2.42.0-rc.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.7...v2.42.0-rc.8
+[2.42.0-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.6...v2.42.0-rc.7
+[2.42.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.5...v2.42.0-rc.6
+[2.42.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.4...v2.42.0-rc.5
+[2.42.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.3...v2.42.0-rc.4
+[2.42.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.2...v2.42.0-rc.3
+[2.42.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.42.0-rc.1...v2.42.0-rc.2
+[2.42.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.41.0-rc.2...v2.42.0-rc.1
+[2.41.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.41.0-rc.1...v2.41.0-rc.2
+[2.41.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6...v2.41.0-rc.1
+[2.40.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.7...v2.40.6
+[2.40.6-rc.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.6...v2.40.6-rc.7
+[2.40.6-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.5...v2.40.6-rc.6
+[2.40.6-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.4...v2.40.6-rc.5
+[2.40.6-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.3...v2.40.6-rc.4
+[2.40.6-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.2...v2.40.6-rc.3
+[2.40.6-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.6-rc.1...v2.40.6-rc.2
+[2.40.6-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.5...v2.40.6-rc.1
+[2.40.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.5-rc.3...v2.40.5
+[2.40.5-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.5-rc.2...v2.40.5-rc.3
+[2.40.5-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.5-beta.1...v2.40.5-rc.2
+[2.40.5-beta.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.5-rc.1...v2.40.5-beta.1
+[2.40.5-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.4...v2.40.5-rc.1
+[2.40.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.3...v2.40.4
+[2.40.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.2...v2.40.3
+[2.40.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.1...v2.40.2
+[2.40.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.40.0...v2.40.1
+[2.40.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.12...v2.40.0
+[2.32.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.11...v2.32.12
+[2.32.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.10...v2.32.11
+[2.32.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.9...v2.32.10
+[2.32.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.8...v2.32.9
+[2.32.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.7...v2.32.8
+[2.32.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.6...v2.32.7
+[2.32.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.5...v2.32.6
+[2.32.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.2...v2.32.5
+[2.32.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.32.0...v2.32.2
+[2.32.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.11...v2.32.0
+[2.31.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.10...v2.31.11
+[2.31.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.9...v2.31.10
+[2.31.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.8...v2.31.9
+[2.31.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.7...v2.31.8
+[2.31.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.6...v2.31.7
+[2.31.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.31.0...v2.31.6
+[2.31.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.30.8...v2.31.0
+[2.30.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.30.7...v2.30.8
+[2.30.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.30.6...v2.30.7
+[2.30.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.30.5...v2.30.6
+[2.30.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.30.0...v2.30.5
+[2.30.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.29.0...v2.30.0
+[2.29.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.28.2...v2.29.0
+[2.28.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.28.1...v2.28.2
+[2.28.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.28.0...v2.28.1
+[2.28.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.27.1...v2.28.0
+[2.27.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.27.0...v2.27.1
+[2.27.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.26.5...v2.27.0
+[2.26.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.26.4...v2.26.5
+[2.26.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.26.3...v2.26.4
+[2.26.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.26.2...v2.26.3
+[2.26.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.26.1...v2.26.2
+[2.26.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.26.0...v2.26.1
+[2.26.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.25.1...v2.26.0
+[2.25.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.25.0...v2.25.1
+[2.25.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.24.4...v2.25.0
+[2.24.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.24.3...v2.24.4
+[2.24.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.24.0...v2.24.3
+[2.24.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.12...v2.24.0
+[2.23.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.11...v2.23.12
+[2.23.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.10...v2.23.11
+[2.23.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.9...v2.23.10
+[2.23.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.6...v2.23.9
+[2.23.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.1...v2.23.6
+[2.23.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.23.0...v2.23.1
+[2.23.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.22.3...v2.23.0
+[2.22.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.22.2...v2.22.3
+[2.22.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.22.0...v2.22.2
+[2.22.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.21.0...v2.22.0
+[2.21.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.20.5...v2.21.0
+[2.20.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.20.4...v2.20.5
+[2.20.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.20.3...v2.20.4
+[2.20.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.20.2...v2.20.3
+[2.20.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.20.1...v2.20.2
+[2.20.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.20.0...v2.20.1
+[2.20.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.19.0...v2.20.0
+[2.19.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.18.3...v2.19.0
+[2.18.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.18.2...v2.18.3
+[2.18.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.18.1...v2.18.2
+[2.18.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.18.0...v2.18.1
+[2.18.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.12...v2.18.0
+[2.17.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.11...v2.17.12
+[2.17.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.10...v2.17.11
+[2.17.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.9...v2.17.10
+[2.17.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.8...v2.17.9
+[2.17.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.7...v2.17.8
+[2.17.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.6...v2.17.7
+[2.17.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.5...v2.17.6
+[2.17.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.4...v2.17.5
+[2.17.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.3...v2.17.4
+[2.17.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.2...v2.17.3
+[2.17.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.1...v2.17.2
+[2.17.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.17.0...v2.17.1
+[2.17.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.16.3...v2.17.0
+[2.16.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.16.2...v2.16.3
+[2.16.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.16.1...v2.16.2
+[2.16.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.16.0...v2.16.1
+[2.16.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.8...v2.16.0
+[2.15.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.7...v2.15.8
+[2.15.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.6...v2.15.7
+[2.15.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.5...v2.15.6
+[2.15.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.4...v2.15.5
+[2.15.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.3...v2.15.4
+[2.15.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.2...v2.15.3
+[2.15.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.1...v2.15.2
+[2.15.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.15.0...v2.15.1
+[2.15.0]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.15.0
+[2.13.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.13.2...v2.13.3
+[2.13.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.13.1...v2.13.2
+[2.13.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.13.1
+[2.12.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.12.5...v2.12.6
+[2.12.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.12.4...v2.12.5
+[2.12.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.12.3...v2.12.4
+[2.12.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.12.2...v2.12.3
+[2.12.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.12.1...v2.12.2
+[2.12.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.12.0...v2.12.1
+[2.12.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.11.0...v2.12.0
+[2.11.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.16...v2.11.0
+[2.10.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.15...v2.10.16
+[2.10.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.14...v2.10.15
+[2.10.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.13...v2.10.14
+[2.10.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.12...v2.10.13
+[2.10.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.11...v2.10.12
+[2.10.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.10...v2.10.11
+[2.10.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.9...v2.10.10
+[2.10.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.8...v2.10.9
+[2.10.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.7...v2.10.8
+[2.10.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.6...v2.10.7
+[2.10.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.5...v2.10.6
+[2.10.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.4...v2.10.5
+[2.10.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.3...v2.10.4
+[2.10.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.2...v2.10.3
+[2.10.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.10.1...v2.10.2
+[2.10.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.9.9...v2.10.1
+[2.9.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.9.8...v2.9.9
+[2.9.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.9.7...v2.9.8
+[2.9.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.9.3...v2.9.7
+[2.9.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.9.2...v2.9.3
+[2.9.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.9.0...v2.9.2
+[2.9.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.8.2...v2.9.0
+[2.8.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.8.1...v2.8.2
+[2.8.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.8.0...v2.8.1
+[2.8.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.17...v2.8.0
+[2.7.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.16...v2.7.17
+[2.7.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.15...v2.7.16
+[2.7.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.14...v2.7.15
+[2.7.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.13...v2.7.14
+[2.7.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.12...v2.7.13
+[2.7.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.11...v2.7.12
+[2.7.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.10...v2.7.11
+[2.7.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.9...v2.7.10
+[2.7.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.8...v2.7.9
+[2.7.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.7...v2.7.8
+[2.7.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.6...v2.7.7
+[2.7.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.5...v2.7.6
+[2.7.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.4...v2.7.5
+[2.7.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.3...v2.7.4
+[2.7.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.2...v2.7.3
+[2.7.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.1...v2.7.2
+[2.7.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.7.0...v2.7.1
+[2.7.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.9...v2.7.0
+[2.6.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.8...v2.6.9
+[2.6.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.7...v2.6.8
+[2.6.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.6...v2.6.7
+[2.6.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.5...v2.6.6
+[2.6.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.3...v2.6.5
 [2.6.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.2...v2.6.3
+[2.6.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.1...v2.6.2
+[2.6.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.6.0...v2.6.1
+[2.6.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.6...v2.6.0
+[2.5.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.5...v2.5.6
+[2.5.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.4...v2.5.5
+[2.5.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.3...v2.5.4
+[2.5.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.2...v2.5.3
+[2.5.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.1...v2.5.2
+[2.5.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.5.0...v2.5.1
+[2.5.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.4.0...v2.5.0
+[2.4.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.3.6...v2.4.0
+[2.3.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.3.5...v2.3.6
+[2.3.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.3.4...v2.3.5
+[2.3.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.3.3...v2.3.4
+[2.3.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.3.2...v2.3.3
+[2.3.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.3.1...v2.3.2
+[2.3.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.3.1
+[2.2.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.2.2...v2.2.3
+[2.2.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.2.0...v2.2.2
+[2.2.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.8...v2.2.0
+[2.1.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.7...v2.1.8
+[2.1.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.5...v2.1.7
+[2.1.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.4...v2.1.5
+[2.1.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.3...v2.1.4
+[2.1.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.2...v2.1.3
+[2.1.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.1...v2.1.2
+[2.1.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.6...v2.1.0
+[2.0.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.5...v2.0.6
+[2.0.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.4...v2.0.5
+[2.0.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.3...v2.0.4
+[2.0.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.2...v2.0.3
+[2.0.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.1...v2.0.2
+[2.0.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.6.5...v2.0.0
+[1.6.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.6.4...v1.6.5
+[1.6.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.6.3...v1.6.4
+[1.6.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.6.2...v1.6.3
+[1.6.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.6.1...v1.6.2
+[1.6.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.5.1...v1.6.0
+[1.5.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.4.1...v1.5.0
+[1.4.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.32...v1.4.1
 [1.3.32]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.31...v1.3.32
 [1.3.31]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.30...v1.3.31
 [1.3.30]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.29...v1.3.30
@@ -3973,14 +4656,4 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 [1.3.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.9...v1.3.10
 [1.3.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.7...v1.3.8
-[1.3.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.6...v1.3.7
-[1.3.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.5...v1.3.6
-[1.3.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.4...v1.3.5
-[1.3.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.3.3...v1.3.4
-[1.3.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.3...v1.3.3
-[1.2.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.2...v1.2.3
-[1.2.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.1...v1.2.2
-[1.2.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/loryanstrant/Sendspin-client/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/loryanstrant/Sendspin-client/releases/tag/v1.0.0
+[1.3.7]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v1.3.7
