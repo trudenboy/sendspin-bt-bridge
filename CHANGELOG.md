@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `requirements.txt` stays a regenerated artefact of `uv.lock`.
 - pip-audit now runs via `uv run --with pip-audit pip-audit` so the
   CVE scan sees the actual installed project venv.
+- Changelog discipline enforced. `scripts/lint_changelog.py` (rules
+  R1–R10) runs as a pre-commit hook and a CI step in `_lint.yml`;
+  forward-only style rules apply to `[Unreleased]`. A one-off
+  rc-consolidation pass folded historical rc/beta entries into their
+  stable releases (`CHANGELOG.md` shrinks ~31 %). Compare-links footer
+  is regenerated automatically on every release. Full ruleset and
+  rationale live in `CONTRIBUTING.md` § Changelog Discipline; an
+  agent-facing summary lives in `CLAUDE.md`.
 
 ### Removed
 - `dev-requirements.txt` and `scripts/sync_requirements.py` — replaced

@@ -73,7 +73,12 @@ PROCESS_NOISE_PATTERNS = [
 # R7 — private code identifiers patterns. Whitelist common false-positives
 # (UPPERCASE_CONFIG_KEYS like SENDSPIN_PORT, ENV vars, dunder __init__).
 _PRIVATE_FUNC_RE = re.compile(r"\b_[a-z][a-z0-9_]+\b")
-_DOTTED_PRIVATE_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*\.[a-z_][a-z_0-9]*\b")
+# Matches both ``ClassName.method`` (uppercase-led) and lowercase
+# module/function dotted paths (``module.fn``,
+# ``services.bluetooth.resolve_hci_for_mac``). File-path matches
+# (``pyproject.toml``, ``services/foo.py``) are caught earlier by
+# ``_FILE_PATH_RE`` so they get the more specific message.
+_DOTTED_PRIVATE_RE = re.compile(r"\b(?:[A-Z][A-Za-z0-9]*|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\.[a-z_][a-z0-9_]*\b")
 _FILE_PATH_RE = re.compile(r"\b[\w/]+\.(?:py|yml|yaml|toml|sh)\b")
 
 # Heading regex compatible with scripts/generate_ha_addon_variants.py:264.
@@ -111,16 +116,29 @@ class Section:
     date: str  # "YYYY-MM-DD" or ""
     yanked: bool
     line: int  # 1-based line number of the `## [...]` heading
-    body_start: int  # absolute char offset (after the heading line)
+    heading_start: int  # absolute char offset of the `## [...]` heading
+    body_start: int  # absolute char offset of the body's first line
     body_end: int  # absolute char offset (start of next heading or len(text))
-    body: str  # section body (between heading and next heading), stripped
+    body: str  # section body (between heading and next heading), unstripped
 
 
 def parse_sections(text: str) -> list[Section]:
+    """Parse `## [...]` sections.
+
+    ``heading_start`` points at the `#` of the `## [...]` heading;
+    ``body_start`` points at the first character of the section body
+    (the line right after the heading). The body is intentionally NOT
+    stripped so line offsets against ``text`` line up with actual file
+    line numbers.
+    """
     matches = list(_VERSION_HEADING_RE.finditer(text))
     sections: list[Section] = []
     for index, match in enumerate(matches):
         body_start = match.end()
+        # Skip past the heading's trailing newline so body_start lands on
+        # the first character of the line below the heading.
+        if body_start < len(text) and text[body_start] == "\n":
+            body_start += 1
         body_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         line_no = text.count("\n", 0, match.start()) + 1
         sections.append(
@@ -129,9 +147,10 @@ def parse_sections(text: str) -> list[Section]:
                 date=(match.group("date") or "").strip(),
                 yanked=bool(match.group("yanked")),
                 line=line_no,
+                heading_start=match.start(),
                 body_start=body_start,
                 body_end=body_end,
-                body=text[body_start:body_end].strip("\n"),
+                body=text[body_start:body_end],
             )
         )
     return sections
@@ -229,13 +248,18 @@ def _is_unreleased(section: Section) -> bool:
 
 
 def _iter_section_subheadings(section: Section, text: str) -> Iterable[tuple[int, str]]:
-    """Yield (1-based line number, heading text after `### `) within a section."""
-    body_lines = section.body.splitlines()
-    body_start_line = _line_number_of_offset(text, section.body_start)
-    for offset, line in enumerate(body_lines):
+    """Yield (1-based line number, heading text after `### `) within a section.
+
+    Walks ``text`` directly so the reported line number is the actual
+    file line, regardless of leading/trailing blank lines in the body.
+    """
+    cursor = section.body_start
+    body = text[section.body_start : section.body_end]
+    for line in body.splitlines(keepends=True):
         stripped = line.strip()
         if stripped.startswith("### "):
-            yield body_start_line + offset, stripped[4:].strip()
+            yield _line_number_of_offset(text, cursor), stripped[4:].strip()
+        cursor += len(line)
 
 
 def check_r5_bare_category(text: str, sections: list[Section]) -> list[Violation]:
@@ -291,12 +315,17 @@ def check_r6_category_order(text: str, sections: list[Section]) -> list[Violatio
 
 
 def _iter_bullets(section: Section, text: str) -> Iterable[tuple[int, str]]:
-    """Yield (1-based line number, bullet text without the leading `- `)."""
-    body_lines = section.body.splitlines()
-    body_start_line = _line_number_of_offset(text, section.body_start)
-    for offset, line in enumerate(body_lines):
+    """Yield (1-based line number, bullet text without the leading `- `).
+
+    Walks ``text`` directly so the reported line number is the actual
+    file line, regardless of leading/trailing blank lines in the body.
+    """
+    cursor = section.body_start
+    body = text[section.body_start : section.body_end]
+    for line in body.splitlines(keepends=True):
         if line.lstrip().startswith("- "):
-            yield body_start_line + offset, line.lstrip()[2:].strip()
+            yield _line_number_of_offset(text, cursor), line.lstrip()[2:].strip()
+        cursor += len(line)
 
 
 def _strip_markup(text: str) -> str:
@@ -393,8 +422,12 @@ def check_r9_no_orphan_prose(text: str, sections: list[Section]) -> list[Violati
     for section in sections:
         if not _is_unreleased(section):
             continue
-        for offset, raw_line in enumerate(section.body.splitlines()):
+        cursor = section.body_start
+        body = text[section.body_start : section.body_end]
+        for raw_line in body.splitlines(keepends=True):
             line = raw_line.strip()
+            line_no = _line_number_of_offset(text, cursor)
+            cursor += len(raw_line)
             if not line:
                 continue
             if line.startswith("### "):
@@ -402,7 +435,6 @@ def check_r9_no_orphan_prose(text: str, sections: list[Section]) -> list[Violati
             if line.startswith("- "):
                 # Bare bullets without a category header — not strictly
                 # orphan prose, but also not collectable; flag separately.
-                line_no = _line_number_of_offset(text, section.body_start) + offset
                 violations.append(
                     Violation(
                         "R9",
@@ -411,7 +443,6 @@ def check_r9_no_orphan_prose(text: str, sections: list[Section]) -> list[Violati
                     )
                 )
                 continue
-            line_no = _line_number_of_offset(text, section.body_start) + offset
             violations.append(
                 Violation(
                     "R9",
@@ -591,14 +622,13 @@ def consolidate_rc(text: str) -> str:
     out_lines: list[str] = []
     cursor = 0
     for section in sections:
-        # Emit text before this section (preserved verbatim).
-        out_lines.append(text[cursor : section.body_start - len(_heading_line(section, text))])
+        # Emit text between previous section's end and this heading.
+        out_lines.append(text[cursor : section.heading_start])
         if section.line in drop_sections:
             cursor = section.body_end
             continue
-        # Re-emit heading.
-        heading_line = _heading_line(section, text)
-        out_lines.append(heading_line)
+        # Re-emit the heading line (including its trailing newline) verbatim.
+        out_lines.append(text[section.heading_start : section.body_start])
         body = rewritten_bodies.get(section.line)
         if body is None:
             # Unmodified — emit original body untouched.
@@ -611,14 +641,6 @@ def consolidate_rc(text: str) -> str:
 
     out_lines.append(text[cursor:])
     return "".join(out_lines)
-
-
-def _heading_line(section: Section, text: str) -> str:
-    """Return the original heading line for *section* (without trailing newline)."""
-    # Find the line containing body_start - 1 going backwards.
-    start = text.rfind("\n", 0, section.body_start) + 1
-    end = section.body_start
-    return text[start:end]
 
 
 def _extract_leading_prose(body: str) -> str:

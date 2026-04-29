@@ -166,6 +166,18 @@ def test_r7_fires_on_internal_dotted_symbol():
     assert "R7" in _rules_fired(text)
 
 
+def test_r7_fires_on_lowercase_module_dotted_symbol():
+    """`module.private_helper` and longer chains must be flagged just like
+    `ClassName.method` — the rule is about internal symbols, not casing."""
+    text = _doc("### Changed\n- module.private_helper now returns None on miss.\n")
+    assert "R7" in _rules_fired(text)
+
+
+def test_r7_fires_on_deeply_nested_dotted_symbol():
+    text = _doc("### Fixed\n- services.bluetooth.resolve_hci_for_mac returns the right adapter.\n")
+    assert "R7" in _rules_fired(text)
+
+
 def test_r7_fires_on_internal_file_path():
     text = _doc("### Changed\n- services/ha_publisher.py now publishes the legacy topic.\n")
     assert "R7" in _rules_fired(text)
@@ -250,6 +262,53 @@ def test_parse_sections_recognises_unreleased_and_releases():
     assert brackets == ["Unreleased", "2.66.0"]
     assert sections[0].date == ""
     assert sections[1].date == "2026-04-29"
+
+
+# --------------------------------------------------------------------------
+# Line-number accuracy regression — the linter reports file line numbers
+# in violation messages; users (and AI agents) navigate to those lines, so
+# they have to match the actual file. parse_sections used to strip leading
+# newlines from each body which silently shifted subsequent line numbers.
+
+
+def test_violation_line_numbers_match_actual_file_lines():
+    """A category heading on file line 11 must be reported as line 11."""
+    # Build a document where the body has multiple leading blank lines so
+    # any drift caused by stripping or off-by-one logic is amplified.
+    text = (
+        _HEADER_OK
+        + "\n## [Unreleased]\n"
+        + "\n"
+        + "\n"
+        + "### Improved\n"  # forbidden category — must be flagged at its real line
+        + "- Faster.\n"
+        + _FOOTER_OK
+    )
+    # Compute the expected line of `### Improved` by counting newlines.
+    target_line = text.splitlines().index("### Improved") + 1
+    violations = lint(text)
+    r5 = [v for v in violations if v.rule == "R5"]
+    assert r5, "expected R5 to fire on `### Improved`"
+    assert r5[0].line == target_line, (
+        f"R5 reported line {r5[0].line}, expected {target_line} (the actual file line of `### Improved`)"
+    )
+
+
+def test_bullet_violation_line_number_matches_file():
+    """A bullet with a private symbol must be reported on its real file line."""
+    text = (
+        _HEADER_OK
+        + "\n## [Unreleased]\n"
+        + "\n"
+        + "### Fixed\n"
+        + "- _publish_full_state now mirrors the legacy availability topic.\n"
+        + _FOOTER_OK
+    )
+    target_line = text.splitlines().index("- _publish_full_state now mirrors the legacy availability topic.") + 1
+    violations = lint(text)
+    r7 = [v for v in violations if v.rule == "R7"]
+    assert r7
+    assert r7[0].line == target_line
 
 
 # --------------------------------------------------------------------------
