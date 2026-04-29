@@ -111,9 +111,28 @@ The same speaker pairs fine with a phone or another Linux desktop, and the failu
 
 Tracked upstream as [bluez/bluez#1025](https://github.com/bluez/bluez/issues/1025).
 
-**Fix.** Override the local adapter's Class of Device. Open **Configuration → Bluetooth**, find the adapter row, and in the **Class of Device** dropdown pick **Computer/Laptop (0x00010c) — Samsung-compat**. Save the config, restart the bridge, and re-pair the soundbar.
+**Fix.** Two steps:
 
-The bridge applies the override at startup via the kernel mgmt API (no host file edits needed). On a regular Docker / LXC deployment you can alternatively persist the value at the host level by adding `Class = 0x00010c` under `[General]` in `/etc/bluetooth/main.conf` and restarting `bluetooth.service` — same effect, host-wide. On HAOS the in-bridge override is the recommended path because the host's `/etc/bluetooth/main.conf` is part of the read-only OS image.
+1. **Enable the experimental flag.** Open **Configuration → Advanced → Experimental features** and toggle on **Per-adapter Class of Device override (Samsung Q-series workaround)**. Save and restart the bridge.
+2. **Set the CoD value.** Go to **Configuration → Bluetooth**, find your adapter row — the **Class of Device** dropdown is now editable. Pick **Computer/Laptop (0x00010c) — Samsung-compat**. Save the config and restart the bridge, then re-pair the soundbar.
+
+The bridge applies the override via a raw HCI `Write_Class_Of_Device` command at startup and **re-applies it immediately before each pair attempt** — so an intervening adapter power-cycle by `bluetoothd` doesn't undo the override right before the soundbar's CoD filter runs.
+
+On a regular Docker / LXC deployment you can alternatively persist the value at the host level by adding `Class = 0x00010c` under `[General]` in `/etc/bluetooth/main.conf` and restarting `bluetooth.service` — same effect, host-wide. On HAOS the in-bridge override is the recommended path because the host's `/etc/bluetooth/main.conf` is part of the read-only OS image.
+
+**If pairing still fails after enabling the flag.** Check the bridge log for a line like:
+
+```
+CoD: hci0 Write_Class_Of_Device returned HCI status=0x0d
+```
+
+That means the adapter rejected the HCI command (rare — observed on some virtual/emulated controllers). To verify manually whether raw HCI works on your adapter:
+
+```bash
+docker exec sendspin-client hcitool -i hci0 cmd 0x03 0x0024 0c 01 00
+```
+
+Expected output: `< HCI Command: ... > HCI Event: 0x0e ... 00`. If you see a non-zero status byte, the adapter's firmware doesn't support `Write_Class_Of_Device` and the in-bridge path won't help; try the host-level `main.conf` approach above instead.
 
 The bridge will also surface this as a recovery card automatically when it detects the `AuthenticationCanceled` + "No Resources" fingerprint during pairing — clicking the card opens the Bluetooth tab where the dropdown lives.
 

@@ -232,6 +232,7 @@ var recentLogIssueState = { hasMeta: false, hasIssues: false, level: '', count: 
 var currentLogLevel = 'all';
 var btAdapters = [];
 var btManualAdapters = [];
+var _codOverrideEnabled = false;
 var _haAreaCatalog = null;
 var _haAdapterAreaMap = {};
 var lastDevices = [];
@@ -4955,6 +4956,7 @@ async function loadBtAdapters(options) {
                 detectedName: adapter.name || '',
                 customName: '',
                 manual: false,
+                liveClass: adapter.live_class || null,
             });
         });
     } catch (_) { btAdapters = []; }
@@ -5779,42 +5781,39 @@ function _updateAdaptersHaAssistSummary() {
         (matchCount ? ' with exact adapter MAC suggestions for ' + matchCount + ' adapter' + (matchCount === 1 ? '' : 's') + '.' : '.');
 }
 
-function _buildAdapterClassOfDeviceHtml(currentValue) {
+function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     // Per-adapter Bluetooth Class of Device override.
-    //
-    // The kernel/bluetoothd defaults work for the vast majority of
-    // peers, so the dropdown's first option is always "(default —
-    // leave unchanged)" with the empty string saved as the value.
-    // Operators only need to touch this when a specific peer
-    // filters incoming connections by initiator CoD — Samsung
-    // Q-series soundbars are the documented case (bluez/bluez#1025),
-    // so we ship the working ``0x00010c`` value as a labelled
-    // preset.  ``custom`` swaps the select for a free-text hex
-    // field — ``_bindAdapterClassOfDevice`` keeps the two in sync.
+    // opts: { enabled: bool, liveClass: string|null }
+    var enabled = !opts || opts.enabled !== false;
+    var liveClass = (opts && opts.liveClass) || null;
     var current = String(currentValue || '').toLowerCase();
     var presetValue = current === '0x00010c' ? '0x00010c' : (current ? 'custom' : '');
     var customValue = current && current !== '0x00010c' ? current : '';
-    var helpText = 'Override the Bluetooth Class of Device this adapter advertises. Default leaves the kernel value untouched. Use 0x00010c (Computer/Laptop) when pairing Samsung Q-series soundbars — they reject other CoDs (bluez/bluez#1025).';
-    return '<div class="adapter-cod-override">' +
+    var helpText = enabled
+        ? 'Override the Bluetooth Class of Device this adapter advertises. Default leaves the kernel value untouched. Use 0x00010c (Computer/Laptop) when pairing Samsung Q-series soundbars — they reject other CoDs (bluez/bluez#1025).'
+        : 'Enable the "Per-adapter Class of Device override" experimental flag (Configuration → Advanced → Experimental features) to use this.';
+    var disabledAttr = enabled ? '' : ' disabled';
+    var liveHtml = '';
+    if (liveClass) {
+        var match = current && liveClass.toLowerCase() === current.toLowerCase();
+        liveHtml = '<span class="adapter-cod-live' + (match ? ' adapter-cod-live--match' : '') + '">' +
+            'Live: ' + escHtml(liveClass) + '</span>';
+    }
+    return '<div class="adapter-cod-override' + (enabled ? '' : ' adapter-cod-override--disabled') + '">' +
         '<span class="adapter-cod-copy">Class of Device' +
-            // Real <button> instead of <span> so keyboard users can
-            // reach the help affordance and screen readers announce
-            // it.  ``aria-label`` mirrors the tooltip so the same
-            // text is exposed to AT regardless of how the button is
-            // discovered.  ``type="button"`` prevents accidental
-            // form submit when the override sits inside the wider
-            // settings form.
             ' <button type="button" class="adapter-cod-help" aria-label="' + escHtmlAttr(helpText) + '" title="' + escHtmlAttr(helpText) + '">?</button>' +
         '</span>' +
         '<div class="adapter-cod-controls">' +
-            '<select class="adp-cod-preset">' +
+            '<select class="adp-cod-preset"' + disabledAttr + '>' +
                 '<option value="" ' + (presetValue === '' ? 'selected' : '') + '>(default — leave unchanged)</option>' +
                 '<option value="0x00010c" ' + (presetValue === '0x00010c' ? 'selected' : '') + '>Computer/Laptop (0x00010c) — Samsung-compat</option>' +
                 '<option value="custom" ' + (presetValue === 'custom' ? 'selected' : '') + '>Custom hex…</option>' +
             '</select>' +
             '<input type="text" class="adp-cod-custom mono" placeholder="0x000000" value="' + escHtmlAttr(customValue) + '"' +
                 (presetValue === 'custom' ? '' : ' hidden') +
+                disabledAttr +
                 ' maxlength="8" spellcheck="false">' +
+            liveHtml +
         '</div>' +
         '<div class="adapter-cod-error" hidden></div>' +
     '</div>';
@@ -6023,7 +6022,7 @@ function renderAdaptersTable() {
                 '<span class="adapter-power-btns">' +
                   '<button type="button" class="btn-bt-action btn-adp-reboot" title="Reboot adapter" data-adapter="' + escHtmlAttr(a.mac) + '">\u21bb Reboot</button>' +
                 '</span>' +
-                _buildAdapterClassOfDeviceHtml(a.deviceClass || '') +
+                _buildAdapterClassOfDeviceHtml(a.deviceClass || '', {enabled: _codOverrideEnabled, liveClass: a.liveClass || null}) +
                 _buildAdapterHaAssistHtml(a);
             row.querySelector('.adp-name').addEventListener('blur', syncManualAdapters);
             row.querySelector('.btn-adp-reboot').addEventListener('click', function() { rebootAdapter(a.mac); });
@@ -6047,7 +6046,7 @@ function buildManualRow(id, mac, name, dirtyKey, deviceClass) {
         '<input type="text" class="adp-name" placeholder="Display name" value="' + escHtmlAttr(name) + '">' +
         '<span class="dot grey">\u25cf</span>' +
         '<button type="button" class="btn-remove-adapter">\u00d7</button>' +
-        _buildAdapterClassOfDeviceHtml(deviceClass || '') +
+        _buildAdapterClassOfDeviceHtml(deviceClass || '', {enabled: _codOverrideEnabled}) +
         _buildAdapterHaAssistHtml({id: id || '', mac: mac || ''});
     ['adp-id', 'adp-mac', 'adp-name'].forEach(function(cls) {
         row.querySelector('.' + cls).addEventListener('blur', syncManualAdapters);
@@ -7927,6 +7926,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
     config.RSSI_BADGE = !!(document.getElementById('rssi-badge') || {}).checked;
     config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
+    config.EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE = !!(document.getElementById('experimental-cod-override') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
     // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
     // the Settings form. The config key is still honoured as a fallback for
@@ -10525,6 +10525,9 @@ async function loadConfig(options) {
         }
         var expAllowHfpCheck = document.getElementById('experimental-allow-hfp-profile');
         if (expAllowHfpCheck) expAllowHfpCheck.checked = !!config.ALLOW_HFP_PROFILE;
+        var expCodOverrideCheck = document.getElementById('experimental-cod-override');
+        if (expCodOverrideCheck) expCodOverrideCheck.checked = !!config.EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE;
+        _codOverrideEnabled = !!config.EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

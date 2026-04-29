@@ -90,7 +90,9 @@ def test_api_bt_adapters_falls_back_to_index_label_without_sysfs(tmp_path, monke
     response = client.get("/api/bt/adapters")
     assert response.status_code == 200
     adapters = response.get_json()["adapters"]
-    assert adapters == [{"id": "hci0", "mac": "AA:BB:CC:DD:EE:01", "name": "Some Controller", "powered": True}]
+    assert adapters == [
+        {"id": "hci0", "mac": "AA:BB:CC:DD:EE:01", "name": "Some Controller", "powered": True, "live_class": None}
+    ]
 
 
 def test_api_bt_adapters_uses_explicit_show_form_for_alias(tmp_path, monkeypatch, client):

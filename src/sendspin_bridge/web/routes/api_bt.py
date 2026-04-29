@@ -29,6 +29,7 @@ from sendspin_bridge.services.bluetooth import (
 )
 from sendspin_bridge.services.bluetooth import bt_remove_device as _bt_remove_device
 from sendspin_bridge.services.bluetooth import persist_device_released as _persist_device_released
+from sendspin_bridge.services.bluetooth.bt_class_of_device import read_device_class as _read_device_class
 from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 from sendspin_bridge.services.lifecycle.async_job_state import (
@@ -450,12 +451,15 @@ def api_bt_adapters():
             # latter is unreliable in piped-stdin mode and surfaced the wrong
             # adapter's alias when default and selected differed (issue #193).
             alias, powered = get_adapter_alias(mac)
+            hci_index = int(kernel_hci[3:]) if kernel_hci.startswith("hci") and kernel_hci[3:].isdigit() else None
+            live_cod = _read_device_class(hci_index) if hci_index is not None else None
             adapters.append(
                 {
                     "id": kernel_hci,
                     "mac": mac,
                     "name": alias or kernel_hci,
                     "powered": powered,
+                    "live_class": f"0x{live_cod:06x}" if live_cod is not None else None,
                 }
             )
         return jsonify({"adapters": adapters})

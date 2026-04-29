@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -126,12 +126,12 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
 def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> None:
     """Apply ``BLUETOOTH_ADAPTERS[].device_class`` to each kernel controller.
 
-    Called once at startup, after PA hardening.  Most fleets have no
-    overrides set (default empty string), so this is a fast no-op for
-    them.  When set, the value is a 6-hex-digit CoD (e.g. ``0x00010c``)
-    and is delivered via ``MGMT_OP_SET_DEV_CLASS`` — the same mgmt
-    channel ``bt_rssi_mgmt`` already uses, so no new capability is
-    required beyond the ``CAP_NET_ADMIN`` the bridge already holds.
+    Called from startup once the experimental
+    ``EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`` flag is on. The value is a
+    6-hex-digit CoD (e.g. ``0x00010c``) and is delivered via raw HCI
+    ``Write_Class_Of_Device`` (OGF=0x03, OCF=0x0024) on a
+    ``BTPROTO_HCI`` socket — same capability surface (``CAP_NET_RAW``)
+    the AVRCP HCI monitor already uses.
 
     Resolution order for the kernel hci index:
 
@@ -142,8 +142,8 @@ def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> Non
        the controller.
 
     Failure modes are logged at WARNING and never raise; a missing
-    btsocket / bad permission / unmounted sysfs lets the bridge keep
-    booting (the operator's other guarantees still hold; only the
+    capability / non-Linux dev box / kernel rejection lets the bridge
+    keep booting (the operator's other guarantees still hold; only the
     Samsung-Q workaround is degraded).
     """
     if not adapters:
@@ -217,6 +217,8 @@ class RuntimeBootstrap:
     web_port: int
     pulse_latency_msec: int
     log_level: str
+    cod_override_enabled: bool = False
+    bluetooth_adapters: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -320,10 +322,13 @@ class BridgeOrchestrator:
         _harden_pulseaudio(disable_rescue_streams=bool(config.get("DISABLE_PA_RESCUE_STREAMS", False)))
 
         # Per-adapter Class of Device override — Samsung Q-series workaround
-        # (bluez/bluez#1025).  Default-empty value means most operators see
-        # this as a fast no-op; only those who explicitly set ``device_class``
-        # in ``BLUETOOTH_ADAPTERS`` pay the mgmt round-trip.
-        _apply_adapter_device_class_overrides(list(config.get("BLUETOOTH_ADAPTERS") or []))
+        # (bluez/bluez#1025).  Gated behind the experimental flag because
+        # the raw HCI Write_Class_Of_Device the applier sends competes with
+        # bluetoothd's own CoD management; opt-in only for users hitting
+        # the Q-series filter. When the flag is off the applier is skipped
+        # entirely — even configured ``device_class`` entries are ignored.
+        if config.get("EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE"):
+            _apply_adapter_device_class_overrides(list(config.get("BLUETOOTH_ADAPTERS") or []))
 
         return RuntimeBootstrap(
             config=config,
@@ -341,6 +346,8 @@ class BridgeOrchestrator:
             enable_a2dp_sink_recovery_dance=enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=enable_pa_module_reload,
             enable_adapter_auto_recovery=enable_adapter_auto_recovery,
+            cod_override_enabled=bool(config.get("EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE", False)),
+            bluetooth_adapters=list(config.get("BLUETOOTH_ADAPTERS") or []),
             enable_rssi_badge=enable_rssi_badge,
             base_listen_port=base_listen_port,
             web_port=web_port,
@@ -557,6 +564,8 @@ class BridgeOrchestrator:
             enable_a2dp_sink_recovery_dance=bootstrap.enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=bootstrap.enable_pa_module_reload,
             enable_adapter_auto_recovery=bootstrap.enable_adapter_auto_recovery,
+            cod_override_enabled=getattr(bootstrap, "cod_override_enabled", False),
+            bluetooth_adapters=getattr(bootstrap, "bluetooth_adapters", []),
             enable_rssi_badge=bootstrap.enable_rssi_badge,
             base_listen_port=base_listen_port,
             client_factory=client_factory,
