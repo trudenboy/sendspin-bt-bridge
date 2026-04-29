@@ -57,6 +57,26 @@ _HCI_PKT_TYPE_COMMAND = 0x01
 _HCI_PKT_TYPE_EVENT = 0x04
 _HCI_EV_COMMAND_COMPLETE = 0x0E
 
+# HCI socket filter. On HCI_CHANNEL_RAW the kernel's default filter is
+# all-zero — every event is dropped before reaching userspace, so the
+# Command Complete reply for our own command never arrives. We have to
+# install an explicit filter that lets event packets and at least the
+# command-status / command-complete opcodes through.
+#
+# struct hci_filter { __u32 type_mask; __u32 event_mask[2]; __le16 opcode; }
+# Layout: 14 bytes (4 + 4 + 4 + 2). x86_64 native-endian == LE so
+# ``=IIIH`` is the wire format the kernel expects.
+_SOL_HCI = 0
+_HCI_FILTER = 2
+_HCI_FILTER_TYPE_MASK_EVENT = 1 << _HCI_PKT_TYPE_EVENT  # 0x10
+_HCI_FILTER_BYTES = struct.pack(
+    "=IIIH",
+    _HCI_FILTER_TYPE_MASK_EVENT,  # type_mask: HCI_EVENT_PKT only
+    0xFFFFFFFF,  # event_mask[0]: events 0-31 (covers CMD_COMPLETE=0x0E, CMD_STATUS=0x0F)
+    0xFFFFFFFF,  # event_mask[1]: events 32-63
+    0x0000,  # opcode: 0 = match any
+)
+
 # Wall-clock budget for one HCI round-trip. Healthy controllers reply
 # in single-digit milliseconds; 2 s is generous and bounds how long a
 # stuck controller can stall the startup or pre-pair sequence.
@@ -123,6 +143,15 @@ def _send_and_read_command_complete(
     status field (empty for commands without return parameters; on
     failure, contains the status byte if available, empty otherwise).
     """
+    # Install the HCI filter so the kernel actually delivers Command
+    # Complete events to our socket. Without this the recv() call below
+    # would always time out on HCI_CHANNEL_RAW. Failure here is fatal —
+    # the operation cannot succeed without a working filter.
+    try:
+        sock.setsockopt(_SOL_HCI, _HCI_FILTER, _HCI_FILTER_BYTES)
+    except OSError:
+        return False, b""
+
     # Command packet: [01][opcode_lo][opcode_hi][plen][payload...]
     packet = struct.pack("<BHB", _HCI_PKT_TYPE_COMMAND, opcode, len(payload)) + payload
     try:

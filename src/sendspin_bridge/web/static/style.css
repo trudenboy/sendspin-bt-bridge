@@ -4424,7 +4424,7 @@ body {
         }
         .adapter-row {
             display: grid;
-            grid-template-columns: 5rem 1fr 1.4fr 2.5rem auto;
+            grid-template-columns: 5rem 1fr 1.4fr minmax(180px, auto) 2.5rem auto;
             gap: 8px; align-items: center;
             padding: 7px 10px; border-bottom: 1px solid var(--divider-color); font-size: 13px;
             cursor: default; border-radius: 6px; transition: background 0.15s, box-shadow 0.15s ease;
@@ -4473,79 +4473,52 @@ body {
             font-size: 11px;
             color: var(--secondary-text-color);
         }
-        .adapter-cod-override {
-            grid-column: 1 / -1;
+        .adapter-cod-override.adapter-cod-inline {
             display: flex;
-            flex-direction: column;
-            gap: 6px;
-            padding-top: 2px;
-        }
-        .adapter-cod-copy {
-            font-size: 11px;
-            color: var(--secondary-text-color);
-        }
-        .adapter-cod-help {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 14px;
-            height: 14px;
-            margin-left: 4px;
-            padding: 0;
-            border-radius: 50%;
-            border: 1px solid var(--divider-color);
-            background: transparent;
-            font: inherit;
-            font-size: 9px;
-            color: var(--secondary-text-color);
-            cursor: help;
-        }
-        .adapter-cod-help:focus-visible {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 1px;
-        }
-        .adapter-cod-controls {
-            display: flex;
+            flex-direction: row;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
+            min-width: 0;
         }
-        .adapter-cod-controls select {
-            flex: 1 1 220px;
-            min-width: 180px;
-            max-width: 100%;
-            padding: 5px 8px;
+        .adapter-cod-inline .adp-cod-preset {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 5px 6px;
             border: 1px solid var(--divider-color);
             border-radius: 4px;
-            font-size: 13px;
+            font-size: 12px;
             background: var(--card-background-color);
             color: var(--primary-text-color);
         }
-        .adapter-cod-controls .adp-cod-custom {
-            flex: 0 1 140px;
-            padding: 5px 8px;
+        .adapter-cod-inline .adp-cod-custom {
+            flex: 0 1 110px;
+            min-width: 0;
+            padding: 5px 6px;
             border: 1px solid var(--divider-color);
             border-radius: 4px;
-            font-size: 13px;
+            font-size: 12px;
             background: var(--card-background-color);
             color: var(--primary-text-color);
         }
-        .adapter-cod-error {
-            font-size: 11px;
-            color: var(--error-color);
-        }
-        .adapter-cod-override--disabled .adapter-cod-controls select,
-        .adapter-cod-override--disabled .adapter-cod-controls .adp-cod-custom {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-        .adapter-cod-live {
+        .adapter-cod-inline .adapter-cod-live {
             font-size: 11px;
             color: var(--secondary-text-color);
             font-family: 'Courier New', monospace;
+            white-space: nowrap;
         }
-        .adapter-cod-live--match {
+        .adapter-cod-inline .adapter-cod-live--match {
             color: var(--success-color);
+        }
+        .adapter-cod-inline .adapter-cod-error {
+            flex-basis: 100%;
+            font-size: 11px;
+            color: var(--error-color);
+        }
+        .adapter-cod-override--disabled .adp-cod-preset,
+        .adapter-cod-override--disabled .adp-cod-custom {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
         .dot { font-size: 16px; text-align: center; }
         .dot.green { color: var(--success-color); }

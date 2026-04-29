@@ -65,6 +65,7 @@ class FakeHciSocket:
         self._recv_queue = list(recv_payloads)
         self.closed = False
         self._timeout: float | None = None
+        self.sockopts: list[tuple[int, int, bytes]] = []
 
     def send(self, data: bytes) -> int:
         self.sent.append(bytes(data))
@@ -72,6 +73,9 @@ class FakeHciSocket:
 
     def settimeout(self, t: float | None) -> None:
         self._timeout = t
+
+    def setsockopt(self, level: int, optname: int, value: bytes) -> None:
+        self.sockopts.append((level, optname, bytes(value)))
 
     def recv(self, _bufsize: int) -> bytes:
         if not self._recv_queue:

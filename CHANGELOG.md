@@ -68,6 +68,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/sys/class/bluetooth/hciN/address` is not mounted, that lookup
   returned nothing and the override was silently skipped. The applier
   now accepts both `hci` and `id` as the HCI label source.
+- **CoD applier timed out on every Command Complete read.** The raw
+  HCI socket on `HCI_CHANNEL_RAW` ships with a zero-mask kernel filter
+  that drops every event before it reaches userspace, so the
+  `Write_Class_Of_Device` / `Read_Class_Of_Device` Command Complete
+  reply never arrived and we logged a misleading "timed out or failed"
+  warning. The applier now installs an `HCI_FILTER` `setsockopt` that
+  lets event packets through (matching what `hciconfig` does
+  internally), so the override actually lands and the live CoD
+  readback works.
+- The per-adapter Class of Device dropdown now sits inline on the
+  same row as the adapter id / MAC / custom name (right of the name
+  input) instead of breaking onto its own line. The live CoD
+  readback chip stays next to the dropdown for at-a-glance
+  confirmation.
 
 ## [2.65.1-rc.1] - 2026-04-29
 
