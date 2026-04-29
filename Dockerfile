@@ -4,6 +4,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
 ARG TARGETVARIANT
 
+# uv: single static binary, ~10–20× faster resolve/install than pip.
+# Pinned to a specific minor for reproducibility; bump deliberately.
+COPY --from=ghcr.io/astral-sh/uv:0.5.31 /uv /usr/local/bin/uv
+
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /tmp/
 RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
     if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
-        pip install --no-cache-dir --prefer-binary --prefix=/install \
+        uv pip install --system --no-cache --prefix=/install \
             --extra-index-url https://www.piwheels.org/simple \
             -r /tmp/requirements-deps.txt \
             "aiosendspin-mpris~=2.1.1" \
@@ -44,7 +48,7 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
             "rich>=13.0.0" \
             "sounddevice>=0.4.6"; \
     else \
-        pip install --no-cache-dir --prefix=/install -r /tmp/requirements-deps.txt; \
+        uv pip install --system --no-cache --prefix=/install -r /tmp/requirements-deps.txt; \
     fi
 
 # Layer 2: sendspin package only — lightweight, rebuilt each release.
@@ -54,10 +58,17 @@ ARG SENDSPIN_VERSION=""
 RUN NO_DEPS="" && \
     if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then NO_DEPS="--no-deps"; fi && \
     if [ -n "${SENDSPIN_VERSION}" ]; then \
-        pip install --no-cache-dir --prefix=/install ${NO_DEPS} "sendspin==${SENDSPIN_VERSION}"; \
+        uv pip install --system --no-cache --prefix=/install ${NO_DEPS} "sendspin==${SENDSPIN_VERSION}"; \
     else \
-        pip install --no-cache-dir --prefix=/install ${NO_DEPS} "sendspin>=5.3.0,<6.0.0"; \
+        uv pip install --system --no-cache --prefix=/install ${NO_DEPS} "sendspin>=5.3.0,<6.0.0"; \
     fi
+
+# Layer 3: the bridge package itself (sendspin_bridge). Install into the same
+# /install prefix the runtime stage will pick up via `COPY --from=builder`.
+# --no-deps because everything is already in layer 1.
+COPY src/ /build/src/
+COPY pyproject.toml VERSION /build/
+RUN uv pip install --system --no-cache --no-deps --prefix=/install /build
 
 # Strip bloat from installed packages before copying to runtime stage
 RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
@@ -190,11 +201,10 @@ RUN chmod +x entrypoint.sh && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/run && \
     chmod +x /etc/s6-overlay/s6-rc.d/sendspin/finish
 
-# Copy application source (src-layout) + manifests; install editable so
-# `python -m sendspin_bridge` and the `sendspin-bridge` console script work.
-COPY src/ /app/src/
-COPY pyproject.toml VERSION /app/
-RUN pip install --no-deps --no-cache-dir -e /app
+# sendspin_bridge package itself was installed by the builder stage and
+# arrived via `COPY --from=builder /install /usr/local`. We only need the
+# raw VERSION file at /app/ for entrypoint.sh's version-printer fallback.
+COPY VERSION /app/
 # scripts/ is intentionally narrowed to runtime + CI smoke-test entrypoints:
 #   translate_ha_config.py   — called by entrypoint.sh when /data/options.json exists (HA addon mode)
 #   check_sendspin_compat.py — invoked inside the image by release.yml post-build
