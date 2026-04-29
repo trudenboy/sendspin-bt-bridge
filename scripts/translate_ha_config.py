@@ -220,6 +220,7 @@ def main() -> None:
             "EXPERIMENTAL_PA_MODULE_RELOAD",
             "EXPERIMENTAL_PAIR_JUST_WORKS",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
+            "EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE",
             "RSSI_BADGE",
             "AUTH_ENABLED",
             "BRUTE_FORCE_PROTECTION",

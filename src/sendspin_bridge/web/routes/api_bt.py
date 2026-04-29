@@ -29,6 +29,7 @@ from sendspin_bridge.services.bluetooth import (
 )
 from sendspin_bridge.services.bluetooth import bt_remove_device as _bt_remove_device
 from sendspin_bridge.services.bluetooth import persist_device_released as _persist_device_released
+from sendspin_bridge.services.bluetooth.bt_class_of_device import read_device_class as _read_device_class
 from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 from sendspin_bridge.services.lifecycle.async_job_state import (
@@ -445,17 +446,27 @@ def api_bt_adapters():
             # after a USB stick hotplug.  Falls back to the synthetic
             # ``hci{i}`` label only when /sys/class/bluetooth isn't mounted
             # (non-Linux dev box, container missing /sys).
-            kernel_hci = hci_map.get(mac.upper().replace(":", "")) or f"hci{i}"
+            kernel_hci_sysfs = hci_map.get(mac.upper().replace(":", ""))
+            kernel_hci = kernel_hci_sysfs or f"hci{i}"
             # Use ``show <MAC>`` instead of ``select <MAC>; show`` — the
             # latter is unreliable in piped-stdin mode and surfaced the wrong
             # adapter's alias when default and selected differed (issue #193).
             alias, powered = get_adapter_alias(mac)
+            # Only read live CoD when we have a sysfs-confirmed hci index.
+            # The synthetic fallback ``hci{i}`` uses the bluetoothctl list
+            # order which may not match kernel numbering, so the index could
+            # address the wrong controller.
+            if kernel_hci_sysfs and kernel_hci_sysfs.startswith("hci") and kernel_hci_sysfs[3:].isdigit():
+                live_cod = _read_device_class(int(kernel_hci_sysfs[3:]))
+            else:
+                live_cod = None
             adapters.append(
                 {
                     "id": kernel_hci,
                     "mac": mac,
                     "name": alias or kernel_hci,
                     "powered": powered,
+                    "live_class": f"0x{live_cod:06x}" if live_cod is not None else None,
                 }
             )
         return jsonify({"adapters": adapters})

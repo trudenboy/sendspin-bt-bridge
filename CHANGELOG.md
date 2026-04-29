@@ -35,10 +35,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is regenerated automatically on every release. Full ruleset and
   rationale live in `CONTRIBUTING.md` § Changelog Discipline; an
   agent-facing summary lives in `CLAUDE.md`.
+- **Per-adapter CoD override is now experimental and off-by-default.**
+  Enable via **Configuration → Advanced → Experimental features →
+  "Per-adapter Class of Device override"**. Once on, the Class of
+  Device dropdown in each adapter row becomes editable. Most users
+  don't need this; it targets the Samsung Q-series quirk specifically.
+  The adapter row also shows the live CoD read back from the adapter
+  after each apply.
 
 ### Removed
 - `dev-requirements.txt` and `scripts/sync_requirements.py` — replaced
   by `uv sync --extra dev` and the `astral-sh/uv-pre-commit` hooks.
+
+### Fixed
+- **Samsung Q-series soundbar pairing (bluez/bluez#1025, issue #210).**
+  v2.65.1-rc.1 added a per-adapter `device_class` override for this
+  quirk, but the underlying applier sent the wrong kernel mgmt opcode
+  (`0x002C` is `MGMT_OP_SET_SCAN_PARAMS`, not `MGMT_OP_SET_DEV_CLASS =
+  0x000E`). Even with the correct opcode, the mgmt API path returned
+  `Invalid Parameters (0x0d)` on every adapter tested (CSR8510 A10,
+  RTL8761B). The applier now sends a raw HCI `Write_Class_Of_Device`
+  command (OGF=0x03, OCF=0x0024) on a `BTPROTO_HCI/HCI_CHANNEL_RAW`
+  socket — verified working on both adapters. The override is also
+  re-applied immediately before each outbound pair attempt so an
+  intervening `bluetoothd` power-cycle doesn't undo it before the
+  soundbar's CoD filter inspects the initiator. Gated behind the new
+  experimental flag — see `### Changed` above.
 
 ## [2.65.1-rc.1] - 2026-04-29
 

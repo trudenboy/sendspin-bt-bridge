@@ -126,6 +126,8 @@ class BluetoothManager:
         enable_a2dp_dance: bool = False,
         enable_pa_module_reload: bool = False,
         enable_adapter_auto_recovery: bool = False,
+        cod_override_enabled: bool = False,
+        adapter_device_class_hex: str = "",
     ):
         self.mac_address = mac_address
         self.adapter = adapter  # "hci0", "hci1", etc. — empty = use default
@@ -166,6 +168,30 @@ class BluetoothManager:
         # Off by default because USB unbind/rebind briefly disconnects
         # every device on the same controller.
         self._enable_adapter_auto_recovery = bool(enable_adapter_auto_recovery)
+        # EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE — gates the per-pair-attempt
+        # raw HCI Write_Class_Of_Device call. Re-applies CoD just before
+        # outbound Connect so the soundbar's CoD filter (Samsung Q-series)
+        # sees Major=Computer at the moment it inspects, even if
+        # bluetoothd power-cycled the adapter between startup and pair.
+        # Pre-parse hex once so the pre-pair hook never emits a WARNING on
+        # every pair attempt for a bad value that was already bad at init.
+        self._cod_override_enabled = bool(cod_override_enabled)
+        hex_raw = str(adapter_device_class_hex or "").strip()
+        if hex_raw and self._cod_override_enabled:
+            try:
+                from sendspin_bridge.services.bluetooth.bt_class_of_device import parse_class_hex as _parse_class_hex
+
+                parsed = _parse_class_hex(hex_raw)
+            except Exception:
+                parsed = None
+            if parsed is None:
+                logger.warning(
+                    "CoD override: device_class=%r is not a valid 6-hex-digit value — override disabled for this manager",
+                    hex_raw,
+                )
+            self._cod_override_int: int | None = parsed
+        else:
+            self._cod_override_int = None
 
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
@@ -281,6 +307,44 @@ class BluetoothManager:
             return m.group(1) if m else ""
         except (OSError, subprocess.SubprocessError):
             return ""
+
+    def _maybe_apply_cod_override_pre_pair(self) -> None:
+        """Re-apply ``device_class`` to the resolved adapter just before pair.
+
+        No-op unless ``EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`` is on AND
+        a valid ``device_class`` was set at ``__init__`` (pre-validated to an
+        int there). Calls ``set_device_class`` directly so failures are logged
+        at WARNING only once — not on every pair attempt for an already-known
+        bad hex value (which was already warned at init time).
+        """
+        if not self._cod_override_enabled or self._cod_override_int is None:
+            return
+        hci_name = self.adapter_hci_name or ""
+        if not hci_name.startswith("hci"):
+            logger.debug(
+                "[%s] Pre-pair CoD: no resolved hciN for adapter — skipping",
+                self.device_name,
+            )
+            return
+        try:
+            adapter_index = int(hci_name[3:])
+        except ValueError:
+            logger.debug(
+                "[%s] Pre-pair CoD: malformed adapter hci name %r — skipping",
+                self.device_name,
+                hci_name,
+            )
+            return
+        try:
+            from sendspin_bridge.services.bluetooth.bt_class_of_device import set_device_class
+
+            set_device_class(adapter_index, self._cod_override_int)
+        except Exception as exc:
+            logger.debug(
+                "[%s] Pre-pair CoD apply failed (non-fatal): %s",
+                self.device_name,
+                exc,
+            )
 
     def _resolve_adapter_hci_name(self) -> str:
         """Return hciN name for the effective adapter MAC (e.g. 'hci0'), or empty string."""
@@ -558,6 +622,14 @@ class BluetoothManager:
             proc.stdin.flush()
             if not self._wait_with_cancel(_PAIRING_SCAN_DURATION):
                 return False
+
+            # Re-apply per-adapter Class of Device override just before the
+            # outbound BR/EDR Connect — Samsung Q-series soundbars filter
+            # incoming connections by initiator CoD (bluez/bluez#1025) and
+            # bluetoothd may have reset CoD on the `power on` above.
+            # Idempotent + cheap (~1ms HCI round-trip); gated on the
+            # experimental flag so non-Q-series users aren't affected.
+            self._maybe_apply_cod_override_pre_pair()
 
             proc.stdin.write("\n".join(pair_cmds) + "\n")
             proc.stdin.flush()

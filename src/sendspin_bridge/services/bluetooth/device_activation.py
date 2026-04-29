@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.audio.mpris_player import (
@@ -79,6 +79,39 @@ def _is_single_speaker_adapter(default_client: Any) -> bool:
             if same_adapter > 1:
                 return False
     return same_adapter == 1
+
+
+def _resolve_adapter_device_class(device_adapter: str, adapters: list[dict[str, Any]]) -> str:
+    """Look up the configured ``device_class`` for a device's adapter.
+
+    *device_adapter* is the value of ``BLUETOOTH_DEVICES[].adapter`` —
+    either an ``hciN`` label or a MAC address. *adapters* is the
+    ``BLUETOOTH_ADAPTERS`` config list. Returns the matching adapter's
+    ``device_class`` hex string (e.g. ``"0x00010c"``) or empty string
+    when no match / no override is configured.
+
+    Empty input fields are tolerated; we just return ``""`` so the
+    caller passes a no-op into BluetoothManager and the pre-pair hook
+    short-circuits.
+    """
+    if not device_adapter or not adapters:
+        return ""
+    target = device_adapter.strip()
+    target_normalized = target.upper().replace(":", "")
+    for entry in adapters:
+        if not isinstance(entry, dict):
+            continue
+        hex_value = str(entry.get("device_class") or "").strip()
+        if not hex_value:
+            continue
+        hci_label = str(entry.get("hci") or "").strip()
+        mac = str(entry.get("mac") or "").strip()
+        mac_normalized = mac.upper().replace(":", "")
+        if hci_label and hci_label == target:
+            return hex_value
+        if mac_normalized and mac_normalized == target_normalized:
+            return hex_value
+    return ""
 
 
 # BlueZ AVRCP forwarding architecture (v2.63.0-rc.6+):
@@ -473,6 +506,15 @@ class DeviceActivationContext:
     # round-trip is never issued.  Default False so existing tests and
     # any other callers that don't pass the flag stay quiet on RSSI.
     enable_rssi_badge: bool = False
+    # EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE — gates the per-pair-attempt
+    # raw HCI Write_Class_Of_Device call (Samsung Q-series workaround).
+    # Default False so test fixtures that don't pass the flag don't
+    # accidentally fire the HCI write.
+    cod_override_enabled: bool = False
+    # ``BLUETOOTH_ADAPTERS`` config — used to look up per-adapter
+    # ``device_class`` for the BluetoothManager pre-pair hook. Default
+    # empty list mirrors the no-override case.
+    bluetooth_adapters: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -577,6 +619,7 @@ def activate_device(
         # socket — zero overhead for the default-off path.
         rssi_callback = _on_rssi_update if context.enable_rssi_badge else None
 
+        adapter_device_class_hex = _resolve_adapter_device_class(adapter, context.bluetooth_adapters)
         bt_mgr = context.bt_manager_factory(
             mac,
             adapter=adapter,
@@ -594,6 +637,8 @@ def activate_device(
             enable_a2dp_dance=context.enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=context.enable_pa_module_reload,
             enable_adapter_auto_recovery=context.enable_adapter_auto_recovery,
+            cod_override_enabled=context.cod_override_enabled,
+            adapter_device_class_hex=adapter_device_class_hex,
         )
         bt_available = bool(bt_mgr.check_bluetooth_available())
         if not bt_available:

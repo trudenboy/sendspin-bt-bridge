@@ -4534,6 +4534,19 @@ body {
             font-size: 11px;
             color: var(--error-color);
         }
+        .adapter-cod-override--disabled .adapter-cod-controls select,
+        .adapter-cod-override--disabled .adapter-cod-controls .adp-cod-custom {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .adapter-cod-live {
+            font-size: 11px;
+            color: var(--secondary-text-color);
+            font-family: 'Courier New', monospace;
+        }
+        .adapter-cod-live--match {
+            color: var(--success-color);
+        }
         .dot { font-size: 16px; text-align: center; }
         .dot.green { color: var(--success-color); }
         .dot.grey  { color: var(--secondary-text-color); }

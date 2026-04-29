@@ -25,7 +25,6 @@ import asyncio
 import contextlib
 import ctypes
 import logging
-import os
 import socket
 import struct
 import sys
@@ -258,44 +257,15 @@ def _seed_handle_map_from_kernel(handle_to_mac: dict[int, str]) -> None:
         sock.close()
 
 
-# ctypes.Structure mirrors btsocket.btmgmt_socket.SocketAddr exactly — same C
-# layout, validated working. We use HCI_CHANNEL_MONITOR (2) instead of channel 3.
-class _SocketAddr(ctypes.Structure):
-    _fields_ = [
-        ("hci_family", ctypes.c_ushort),
-        ("hci_dev", ctypes.c_ushort),
-        ("hci_channel", ctypes.c_ushort),
-    ]
-
-
 def _open_hci_monitor_socket() -> socket.socket:
     """Open BTPROTO_HCI socket on HCI_CHANNEL_MONITOR. Raises OSError if unavailable."""
-    if sys.platform != "linux":
-        raise OSError("HCI monitor requires Linux")
-    libc = ctypes.CDLL("libc.so.6", use_errno=True)
-    libc.socket.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
-    libc.socket.restype = ctypes.c_int
-    libc.bind.argtypes = (ctypes.c_int, ctypes.POINTER(_SocketAddr), ctypes.c_int)
-    libc.bind.restype = ctypes.c_int
-    fd = libc.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI)
-    if fd < 0:
-        raise OSError("Unable to open PF_BLUETOOTH socket")
-    try:
-        addr = _SocketAddr(
-            hci_family=_AF_BLUETOOTH,
-            hci_dev=_HCI_DEV_NONE,
-            hci_channel=_HCI_CHANNEL_MONITOR,
-        )
-        r = libc.bind(fd, ctypes.pointer(addr), ctypes.sizeof(addr))
-        if r < 0:
-            raise OSError(f"Unable to bind HCI_CHANNEL_MONITOR: errno={ctypes.get_errno()}")
-        return socket.socket(_AF_BLUETOOTH, socket.SOCK_RAW, _BTPROTO_HCI, fileno=fd)
-    except BaseException:
-        # Close the raw fd on any failure between socket() and the
-        # successful socket.socket() handoff — otherwise the backoff
-        # retry loop in _monitor_loop leaks one fd per failed attempt.
-        os.close(fd)
-        raise
+    from sendspin_bridge.services.bluetooth.hci_socket import (
+        HCI_CHANNEL_MONITOR,
+        HCI_DEV_NONE,
+        open_hci_socket,
+    )
+
+    return open_hci_socket(hci_dev=HCI_DEV_NONE, channel=HCI_CHANNEL_MONITOR)
 
 
 class HciAvrcpMonitor:
