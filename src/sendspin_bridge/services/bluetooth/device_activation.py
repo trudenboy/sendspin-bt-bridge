@@ -506,14 +506,11 @@ class DeviceActivationContext:
     # round-trip is never issued.  Default False so existing tests and
     # any other callers that don't pass the flag stay quiet on RSSI.
     enable_rssi_badge: bool = False
-    # EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE — gates the per-pair-attempt
-    # raw HCI Write_Class_Of_Device call (Samsung Q-series workaround).
-    # Default False so test fixtures that don't pass the flag don't
-    # accidentally fire the HCI write.
-    cod_override_enabled: bool = False
     # ``BLUETOOTH_ADAPTERS`` config — used to look up per-adapter
-    # ``device_class`` for the BluetoothManager pre-pair hook. Default
-    # empty list mirrors the no-override case.
+    # ``device_class`` for the BluetoothManager pre-pair hook. The hook
+    # fires a raw HCI Write_Class_Of_Device just before each outbound
+    # pair attempt as a Samsung Q-series workaround (bluez/bluez#1025).
+    # Default empty list = no override applied.
     bluetooth_adapters: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -637,7 +634,6 @@ def activate_device(
             enable_a2dp_dance=context.enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=context.enable_pa_module_reload,
             enable_adapter_auto_recovery=context.enable_adapter_auto_recovery,
-            cod_override_enabled=context.cod_override_enabled,
             adapter_device_class_hex=adapter_device_class_hex,
         )
         bt_available = bool(bt_mgr.check_bluetooth_available())

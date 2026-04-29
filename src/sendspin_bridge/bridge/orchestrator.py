@@ -126,10 +126,14 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
 def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> None:
     """Apply ``BLUETOOTH_ADAPTERS[].device_class`` to each kernel controller.
 
-    Called from startup once the experimental
-    ``EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`` flag is on. The value is a
-    6-hex-digit CoD (e.g. ``0x00010c``) and is delivered via raw HCI
-    ``Write_Class_Of_Device`` (OGF=0x03, OCF=0x0024) on a
+    Runs unconditionally on startup; entries without a ``device_class``
+    value are skipped. The UI surface that lets operators set this is
+    gated on the global "Show experimental features" toggle, but the
+    runtime always honours configured values so existing setups keep
+    working without an extra flip.
+
+    The value is a 6-hex-digit CoD (e.g. ``0x00010c``) delivered via
+    raw HCI ``Write_Class_Of_Device`` (OGF=0x03, OCF=0x0024) on a
     ``BTPROTO_HCI`` socket — same capability surface (``CAP_NET_RAW``)
     the AVRCP HCI monitor already uses.
 
@@ -217,7 +221,6 @@ class RuntimeBootstrap:
     web_port: int
     pulse_latency_msec: int
     log_level: str
-    cod_override_enabled: bool = False
     bluetooth_adapters: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -322,13 +325,12 @@ class BridgeOrchestrator:
         _harden_pulseaudio(disable_rescue_streams=bool(config.get("DISABLE_PA_RESCUE_STREAMS", False)))
 
         # Per-adapter Class of Device override — Samsung Q-series workaround
-        # (bluez/bluez#1025).  Gated behind the experimental flag because
-        # the raw HCI Write_Class_Of_Device the applier sends competes with
-        # bluetoothd's own CoD management; opt-in only for users hitting
-        # the Q-series filter. When the flag is off the applier is skipped
-        # entirely — even configured ``device_class`` entries are ignored.
-        if config.get("EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE"):
-            _apply_adapter_device_class_overrides(list(config.get("BLUETOOTH_ADAPTERS") or []))
+        # (bluez/bluez#1025).  Applied whenever an adapter entry has a
+        # ``device_class`` value; entries without one are skipped inside
+        # the helper. The UI surface is gated on the global "Show
+        # experimental features" toggle so casual users don't trip over
+        # it, but the runtime always honours configured values.
+        _apply_adapter_device_class_overrides(list(config.get("BLUETOOTH_ADAPTERS") or []))
 
         return RuntimeBootstrap(
             config=config,
@@ -346,7 +348,6 @@ class BridgeOrchestrator:
             enable_a2dp_sink_recovery_dance=enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=enable_pa_module_reload,
             enable_adapter_auto_recovery=enable_adapter_auto_recovery,
-            cod_override_enabled=bool(config.get("EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE", False)),
             bluetooth_adapters=list(config.get("BLUETOOTH_ADAPTERS") or []),
             enable_rssi_badge=enable_rssi_badge,
             base_listen_port=base_listen_port,
@@ -564,7 +565,6 @@ class BridgeOrchestrator:
             enable_a2dp_sink_recovery_dance=bootstrap.enable_a2dp_sink_recovery_dance,
             enable_pa_module_reload=bootstrap.enable_pa_module_reload,
             enable_adapter_auto_recovery=bootstrap.enable_adapter_auto_recovery,
-            cod_override_enabled=getattr(bootstrap, "cod_override_enabled", False),
             bluetooth_adapters=getattr(bootstrap, "bluetooth_adapters", []),
             enable_rssi_badge=bootstrap.enable_rssi_badge,
             base_listen_port=base_listen_port,

@@ -305,11 +305,6 @@
       "default": false,
       "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the adapter as a last-ditch attempt before auto-releasing BT management. Disruptive: the USB step briefly disconnects every device on that controller, and it requires CAP_NET_ADMIN plus /dev/rfkill and /sys/bus/usb access (Docker privileged or matching capabilities)."
     },
-    "EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE": {
-      "type": "boolean",
-      "default": false,
-      "description": "Experimental: apply per-adapter Class of Device override (BLUETOOTH_ADAPTERS[].device_class) via raw HCI Write_Class_Of_Device. Workaround for the Samsung Q-series soundbar pairing quirk documented in bluez/bluez#1025 — the soundbar's BR/EDR firmware filters incoming connections by initiator CoD and rejects the default 0x0c0000 with `Connection Rejected: Limited Resources (0x0d)`. Setting CoD to 0x00010c (Computer/Laptop) bypasses the filter. Off by default — most users don't need this. Re-applied just before each pair attempt so an intervening adapter power-cycle doesn't undo the override before the outbound Connect."
-    },
     "RSSI_BADGE": {
       "type": "boolean",
       "default": true,

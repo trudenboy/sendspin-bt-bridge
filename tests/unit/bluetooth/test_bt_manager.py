@@ -1951,41 +1951,42 @@ def test_apply_connected_state_called_by_dbus_props_changed_path():
 # ---------------------------------------------------------------------------
 
 
-def _make_cod_manager(cod_override_enabled: bool, adapter_device_class_hex: str, adapter: str = "hci0"):
+def _make_cod_manager(adapter_device_class_hex: str, adapter: str = "hci0"):
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         return BluetoothManager(
             mac_address="AA:BB:CC:DD:EE:FF",
             device_name="TestSpeaker",
-            cod_override_enabled=cod_override_enabled,
             adapter_device_class_hex=adapter_device_class_hex,
             adapter=adapter,
         )
 
 
 def test_cod_valid_hex_pre_parsed_to_int():
-    mgr = _make_cod_manager(True, "0x00010c")
+    mgr = _make_cod_manager("0x00010c")
     assert mgr._cod_override_int == 0x00010C
 
 
-def test_cod_invalid_hex_pre_parsed_to_none_and_override_int_is_none():
-    with patch("subprocess.check_output", return_value=""):
-        import logging
+def test_cod_invalid_hex_pre_parsed_to_none_and_warns():
+    import logging
 
-        with patch.object(logging.getLogger("sendspin_bridge.bluetooth.manager"), "warning") as mock_warn:
-            mgr = _make_cod_manager(True, "not-valid-hex")
+    with (
+        patch("subprocess.check_output", return_value=""),
+        patch.object(logging.getLogger("sendspin_bridge.bluetooth.manager"), "warning") as mock_warn,
+    ):
+        mgr = _make_cod_manager("not-valid-hex")
     assert mgr._cod_override_int is None
     mock_warn.assert_called_once()
 
 
-def test_cod_flag_off_skips_parse_and_leaves_none():
-    mgr = _make_cod_manager(False, "0x00010c")
+def test_cod_empty_hex_leaves_none():
+    mgr = _make_cod_manager("")
     assert mgr._cod_override_int is None
 
 
 def test_pre_pair_hook_calls_set_device_class_with_int(monkeypatch):
-    mgr = _make_cod_manager(True, "0x00010c", adapter="hci2")
+    mgr = _make_cod_manager("0x00010c", adapter="hci2")
     mgr.adapter_hci_name = "hci2"
 
     calls = []
@@ -2003,7 +2004,7 @@ def test_pre_pair_hook_calls_set_device_class_with_int(monkeypatch):
 
 
 def test_pre_pair_hook_no_op_when_cod_override_int_is_none(monkeypatch):
-    mgr = _make_cod_manager(True, "invalid")
+    mgr = _make_cod_manager("invalid")
     mgr.adapter_hci_name = "hci0"
 
     calls = []
@@ -2015,8 +2016,8 @@ def test_pre_pair_hook_no_op_when_cod_override_int_is_none(monkeypatch):
     assert calls == []
 
 
-def test_pre_pair_hook_no_op_when_flag_off(monkeypatch):
-    mgr = _make_cod_manager(False, "0x00010c")
+def test_pre_pair_hook_no_op_when_hex_empty(monkeypatch):
+    mgr = _make_cod_manager("")
     mgr.adapter_hci_name = "hci0"
 
     calls = []

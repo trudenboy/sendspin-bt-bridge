@@ -35,13 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is regenerated automatically on every release. Full ruleset and
   rationale live in `CONTRIBUTING.md` § Changelog Discipline; an
   agent-facing summary lives in `CLAUDE.md`.
-- **Per-adapter CoD override is now experimental and off-by-default.**
-  Enable via **Configuration → Advanced → Experimental features →
-  "Per-adapter Class of Device override"**. Once on, the Class of
-  Device dropdown in each adapter row becomes editable. Most users
-  don't need this; it targets the Samsung Q-series quirk specifically.
-  The adapter row also shows the live CoD read back from the adapter
-  after each apply.
+- **Per-adapter CoD override surface gated on "Show experimental
+  features".** The dedicated `EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`
+  toggle (briefly added in rc.7–rc.9) is gone. The adapter row's
+  Class of Device dropdown now appears only when **Show experimental
+  features** is on (top of Configuration), styled with a red dashed
+  outline and ⚠ icon to flag it as experimental. The runtime always
+  honours configured `device_class` values regardless of the UI
+  toggle, so existing setups don't need to flip anything to keep
+  working. Targets the Samsung Q-series quirk (bluez/bluez#1025); the
+  adapter row also shows the live CoD read back after each apply.
 
 ### Removed
 - `dev-requirements.txt` and `scripts/sync_requirements.py` — replaced
@@ -59,8 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   socket — verified working on both adapters. The override is also
   re-applied immediately before each outbound pair attempt so an
   intervening `bluetoothd` power-cycle doesn't undo it before the
-  soundbar's CoD filter inspects the initiator. Gated behind the new
-  experimental flag — see `### Changed` above.
+  soundbar's CoD filter inspects the initiator.
 - **CoD startup applier skipped adapter when config stored `id` key.**
   Adapter config entries use `id` for the HCI label (`hci0` etc.) but
   the startup applier was only looking for a `hci` key, so it always

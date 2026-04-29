@@ -126,7 +126,6 @@ class BluetoothManager:
         enable_a2dp_dance: bool = False,
         enable_pa_module_reload: bool = False,
         enable_adapter_auto_recovery: bool = False,
-        cod_override_enabled: bool = False,
         adapter_device_class_hex: str = "",
     ):
         self.mac_address = mac_address
@@ -168,16 +167,16 @@ class BluetoothManager:
         # Off by default because USB unbind/rebind briefly disconnects
         # every device on the same controller.
         self._enable_adapter_auto_recovery = bool(enable_adapter_auto_recovery)
-        # EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE — gates the per-pair-attempt
-        # raw HCI Write_Class_Of_Device call. Re-applies CoD just before
-        # outbound Connect so the soundbar's CoD filter (Samsung Q-series)
-        # sees Major=Computer at the moment it inspects, even if
-        # bluetoothd power-cycled the adapter between startup and pair.
-        # Pre-parse hex once so the pre-pair hook never emits a WARNING on
-        # every pair attempt for a bad value that was already bad at init.
-        self._cod_override_enabled = bool(cod_override_enabled)
+        # Per-pair-attempt raw HCI Write_Class_Of_Device — re-applies the
+        # configured CoD just before outbound Connect so the soundbar's
+        # CoD filter (Samsung Q-series, bluez/bluez#1025) sees
+        # Major=Computer at the moment it inspects, even if bluetoothd
+        # power-cycled the adapter between startup and pair. Pre-parse
+        # hex once so the pre-pair hook never emits a WARNING on every
+        # pair attempt for a bad value that was already bad at init.
+        # No-op when ``adapter_device_class_hex`` is empty.
         hex_raw = str(adapter_device_class_hex or "").strip()
-        if hex_raw and self._cod_override_enabled:
+        if hex_raw:
             try:
                 from sendspin_bridge.services.bluetooth.bt_class_of_device import parse_class_hex as _parse_class_hex
 
@@ -311,13 +310,13 @@ class BluetoothManager:
     def _maybe_apply_cod_override_pre_pair(self) -> None:
         """Re-apply ``device_class`` to the resolved adapter just before pair.
 
-        No-op unless ``EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`` is on AND
-        a valid ``device_class`` was set at ``__init__`` (pre-validated to an
-        int there). Calls ``set_device_class`` directly so failures are logged
-        at WARNING only once — not on every pair attempt for an already-known
-        bad hex value (which was already warned at init time).
+        No-op unless a valid ``device_class`` was set at ``__init__``
+        (pre-validated to an int there). Calls ``set_device_class``
+        directly so failures are logged at WARNING only once — not on
+        every pair attempt for an already-known bad hex value (which
+        was already warned at init time).
         """
-        if not self._cod_override_enabled or self._cod_override_int is None:
+        if self._cod_override_int is None:
             return
         hci_name = self.adapter_hci_name or ""
         if not hci_name.startswith("hci"):

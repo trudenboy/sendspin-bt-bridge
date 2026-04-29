@@ -47,7 +47,7 @@ from sendspin_bridge.config.network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.66.0-rc.9"
+VERSION = "2.66.0-rc.10"
 BUILD_DATE = "2026-04-29"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
@@ -142,12 +142,6 @@ DEFAULT_CONFIG = {
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
     "EXPERIMENTAL_PAIR_JUST_WORKS": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
-    # v2.66.0-rc.7 — apply per-adapter Class of Device override
-    # (BLUETOOTH_ADAPTERS[].device_class) via raw HCI Write_Class_Of_Device.
-    # Workaround for the Samsung Q-series soundbar pairing quirk
-    # documented in bluez/bluez#1025. Off by default; turn on only if
-    # you're hitting the Q-series filter.
-    "EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE": False,
     # Periodic live-RSSI refresh for connected speakers (mgmt opcode 0x0031).
     # On by default since v2.64.0 — feature has been stable since
     # 2.63.0-rc.8.  The refresh tick adds one mgmt round-trip per

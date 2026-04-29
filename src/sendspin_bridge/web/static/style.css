@@ -4480,6 +4480,18 @@ body {
             gap: 6px;
             align-items: center;
             min-width: 0;
+            padding: 4px 6px;
+            border-radius: 5px;
+        }
+        .adapter-cod-override--experimental {
+            border: 1px dashed var(--error-color, #db4437);
+            background: rgba(219, 68, 55, 0.06);
+        }
+        .adapter-cod-warn {
+            font-size: 13px;
+            line-height: 1;
+            color: var(--error-color, #db4437);
+            cursor: help;
         }
         .adapter-cod-inline .adp-cod-preset {
             flex: 1 1 auto;
@@ -4514,11 +4526,6 @@ body {
             flex-basis: 100%;
             font-size: 11px;
             color: var(--error-color);
-        }
-        .adapter-cod-override--disabled .adp-cod-preset,
-        .adapter-cod-override--disabled .adp-cod-custom {
-            opacity: 0.45;
-            cursor: not-allowed;
         }
         .dot { font-size: 16px; text-align: center; }
         .dot.green { color: var(--success-color); }
