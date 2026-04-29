@@ -8,12 +8,14 @@ repos:
       - id: check-yaml
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+    # Pin matches the ruff version in [project.optional-dependencies].dev
+    # so local pre-commit and CI's `uv run ruff` apply the same rules
+    # and formatter. Bump alongside that pin.
+    rev: v0.15.12
     hooks:
       - id: ruff
         args:
           - --fix
-          - --extend-ignore=UP038
       - id: ruff-format
 
   - repo: https://github.com/astral-sh/uv-pre-commit

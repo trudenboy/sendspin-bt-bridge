@@ -83,7 +83,6 @@ select = [
 ignore = [
     "E501",   # line too long (handled by formatter)
     "UP017",  # datetime.UTC alias (we use timezone.utc for Python 3.9 compat)
-    "UP038",  # isinstance union syntax (deprecated in ruff 0.14; tuple form is faster at runtime)
     "SIM102", # collapsible if (reduces readability in complex conditionals)
     "SIM103", # return condition directly (reduces readability)
     "SIM105", # contextlib.suppress (try/except/pass is clearer for this project)
