@@ -70,8 +70,8 @@ def _patch_registry(monkeypatch, initial: list | None = None) -> list:
         live[:] = list(mutator(list(live)))
         return SimpleNamespace(active_clients=list(live), disabled_devices=[])
 
-    monkeypatch.setattr("state.set_clients", _set_clients)
-    monkeypatch.setattr("state.get_clients_snapshot", _get_snapshot)
+    monkeypatch.setattr("sendspin_bridge.bridge.state.set_clients", _set_clients)
+    monkeypatch.setattr("sendspin_bridge.bridge.state.get_clients_snapshot", _get_snapshot)
     monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_registry.mutate_active_clients", _mutate)
     return live
 
@@ -460,7 +460,7 @@ def test_start_client_rollback_on_run_task_failure(monkeypatch):
 
         live = _patch_registry(monkeypatch)
         notify_calls: list[int] = []
-        monkeypatch.setattr("state.notify_status_changed", lambda: notify_calls.append(1))
+        monkeypatch.setattr("sendspin_bridge.bridge.state.notify_status_changed", lambda: notify_calls.append(1))
 
         captured_cb: dict[str, object] = {}
 

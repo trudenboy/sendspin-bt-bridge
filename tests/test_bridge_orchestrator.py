@@ -9,9 +9,9 @@ from types import SimpleNamespace
 
 import pytest
 
+import sendspin_bridge.bridge.state as state
 import sendspin_bridge.config as config
-import state
-from bridge_orchestrator import BridgeOrchestrator
+from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 
 
 class RecordingLifecycleState:

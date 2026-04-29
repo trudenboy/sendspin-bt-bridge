@@ -535,7 +535,7 @@ class HaMqttPublisher:
         except RuntimeError:
             try:
                 # Fall back to the bridge's main loop.
-                import state as live_state
+                import sendspin_bridge.bridge.state as live_state
 
                 return live_state.get_main_loop()
             except Exception:

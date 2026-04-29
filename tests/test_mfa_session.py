@@ -35,8 +35,8 @@ def app():
     """Minimal Flask app with the auth blueprint and supporting routes."""
     application = Flask(
         __name__,
-        template_folder="../templates",
-        static_folder="../static",
+        template_folder="../src/sendspin_bridge/web/templates",
+        static_folder="../src/sendspin_bridge/web/static",
     )
     application.secret_key = "test-secret"
     application.config["TESTING"] = True

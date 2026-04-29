@@ -45,7 +45,7 @@ def _reset_bt_operation_lock():
 
 
 def _make_manager(adapter_hci_name: str = "hci0"):
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(

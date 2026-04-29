@@ -377,7 +377,7 @@ class ReconfigOrchestrator:
         # re-reads the list under the registry lock to avoid the
         # read-modify-write race against concurrent ``POST /api/config``
         # request threads (Waitress runs requests in parallel).
-        import state as _state
+        import sendspin_bridge.bridge.state as _state
         from sendspin_bridge.services.bluetooth.device_registry import mutate_active_clients
 
         try:
@@ -528,7 +528,7 @@ class ReconfigOrchestrator:
     def _rollback_started_client(self, mac_key: str) -> None:
         """Remove a client that failed its ``run()`` bootstrap from the registry."""
         try:
-            import state as _state
+            import sendspin_bridge.bridge.state as _state
             from sendspin_bridge.services.bluetooth.device_registry import mutate_active_clients
         except Exception:  # pragma: no cover — imports must succeed in practice
             return

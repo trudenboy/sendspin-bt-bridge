@@ -2,7 +2,7 @@ import threading
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.lifecycle.status_snapshot import (
     build_bridge_snapshot,
     build_device_snapshot,

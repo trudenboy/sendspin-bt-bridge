@@ -366,7 +366,7 @@ class BridgeOrchestrator:
         """Publish clients to shared state and start the web server thread."""
         web_main_fn = web_main
         if web_main_fn is None:
-            from web_interface import main as imported_web_main
+            from sendspin_bridge.web.interface import main as imported_web_main
 
             web_main_fn = imported_web_main
 
@@ -495,8 +495,8 @@ class BridgeOrchestrator:
             return
         bridge_name = str(config.get("BRIDGE_NAME") or "").strip()
         try:
+            from sendspin_bridge.bridge.state import set_duplicate_device_warnings
             from sendspin_bridge.services.bluetooth.duplicate_device_check import find_duplicate_devices
-            from state import set_duplicate_device_warnings
 
             warnings = await loop.run_in_executor(None, find_duplicate_devices, config, bridge_name)
             set_duplicate_device_warnings(warnings)
@@ -711,13 +711,13 @@ class BridgeOrchestrator:
         for the bridge's lifetime.
         """
         try:
+            from sendspin_bridge.bridge.state import get_clients_snapshot, get_internal_event_publisher
             from sendspin_bridge.services.ha.ha_integration_lifecycle import (
                 HaIntegrationLifecycle,
                 set_default_lifecycle,
             )
             from sendspin_bridge.services.ha.ha_state_projector import project_snapshot
             from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
-            from state import get_clients_snapshot, get_internal_event_publisher
         except Exception as exc:  # pragma: no cover — import-time guard
             logger.info("HA integration unavailable (import failed): %s", exc)
             return None

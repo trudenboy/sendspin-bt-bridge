@@ -42,7 +42,7 @@ def _mock_config(tmp_path, monkeypatch):
 @pytest.fixture()
 def _default_trusted(monkeypatch):
     """Pin _TRUSTED_PROXIES to the well-known defaults for deterministic tests."""
-    import web_interface
+    import sendspin_bridge.web.interface as web_interface
 
     monkeypatch.setattr(web_interface, "_TRUSTED_PROXIES", {"127.0.0.1", "::1", "172.30.32.2"})
 
@@ -72,7 +72,7 @@ def _dummy_app(environ, start_response):
 
 @pytest.mark.usefixtures("_default_trusted")
 def test_sets_script_name_from_trusted_proxy():
-    from web_interface import _IngressMiddleware
+    from sendspin_bridge.web.interface import _IngressMiddleware
 
     captured = {}
 
@@ -89,7 +89,7 @@ def test_sets_script_name_from_trusted_proxy():
 
 @pytest.mark.usefixtures("_default_trusted")
 def test_ignores_untrusted_proxy():
-    from web_interface import _IngressMiddleware
+    from sendspin_bridge.web.interface import _IngressMiddleware
 
     captured = {}
 
@@ -107,7 +107,7 @@ def test_ignores_untrusted_proxy():
 @pytest.mark.usefixtures("_default_trusted")
 def test_strips_ingress_prefix_from_path_info():
     """SCRIPT_NAME is set; PATH_INFO is left unchanged by the middleware."""
-    from web_interface import _IngressMiddleware
+    from sendspin_bridge.web.interface import _IngressMiddleware
 
     captured = {}
 
@@ -129,7 +129,7 @@ def test_strips_ingress_prefix_from_path_info():
 
 @pytest.mark.usefixtures("_default_trusted")
 def test_no_header_passthrough():
-    from web_interface import _IngressMiddleware
+    from sendspin_bridge.web.interface import _IngressMiddleware
 
     captured = {}
 
@@ -147,7 +147,7 @@ def test_no_header_passthrough():
 
 @pytest.mark.usefixtures("_default_trusted")
 def test_ipv6_trusted():
-    from web_interface import _IngressMiddleware
+    from sendspin_bridge.web.interface import _IngressMiddleware
 
     captured = {}
 
@@ -164,7 +164,7 @@ def test_ipv6_trusted():
 
 def test_session_timeout_loaded_from_config(tmp_path, monkeypatch):
     import sendspin_bridge.config as config
-    import web_interface
+    import sendspin_bridge.web.interface as web_interface
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")

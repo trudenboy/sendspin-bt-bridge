@@ -302,8 +302,8 @@ def test_apply_device_config_change_rejects_unknown_player(monkeypatch):
 
 
 def test_schedule_coroutine_no_loop_returns_503(monkeypatch):
+    import sendspin_bridge.bridge.state as live_state
     import sendspin_bridge.services.bluetooth.bt_commands as bt
-    import state as live_state
 
     monkeypatch.setattr(live_state, "get_main_loop", lambda: None)
 

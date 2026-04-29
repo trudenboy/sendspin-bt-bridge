@@ -7,7 +7,7 @@ import hmac
 import urllib.parse as _up
 from functools import lru_cache
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.config import ensure_secret_key, load_config
 
 

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.diagnostics.log_analysis import classify_subprocess_stderr_level
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 from sendspin_client import SendspinClient, _filter_duplicate_bluetooth_devices

@@ -63,7 +63,7 @@ def auth_client(monkeypatch):
     # in lockstep.  Adding a path here without updating the source module
     # creates a false-positive test, so the test below also asserts the
     # set is identical to the live module's.
-    from web_interface import _PUBLIC_PATHS as _LIVE_PUBLIC_PATHS
+    from sendspin_bridge.web.interface import _PUBLIC_PATHS as _LIVE_PUBLIC_PATHS
 
     _PUBLIC_PATHS = set(_LIVE_PUBLIC_PATHS)
 
@@ -162,7 +162,7 @@ def test_ha_pair_is_public_pre_auth(auth_client):
 def test_public_paths_set_includes_ha_pair():
     """Lockstep guard: the live ``_PUBLIC_PATHS`` must list
     ``/api/auth/ha-pair`` alongside login/logout/health/preflight."""
-    from web_interface import _PUBLIC_PATHS
+    from sendspin_bridge.web.interface import _PUBLIC_PATHS
 
     assert "/api/auth/ha-pair" in _PUBLIC_PATHS
 

@@ -1558,12 +1558,12 @@ def _build_full_text_report(
             np = g.get("now_playing", {})
             if np:
                 full.append(
-                    f"    Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('state', '?')})"
+                    f"    Now playing: {np.get('artist', '?')} — {np.get('title', '?')} ({np.get('sendspin_bridge.bridge.state', '?')})"
                 )
             for m in g.get("members", []):
                 avail = "OK" if m.get("available") else "FAIL"
                 vol = f" vol={m.get('volume')}" if m.get("volume") is not None else ""
-                full.append(f"    {m.get('name', '?')}: {m.get('state', '?')} [{avail}]{vol}")
+                full.append(f"    {m.get('name', '?')}: {m.get('sendspin_bridge.bridge.state', '?')} [{avail}]{vol}")
         full.append("")
 
     if assistant:

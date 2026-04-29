@@ -23,10 +23,10 @@ def _make_client(
 
 
 @pytest.mark.asyncio
-@patch("bt_monitor._SINK_CORRECTION_DELAY", 0)
+@patch("sendspin_bridge.bluetooth.monitor._SINK_CORRECTION_DELAY", 0)
 async def test_skips_triggering_device():
     """amove_pid_sink_inputs must NOT be called for the triggering device."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     triggering_mgr = MagicMock()
     client_a = _make_client("A", bt_manager=triggering_mgr, pid=100, sink="sink_a")
@@ -49,10 +49,10 @@ async def test_skips_triggering_device():
 
 
 @pytest.mark.asyncio
-@patch("bt_monitor._SINK_CORRECTION_DELAY", 0)
+@patch("sendspin_bridge.bluetooth.monitor._SINK_CORRECTION_DELAY", 0)
 async def test_corrects_misrouted_stream():
     """Verify amove_pid_sink_inputs is called with B's pid and sink."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     triggering_mgr = MagicMock()
     client_a = _make_client("A", bt_manager=triggering_mgr, pid=100, sink="sink_a")
@@ -75,10 +75,10 @@ async def test_corrects_misrouted_stream():
 
 
 @pytest.mark.asyncio
-@patch("bt_monitor._SINK_CORRECTION_DELAY", 0)
+@patch("sendspin_bridge.bluetooth.monitor._SINK_CORRECTION_DELAY", 0)
 async def test_skips_client_without_subprocess():
     """Client with no subprocess (pid=None) must be skipped."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     triggering_mgr = MagicMock()
     client = _make_client("NoProc", bt_manager=MagicMock(), pid=None, sink="sink_x")
@@ -99,10 +99,10 @@ async def test_skips_client_without_subprocess():
 
 
 @pytest.mark.asyncio
-@patch("bt_monitor._SINK_CORRECTION_DELAY", 0)
+@patch("sendspin_bridge.bluetooth.monitor._SINK_CORRECTION_DELAY", 0)
 async def test_skips_client_without_sink():
     """Client with a pid but no bluetooth_sink_name must be skipped."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     triggering_mgr = MagicMock()
     client = _make_client("NoSink", bt_manager=MagicMock(), pid=500, sink=None)
@@ -123,10 +123,10 @@ async def test_skips_client_without_sink():
 
 
 @pytest.mark.asyncio
-@patch("bt_monitor._SINK_CORRECTION_DELAY", 0)
+@patch("sendspin_bridge.bluetooth.monitor._SINK_CORRECTION_DELAY", 0)
 async def test_handles_pulse_error_gracefully():
     """PulseAudio errors must be caught — function returns normally."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     triggering_mgr = MagicMock()
     client = _make_client("Err", bt_manager=MagicMock(), pid=999, sink="sink_err")

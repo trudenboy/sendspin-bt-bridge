@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.lifecycle.lifecycle_state import BridgeLifecycleState
 
 

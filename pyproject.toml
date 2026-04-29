@@ -39,11 +39,12 @@ path = "VERSION"
 pattern = "^(?P<version>.+)$"
 
 [tool.hatch.build.targets.wheel]
-# Mid-migration: both the legacy flat packages (routes/, services/) and the
-# new src/sendspin_bridge/ skeleton are packaged. As modules migrate (B2–B6),
-# the flat entries get removed; B6 leaves only ["src/sendspin_bridge"].
-packages = ["routes", "services", "src/sendspin_bridge"]
-# Top-level *.py modules picked up automatically by hatchling.
+# B5: routes/services/templates/static moved into src/sendspin_bridge/.
+# Only the top-level src package remains. B6 will move sendspin_client.py
+# into the package as well; until then it ships as a sibling module.
+packages = ["src/sendspin_bridge"]
+# Hatchling auto-includes non-.py files inside the package tree (Flask
+# templates/, static/, config/schema.json), so no force-include is needed.
 
 [project.optional-dependencies]
 dev = [

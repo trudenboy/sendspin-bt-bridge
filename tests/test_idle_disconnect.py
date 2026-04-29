@@ -314,7 +314,7 @@ class TestBtMonitorStandbyCheck:
         """Verify the standby check exists in _monitor_polling logic."""
         import inspect
 
-        import bt_monitor
+        import sendspin_bridge.bluetooth.monitor as bt_monitor
 
         src = inspect.getsource(bt_monitor._monitor_polling)
         assert "bt_standby" in src, "_monitor_polling should check bt_standby"
@@ -323,7 +323,7 @@ class TestBtMonitorStandbyCheck:
         """Verify the standby check exists in _inner_dbus_monitor logic."""
         import inspect
 
-        import bt_monitor
+        import sendspin_bridge.bluetooth.monitor as bt_monitor
 
         src = inspect.getsource(bt_monitor._inner_dbus_monitor)
         assert "bt_standby" in src, "_inner_dbus_monitor should check bt_standby"
@@ -356,7 +356,7 @@ class TestWakeApiEndpoint:
 
         with (
             patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(client, None)),
-            patch("state.get_main_loop", return_value=loop),
+            patch("sendspin_bridge.bridge.state.get_main_loop", return_value=loop),
         ):
             app = self._make_app()
             with app.test_client() as tc:

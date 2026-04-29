@@ -37,10 +37,10 @@ ha_bp = Blueprint("ha_integration", __name__)
 
 def _build_projection_for_request():
     """Build a fresh ``HAStateProjection`` from the live bridge snapshot."""
+    from sendspin_bridge.bridge.state import get_clients_snapshot
     from sendspin_bridge.config import ensure_bridge_name, get_runtime_version, load_config
     from sendspin_bridge.services.ha.ha_state_projector import project_snapshot
     from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
-    from state import get_clients_snapshot
 
     config = load_config()
     bridge_name = ensure_bridge_name(config)
@@ -101,7 +101,7 @@ def api_status_events():
             )
         status_module._sse_count += 1
 
-    from state import get_internal_event_publisher
+    from sendspin_bridge.bridge.state import get_internal_event_publisher
 
     publisher = get_internal_event_publisher()
     msg_q: queue.Queue = queue.Queue(maxsize=_EVENT_QUEUE_MAXSIZE)

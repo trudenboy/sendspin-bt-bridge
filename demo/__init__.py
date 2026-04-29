@@ -36,8 +36,8 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 1. Patch BluetoothManager class
     # ------------------------------------------------------------------
-    import bluetooth_manager
-    import state as _st
+    import sendspin_bridge.bluetooth.manager as bluetooth_manager
+    import sendspin_bridge.bridge.state as _st
     from demo.bt_manager import DemoBluetoothManager
     from demo.fixtures import (
         DEMO_ADAPTER_NAMES,
@@ -421,7 +421,7 @@ def install() -> None:
         if not _demo_enabled():
             _original_run_bt_scan(job_id, adapter, audio_only)
             return
-        from state import finish_scan_job
+        from sendspin_bridge.bridge.state import finish_scan_job
 
         time.sleep(1.5)
         selected_adapter = str(get_demo_adapter(adapter)["id"]) if adapter else ""
@@ -472,7 +472,7 @@ def install() -> None:
             )
             return
         del quiesce, no_input_no_output_agent  # demo mode ignores per-pair flags
-        from state import finish_scan_job
+        from sendspin_bridge.bridge.state import finish_scan_job
 
         del adapter
         nonlocal _demo_runtime_paired_devices, _demo_runtime_bt_device_info
@@ -758,7 +758,7 @@ def install() -> None:
     _config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
     _config_mod.update_config = _demo_update_config  # type: ignore[assignment]
     _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
-    import bridge_orchestrator as _bridge_orchestrator
+    import sendspin_bridge.bridge.orchestrator as _bridge_orchestrator
     import sendspin_bridge.web.routes.api_config as _api_config_mod
 
     _bridge_orchestrator.load_config = _demo_load_config
@@ -786,7 +786,11 @@ def install() -> None:
     def _simulate_demo_restart() -> None:
         if not _demo_enabled():
             return
-        from state import complete_startup_progress, reset_startup_progress, update_startup_progress
+        from sendspin_bridge.bridge.state import (
+            complete_startup_progress,
+            reset_startup_progress,
+            update_startup_progress,
+        )
 
         reset_startup_progress(6, message="Demo restart initiated")
         update_startup_progress(

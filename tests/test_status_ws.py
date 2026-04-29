@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-import state as _state
+import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.web.routes.api_ws import status_ws_iter
 
 

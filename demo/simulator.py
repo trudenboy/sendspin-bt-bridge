@@ -90,7 +90,7 @@ async def run_simulator(clients: list) -> None:
 
     def _sync_ma_now_playing(queue_members: dict[str, list], queue_state: dict[str, dict[str, int]]) -> None:
         """Sync MA now-playing state for sync groups and solo demo queues."""
-        import state as _st
+        import sendspin_bridge.bridge.state as _st
 
         if not _st.is_ma_connected():
             return

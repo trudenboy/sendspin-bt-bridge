@@ -12,7 +12,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import state
+import sendspin_bridge.bridge.state as state
+from sendspin_bridge.bridge.state import get_adapter_name, get_ma_group_for_player_id, get_ma_now_playing_for_group
 from sendspin_bridge.config import BUILD_DATE, get_runtime_version, load_config, resolve_device_room_context
 from sendspin_bridge.services.bluetooth import _match_player_name
 from sendspin_bridge.services.bluetooth.device_health_state import (
@@ -20,7 +21,6 @@ from sendspin_bridge.services.bluetooth.device_health_state import (
     compute_device_health_state,
 )
 from sendspin_bridge.services.ipc.bridge_state_model import build_normalized_device_state
-from state import get_adapter_name, get_ma_group_for_player_id, get_ma_now_playing_for_group
 
 UTC = timezone.utc
 

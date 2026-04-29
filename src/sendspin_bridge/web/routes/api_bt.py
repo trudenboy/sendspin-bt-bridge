@@ -277,7 +277,7 @@ def api_bt_wake():
         return jsonify({"success": False, "error": "Device is not in standby"}), 409
     import asyncio
 
-    import state as _state
+    import sendspin_bridge.bridge.state as _state
 
     loop = _state.get_main_loop()
     if loop and loop.is_running():
@@ -332,7 +332,7 @@ def api_bt_power_save():
 
     import asyncio
 
-    import state as _state
+    import sendspin_bridge.bridge.state as _state
 
     loop = _state.get_main_loop()
     if loop is None or not loop.is_running():
@@ -378,7 +378,7 @@ def api_bt_standby():
         return jsonify({"success": False, "error": "Device is already in standby"}), 409
     import asyncio
 
-    import state as _state
+    import sendspin_bridge.bridge.state as _state
 
     loop = _state.get_main_loop()
     if loop and loop.is_running():

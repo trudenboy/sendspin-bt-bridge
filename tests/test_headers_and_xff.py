@@ -75,7 +75,7 @@ class TestServerErrorHandler:
     def _build_app(self, monkeypatch):
         import importlib
 
-        import web_interface
+        import sendspin_bridge.web.interface as web_interface
 
         importlib.reload(web_interface)
         web_interface.app.config["TESTING"] = False
@@ -120,7 +120,7 @@ class TestXFrameOptions:
         import importlib
 
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
-        import web_interface
+        import sendspin_bridge.web.interface as web_interface
 
         importlib.reload(web_interface)
         client = web_interface.app.test_client()
@@ -131,7 +131,7 @@ class TestXFrameOptions:
         import importlib
 
         monkeypatch.setenv("SUPERVISOR_TOKEN", "fake-token")
-        import web_interface
+        import sendspin_bridge.web.interface as web_interface
 
         importlib.reload(web_interface)
         client = web_interface.app.test_client()

@@ -3,7 +3,7 @@
 import threading
 import uuid
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.bluetooth.device_registry import set_active_clients
 
 

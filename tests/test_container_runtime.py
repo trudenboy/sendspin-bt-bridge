@@ -4,9 +4,9 @@ from scripts.check_container_runtime import _import_runtime_modules, _run_transl
 def test_container_runtime_smoke_imports_runtime_modules():
     imported = _import_runtime_modules()
 
-    assert "bridge_orchestrator" in imported
-    assert "sendspin_client" in imported
-    assert "web_interface" in imported
+    assert "sendspin_bridge.bridge.orchestrator" in imported
+    assert "sendspin_client" in imported  # B6 will rename to sendspin_bridge.bridge.client
+    assert "sendspin_bridge.web.interface" in imported
 
 
 def test_container_runtime_smoke_runs_translation_path():

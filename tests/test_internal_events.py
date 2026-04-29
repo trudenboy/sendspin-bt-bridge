@@ -4,7 +4,7 @@ import threading
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.diagnostics.internal_events import (
     DeviceEventType,
     InternalEventPublisher,

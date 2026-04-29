@@ -91,7 +91,7 @@ def bt_manager():
     recovery-path tests exercise the full code path. Tests that need to verify
     the default-off behavior should construct their own manager explicitly.
     """
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     # Mock subprocess calls that happen in __init__ (adapter resolution)
     with patch("subprocess.check_output", return_value=""):
@@ -111,7 +111,7 @@ def bt_manager():
 
 def test_bt_executor_pool_size():
     """The module-level thread pool must have at least 4 workers."""
-    from bluetooth_manager import _bt_executor
+    from sendspin_bridge.bluetooth.manager import _bt_executor
 
     assert _bt_executor._max_workers >= 4
 
@@ -134,10 +134,10 @@ def test_configure_bluetooth_audio_pipewire_pattern(bt_manager):
 
     fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
     with (
-        patch("bt_audio.list_sinks", return_value=fake_sinks),
-        patch("bt_audio.get_sink_volume", return_value=50),
-        patch("bt_audio.set_sink_mute", return_value=True),
-        patch("bt_audio.set_sink_volume", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=fake_sinks),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -152,10 +152,10 @@ def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
 
     fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
     with (
-        patch("bt_audio.list_sinks", return_value=fake_sinks),
-        patch("bt_audio.get_sink_volume", return_value=50),
-        patch("bt_audio.set_sink_mute", return_value=True),
-        patch("bt_audio.set_sink_volume", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=fake_sinks),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -166,9 +166,9 @@ def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
 def test_configure_bluetooth_audio_no_sink(bt_manager):
     """Returns False when no matching sink is found."""
     with (
-        patch("bt_audio.list_sinks", return_value=[]),
-        patch("bt_audio.get_sink_volume", return_value=None),
-        patch("bt_audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=[]),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=None),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -215,13 +215,13 @@ def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
         return True
 
     with (
-        patch("bt_audio.list_sinks", side_effect=_list_sinks),
-        patch("bt_audio.get_sink_volume", side_effect=_get_sink_volume),
-        patch("bt_audio.set_sink_mute", return_value=True),
-        patch("bt_audio.set_sink_volume", return_value=True),
-        patch("bt_audio.list_cards", return_value=cards_payload),
-        patch("bt_audio.set_card_profile", side_effect=_set_card_profile),
-        patch("bt_audio._warn_pipewire_session"),
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", side_effect=_list_sinks),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", side_effect=_get_sink_volume),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.list_cards", return_value=cards_payload),
+        patch("sendspin_bridge.bluetooth.audio.set_card_profile", side_effect=_set_card_profile),
+        patch("sendspin_bridge.bluetooth.audio._warn_pipewire_session"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -232,7 +232,7 @@ def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
 
 def bt_audio_retry_threshold():
     """Return a call count at which the sink should become visible (after switch)."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     # After retries exhaust, profile switch triggers one extra list_sinks refresh.
     return bt_audio._SINK_RETRY_COUNT + 1
@@ -255,12 +255,15 @@ def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_man
     set_profile_calls = []
 
     with (
-        patch("bt_audio.list_sinks", return_value=[]),
-        patch("bt_audio.get_sink_volume", return_value=None),
-        patch("bt_audio.set_sink_mute", return_value=True),
-        patch("bt_audio.list_cards", return_value=cards_payload),
-        patch("bt_audio.set_card_profile", side_effect=lambda c, p: set_profile_calls.append((c, p)) or True),
-        patch("bt_audio._warn_pipewire_session"),
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=[]),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=None),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.list_cards", return_value=cards_payload),
+        patch(
+            "sendspin_bridge.bluetooth.audio.set_card_profile",
+            side_effect=lambda c, p: set_profile_calls.append((c, p)) or True,
+        ),
+        patch("sendspin_bridge.bluetooth.audio._warn_pipewire_session"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -271,7 +274,7 @@ def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_man
 
 def test_configure_bluetooth_audio_retries_five_times(bt_manager):
     """Default retry count is 5 (env-configurable via SINK_RETRY_COUNT)."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     assert bt_audio._SINK_RETRY_COUNT >= 5
 
@@ -283,10 +286,10 @@ def test_configure_bluetooth_audio_retries_five_times(bt_manager):
         return []
 
     with (
-        patch("bt_audio.list_sinks", side_effect=_counting_list_sinks),
-        patch("bt_audio.get_sink_volume", return_value=None),
-        patch("bt_audio.set_sink_mute", return_value=True),
-        patch("bt_audio._warn_pipewire_session"),
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", side_effect=_counting_list_sinks),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=None),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio._warn_pipewire_session"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -298,7 +301,7 @@ def test_configure_bluetooth_audio_retries_five_times(bt_manager):
 
 def test_warn_pipewire_session_emits_on_pipewire_without_bt_sinks():
     """_warn_pipewire_session logs remediation when PipeWire has no BT sinks."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     with (
         patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
@@ -313,7 +316,7 @@ def test_warn_pipewire_session_emits_on_pipewire_without_bt_sinks():
 
 def test_warn_pipewire_session_silent_on_pulseaudio():
     """_warn_pipewire_session does nothing on native PulseAudio."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     with (
         patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="pulseaudio 17.0"),
@@ -326,7 +329,7 @@ def test_warn_pipewire_session_silent_on_pulseaudio():
 
 def test_warn_pipewire_session_silent_when_bt_sinks_present():
     """_warn_pipewire_session stays quiet if BT sinks exist (no false alarm)."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     sinks = {"bluez_output.AA_BB_CC_DD_EE_FF.1", "sendspin_fallback"}
     with (
@@ -340,7 +343,7 @@ def test_warn_pipewire_session_silent_when_bt_sinks_present():
 
 def test_warn_pipewire_session_also_checks_wireplumber_logind():
     """_warn_pipewire_session calls _warn_wireplumber_logind when PipeWire has no BT sinks."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     with (
         patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
@@ -354,7 +357,7 @@ def test_warn_pipewire_session_also_checks_wireplumber_logind():
 
 def test_is_wireplumber_logind_active_returns_false_when_override_exists(tmp_path):
     """_is_wireplumber_logind_active returns False when user override disables with-logind."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     override_dir = tmp_path / "override"
     override_dir.mkdir()
@@ -369,7 +372,7 @@ def test_is_wireplumber_logind_active_returns_false_when_override_exists(tmp_pat
 
 def test_is_wireplumber_logind_active_returns_true_when_default_config(tmp_path):
     """_is_wireplumber_logind_active returns True when default config has with-logind = true."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     # No user overrides
     empty_override = tmp_path / "override"
@@ -387,7 +390,7 @@ def test_is_wireplumber_logind_active_returns_true_when_default_config(tmp_path)
 
 def test_is_wireplumber_logind_active_returns_none_when_no_config(tmp_path):
     """_is_wireplumber_logind_active returns None when config files are unreadable."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     result = bt_audio._is_wireplumber_logind_active(
         _override_dirs=[tmp_path / "nonexistent"],
@@ -398,7 +401,7 @@ def test_is_wireplumber_logind_active_returns_none_when_no_config(tmp_path):
 
 def test_warn_wireplumber_logind_emits_warning_when_active():
     """_warn_wireplumber_logind logs fix instructions when logind is active."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     with (
         patch.object(bt_audio, "_is_wireplumber_logind_active", return_value=True),
@@ -413,7 +416,7 @@ def test_warn_wireplumber_logind_emits_warning_when_active():
 
 def test_warn_wireplumber_logind_silent_when_disabled():
     """_warn_wireplumber_logind stays quiet when logind is already disabled."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     with (
         patch.object(bt_audio, "_is_wireplumber_logind_active", return_value=False),
@@ -426,7 +429,7 @@ def test_warn_wireplumber_logind_silent_when_disabled():
 
 def test_warn_wireplumber_logind_silent_when_unknown():
     """_warn_wireplumber_logind stays quiet when detection returns None."""
-    import bt_audio
+    import sendspin_bridge.bluetooth.audio as bt_audio
 
     with (
         patch.object(bt_audio, "_is_wireplumber_logind_active", return_value=None),
@@ -439,7 +442,7 @@ def test_warn_wireplumber_logind_silent_when_unknown():
 
 def test_device_name_fallback():
     """When no device_name is given, it falls back to the MAC address."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(mac_address="11:22:33:44:55:66")
@@ -449,7 +452,7 @@ def test_device_name_fallback():
 
 def test_unresolved_adapter_disables_dbus_path():
     """When adapter resolution fails, D-Bus path should remain unavailable."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with (
         patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value=""),
@@ -465,7 +468,7 @@ def test_unresolved_adapter_disables_dbus_path():
 async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
     bt_manager._dbus_device_path = None
 
-    from bt_monitor import _monitor_dbus
+    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
 
     with pytest.raises(RuntimeError, match="adapter resolution failed"):
         await _monitor_dbus(bt_manager, None, None)
@@ -474,7 +477,7 @@ async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
 def test_record_reconnect_prunes_old_entries(bt_manager):
     """Only reconnects inside the churn window should be retained."""
     bt_manager._CHURN_WINDOW = 10
-    with patch("bluetooth_manager.time.monotonic", side_effect=[100.0, 111.0]):
+    with patch("sendspin_bridge.bluetooth.manager.time.monotonic", side_effect=[100.0, 111.0]):
         bt_manager._record_reconnect()
         bt_manager._record_reconnect()
 
@@ -490,7 +493,7 @@ def test_check_reconnect_churn_disables_management(bt_manager):
     bt_manager.host.bt_management_enabled = True
 
     with (
-        patch("bluetooth_manager.time.monotonic", return_value=100.0),
+        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=100.0),
         patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released,
     ):
         assert bt_manager._check_reconnect_churn() is True
@@ -536,7 +539,7 @@ def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager)
 
 def test_is_device_paired_returns_none_when_device_not_available(bt_manager):
     with (
-        patch("bluetooth_manager._dbus_get_device_property", return_value=None),
+        patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None),
         patch.object(bt_manager, "_run_bluetoothctl", return_value=(False, "Device AA:BB:CC:DD:EE:FF not available")),
     ):
         assert bt_manager.is_device_paired() is None
@@ -564,8 +567,8 @@ def test_pair_device_trusts_only_after_pair_success(bt_manager):
     )
 
     with (
-        patch("bluetooth_manager.subprocess.run"),
-        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run"),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
@@ -597,8 +600,8 @@ def test_pair_device_issues_explicit_a2dp_sink_profile_on_success(bt_manager):
     )
 
     with (
-        patch("bluetooth_manager.subprocess.run"),
-        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run"),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile", return_value=True) as mock_force,
@@ -620,8 +623,8 @@ def test_pair_device_does_not_issue_a2dp_sink_profile_on_failure(bt_manager):
     )
 
     with (
-        patch("bluetooth_manager.subprocess.run"),
-        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run"),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile", return_value=True) as mock_force,
@@ -644,8 +647,8 @@ def test_pair_device_pair_success_value_is_unaffected_by_profile_hint_failure(bt
     )
 
     with (
-        patch("bluetooth_manager.subprocess.run"),
-        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run"),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile", side_effect=RuntimeError("dbus gone")),
@@ -662,7 +665,7 @@ def test_pair_device_cancelled_before_popen(bt_manager):
     """pair_device returns False immediately if cancelled before Popen."""
     bt_manager._cancel_reconnect.set()
 
-    with patch("bluetooth_manager.subprocess.Popen") as mock_popen:
+    with patch("sendspin_bridge.bluetooth.manager.subprocess.Popen") as mock_popen:
         assert bt_manager.pair_device() is False
 
     mock_popen.assert_not_called()
@@ -677,8 +680,8 @@ def test_pair_device_cancelled_after_popen(bt_manager):
         return fake_proc
 
     with (
-        patch("bluetooth_manager.subprocess.run"),
-        patch("bluetooth_manager.subprocess.Popen", side_effect=_set_cancelled),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run"),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", side_effect=_set_cancelled),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
     ):
         assert bt_manager.pair_device() is False
@@ -710,8 +713,8 @@ def test_pair_device_clears_stale_agent_before_pairing(bt_manager):
         return result
 
     with (
-        patch("bluetooth_manager.subprocess.run", side_effect=_capture_run),
-        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run", side_effect=_capture_run),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
@@ -751,7 +754,7 @@ def test_connect_device_clears_stale_bluez_entry_after_repeated_unknown_pairing(
         patch.object(bt_manager, "is_device_connected", return_value=False),
         patch.object(bt_manager, "is_device_paired", return_value=None),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
-        patch("bluetooth_manager.subprocess.run", side_effect=_capture_run),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run", side_effect=_capture_run),
     ):
         bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
 
@@ -810,8 +813,8 @@ def test_pair_device_auto_answers_legacy_pin_prompt(bt_manager, prompt_line):
     )
 
     with (
-        patch("bluetooth_manager.subprocess.run"),
-        patch("bluetooth_manager.subprocess.Popen", return_value=fake_proc),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.run"),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
@@ -830,7 +833,7 @@ def test_pair_device_auto_answers_legacy_pin_prompt(bt_manager, prompt_line):
 
 def test_resolve_adapter_hci_name_returns_config_adapter_directly():
     """When adapter is already hciN, _resolve_adapter_hci_name returns it as-is."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", adapter="hci1")
@@ -840,7 +843,7 @@ def test_resolve_adapter_hci_name_returns_config_adapter_directly():
 
 def test_resolve_adapter_hci_name_bluetoothctl_fallback():
     """When sysfs is unavailable, falls back to bluetoothctl list output."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     bt_list_output = "Controller C0:FB:F9:62:D6:9D MyAdapter1 [default]\nController C0:FB:F9:62:D7:D6 MyAdapter2\n"
 
@@ -858,7 +861,7 @@ def test_resolve_adapter_hci_name_bluetoothctl_fallback():
 
 def test_resolve_adapter_hci_name_empty_when_all_fail():
     """Returns empty string when both sysfs and bluetoothctl fail."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with (
         patch("subprocess.check_output", return_value=""),
@@ -923,7 +926,7 @@ def test_connect_device_fails_after_all_retries(bt_manager):
 
 def test_is_device_connected_dbus_true(bt_manager):
     """D-Bus returns True — should report connected."""
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=True):
         assert bt_manager.is_device_connected() is True
     assert bt_manager.connected is True
 
@@ -931,7 +934,7 @@ def test_is_device_connected_dbus_true(bt_manager):
 def test_is_device_connected_dbus_false(bt_manager):
     """D-Bus returns False — should report disconnected."""
     bt_manager.connected = True  # was previously connected
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=False):
         assert bt_manager.is_device_connected() is False
     assert bt_manager.connected is False
 
@@ -939,7 +942,7 @@ def test_is_device_connected_dbus_false(bt_manager):
 def test_is_device_connected_bluetoothctl_fallback(bt_manager):
     """When D-Bus is unavailable, falls back to bluetoothctl output."""
     with (
-        patch("bluetooth_manager._dbus_get_device_property", return_value=None),
+        patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None),
         patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, "Connected: yes")),
     ):
         assert bt_manager.is_device_connected() is True
@@ -948,7 +951,9 @@ def test_is_device_connected_bluetoothctl_fallback(bt_manager):
 def test_is_device_connected_exception_returns_false(bt_manager):
     """Exceptions in connection check should return False."""
     bt_manager.connected = True
-    with patch("bluetooth_manager._dbus_get_device_property", side_effect=RuntimeError("D-Bus exploded")):
+    with patch(
+        "sendspin_bridge.bluetooth.manager._dbus_get_device_property", side_effect=RuntimeError("D-Bus exploded")
+    ):
         assert bt_manager.is_device_connected() is False
     assert bt_manager.connected is False
 
@@ -1134,10 +1139,10 @@ def test_handle_reconnect_failure_runs_adapter_recovery_for_default_adapter_devi
 
 def test_force_a2dp_sink_profile_calls_connect_profile_with_sink_uuid(bt_manager):
     """_force_a2dp_sink_profile invokes _dbus_connect_profile with the A2DP Sink UUID."""
-    from bt_dbus import A2DP_SINK_UUID
+    from sendspin_bridge.bluetooth.dbus import A2DP_SINK_UUID
 
     bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    with patch("bluetooth_manager._dbus_connect_profile", return_value=(True, "")) as mock_cp:
+    with patch("sendspin_bridge.bluetooth.manager._dbus_connect_profile", return_value=(True, "")) as mock_cp:
         assert bt_manager._force_a2dp_sink_profile() is True
 
     mock_cp.assert_called_once_with(bt_manager._dbus_device_path, A2DP_SINK_UUID)
@@ -1147,7 +1152,7 @@ def test_force_a2dp_sink_profile_returns_false_on_error(bt_manager):
     """Returns False when ConnectProfile raises a non-AlreadyConnected error."""
     bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
     with patch(
-        "bluetooth_manager._dbus_connect_profile",
+        "sendspin_bridge.bluetooth.manager._dbus_connect_profile",
         return_value=(False, "org.bluez.Error.NotSupported"),
     ):
         assert bt_manager._force_a2dp_sink_profile() is False
@@ -1158,10 +1163,10 @@ def test_force_a2dp_sink_profile_treats_already_connected_as_benign(bt_manager):
     bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
     with (
         patch(
-            "bluetooth_manager._dbus_connect_profile",
+            "sendspin_bridge.bluetooth.manager._dbus_connect_profile",
             return_value=(False, "org.bluez.Error.AlreadyConnected"),
         ),
-        patch("bluetooth_manager.logger.info") as mock_info,
+        patch("sendspin_bridge.bluetooth.manager.logger.info") as mock_info,
     ):
         result = bt_manager._force_a2dp_sink_profile()
 
@@ -1273,7 +1278,7 @@ def test_a2dp_recovery_dance_returns_true_on_successful_reconnect(bt_manager):
     is_connected_results = iter([False, True])
 
     with (
-        patch("bluetooth_manager._dbus_call_device_method", return_value=True),
+        patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True),
         patch.object(bt_manager, "is_device_connected", side_effect=lambda: next(is_connected_results)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
@@ -1291,7 +1296,7 @@ def test_a2dp_recovery_dance_returns_true_on_successful_reconnect(bt_manager):
 def test_a2dp_recovery_dance_returns_false_when_reconnect_never_succeeds(bt_manager):
     """If the link never comes back up, the dance reports failure."""
     with (
-        patch("bluetooth_manager._dbus_call_device_method", return_value=True),
+        patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True),
         patch.object(bt_manager, "is_device_connected", return_value=False),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
@@ -1308,7 +1313,7 @@ def test_a2dp_recovery_dance_returns_false_when_reconnect_never_succeeds(bt_mana
 
 def test_a2dp_dance_default_is_disabled_for_new_manager_instance():
     """New managers created without kwargs must have dance disabled by default."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="Default")
@@ -1318,7 +1323,7 @@ def test_a2dp_dance_default_is_disabled_for_new_manager_instance():
 
 def test_connect_device_does_not_dance_when_flag_disabled():
     """With `enable_a2dp_dance=False`, a missing sink must not trigger the dance."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(
@@ -1332,7 +1337,7 @@ def test_connect_device_does_not_dance_when_flag_disabled():
         patch.object(mgr, "configure_bluetooth_audio", return_value=False),
         patch.object(mgr, "_wait_with_cancel", return_value=True),
         patch.object(mgr, "_force_a2dp_sink_profile"),
-        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=True),
+        patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=True),
         patch.object(mgr, "_a2dp_recovery_dance") as mock_dance,
     ):
         mgr._run_bluetoothctl = MagicMock(return_value=(True, ""))
@@ -1342,7 +1347,7 @@ def test_connect_device_does_not_dance_when_flag_disabled():
 
 def test_connect_device_does_not_reload_pa_module_when_flag_disabled():
     """With `enable_pa_module_reload=False`, the last-resort reload must not fire."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(
@@ -1357,7 +1362,7 @@ def test_connect_device_does_not_reload_pa_module_when_flag_disabled():
         patch.object(mgr, "configure_bluetooth_audio", return_value=False),
         patch.object(mgr, "_wait_with_cancel", return_value=True),
         patch.object(mgr, "_force_a2dp_sink_profile"),
-        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=True),
+        patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=True),
         patch.object(mgr, "_reload_pa_bluez5_module") as mock_reload,
     ):
         mgr._run_bluetoothctl = MagicMock(return_value=(True, ""))
@@ -1380,7 +1385,7 @@ def test_connect_device_reloads_pa_module_as_last_resort_when_flag_enabled(bt_ma
         patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_configure),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
-        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=True),
+        patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=True),
         patch.object(bt_manager, "_a2dp_recovery_dance", return_value=True),
         patch.object(bt_manager, "_reload_pa_bluez5_module", return_value=True) as mock_reload,
     ):
@@ -1417,7 +1422,7 @@ def test_connect_device_waits_for_services_resolved_before_configure_audio(bt_ma
         patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_configure),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile", side_effect=_force),
-        patch("bluetooth_manager._dbus_wait_services_resolved", side_effect=_wait) as mock_wait,
+        patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", side_effect=_wait) as mock_wait,
     ):
         bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
@@ -1434,7 +1439,7 @@ def test_connect_device_proceeds_when_services_resolved_timeout(bt_manager):
         patch.object(bt_manager, "configure_bluetooth_audio", return_value=True) as mock_conf,
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
-        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=False),
+        patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=False),
     ):
         bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
@@ -1455,7 +1460,7 @@ def test_check_audio_profiles_after_pair_warns_when_no_audio_uuid_advertised(bt_
     bt_manager.host.update_status.side_effect = lambda d: updates.append(d)
 
     with patch(
-        "bluetooth_manager._dbus_get_device_uuids",
+        "sendspin_bridge.bluetooth.manager._dbus_get_device_uuids",
         return_value=["0000180f-0000-1000-8000-00805f9b34fb"],
     ):
         bt_manager._check_audio_profiles_after_pair()
@@ -1466,11 +1471,11 @@ def test_check_audio_profiles_after_pair_warns_when_no_audio_uuid_advertised(bt_
 
 def test_check_audio_profiles_after_pair_no_warn_for_audio_device(bt_manager):
     """A2DP-capable peer must not trigger the no-audio warning on status."""
-    from bt_dbus import A2DP_SINK_UUID
+    from sendspin_bridge.bluetooth.dbus import A2DP_SINK_UUID
 
     bt_manager.host = MagicMock()
 
-    with patch("bluetooth_manager._dbus_get_device_uuids", return_value=[A2DP_SINK_UUID]):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_uuids", return_value=[A2DP_SINK_UUID]):
         bt_manager._check_audio_profiles_after_pair()
 
     bt_manager.host.update_status.assert_not_called()
@@ -1480,7 +1485,7 @@ def test_check_audio_profiles_after_pair_no_warn_when_uuid_read_empty(bt_manager
     """Empty UUID list (D-Bus unavailable) must not trigger warning — nothing actionable."""
     bt_manager.host = MagicMock()
 
-    with patch("bluetooth_manager._dbus_get_device_uuids", return_value=[]):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_uuids", return_value=[]):
         bt_manager._check_audio_profiles_after_pair()
 
     bt_manager.host.update_status.assert_not_called()
@@ -1493,7 +1498,7 @@ def test_check_audio_profiles_after_pair_no_warn_when_uuid_read_empty(bt_manager
 
 def test_dbus_connect_profile_returns_false_when_dbus_module_missing():
     """With dbus-python unavailable the helper reports dbus-unavailable reason."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     with patch.object(bt_dbus, "dbus", None):
         ok, reason = bt_dbus._dbus_connect_profile("/org/bluez/hci0/dev_X", "uuid")
@@ -1504,7 +1509,7 @@ def test_dbus_connect_profile_returns_false_when_dbus_module_missing():
 
 def test_dbus_connect_profile_returns_false_for_empty_device_path():
     """Empty device path short-circuits to False without touching the bus."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     ok, reason = bt_dbus._dbus_connect_profile(None, bt_dbus.A2DP_SINK_UUID)
     assert ok is False
@@ -1522,7 +1527,7 @@ def test_dbus_wait_services_resolved_returns_true_when_property_already_set():
     ``wait_with_cancel`` contract matches ``BluetoothManager._wait_with_cancel``:
     True = waited uninterrupted, False = cancelled.
     """
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=True):
         ok = bt_dbus._dbus_wait_services_resolved(
@@ -1537,7 +1542,7 @@ def test_dbus_wait_services_resolved_returns_true_when_property_already_set():
 
 def test_dbus_wait_services_resolved_bails_out_on_disconnect():
     """If is_connected_check returns False the helper reports failure."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
         ok = bt_dbus._dbus_wait_services_resolved(
@@ -1552,7 +1557,7 @@ def test_dbus_wait_services_resolved_bails_out_on_disconnect():
 
 def test_dbus_wait_services_resolved_returns_false_on_timeout():
     """With timeout=0 and property not resolved, helper returns False without blocking."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
         ok = bt_dbus._dbus_wait_services_resolved(
@@ -1567,7 +1572,7 @@ def test_dbus_wait_services_resolved_returns_false_on_timeout():
 
 def test_dbus_wait_services_resolved_respects_cancellation():
     """Caller-driven cancellation (wait_with_cancel returns False) exits with False."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
         ok = bt_dbus._dbus_wait_services_resolved(
@@ -1588,7 +1593,7 @@ def test_dbus_wait_services_resolved_returns_none_when_dbus_unavailable():
     without dbus-python. The caller distinguishes "could not check" from
     "checked and timed out" by the ``None`` sentinel.
     """
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     with patch.object(bt_dbus, "dbus", None):
         result = bt_dbus._dbus_wait_services_resolved(
@@ -1603,7 +1608,7 @@ def test_dbus_wait_services_resolved_returns_none_when_dbus_unavailable():
 
 def test_dbus_wait_services_resolved_returns_none_when_device_path_missing():
     """Missing device_path is a not-actually-checked case — must be ``None``."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     result = bt_dbus._dbus_wait_services_resolved(
         None,
@@ -1627,8 +1632,8 @@ def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manage
         patch.object(bt_manager, "configure_bluetooth_audio", return_value=True),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
-        patch("bluetooth_manager._dbus_wait_services_resolved", return_value=None),
-        patch("bluetooth_manager.logger") as mock_logger,
+        patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=None),
+        patch("sendspin_bridge.bluetooth.manager.logger") as mock_logger,
     ):
         bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
@@ -1647,7 +1652,7 @@ def test_dbus_wait_services_resolved_polls_multiple_times_until_resolved():
     cancelled. This verifies the loop actually iterates until ServicesResolved
     flips to True.
     """
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     property_calls = {"count": 0}
 
@@ -1675,7 +1680,7 @@ def test_dbus_wait_services_resolved_polls_multiple_times_until_resolved():
 
 def test_dbus_get_device_uuids_normalizes_to_lowercase():
     """UUIDs from BlueZ are lowercased so set intersection with AUDIO_SINK_UUIDS works."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     raw = ["0000110B-0000-1000-8000-00805F9B34FB", "0000180F-0000-1000-8000-00805F9B34FB"]
     with patch.object(bt_dbus, "_dbus_get_device_property", return_value=raw):
@@ -1685,7 +1690,7 @@ def test_dbus_get_device_uuids_normalizes_to_lowercase():
 
 def test_dbus_get_device_uuids_returns_empty_on_missing_path():
     """Empty path → empty list; no dbus interaction."""
-    import bt_dbus
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     assert bt_dbus._dbus_get_device_uuids(None) == []
 
@@ -1698,7 +1703,7 @@ def test_dbus_get_device_uuids_returns_empty_on_missing_path():
 
 
 def _make_bt_manager_with_transition_callbacks(on_connected=None, on_disconnected=None):
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         return BluetoothManager(
@@ -1715,7 +1720,7 @@ def test_is_device_connected_fires_on_connected_on_false_to_true_transition():
     fired: list[str] = []
     mgr = _make_bt_manager_with_transition_callbacks(on_connected=lambda: fired.append("up"))
     # mgr.connected starts False; flip the underlying check to True.
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=True):
         assert mgr.is_device_connected() is True
 
     assert fired == ["up"]
@@ -1727,7 +1732,7 @@ def test_is_device_connected_does_not_refire_on_connected_when_already_connected
     on the system bus and crash dbus_fast)."""
     fired: list[str] = []
     mgr = _make_bt_manager_with_transition_callbacks(on_connected=lambda: fired.append("up"))
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=True):
         mgr.is_device_connected()
         mgr.is_device_connected()
         mgr.is_device_connected()
@@ -1743,7 +1748,7 @@ def test_is_device_connected_fires_on_disconnected_on_true_to_false_transition()
         on_disconnected=lambda: fired.append("down"),
     )
     mgr.connected = True  # simulate prior connected state
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=False):
         assert mgr.is_device_connected() is False
 
     assert fired == ["down"]
@@ -1757,7 +1762,7 @@ def test_is_device_connected_does_not_refire_on_disconnected_when_already_discon
         on_disconnected=lambda: fired.append("down"),
     )
     # mgr.connected starts False
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=False):
         mgr.is_device_connected()
         mgr.is_device_connected()
 
@@ -1772,7 +1777,7 @@ def test_disconnect_device_fires_on_disconnected():
         on_disconnected=lambda: fired.append("down"),
     )
     mgr.connected = True
-    with patch("bluetooth_manager._dbus_call_device_method", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True):
         assert mgr.disconnect_device() is True
 
     assert fired == ["down"]
@@ -1787,7 +1792,7 @@ def test_disconnect_device_does_not_refire_when_already_disconnected():
         on_disconnected=lambda: fired.append("down"),
     )
     # mgr.connected starts False (already disconnected)
-    with patch("bluetooth_manager._dbus_call_device_method", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True):
         mgr.disconnect_device()
 
     assert fired == []
@@ -1805,12 +1810,12 @@ def test_transition_callbacks_swallow_exceptions():
         on_connected=_boom,
         on_disconnected=_boom,
     )
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=True):
         # Must not raise even though the callback explodes.
         assert mgr.is_device_connected() is True
     assert mgr.connected is True
 
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=False):
         assert mgr.is_device_connected() is False
     assert mgr.connected is False
 
@@ -1818,13 +1823,13 @@ def test_transition_callbacks_swallow_exceptions():
 def test_transition_callbacks_optional_when_unset():
     """No callbacks supplied → behaviour identical to pre-2.63 (no AttributeError,
     no spurious calls).  Backwards-compat smoke."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="TestSpeaker")
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=True):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=True):
         mgr.is_device_connected()
-    with patch("bluetooth_manager._dbus_get_device_property", return_value=False):
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=False):
         mgr.is_device_connected()
     # No exception → pass.
 
@@ -1912,7 +1917,7 @@ def test_apply_connected_state_called_by_dbus_props_changed_path():
     import ast
     from pathlib import Path
 
-    import bt_monitor
+    import sendspin_bridge.bluetooth.monitor as bt_monitor
 
     tree = ast.parse(Path(bt_monitor.__file__).read_text())
 

@@ -19,7 +19,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config, write_config_file
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.infrastructure.config_diff import diff_configs

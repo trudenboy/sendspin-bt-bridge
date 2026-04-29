@@ -38,7 +38,7 @@ class _FakeClient:
 @pytest.fixture
 def fake_clients_state(monkeypatch):
     """Stub ``state.get_clients_snapshot`` to return an in-test list."""
-    import state as _state
+    import sendspin_bridge.bridge.state as _state
 
     fake_clients: list = []
     monkeypatch.setattr(_state, "get_clients_snapshot", lambda: list(fake_clients))

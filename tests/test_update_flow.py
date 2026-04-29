@@ -292,8 +292,8 @@ def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client,
 
 
 def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_config as api_config
-    import state
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "docker")
@@ -320,8 +320,8 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
 
 
 def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_config as api_config
-    import state
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc", "AUTO_UPDATE": False})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
@@ -347,8 +347,8 @@ def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_clien
 
 
 def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_variant(config_client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_config as api_config
-    import state
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")

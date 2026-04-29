@@ -31,7 +31,7 @@ def _isolated_config(tmp_path, monkeypatch):
 @pytest.fixture()
 def bt_manager():
     """Create a BluetoothManager with reasonable defaults for testing."""
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(
@@ -51,7 +51,7 @@ def bt_manager():
 @pytest.mark.asyncio
 async def test_correct_other_devices_routing_skips_triggering_manager(bt_manager):
     """The triggering manager's own client should be skipped (no move attempt)."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     client = MagicMock()
     client.bt_manager = bt_manager
@@ -59,7 +59,7 @@ async def test_correct_other_devices_routing_skips_triggering_manager(bt_manager
     client.bluetooth_sink_name = "bluez_sink.AA_BB"
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
         patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
     ):
@@ -71,7 +71,7 @@ async def test_correct_other_devices_routing_skips_triggering_manager(bt_manager
 @pytest.mark.asyncio
 async def test_correct_other_devices_routing_moves_other_clients(bt_manager):
     """Clients belonging to other managers get their sink routing corrected."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     other_mgr = MagicMock()
     client = MagicMock()
@@ -81,7 +81,7 @@ async def test_correct_other_devices_routing_moves_other_clients(bt_manager):
     client.player_name = "OtherSpeaker"
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
         patch(
             "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=1
@@ -95,7 +95,7 @@ async def test_correct_other_devices_routing_moves_other_clients(bt_manager):
 @pytest.mark.asyncio
 async def test_correct_other_devices_routing_skips_client_without_pid(bt_manager):
     """Clients with no running subprocess (pid=None) are skipped."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     client = MagicMock()
     client.bt_manager = MagicMock()  # different manager
@@ -103,7 +103,7 @@ async def test_correct_other_devices_routing_skips_client_without_pid(bt_manager
     client.bluetooth_sink_name = "bluez_sink.XX_YY"
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
         patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
     ):
@@ -115,7 +115,7 @@ async def test_correct_other_devices_routing_skips_client_without_pid(bt_manager
 @pytest.mark.asyncio
 async def test_correct_other_devices_routing_skips_client_without_sink(bt_manager):
     """Clients with empty bluetooth_sink_name are skipped."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     client = MagicMock()
     client.bt_manager = MagicMock()
@@ -123,7 +123,7 @@ async def test_correct_other_devices_routing_skips_client_without_sink(bt_manage
     client.bluetooth_sink_name = ""
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
         patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as mock_move,
     ):
@@ -135,7 +135,7 @@ async def test_correct_other_devices_routing_skips_client_without_sink(bt_manage
 @pytest.mark.asyncio
 async def test_correct_other_devices_routing_handles_move_exception(bt_manager):
     """amove_pid_sink_inputs exceptions are caught and logged, not propagated."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     client = MagicMock()
     client.bt_manager = MagicMock()
@@ -144,7 +144,7 @@ async def test_correct_other_devices_routing_handles_move_exception(bt_manager):
     client.player_name = "FailSpeaker"
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
         patch(
             "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs",
@@ -159,7 +159,7 @@ async def test_correct_other_devices_routing_handles_move_exception(bt_manager):
 @pytest.mark.asyncio
 async def test_correct_other_devices_routing_handles_none_bt_manager(bt_manager):
     """Clients whose bt_manager attribute is None should be processed normally."""
-    from bt_monitor import _correct_other_devices_routing
+    from sendspin_bridge.bluetooth.monitor import _correct_other_devices_routing
 
     client = MagicMock()
     client.bt_manager = None
@@ -167,7 +167,7 @@ async def test_correct_other_devices_routing_handles_none_bt_manager(bt_manager)
     client.bluetooth_sink_name = "bluez_sink.GG_HH"
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.services.bluetooth.device_registry.get_active_clients_snapshot", return_value=[client]),
         patch(
             "sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock, return_value=0
@@ -186,11 +186,15 @@ async def test_correct_other_devices_routing_handles_none_bt_manager(bt_manager)
 @pytest.mark.asyncio
 async def test_monitor_and_reconnect_falls_back_to_polling_on_import_error(bt_manager):
     """When dbus_fast is unavailable, monitor_and_reconnect uses polling fallback."""
-    from bt_monitor import monitor_and_reconnect
+    from sendspin_bridge.bluetooth.monitor import monitor_and_reconnect
 
     with (
-        patch("bt_monitor._monitor_dbus", new_callable=AsyncMock, side_effect=ImportError("no dbus_fast")),
-        patch("bt_monitor._monitor_polling", new_callable=AsyncMock) as mock_polling,
+        patch(
+            "sendspin_bridge.bluetooth.monitor._monitor_dbus",
+            new_callable=AsyncMock,
+            side_effect=ImportError("no dbus_fast"),
+        ),
+        patch("sendspin_bridge.bluetooth.monitor._monitor_polling", new_callable=AsyncMock) as mock_polling,
         patch.dict("sys.modules", {"dbus_fast": None, "dbus_fast.aio": None}),
     ):
         await monitor_and_reconnect(bt_manager)
@@ -201,14 +205,18 @@ async def test_monitor_and_reconnect_falls_back_to_polling_on_import_error(bt_ma
 @pytest.mark.asyncio
 async def test_monitor_and_reconnect_falls_back_on_runtime_error(bt_manager):
     """RuntimeError from D-Bus monitor triggers polling fallback."""
-    from bt_monitor import monitor_and_reconnect
+    from sendspin_bridge.bluetooth.monitor import monitor_and_reconnect
 
     mock_dbus_fast = MagicMock()
 
     with (
         patch.dict("sys.modules", {"dbus_fast": mock_dbus_fast, "dbus_fast.aio": mock_dbus_fast}),
-        patch("bt_monitor._monitor_dbus", new_callable=AsyncMock, side_effect=RuntimeError("D-Bus fail")),
-        patch("bt_monitor._monitor_polling", new_callable=AsyncMock) as mock_polling,
+        patch(
+            "sendspin_bridge.bluetooth.monitor._monitor_dbus",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("D-Bus fail"),
+        ),
+        patch("sendspin_bridge.bluetooth.monitor._monitor_polling", new_callable=AsyncMock) as mock_polling,
     ):
         await monitor_and_reconnect(bt_manager)
 
@@ -223,7 +231,7 @@ async def test_monitor_and_reconnect_falls_back_on_runtime_error(bt_manager):
 @pytest.mark.asyncio
 async def test_monitor_dbus_raises_when_no_device_path(bt_manager):
     """_monitor_dbus raises RuntimeError if _dbus_device_path is None."""
-    from bt_monitor import _monitor_dbus
+    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
 
     bt_manager._dbus_device_path = None
 
@@ -234,7 +242,7 @@ async def test_monitor_dbus_raises_when_no_device_path(bt_manager):
 @pytest.mark.asyncio
 async def test_monitor_dbus_raises_after_max_introspection_failures(bt_manager):
     """Three consecutive introspection failures trigger RuntimeError."""
-    from bt_monitor import _monitor_dbus
+    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
 
     bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
 
@@ -248,7 +256,7 @@ async def test_monitor_dbus_raises_after_max_introspection_failures(bt_manager):
     MockBusType.SYSTEM = "system"
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         pytest.raises(RuntimeError, match="introspection failed 3 times"),
     ):
         await _monitor_dbus(bt_manager, MockMessageBus, MockBusType)
@@ -262,7 +270,7 @@ async def test_monitor_dbus_raises_after_max_introspection_failures(bt_manager):
 @pytest.mark.asyncio
 async def test_monitor_polling_skips_when_management_disabled(bt_manager):
     """When management_enabled is False, polling sleeps without checking BT state."""
-    from bt_monitor import _monitor_polling
+    from sendspin_bridge.bluetooth.monitor import _monitor_polling
 
     bt_manager.management_enabled = False
     iteration_count = 0
@@ -277,8 +285,8 @@ async def test_monitor_polling_skips_when_management_disabled(bt_manager):
         await original_sleep(0)
 
     with (
-        patch("bt_monitor.asyncio.sleep", side_effect=_counting_sleep),
-        patch("bluetooth_manager._bt_executor"),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
+        patch("sendspin_bridge.bluetooth.manager._bt_executor"),
     ):
         await _monitor_polling(bt_manager)
 
@@ -293,7 +301,7 @@ async def test_monitor_polling_skips_when_management_disabled(bt_manager):
 @pytest.mark.asyncio
 async def test_inner_dbus_monitor_reconnect_cancelled_resets_attempt(bt_manager):
     """When _reconnect_cancelled() is True after connect, reconnect_attempt resets."""
-    from bt_monitor import _inner_dbus_monitor
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
 
     bt_manager.connected = False
     bt_manager.management_enabled = True
@@ -320,10 +328,10 @@ async def test_inner_dbus_monitor_reconnect_cancelled_resets_attempt(bt_manager)
         return False
 
     with (
-        patch("bluetooth_manager._bt_executor", new=None),
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(bt_manager, "is_device_paired", return_value=True),
         patch.object(bt_manager, "connect_device", side_effect=_connect_side_effect),
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         # Patch run_in_executor to call functions directly
         async def _mock_run_in_executor(executor, fn, *args):
@@ -345,7 +353,7 @@ async def test_inner_dbus_monitor_reconnect_cancelled_resets_attempt(bt_manager)
 @pytest.mark.asyncio
 async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager):
     """Heartbeat timeout should detect a missed disconnect signal."""
-    from bt_monitor import _inner_dbus_monitor
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
 
     bt_manager.connected = True
     bt_manager.management_enabled = True
@@ -378,9 +386,9 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
         return fn(*args) if args else fn()
 
     with (
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("bt_monitor.asyncio.wait_for", side_effect=_fake_wait_for),
-        patch("bt_monitor._dbus_get_battery_level", return_value=None),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_fake_wait_for),
+        patch("sendspin_bridge.bluetooth.monitor._dbus_get_battery_level", return_value=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "is_device_paired", return_value=True),
         # After heartbeat detects disconnect, _handle_reconnect_failure → True exits immediately
@@ -401,7 +409,7 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
 @pytest.mark.asyncio
 async def test_inner_dbus_monitor_successful_reconnect_starts_subprocess(bt_manager):
     """Successful reconnect should start the subprocess and return for re-subscription."""
-    from bt_monitor import _inner_dbus_monitor
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
 
     bt_manager.connected = False
     bt_manager.management_enabled = True
@@ -422,14 +430,14 @@ async def test_inner_dbus_monitor_successful_reconnect_starts_subprocess(bt_mana
         return next(executor_results)
 
     with (
-        patch("bluetooth_manager._bt_executor", new=None),
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "_handle_reconnect_failure", return_value=False),
         patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
         patch.object(bt_manager, "_record_reconnect"),
-        patch("bt_monitor._correct_other_devices_routing", new_callable=AsyncMock),
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
-        patch("bt_monitor.asyncio.ensure_future"),
+        patch("sendspin_bridge.bluetooth.monitor._correct_other_devices_routing", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
     ):
         await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, loop)
 
@@ -440,7 +448,7 @@ async def test_inner_dbus_monitor_successful_reconnect_starts_subprocess(bt_mana
 @pytest.mark.asyncio
 async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
     """When _handle_reconnect_failure returns True, _inner_dbus_monitor should exit."""
-    from bt_monitor import _inner_dbus_monitor
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
 
     bt_manager.connected = False
     bt_manager.management_enabled = True
@@ -457,10 +465,10 @@ async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
         return True
 
     with (
-        patch("bluetooth_manager._bt_executor", new=None),
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
-        patch("bt_monitor.asyncio.sleep", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         # Should return without attempting connect
         await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, loop)

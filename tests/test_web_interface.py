@@ -56,15 +56,16 @@ def app():
     """Create a minimal Flask app that mirrors web_interface setup."""
     from flask import Flask, g, jsonify, redirect, request, send_from_directory
 
-    from web_interface import (
+    from sendspin_bridge.web.interface import (
         _set_cache_headers,
     )
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    web_pkg = os.path.join(project_root, "src", "sendspin_bridge", "web")
     test_app = Flask(
         __name__,
-        template_folder=os.path.join(project_root, "templates"),
-        static_folder=os.path.join(project_root, "static"),
+        template_folder=os.path.join(web_pkg, "templates"),
+        static_folder=os.path.join(web_pkg, "static"),
     )
     test_app.secret_key = "test-secret"
     test_app.config["TESTING"] = True
@@ -197,7 +198,7 @@ def test_json_no_cache_control_override(client):
 
 class TestCoerceSessionTimeoutHours:
     def setup_method(self):
-        from web_interface import _coerce_session_timeout_hours
+        from sendspin_bridge.web.interface import _coerce_session_timeout_hours
 
         self.coerce = _coerce_session_timeout_hours
 
@@ -298,7 +299,7 @@ def test_vstatic_missing_file_not_200(client):
 
 def test_ingress_rejects_double_slash():
     """Middleware must reject ingress paths starting with // (protocol-relative)."""
-    from web_interface import _IngressMiddleware
+    from sendspin_bridge.web.interface import _IngressMiddleware
 
     captured = {}
 
@@ -306,7 +307,7 @@ def test_ingress_rejects_double_slash():
         captured.update(environ)
         return [b"ok"]
 
-    import web_interface
+    import sendspin_bridge.web.interface as web_interface
 
     original = web_interface._TRUSTED_PROXIES
     web_interface._TRUSTED_PROXIES = {"127.0.0.1"}
@@ -357,11 +358,12 @@ def test_templates_have_no_inline_event_handlers():
 
     pattern = re.compile(r"""(?:^|[\s'"])(on[a-z]+)\s*=\s*["']""", re.IGNORECASE)
     project_root = pathlib.Path(__file__).resolve().parent.parent
+    web_pkg = project_root / "src" / "sendspin_bridge" / "web"
     offenders: dict[str, set[str]] = {}
     for path in [
-        project_root / "templates" / "index.html",
-        project_root / "templates" / "login.html",
-        project_root / "static" / "app.js",
+        web_pkg / "templates" / "index.html",
+        web_pkg / "templates" / "login.html",
+        web_pkg / "static" / "app.js",
     ]:
         text = path.read_text(encoding="utf-8")
         matches = pattern.findall(text)

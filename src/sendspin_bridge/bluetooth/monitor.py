@@ -13,11 +13,11 @@ import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from bt_dbus import _dbus_get_battery_level
+from sendspin_bridge.bluetooth.dbus import _dbus_get_battery_level
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 if TYPE_CHECKING:
-    from bluetooth_manager import BluetoothManager
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
 
 UTC = timezone.utc
 
@@ -96,7 +96,7 @@ async def monitor_and_reconnect(mgr: BluetoothManager) -> None:
 
 async def _monitor_polling(mgr: BluetoothManager) -> None:
     """Legacy bluetoothctl polling-based monitor (fallback)."""
-    from bluetooth_manager import _bt_executor
+    from sendspin_bridge.bluetooth.manager import _bt_executor
 
     loop = asyncio.get_running_loop()
     iteration = 0
@@ -343,7 +343,7 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
 
 async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_event, loop) -> None:
     """Inner D-Bus monitor loop; returns when D-Bus re-subscription is needed."""
-    from bluetooth_manager import _bt_executor
+    from sendspin_bridge.bluetooth.manager import _bt_executor
 
     reconnect_attempt = 0
     while mgr._running:

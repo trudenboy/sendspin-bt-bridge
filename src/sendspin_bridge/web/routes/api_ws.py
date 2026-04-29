@@ -26,7 +26,7 @@ import queue as _queue
 import time
 from typing import TYPE_CHECKING, Any
 
-import state as _state
+import sendspin_bridge.bridge.state as _state
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

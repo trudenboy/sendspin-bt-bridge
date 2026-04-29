@@ -20,9 +20,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import bt_audio
-import bt_monitor
-from bt_dbus import (
+import sendspin_bridge.bluetooth.audio as bt_audio
+import sendspin_bridge.bluetooth.monitor as bt_monitor
+from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
     _dbus_call_device_method,
@@ -63,7 +63,7 @@ def _load_allow_hfp() -> bool:
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bt_types import BluetoothManagerHost
+    from sendspin_bridge.bridge.types import BluetoothManagerHost
     from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 UTC = timezone.utc
@@ -1234,7 +1234,7 @@ class BluetoothManager:
     ) -> None:
         if not self.host:
             return
-        import state as _state
+        import sendspin_bridge.bridge.state as _state
 
         _state.publish_device_event(
             getattr(self.host, "player_id", "") or self.device_name,

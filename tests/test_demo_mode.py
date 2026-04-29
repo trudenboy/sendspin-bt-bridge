@@ -34,7 +34,7 @@ from sendspin_bridge.web.routes.views import views_bp
 
 
 def _reset_demo_shared_state() -> None:
-    import state
+    import sendspin_bridge.bridge.state as state
 
     sys.modules.pop("sendspin.audio", None)
     sys.modules.pop("sendspin.audio_devices", None)
@@ -293,8 +293,8 @@ async def test_demo_simulator_keeps_group_members_on_same_track(monkeypatch):
 @pytest.mark.asyncio
 async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypatch, request):
     import demo
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.config as config_module
-    import state
 
     class StubSendspinClient:
         def __init__(self):
@@ -530,8 +530,8 @@ def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypat
 
 @pytest.mark.asyncio
 async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch, request):
-    import bridge_orchestrator
     import demo
+    import sendspin_bridge.bridge.orchestrator as bridge_orchestrator
 
     class StubSendspinClient:
         def __init__(self):
@@ -561,7 +561,7 @@ async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch,
 @pytest.mark.asyncio
 async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypatch, request):
     import demo
-    import state
+    import sendspin_bridge.bridge.state as state
     from sendspin_bridge.web.routes.api_config import config_bp
     from sendspin_bridge.web.routes.api_status import status_bp
 
@@ -642,8 +642,8 @@ def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(
         __name__,
-        template_folder=str(template_root / "templates"),
-        static_folder=str(template_root / "static"),
+        template_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "templates"),
+        static_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "static"),
     )
     app.secret_key = "testing"
     app.config["AUTH_ENABLED"] = False
@@ -678,8 +678,8 @@ def test_standalone_index_shows_short_web_port_hint(monkeypatch):
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(
         __name__,
-        template_folder=str(template_root / "templates"),
-        static_folder=str(template_root / "static"),
+        template_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "templates"),
+        static_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "static"),
     )
     app.secret_key = "testing"
     app.config["AUTH_ENABLED"] = False
@@ -716,8 +716,8 @@ def test_ha_addon_index_hides_logout_button(monkeypatch):
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(
         __name__,
-        template_folder=str(template_root / "templates"),
-        static_folder=str(template_root / "static"),
+        template_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "templates"),
+        static_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "static"),
     )
     app.secret_key = "testing"
     app.config["AUTH_ENABLED"] = True

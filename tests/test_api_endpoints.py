@@ -3000,7 +3000,7 @@ def test_error_response_no_leak(client):
 
 def test_status_includes_disabled_devices(client):
     """GET /api/status includes disabled_devices list."""
-    import state
+    import sendspin_bridge.bridge.state as state
 
     state.set_disabled_devices(
         [
@@ -3019,8 +3019,8 @@ def test_status_includes_disabled_devices(client):
 
 def test_status_reports_all_devices_disabled_header_status(client, monkeypatch):
     """GET /api/status reports a dedicated neutral header when all configured devices are disabled."""
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
-    import state
 
     monkeypatch.setattr(
         api_status,
@@ -3080,8 +3080,8 @@ def test_status_reports_all_devices_disabled_header_status(client, monkeypatch):
 
 def test_status_includes_ma_syncgroup_id(client, monkeypatch):
     """GET /api/status exposes the MA syncgroup player_id for grouped devices."""
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
-    import state
 
     fake_client = SimpleNamespace(
         status={
@@ -3131,8 +3131,8 @@ def test_status_includes_ma_syncgroup_id(client, monkeypatch):
 
 def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
     """GET /api/status exposes health_summary and recent_events from snapshots."""
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
-    import state
 
     fake_client = SimpleNamespace(
         status={
@@ -3186,7 +3186,7 @@ def test_status_includes_health_summary_and_recent_events(client, monkeypatch):
 
 def test_status_and_startup_progress_endpoint_include_startup_progress(client):
     """Startup progress is exposed both directly and via the main status payload."""
-    import state
+    import sendspin_bridge.bridge.state as state
 
     state.reset_startup_progress(4, message="Booting")
     state.update_startup_progress("web", "Starting web interface", current_step=3, details={"active_clients": 2})
@@ -3231,7 +3231,7 @@ def test_status_includes_normalized_state_model_and_assistant_payloads(client):
 
 def test_runtime_info_endpoint_and_status_include_mock_runtime(client):
     """Runtime explainability is exposed directly and via the status payload."""
-    import state
+    import sendspin_bridge.bridge.state as state
 
     state.set_runtime_mode_info(
         {
@@ -3641,8 +3641,8 @@ def test_api_status_parse_helpers_are_defensive():
 
 def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkeypatch):
     """GET /api/diagnostics should expose playing state and parsed sink-input metadata."""
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
-    import state
     from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
     from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry, get_event_hook_registry
@@ -3814,8 +3814,8 @@ def test_collect_preflight_status_surfaces_audio_probe_failure(monkeypatch):
 def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(client, monkeypatch):
     import subprocess
 
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
-    import state
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     fake_client = SimpleNamespace(
@@ -3961,7 +3961,7 @@ def test_ha_auth_page_accepts_empty_url(client):
 
 
 def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
-    import state
+    import sendspin_bridge.bridge.state as state
     from sendspin_bridge.services.music_assistant.ma_artwork import sign_artwork_url
 
     class _FakeHeaders:
@@ -4013,7 +4013,7 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
 
 
 def test_ma_artwork_proxy_rejects_unsupported_scheme(client):
-    import state
+    import sendspin_bridge.bridge.state as state
     from sendspin_bridge.services.music_assistant.ma_artwork import sign_artwork_url
 
     state.set_ma_api_credentials("http://ma:8095", "token123")
@@ -4027,7 +4027,7 @@ def test_ma_artwork_proxy_rejects_unsupported_scheme(client):
 
 
 def test_ma_artwork_proxy_rejects_unsigned_external_provider_artwork(client):
-    import state
+    import sendspin_bridge.bridge.state as state
 
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
@@ -4043,7 +4043,7 @@ def test_ma_artwork_proxy_rejects_unsigned_external_provider_artwork(client):
 
 def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_token(client):
     """External (non-MA-origin) artwork URLs with valid sig are proxied without Bearer token."""
-    import state
+    import sendspin_bridge.bridge.state as state
     from sendspin_bridge.services.music_assistant.ma_artwork import sign_artwork_url
 
     raw_url = "https://avatars.yandex.net/get-music-content/49876/ab027f9c.a.37173-2/1000x1000"
@@ -4066,7 +4066,7 @@ def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_to
 
 
 def test_ma_artwork_proxy_rejects_invalid_signature(client):
-    import state
+    import sendspin_bridge.bridge.state as state
 
     state.set_ma_api_credentials("http://ma:8095", "token123")
     try:
@@ -4093,10 +4093,10 @@ def test_ma_host_from_sendspin_clients_uses_registry_snapshot(monkeypatch):
 
 
 def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_path, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.services.music_assistant.ma_client as ma_client
     import sendspin_bridge.web.routes.api_ma as api_ma
     import sendspin_bridge.web.routes.ma_groups as ma_groups
-    import state
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
@@ -4163,10 +4163,10 @@ def test_api_ma_rediscover_uses_registry_snapshot_player_payload(client, tmp_pat
 
 
 def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.services.music_assistant.ma_client as ma_client
     import sendspin_bridge.web.routes.api_ma as api_ma
     import sendspin_bridge.web.routes.ma_groups as ma_groups
-    import state
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     (tmp_path / "config.json").write_text(json.dumps({"MA_API_URL": "http://ma.local:8095", "MA_API_TOKEN": "token"}))
@@ -4244,8 +4244,8 @@ def test_api_ma_reload_restarts_monitor_and_rediscover(client, tmp_path, monkeyp
 
 
 def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_ma as api_ma
-    import state
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     state.clear_ma_now_playing()
@@ -4280,10 +4280,10 @@ def test_api_debug_ma_uses_registry_snapshot(client, monkeypatch):
 
 
 def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import sendspin_bridge.web.routes.api_ma as api_ma
     import sendspin_bridge.web.routes.ma_playback as ma_playback
-    import state
 
     class _FakeMonitor:
         def is_connected(self):
@@ -4373,10 +4373,10 @@ def test_ma_queue_cmd_returns_structured_predicted_state(client, monkeypatch):
 
 
 def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import sendspin_bridge.web.routes.api_ma as api_ma
     import sendspin_bridge.web.routes.ma_playback as ma_playback
-    import state
 
     class _FakeMonitor:
         def is_connected(self):
@@ -4470,10 +4470,10 @@ def test_ma_queue_cmd_prefers_player_queue_over_stale_group_id(client, monkeypat
 
 
 def test_ma_queue_cmd_refreshes_actual_accepted_solo_queue(client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import sendspin_bridge.web.routes.api_ma as api_ma
     import sendspin_bridge.web.routes.ma_playback as ma_playback
-    import state
 
     class _FakeMonitor:
         def is_connected(self):
@@ -4567,8 +4567,8 @@ def test_ma_queue_cmd_refreshes_actual_accepted_solo_queue(client, monkeypatch):
 
 
 def test_resolve_target_queue_uses_player_id_queue_for_solo_sendspin_player():
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_ma as api_ma
-    import state
 
     state.set_ma_groups({}, [])
     try:
@@ -4585,8 +4585,8 @@ def test_resolve_target_queue_uses_player_id_queue_for_solo_sendspin_player():
 
 
 def test_resolve_target_queue_uses_ma_group_mapping_for_grouped_player():
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_ma as api_ma
-    import state
 
     state.set_ma_groups(
         {"sendspin-yandex-mini-2---lxc": {"id": "syncgroup_5zr8ss8g", "name": "Semdspin BT"}},
@@ -4606,8 +4606,8 @@ def test_resolve_target_queue_uses_ma_group_mapping_for_grouped_player():
 
 
 def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_ma as api_ma
-    import state
 
     state.set_ma_groups(
         {},
@@ -4633,9 +4633,9 @@ def test_resolve_target_queue_ignores_stale_syncgroup_id_for_solo_player():
 
 
 def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_ma as api_ma
     import sendspin_bridge.web.routes.ma_playback as ma_playback
-    import state
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
     fake_client = SimpleNamespace(
@@ -4667,8 +4667,8 @@ def test_resolve_target_queue_infers_single_active_player_for_stale_page(monkeyp
 
 
 def test_resolve_target_queue_keeps_legacy_universal_queue_for_uuid_player_id():
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_ma as api_ma
-    import state
 
     state.set_ma_groups({}, [])
     try:
@@ -4685,9 +4685,9 @@ def test_resolve_target_queue_keeps_legacy_universal_queue_for_uuid_player_id():
 
 
 def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):
+    import sendspin_bridge.bridge.state as state
     import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
     import sendspin_bridge.web.routes.ma_playback as ma_playback
-    import state
 
     class _FakeMonitor:
         def is_connected(self):
@@ -4713,7 +4713,7 @@ def test_ma_queue_cmd_returns_503_when_monitor_unavailable(client, monkeypatch):
 
 
 def test_ma_queue_cmd_returns_503_when_queue_unavailable(client):
-    import state
+    import sendspin_bridge.bridge.state as state
 
     state.set_ma_connected(True)
     state.set_ma_groups({}, [])

@@ -24,9 +24,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import concurrent.futures
 
-import state as _state
-from bluetooth_manager import BluetoothManager
-from bridge_orchestrator import BridgeOrchestrator
+import sendspin_bridge.bridge.state as _state
+from sendspin_bridge.bluetooth.manager import BluetoothManager
+from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,

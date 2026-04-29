@@ -453,7 +453,7 @@ class TestGroupAutoWake:
         client.status.update({"bt_standby": True, "group_id": "group-1"})
         client._wake_from_standby = fake_wake
 
-        import state
+        import sendspin_bridge.bridge.state as state
 
         loop = asyncio.get_running_loop()
         with (
@@ -467,7 +467,7 @@ class TestGroupAutoWake:
 
     def test_group_auto_wake_noop_when_not_playing(self):
         """No wake when group state is idle."""
-        import state
+        import sendspin_bridge.bridge.state as state
         from sendspin_client import DeviceStatus
 
         client = MagicMock()
@@ -485,7 +485,7 @@ class TestGroupAutoWake:
 
     def test_group_auto_wake_noop_when_not_standby(self):
         """Client not in standby is not woken even if group is playing."""
-        import state
+        import sendspin_bridge.bridge.state as state
         from sendspin_client import DeviceStatus
 
         client = MagicMock()
@@ -518,7 +518,7 @@ class TestGroupAutoWake:
         client.status.update({"bt_standby": True})  # No group_id
         client._wake_from_standby = fake_wake
 
-        import state
+        import sendspin_bridge.bridge.state as state
 
         loop = asyncio.get_running_loop()
         with (
@@ -533,7 +533,7 @@ class TestGroupAutoWake:
 
     def test_solo_player_no_wake_when_idle(self):
         """Solo player is NOT woken when now_playing keyed by player_id is idle."""
-        import state
+        import sendspin_bridge.bridge.state as state
         from sendspin_client import DeviceStatus
 
         client = MagicMock()

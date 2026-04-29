@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import state as _state
+import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.services.bluetooth.device_registry import set_active_clients, set_disabled_devices
 
 

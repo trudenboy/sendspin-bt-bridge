@@ -20,7 +20,7 @@ import time
 import urllib.parse as _up
 from typing import TYPE_CHECKING
 
-import state as _state
+import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.music_assistant.ma_artwork import build_artwork_proxy_url

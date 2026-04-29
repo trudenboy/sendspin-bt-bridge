@@ -9,8 +9,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+import sendspin_bridge.bridge.state as state
 import sendspin_bridge.services.music_assistant.ma_monitor as ma_monitor
-import state
 from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 from sendspin_bridge.services.music_assistant.ma_monitor import (
     MaMonitor,

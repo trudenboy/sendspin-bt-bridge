@@ -284,7 +284,7 @@ async def check_latest_version(channel: str | None = None) -> dict[str, Any] | N
 
 async def run_update_checker(current_version: str) -> None:
     """Long-running task: check for updates every CHECK_INTERVAL seconds."""
-    import state
+    import sendspin_bridge.bridge.state as state
 
     await asyncio.sleep(30)
 

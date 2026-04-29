@@ -14,7 +14,7 @@ import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-import state
+import sendspin_bridge.bridge.state as state
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

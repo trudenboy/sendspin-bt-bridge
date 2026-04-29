@@ -334,8 +334,8 @@ def csrf_client():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     app = Flask(
         __name__,
-        template_folder=os.path.join(project_root, "templates"),
-        static_folder=os.path.join(project_root, "static"),
+        template_folder=os.path.join(project_root, "src", "sendspin_bridge", "web", "templates"),
+        static_folder=os.path.join(project_root, "src", "sendspin_bridge", "web", "static"),
     )
     app.secret_key = "test-csrf"
     # CSRF guard short-circuits when global auth is off (Docker / no-auth

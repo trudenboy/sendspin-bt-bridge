@@ -4,7 +4,7 @@ import json
 import threading
 from unittest.mock import MagicMock, patch
 
-import state
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.config import update_config
 
 # ---------------------------------------------------------------------------
