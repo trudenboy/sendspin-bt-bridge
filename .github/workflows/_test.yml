@@ -58,10 +58,12 @@ jobs:
         run: uv sync --frozen --extra dev
 
       - name: Audit dependencies for CVEs
-        # Run pip-audit as an isolated tool (uv tool run) against the
-        # already-installed venv. Avoids polluting the project venv with
-        # pip-audit's transitive deps; uv tool caches the tool environment
-        # across runs.
+        # Run pip-audit *against the project venv* — pip-audit with no
+        # explicit target audits the current Python environment, so the
+        # invocation must run in the venv that ``uv sync`` just populated,
+        # not in pip-audit's own tool sandbox. ``uv run --with pip-audit``
+        # adds pip-audit as a transient extra dep for this single run
+        # without polluting the lockfile.
         #
         # ``pip`` itself is the package manager, not a shipped runtime
         # dep — its CVEs only apply when running pip on attacker-
@@ -70,7 +72,7 @@ jobs:
         # ``--ignore-vuln`` per-ID with the rationale here so a new
         # pip CVE gets a deliberate review rather than a silent skip.
         run: |
-          uv tool run --from pip-audit pip-audit \
+          uv run --with pip-audit pip-audit \
             --ignore-vuln CVE-2025-8869 \
             --ignore-vuln CVE-2026-1703 \
             --ignore-vuln CVE-2026-3219

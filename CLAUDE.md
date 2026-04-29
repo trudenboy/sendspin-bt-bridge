@@ -24,7 +24,11 @@ uv run python -m sendspin_bridge              # run the bridge
 
 # Standalone CLI tools (cached in ~/.local/share/uv/tools)
 uv tool install pre-commit                    # one-time
-uv tool run --from pip-audit pip-audit        # CVE audit, no project pollution
+uv run --with pip-audit pip-audit             # CVE audit of the synced project venv
+                                              # (pip-audit with no target scans the
+                                              # active interpreter — must run inside
+                                              # `uv run` so it sees the project deps,
+                                              # not pip-audit's own sandbox)
 
 # Updating dependencies
 uv lock --upgrade-package <name>              # bump one package
@@ -44,7 +48,7 @@ pip install -e .[dev]
 pytest -q
 ```
 
-Unit tests: `uv run pytest` (or `pytest` inside an activated venv); see `tests/`. 1566+ tests across 115+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `uv run pytest` (or `pytest` inside an activated venv); see `tests/` for the current suite. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION change to `main` triggers `release.yml` which runs lint+pytest, updates `config.py`, creates the git tag, builds Docker images (amd64+arm64), syncs HA addon directories, creates a GitHub Release (stable only), and builds armv7 (stable only). Regular development pushes and PRs trigger `ci.yml` (lint+test only).
 

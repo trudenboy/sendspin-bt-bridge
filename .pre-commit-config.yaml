@@ -38,7 +38,10 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy
+        # Run mypy through uv so the version + env match what
+        # ``[project.optional-dependencies].dev`` (and CI's ``uv run mypy``)
+        # use, instead of relying on a global ``mypy`` on PATH.
+        entry: uv run mypy --config-file pyproject.toml
         language: system
         types: [python]
         require_serial: true
