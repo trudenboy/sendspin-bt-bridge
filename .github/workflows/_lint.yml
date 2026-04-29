@@ -64,11 +64,12 @@ jobs:
         run: uv lock --check
 
       - name: Verify requirements.txt was regenerated from uv.lock
-        # If pyproject.toml or uv.lock changed but requirements.txt wasn't
-        # regenerated, surface the diff so CI fails clearly.
+        # uv embeds the actual --output-file path in the export header, so
+        # we have to regenerate in-place and then check git for drift —
+        # the same trick the uv-export pre-commit hook uses locally.
         run: |
-          uv export --no-hashes --no-dev --no-emit-project --output-file /tmp/requirements.regen.txt
-          diff -u requirements.txt /tmp/requirements.regen.txt
+          uv export --no-hashes --no-dev --no-emit-project --output-file requirements.txt
+          git diff --exit-code requirements.txt
 
       - name: Lint Dockerfiles
         run: |
