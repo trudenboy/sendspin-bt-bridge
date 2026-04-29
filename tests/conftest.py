@@ -131,4 +131,34 @@ def _reset_shared_module_state():
     with _ajs._scan_jobs_lock:
         _ajs._scan_jobs.clear()
 
+    # 4. Re-sync the `routes` package's submodule attributes with the
+    #    sys.modules entries. test_scan_cooldown's stash/pop fixture
+    #    sometimes leaves `routes.api_bt` pointing at a re-imported,
+    #    now-popped instance while sys.modules holds the original —
+    #    `monkeypatch.setattr(api_bt, ...)` then patches one and
+    #    Flask's blueprint references the other.
+    import sys as _sys
+
+    import sendspin_bridge.web.routes as _routes_pkg
+
+    for _submod in (
+        "api",
+        "api_bt",
+        "api_config",
+        "api_status",
+        "api_ha",
+        "api_ma",
+        "api_transport",
+        "api_ws",
+        "auth",
+        "ma_auth",
+        "ma_groups",
+        "ma_playback",
+        "views",
+        "_helpers",
+    ):
+        _full = f"sendspin_bridge.web.routes.{_submod}"
+        if _full in _sys.modules:
+            setattr(_routes_pkg, _submod, _sys.modules[_full])
+
     yield
