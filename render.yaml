@@ -3,8 +3,8 @@ services:
     name: sendspin-demo
     runtime: python
     plan: free
-    buildCommand: pip install sendspin flask waitress websockets
-    startCommand: python sendspin_client.py
+    buildCommand: pip install .
+    startCommand: python -m sendspin_bridge
     envVars:
       - key: DEMO_MODE
         value: "true"

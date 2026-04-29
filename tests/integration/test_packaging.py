@@ -3,9 +3,15 @@ from pathlib import Path
 
 
 def test_dockerfile_copies_all_top_level_python_modules():
+    """After src-layout migration the runtime ships from src/sendspin_bridge/.
+
+    Verify the Dockerfile copies the src/ tree and pip-installs the package
+    rather than dropping bare *.py files at /app/.
+    """
     dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
 
-    assert "COPY *.py ./" in dockerfile
+    assert "COPY src/ /app/src/" in dockerfile
+    assert "pip install --no-deps --no-cache-dir -e /app" in dockerfile
 
 
 def test_dockerfile_installs_ffmpeg_runtime_libraries():

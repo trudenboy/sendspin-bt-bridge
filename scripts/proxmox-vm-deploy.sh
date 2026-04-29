@@ -146,7 +146,7 @@ if [[ $elapsed -lt $MAX_WAIT ]]; then
 fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
-VERSION=$($SSH_CMD "docker exec sendspin-client python3 -c 'from config import VERSION; print(VERSION)'" 2>/dev/null || echo "unknown")
+VERSION=$($SSH_CMD "docker exec sendspin-client python3 -m sendspin_bridge --version" 2>/dev/null || echo "unknown")
 
 echo ""
 echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

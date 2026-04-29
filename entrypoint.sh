@@ -368,16 +368,16 @@ _exec_sendspin_client() {
                 --clear-groups \
                 --inh-caps=+net_admin,+net_raw \
                 --ambient-caps=+net_admin,+net_raw \
-                env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
+                env HOME="$HOME" USER="$USER" python3 -m sendspin_bridge
         fi
         if command -v gosu >/dev/null 2>&1; then
             echo "Starting Sendspin client with web interface as UID ${APP_RUNTIME_UID}:${APP_RUNTIME_GID} (setpriv missing — RSSI will be unavailable)..."
-            exec gosu "$APP_RUNTIME_SPEC" env HOME="$HOME" USER="$USER" python3 /app/sendspin_client.py
+            exec gosu "$APP_RUNTIME_SPEC" env HOME="$HOME" USER="$USER" python3 -m sendspin_bridge
         fi
     fi
 
     echo "Starting Sendspin client with web interface..."
-    exec python3 /app/sendspin_client.py
+    exec python3 -m sendspin_bridge
 }
 
 # HA Addon mode: /data/options.json is written by HA Supervisor before start.
@@ -425,7 +425,7 @@ PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
 
 # Get version: prefer the entry-point's --version short-circuit (cheap, no deps),
 # fall back to /app/VERSION file, finally "unknown".
-VERSION=$(python3 /app/sendspin_client.py --version 2>/dev/null || cat /app/VERSION 2>/dev/null || echo "unknown")
+VERSION=$(python3 -m sendspin_bridge --version 2>/dev/null || cat /app/VERSION 2>/dev/null || echo "unknown")
 
 # MA server setting
 MA_SERVER="${SENDSPIN_SERVER:-auto}"
