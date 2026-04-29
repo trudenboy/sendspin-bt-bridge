@@ -84,6 +84,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   input) instead of breaking onto its own line. The live CoD
   readback chip stays next to the dropdown for at-a-glance
   confirmation.
+- **MAC→hci lookup falls back to `hciconfig -a` when sysfs is
+  unmounted.** Docker images that don't pass `-v /sys:/sys:ro` had
+  `/sys/class/bluetooth/hciN/address` missing, so the per-adapter CoD
+  startup applier and the live CoD readback for the adapter row
+  silently no-op'd. The fallback parses `hciconfig -a` (which talks
+  to the kernel via the BlueZ control socket) so both paths now work
+  in the typical Docker setup without extra mounts.
 
 ## [2.65.1-rc.1] - 2026-04-29
 

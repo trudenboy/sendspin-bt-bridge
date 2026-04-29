@@ -92,7 +92,7 @@ def is_valid_mac(mac: str) -> bool:
 
 
 def build_hci_map() -> dict[str, str]:
-    """Return a ``{normalised_mac: hciN}`` map by scanning sysfs once.
+    """Return a ``{normalised_mac: hciN}`` map for every visible controller.
 
     Use this instead of calling :func:`resolve_hci_for_mac` in a loop —
     one sysfs walk per request keeps the endpoint O(n) in the number of
@@ -100,25 +100,63 @@ def build_hci_map() -> dict[str, str]:
     BT controllers.
 
     Keys are uppercase, colon-stripped MACs (matching what
-    ``resolve_hci_for_mac`` compares internally).  Returns an empty dict
-    when sysfs is unreadable.
+    ``resolve_hci_for_mac`` compares internally). Sysfs is the
+    authoritative source — :file:`/sys/class/bluetooth/hciN/address` is
+    what BlueZ itself honours. When sysfs isn't mounted into the
+    process (the typical Docker case unless ``-v /sys:/sys:ro`` is
+    used) we fall back to parsing :command:`hciconfig -a`, which talks
+    to the kernel via the BlueZ control socket and returns the same
+    ``hciN`` labels. Returns an empty dict only when both paths fail.
     """
     mapping: dict[str, str] = {}
     try:
         entries = sorted(_BT_SYSFS_DIR.iterdir())
     except OSError as exc:
         logger.debug("sysfs adapter lookup failed: %s", exc)
+    else:
+        for hci in entries:
+            addr_file = hci / "address"
+            if not addr_file.exists():
+                continue
+            try:
+                addr = addr_file.read_text().strip().upper().replace(":", "")
+            except OSError:
+                continue
+            if addr:
+                mapping[addr] = hci.name
+        if mapping:
+            return mapping
+
+    # Sysfs unmounted (Docker without /sys passthrough). Ask the kernel
+    # via hciconfig — it uses the BlueZ control socket and prints the
+    # canonical hciN labels with their MACs.
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            ["hciconfig", "-a"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.debug("hciconfig fallback failed: %s", exc)
         return mapping
-    for hci in entries:
-        addr_file = hci / "address"
-        if not addr_file.exists():
+
+    current: str | None = None
+    for line in out.splitlines():
+        head = line.split("\t", 1)[0].strip()
+        if head.endswith(":") and head[:-1].startswith("hci") and head[:-1][3:].isdigit():
+            current = head[:-1]
             continue
-        try:
-            addr = addr_file.read_text().strip().upper().replace(":", "")
-        except OSError:
-            continue
-        if addr:
-            mapping[addr] = hci.name
+        if current and "BD Address:" in line:
+            # "    BD Address: AA:BB:CC:DD:EE:FF  ACL MTU: ..."
+            tail = line.split("BD Address:", 1)[1].strip()
+            mac = tail.split()[0] if tail else ""
+            if _MAC_RE.match(mac):
+                mapping[mac.upper().replace(":", "")] = current
+            current = None
     return mapping
 
 
