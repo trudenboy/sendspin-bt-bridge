@@ -50,22 +50,19 @@ htmlcov/
 # Worktrees
 .worktrees/
 
-# Local notes
-community_engagement.md
-.worktrees/
+# Local working notes / screenshots / drafts (everything inside .scratch/ is ignored)
+.scratch/
 
 # IDE / tool artifacts
 .playwright-mcp/
-sendspin-cli/
-# Debug screenshots (docs screenshots live in docs-site/public/screenshots/)
-/*.png
 .venv
 .claude/
-community_engagement.md
-reddit/
-github-issue-snapshot.md
-github-issue-snapshot-2.md
-img/
 .wrangler/
 .understand-anything/
-mobile-375-config-snapshot.md
+
+# Sibling project (intentionally separate; lives alongside but is not part of this repo)
+sendspin-cli/
+
+# Legacy directories (ignored if regenerated locally)
+reddit/
+img/
