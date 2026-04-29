@@ -96,6 +96,27 @@ After the switch, `Tx excessive retries` should stay at `0` during playback and 
 
 If you cannot move the host to 5 GHz, you may need to look into wiring the Pi over Ethernet, switching the BT dongle to a different physical setup, or accepting that single-speaker playback is the practical ceiling on a 2.4 GHz-only Pi.
 
+## Samsung Q-series soundbar refuses to pair (`AuthenticationCanceled` / "No Resources")
+
+**Symptom.** Pairing a Samsung HW-Q910B / Q990B / similar Q-series soundbar fails immediately with:
+
+```
+hci0 1C:86:9A:** type BR/EDR connect failed (status 0x07, No Resources)
+Failed to pair: org.bluez.Error.AuthenticationCanceled
+```
+
+The same speaker pairs fine with a phone or another Linux desktop, and the failure is identical regardless of which USB Bluetooth adapter you swap in.
+
+**Root cause.** Samsung Q-series firmware **filters incoming BR/EDR connection attempts by the initiator's Class of Device**. When the local adapter advertises a CoD the speaker doesn't recognise (HAOS / Raspberry Pi default to `0x0c0000`, which fails the filter), the soundbar replies `LMP_not_accepted_ext: Limited Resources` over the air. BlueZ surfaces that as `HCI Connect Complete status=0x0d` → `MGMT Connect Failed: No Resources (0x07)` → `org.bluez.Error.AuthenticationCanceled` — a misleading name; no authentication phase ever ran.
+
+Tracked upstream as [bluez/bluez#1025](https://github.com/bluez/bluez/issues/1025).
+
+**Fix.** Override the local adapter's Class of Device. Open **Configuration → Bluetooth**, find the adapter row, and in the **Class of Device** dropdown pick **Computer/Laptop (0x00010c) — Samsung-compat**. Save the config, restart the bridge, and re-pair the soundbar.
+
+The bridge applies the override at startup via the kernel mgmt API (no host file edits needed). On a regular Docker / LXC deployment you can alternatively persist the value at the host level by adding `Class = 0x00010c` under `[General]` in `/etc/bluetooth/main.conf` and restarting `bluetooth.service` — same effect, host-wide. On HAOS the in-bridge override is the recommended path because the host's `/etc/bluetooth/main.conf` is part of the read-only OS image.
+
+The bridge will also surface this as a recovery card automatically when it detects the `AuthenticationCanceled` + "No Resources" fingerprint during pairing — clicking the card opens the Bluetooth tab where the dropdown lives.
+
 ## Bluetooth does not connect
 
 1. Confirm the speaker is paired at the host level.

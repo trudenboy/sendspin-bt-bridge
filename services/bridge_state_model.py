@@ -140,6 +140,9 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
             "max_reconnect_fails": max_reconnect_fails,
             "reconnect_attempts_remaining": reconnect_attempts_remaining,
             "standby": bool(extra.get("bt_standby")),
+            "pair_failure_kind": extra.get("pair_failure_kind"),
+            "pair_failure_adapter_mac": extra.get("pair_failure_adapter_mac"),
+            "pair_failure_at": extra.get("pair_failure_at"),
         },
         audio={
             "has_sink": bool(_obj_get(device, "has_sink", False)),

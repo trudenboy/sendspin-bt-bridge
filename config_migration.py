@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -409,6 +410,44 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         if not isinstance(value, list):
             logger.warning("Invalid %s value %r in config; using default []", key, value)
             config[key] = []
+
+    config["BLUETOOTH_ADAPTERS"] = _normalize_bluetooth_adapters(config.get("BLUETOOTH_ADAPTERS", []))
+
+
+_DEVICE_CLASS_HEX_RE = re.compile(r"^0x[0-9a-fA-F]{6}$")
+
+
+def _normalize_bluetooth_adapters(adapters: Any) -> list[dict]:
+    """Normalise BLUETOOTH_ADAPTERS entries.
+
+    Entries are dicts; we currently only sanitise the ``device_class``
+    field (added in v2.65.1 for the Samsung Q-series CoD-filter workaround,
+    bluez/bluez#1025).  Invalid hex strings are dropped with a warning so a
+    typo in main.conf doesn't propagate to the kernel mgmt call at startup.
+    """
+    if not isinstance(adapters, list):
+        return []
+
+    normalized: list[dict] = []
+    for entry in adapters:
+        if not isinstance(entry, dict):
+            logger.warning("Ignoring invalid Bluetooth adapter entry %r", entry)
+            continue
+        clean = dict(entry)
+        raw_class = clean.get("device_class")
+        if raw_class is None or raw_class == "":
+            clean.pop("device_class", None)
+        elif isinstance(raw_class, str) and _DEVICE_CLASS_HEX_RE.match(raw_class.strip()):
+            clean["device_class"] = raw_class.strip().lower()
+        else:
+            logger.warning(
+                "Adapter %s: invalid device_class %r — must be six hex chars (e.g. '0x00010c'); dropping",
+                clean.get("mac", "?"),
+                raw_class,
+            )
+            clean.pop("device_class", None)
+        normalized.append(clean)
+    return normalized
 
 
 def _configured_device_matches(

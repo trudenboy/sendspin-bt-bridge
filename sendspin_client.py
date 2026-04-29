@@ -373,6 +373,15 @@ class DeviceStatus:
     active_listen_port: int | None = None
     reloading: bool = False
     listen_port: int | None = None
+    # v2.65.1 — last-pair classifier output for the operator-guidance
+    # builder.  ``None`` = no recognised fingerprint (most failures);
+    # ``"samsung_cod_filter"`` = the Q-series Class-of-Device filter
+    # quirk (bluez/bluez#1025) — see services/bluetooth.classify_pair_failure.
+    # The adapter MAC is captured alongside so the recovery card can name
+    # the controller the operator should adjust in Settings → Bluetooth.
+    pair_failure_kind: str | None = None
+    pair_failure_adapter_mac: str | None = None
+    pair_failure_at: str | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 

@@ -109,6 +109,83 @@ def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
         logger.warning("PA hardening skipped (pactl unavailable): %s", exc)
 
 
+# ---------------------------------------------------------------------------
+# Bluetooth Class of Device hardening (per-adapter)
+# ---------------------------------------------------------------------------
+
+
+def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> None:
+    """Apply ``BLUETOOTH_ADAPTERS[].device_class`` to each kernel controller.
+
+    Called once at startup, after PA hardening.  Most fleets have no
+    overrides set (default empty string), so this is a fast no-op for
+    them.  When set, the value is a 6-hex-digit CoD (e.g. ``0x00010c``)
+    and is delivered via ``MGMT_OP_SET_DEV_CLASS`` — the same mgmt
+    channel ``bt_rssi_mgmt`` already uses, so no new capability is
+    required beyond the ``CAP_NET_ADMIN`` the bridge already holds.
+
+    Resolution order for the kernel hci index:
+
+    1. ``adapter['hci']`` from config (e.g. ``'hci0'``) when present —
+       lets operators pin the override regardless of sysfs ordering.
+    2. Sysfs MAC→hci lookup via ``services.bluetooth.build_hci_map`` —
+       handles configs that only list MAC and trust the bridge to find
+       the controller.
+
+    Failure modes are logged at WARNING and never raise; a missing
+    btsocket / bad permission / unmounted sysfs lets the bridge keep
+    booting (the operator's other guarantees still hold; only the
+    Samsung-Q workaround is degraded).
+    """
+    if not adapters:
+        return
+
+    # Lazy-imported to avoid pulling sysfs / btsocket at module import
+    # time on non-Linux dev boxes.
+    from services.bluetooth import build_hci_map
+    from services.bt_class_of_device import apply_device_class_for_hex
+
+    hci_map: dict[str, str] | None = None
+    for entry in adapters:
+        if not isinstance(entry, dict):
+            continue
+        hex_value = str(entry.get("device_class") or "").strip()
+        if not hex_value:
+            continue
+
+        hci_label = str(entry.get("hci") or "").strip()
+        if not hci_label:
+            mac = str(entry.get("mac") or "").strip()
+            if not mac:
+                logger.warning(
+                    "CoD: cannot apply device_class=%s — adapter entry has neither 'hci' nor 'mac'",
+                    hex_value,
+                )
+                continue
+            if hci_map is None:
+                hci_map = build_hci_map()
+            hci_label = hci_map.get(mac.upper().replace(":", ""), "")
+            if not hci_label:
+                logger.warning(
+                    "CoD: cannot apply device_class=%s — sysfs has no hci entry for adapter %s",
+                    hex_value,
+                    mac,
+                )
+                continue
+
+        # ``hci0`` → ``0`` — guard against malformed labels.
+        if not hci_label.startswith("hci"):
+            logger.warning("CoD: ignoring adapter entry with malformed hci label %r", hci_label)
+            continue
+        try:
+            adapter_index = int(hci_label[3:])
+        except ValueError:
+            logger.warning("CoD: ignoring adapter entry with non-numeric hci suffix %r", hci_label)
+            continue
+
+        apply_device_class_for_hex(adapter_index, hex_value)
+
+
 @dataclass
 class RuntimeBootstrap:
     config: dict[str, Any]
@@ -232,6 +309,12 @@ class BridgeOrchestrator:
 
         # PulseAudio runtime hardening — before any subprocess is spawned
         _harden_pulseaudio(disable_rescue_streams=bool(config.get("DISABLE_PA_RESCUE_STREAMS", False)))
+
+        # Per-adapter Class of Device override — Samsung Q-series workaround
+        # (bluez/bluez#1025).  Default-empty value means most operators see
+        # this as a fast no-op; only those who explicitly set ``device_class``
+        # in ``BLUETOOTH_ADAPTERS`` pay the mgmt round-trip.
+        _apply_adapter_device_class_overrides(list(config.get("BLUETOOTH_ADAPTERS") or []))
 
         return RuntimeBootstrap(
             config=config,

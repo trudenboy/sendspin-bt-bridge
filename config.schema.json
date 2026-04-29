@@ -479,6 +479,12 @@
         "hci": {
           "type": "string",
           "description": "HCI device name (e.g. 'hci0')."
+        },
+        "device_class": {
+          "type": "string",
+          "pattern": "^(0x[0-9a-fA-F]{6}|)$",
+          "default": "",
+          "description": "Override the local Bluetooth Class of Device for this adapter (six-hex form, e.g. '0x00010c' for Computer/Laptop). Empty string leaves the kernel/bluetoothd default in place. Some peers — notably Samsung Q-series soundbars (bluez/bluez#1025) — reject incoming BR/EDR connections whose initiator CoD they don't recognise; setting this to '0x00010c' is the documented workaround."
         }
       },
       "additionalProperties": false
