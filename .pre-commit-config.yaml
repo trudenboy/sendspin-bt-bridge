@@ -8,27 +8,41 @@ repos:
       - id: check-yaml
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+    # Pin matches the ruff version in [project.optional-dependencies].dev
+    # so local pre-commit and CI's `uv run ruff` apply the same rules
+    # and formatter. Bump alongside that pin.
+    rev: v0.15.12
     hooks:
       - id: ruff
         args:
           - --fix
-          - --extend-ignore=UP038
       - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.27
+    hooks:
+      # `uv lock --check` — fail if uv.lock is out of sync with pyproject.toml.
+      - id: uv-lock
+      # Regenerate requirements.txt from uv.lock and abort the commit if the
+      # working tree's requirements.txt would change. Keeps the LXC pip3
+      # install path on the same dependency set as Docker / CI / local dev.
+      - id: uv-export
+        args:
+          - "--no-hashes"
+          - "--no-dev"
+          - "--no-emit-project"
+          - "--output-file"
+          - "requirements.txt"
 
   - repo: local
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy
+        # Run mypy through uv so the version + env match what
+        # ``[project.optional-dependencies].dev`` (and CI's ``uv run mypy``)
+        # use, instead of relying on a global ``mypy`` on PATH.
+        entry: uv run mypy --config-file pyproject.toml
         language: system
         types: [python]
         require_serial: true
         exclude: "(sendspin-cli/|scripts/)"
-
-      - id: sync-requirements
-        name: sync requirements.txt and pyproject.toml deps
-        entry: python3 scripts/sync_requirements.py --check
-        language: system
-        files: '^(requirements\.txt|pyproject\.toml)$'
-        pass_filenames: false

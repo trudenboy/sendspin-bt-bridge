@@ -38,8 +38,23 @@ should update their paths.
 
 - `pyproject.toml` now declares `[build-system]` (hatchling) and reads
   the version dynamically from the `VERSION` file (PEP 621).
-- `requirements.txt` is now mirrored from `pyproject.toml`'s
-  `[project.dependencies]` (CI guardrail enforces parity).
+- Dependency management migrated to [uv](https://docs.astral.sh/uv/).
+  `uv.lock` is the single source of truth for resolved versions across
+  Linux/macOS/Windows on Python ≥ 3.12; `requirements.txt` is now an
+  artefact regenerated from `uv.lock` via `uv export` (header documents
+  the canonical regen command). The legacy `scripts/sync_requirements.py`
+  diff guard and `dev-requirements.txt` shim are removed; CI parity is
+  enforced by `uv lock --check` + a `uv export` diff and the
+  `astral-sh/uv-pre-commit` hooks (`uv-lock`, `uv-export`).
+- CI workflows `_lint.yml` and `_test.yml` install dependencies via
+  `astral-sh/setup-uv@v4` + `uv sync --frozen --extra dev` (≈3-8 s vs
+  the previous ~30-45 s pip flow). pip-audit runs via `uv run --with
+  pip-audit pip-audit` so it scans the actual synced project venv
+  (rather than pip-audit's own tool sandbox) without permanently adding
+  the auditor to the lockfile. Dockerfile uv pin bumped 0.5.31 → 0.9.27.
+- `pytest-cov` moved from an ad-hoc CI install into
+  `[project.optional-dependencies].dev`, so `uv run pytest --cov=...`
+  works locally too.
 - 67 `services/*.py` modules grouped into 8 semantic subpackages
   (`bluetooth/`, `audio/`, `music_assistant/`, `ha/`, `ipc/`,
   `lifecycle/`, `diagnostics/`, `infrastructure/`).

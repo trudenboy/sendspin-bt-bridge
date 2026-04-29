@@ -28,31 +28,48 @@ jobs:
           sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" src/sendspin_bridge/config/__init__.py
           sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" src/sendspin_bridge/config/__init__.py
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.12"
-          cache: pip
+          version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Install dependencies
-        run: |
-          pip install ruff==0.11.13 mypy
-          pip install -r requirements.txt || true
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install system build dependencies
+        # dbus-python ships sdist-only on PyPI; building requires the
+        # libdbus headers. The full ``uv sync --frozen --extra dev`` pulls
+        # the bridge package + all runtime deps so mypy sees the same
+        # import surface as production.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libdbus-1-dev libglib2.0-dev
+
+      - name: Install dependencies (sync from uv.lock)
+        run: uv sync --frozen --extra dev
 
       - name: Ruff check
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Ruff format check
-        run: ruff format --check .
+        run: uv run ruff format --check .
 
       - name: Mypy
-        run: mypy --config-file pyproject.toml src/sendspin_bridge/
+        run: uv run mypy --config-file pyproject.toml src/sendspin_bridge/
 
       - name: Verify HA addon variants are in sync with template
-        run: python scripts/generate_ha_addon_variants.py check-current-repo
+        run: uv run python scripts/generate_ha_addon_variants.py check-current-repo
 
-      - name: Verify requirements.txt and pyproject.toml deps are in sync
-        run: python scripts/sync_requirements.py --check
+      - name: Verify uv.lock is in sync with pyproject.toml
+        run: uv lock --check
+
+      - name: Verify requirements.txt was regenerated from uv.lock
+        # uv embeds the actual --output-file path in the export header, so
+        # we have to regenerate in-place and then check git for drift —
+        # the same trick the uv-export pre-commit hook uses locally.
+        run: |
+          uv export --no-hashes --no-dev --no-emit-project --output-file requirements.txt
+          git diff --exit-code requirements.txt
 
       - name: Lint Dockerfiles
         run: |

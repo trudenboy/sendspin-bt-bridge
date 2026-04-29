@@ -207,9 +207,11 @@ def install() -> None:
     _original_is_audio_device = _sbt.is_audio_device
     _audio_macs = {d["mac"] for d in DEMO_SCAN_RESULTS}
     _sbt.list_bt_adapters = (  # type: ignore[assignment]
-        lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
-        if _demo_enabled()
-        else _original_list_bt_adapters(timeout=timeout)
+        lambda timeout=5: (
+            [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
+            if _demo_enabled()
+            else _original_list_bt_adapters(timeout=timeout)
+        )
     )
     _sbt.is_audio_device = (  # type: ignore[assignment]
         lambda mac: mac.upper() in _audio_macs if _demo_enabled() else _original_is_audio_device(mac)
@@ -506,9 +508,11 @@ def install() -> None:
     _abt._run_standalone_pair = _demo_run_standalone_pair
     _original_api_bt_list_adapters = _abt.list_bt_adapters
     _abt.list_bt_adapters = (  # type: ignore[assignment]
-        lambda timeout=5: [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
-        if _demo_enabled()
-        else _original_api_bt_list_adapters(timeout=timeout)
+        lambda timeout=5: (
+            [str(adapter["mac"]) for adapter in DEMO_ADAPTERS]
+            if _demo_enabled()
+            else _original_api_bt_list_adapters(timeout=timeout)
+        )
     )
 
     # Replace subprocess module reference in api_bt so that handlers
@@ -783,9 +787,9 @@ def install() -> None:
     if hasattr(_abt, "CONFIG_FILE"):
         _abt.CONFIG_FILE = _demo_config_file  # type: ignore[assignment]
     _api_config_mod._read_log_lines = (  # type: ignore[assignment]
-        lambda runtime, lines: list(DEMO_LOG_LINES)[-lines:]
-        if _demo_enabled()
-        else _original_read_log_lines(runtime, lines)
+        lambda runtime, lines: (
+            list(DEMO_LOG_LINES)[-lines:] if _demo_enabled() else _original_read_log_lines(runtime, lines)
+        )
     )
     _api_config_mod.subprocess = _demo_subprocess  # type: ignore[assignment]
 
