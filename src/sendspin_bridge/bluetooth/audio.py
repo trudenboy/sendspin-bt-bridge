@@ -29,7 +29,7 @@ from sendspin_bridge.services.audio.pulse import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.bridge.types import BluetoothManagerHost
+    from sendspin_bridge.bridge.bt_types import BluetoothManagerHost
 
 logger = logging.getLogger(__name__)
 

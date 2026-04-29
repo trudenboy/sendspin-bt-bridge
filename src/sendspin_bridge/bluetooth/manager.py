@@ -63,7 +63,7 @@ def _load_allow_hfp() -> bool:
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.bridge.types import BluetoothManagerHost
+    from sendspin_bridge.bridge.bt_types import BluetoothManagerHost
     from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 UTC = timezone.utc
