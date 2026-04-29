@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.0] - 2026-04-29
+
+### Changed
+- **⚠️ Breaking — repository moved to PyPA src-layout.** The Python
+  source tree moved from the flat repo-root layout into
+  `src/sendspin_bridge/`. Runtime behaviour is unchanged; only the
+  install / upgrade path is affected. **Docker** and **HA Add-on**
+  users — no action, the image rebuild handles it. **LXC users** —
+  the pre-2.66 `upgrade.sh` cannot apply this release; run the
+  one-shot bootstrap helper once, then resume normal upgrades:
+  `curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/migrate-to-src-layout.sh | sh`.
+  The canonical entry point is now `python -m sendspin_bridge`.
+- Build system declared via PEP 621 with version sourced from
+  `VERSION`; `pip install .` and `pip install -e .` now work without
+  side files.
+- Dependency management migrated to [uv](https://docs.astral.sh/uv/).
+  Local development uses `uv venv` + `uv sync --frozen --extra dev`;
+  `uv.lock` is the canonical resolved-deps file. CI install drops from
+  ~30-45 s to 3-8 s. Pre-commit + CI guardrails enforce that
+  `requirements.txt` stays a regenerated artefact of `uv.lock`.
+- pip-audit now runs via `uv run --with pip-audit pip-audit` so the
+  CVE scan sees the actual installed project venv.
+- Changelog discipline enforced. `scripts/lint_changelog.py` (rules
+  R1–R10) runs as a pre-commit hook and a CI step in `_lint.yml`;
+  forward-only style rules apply to `[Unreleased]`. A one-off
+  rc-consolidation pass folded historical rc/beta entries into their
+  stable releases (`CHANGELOG.md` shrinks ~31 %). Compare-links footer
+  is regenerated automatically on every release. Full ruleset and
+  rationale live in `CONTRIBUTING.md` § Changelog Discipline; an
+  agent-facing summary lives in `CLAUDE.md`.
+- **Per-adapter CoD override surface gated on "Show experimental
+  features".** The dedicated `EXPERIMENTAL_BT_DEVICE_CLASS_OVERRIDE`
+  toggle (briefly added in rc.7–rc.9) is gone. The adapter row's
+  Class of Device dropdown now appears only when **Show experimental
+  features** is on (top of Configuration), styled with a red dashed
+  outline and ⚠ icon to flag it as experimental. The runtime always
+  honours configured `device_class` values regardless of the UI
+  toggle, so existing setups don't need to flip anything to keep
+  working. Targets the Samsung Q-series quirk (bluez/bluez#1025); the
+  adapter row also shows the live CoD read back after each apply.
+
+### Removed
+- `dev-requirements.txt` and `scripts/sync_requirements.py` — replaced
+  by `uv sync --extra dev` and the `astral-sh/uv-pre-commit` hooks.
+
+### Fixed
+- **Samsung Q-series soundbar pairing (bluez/bluez#1025, issue #210).**
+  v2.65.1-rc.1 added a per-adapter `device_class` override for this
+  quirk, but the underlying applier sent the wrong kernel mgmt opcode
+  (`0x002C` is `MGMT_OP_SET_SCAN_PARAMS`, not `MGMT_OP_SET_DEV_CLASS =
+  0x000E`). Even with the correct opcode, the mgmt API path returned
+  `Invalid Parameters (0x0d)` on every adapter tested (CSR8510 A10,
+  RTL8761B). The applier now sends a raw HCI `Write_Class_Of_Device`
+  command (OGF=0x03, OCF=0x0024) on a `BTPROTO_HCI/HCI_CHANNEL_RAW`
+  socket — verified working on both adapters. The override is also
+  re-applied immediately before each outbound pair attempt so an
+  intervening `bluetoothd` power-cycle doesn't undo it before the
+  soundbar's CoD filter inspects the initiator.
+- **CoD startup applier skipped adapter when config stored `id` key.**
+  Adapter config entries use `id` for the HCI label (`hci0` etc.) but
+  the startup applier was only looking for a `hci` key, so it always
+  fell back to sysfs MAC lookup. On Docker hosts where
+  `/sys/class/bluetooth/hciN/address` is not mounted, that lookup
+  returned nothing and the override was silently skipped. The applier
+  now accepts both `hci` and `id` as the HCI label source.
+- **CoD applier timed out on every Command Complete read.** The raw
+  HCI socket on `HCI_CHANNEL_RAW` ships with a zero-mask kernel filter
+  that drops every event before it reaches userspace, so the
+  `Write_Class_Of_Device` / `Read_Class_Of_Device` Command Complete
+  reply never arrived and we logged a misleading "timed out or failed"
+  warning. The applier now installs an `HCI_FILTER` `setsockopt` that
+  lets event packets through (matching what `hciconfig` does
+  internally), so the override actually lands and the live CoD
+  readback works.
+- The per-adapter Class of Device dropdown now sits inline on the
+  same row as the adapter id / MAC / custom name (right of the name
+  input) instead of breaking onto its own line. The live CoD
+  readback chip stays next to the dropdown for at-a-glance
+  confirmation.
+- **MAC→hci lookup falls back to `hciconfig -a` when sysfs is
+  unmounted.** Docker images that don't pass `-v /sys:/sys:ro` had
+  `/sys/class/bluetooth/hciN/address` missing, so the per-adapter CoD
+  startup applier and the live CoD readback for the adapter row
+  silently no-op'd. The fallback parses `hciconfig -a` (which talks
+  to the kernel via the BlueZ control socket) so both paths now work
+  in the typical Docker setup without extra mounts.
+- **CoD `HCI_FILTER` setsockopt rejected with `EINVAL`.** The packed
+  filter buffer was 14 bytes, but the kernel's `struct hci_filter`
+  pads its trailing `__le16 opcode` to a 16-byte boundary; the
+  `bt_copy_from_sockptr` size check rejected the short buffer and
+  the failure surfaced as a misleading "Write_Class_Of_Device timed
+  out or failed" warning. The pack format is now `=IIIH2x` (16
+  bytes), which the kernel accepts.
+- **`/api/logs` no longer reports "docker CLI not available" inside
+  containers.** The fallback used to look up the in-memory ring log
+  handler via `sys.modules['__main__']`, which only worked when the
+  bridge was launched as a script. Under v2.66's PyPA src-layout the
+  entry point is `python -m sendspin_bridge`, so that lookup always
+  failed and the UI showed only the boilerplate placeholder. The
+  endpoint now imports the ring buffer directly so live and
+  bug-report log views show the bridge's own logs as expected.
+
 ## [2.65.0] - 2026-04-28
 **Sendspin BT Bridge now talks to Home Assistant directly.**  No more
 running everything through Music Assistant just to reach a dashboard
@@ -4231,7 +4333,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0-rc.12...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...HEAD
+[2.66.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.1-rc.1...v2.66.0
 [2.65.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0...v2.65.1-rc.1
 [2.65.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.3...v2.65.0
 [2.64.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.2...v2.64.3
