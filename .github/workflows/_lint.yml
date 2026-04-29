@@ -48,6 +48,9 @@ jobs:
       - name: Mypy
         run: mypy --config-file pyproject.toml *.py routes/ services/
 
+      - name: Verify HA addon variants are in sync with template
+        run: python scripts/generate_ha_addon_variants.py check-current-repo
+
       - name: Lint Dockerfiles
         run: |
           wget -qO /usr/local/bin/hadolint \

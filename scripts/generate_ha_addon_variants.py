@@ -8,9 +8,12 @@ style of `stable` / `rc` / `beta` addon directories.
 from __future__ import annotations
 
 import argparse
+import filecmp
 import json
 import re
 import shutil
+import sys
+import tempfile
 import urllib.parse as _up
 from dataclasses import dataclass
 from pathlib import Path
@@ -436,6 +439,81 @@ def sync_multi_addon_repo(
     )
 
 
+def _read_addon_version(addon_dir: Path) -> str | None:
+    """Return the `version: "x.y.z"` value declared in <addon_dir>/config.yaml, or None."""
+    config_path = addon_dir / "config.yaml"
+    if not config_path.exists():
+        return None
+    match = re.search(r'^version:\s+"([^"]+)"', config_path.read_text(), flags=re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _diff_dirs(left: Path, right: Path) -> list[str]:
+    """Return relative paths of files that differ between left and right (recursive)."""
+    diffs: list[str] = []
+    cmp = filecmp.dircmp(left, right)
+    stack = [(cmp, "")]
+    while stack:
+        node, prefix = stack.pop()
+        for name in node.diff_files:
+            diffs.append(f"{prefix}{name}")
+        for name in node.left_only:
+            diffs.append(f"{prefix}{name} (only in expected)")
+        for name in node.right_only:
+            diffs.append(f"{prefix}{name} (only in repo)")
+        for sub_name, sub_cmp in node.subdirs.items():
+            stack.append((sub_cmp, f"{prefix}{sub_name}/"))
+    return diffs
+
+
+def check_current_repo(output_root: Path) -> int:
+    """Verify ha-addon-rc/ and ha-addon-beta/ match what the generator would produce.
+
+    Reads versions from the existing on-disk config.yaml of each channel, regenerates
+    expected files into a tmp dir, and diffs. Returns 0 if in sync, 1 otherwise.
+    """
+    rc_version = _read_addon_version(output_root / "ha-addon-rc")
+    beta_version = _read_addon_version(output_root / "ha-addon-beta")
+    stable_version = _read_addon_version(output_root / "ha-addon")
+    if not (rc_version or beta_version):
+        print("check: no rc/beta addon dirs to verify (nothing to do)", file=sys.stderr)
+        return 0
+
+    issues: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp_root_str:
+        tmp_root = Path(tmp_root_str)
+        write_multi_addon_repo(
+            tmp_root,
+            stable_version=stable_version,
+            rc_version=rc_version,
+            beta_version=beta_version,
+        )
+        for channel in ("rc", "beta"):
+            addon_dir = _CHANNEL_ADDON_DIRS[channel]
+            actual = output_root / addon_dir
+            expected = tmp_root / addon_dir
+            if not actual.exists():
+                continue
+            if not expected.exists():
+                issues.append(f"{addon_dir}: directory missing in expected output")
+                continue
+            diffs = _diff_dirs(expected, actual)
+            for d in diffs:
+                issues.append(f"{addon_dir}/{d}")
+
+    if issues:
+        print("HA addon variants are OUT OF SYNC with the generator template:", file=sys.stderr)
+        for issue in issues:
+            print(f"  - {issue}", file=sys.stderr)
+        print(
+            "\nRun: python scripts/generate_ha_addon_variants.py sync-current-repo "
+            "--output-dir . --rc-version <rc> --beta-version <beta>",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -462,6 +540,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     sync_parser.add_argument("--rc-stage", default="experimental")
     sync_parser.add_argument("--beta-stage", default="experimental")
     sync_parser.add_argument("--output-dir", type=Path, default=_REPO_ROOT)
+
+    check_parser = subparsers.add_parser(
+        "check-current-repo",
+        help="Verify on-disk ha-addon-rc/beta/ match the generator template; exit 1 if drift",
+    )
+    check_parser.add_argument("--output-dir", type=Path, default=_REPO_ROOT)
     return parser
 
 
@@ -488,6 +572,9 @@ def main() -> None:
             beta_stage=args.beta_stage,
         )
         return
+
+    if args.command == "check-current-repo":
+        sys.exit(check_current_repo(args.output_dir))
 
     sync_multi_addon_repo(
         args.output_dir,
