@@ -331,7 +331,7 @@ def csrf_client():
 
     from sendspin_bridge.web.routes.auth import auth_bp
 
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     app = Flask(
         __name__,
         template_folder=os.path.join(project_root, "src", "sendspin_bridge", "web", "templates"),

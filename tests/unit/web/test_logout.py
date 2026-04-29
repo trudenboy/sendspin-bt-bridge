@@ -24,8 +24,8 @@ def _isolated_config(tmp_path, monkeypatch):
 def app():
     application = Flask(
         __name__,
-        template_folder="../src/sendspin_bridge/web/templates",
-        static_folder="../src/sendspin_bridge/web/static",
+        template_folder="../../../src/sendspin_bridge/web/templates",
+        static_folder="../../../src/sendspin_bridge/web/static",
     )
     application.secret_key = "test-secret"
     application.config["TESTING"] = True

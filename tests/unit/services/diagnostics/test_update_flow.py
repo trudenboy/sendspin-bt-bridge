@@ -395,7 +395,7 @@ def test_api_update_apply_in_ha_addon_returns_matching_variant_guidance(config_c
 
 
 def test_lxc_scripts_sync_repo_snapshot_recursively():
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parents[4]
 
     for relative_path in ("lxc/install.sh", "lxc/upgrade.sh"):
         text = (repo_root / relative_path).read_text()

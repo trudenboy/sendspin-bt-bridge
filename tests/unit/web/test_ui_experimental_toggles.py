@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 INDEX_HTML = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "templates" / "index.html"
 APP_JS = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "static" / "app.js"
 STYLE_CSS = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "static" / "style.css"

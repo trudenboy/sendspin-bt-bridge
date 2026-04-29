@@ -639,7 +639,7 @@ async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypa
 def test_demo_index_shows_demo_user_and_ma_token_notice_by_default(monkeypatch):
     monkeypatch.setenv("DEMO_MODE", "true")
 
-    template_root = Path(__file__).resolve().parents[1]
+    template_root = Path(__file__).resolve().parents[4]
     app = Flask(
         __name__,
         template_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "templates"),
@@ -675,7 +675,7 @@ def test_standalone_index_shows_short_web_port_hint(monkeypatch):
     monkeypatch.delenv("DEMO_MODE", raising=False)
     monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
 
-    template_root = Path(__file__).resolve().parents[1]
+    template_root = Path(__file__).resolve().parents[4]
     app = Flask(
         __name__,
         template_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "templates"),
@@ -713,7 +713,7 @@ def test_ha_addon_index_hides_logout_button(monkeypatch):
     monkeypatch.setattr("sendspin_bridge.web.routes.views.resolve_web_port", lambda: 8081)
     monkeypatch.setattr("sendspin_bridge.web.routes.views.detect_ha_addon_channel", lambda: "rc")
 
-    template_root = Path(__file__).resolve().parents[1]
+    template_root = Path(__file__).resolve().parents[4]
     app = Flask(
         __name__,
         template_folder=str(template_root / "src" / "sendspin_bridge" / "web" / "templates"),

@@ -471,7 +471,7 @@ def test_translation_preserves_existing_startup_banner_grace_when_option_omitted
 
 
 def test_translate_script_runs_as_direct_file() -> None:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "translate_ha_config.py"
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "translate_ha_config.py"
     result = subprocess.run(
         [sys.executable, str(script_path)],
         cwd="/",

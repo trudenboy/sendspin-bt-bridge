@@ -43,7 +43,7 @@ def test_default_config_keys_present_in_json_schema():
 
     from sendspin_bridge.config import DEFAULT_CONFIG
 
-    schema_path = Path(__file__).resolve().parents[1] / "src" / "sendspin_bridge" / "config" / "schema.json"
+    schema_path = Path(__file__).resolve().parents[3] / "src" / "sendspin_bridge" / "config" / "schema.json"
     schema = json.loads(schema_path.read_text())
     schema_props = set((schema.get("properties") or {}).keys())
 

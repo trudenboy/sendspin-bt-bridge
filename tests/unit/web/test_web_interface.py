@@ -60,7 +60,7 @@ def app():
         _set_cache_headers,
     )
 
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     web_pkg = os.path.join(project_root, "src", "sendspin_bridge", "web")
     test_app = Flask(
         __name__,
@@ -357,7 +357,7 @@ def test_templates_have_no_inline_event_handlers():
     import re
 
     pattern = re.compile(r"""(?:^|[\s'"])(on[a-z]+)\s*=\s*["']""", re.IGNORECASE)
-    project_root = pathlib.Path(__file__).resolve().parent.parent
+    project_root = pathlib.Path(__file__).resolve().parents[3]
     web_pkg = project_root / "src" / "sendspin_bridge" / "web"
     offenders: dict[str, set[str]] = {}
     for path in [

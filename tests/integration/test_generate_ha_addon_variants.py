@@ -14,7 +14,7 @@ from scripts.generate_ha_addon_variants import (
 
 
 def _current_stable_version() -> str:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     text = (root / "ha-addon" / "config.yaml").read_text()
     match = re.search(r'^version: "([^"]+)"$', text, flags=re.MULTILINE)
     assert match
@@ -22,7 +22,7 @@ def _current_stable_version() -> str:
 
 
 def test_generate_stable_variant_matches_current_addon_files():
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     variant = HaAddonVariant(channel="stable", version=_current_stable_version())
 
     rendered = generate_variant_files(variant)
@@ -93,7 +93,7 @@ def test_write_variant_files_writes_generated_ha_addon_tree(tmp_path):
 
 
 def test_generate_multi_addon_repo_files_renders_suffix_slug_repository_layout():
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
 
     rendered = generate_multi_addon_repo_files(
         stable_version=_current_stable_version(),

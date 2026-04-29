@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Keys ``_sync_ha_options`` always pushes to Supervisor.  Keep this list
 # in sync with ``routes/api_config.py:_sync_ha_options``; the test below

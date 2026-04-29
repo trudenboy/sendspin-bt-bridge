@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_JS_PATH = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "static" / "app.js"
 
 _DERIVE_ZERO_DEVICE_RUNTIME_STATE_SCRIPT = r"""
