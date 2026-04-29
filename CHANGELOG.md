@@ -4845,7 +4845,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.1...HEAD
+[2.66.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...v2.66.1
 [2.66.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.1-rc.1...v2.66.0
 [2.65.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0...v2.65.1-rc.1
 [2.65.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.3...v2.65.0

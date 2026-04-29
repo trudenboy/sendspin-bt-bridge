@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.1] - 2026-04-29
+
+### Fixed
+- Restored the supplementary armv7 (RPi 1 / Zero W) Docker image. The
+  v2.66.0 build failed for armv7 because the upstream uv image
+  (`ghcr.io/astral-sh/uv`) ships no `linux/arm/v7` manifest, so the
+  Dockerfile's `COPY --from` errored with "no match for platform in
+  manifest". The Dockerfile now picks up uv from a `pip install`-based
+  source stage on armv7, while amd64/arm64 keep using the upstream
+  image directly. No runtime behaviour change; only the v2.66.0
+  armv7 image was missing from GHCR for users on RPi 1 / Zero W.
+
 ## [2.66.0] - 2026-04-29
 
 ### Changed
@@ -4333,7 +4345,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.1...HEAD
+[2.66.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...v2.66.1
 [2.66.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.1-rc.1...v2.66.0
 [2.65.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0...v2.65.1-rc.1
 [2.65.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.64.3...v2.65.0
