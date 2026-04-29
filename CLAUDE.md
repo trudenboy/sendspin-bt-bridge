@@ -8,22 +8,43 @@ A Dockerized Python client that bridges Music Assistant's Sendspin protocol to B
 
 ## Development Commands
 
+Local environment is managed by [uv](https://docs.astral.sh/uv/). The
+checked-in `uv.lock` is the single source of truth for resolved
+dependencies; `requirements.txt` is regenerated from it via `uv export`
+and only kept around for the LXC pip3 install path.
+
 ```bash
 # Build and run locally
 docker compose up --build
 
-# Run without Docker (requires system Bluetooth/audio packages)
-pip install -r requirements.txt
-python sendspin_client.py
+# Local Python venv (preferred — uv-managed, frozen to uv.lock)
+uv venv                                       # one-time: create .venv from uv.lock metadata
+uv sync --frozen --extra dev                  # install runtime + dev deps
+uv run python -m sendspin_bridge              # run the bridge
+
+# Standalone CLI tools (cached in ~/.local/share/uv/tools)
+uv tool install pre-commit                    # one-time
+uv tool run --from pip-audit pip-audit        # CVE audit, no project pollution
+
+# Updating dependencies
+uv lock --upgrade-package <name>              # bump one package
+uv lock                                       # refresh resolution from pyproject.toml
+uv export --no-hashes --no-dev --no-emit-project --output-file requirements.txt
+                                              # regenerate the LXC-facing pinset
+                                              # (the uv-export pre-commit hook enforces this)
 
 # View container logs
 docker logs -f sendspin-client
 
 # Bluetooth troubleshooting inside container
 docker exec -it sendspin-client bluetoothctl
+
+# Classic pip flow (still works as a fallback; uv-managed lockfile is canonical)
+pip install -e .[dev]
+pytest -q
 ```
 
-Unit tests: `pytest` (see `tests/`). 1566+ tests across 115+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
+Unit tests: `uv run pytest` (or `pytest` inside an activated venv); see `tests/`. 1566+ tests across 115+ files. Manual testing via `docker logs` and the web UI at `http://localhost:8080`.
 
 CI/CD: The `VERSION` file is the single source of truth. Pushing a VERSION change to `main` triggers `release.yml` which runs lint+pytest, updates `config.py`, creates the git tag, builds Docker images (amd64+arm64), syncs HA addon directories, creates a GitHub Release (stable only), and builds armv7 (stable only). Regular development pushes and PRs trigger `ci.yml` (lint+test only).
 

@@ -27,15 +27,22 @@ open http://localhost:8080
 To run without Docker (requires system Bluetooth and audio packages):
 
 ```bash
-pip install -r requirements.txt
-python sendspin_client.py
+# Recommended: uv-managed venv frozen to uv.lock. One-time install: https://docs.astral.sh/uv/
+uv venv
+uv sync --frozen --extra dev
+uv run python -m sendspin_bridge
+
+# Fallback: pip + venv. uv.lock is canonical, requirements.txt is regenerated from it.
+python -m venv .venv && source .venv/bin/activate
+pip install -e .[dev]
+python -m sendspin_bridge
 ```
 
 ---
 
 ## Manual Test Checklist
 
-Run `python3 -m pytest -q` for the automated runtime suite and use `cd docs-site && npm run build` when changing the Starlight docs. The test suite and docs should be treated as separate validation surfaces: Python catches runtime regressions, while the docs build catches broken Starlight routes, content, screenshot references, and frontmatter/schema issues.
+Run `uv run python -m pytest -q` for the automated runtime suite and use `cd docs-site && npm run build` when changing the Starlight docs. The test suite and docs should be treated as separate validation surfaces: Python catches runtime regressions, while the docs build catches broken Starlight routes, content, screenshot references, and frontmatter/schema issues.
 
 ### Test-Driven Development (TDD)
 
@@ -52,8 +59,18 @@ When fixing a bug, first write a test that reproduces it (red), then fix (green)
 ### Linting
 
 ```bash
-ruff check .                    # Fast Python linter
-ruff format --check .           # Code formatting check
+uv run ruff check .             # Fast Python linter
+uv run ruff format --check .    # Code formatting check
+uv run mypy --config-file pyproject.toml src/sendspin_bridge/
+
+# CI also enforces these (driven by uv-pre-commit hooks):
+uv lock --check                 # uv.lock matches pyproject.toml
+uv export --no-hashes --no-dev --no-emit-project --output-file requirements.txt
+                                # requirements.txt regenerates cleanly
+
+# One-time pre-commit setup:
+uv tool install pre-commit
+pre-commit install
 ```
 
 Additionally, use this manual checklist when testing changes:
