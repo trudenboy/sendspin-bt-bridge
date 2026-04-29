@@ -162,4 +162,4 @@ Use the docs site for the full guides and reference:
 - [Changelog](CHANGELOG.md)
 - [Security Policy](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [History](HISTORY.md)
+- [History](docs/history/v1-v2.0.md)

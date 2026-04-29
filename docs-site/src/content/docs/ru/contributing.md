@@ -122,5 +122,5 @@ ruff format --check .           # Проверка форматирования 
 ## Дополнительные материалы
 
 - [Архитектура](/sendspin-bt-bridge/architecture/) — процессная модель, IPC-протокол, маршрутизация звука, автомат состояний Bluetooth, интеграция с MA, аутентификация и graceful degradation
-- [HISTORY.ru.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/HISTORY.ru.md) — история эволюции проекта (v1 → v2, ключевые архитектурные решения)
+- [docs/history/v1-v2.0.ru.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/docs/history/v1-v2.0.ru.md) — история эволюции проекта (v1 → v2, ключевые архитектурные решения)
 - [CHANGELOG.md](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md) — полная история версий

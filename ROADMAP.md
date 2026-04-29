@@ -1,5 +1,12 @@
 # Roadmap
 
+## Related documents
+
+- [`docs/roadmap/todo.md`](docs/roadmap/todo.md) — open items aligned with the v3 phases
+- [`docs/roadmap/v3.md`](docs/roadmap/v3.md) — full V3 architectural plan (sendspin-bt-bridge → sendspin-audio-bridge)
+- [`docs/roadmap/bluez-agent.md`](docs/roadmap/bluez-agent.md) — focused track for the native BlueZ pairing agent rollout
+- [`docs/history/v1-v2.0.md`](docs/history/v1-v2.0.md) — narrative history of v1 → v2
+
 ## Purpose
 
 This roadmap is written for the **v3 wave**, starting from the reality already shipped in `v2.46.x+`.
