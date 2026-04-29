@@ -33,7 +33,7 @@ from bt_dbus import (
 )
 from services import bt_operation_lock as _bt_op_lock
 from services import bt_rssi_mgmt
-from services.bluetooth import describe_pair_failure
+from services.bluetooth import classify_pair_failure, describe_pair_failure
 from services.pairing_agent import PairingAgent
 
 
@@ -458,6 +458,23 @@ class BluetoothManager:
             return False
 
         logger.info("Pairing with %s...", mac)
+        # Clear any pair-failure fingerprint left by a previous attempt
+        # before we run the new one — otherwise a stale
+        # ``samsung_cod_filter`` from last time can outlive a different
+        # failure shape (or even a successful re-pair before the
+        # next ``ok`` branch runs) and keep the recovery card lit.  Any
+        # match this attempt produces will overwrite these back below.
+        if self.host is not None:
+            try:
+                self.host.update_status(
+                    {
+                        "pair_failure_kind": None,
+                        "pair_failure_adapter_mac": None,
+                        "pair_failure_at": None,
+                    }
+                )
+            except Exception as exc:
+                logger.debug("[%s] pair_failure clear-on-entry failed: %s", self.device_name, exc)
         if self._reconnect_cancelled():
             logger.info("[%s] Pairing skipped because reconnect was cancelled", self.device_name)
             return False
@@ -650,6 +667,29 @@ class BluetoothManager:
                 )
                 logger.warning("Pairing may have failed: %s", failure_reason)
                 logger.debug("Pair output tail: %s", out[-600:])
+                # Fingerprint the failure for downstream operator guidance.
+                # Right now only the Samsung Q-series Class-of-Device filter
+                # quirk (bluez/bluez#1025) is recognised; ``classify_pair_failure``
+                # returns ``None`` for everything else so the recovery card
+                # only fires when we have a confident, actionable diagnosis.
+                agent_telemetry: dict | None = None
+                if native_agent is not None:
+                    try:
+                        agent_telemetry = native_agent.telemetry
+                    except Exception as exc:
+                        logger.debug("[%s] agent telemetry capture failed: %s", self.device_name, exc)
+                kind = classify_pair_failure(out, agent_telemetry=agent_telemetry)
+                if kind and self.host is not None:
+                    try:
+                        self.host.update_status(
+                            {
+                                "pair_failure_kind": kind,
+                                "pair_failure_adapter_mac": self.effective_adapter_mac or "",
+                                "pair_failure_at": datetime.now(tz=UTC).isoformat(),
+                            }
+                        )
+                    except Exception as exc:
+                        logger.debug("[%s] pair_failure_kind status push failed: %s", self.device_name, exc)
             return ok
         except (OSError, subprocess.SubprocessError) as e:
             logger.error("Pair error: %s", e)

@@ -271,6 +271,17 @@ def build_recovery_issue_actions(
             "Open device settings",
             device_names=names,
         )
+    elif issue_key == "samsung_cod_filter":
+        # Drives the user to the Bluetooth settings tab where they
+        # set the adapter's ``device_class`` override.  Re-pair is
+        # the natural follow-up so it goes in the secondary slot —
+        # the operator confirms the fix worked by retrying the
+        # connection that originally failed.
+        primary_action = _recovery_action("open_bt_settings", "Open Bluetooth settings", device_names=names)
+        secondary_actions.insert(
+            0,
+            _recovery_action("pair_device", "Re-pair speaker", device_names=names),
+        )
     elif issue_key == "sendspin_port_unreachable":
         primary_action = _recovery_action("open_config", "Open config", device_names=names)
     elif issue_key == "setup_step":
@@ -318,6 +329,50 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                     title=f"{name} was auto-released",
                     summary=summary
                     or "Bluetooth management was auto-released for this speaker after connection problems.",
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
+                    device_name=name,
+                )
+            )
+            continue
+        # Samsung Q-series Class-of-Device filter quirk
+        # (bluez/bluez#1025).  Surfaced *before* the generic
+        # bluetooth-disconnected / repair-required branches because
+        # the operator action is different — they need to set the
+        # adapter's ``device_class`` override, not press "Re-pair".
+        # Detected at pair time by ``classify_pair_failure`` and
+        # written to ``DeviceStatus.pair_failure_kind``.
+        #
+        # Defence-in-depth: ``bluetooth_manager.pair_device`` clears
+        # this fingerprint at the start of every pair attempt (and on
+        # success) so a stale match doesn't outlive the failure it
+        # described.  We *also* gate the card on the device being
+        # currently disconnected and unpaired here — if the speaker
+        # is now connected and streaming, no diagnosis card should
+        # cover it regardless of what a past pair-attempt fingerprint
+        # said.
+        pair_failure_kind = (
+            bluetooth.get("pair_failure_kind") if bluetooth else _device_extra(device).get("pair_failure_kind")
+        )
+        if pair_failure_kind == "samsung_cod_filter" and not bluetooth_connected:
+            adapter_mac = (
+                bluetooth.get("pair_failure_adapter_mac")
+                if bluetooth
+                else _device_extra(device).get("pair_failure_adapter_mac")
+            ) or ""
+            adapter_label = adapter_mac or "the Bluetooth adapter"
+            primary_action, secondary_actions = build_recovery_issue_actions("samsung_cod_filter", device_names)
+            issues.append(
+                RecoveryIssue(
+                    key="samsung_cod_filter",
+                    severity="error",
+                    title=f"{name} pair rejected by Class of Device filter",
+                    summary=(
+                        f"{adapter_label} sent the connect attempt and the speaker rejected it with "
+                        "'Limited Resources'. Samsung Q-series soundbars filter incoming pairings by the "
+                        "initiator's Bluetooth Class of Device (bluez/bluez#1025). Set "
+                        f"device_class to 0x00010c on {adapter_label} in Settings → Bluetooth, then re-pair."
+                    ),
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,

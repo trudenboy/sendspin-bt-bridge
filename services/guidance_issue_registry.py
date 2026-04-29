@@ -132,6 +132,22 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("not_paired",),
     ),
+    "samsung_cod_filter": GuidanceIssueDefinition(
+        # Samsung Q-series soundbars (Q910B, Q990B, …) reject incoming
+        # BR/EDR connections whose initiator Class of Device they don't
+        # recognise — see bluez/bluez#1025.  We surface this as an
+        # error-level card so operators reach the Settings → Bluetooth
+        # device-class override before they spend hours swapping
+        # adapters.  Priority 22 places it just after the generic
+        # bluetooth-unavailable card (20) — it's specific enough to
+        # take precedence over the broader pairing/repair guidance
+        # below.
+        key="samsung_cod_filter",
+        layer="bluetooth",
+        priority=22,
+        severity="error",
+        default_reason_codes=("samsung_cod_filter",),
+    ),
     "disconnected": GuidanceIssueDefinition(
         key="disconnected",
         layer="sink_verification",

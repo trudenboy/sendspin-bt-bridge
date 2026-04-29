@@ -23,6 +23,7 @@ __all__ = [
     "COMMON_BT_PAIR_PINS",
     "bt_remove_device",
     "build_hci_map",
+    "classify_pair_failure",
     "describe_pair_failure",
     "extract_pair_failure_reason",
     "get_adapter_alias",
@@ -260,6 +261,76 @@ def describe_pair_failure(output: str, *, pin_attempted: bool = False, pin_used:
         return base
     pin_label = pin_used or "0000"
     return f"{base} — device rejected PIN {pin_label}"
+
+
+# bluetoothctl output markers that — taken together with
+# ``AuthenticationCanceled`` — fingerprint the Samsung Q-series
+# Class-of-Device filter (bluez/bluez#1025).  All three substrings
+# describe the same on-the-wire event:
+#
+# * ``"No Resources"`` — the bluetoothctl monitor decoder for HCI
+#   Connect Complete status ``0x0d`` (and the equivalent MGMT
+#   ``Connect Failed: No Resources (0x07)`` it emits one event later).
+# * ``"connect failed (status 0x07"`` — the legacy human-readable line
+#   bluetoothctl prints alongside the structured monitor stream on
+#   bluez ≥ 5.78.
+# * ``"status 0x0d"`` — the literal HCI status code, which still
+#   appears verbatim on older bluez builds.
+#
+# Matching ANY of them keeps the detector resilient to bluetoothctl
+# release-to-release wording shifts; pairing it with the
+# ``AuthenticationCanceled`` D-Bus error is what scopes the signal to
+# the Samsung quirk and away from generic page-timeouts.
+_SAMSUNG_COD_FILTER_AT_LMP_MARKERS = (
+    "no resources",
+    "connect failed (status 0x07",
+    "status 0x0d",
+)
+
+
+def classify_pair_failure(
+    output: str,
+    *,
+    agent_telemetry: dict | None = None,
+) -> str | None:
+    """Classify a pair-failure into a known fingerprint, or ``None``.
+
+    Currently surfaces a single kind:
+
+    - ``"samsung_cod_filter"`` — the Samsung Q-series Class-of-Device
+      filter quirk (bluez/bluez#1025).  Fingerprint:
+
+      * The bluetoothctl run logged ``org.bluez.Error.AuthenticationCanceled``,
+      * **and** at least one BR/EDR connect-failed marker
+        (``"No Resources"`` / ``"connect failed (status 0x07"`` /
+        ``"status 0x0d"``) appears in the same buffer,
+      * **and**, when ``agent_telemetry`` is supplied, the native
+        pairing agent recorded zero method calls — confirming BlueZ
+        never reached the IO-capability negotiation phase, which is
+        the on-the-wire signature of a peer that LMP-rejects with
+        Limited Resources before authentication starts.
+
+    The agent-telemetry check is treated as advisory: when the caller
+    can't supply telemetry (e.g. tests, future call sites that don't
+    use the native agent path), the two textual markers alone are
+    enough to make the call.
+
+    Returns the kind string for use as ``DeviceStatus.pair_failure_kind``
+    or ``None`` when nothing matches.
+    """
+    text = (output or "").lower()
+    if "authenticationcanceled" not in text:
+        return None
+    if not any(marker in text for marker in _SAMSUNG_COD_FILTER_AT_LMP_MARKERS):
+        return None
+    if agent_telemetry is not None:
+        method_calls = agent_telemetry.get("method_calls")
+        if isinstance(method_calls, list) and method_calls:
+            # Agent was actually invoked — this is a different class of
+            # failure (PIN rejected, IO-cap mismatch, etc.); don't claim
+            # the Samsung CoD-filter signature.
+            return None
+    return "samsung_cod_filter"
 
 
 def bt_remove_device(mac: str, adapter_mac: str = "") -> None:

@@ -4964,9 +4964,11 @@ async function loadBtAdapters(options) {
             return (m.id && a.id === m.id) ||
                 (_normalizeDeviceMac(m.mac) && _normalizeDeviceMac(a.mac) === _normalizeDeviceMac(m.mac));
         });
+        var deviceClass = (m.device_class || '').toLowerCase();
         if (match) {
             match.customName = m.name || '';
             match.name = m.name || match.detectedName || match.id;
+            match.deviceClass = deviceClass;
         } else {
             btAdapters.push({
                 id: m.id || '',
@@ -4975,6 +4977,7 @@ async function loadBtAdapters(options) {
                 customName: m.name || '',
                 detectedName: '',
                 manual: true,
+                deviceClass: deviceClass,
             });
         }
     });
@@ -5776,6 +5779,95 @@ function _updateAdaptersHaAssistSummary() {
         (matchCount ? ' with exact adapter MAC suggestions for ' + matchCount + ' adapter' + (matchCount === 1 ? '' : 's') + '.' : '.');
 }
 
+function _buildAdapterClassOfDeviceHtml(currentValue) {
+    // Per-adapter Bluetooth Class of Device override.
+    //
+    // The kernel/bluetoothd defaults work for the vast majority of
+    // peers, so the dropdown's first option is always "(default —
+    // leave unchanged)" with the empty string saved as the value.
+    // Operators only need to touch this when a specific peer
+    // filters incoming connections by initiator CoD — Samsung
+    // Q-series soundbars are the documented case (bluez/bluez#1025),
+    // so we ship the working ``0x00010c`` value as a labelled
+    // preset.  ``custom`` swaps the select for a free-text hex
+    // field — ``_bindAdapterClassOfDevice`` keeps the two in sync.
+    var current = String(currentValue || '').toLowerCase();
+    var presetValue = current === '0x00010c' ? '0x00010c' : (current ? 'custom' : '');
+    var customValue = current && current !== '0x00010c' ? current : '';
+    var helpText = 'Override the Bluetooth Class of Device this adapter advertises. Default leaves the kernel value untouched. Use 0x00010c (Computer/Laptop) when pairing Samsung Q-series soundbars — they reject other CoDs (bluez/bluez#1025).';
+    return '<div class="adapter-cod-override">' +
+        '<span class="adapter-cod-copy">Class of Device' +
+            // Real <button> instead of <span> so keyboard users can
+            // reach the help affordance and screen readers announce
+            // it.  ``aria-label`` mirrors the tooltip so the same
+            // text is exposed to AT regardless of how the button is
+            // discovered.  ``type="button"`` prevents accidental
+            // form submit when the override sits inside the wider
+            // settings form.
+            ' <button type="button" class="adapter-cod-help" aria-label="' + escHtmlAttr(helpText) + '" title="' + escHtmlAttr(helpText) + '">?</button>' +
+        '</span>' +
+        '<div class="adapter-cod-controls">' +
+            '<select class="adp-cod-preset">' +
+                '<option value="" ' + (presetValue === '' ? 'selected' : '') + '>(default — leave unchanged)</option>' +
+                '<option value="0x00010c" ' + (presetValue === '0x00010c' ? 'selected' : '') + '>Computer/Laptop (0x00010c) — Samsung-compat</option>' +
+                '<option value="custom" ' + (presetValue === 'custom' ? 'selected' : '') + '>Custom hex…</option>' +
+            '</select>' +
+            '<input type="text" class="adp-cod-custom mono" placeholder="0x000000" value="' + escHtmlAttr(customValue) + '"' +
+                (presetValue === 'custom' ? '' : ' hidden') +
+                ' maxlength="8" spellcheck="false">' +
+        '</div>' +
+        '<div class="adapter-cod-error" hidden></div>' +
+    '</div>';
+}
+
+function _bindAdapterClassOfDevice(row) {
+    var preset = row.querySelector('.adp-cod-preset');
+    var custom = row.querySelector('.adp-cod-custom');
+    var error = row.querySelector('.adapter-cod-error');
+    if (!preset) return;
+    preset.addEventListener('change', function() {
+        if (preset.value === 'custom') {
+            if (custom) {
+                custom.hidden = false;
+                custom.focus();
+            }
+        } else if (custom) {
+            custom.hidden = true;
+            custom.value = '';
+            if (error) { error.hidden = true; error.textContent = ''; }
+        }
+        syncManualAdapters();
+        _recomputeConfigDirtyState();
+    });
+    if (custom) {
+        custom.addEventListener('blur', function() {
+            var value = (custom.value || '').trim().toLowerCase();
+            if (value && !/^0x[0-9a-f]{6}$/.test(value)) {
+                if (error) {
+                    error.textContent = 'Class of Device must be six hex digits, e.g. 0x00010c.';
+                    error.hidden = false;
+                }
+                return;
+            }
+            if (error) { error.hidden = true; error.textContent = ''; }
+            custom.value = value;
+            syncManualAdapters();
+            _recomputeConfigDirtyState();
+        });
+    }
+}
+
+function _readAdapterDeviceClassFromRow(row) {
+    var preset = row.querySelector('.adp-cod-preset');
+    if (!preset) return '';
+    if (preset.value === 'custom') {
+        var custom = row.querySelector('.adp-cod-custom');
+        var value = custom ? String(custom.value || '').trim().toLowerCase() : '';
+        return /^0x[0-9a-f]{6}$/.test(value) ? value : '';
+    }
+    return String(preset.value || '').toLowerCase();
+}
+
 function _buildAdapterHaAssistHtml(adapter) {
     if (!_isHaAreaAssistEnabled()) return '';
     if (!_haAreaCatalog.available || !_haAreaCatalog.areas.length) return '';
@@ -5912,7 +6004,7 @@ function renderAdaptersTable() {
     el.innerHTML = '';
     btAdapters.forEach(function(a) {
         if (a.manual) {
-            el.appendChild(buildManualRow(a.id, a.mac, a.name, a._configDirtyKey || ''));
+            el.appendChild(buildManualRow(a.id, a.mac, a.name, a._configDirtyKey || '', a.deviceClass || ''));
         } else {
             var row = document.createElement('div');
             row.className = 'adapter-row detected';
@@ -5931,9 +6023,11 @@ function renderAdaptersTable() {
                 '<span class="adapter-power-btns">' +
                   '<button type="button" class="btn-bt-action btn-adp-reboot" title="Reboot adapter" data-adapter="' + escHtmlAttr(a.mac) + '">\u21bb Reboot</button>' +
                 '</span>' +
+                _buildAdapterClassOfDeviceHtml(a.deviceClass || '') +
                 _buildAdapterHaAssistHtml(a);
             row.querySelector('.adp-name').addEventListener('blur', syncManualAdapters);
             row.querySelector('.btn-adp-reboot').addEventListener('click', function() { rebootAdapter(a.mac); });
+            _bindAdapterClassOfDevice(row);
             _bindAdapterHaAssist(row);
             el.appendChild(row);
         }
@@ -5941,7 +6035,7 @@ function renderAdaptersTable() {
     _updateAdaptersHaAssistSummary();
 }
 
-function buildManualRow(id, mac, name, dirtyKey) {
+function buildManualRow(id, mac, name, dirtyKey, deviceClass) {
     var row = document.createElement('div');
     row.className = 'adapter-row manual';
     row.dataset.adapterId = id || '';
@@ -5953,6 +6047,7 @@ function buildManualRow(id, mac, name, dirtyKey) {
         '<input type="text" class="adp-name" placeholder="Display name" value="' + escHtmlAttr(name) + '">' +
         '<span class="dot grey">\u25cf</span>' +
         '<button type="button" class="btn-remove-adapter">\u00d7</button>' +
+        _buildAdapterClassOfDeviceHtml(deviceClass || '') +
         _buildAdapterHaAssistHtml({id: id || '', mac: mac || ''});
     ['adp-id', 'adp-mac', 'adp-name'].forEach(function(cls) {
         row.querySelector('.' + cls).addEventListener('blur', syncManualAdapters);
@@ -5961,6 +6056,7 @@ function buildManualRow(id, mac, name, dirtyKey) {
         row.remove();
         syncManualAdapters();
     });
+    _bindAdapterClassOfDevice(row);
     _bindAdapterHaAssist(row);
     return row;
 }
@@ -6020,24 +6116,35 @@ function syncManualAdapters() {
     btAdapters.filter(function(a) { return !a.manual; }).forEach(function(adapter) {
         adapter.customName = '';
         adapter.name = adapter.detectedName || adapter.id || '';
+        adapter.deviceClass = '';
     });
     document.querySelectorAll('#adapters-table .adapter-row').forEach(function(row) {
         var isManual = row.classList.contains('manual');
         var id = isManual ? row.querySelector('.adp-id').value.trim() : (row.dataset.adapterId || '').trim();
         var mac = isManual ? row.querySelector('.adp-mac').value.trim() : (row.dataset.adapterMac || '').trim();
         var name = (row.querySelector('.adp-name') || {}).value ? row.querySelector('.adp-name').value.trim() : '';
+        var deviceClass = _readAdapterDeviceClassFromRow(row);
         if (isManual) {
             row.dataset.adapterId = id;
             row.dataset.adapterMac = mac;
-            if (id || mac) savedAdapters.push({id: id, mac: mac, name: name});
+            if (id || mac) {
+                var manualEntry = {id: id, mac: mac, name: name};
+                if (deviceClass) manualEntry.device_class = deviceClass;
+                savedAdapters.push(manualEntry);
+            }
             return;
         }
         var match = _findAdapterRecord(id, mac);
         if (match) {
             match.customName = name;
             match.name = name || match.detectedName || match.id || '';
+            match.deviceClass = deviceClass;
         }
-        if (id && name) savedAdapters.push({id: id, mac: mac, name: name});
+        if (id && (name || deviceClass)) {
+            var detectedEntry = {id: id, mac: mac, name: name};
+            if (deviceClass) detectedEntry.device_class = deviceClass;
+            savedAdapters.push(detectedEntry);
+        }
     });
     btManualAdapters = savedAdapters;
     btAdapters = btAdapters.filter(function(a) { return !a.manual; });
@@ -6054,6 +6161,7 @@ function syncManualAdapters() {
                 customName: m.name || '',
                 detectedName: '',
                 manual: true,
+                deviceClass: m.device_class || '',
             });
         }
     });
@@ -6068,17 +6176,24 @@ function _collectPersistedAdaptersFromDom() {
         var id = isManual ? ((row.querySelector('.adp-id') || {}).value || '').trim() : (row.dataset.adapterId || '').trim();
         var mac = isManual ? ((row.querySelector('.adp-mac') || {}).value || '').trim() : (row.dataset.adapterMac || '').trim();
         var name = ((row.querySelector('.adp-name') || {}).value || '').trim();
+        var deviceClass = _readAdapterDeviceClassFromRow(row);
         if (isManual) {
             if (id || mac) {
                 var manualEntry = {id: id, mac: mac};
                 if (name) manualEntry.name = name;
+                if (deviceClass) manualEntry.device_class = deviceClass;
                 savedAdapters.push(manualEntry);
             }
             return;
         }
-        if (id && name) {
+        // Detected adapters get a config entry whenever they carry any
+        // operator override — name or CoD.  Without this guard the
+        // dropdown change would silently drop on save (the entry
+        // gates on ``id && name``).
+        if (id && (name || deviceClass)) {
             var detectedEntry = {id: id, mac: mac};
-            detectedEntry.name = name;
+            if (name) detectedEntry.name = name;
+            if (deviceClass) detectedEntry.device_class = deviceClass;
             savedAdapters.push(detectedEntry);
         }
     });
