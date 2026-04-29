@@ -81,3 +81,41 @@ def _fast_bt_pair_timing(monkeypatch, request):
         raise RuntimeError("PairingAgent disabled in tests (use bluetoothctl agent fallback)")
 
     monkeypatch.setattr(_pair_agent.PairingAgent, "__enter__", _fast_enter, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_module_state():
+    """Reset known process-wide module-level state between tests.
+
+    pytest-xdist's `loadfile` distribution puts whole files into one
+    worker, but unrelated files can still share a worker — and when one
+    file leaks shared state (BT operation lock, MA API credentials,
+    scan-job dict), the next file's tests see stale values.
+
+    Reset the few known leak sites BEFORE each test. Cheap; deterministic.
+    """
+    # 1. Force-release the global BT operation lock. Some test failure
+    #    paths (e.g. pair flow exception before _release_bt_operation)
+    #    leave the threading.Lock acquired.
+    import sendspin_bridge.services.bluetooth.bt_operation_lock as _btlock
+
+    try:
+        _btlock._bt_operation_lock.release()
+    except RuntimeError:
+        pass  # already released — expected
+
+    # 2. Clear MA API credentials so `_build_imageproxy_url` returns the
+    #    raw path instead of a fully-qualified `http://ma:8095/imageproxy`
+    #    URL when the test didn't explicitly opt in.
+    import sendspin_bridge.bridge.state as _state
+
+    _state.set_ma_api_credentials("", "")
+
+    # 3. Clear in-flight scan jobs so /api/bt/scan doesn't 409 with
+    #    "scan already in progress" from a sibling test.
+    import sendspin_bridge.services.lifecycle.async_job_state as _ajs
+
+    with _ajs._scan_jobs_lock:
+        _ajs._scan_jobs.clear()
+
+    yield
