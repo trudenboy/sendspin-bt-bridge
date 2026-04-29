@@ -51,6 +51,9 @@ jobs:
       - name: Verify HA addon variants are in sync with template
         run: python scripts/generate_ha_addon_variants.py check-current-repo
 
+      - name: Verify requirements.txt and pyproject.toml deps are in sync
+        run: python scripts/sync_requirements.py --check
+
       - name: Lint Dockerfiles
         run: |
           wget -qO /usr/local/bin/hadolint \

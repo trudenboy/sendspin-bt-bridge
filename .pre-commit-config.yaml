@@ -25,3 +25,10 @@ repos:
         types: [python]
         require_serial: true
         exclude: "(sendspin-cli/|scripts/)"
+
+      - id: sync-requirements
+        name: sync requirements.txt and pyproject.toml deps
+        entry: python3 scripts/sync_requirements.py --check
+        language: system
+        files: '^(requirements\.txt|pyproject\.toml)$'
+        pass_filenames: false
