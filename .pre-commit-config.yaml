@@ -46,3 +46,12 @@ repos:
         types: [python]
         require_serial: true
         exclude: "(sendspin-cli/|scripts/)"
+
+      - id: lint-changelog
+        name: lint CHANGELOG.md (Keep a Changelog discipline)
+        # Enforces R1–R10 from CONTRIBUTING.md § Changelog Discipline.
+        # Forward-only: stylistic rules (R5–R8) only check [Unreleased].
+        entry: uv run python scripts/lint_changelog.py
+        language: system
+        files: '^CHANGELOG\.md$'
+        pass_filenames: true
