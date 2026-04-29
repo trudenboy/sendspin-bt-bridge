@@ -46,8 +46,8 @@ def _isolated_config(tmp_path, monkeypatch):
 def _patch_state():
     """Stub state helpers so tests never touch real SSE or event buses."""
     with (
-        patch("sendspin_client._state.notify_status_changed"),
-        patch("sendspin_client._state.publish_device_event"),
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client._state.publish_device_event"),
     ):
         yield
 
@@ -55,7 +55,7 @@ def _patch_state():
 @pytest.fixture()
 def client(_patch_state):
     """Return a minimal SendspinClient with a mocked BluetoothManager."""
-    from sendspin_client import SendspinClient
+    from sendspin_bridge.bridge.client import SendspinClient
 
     bt = MagicMock()
     bt.mac_address = "AA:BB:CC:DD:EE:FF"
@@ -80,53 +80,53 @@ class TestDeviceStatusDictInterface:
     """DeviceStatus must behave like a dict for backward-compat callers."""
 
     def test_getitem_returns_field_value(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus(volume=42)
         assert ds["volume"] == 42
 
     def test_getitem_raises_keyerror_for_unknown_key(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         with pytest.raises(KeyError):
             ds["no_such_field"]
 
     def test_setitem_sets_known_field(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         ds["volume"] = 77
         assert ds.volume == 77
 
     def test_setitem_ignores_unknown_field(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         ds["bogus_key"] = 123  # should not raise
         assert not hasattr(ds, "bogus_key") or ds.get("bogus_key") is None
 
     def test_contains_known_field(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         assert "volume" in ds
         assert "playing" in ds
 
     def test_contains_unknown_field(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         assert "nonexistent" not in ds
 
     def test_contains_non_string_returns_false(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         assert 42 not in ds
 
     def test_get_returns_value_or_default(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus(volume=55)
         assert ds.get("volume") == 55
@@ -134,7 +134,7 @@ class TestDeviceStatusDictInterface:
         assert ds.get("missing") is None
 
     def test_update_applies_known_keys(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         ds.update({"volume": 80, "playing": True, "current_track": "Song"})
@@ -143,14 +143,14 @@ class TestDeviceStatusDictInterface:
         assert ds.current_track == "Song"
 
     def test_update_ignores_unknown_keys(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         ds.update({"volume": 50, "alien_key": "ignored"})
         assert ds.volume == 50
 
     def test_copy_returns_plain_dict(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus(volume=65, playing=True)
         d = ds.copy()
@@ -162,14 +162,14 @@ class TestDeviceStatusDictInterface:
         assert ds.volume == 65
 
     def test_copy_excludes_field_names_cache(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         d = ds.copy()
         assert "_field_names" not in d
 
     def test_equality_between_instances(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         fixed_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
         a = DeviceStatus(volume=50, playing=True, uptime_start=fixed_time)
@@ -177,14 +177,14 @@ class TestDeviceStatusDictInterface:
         assert a == b
 
     def test_inequality_between_instances(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         a = DeviceStatus(volume=50)
         b = DeviceStatus(volume=99)
         assert a != b
 
     def test_default_field_values(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         ds = DeviceStatus()
         assert ds.volume == 100
@@ -202,12 +202,12 @@ class TestDeviceStatusDictInterface:
 
 class TestNormalizeDeviceMac:
     def test_strips_and_uppercases(self):
-        from sendspin_client import _normalize_device_mac
+        from sendspin_bridge.bridge.client import _normalize_device_mac
 
         assert _normalize_device_mac("  aa:bb:cc:dd:ee:ff  ") == "AA:BB:CC:DD:EE:FF"
 
     def test_non_string_returns_empty(self):
-        from sendspin_client import _normalize_device_mac
+        from sendspin_bridge.bridge.client import _normalize_device_mac
 
         assert _normalize_device_mac(None) == ""
         assert _normalize_device_mac(123) == ""
@@ -215,7 +215,7 @@ class TestNormalizeDeviceMac:
 
 class TestFilterDuplicateBluetoothDevices:
     def test_keeps_first_occurrence_of_duplicate_mac(self):
-        from sendspin_client import _filter_duplicate_bluetooth_devices
+        from sendspin_bridge.bridge.client import _filter_duplicate_bluetooth_devices
 
         devices = [
             {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "First"},
@@ -228,7 +228,7 @@ class TestFilterDuplicateBluetoothDevices:
         assert result[1]["player_name"] == "Other"
 
     def test_preserves_order_without_duplicates(self):
-        from sendspin_client import _filter_duplicate_bluetooth_devices
+        from sendspin_bridge.bridge.client import _filter_duplicate_bluetooth_devices
 
         devices = [
             {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "A"},
@@ -238,7 +238,7 @@ class TestFilterDuplicateBluetoothDevices:
         assert len(result) == 2
 
     def test_empty_list(self):
-        from sendspin_client import _filter_duplicate_bluetooth_devices
+        from sendspin_bridge.bridge.client import _filter_duplicate_bluetooth_devices
 
         assert _filter_duplicate_bluetooth_devices([]) == []
 
@@ -248,36 +248,36 @@ class TestLoadSavedDeviceVolume:
         import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 42}}))
-        from sendspin_client import _load_saved_device_volume
+        from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_client.CONFIG_FILE", config.CONFIG_FILE):
+        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") == 42
 
     def test_returns_none_for_missing_mac(self, tmp_path):
         import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {}}))
-        from sendspin_client import _load_saved_device_volume
+        from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_client.CONFIG_FILE", config.CONFIG_FILE):
+        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
     def test_returns_none_for_out_of_range(self, tmp_path):
         import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 150}}))
-        from sendspin_client import _load_saved_device_volume
+        from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_client.CONFIG_FILE", config.CONFIG_FILE):
+        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
     def test_returns_none_on_corrupted_file(self, tmp_path):
         import sendspin_bridge.config as config
 
         config.CONFIG_FILE.write_text("{bad json")
-        from sendspin_client import _load_saved_device_volume
+        from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_client.CONFIG_FILE", config.CONFIG_FILE):
+        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
             assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
 
@@ -443,7 +443,7 @@ class TestReadSubprocessOutput:
         proc.returncode = None
         client._daemon_proc = proc
 
-        with patch("sendspin_client.save_device_volume") as mock_save:
+        with patch("sendspin_bridge.bridge.client.save_device_volume") as mock_save:
             await client._read_subprocess_output()
             mock_save.assert_called_once_with("AA:BB:CC:DD:EE:FF", 60)
 
@@ -457,7 +457,7 @@ class TestReadSubprocessOutput:
         proc.returncode = None
         client._daemon_proc = proc
 
-        with patch("sendspin_client.save_device_volume") as mock_save:
+        with patch("sendspin_bridge.bridge.client.save_device_volume") as mock_save:
             await client._read_subprocess_output()
             mock_save.assert_not_called()
 
@@ -599,7 +599,7 @@ class TestClientInit:
     def test_no_bt_manager_uses_name_fallback(self, _patch_state):
         import uuid
 
-        from sendspin_client import SendspinClient
+        from sendspin_bridge.bridge.client import SendspinClient
 
         c = SendspinClient(
             player_name="NoBT Player",
@@ -611,7 +611,7 @@ class TestClientInit:
 
     def test_long_name_player_id_fits_mdns(self, _patch_state):
         """Long speaker names must produce UUID5 player_id (always 36 chars, ≤63 bytes)."""
-        from sendspin_client import SendspinClient
+        from sendspin_bridge.bridge.client import SendspinClient
 
         c = SendspinClient(
             player_name="[AV] Samsung Soundbar M360 M-Series @ asus-laptop-ubuntu",
@@ -623,13 +623,13 @@ class TestClientInit:
 
     def test_long_name_player_id_is_deterministic(self, _patch_state):
         """Same long name must always produce the same player_id."""
-        from sendspin_client import SendspinClient
+        from sendspin_bridge.bridge.client import SendspinClient
 
         name = "[AV] Samsung Soundbar M360 M-Series @ asus-laptop-ubuntu"
         c1 = SendspinClient(player_name=name, server_host="auto", server_port=9000)
         c2 = SendspinClient(player_name=name, server_host="auto", server_port=9000)
         assert c1.player_id == c2.player_id
-        from sendspin_client import SendspinClient
+        from sendspin_bridge.bridge.client import SendspinClient
 
         c = SendspinClient(
             player_name="Test",

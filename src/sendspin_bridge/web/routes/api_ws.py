@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from flask_sock import Sock
 
-    from sendspin_client import _RingLogHandler
+    from sendspin_bridge.bridge.client import _RingLogHandler
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ def register_ws_routes(sock: Sock) -> None:
         # importable on hosts where sendspin_client isn't yet on
         # ``sys.path`` (test rigs, lint tooling).
         try:
-            from sendspin_client import _ring_log_handler
+            from sendspin_bridge.bridge.client import _ring_log_handler
         except ImportError as exc:
             logger.warning("/api/logs/stream unavailable — ring handler missing: %s", exc)
             return

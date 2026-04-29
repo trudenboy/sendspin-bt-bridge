@@ -11,7 +11,7 @@ import pytest
 
 def _make_client(*, idle_mode: str = "power_save", power_save_delay: int = 1):
     """Create a SendspinClient configured for power_save testing."""
-    from sendspin_client import DeviceStatus, SendspinClient
+    from sendspin_bridge.bridge.client import DeviceStatus, SendspinClient
 
     client = SendspinClient.__new__(SendspinClient)
     client.player_name = "TestSpeaker"
@@ -164,19 +164,19 @@ class TestIdleModeInStatus:
     """Tests that idle_mode is exposed in DeviceStatus."""
 
     def test_idle_mode_in_device_status_default(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         status = DeviceStatus()
         assert status["idle_mode"] == "default"
 
     def test_idle_mode_in_device_status_custom(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         status = DeviceStatus(idle_mode="power_save")
         assert status["idle_mode"] == "power_save"
 
     def test_idle_mode_in_dict_conversion(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         status = DeviceStatus(idle_mode="keep_alive")
         d = status.copy()

@@ -28,7 +28,7 @@ def _isolated_config(tmp_path, monkeypatch):
 
 def _make_client(idle_disconnect_minutes: int = 30):
     """Create a SendspinClient via __new__ with minimal wiring for idle timer tests."""
-    from sendspin_client import DeviceStatus, SendspinClient
+    from sendspin_bridge.bridge.client import DeviceStatus, SendspinClient
 
     client = SendspinClient.__new__(SendspinClient)
     client.player_name = "TestSpeaker"
@@ -58,14 +58,14 @@ class TestDeviceStatusStandbyFields:
     """DeviceStatus exposes bt_standby and bt_standby_since."""
 
     def test_defaults_false(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         status = DeviceStatus()
         assert status.get("bt_standby") is False
         assert status.get("bt_standby_since") is None
 
     def test_update_standby(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         status = DeviceStatus()
         status.update({"bt_standby": True, "bt_standby_since": "2025-01-01T00:00:00+00:00"})
@@ -73,7 +73,7 @@ class TestDeviceStatusStandbyFields:
         assert status["bt_standby_since"] == "2025-01-01T00:00:00+00:00"
 
     def test_clear_standby(self):
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         status = DeviceStatus()
         status.update({"bt_standby": True, "bt_standby_since": "2025-01-01T00:00:00+00:00"})
@@ -87,7 +87,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_starts_on_streaming_stop(self):
         """Timer starts when audio_streaming goes True→False."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"audio_streaming": True})
 
@@ -97,7 +97,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_cancels_on_streaming_start(self):
         """Timer cancels when audio_streaming goes False→True."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=30)
             # Previous state: not streaming
             with patch.object(client, "_cancel_idle_timer") as cancel_mock:
@@ -106,7 +106,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_not_started_when_disabled(self):
         """Timer does not start when idle_disconnect_minutes=0."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=0)
             client.status.update({"audio_streaming": True})
 
@@ -116,7 +116,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_starts_on_daemon_connect_without_audio(self):
         """Timer starts when daemon connects (server_connected=True) with no audio playing."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             # Device has no audio streaming (initial state)
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -125,7 +125,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_not_started_on_daemon_connect_when_streaming(self):
         """Timer does NOT start on daemon connect if audio is already streaming."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client.status.update({"audio_streaming": True})
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -134,7 +134,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_not_started_on_daemon_connect_when_already_standby(self):
         """Timer does NOT start on daemon connect if already in standby."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client.status.update({"bt_standby": True})
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -143,7 +143,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_not_started_on_daemon_connect_when_disabled(self):
         """Timer does NOT start on daemon connect when idle_disconnect_minutes=0."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=0)
             with patch.object(client, "_start_idle_timer") as start_mock:
                 client._update_status({"server_connected": True})
@@ -151,7 +151,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_cancels_on_playing_start(self):
         """Timer cancels when playing goes False→True (MA reports playback)."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             # Previous state: not playing
             with patch.object(client, "_cancel_idle_timer") as cancel_mock:
@@ -160,7 +160,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_starts_on_playing_stop_without_streaming(self):
         """Timer starts when playing goes True→False and audio_streaming is False."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client.status.update({"playing": True})
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -169,7 +169,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_not_started_on_playing_stop_while_streaming(self):
         """Timer does NOT start when playing→False if audio_streaming is still True."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client.status.update({"playing": True, "audio_streaming": True})
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -178,7 +178,7 @@ class TestIdleTimerStartCancel:
 
     def test_timer_not_started_on_daemon_connect_when_playing(self):
         """Timer does NOT start on daemon connect if playing is True."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client.status.update({"playing": True})
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -210,7 +210,7 @@ class TestEnterStandby:
 
     @pytest.mark.asyncio
     async def test_enter_standby_sets_status_and_disconnects(self):
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             client = _make_client(idle_disconnect_minutes=30)
 
             await client._enter_standby()
@@ -225,7 +225,7 @@ class TestEnterStandby:
 
     @pytest.mark.asyncio
     async def test_enter_standby_noop_if_already_standby(self):
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"bt_standby": True})
 
@@ -235,7 +235,7 @@ class TestEnterStandby:
 
     @pytest.mark.asyncio
     async def test_enter_standby_handles_bt_disconnect_failure(self):
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=30)
             client.bt_manager.disconnect_device.side_effect = RuntimeError("BT gone")
 
@@ -249,7 +249,7 @@ class TestWakeFromStandby:
 
     @pytest.mark.asyncio
     async def test_wake_clears_standby_and_allows_reconnect(self):
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update(
                 {
@@ -269,7 +269,7 @@ class TestWakeFromStandby:
 
     @pytest.mark.asyncio
     async def test_wake_noop_if_not_in_standby(self):
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=30)
 
             await client._wake_from_standby()
@@ -284,7 +284,7 @@ class TestWakeFromStandby:
         (race window) → _on_sink_idle returns early.  After bt_standby is
         cleared in _reroute_to_bt_sink, the idle timer must be re-armed.
         """
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=2)
             client.bluetooth_sink_name = "bluez_sink.AA_BB.a2dp_sink"
             client.status.update({"bt_standby": True, "bt_waking": True})
@@ -403,7 +403,7 @@ class TestIdleTimerFullCycle:
     @pytest.mark.asyncio
     async def test_timer_fires_and_enters_standby(self):
         """Timer fires after timeout and calls _enter_standby."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None  # force ensure_future path
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
@@ -419,7 +419,7 @@ class TestIdleTimerFullCycle:
     @pytest.mark.asyncio
     async def test_timer_cancelled_before_firing(self):
         """Timer cancelled before expiry does not enter standby."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
@@ -434,7 +434,7 @@ class TestIdleTimerFullCycle:
     @pytest.mark.asyncio
     async def test_multiple_start_stop_cycles_reset_timer(self):
         """Starting/stopping streaming multiple times resets the timer each time."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
@@ -463,14 +463,14 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_suppressed_when_daemon_reports_playing(self):
         """Timer fires but daemon says playing=True → suppress standby (#120)."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"playing": True})
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -481,14 +481,14 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_enters_standby_when_idle_at_fire_time(self):
         """If both playing and audio_streaming are False, standby proceeds."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
             # Both default to False — device is truly idle
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -498,14 +498,14 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_suppressed_when_already_standby(self):
         """Timer fires but bt_standby is already True → skip."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"bt_standby": True})
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -516,7 +516,7 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_suppressed_when_waking(self):
         """Timer fires during bt_waking → skip standby."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
@@ -524,7 +524,7 @@ class TestIdleTimerGuardAtFiring:
             # Simulate wake in progress
             client.status.update({"bt_standby": False, "bt_waking": True})
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -535,7 +535,7 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_suppressed_when_pa_sink_running(self):
         """Timer fires but cached PA sink state is 'running' → suppress standby."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
@@ -546,7 +546,7 @@ class TestIdleTimerGuardAtFiring:
             client._sink_monitor = sm
             client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -556,7 +556,7 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_proceeds_when_pa_sink_idle(self):
         """Timer fires and cached PA sink state is 'idle', daemon idle → enter standby."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
@@ -566,7 +566,7 @@ class TestIdleTimerGuardAtFiring:
             client._sink_monitor = sm
             client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -576,14 +576,14 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_suppressed_when_daemon_streaming(self):
         """Timer fires but daemon says audio_streaming=True → suppress standby (#120)."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
             client = _make_client(idle_disconnect_minutes=30)
             client.status.update({"audio_streaming": True})
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -593,7 +593,7 @@ class TestIdleTimerGuardAtFiring:
     @pytest.mark.asyncio
     async def test_timer_suppressed_pa_idle_but_daemon_playing(self):
         """PA sink idle + daemon playing → daemon flag safety net suppresses standby."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             state_mock.notify_status_changed = MagicMock()
             state_mock.publish_device_event = MagicMock()
@@ -605,7 +605,7 @@ class TestIdleTimerGuardAtFiring:
             client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
             client.status.update({"playing": True})
 
-            with patch("sendspin_client.asyncio.sleep", new_callable=AsyncMock):
+            with patch("sendspin_bridge.bridge.client.asyncio.sleep", new_callable=AsyncMock):
                 client._start_idle_timer()
                 task = client._idle_timer_task
                 assert task is not None
@@ -626,7 +626,7 @@ class TestSinkMonitorDrivenIdle:
 
     def test_on_sink_idle_starts_timer(self):
         """_on_sink_idle() starts idle timer."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             client = _make_client(idle_disconnect_minutes=15)
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -658,7 +658,7 @@ class TestSinkMonitorDrivenIdle:
 
     def test_on_sink_idle_noop_when_already_standby(self):
         """_on_sink_idle() does nothing when device is already in standby."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client.status.update({"bt_standby": True})
             with patch.object(client, "_start_idle_timer") as start_mock:
@@ -676,7 +676,7 @@ class TestSinkMonitorFallback:
         sinks, so the SinkMonitor alone is insufficient.  Daemon flags are now a
         dual authority alongside SinkMonitor callbacks.
         """
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True
@@ -689,7 +689,7 @@ class TestSinkMonitorFallback:
 
     def test_daemon_flags_cancel_timer_even_with_sink_monitor_active(self):
         """_update_status cancels timer from daemon flags even when sink monitor is active."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True
@@ -705,7 +705,7 @@ class TestSinkMonitorFallback:
         The timer was already started by SinkMonitor.register() → on_idle
         at registration time, so server_connected is redundant.
         """
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True
@@ -717,7 +717,7 @@ class TestSinkMonitorFallback:
 
     def test_fallback_active_when_no_sink_monitor(self):
         """_update_status DOES start timer from daemon flags when sink monitor is unavailable."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = None
             client.status.update({"audio_streaming": True})
@@ -728,7 +728,7 @@ class TestSinkMonitorFallback:
 
     def test_fallback_active_when_sink_monitor_not_available(self):
         """_update_status DOES start timer when sink monitor exists but not available."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=15)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = False
@@ -775,7 +775,7 @@ class TestIdleTimerThreadSafety:
 
     def test_concurrent_start_cancel_no_leak(self):
         """Concurrent _start and _cancel don't leak timers."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             state_mock.get_main_loop.return_value = None
             client = _make_client(idle_disconnect_minutes=15)
 
@@ -824,7 +824,7 @@ class TestPipeWireCompat:
 
     def test_daemon_flags_cancel_timer_started_by_sink_monitor(self):
         """SinkMonitor starts timer (on_idle), daemon flags cancel it (playing True)."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=2)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True
@@ -844,7 +844,7 @@ class TestPipeWireCompat:
 
     def test_daemon_flags_restart_timer_when_playback_stops(self):
         """After cancelling, daemon flags re-start timer when playback stops."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=2)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True
@@ -860,7 +860,7 @@ class TestPipeWireCompat:
 
     def test_no_standby_while_streaming_on_pipewire(self):
         """Full scenario: SinkMonitor on_idle → daemon playing → timer cancelled."""
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(idle_disconnect_minutes=2)
             client._sink_monitor = MagicMock()
             client._sink_monitor.available = True

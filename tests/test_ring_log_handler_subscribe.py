@@ -14,7 +14,7 @@ import queue
 
 import pytest
 
-from sendspin_client import _RingLogHandler
+from sendspin_bridge.bridge.client import _RingLogHandler
 
 
 @pytest.fixture

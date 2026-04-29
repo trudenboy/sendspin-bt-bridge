@@ -11,9 +11,9 @@ from unittest.mock import patch
 import pytest
 
 import sendspin_bridge.bridge.state as state
+from sendspin_bridge.bridge.client import SendspinClient, _filter_duplicate_bluetooth_devices
 from sendspin_bridge.services.diagnostics.log_analysis import classify_subprocess_stderr_level
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
-from sendspin_client import SendspinClient, _filter_duplicate_bluetooth_devices
 
 
 class _RaceyStdin:
@@ -132,7 +132,7 @@ async def test_send_reconnect_timeout_clears_stuck_ma_reconnect(monkeypatch):
         return None
 
     monkeypatch.setattr(client._command_service, "send", _fake_send)
-    monkeypatch.setattr("sendspin_client._MA_RECONNECT_TIMEOUT_S", 0.0)
+    monkeypatch.setattr("sendspin_bridge.bridge.client._MA_RECONNECT_TIMEOUT_S", 0.0)
 
     await client.send_reconnect()
     assert client._ma_reconnect_task is not None
@@ -174,7 +174,7 @@ async def test_stop_sendspin_delegates_to_stop_service():
     fake_service = _FakeService()
     client._stop_service = fake_service
 
-    with patch("sendspin_client._state.notify_status_changed"):
+    with patch("sendspin_bridge.bridge.client._state.notify_status_changed"):
         await client.stop_sendspin()
 
     assert len(fake_service.stop_calls) == 1
@@ -361,7 +361,7 @@ async def test_read_subprocess_output_accepts_structured_error_envelope_once():
         ),
     )
 
-    with patch("sendspin_client.logger.error"):
+    with patch("sendspin_bridge.bridge.client.logger.error"):
         await client._read_subprocess_output()
 
     assert client.status.last_error == "No audio output device found"
@@ -440,7 +440,7 @@ def test_filter_duplicate_bluetooth_devices_keeps_first_mac():
 def test_update_status_resets_stream_tracking_when_playback_stops():
     client = SendspinClient("Test Player", "localhost", 9000)
 
-    with patch("sendspin_client._state.notify_status_changed"):
+    with patch("sendspin_bridge.bridge.client._state.notify_status_changed"):
         client._update_status({"playing": True})
         client._update_status({"audio_streaming": True})
 
@@ -457,7 +457,7 @@ def test_update_status_records_structured_device_events():
     state.clear_device_events(client.player_id)
 
     try:
-        with patch("sendspin_client._state.notify_status_changed"):
+        with patch("sendspin_bridge.bridge.client._state.notify_status_changed"):
             client._update_status({"bluetooth_connected": True, "server_connected": True})
             client._update_status({"playing": True})
             client._update_status({"audio_streaming": True})
@@ -481,7 +481,7 @@ def test_zombie_watchdog_triggers_after_second_play_without_audio():
     client = SendspinClient("Test Player", "localhost", 9000)
     client._daemon_proc = SimpleNamespace(returncode=None)
 
-    with patch("sendspin_client._state.notify_status_changed"):
+    with patch("sendspin_bridge.bridge.client._state.notify_status_changed"):
         client._update_status({"playing": True})
         client._update_status({"audio_streaming": True})
         client._update_status({"playing": False})
@@ -490,8 +490,8 @@ def test_zombie_watchdog_triggers_after_second_play_without_audio():
 
     scheduled = []
     with (
-        patch("sendspin_client.time.monotonic", return_value=116.0),
-        patch("sendspin_client.asyncio.create_task", side_effect=lambda coro: scheduled.append(coro)),
+        patch("sendspin_bridge.bridge.client.time.monotonic", return_value=116.0),
+        patch("sendspin_bridge.bridge.client.asyncio.create_task", side_effect=lambda coro: scheduled.append(coro)),
     ):
         client._check_zombie_playback()
 
@@ -509,8 +509,8 @@ def test_handle_subprocess_stderr_line_sets_last_error_for_crash_output():
     client = SendspinClient("Test Player", "localhost", 9000)
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
-        patch("sendspin_client.logger.error") as log_error,
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client.logger.error") as log_error,
     ):
         client._handle_subprocess_stderr_line("TypeError: unexpected keyword argument 'use_hardware_volume'")
 
@@ -523,8 +523,8 @@ def test_handle_subprocess_stderr_line_keeps_benign_stderr_as_warning():
     client = SendspinClient("Test Player", "localhost", 9000)
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
-        patch("sendspin_client.logger.warning") as log_warning,
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client.logger.warning") as log_warning,
     ):
         client._handle_subprocess_stderr_line("ALSA lib pcm.c:2666: Unknown PCM default")
 
@@ -578,7 +578,7 @@ async def test_sink_unmute_syncs_to_ma_when_muted_via_ma():
     )
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
         patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
         patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -616,7 +616,7 @@ async def test_sink_unmute_skipped_when_ma_not_connected():
     )
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
         patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=False),
         patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -663,7 +663,7 @@ async def test_sink_unmute_force_pushes_to_ma_even_when_local_status_says_unmute
     )
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
         patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
         patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -688,7 +688,7 @@ async def test_sync_unmute_to_ma_without_force_skips_when_already_unmuted():
     client._update_status({"muted": False})
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
         patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
         patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -723,7 +723,7 @@ async def test_sink_unmute_not_synced_without_reconnect_flag():
     )
 
     with (
-        patch("sendspin_client._state.notify_status_changed"),
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
         patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
         patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
     ):
@@ -782,7 +782,7 @@ async def test_start_sendspin_inner_auto_shifts_listen_port_when_taken(monkeypat
         probe_calls.append({"port": port, "host": host, "max_attempts": max_attempts})
         return 8929
 
-    monkeypatch.setattr("sendspin_client.find_available_bind_port", _fake_probe)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", _fake_probe)
 
     captured_params: list[str] = []
 
@@ -803,7 +803,7 @@ async def test_start_sendspin_inner_auto_shifts_listen_port_when_taken(monkeypat
         return _FakeProc()
 
     with (
-        patch("sendspin_client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
         patch.object(client, "is_running", return_value=False),
         patch.object(client, "stop_sendspin", return_value=None),
     ):
@@ -829,7 +829,7 @@ async def test_start_sendspin_inner_clears_port_collision_on_clean_start(monkeyp
     # Pretend a previous restart cycle flagged a collision.
     client.status.update({"port_collision": True, "active_listen_port": 8929})
 
-    monkeypatch.setattr("sendspin_client.find_available_bind_port", lambda p, **_: p)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda p, **_: p)
 
     class _FakeProc:
         returncode = None
@@ -843,7 +843,7 @@ async def test_start_sendspin_inner_clears_port_collision_on_clean_start(monkeyp
         return _FakeProc()
 
     with (
-        patch("sendspin_client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_exec),
         patch.object(client, "is_running", return_value=False),
         patch.object(client, "stop_sendspin", return_value=None),
     ):
@@ -856,13 +856,13 @@ async def test_start_sendspin_inner_clears_port_collision_on_clean_start(monkeyp
 @pytest.mark.asyncio
 async def test_start_sendspin_inner_halts_after_max_bind_failures(monkeypatch):
     """After _MAX_BIND_FAILURES consecutive probe failures, the restart loop must be halted."""
-    from sendspin_client import _MAX_BIND_FAILURES
+    from sendspin_bridge.bridge.client import _MAX_BIND_FAILURES
 
     client = SendspinClient("Test Player", "localhost", 9000, listen_port=8928)
     client._start_sendspin_lock = asyncio.Lock()
     client.bluetooth_sink_name = ""
 
-    monkeypatch.setattr("sendspin_client.find_available_bind_port", lambda *a, **kw: None)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: None)
 
     exec_calls = 0
 
@@ -872,7 +872,7 @@ async def test_start_sendspin_inner_halts_after_max_bind_failures(monkeypatch):
         return SimpleNamespace(returncode=0, stdin=None, stdout=None, stderr=None)
 
     with (
-        patch("sendspin_client.asyncio.create_subprocess_exec", side_effect=_unexpected_exec),
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_unexpected_exec),
         patch.object(client, "is_running", return_value=False),
         patch.object(client, "stop_sendspin", return_value=None),
     ):

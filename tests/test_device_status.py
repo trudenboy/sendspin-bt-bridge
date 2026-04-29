@@ -2,7 +2,7 @@
 
 import pytest
 
-from sendspin_client import DeviceStatus
+from sendspin_bridge.bridge.client import DeviceStatus
 
 
 def test_getitem_known_key():

@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sendspin_client import SendspinClient
+from sendspin_bridge.bridge.client import SendspinClient
 
 
 class _FakeStdout:
@@ -58,7 +58,7 @@ async def test_reader_survives_idle_timeout(monkeypatch, caplog):
     client = _make_client_with(proc)
     monkeypatch.setattr(SendspinClient, "_STDOUT_IDLE_TIMEOUT_SECS", 0.05)
 
-    with caplog.at_level(logging.DEBUG, logger="sendspin_client"):
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.bridge.client"):
         # Give the reader enough time for ≥1 timeout + 1 continued readline
         task = asyncio.create_task(client._read_subprocess_output())
         await asyncio.sleep(0.2)

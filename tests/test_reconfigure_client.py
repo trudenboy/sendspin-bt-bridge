@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sendspin_client import SendspinClient
+from sendspin_bridge.bridge.client import SendspinClient
 
 
 class _FakeCommandService:

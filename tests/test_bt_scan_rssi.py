@@ -90,7 +90,7 @@ def test_device_status_has_rssi_fields_with_safe_defaults():
     """``DeviceStatus`` must declare ``rssi_dbm`` and ``rssi_at_ts`` so the
     background refresh task can populate them and Flask routes can read
     them without ``getattr`` ceremony."""
-    from sendspin_client import DeviceStatus
+    from sendspin_bridge.bridge.client import DeviceStatus
 
     s = DeviceStatus()
     assert hasattr(s, "rssi_dbm") and s.rssi_dbm is None

@@ -5,7 +5,7 @@ def test_container_runtime_smoke_imports_runtime_modules():
     imported = _import_runtime_modules()
 
     assert "sendspin_bridge.bridge.orchestrator" in imported
-    assert "sendspin_client" in imported  # B6 will rename to sendspin_bridge.bridge.client
+    assert "sendspin_bridge.bridge.client" in imported
     assert "sendspin_bridge.web.interface" in imported
 
 

@@ -148,7 +148,7 @@ async def test_handles_pulse_error_gracefully():
 @pytest.mark.asyncio
 async def test_get_subprocess_pid_protocol():
     """SendspinClient.get_subprocess_pid() returns None / PID correctly."""
-    from sendspin_client import SendspinClient
+    from sendspin_bridge.bridge.client import SendspinClient
 
     bt_mgr = MagicMock()
     bt_mgr.check_bluetooth_available = MagicMock(return_value=False)

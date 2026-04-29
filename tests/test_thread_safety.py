@@ -14,12 +14,12 @@ from sendspin_bridge.config import update_config
 
 def _make_client_stub():
     """Return a lightweight SendspinClient-like object with _update_status."""
-    from sendspin_client import SendspinClient
+    from sendspin_bridge.bridge.client import SendspinClient
 
     bt = MagicMock()
     bt.check_bluetooth_available.return_value = False
     bt.mac_address = "AA:BB:CC:DD:EE:FF"
-    with patch("sendspin_client.socket.gethostname", return_value="test-host"):
+    with patch("sendspin_bridge.bridge.client.socket.gethostname", return_value="test-host"):
         client = SendspinClient(
             player_name="ThreadTest",
             server_host="localhost",
@@ -29,7 +29,7 @@ def _make_client_stub():
     return client
 
 
-@patch("sendspin_client._state")
+@patch("sendspin_bridge.bridge.client._state")
 def test_concurrent_update_status(mock_state):
     """Multiple threads calling _update_status must not corrupt DeviceStatus."""
     mock_state.publish_device_event = MagicMock()
@@ -58,7 +58,7 @@ def test_concurrent_update_status(mock_state):
     assert 0 <= client.status["volume"] <= 9
 
 
-@patch("sendspin_client._state")
+@patch("sendspin_bridge.bridge.client._state")
 def test_update_status_preserves_other_fields(mock_state):
     """_update_status must only change the keys in the updates dict."""
     mock_state.publish_device_event = MagicMock()

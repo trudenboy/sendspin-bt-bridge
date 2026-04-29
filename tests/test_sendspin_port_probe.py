@@ -68,8 +68,8 @@ async def test_probe_deduplicates_default_port():
 @pytest.mark.asyncio
 async def test_probe_port_if_default_returns_none_on_exception():
     """_probe_port_if_default should return None on any exception."""
-    from sendspin_client import _probe_port_if_default
+    from sendspin_bridge.bridge.client import _probe_port_if_default
 
-    with patch("sendspin_client.probe_sendspin_port", side_effect=RuntimeError("boom")):
+    with patch("sendspin_bridge.bridge.client.probe_sendspin_port", side_effect=RuntimeError("boom")):
         result = await _probe_port_if_default("192.168.1.10", 9000)
     assert result is None

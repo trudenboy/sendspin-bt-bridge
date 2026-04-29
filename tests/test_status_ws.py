@@ -173,8 +173,8 @@ def test_log_stream_iter_first_frame_is_snapshot_with_history():
     second polling round-trip."""
     import logging as _logging
 
+    from sendspin_bridge.bridge.client import _RingLogHandler
     from sendspin_bridge.web.routes.api_ws import log_stream_iter
-    from sendspin_client import _RingLogHandler
 
     h = _RingLogHandler(maxlen=10)
     h.setFormatter(_logging.Formatter("%(message)s"))
@@ -193,8 +193,8 @@ def test_log_stream_iter_emits_append_per_new_line():
     import threading as _threading
     import time as _time
 
+    from sendspin_bridge.bridge.client import _RingLogHandler
     from sendspin_bridge.web.routes.api_ws import log_stream_iter
-    from sendspin_client import _RingLogHandler
 
     h = _RingLogHandler(maxlen=10)
     h.setFormatter(_logging.Formatter("%(message)s"))
@@ -217,8 +217,8 @@ def test_log_stream_iter_emits_heartbeat_on_idle_timeout():
     the WS connection warm against ingress / browser idle close."""
     import logging as _logging
 
+    from sendspin_bridge.bridge.client import _RingLogHandler
     from sendspin_bridge.web.routes.api_ws import log_stream_iter
-    from sendspin_client import _RingLogHandler
 
     h = _RingLogHandler(maxlen=10)
     h.setFormatter(_logging.Formatter("%(message)s"))
@@ -235,8 +235,8 @@ def test_log_stream_iter_unsubscribes_on_completion():
     forever for closed clients."""
     import logging as _logging
 
+    from sendspin_bridge.bridge.client import _RingLogHandler
     from sendspin_bridge.web.routes.api_ws import log_stream_iter
-    from sendspin_client import _RingLogHandler
 
     h = _RingLogHandler(maxlen=10)
     h.setFormatter(_logging.Formatter("%(message)s"))
@@ -255,8 +255,8 @@ def test_log_stream_iter_uses_atomic_subscribe_snapshot():
     """
     import logging as _logging
 
+    from sendspin_bridge.bridge.client import _RingLogHandler
     from sendspin_bridge.web.routes.api_ws import log_stream_iter
-    from sendspin_client import _RingLogHandler
 
     h = _RingLogHandler(maxlen=10)
     h.setFormatter(_logging.Formatter("%(message)s"))
@@ -282,8 +282,8 @@ def test_log_stream_iter_queue_is_bounded_drops_newest_when_full():
     """
     import logging as _logging
 
+    from sendspin_bridge.bridge.client import _RingLogHandler
     from sendspin_bridge.web.routes.api_ws import LOG_STREAM_QUEUE_MAXSIZE, log_stream_iter
-    from sendspin_client import _RingLogHandler
 
     h = _RingLogHandler(maxlen=4096)
     h.setFormatter(_logging.Formatter("%(message)s"))

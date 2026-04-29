@@ -13,7 +13,7 @@ import pytest
 
 def _make_client(idle_disconnect_minutes: int = 30, *, daemon_alive: bool = False):
     """Create a SendspinClient with optional mock daemon proc."""
-    from sendspin_client import DeviceStatus, SendspinClient
+    from sendspin_bridge.bridge.client import DeviceStatus, SendspinClient
 
     client = SendspinClient.__new__(SendspinClient)
     client.player_name = "TestSpeaker"
@@ -102,7 +102,7 @@ class TestStandbyDaemonAlive:
     async def test_enter_standby_moves_streams_to_null_sink(self):
         """Daemon stays alive; streams are moved to null sink."""
         with (
-            patch("sendspin_client._state") as state_mock,
+            patch("sendspin_bridge.bridge.client._state") as state_mock,
             patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock) as move_mock,
             patch("sendspin_bridge.services.audio.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
         ):
@@ -123,7 +123,7 @@ class TestStandbyDaemonAlive:
     async def test_enter_standby_fallback_stops_daemon_if_null_sink_fails(self):
         """Falls back to stopping daemon when null sink cannot be created."""
         with (
-            patch("sendspin_client._state") as state_mock,
+            patch("sendspin_bridge.bridge.client._state") as state_mock,
             patch("sendspin_bridge.services.audio.pulse.amove_pid_sink_inputs", new_callable=AsyncMock),
             patch("sendspin_bridge.services.audio.pulse.aensure_null_sink", new_callable=AsyncMock) as ensure_mock,
         ):
@@ -139,7 +139,7 @@ class TestStandbyDaemonAlive:
     @pytest.mark.asyncio
     async def test_enter_standby_no_daemon_skips_null_sink(self):
         """When daemon is not running, null sink logic is skipped."""
-        with patch("sendspin_client._state") as state_mock:
+        with patch("sendspin_bridge.bridge.client._state") as state_mock:
             client = _make_client(daemon_alive=False)
 
             await client._enter_standby()
@@ -157,7 +157,7 @@ class TestAutoWake:
 
     @pytest.mark.asyncio
     async def test_on_standby_play_detected_triggers_wake(self):
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(daemon_alive=True)
             client.status.update({"bt_standby": True, "bt_standby_since": "2025-01-01"})
 
@@ -173,7 +173,7 @@ class TestAutoWake:
 
     @pytest.mark.asyncio
     async def test_on_standby_play_noop_if_not_standby(self):
-        with patch("sendspin_client._state"):
+        with patch("sendspin_bridge.bridge.client._state"):
             client = _make_client(daemon_alive=True)
             # Not in standby
             await client._on_standby_play_detected()
@@ -284,7 +284,7 @@ class TestKeepaliveInfrasound:
 
     def test_infrasound_buffer_is_not_silence(self):
         """The keepalive buffer must contain non-zero samples (infrasound, not silence)."""
-        from sendspin_client import _generate_infrasound_burst
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst
 
         buf = _generate_infrasound_burst()
         assert isinstance(buf, (bytes, bytearray))
@@ -294,7 +294,7 @@ class TestKeepaliveInfrasound:
 
     def test_infrasound_buffer_length(self):
         """Buffer length must match 1 s of stereo 16-bit 44100 Hz audio."""
-        from sendspin_client import _generate_infrasound_burst
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst
 
         buf = _generate_infrasound_burst()
         # 1 s x 44100 Hz x 2 channels x 2 bytes/sample = 176400 bytes
@@ -304,7 +304,7 @@ class TestKeepaliveInfrasound:
         """Peak amplitude must stay below -40 dB (≈ 328 out of 32767)."""
         import struct
 
-        from sendspin_client import _generate_infrasound_burst
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst
 
         buf = _generate_infrasound_burst()
         samples = struct.unpack(f"<{len(buf) // 2}h", buf)
@@ -318,7 +318,7 @@ class TestKeepaliveInfrasound:
         """Verify the signal completes roughly 2 full cycles in 1 second (2 Hz)."""
         import struct
 
-        from sendspin_client import _generate_infrasound_burst
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst
 
         buf = _generate_infrasound_burst()
         # Extract left channel samples only (every other sample)
@@ -352,12 +352,12 @@ class TestKeepaliveMethodEnum:
     """
 
     def test_infrasound_method_uses_existing_burst(self):
-        from sendspin_client import _generate_infrasound_burst, _generate_keepalive_buffer
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst, _generate_keepalive_buffer
 
         assert _generate_keepalive_buffer("infrasound") == _generate_infrasound_burst()
 
     def test_silence_method_is_all_zeros_with_same_length(self):
-        from sendspin_client import _generate_infrasound_burst, _generate_keepalive_buffer
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst, _generate_keepalive_buffer
 
         ref_len = len(_generate_infrasound_burst())
         buf = _generate_keepalive_buffer("silence")
@@ -365,14 +365,14 @@ class TestKeepaliveMethodEnum:
         assert buf == b"\x00" * ref_len
 
     def test_none_method_returns_empty_bytes(self):
-        from sendspin_client import _generate_keepalive_buffer
+        from sendspin_bridge.bridge.client import _generate_keepalive_buffer
 
         assert _generate_keepalive_buffer("none") == b""
 
     def test_unknown_method_falls_back_to_infrasound(self):
         """Defensive fallback so a bad config value can't disable keepalive
         silently — the original infrasound default is returned."""
-        from sendspin_client import _generate_infrasound_burst, _generate_keepalive_buffer
+        from sendspin_bridge.bridge.client import _generate_infrasound_burst, _generate_keepalive_buffer
 
         assert _generate_keepalive_buffer("bogus") == _generate_infrasound_burst()
 
@@ -439,7 +439,7 @@ class TestGroupAutoWake:
     @pytest.mark.asyncio
     async def test_group_auto_wake_triggers_for_standby_member(self):
         """When a group is playing and a client is in standby with that group_id, wake it."""
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         wake_called = False
 
@@ -468,7 +468,7 @@ class TestGroupAutoWake:
     def test_group_auto_wake_noop_when_not_playing(self):
         """No wake when group state is idle."""
         import sendspin_bridge.bridge.state as state
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         client = MagicMock()
         client.status = DeviceStatus()
@@ -486,7 +486,7 @@ class TestGroupAutoWake:
     def test_group_auto_wake_noop_when_not_standby(self):
         """Client not in standby is not woken even if group is playing."""
         import sendspin_bridge.bridge.state as state
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         client = MagicMock()
         client.status = DeviceStatus()
@@ -503,7 +503,7 @@ class TestGroupAutoWake:
     @pytest.mark.asyncio
     async def test_solo_player_auto_wake_by_player_id(self):
         """Solo player (no group_id) is auto-woken when now_playing keyed by player_id is playing."""
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         wake_called = False
 
@@ -534,7 +534,7 @@ class TestGroupAutoWake:
     def test_solo_player_no_wake_when_idle(self):
         """Solo player is NOT woken when now_playing keyed by player_id is idle."""
         import sendspin_bridge.bridge.state as state
-        from sendspin_client import DeviceStatus
+        from sendspin_bridge.bridge.client import DeviceStatus
 
         client = MagicMock()
         client.player_name = "Solo-Speaker"
