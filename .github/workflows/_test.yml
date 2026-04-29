@@ -46,7 +46,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r dev-requirements.txt pytest-cov
+        run: |
+          pip install -r requirements.txt -r dev-requirements.txt pytest-cov
+          # Install the bridge package itself (no deps — they're already pinned
+          # via requirements.txt above) so `python -m sendspin_bridge` and
+          # `from sendspin_bridge import ...` resolve in scripts and tests.
+          pip install --no-deps -e .
 
       - name: Audit dependencies for CVEs
         # Audit the already-installed venv (no -r flag) so pip-audit
