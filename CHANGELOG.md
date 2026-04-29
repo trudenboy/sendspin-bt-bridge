@@ -61,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   intervening `bluetoothd` power-cycle doesn't undo it before the
   soundbar's CoD filter inspects the initiator. Gated behind the new
   experimental flag — see `### Changed` above.
+- **CoD startup applier skipped adapter when config stored `id` key.**
+  Adapter config entries use `id` for the HCI label (`hci0` etc.) but
+  the startup applier was only looking for a `hci` key, so it always
+  fell back to sysfs MAC lookup. On Docker hosts where
+  `/sys/class/bluetooth/hciN/address` is not mounted, that lookup
+  returned nothing and the override was silently skipped. The applier
+  now accepts both `hci` and `id` as the HCI label source.
 
 ## [2.65.1-rc.1] - 2026-04-29
 

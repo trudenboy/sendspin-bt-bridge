@@ -162,7 +162,7 @@ def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> Non
         if not hex_value:
             continue
 
-        hci_label = str(entry.get("hci") or "").strip()
+        hci_label = str(entry.get("hci") or entry.get("id") or "").strip()
         if not hci_label:
             mac = str(entry.get("mac") or "").strip()
             if not mac:
