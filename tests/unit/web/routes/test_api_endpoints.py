@@ -1206,11 +1206,10 @@ def test_read_log_lines_docker_uses_root_logger_ring_buffer(monkeypatch):
     """Ring buffer fallback must find the handler via sys.modules['__main__'],
     not via ``from sendspin_client import _ring_log_handler`` (which
     would create a second empty instance when __main__ != module name)."""
-    import logging
     import subprocess
-    import sys
     from collections import deque
 
+    import sendspin_bridge.bridge.client as client_mod
     import sendspin_bridge.web.routes.api_config as mod
 
     monkeypatch.setattr(mod, "_detect_runtime", lambda: "docker")
@@ -1220,26 +1219,13 @@ def test_read_log_lines_docker_uses_root_logger_ring_buffer(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", _no_docker)
 
-    class _FakeRing(logging.Handler):
+    class _FakeRing:
         def __init__(self):
-            super().__init__()
             self.records = deque(["line-1", "line-2", "line-3"], maxlen=100)
 
-        def emit(self, record):
-            pass
-
-    handler = _FakeRing()
-    main_mod = sys.modules["__main__"]
-    old = getattr(main_mod, "_ring_log_handler", None)
-    main_mod._ring_log_handler = handler
-    try:
-        lines = mod._read_log_lines("docker", 10)
-        assert lines == ["line-1", "line-2", "line-3"]
-    finally:
-        if old is None:
-            delattr(main_mod, "_ring_log_handler")
-        else:
-            main_mod._ring_log_handler = old
+    monkeypatch.setattr(client_mod, "_ring_log_handler", _FakeRing())
+    lines = mod._read_log_lines("docker", 10)
+    assert lines == ["line-1", "line-2", "line-3"]
 
 
 def test_api_group_pause_uses_registry_snapshot_for_group_lookup(client, monkeypatch):

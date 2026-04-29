@@ -91,6 +91,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   silently no-op'd. The fallback parses `hciconfig -a` (which talks
   to the kernel via the BlueZ control socket) so both paths now work
   in the typical Docker setup without extra mounts.
+- **CoD `HCI_FILTER` setsockopt rejected with `EINVAL`.** The packed
+  filter buffer was 14 bytes, but the kernel's `struct hci_filter`
+  pads its trailing `__le16 opcode` to a 16-byte boundary; the
+  `bt_copy_from_sockptr` size check rejected the short buffer and
+  the failure surfaced as a misleading "Write_Class_Of_Device timed
+  out or failed" warning. The pack format is now `=IIIH2x` (16
+  bytes), which the kernel accepts.
+- **`/api/logs` no longer reports "docker CLI not available" inside
+  containers.** The fallback used to look up the in-memory ring log
+  handler via `sys.modules['__main__']`, which only worked when the
+  bridge was launched as a script. Under v2.66's PyPA src-layout the
+  entry point is `python -m sendspin_bridge`, so that lookup always
+  failed and the UI showed only the boilerplate placeholder. The
+  endpoint now imports the ring buffer directly so live and
+  bug-report log views show the bridge's own logs as expected.
 
 ## [2.65.1-rc.1] - 2026-04-29
 

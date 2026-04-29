@@ -64,13 +64,17 @@ _HCI_EV_COMMAND_COMPLETE = 0x0E
 # command-status / command-complete opcodes through.
 #
 # struct hci_filter { __u32 type_mask; __u32 event_mask[2]; __le16 opcode; }
-# Layout: 14 bytes (4 + 4 + 4 + 2). x86_64 native-endian == LE so
-# ``=IIIH`` is the wire format the kernel expects.
+# The struct sizes to **16 bytes** on Linux because the trailing
+# ``__le16`` aligns up to the ``__u32`` boundary — the kernel's
+# ``bt_copy_from_sockptr`` rejects shorter buffers with ``EINVAL``,
+# which is why a 14-byte ``=IIIH`` pack failed silently as a "timed
+# out or failed" Command Complete read. ``=IIIH2x`` matches the real
+# struct layout.
 _SOL_HCI = 0
 _HCI_FILTER = 2
 _HCI_FILTER_TYPE_MASK_EVENT = 1 << _HCI_PKT_TYPE_EVENT  # 0x10
 _HCI_FILTER_BYTES = struct.pack(
-    "=IIIH",
+    "=IIIH2x",
     _HCI_FILTER_TYPE_MASK_EVENT,  # type_mask: HCI_EVENT_PKT only
     0xFFFFFFFF,  # event_mask[0]: events 0-31 (covers CMD_COMPLETE=0x0E, CMD_STATUS=0x0F)
     0xFFFFFFFF,  # event_mask[1]: events 32-63

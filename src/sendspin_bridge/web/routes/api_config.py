@@ -1048,32 +1048,32 @@ def _read_log_lines(runtime: str, lines: int) -> list[str]:
         else:
             log_lines = ["(SUPERVISOR_TOKEN not available — check addon permissions)"]
     else:
-        # Inside a Docker container the docker CLI is not available.
-        # Try the CLI first, then fall back to the in-memory ring buffer
-        # attached to the root logger by sendspin_client._ring_log_handler.
+        # Inside a Docker container the docker CLI is typically not
+        # available. Read straight from the in-memory ring buffer the
+        # bridge attaches to the root logger at startup — same source
+        # the SSE log stream uses, so `/api/logs` and the live stream
+        # show the same lines. The docker CLI is only attempted as a
+        # last resort for hosts that bind-mount /var/run/docker.sock.
         log_lines = []
         try:
-            result = subprocess.run(
-                ["docker", "logs", "--tail", str(lines), "sendspin-client"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            log_lines = (result.stdout + result.stderr).splitlines()
-        except FileNotFoundError:
-            # docker CLI unavailable — read from in-memory ring buffer
-            # attached to the root logger.  We cannot ``from sendspin_client
-            # import _ring_log_handler`` because the main script runs as
-            # ``__main__``; importing by module name creates a *second*
-            # instance with an empty buffer.
-            import sys
+            from sendspin_bridge.bridge.client import _ring_log_handler
 
-            main_mod = sys.modules.get("__main__")
-            ring = getattr(main_mod, "_ring_log_handler", None)
-            if ring is not None:
-                log_lines = list(ring.records)[-lines:]
-            if not log_lines:
-                log_lines = ["(docker CLI not available — showing logs since last restart only)"]
+            log_lines = list(_ring_log_handler.records)[-lines:]
+        except Exception:
+            log_lines = []
+        if not log_lines:
+            try:
+                result = subprocess.run(
+                    ["docker", "logs", "--tail", str(lines), "sendspin-client"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                log_lines = (result.stdout + result.stderr).splitlines()
+            except FileNotFoundError:
+                pass
+        if not log_lines:
+            log_lines = ["(no log lines yet — bridge just started)"]
 
     return log_lines or ["(No logs available)"]
 

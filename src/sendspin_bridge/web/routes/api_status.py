@@ -1214,7 +1214,17 @@ def _collect_recent_logs(n: int = 100) -> list[str]:
                     text = resp.read().decode("utf-8", errors="replace")
                 return text.splitlines()[-n:]
             return []
-        # Docker fallback
+        # In-process ring buffer — works inside containers without a
+        # bind-mounted docker socket, which is the typical case.
+        try:
+            from sendspin_bridge.bridge.client import _ring_log_handler
+
+            ring_lines = list(_ring_log_handler.records)[-n:]
+            if ring_lines:
+                return ring_lines
+        except Exception:
+            pass
+        # Last-resort docker CLI for hosts that mount /var/run/docker.sock.
         r = subprocess.run(
             ["docker", "logs", "--tail", str(n), "sendspin-client"],
             capture_output=True,
