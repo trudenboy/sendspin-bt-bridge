@@ -165,6 +165,323 @@ Keep the current runtime layering in mind when making code or docs changes:
 
 ---
 
+## Changelog Discipline
+
+`CHANGELOG.md` is parsed by automated tooling (`scripts/release_notes.py`
+composes GitHub Release bodies from it; `scripts/generate_ha_addon_variants.py`
+filters it into per-channel `ha-addon*/CHANGELOG.md` artifacts) and read by
+end users. The format is [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
+with a small set of project-specific guardrails enforced by
+`scripts/lint_changelog.py` (rules **R1–R10** below). The linter runs as
+a pre-commit hook and as a CI step in `_lint.yml`.
+
+**Forward-only**: stylistic rules (R5–R8) check only the `[Unreleased]`
+block. Historical entries are grandfathered.
+
+### When you add a changelog entry
+
+1. Open `CHANGELOG.md` and place your bullet under `## [Unreleased]`.
+2. Use one of the canonical category headings (R5):
+
+   ```markdown
+   ## [Unreleased]
+
+   ### Added
+   - …
+
+   ### Changed
+   - …
+
+   ### Deprecated
+   - …
+
+   ### Removed
+   - …
+
+   ### Fixed
+   - …
+
+   ### Security
+   - …
+   ```
+
+   Delete the categories you don't use.
+
+3. Run the linter locally (or just commit — the pre-commit hook does
+   the same):
+
+   ```bash
+   uv run python scripts/lint_changelog.py CHANGELOG.md
+   ```
+
+4. On release, the new `## [X.Y.Z] - YYYY-MM-DD` section replaces the
+   `[Unreleased]` heading. CI's `release.yml` regenerates the
+   compare-links footer (R10) automatically.
+
+### Rules (R1 – R10)
+
+Each rule below tells you the **rule** (imperative), **why**
+(rationale + what breaks otherwise), a **counterexample** (what NOT to
+write), and the **lint check** that enforces it. Rule IDs match the
+linter output; AI agents working in this repo should treat them as
+falsifiable invariants and self-correct before committing.
+
+#### R1 — Header references Keep a Changelog 1.1.0
+
+**Rule.** The file header must link to
+`https://keepachangelog.com/en/1.1.0/`.
+
+**Why.** The project's tooling (release notes, addon variant
+generation, this linter) is aligned with KaC 1.1.0 vocabulary
+(Added / Changed / Deprecated / Removed / Fixed / Security). An
+older link signals an older format and confuses downstream readers.
+
+**Counterexample.** Linking to `1.0.0`.
+
+**Lint check.** `R1`.
+
+#### R2 — Heading shape
+
+**Rule.** Every release heading matches one of these forms:
+
+```markdown
+## [Unreleased]
+## [X.Y.Z] - YYYY-MM-DD
+## [X.Y.Z-rc.N] - YYYY-MM-DD
+## [X.Y.Z-beta.N] - YYYY-MM-DD
+## [X.Y.Z] - YYYY-MM-DD [YANKED]
+```
+
+The bracket token is exactly `Unreleased` or `X.Y.Z[-(rc|beta).N]`.
+
+**Why.** `scripts/release_notes.py:_iter_changelog_sections` and
+`scripts/generate_ha_addon_variants.py:render_changelog_md` both rely
+on this shape. Free-form bracket content (`## [hotfix-2026-04]`)
+breaks both tools.
+
+**Counterexample.** `## [v2.66] - 2026-04-29` (leading `v`,
+non-semver).
+
+**Lint check.** `R2`.
+
+#### R3 — `[Unreleased]` carries no date
+
+**Rule.** The `## [Unreleased]` line must not have a date suffix.
+
+**Why.** "Unreleased" is, by definition, undated. A date there means
+either the section was already released (and should be renamed) or
+the date was copy-pasted by mistake.
+
+**Counterexample.** `## [Unreleased] - 2026-04-29`.
+
+**Lint check.** `R3`.
+
+#### R4 — Released sections carry an ISO 8601 date
+
+**Rule.** Every `## [X.Y.Z…]` section has ` - YYYY-MM-DD` after the
+bracket.
+
+**Why.** Users and downstream tooling rely on the date for ordering
+and for "what shipped when". A dateless release section reads as
+"unfinished".
+
+**Counterexample.** `## [2.66.0]` (no date).
+
+**Lint check.** `R4`.
+
+#### R5 — Bare category headings
+
+**Rule.** Under `[Unreleased]`, every `### …` is one of the bare
+canonical categories: `### Added`, `### Changed`, `### Deprecated`,
+`### Removed`, `### Fixed`, `### Security`. Nothing else after the
+word — no em-dash subtitle, no narrative phrase, no synonym.
+
+**Why.** `scripts/release_notes.py:_iter_section_categories` parses
+the entire `### …` line as the category name. A heading like
+`### Fixed — Group ID overflow` becomes a category named
+`"Fixed — Group ID overflow"`, which doesn't match the canonical set
+in `release_notes.py:152`. The result: bullets land at the bottom of
+GitHub release notes out of order, separate from real `Fixed` entries.
+This was a live regression visible in v2.65.0-rc.x release pages.
+
+Synonyms (`### Improved`, `### Refactored`, `### Tests`,
+`### Performance`, `### Notes`, `### Internal`, `### Polish`,
+`### Cleanup`) are explicitly forbidden — they fragment release
+notes and dilute the canonical taxonomy. If a bullet doesn't fit
+Added/Changed/Deprecated/Removed/Fixed/Security, it probably
+belongs in the commit message, not the changelog.
+
+**Counterexample.**
+
+```markdown
+### Fixed — Group ID no longer overflows the device card
+- …
+
+### Improved
+- Made things faster.
+
+### Code-review polish
+- Tidied helper.
+```
+
+**Correct.**
+
+```markdown
+### Fixed
+- Group ID no longer overflows the device card.
+
+### Changed
+- Faster path X (cite measured improvement).
+```
+
+**Lint check.** `R5`.
+
+#### R6 — Categories follow canonical KaC order
+
+**Rule.** Under one section, categories appear in canonical order:
+**Added, Changed, Deprecated, Removed, Fixed, Security**. Skipping is
+fine; reordering is not.
+
+**Why.** Predictable order helps readers scan a release. KaC 1.1.0
+spec mandates this ordering, and the linter aligns with the spec.
+
+**Counterexample.**
+
+```markdown
+### Fixed
+- …
+
+### Added         ← out of order; Added must come first
+- …
+```
+
+**Lint check.** `R6`.
+
+#### R7 — No private code identifiers in bullets
+
+**Rule.** Under `[Unreleased]`, bullets must not name internal Python
+identifiers or file paths. Specifically:
+
+- Python-style private functions (`_underscore_foo`).
+- Internal dotted symbols (`ClassName.method`,
+  `module.private_helper`).
+- File paths (`services/foo.py`, `path/bar.yml`).
+
+**Allowed:**
+
+- Public uppercase config keys (`SENDSPIN_PORT`, `BT_CHURN_THRESHOLD`).
+- User-facing files referenced **inside backticks** (e.g.
+  `` `pyproject.toml` `` for "edit your `pyproject.toml`").
+- URLs and markdown link targets (the linter strips them before
+  scanning).
+
+**Why.** Internal symbols rot through refactors. A 2024 changelog
+entry that says "fixed `services/old_path.py:_private_helper`" is
+useless to a 2026 reader looking at a renamed codebase, and the
+information was always more useful in the commit message anyway.
+Describe what changed from the **user's** point of view.
+
+**Counterexample.**
+
+```markdown
+### Fixed
+- `services/ha_publisher.py:_publish_full_state` now mirrors the
+  legacy availability topic.
+```
+
+**Correct.**
+
+```markdown
+### Fixed
+- HA dashboards no longer hold a stale availability state for
+  devices that subscribed via a pre-2.65 cache.
+```
+
+**Lint check.** `R7`.
+
+#### R8 — No process-noise headings
+
+**Rule.** Headings under `[Unreleased]` must not describe the
+**process** of the change. Forbidden patterns:
+
+- `Code-review polish`, `Polish`, `Cleanup`
+- `Copilot review on PR #N`, `Round 2 fixes`, `Second-round review`
+- `Follow-ups on rc.X`, `Internal`, `Tests`
+
+**Why.** A changelog entry exists to tell the user what changed in
+their world, not to log the workflow that produced it. "Round 2
+review fixes from PR #218" tells the reader nothing actionable. If a
+review surfaced a real user-facing bug, file it under `### Fixed`
+with a description of the bug. The PR / round metadata lives in
+`git log`.
+
+**Counterexample.** `### Fixed — Copilot review on PR #218`.
+
+**Correct.** `### Fixed` + bullet that names the user-visible fix.
+
+**Lint check.** `R8`.
+
+#### R9 — No orphan prose under a section
+
+**Rule.** Between `## [...]` and the first `### Category`, only blank
+lines are allowed under `[Unreleased]`. No stand-alone paragraphs, no
+bare bullets.
+
+**Why.** `scripts/release_notes.py:_iter_section_categories` only
+starts collecting bullets after the first `### Category` heading;
+any prose above it is silently dropped. So a "this release adds X"
+intro paragraph at the top of a section never appears in the GitHub
+release body that users actually read.
+
+**Counterexample.**
+
+```markdown
+## [Unreleased]
+
+This release ships the new HA integration with one-click MQTT setup.
+
+### Added
+- …
+```
+
+**Correct.** Move the intro into a bullet under `### Added` (or
+elsewhere), or put it inside a category section.
+
+**Lint check.** `R9`.
+
+#### R10 — Compare-links footer is present
+
+**Rule.** The file ends with at least one `[X.Y.Z]:` link reference
+to a GitHub compare URL.
+
+**Why.** Without compare-links, `## [X.Y.Z]` headings are not
+clickable on GitHub; readers cannot jump from "what changed" to "the
+diff". Run `scripts/lint_changelog.py CHANGELOG.md --fix-footer` to
+regenerate the footer from `git tag`. The `release.yml` workflow
+calls `--fix-footer` automatically on every release cut.
+
+**Counterexample.** Empty file end.
+
+**Lint check.** `R10`.
+
+### Tooling cheat-sheet
+
+```bash
+# Check
+uv run python scripts/lint_changelog.py CHANGELOG.md
+
+# Auto-fix the compare-links footer
+uv run python scripts/lint_changelog.py CHANGELOG.md --fix-footer
+
+# Mechanical fold of rc.1…rc.N into stable releases (one-off)
+uv run python scripts/lint_changelog.py CHANGELOG.md --consolidate-rc
+
+# Dry-run any auto-fix (show diff size, don't write)
+uv run python scripts/lint_changelog.py CHANGELOG.md --fix-footer --dry-run
+```
+
+---
+
 ## Branching Strategy
 
 - `main` — stable, always releasable

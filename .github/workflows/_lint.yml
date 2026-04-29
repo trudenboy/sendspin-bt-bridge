@@ -57,6 +57,11 @@ jobs:
       - name: Mypy
         run: uv run mypy --config-file pyproject.toml src/sendspin_bridge/
 
+      - name: Lint CHANGELOG.md (Keep a Changelog discipline)
+        # Rule set: CONTRIBUTING.md § Changelog Discipline (R1–R10).
+        # Forward-only: stylistic rules check only the [Unreleased] block.
+        run: uv run python scripts/lint_changelog.py CHANGELOG.md
+
       - name: Verify HA addon variants are in sync with template
         run: uv run python scripts/generate_ha_addon_variants.py check-current-repo
 

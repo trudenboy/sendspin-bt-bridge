@@ -335,6 +335,13 @@ jobs:
           git fetch --force --tags
           git reset --hard origin/main
 
+      - name: Refresh CHANGELOG compare-links footer
+        # The new tag is now visible to `git tag`. Regenerate the footer so
+        # the just-released version's link appears alongside Unreleased and
+        # historical entries. Bundled into the same chore commit as the HA
+        # addon sync below.
+        run: python scripts/lint_changelog.py CHANGELOG.md --fix-footer
+
       - name: Sync HA addon directories
         env:
           CHANNEL: ${{ needs.prepare.outputs.channel }}
@@ -358,18 +365,18 @@ jobs:
           [ -n "${beta_tag}" ] && cmd+=(--beta-version "${beta_tag#v}")
           "${cmd[@]}"
 
-      - name: Commit and push addon changes
+      - name: Commit and push addon + footer changes
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           if [ -z "$(git status --short)" ]; then
-            echo "HA addon directories already up to date"
+            echo "HA addon directories and CHANGELOG footer already up to date"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A .
-          git commit -m "chore: sync HA addon directories for ${VERSION}"
+          git commit -m "chore: sync HA addon directories + CHANGELOG footer for ${VERSION}"
           git push origin HEAD:main
 
   # ── 8. GitHub Release (stable only) ─────────────────────────────

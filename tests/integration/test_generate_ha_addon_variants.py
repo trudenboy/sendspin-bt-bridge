@@ -122,12 +122,21 @@ def test_generate_multi_addon_repo_files_renders_suffix_slug_repository_layout()
     assert "https://img.shields.io/badge/Beta%20channel-Experimental-ef4444" in rendered["ha-addon-beta/DOCS.md"]
     assert "different default HA ingress ports" in rendered["ha-addon-beta/DOCS.md"]
     assert "profile sendspin_bt_bridge_rc " in rendered["ha-addon-rc/apparmor.txt"]
+    # Channel-filter invariants: the addon variant CHANGELOG must contain
+    # only entries from its own release channel, not the others. After the
+    # 2.66.0 rc-consolidation pass, historical rc.N / beta.N entries are
+    # folded into their stable counterparts; only orphan prereleases (no
+    # corresponding stable yet) survive in the root CHANGELOG. We assert
+    # against a known-orphan rc and the cross-channel exclusion guarantee.
     assert "## [2.40.5]" in rendered["ha-addon/CHANGELOG.md"]
     assert "## [2.40.5-rc.3]" not in rendered["ha-addon/CHANGELOG.md"]
-    assert "## [2.40.5-rc.3]" in rendered["ha-addon-rc/CHANGELOG.md"]
+    assert "## [2.65.1-rc.1]" in rendered["ha-addon-rc/CHANGELOG.md"]
+    assert "## [2.65.1]" not in rendered["ha-addon-rc/CHANGELOG.md"]
     assert "## [2.40.5]" not in rendered["ha-addon-rc/CHANGELOG.md"]
-    assert "## [2.40.5-beta.1]" in rendered["ha-addon-beta/CHANGELOG.md"]
-    assert "## [2.40.5-rc.1]" not in rendered["ha-addon-beta/CHANGELOG.md"]
+    # The beta channel currently has no surviving entries — assert the
+    # negative cross-channel guarantee instead.
+    assert "## [2.65.1-rc.1]" not in rendered["ha-addon-beta/CHANGELOG.md"]
+    assert "## [2.40.5]" not in rendered["ha-addon-beta/CHANGELOG.md"]
 
 
 def test_render_changelog_md_filters_entries_to_variant_channel():
