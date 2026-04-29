@@ -1,3 +1,28 @@
+# UV_STAGE selects which uv source stage feeds the builder's COPY
+# below. Default works for amd64/arm64; the armv7 release job
+# overrides this to ``uv-armv7``. The ARG must precede every FROM that
+# references it — BuildKit requires the global form here.
+ARG UV_STAGE=uv-default
+
+# uv source stages.
+#
+# Default — pull the static binary directly from the upstream image.
+# This is what amd64/arm64 builds use; the COPY --from below short-
+# circuits to a single layer copy (~50 MB pull amortised across builds).
+FROM ghcr.io/astral-sh/uv:0.9.27 AS uv-default
+
+# armv7 fallback. ghcr.io/astral-sh/uv ships no linux/arm/v7 manifest,
+# so the COPY in the default stage above would fail with "no match for
+# platform in manifest". Install uv via pip on a python:3.12-slim base
+# instead — functionally identical, just adds a couple seconds at
+# layer build time. Selected by passing --build-arg UV_STAGE=uv-armv7
+# in the release workflow.
+FROM python:3.12-slim AS uv-armv7
+RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.9.27" && \
+    cp "$(command -v uv)" /uv
+
+FROM ${UV_STAGE} AS uv-source
+
 FROM python:3.12-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -6,7 +31,8 @@ ARG TARGETVARIANT
 
 # uv: single static binary, ~10–20× faster resolve/install than pip.
 # Pinned to a specific minor for reproducibility; bump deliberately.
-COPY --from=ghcr.io/astral-sh/uv:0.9.27 /uv /usr/local/bin/uv
+# Source stage is chosen above based on the target platform.
+COPY --from=uv-source /uv /usr/local/bin/uv
 
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)

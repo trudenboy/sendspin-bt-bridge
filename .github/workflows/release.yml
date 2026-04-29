@@ -549,6 +549,7 @@ jobs:
           build-args: |
             SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
             BUGREPORTER_PRIVATE_KEY=${{ secrets.BUGREPORTER_PRIVATE_KEY }}
+            UV_STAGE=uv-armv7
           cache-from: type=gha,scope=build-linux/arm/v7
           cache-to: type=gha,mode=max,scope=build-linux/arm/v7,ignore-error=true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
