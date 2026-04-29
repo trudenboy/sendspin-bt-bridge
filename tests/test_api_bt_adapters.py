@@ -20,7 +20,7 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
-from routes.api_bt import bt_bp
+from sendspin_bridge.web.routes.api_bt import bt_bp
 
 
 @pytest.fixture
@@ -54,12 +54,12 @@ def test_api_bt_adapters_resolves_kernel_hci_via_sysfs(tmp_path, monkeypatch, cl
     (sysfs / "hci1" / "address").write_text("88:A2:9E:C0:07:0D\n")
     monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", sysfs)
 
-    monkeypatch.setattr("routes.api_bt.list_bt_adapters", lambda: macs)
+    monkeypatch.setattr("sendspin_bridge.web.routes.api_bt.list_bt_adapters", lambda: macs)
 
     def _fake_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:
         return ({"A0:AD:9F:6E:B2:D5": "SendSpinEG", "88:A2:9E:C0:07:0D": "SendSpinEG #2"}[mac], True)
 
-    monkeypatch.setattr("routes.api_bt.get_adapter_alias", _fake_alias)
+    monkeypatch.setattr("sendspin_bridge.web.routes.api_bt.get_adapter_alias", _fake_alias)
 
     response = client.get("/api/bt/adapters")
     assert response.status_code == 200
@@ -82,8 +82,10 @@ def test_api_bt_adapters_falls_back_to_index_label_without_sysfs(tmp_path, monke
     # the endpoint must still respond with usable labels rather than
     # erroring out.
     monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "nonexistent")
-    monkeypatch.setattr("routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:01"])
-    monkeypatch.setattr("routes.api_bt.get_adapter_alias", lambda mac, **_: ("Some Controller", True))
+    monkeypatch.setattr("sendspin_bridge.web.routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:01"])
+    monkeypatch.setattr(
+        "sendspin_bridge.web.routes.api_bt.get_adapter_alias", lambda mac, **_: ("Some Controller", True)
+    )
 
     response = client.get("/api/bt/adapters")
     assert response.status_code == 200
@@ -96,7 +98,7 @@ def test_api_bt_adapters_uses_explicit_show_form_for_alias(tmp_path, monkeypatch
     # ``get_adapter_alias`` (which uses ``show <MAC>``) — not the legacy
     # ``select <MAC>; show`` path that produced the alias swap in #193.
     monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
-    monkeypatch.setattr("routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:FF"])
+    monkeypatch.setattr("sendspin_bridge.web.routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:FF"])
 
     captured: dict[str, object] = {}
 

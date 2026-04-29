@@ -20,11 +20,6 @@ import urllib.request as _ur
 from flask import Response, g, jsonify, request, session
 
 from config import load_config, update_config
-from routes.api_ma import (
-    _bridge_players_snapshot,
-    _ma_host_from_sendspin_clients,
-    ma_bp,
-)
 from sendspin_bridge.services.ha.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
 from sendspin_bridge.services.infrastructure.url_safety import (
     SafeHTTPConnection,
@@ -39,6 +34,11 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_api_credentials,
     set_ma_api_credentials,
     set_ma_groups,
+)
+from sendspin_bridge.web.routes.api_ma import (
+    _bridge_players_snapshot,
+    _ma_host_from_sendspin_clients,
+    ma_bp,
 )
 
 logger = logging.getLogger(__name__)
@@ -258,7 +258,7 @@ def _save_ma_token_and_rediscover(
     Non-OS exceptions (ValueError, TypeError, etc.) still raise so
     real bugs aren't masked.
     """
-    from routes._helpers import config_write_error_response
+    from sendspin_bridge.web.routes._helpers import config_write_error_response
 
     token_label = _ma_token_name()
     token_hostname = _current_instance_hostname()

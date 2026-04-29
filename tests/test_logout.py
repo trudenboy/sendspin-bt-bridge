@@ -8,7 +8,7 @@ import secrets
 import pytest
 from flask import Flask
 
-from routes.auth import auth_bp
+from sendspin_bridge.web.routes.auth import auth_bp
 
 
 @pytest.fixture(autouse=True)

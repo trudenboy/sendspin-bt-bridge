@@ -15,7 +15,6 @@ import uuid
 
 from flask import Response, jsonify, request
 
-from routes.api_ma import _await_loop_result, ma_bp
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.lifecycle.async_job_state import create_async_job, finish_async_job, get_async_job
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
@@ -32,6 +31,7 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_now_playing,
     is_ma_connected,
 )
+from sendspin_bridge.web.routes.api_ma import _await_loop_result, ma_bp
 
 logger = logging.getLogger(__name__)
 

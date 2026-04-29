@@ -280,13 +280,13 @@ def install() -> None:
     _sp.get_server_name = lambda: "pulseaudio (demo)"
 
     # Also patch names already imported into routes.api (from X import Y binds locally)
-    import routes.api as _api_mod
+    import sendspin_bridge.web.routes.api as _api_mod
 
     _api_mod.set_sink_volume = _sp_set_volume
     _api_mod.set_sink_mute = _sp_set_mute
     _api_mod.get_sink_mute = _sp_get_mute
 
-    import routes.api_status as _api_status_mod
+    import sendspin_bridge.web.routes.api_status as _api_status_mod
 
     _api_status_mod.get_server_name = _sp.get_server_name
     _api_status_mod.list_sinks = _sp.list_sinks
@@ -412,7 +412,7 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 5. Patch routes.api_bt (scan, paired, adapters)
     # ------------------------------------------------------------------
-    import routes.api_bt as _abt
+    import sendspin_bridge.web.routes.api_bt as _abt
 
     _original_run_bt_scan = _abt._run_bt_scan
     _original_run_standalone_pair = _abt._run_standalone_pair
@@ -759,7 +759,7 @@ def install() -> None:
     _config_mod.update_config = _demo_update_config  # type: ignore[assignment]
     _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
     import bridge_orchestrator as _bridge_orchestrator
-    import routes.api_config as _api_config_mod
+    import sendspin_bridge.web.routes.api_config as _api_config_mod
 
     _bridge_orchestrator.load_config = _demo_load_config
     if hasattr(_bridge_orchestrator, "CONFIG_FILE"):

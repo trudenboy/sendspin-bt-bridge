@@ -31,13 +31,13 @@ def client(tmp_path, monkeypatch):
 
     # Drop stubs from prior tests, if any.
     for mod_name in (
-        "routes.api_ha",
-        "routes.api_status",
+        "sendspin_bridge.web.routes.api_ha",
+        "sendspin_bridge.web.routes.api_status",
     ):
         if mod_name in sys.modules and getattr(sys.modules[mod_name], "__file__", None) is None:
             sys.modules.pop(mod_name)
 
-    from routes.api_ha import ha_bp
+    from sendspin_bridge.web.routes.api_ha import ha_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
@@ -66,7 +66,7 @@ def test_ha_state_returns_projection(client, monkeypatch):
 
 def test_ha_state_handles_internal_errors_gracefully(client, monkeypatch):
     """A failure in projection building must not blow up the response."""
-    import routes.api_ha as M
+    import sendspin_bridge.web.routes.api_ha as M
 
     monkeypatch.setattr(
         M,

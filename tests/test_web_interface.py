@@ -15,14 +15,14 @@ import pytest
 # Stub route blueprint modules so web_interface can be imported regardless of
 # the Python version available on the test runner (mirrors test_ingress_middleware.py).
 for _mod_name in (
-    "routes.api",
-    "routes.api_bt",
-    "routes.api_config",
-    "routes.api_ma",
-    "routes.api_status",
-    "routes.api_transport",
-    "routes.auth",
-    "routes.views",
+    "sendspin_bridge.web.routes.api",
+    "sendspin_bridge.web.routes.api_bt",
+    "sendspin_bridge.web.routes.api_config",
+    "sendspin_bridge.web.routes.api_ma",
+    "sendspin_bridge.web.routes.api_status",
+    "sendspin_bridge.web.routes.api_transport",
+    "sendspin_bridge.web.routes.auth",
+    "sendspin_bridge.web.routes.views",
 ):
     if _mod_name not in sys.modules:
         _stub = types.ModuleType(_mod_name)

@@ -13,7 +13,7 @@ def config_client(tmp_path, monkeypatch):
     from flask import Flask
 
     import config
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
@@ -179,7 +179,7 @@ def test_check_latest_version_uses_tags_for_prerelease(monkeypatch):
 
 
 def test_api_update_apply_starts_requested_version(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
 
     captured = {}
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "systemd")
@@ -198,7 +198,7 @@ def test_api_update_apply_starts_requested_version(config_client, monkeypatch):
 
 
 def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
 
     captured = {}
     monkeypatch.setattr(api_config, "get_main_loop", lambda: object())
@@ -244,7 +244,7 @@ def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
 
 
 def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(api_config, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc"})
@@ -292,7 +292,7 @@ def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client,
 
 
 def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
     import state
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
@@ -320,7 +320,7 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
 
 
 def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
     import state
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc", "AUTO_UPDATE": False})
@@ -347,7 +347,7 @@ def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_clien
 
 
 def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_variant(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
     import state
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
@@ -374,7 +374,7 @@ def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_v
 
 
 def test_api_update_apply_in_ha_addon_returns_matching_variant_guidance(config_client, monkeypatch):
-    import routes.api_config as api_config
+    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta"})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")

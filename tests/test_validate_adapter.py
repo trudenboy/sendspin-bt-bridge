@@ -2,7 +2,7 @@
 
 import pytest
 
-from routes._helpers import validate_adapter
+from sendspin_bridge.web.routes._helpers import validate_adapter
 
 # ---------------------------------------------------------------------------
 # Valid inputs

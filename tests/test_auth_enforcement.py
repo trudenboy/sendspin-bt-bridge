@@ -28,25 +28,25 @@ def auth_client(monkeypatch):
     # Remove cached module stubs from other test files
     _stashed = {}
     for mod_name in [
-        "routes.api",
-        "routes.api_bt",
-        "routes.api_config",
-        "routes.api_ma",
-        "routes.api_status",
-        "routes.auth",
-        "routes.views",
-        "routes",
+        "sendspin_bridge.web.routes.api",
+        "sendspin_bridge.web.routes.api_bt",
+        "sendspin_bridge.web.routes.api_config",
+        "sendspin_bridge.web.routes.api_ma",
+        "sendspin_bridge.web.routes.api_status",
+        "sendspin_bridge.web.routes.auth",
+        "sendspin_bridge.web.routes.views",
+        "sendspin_bridge.web.routes",
     ]:
         cached = sys.modules.get(mod_name)
         if cached is not None and getattr(cached, "__file__", None) is None:
             _stashed[mod_name] = sys.modules.pop(mod_name)
 
-    from routes.api import api_bp
-    from routes.api_bt import bt_bp
-    from routes.api_config import config_bp
-    from routes.api_ma import ma_bp
-    from routes.api_status import status_bp
-    from routes.auth import auth_bp
+    from sendspin_bridge.web.routes.api import api_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_config import config_bp
+    from sendspin_bridge.web.routes.api_ma import ma_bp
+    from sendspin_bridge.web.routes.api_status import status_bp
+    from sendspin_bridge.web.routes.auth import auth_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"

@@ -54,13 +54,13 @@ def client():
     from flask import Flask
 
     route_modules = [
-        "routes.api",
-        "routes.api_bt",
-        "routes.api_config",
-        "routes.api_status",
-        "routes.auth",
-        "routes.views",
-        "routes",
+        "sendspin_bridge.web.routes.api",
+        "sendspin_bridge.web.routes.api_bt",
+        "sendspin_bridge.web.routes.api_config",
+        "sendspin_bridge.web.routes.api_status",
+        "sendspin_bridge.web.routes.auth",
+        "sendspin_bridge.web.routes.views",
+        "sendspin_bridge.web.routes",
     ]
     _stashed = {}
     for mod_name in route_modules:
@@ -68,7 +68,7 @@ def client():
         if cached is not None:
             _stashed[mod_name] = cached
 
-    from routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
@@ -90,10 +90,13 @@ def client():
 
 def test_scan_returns_429_during_cooldown(client):
     """POST /api/bt/scan during cooldown returns 429."""
-    with patch("routes.api_bt.is_scan_running", return_value=False), patch("routes.api_bt.time") as mock_time:
+    with (
+        patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
+        patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
+    ):
         # Simulate a scan that completed 5 seconds ago (within 10 s cooldown)
         mock_time.monotonic.return_value = 100.0
-        _mod = importlib.import_module("routes.api_bt")
+        _mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
 
         _mod._last_scan_completed = 95.0  # 5 s ago
 
@@ -105,13 +108,16 @@ def test_scan_returns_429_during_cooldown(client):
 def test_scan_allowed_after_cooldown_expires(client):
     """POST /api/bt/scan succeeds when cooldown has elapsed."""
     with (
-        patch("routes.api_bt.is_scan_running", return_value=False),
-        patch("routes.api_bt.time") as mock_time,
-        patch("routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]),
-        patch("routes.api_bt.threading.Thread") as mock_thread,
+        patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
+        patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
+        patch(
+            "sendspin_bridge.web.routes.api_bt.list_bt_adapters",
+            return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"],
+        ),
+        patch("sendspin_bridge.web.routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
-        _mod = importlib.import_module("routes.api_bt")
+        _mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
 
         _mod._last_scan_completed = 80.0  # 20 s ago — past the 10 s cooldown
 
@@ -128,7 +134,7 @@ def test_scan_allowed_after_cooldown_expires(client):
 
 def test_concurrent_scan_returns_409(client):
     """POST /api/bt/scan while another scan is running returns 409."""
-    with patch("routes.api_bt.is_scan_running", return_value=True):
+    with patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=True):
         resp = client.post("/api/bt/scan")
         assert resp.status_code == 409
         assert "already in progress" in resp.get_json()["error"].lower()
@@ -137,15 +143,18 @@ def test_concurrent_scan_returns_409(client):
 def test_scan_accepts_selected_adapter_and_audio_filter(client):
     """POST /api/bt/scan forwards selected adapter and audio-only options."""
     with (
-        patch("routes.api_bt.is_scan_running", return_value=False),
-        patch("routes.api_bt.time") as mock_time,
-        patch("routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"]),
-        patch("routes.api_bt._run_bt_scan") as run_bt_scan,
-        patch("routes.api_bt._release_bt_operation") as release_bt_operation,
-        patch("routes.api_bt.threading.Thread") as mock_thread,
+        patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
+        patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
+        patch(
+            "sendspin_bridge.web.routes.api_bt.list_bt_adapters",
+            return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"],
+        ),
+        patch("sendspin_bridge.web.routes.api_bt._run_bt_scan") as run_bt_scan,
+        patch("sendspin_bridge.web.routes.api_bt._release_bt_operation") as release_bt_operation,
+        patch("sendspin_bridge.web.routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
-        _mod = importlib.import_module("routes.api_bt")
+        _mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
         _mod._last_scan_completed = 80.0
         mock_thread.return_value.start = lambda: None
 
@@ -168,7 +177,7 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
 
 def test_scan_rejects_invalid_adapter_identifier(client):
     """POST /api/bt/scan rejects malformed adapter values."""
-    with patch("routes.api_bt.is_scan_running", return_value=False):
+    with patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False):
         resp = client.post("/api/bt/scan", json={"adapter": "hciX"})
         assert resp.status_code == 400
         assert "invalid adapter" in resp.get_json()["error"].lower()
@@ -177,7 +186,7 @@ def test_scan_rejects_invalid_adapter_identifier(client):
 def test_scan_result_running_includes_metadata(client):
     """GET /api/bt/scan/result exposes running scan metadata for the modal."""
     with patch(
-        "routes.api_bt.get_scan_job",
+        "sendspin_bridge.web.routes.api_bt.get_scan_job",
         return_value={
             "status": "running",
             "scan_options": {"adapter": "", "audio_only": True, "adapter_scope": "all", "adapter_count": 2},
@@ -197,19 +206,19 @@ def test_scan_result_running_includes_metadata(client):
 
 def test_cooldown_timestamp_updated_after_scan(client):
     """A completed scan immediately activates the cooldown for the next scan request."""
-    _mod = importlib.import_module("routes.api_bt")
+    _mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
 
     _mod._last_scan_completed = 0.0
 
     fake_time = 500.0
     with (
-        patch("routes.api_bt.time") as mock_time,
-        patch("routes.api_bt.is_scan_running", return_value=False),
-        patch("routes.api_bt.list_bt_adapters", return_value=[]),
-        patch("routes.api_bt._run_bluetoothctl_scan", return_value=""),
-        patch("routes.api_bt._parse_scan_output", return_value=(set(), {}, {}, set())),
-        patch("routes.api_bt._resolve_unnamed_devices"),
-        patch("routes.api_bt.finish_scan_job"),
+        patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
+        patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
+        patch("sendspin_bridge.web.routes.api_bt.list_bt_adapters", return_value=[]),
+        patch("sendspin_bridge.web.routes.api_bt._run_bluetoothctl_scan", return_value=""),
+        patch("sendspin_bridge.web.routes.api_bt._parse_scan_output", return_value=(set(), {}, {}, set())),
+        patch("sendspin_bridge.web.routes.api_bt._resolve_unnamed_devices"),
+        patch("sendspin_bridge.web.routes.api_bt.finish_scan_job"),
     ):
         mock_time.monotonic.return_value = fake_time
 

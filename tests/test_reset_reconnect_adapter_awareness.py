@@ -27,7 +27,7 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 @pytest.fixture
 def client(tmp_config):
-    from routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
 
     app = Flask(__name__)
     app.register_blueprint(bt_bp)
@@ -122,7 +122,7 @@ class _FakeSelector:
 def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
     """POST body's ``adapter`` must reach the background job verbatim."""
 
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: dict[str, Any] = {}
     done = threading.Event()
@@ -148,7 +148,7 @@ def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
 def test_reset_reconnect_preserves_default_adapter_when_omitted(client, monkeypatch):
     """Missing ``adapter`` → empty string (pre-existing behaviour)."""
 
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: dict[str, Any] = {}
     done = threading.Event()
@@ -169,7 +169,7 @@ def test_reset_reconnect_preserves_default_adapter_when_omitted(client, monkeypa
 def test_reset_reconnect_rejects_invalid_adapter(client, monkeypatch):
     """Garbage adapter strings must 400 before spawning the job thread."""
 
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     called = threading.Event()
 
@@ -193,7 +193,7 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     radio.
     """
 
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured_runs: list[str] = []
 
@@ -242,7 +242,7 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch):
     entire sequence silently runs against the default controller.
     """
 
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured_runs: list[str] = []
 
@@ -291,7 +291,7 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch):
     failed ``select`` surfaces as the natural "not paired" outcome.
     """
 
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured_runs: list[str] = []
 

@@ -240,10 +240,10 @@ def test_guidance_registry_has_duplicate_device():
 # ---------------------------------------------------------------------------
 
 
-@patch("routes.api_bt.load_config")
+@patch("sendspin_bridge.web.routes.api_bt.load_config")
 @patch("sendspin_bridge.services.bluetooth.duplicate_device_check.find_scan_device_conflicts")
 def test_annotate_scan_conflicts_adds_warning(mock_conflicts, mock_load):
-    from routes.api_bt import _annotate_scan_conflicts
+    from sendspin_bridge.web.routes.api_bt import _annotate_scan_conflicts
 
     mock_load.return_value = {
         "DUPLICATE_DEVICE_CHECK": True,
@@ -260,9 +260,9 @@ def test_annotate_scan_conflicts_adds_warning(mock_conflicts, mock_load):
     assert "warning" not in devices[1]
 
 
-@patch("routes.api_bt.load_config")
+@patch("sendspin_bridge.web.routes.api_bt.load_config")
 def test_annotate_scan_conflicts_disabled(mock_load):
-    from routes.api_bt import _annotate_scan_conflicts
+    from sendspin_bridge.web.routes.api_bt import _annotate_scan_conflicts
 
     mock_load.return_value = {"DUPLICATE_DEVICE_CHECK": False}
 
@@ -272,9 +272,9 @@ def test_annotate_scan_conflicts_disabled(mock_load):
     assert "warning" not in devices[0]
 
 
-@patch("routes.api_bt.load_config", side_effect=Exception("boom"))
+@patch("sendspin_bridge.web.routes.api_bt.load_config", side_effect=Exception("boom"))
 def test_annotate_scan_conflicts_exception_safe(mock_load):
-    from routes.api_bt import _annotate_scan_conflicts
+    from sendspin_bridge.web.routes.api_bt import _annotate_scan_conflicts
 
     devices = [{"mac": "AA:BB:CC:DD:EE:FF"}]
     _annotate_scan_conflicts(devices)

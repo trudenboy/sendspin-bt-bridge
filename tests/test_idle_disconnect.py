@@ -337,7 +337,7 @@ class TestWakeApiEndpoint:
 
         app = Flask(__name__)
         app.config["TESTING"] = True
-        from routes.api_bt import bt_bp
+        from sendspin_bridge.web.routes.api_bt import bt_bp
 
         app.register_blueprint(bt_bp)
         return app
@@ -355,7 +355,7 @@ class TestWakeApiEndpoint:
         loop = asyncio.new_event_loop()
 
         with (
-            patch("routes.api_bt.get_client_or_error", return_value=(client, None)),
+            patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(client, None)),
             patch("state.get_main_loop", return_value=loop),
         ):
             app = self._make_app()
@@ -377,7 +377,7 @@ class TestWakeApiEndpoint:
         client.status = MagicMock()
         client.status.get = MagicMock(return_value=False)
 
-        with patch("routes.api_bt.get_client_or_error", return_value=(client, None)):
+        with patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(client, None)):
             app = self._make_app()
             with app.test_client() as tc:
                 resp = tc.post("/api/bt/wake", json={"player_name": "Spk"})
@@ -389,7 +389,10 @@ class TestWakeApiEndpoint:
             from flask import jsonify as _jsonify
 
             err_resp = _jsonify(success=False, error="Not found"), 404
-        with patch("routes.api_bt.get_client_or_error", return_value=(None, err_resp)), app.test_client() as tc:
+        with (
+            patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(None, err_resp)),
+            app.test_client() as tc,
+        ):
             resp = tc.post("/api/bt/wake", json={"player_name": "Unknown"})
             assert resp.status_code == 404
 

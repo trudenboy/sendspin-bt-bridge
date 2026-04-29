@@ -16,7 +16,7 @@ Only lines that are literally a *response* to ``devices Paired`` count:
 
 from __future__ import annotations
 
-from routes.api_bt import _parse_paired_stdout
+from sendspin_bridge.web.routes.api_bt import _parse_paired_stdout
 
 
 def test_parse_ignores_chg_rssi_async_notifications():

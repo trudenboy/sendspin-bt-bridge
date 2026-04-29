@@ -63,15 +63,15 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
 
     # Drop stubs from prior tests, if any.
-    for mod_name in ("routes.api_config",):
+    for mod_name in ("sendspin_bridge.web.routes.api_config",):
         if mod_name in sys.modules and getattr(sys.modules[mod_name], "__file__", None) is None:
             sys.modules.pop(mod_name)
 
-    import routes.api_config as api_config_module
+    import sendspin_bridge.web.routes.api_config as api_config_module
 
     monkeypatch.setattr(api_config_module, "CONFIG_FILE", cfg_file)
 
-    from routes.api_config import config_bp
+    from sendspin_bridge.web.routes.api_config import config_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"

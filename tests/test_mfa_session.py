@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
-from routes.auth import auth_bp
+from sendspin_bridge.web.routes.auth import auth_bp
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -86,9 +86,9 @@ def test_ha_login_user_cleared_after_password_auth(client, app):
         sess["_ha_login_user"] = "stale_mfa_user"
 
     with (
-        patch("routes.auth.load_config", return_value={"AUTH_PASSWORD_HASH": stored_hash}),
-        patch("routes.auth.check_password", return_value=True),
-        patch("routes.auth._detect_auth_methods", return_value=["password"]),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"AUTH_PASSWORD_HASH": stored_hash}),
+        patch("sendspin_bridge.web.routes.auth.check_password", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["password"]),
     ):
         _post_with_csrf(client, "/login", {"method": "password", "password": "correct"})
 
@@ -107,7 +107,7 @@ def test_ha_login_user_cleared_on_get_login(client, app):
     with client.session_transaction() as sess:
         sess["_ha_login_user"] = "abandoned_user"
 
-    with patch("routes.auth._detect_auth_methods", return_value=["password"]):
+    with patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["password"]):
         resp = client.get("/login")
         assert resp.status_code == 200
 
@@ -128,9 +128,9 @@ def test_ha_login_user_not_leaked_between_users(client, app):
         sess["_ha_login_user"] = "user_a"
 
     with (
-        patch("routes.auth.load_config", return_value={"AUTH_PASSWORD_HASH": "hash"}),
-        patch("routes.auth.check_password", return_value=True),
-        patch("routes.auth._detect_auth_methods", return_value=["password"]),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"AUTH_PASSWORD_HASH": "hash"}),
+        patch("sendspin_bridge.web.routes.auth.check_password", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["password"]),
     ):
         _post_with_csrf(client, "/login", {"method": "password", "password": "correct"})
 
@@ -148,8 +148,8 @@ def test_ha_login_user_not_leaked_across_ma_login(client, app):
         sess["_ha_login_user"] = "user_a"
 
     with (
-        patch("routes.auth._ma_validate_credentials", return_value=(True, "")),
-        patch("routes.auth._detect_auth_methods", return_value=["ma", "password"]),
+        patch("sendspin_bridge.web.routes.auth._ma_validate_credentials", return_value=(True, "")),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["ma", "password"]),
     ):
         _post_with_csrf(
             client,
@@ -183,10 +183,10 @@ def test_ha_login_user_cleared_after_ha_direct_auth(client, app):
         sess["_ha_login_user"] = "ha_admin"
 
     with (
-        patch("routes.auth._is_ha_addon", return_value=True),
-        patch("routes.auth._detect_auth_methods", return_value=["ha"]),
-        patch("routes.auth._ha_flow_start", return_value=flow_start),
-        patch("routes.auth._ha_flow_step", return_value=create_entry),
+        patch("sendspin_bridge.web.routes.auth._is_ha_addon", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["ha"]),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=flow_start),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_step", return_value=create_entry),
     ):
         _post_with_csrf(
             client,
@@ -213,9 +213,9 @@ def test_ha_login_user_cleared_after_mfa_step(client, app):
         sess["_ha_login_user"] = "mfa_user"
 
     with (
-        patch("routes.auth._is_ha_addon", return_value=True),
-        patch("routes.auth._detect_auth_methods", return_value=["ha"]),
-        patch("routes.auth._ha_flow_step", return_value={"type": "create_entry"}),
+        patch("sendspin_bridge.web.routes.auth._is_ha_addon", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["ha"]),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_step", return_value={"type": "create_entry"}),
     ):
         _post_with_csrf(
             client,
@@ -246,10 +246,10 @@ def test_ha_login_user_set_during_mfa_prompt(client, app):
     }
 
     with (
-        patch("routes.auth._is_ha_addon", return_value=True),
-        patch("routes.auth._detect_auth_methods", return_value=["ha"]),
-        patch("routes.auth._ha_flow_start", return_value=flow_start),
-        patch("routes.auth._ha_flow_step", return_value=mfa_prompt),
+        patch("sendspin_bridge.web.routes.auth._is_ha_addon", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["ha"]),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=flow_start),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_step", return_value=mfa_prompt),
     ):
         _post_with_csrf(
             client,
@@ -276,10 +276,10 @@ def test_ha_via_ma_login_user_cleared_after_auth(client, app):
         sess["_ha_login_user"] = "remote_ha_user"
 
     with (
-        patch("routes.auth._detect_auth_methods", return_value=["ha_via_ma", "password"]),
-        patch("routes.auth._get_ha_core_url_from_ma", return_value="http://ha:8123"),
-        patch("routes.auth._ha_remote_flow_start", return_value=flow_start),
-        patch("routes.auth._ha_remote_flow_step", return_value=create_entry),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["ha_via_ma", "password"]),
+        patch("sendspin_bridge.web.routes.auth._get_ha_core_url_from_ma", return_value="http://ha:8123"),
+        patch("sendspin_bridge.web.routes.auth._ha_remote_flow_start", return_value=flow_start),
+        patch("sendspin_bridge.web.routes.auth._ha_remote_flow_step", return_value=create_entry),
     ):
         _post_with_csrf(
             client,
@@ -312,10 +312,10 @@ def test_supervisor_fallback_clears_ha_login_user(client, app, monkeypatch):
         sess["_ha_login_user"] = "stale"
 
     with (
-        patch("routes.auth._is_ha_addon", return_value=True),
-        patch("routes.auth._detect_auth_methods", return_value=["ha"]),
-        patch("routes.auth._ha_flow_start", return_value=None),
-        patch("routes.auth._supervisor_auth", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._is_ha_addon", return_value=True),
+        patch("sendspin_bridge.web.routes.auth._detect_auth_methods", return_value=["ha"]),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
+        patch("sendspin_bridge.web.routes.auth._supervisor_auth", return_value=True),
     ):
         _post_with_csrf(
             client,

@@ -92,7 +92,7 @@ def _build_ma_integration_summary(discovered_url: str = "") -> dict[str, object]
     connected = is_ma_connected()
     token_valid = False
     if configured_url and configured_token:
-        from routes.ma_auth import _validate_ma_token
+        from sendspin_bridge.web.routes.ma_auth import _validate_ma_token
 
         token_valid = _validate_ma_token(configured_url, configured_token)
     return {
@@ -112,30 +112,30 @@ def _build_ma_integration_summary(discovered_url: str = "") -> dict[str, object]
 # Register sub-module routes on this blueprint.
 # Imported at module bottom to avoid circular dependencies.
 # ---------------------------------------------------------------------------
-import routes.ma_auth  # noqa: E402
-import routes.ma_groups  # noqa: E402
-import routes.ma_playback  # noqa: E402, F401
+import sendspin_bridge.web.routes.ma_auth  # noqa: E402
+import sendspin_bridge.web.routes.ma_groups  # noqa: E402
+import sendspin_bridge.web.routes.ma_playback  # noqa: E402, F401
 
 # Re-export moved functions for backward compatibility with tests and
 # any external code that imports them from routes.api_ma.
 # Uses __getattr__ to avoid circular import issues at module load time.
 _REEXPORTS: dict[str, str] = {
-    "_validate_ma_token": "routes.ma_auth",
-    "_exchange_for_long_lived_token": "routes.ma_auth",
-    "_create_ha_ingress_session_via_ws": "routes.ma_auth",
-    "_create_ma_token_via_ha_proxy": "routes.ma_auth",
-    "_create_ma_token_via_ingress": "routes.ma_auth",
-    "_get_ha_supervisor_addon_info_via_ws": "routes.ma_auth",
-    "_get_ha_user_via_ws": "routes.ma_auth",
-    "_get_ma_oauth_params": "routes.ma_auth",
-    "_get_ma_oauth_bootstrap": "routes.ma_auth",
-    "_ma_reports_homeassistant_addon": "routes.ma_auth",
-    "_save_ma_token_and_rediscover": "routes.ma_auth",
-    "_resolve_target_queue": "routes.ma_playback",
-    "_build_ma_prediction_patch": "routes.ma_playback",
-    "_schedule_ma_rediscover_job": "routes.ma_groups",
-    "_run_ma_discover_job": "routes.ma_groups",
-    "_run_ma_rediscover_job": "routes.ma_groups",
+    "_validate_ma_token": "sendspin_bridge.web.routes.ma_auth",
+    "_exchange_for_long_lived_token": "sendspin_bridge.web.routes.ma_auth",
+    "_create_ha_ingress_session_via_ws": "sendspin_bridge.web.routes.ma_auth",
+    "_create_ma_token_via_ha_proxy": "sendspin_bridge.web.routes.ma_auth",
+    "_create_ma_token_via_ingress": "sendspin_bridge.web.routes.ma_auth",
+    "_get_ha_supervisor_addon_info_via_ws": "sendspin_bridge.web.routes.ma_auth",
+    "_get_ha_user_via_ws": "sendspin_bridge.web.routes.ma_auth",
+    "_get_ma_oauth_params": "sendspin_bridge.web.routes.ma_auth",
+    "_get_ma_oauth_bootstrap": "sendspin_bridge.web.routes.ma_auth",
+    "_ma_reports_homeassistant_addon": "sendspin_bridge.web.routes.ma_auth",
+    "_save_ma_token_and_rediscover": "sendspin_bridge.web.routes.ma_auth",
+    "_resolve_target_queue": "sendspin_bridge.web.routes.ma_playback",
+    "_build_ma_prediction_patch": "sendspin_bridge.web.routes.ma_playback",
+    "_schedule_ma_rediscover_job": "sendspin_bridge.web.routes.ma_groups",
+    "_run_ma_discover_job": "sendspin_bridge.web.routes.ma_groups",
+    "_run_ma_rediscover_job": "sendspin_bridge.web.routes.ma_groups",
 }
 
 

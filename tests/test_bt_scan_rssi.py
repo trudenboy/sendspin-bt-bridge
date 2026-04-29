@@ -21,7 +21,7 @@ import pytest
 
 def test_parse_scan_output_extracts_rssi_decimal():
     """Modern bluetoothctl emits ``RSSI: -43`` directly."""
-    from routes.api_bt import _parse_scan_output
+    from sendspin_bridge.web.routes.api_bt import _parse_scan_output
 
     stdout = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: -43\n[CHG] Device 11:22:33:44:55:66 RSSI: -78\n"
 
@@ -38,7 +38,7 @@ def test_parse_scan_output_extracts_rssi_decimal():
 def test_parse_scan_output_extracts_rssi_parenthesised_hex():
     """Older bluetoothctl emits ``RSSI: 0xffffffd5 (-43)`` — the
     parenthesised decimal is what we want."""
-    from routes.api_bt import _parse_scan_output
+    from sendspin_bridge.web.routes.api_bt import _parse_scan_output
 
     stdout = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: 0xffffffd5 (-43)\n"
 
@@ -50,7 +50,7 @@ def test_parse_scan_output_extracts_rssi_parenthesised_hex():
 def test_parse_scan_output_keeps_active_mac_set_even_without_rssi_value():
     """A ``[CHG] ... RSSI:`` line with no numeric tail must still mark the
     device as active (legacy contract) even though no RSSI is captured."""
-    from routes.api_bt import _parse_scan_output
+    from sendspin_bridge.web.routes.api_bt import _parse_scan_output
 
     stdout = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI:\n"
 
@@ -78,7 +78,7 @@ def test_parse_scan_output_keeps_active_mac_set_even_without_rssi_value():
     ],
 )
 def test_extract_rssi_from_info_handles_format_variants(info_text, expected):
-    from routes.api_bt import _extract_rssi_from_info
+    from sendspin_bridge.web.routes.api_bt import _extract_rssi_from_info
 
     assert _extract_rssi_from_info(info_text) == expected
 

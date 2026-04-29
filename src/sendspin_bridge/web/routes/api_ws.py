@@ -66,7 +66,7 @@ def status_ws_iter(
     # Lazy-import the snapshot builder — pulling routes/api_status at
     # module load time would re-enter ``routes.api_status`` while it is
     # still being initialised by Flask blueprint registration.
-    from routes.api_status import _build_status_payload
+    from sendspin_bridge.web.routes.api_status import _build_status_payload
 
     # Capture the status version BEFORE building the initial snapshot.
     # If a status change lands between snapshot build and version

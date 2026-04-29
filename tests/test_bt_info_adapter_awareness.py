@@ -27,7 +27,7 @@ from flask import Flask
 
 @pytest.fixture
 def client(tmp_config):
-    from routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
 
     app = Flask(__name__)
     app.register_blueprint(bt_bp)
@@ -54,7 +54,7 @@ _DEVICE_INFO_FULL = (
 
 def test_get_bt_device_info_issues_select_before_info_when_adapter_provided(monkeypatch):
     """With an explicit adapter, `select <mac>\\ninfo <mac>\\n` must hit stdin."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: list[str] = []
 
@@ -75,7 +75,7 @@ def test_get_bt_device_info_issues_select_before_info_when_adapter_provided(monk
 def test_get_bt_device_info_translates_hci_name_to_controller_mac(monkeypatch):
     """``hci1`` must be resolved via ``list_bt_adapters`` — raw ``hci1``
     fails with ``Controller hci1 not available`` on HAOS/LXC."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: list[str] = []
 
@@ -99,7 +99,7 @@ def test_get_bt_device_info_probes_every_adapter_when_none_given(monkeypatch):
     """Without an adapter the helper must try each controller until one
     returns a response with actual device fields (``Name:``/``Paired:``).
     Prior behaviour queried only the default controller."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: list[str] = []
 
@@ -129,7 +129,7 @@ def test_get_bt_device_info_probes_every_adapter_when_none_given(monkeypatch):
 
 def test_get_bt_device_info_stops_at_first_adapter_with_fields(monkeypatch):
     """If the first adapter already returns a full record, don't keep probing."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: list[str] = []
 
@@ -151,7 +151,7 @@ def test_get_bt_device_info_stops_at_first_adapter_with_fields(monkeypatch):
 
 def test_api_bt_info_forwards_adapter_field(client, monkeypatch):
     """The ``adapter`` field on the POST body must reach the helper."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     captured: dict[str, Any] = {}
 
@@ -205,7 +205,7 @@ def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(monkey
     must reach the ``raw`` array.  Without UUIDs in the modal,
     issue #168 would have taken another round of asking the
     reporter for ``bluetoothctl info`` over SSH."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     monkeypatch.setattr(
         module.subprocess,
@@ -235,7 +235,7 @@ def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(monkey
 
 def test_api_bt_info_rejects_invalid_adapter(client, monkeypatch):
     """Garbage adapter strings must 400 before touching bluetoothctl."""
-    import routes.api_bt as module
+    import sendspin_bridge.web.routes.api_bt as module
 
     called = {"n": 0}
 

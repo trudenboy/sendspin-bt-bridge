@@ -16,7 +16,7 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
-from routes.auth import auth_bp
+from sendspin_bridge.web.routes.auth import auth_bp
 
 
 @pytest.fixture(autouse=True)
@@ -82,9 +82,9 @@ class TestFallbackOffByDefault:
             return True
 
         with (
-            patch("routes.auth._ha_flow_start", return_value=None),
-            patch("routes.auth._supervisor_auth", side_effect=_fake_supervisor_auth),
-            caplog.at_level(logging.ERROR, logger="routes.auth"),
+            patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
+            patch("sendspin_bridge.web.routes.auth._supervisor_auth", side_effect=_fake_supervisor_auth),
+            caplog.at_level(logging.ERROR, logger="sendspin_bridge.web.routes.auth"),
         ):
             resp = _post_login(client)
 
@@ -99,9 +99,9 @@ class TestFallbackOnOptIn:
         monkeypatch.setenv("ALLOW_SUPERVISOR_FALLBACK", "1")
 
         with (
-            patch("routes.auth._ha_flow_start", return_value=None),
-            patch("routes.auth._supervisor_auth", return_value=True),
-            caplog.at_level(logging.WARNING, logger="routes.auth"),
+            patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
+            patch("sendspin_bridge.web.routes.auth._supervisor_auth", return_value=True),
+            caplog.at_level(logging.WARNING, logger="sendspin_bridge.web.routes.auth"),
         ):
             resp = _post_login(client)
 
@@ -119,9 +119,9 @@ class TestFallbackOnOptIn:
         monkeypatch.setenv("ALLOW_SUPERVISOR_FALLBACK", "1")
 
         with (
-            patch("routes.auth._ha_flow_start", return_value=None),
-            patch("routes.auth._supervisor_auth", return_value=False),
-            patch("routes.auth._record_failure") as record_failure,
+            patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
+            patch("sendspin_bridge.web.routes.auth._supervisor_auth", return_value=False),
+            patch("sendspin_bridge.web.routes.auth._record_failure") as record_failure,
         ):
             resp = _post_login(client)
 

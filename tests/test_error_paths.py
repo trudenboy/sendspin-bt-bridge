@@ -89,7 +89,7 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 def _cancel_api_volume_timers() -> None:
-    api_mod = sys.modules.get("routes.api")
+    api_mod = sys.modules.get("sendspin_bridge.web.routes.api")
     if api_mod is None:
         return
     timers = getattr(api_mod, "_volume_timers", None)
@@ -114,14 +114,14 @@ def _clear_volume_persist_timers():
 def client():
     _stashed = {}
     for mod_name in [
-        "routes.api",
-        "routes.api_bt",
-        "routes.api_config",
-        "routes.api_ma",
-        "routes.api_status",
-        "routes.auth",
-        "routes.views",
-        "routes",
+        "sendspin_bridge.web.routes.api",
+        "sendspin_bridge.web.routes.api_bt",
+        "sendspin_bridge.web.routes.api_config",
+        "sendspin_bridge.web.routes.api_ma",
+        "sendspin_bridge.web.routes.api_status",
+        "sendspin_bridge.web.routes.auth",
+        "sendspin_bridge.web.routes.views",
+        "sendspin_bridge.web.routes",
     ]:
         cached = sys.modules.get(mod_name)
         if cached is not None and getattr(cached, "__file__", None) is None:
@@ -129,11 +129,11 @@ def client():
 
     from flask import Flask
 
-    from routes.api import api_bp
-    from routes.api_bt import bt_bp
-    from routes.api_config import config_bp
-    from routes.api_ma import ma_bp
-    from routes.api_status import status_bp
+    from sendspin_bridge.web.routes.api import api_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_config import config_bp
+    from sendspin_bridge.web.routes.api_ma import ma_bp
+    from sendspin_bridge.web.routes.api_status import status_bp
 
     app = Flask(__name__)
     app.secret_key = "testing"
@@ -152,7 +152,7 @@ def client():
 
 def test_restart_handles_process_lookup_error(client, monkeypatch):
     """Restart endpoint falls back to SIGTERM on ProcessLookupError from PID 1."""
-    import routes.api as api_mod
+    import sendspin_bridge.web.routes.api as api_mod
 
     monkeypatch.setattr(api_mod, "_detect_runtime", lambda: "docker")
 
@@ -181,7 +181,7 @@ def test_restart_handles_process_lookup_error(client, monkeypatch):
 
 def test_restart_handles_permission_error(client, monkeypatch):
     """Restart endpoint falls back to own-PID SIGTERM on PermissionError from PID 1."""
-    import routes.api as api_mod
+    import sendspin_bridge.web.routes.api as api_mod
 
     monkeypatch.setattr(api_mod, "_detect_runtime", lambda: "docker")
 

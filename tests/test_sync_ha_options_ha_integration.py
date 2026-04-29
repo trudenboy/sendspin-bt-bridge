@@ -26,10 +26,13 @@ def captured_supervisor_post(monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "test-token")
 
     # Drop any cached stub for routes.api_config from prior tests.
-    if "routes.api_config" in sys.modules and getattr(sys.modules["routes.api_config"], "__file__", None) is None:
-        sys.modules.pop("routes.api_config")
+    if (
+        "sendspin_bridge.web.routes.api_config" in sys.modules
+        and getattr(sys.modules["sendspin_bridge.web.routes.api_config"], "__file__", None) is None
+    ):
+        sys.modules.pop("sendspin_bridge.web.routes.api_config")
 
-    import routes.api_config as M
+    import sendspin_bridge.web.routes.api_config as M
 
     monkeypatch.setattr(M, "_detect_runtime", lambda: "ha_addon")
 
@@ -158,9 +161,12 @@ def test_no_op_outside_addon_mode(monkeypatch):
     """Outside HA addon mode the function returns silently — neither
     Supervisor nor stale options matter for Docker / standalone."""
     monkeypatch.setenv("SUPERVISOR_TOKEN", "")
-    if "routes.api_config" in sys.modules and getattr(sys.modules["routes.api_config"], "__file__", None) is None:
-        sys.modules.pop("routes.api_config")
-    import routes.api_config as M
+    if (
+        "sendspin_bridge.web.routes.api_config" in sys.modules
+        and getattr(sys.modules["sendspin_bridge.web.routes.api_config"], "__file__", None) is None
+    ):
+        sys.modules.pop("sendspin_bridge.web.routes.api_config")
+    import sendspin_bridge.web.routes.api_config as M
 
     monkeypatch.setattr(M, "_detect_runtime", lambda: "docker")
 

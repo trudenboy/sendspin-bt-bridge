@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock
 import pytest
 from flask import Flask
 
-from routes.api_bt import bt_bp
 from sendspin_bridge.services.audio.mpris_player import MprisPlayer, get_registry
+from sendspin_bridge.web.routes.api_bt import bt_bp
 
 
 @pytest.fixture

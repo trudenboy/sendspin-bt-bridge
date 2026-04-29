@@ -17,7 +17,6 @@ from typing import Any
 from flask import Blueprint, jsonify, request
 
 from config import CONFIG_FILE, config_lock, load_config
-from routes._helpers import get_client_or_error, validate_adapter, validate_mac
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
     _AUDIO_UUIDS,
@@ -38,6 +37,7 @@ from sendspin_bridge.services.lifecycle.async_job_state import (
     get_scan_job,
     is_scan_running,
 )
+from sendspin_bridge.web.routes._helpers import get_client_or_error, validate_adapter, validate_mac
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +254,7 @@ def api_bt_management():
     try:
         with config_lock, open(CONFIG_FILE) as _f:
             _cfg = json.load(_f)
-        from routes.api_config import _sync_ha_options  # late import to avoid circular dependency
+        from sendspin_bridge.web.routes.api_config import _sync_ha_options  # late import to avoid circular dependency
 
         threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
     except Exception as exc:
@@ -411,7 +411,7 @@ def api_device_enabled():
     try:
         with config_lock, open(CONFIG_FILE) as _f:
             _cfg = json.load(_f)
-        from routes.api_config import _sync_ha_options
+        from sendspin_bridge.web.routes.api_config import _sync_ha_options
 
         threading.Thread(target=_sync_ha_options, args=(_cfg,), daemon=True).start()
     except Exception as exc:

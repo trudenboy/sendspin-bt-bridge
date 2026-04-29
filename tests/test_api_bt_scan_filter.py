@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock, patch
 
-from routes import api_bt
+from sendspin_bridge.web.routes import api_bt
 
 _CLASS_AUDIO = """Device AA:BB:CC:DD:EE:FF
 \tName: Living Room Speaker
@@ -80,7 +80,7 @@ def test_enrich_scan_device_logs_and_returns_reason_when_dropped(caplog):
     caplog.set_level(logging.INFO, logger=api_bt.logger.name)
 
     mock_run = MagicMock(return_value=MagicMock(stdout=_CLASS_PHONE))
-    with patch("routes.api_bt.subprocess.run", mock_run):
+    with patch("sendspin_bridge.web.routes.api_bt.subprocess.run", mock_run):
         device, reason = api_bt._enrich_scan_device("11:22:33:44:55:66", {}, audio_only=True)
 
     assert device is None
@@ -93,7 +93,7 @@ def test_enrich_scan_device_logs_and_returns_reason_when_dropped(caplog):
 def test_enrich_scan_device_returns_audio_device_unfiltered():
     """Audio device must pass the audio_only filter with no drop reason."""
     mock_run = MagicMock(return_value=MagicMock(stdout=_CLASS_AUDIO))
-    with patch("routes.api_bt.subprocess.run", mock_run):
+    with patch("sendspin_bridge.web.routes.api_bt.subprocess.run", mock_run):
         device, reason = api_bt._enrich_scan_device("AA:BB:CC:DD:EE:FF", {}, audio_only=True)
 
     assert device is not None
@@ -104,7 +104,7 @@ def test_enrich_scan_device_returns_audio_device_unfiltered():
 def test_enrich_scan_device_keeps_non_audio_when_audio_only_disabled():
     """With audio_only=False, non-audio devices are returned (no reason)."""
     mock_run = MagicMock(return_value=MagicMock(stdout=_CLASS_PHONE))
-    with patch("routes.api_bt.subprocess.run", mock_run):
+    with patch("sendspin_bridge.web.routes.api_bt.subprocess.run", mock_run):
         device, reason = api_bt._enrich_scan_device("11:22:33:44:55:66", {}, audio_only=False)
 
     assert device is not None

@@ -15,7 +15,11 @@ import pytest
 
 # Stub route blueprint modules so web_interface can be imported regardless of
 # the Python version available on the test runner.
-for _mod_name in ("routes.api", "routes.auth", "routes.views"):
+for _mod_name in (
+    "sendspin_bridge.web.routes.api",
+    "sendspin_bridge.web.routes.auth",
+    "sendspin_bridge.web.routes.views",
+):
     if _mod_name not in sys.modules:
         _stub = types.ModuleType(_mod_name)
         # web_interface expects blueprint objects with a register() method.

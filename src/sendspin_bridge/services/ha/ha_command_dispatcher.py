@@ -294,7 +294,7 @@ def _bridge_scan(_value: Any) -> CommandResult:
         # on a concrete attribute that may not exist on older builds.
         import importlib
 
-        api_bt_mod = importlib.import_module("routes.api_bt")
+        api_bt_mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
         starter = getattr(api_bt_mod, "_start_bt_scan_job", None)
         if callable(starter):
             job_id = starter()

@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
-from routes.auth import (
+from sendspin_bridge.web.routes.auth import (
     _LOCKOUT_DURATION_SECS,
     _LOCKOUT_WINDOW_SECS,
     _check_rate_limit,
@@ -83,7 +83,7 @@ def test_window_reset(monkeypatch):
 
 
 def test_bruteforce_disabled_never_locks():
-    with patch("routes.auth.load_config", return_value={"BRUTE_FORCE_PROTECTION": False}):
+    with patch("sendspin_bridge.web.routes.auth.load_config", return_value={"BRUTE_FORCE_PROTECTION": False}):
         for _ in range(10):
             _record_failure("10.0.0.7")
         assert _check_rate_limit("10.0.0.7") is False
@@ -96,7 +96,7 @@ def test_custom_max_attempts_applied():
         "BRUTE_FORCE_WINDOW_MINUTES": 1,
         "BRUTE_FORCE_LOCKOUT_MINUTES": 5,
     }
-    with patch("routes.auth.load_config", return_value=cfg):
+    with patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg):
         _record_failure("10.0.0.8")
         _record_failure("10.0.0.8")
         assert _check_rate_limit("10.0.0.8") is False
@@ -106,7 +106,7 @@ def test_custom_max_attempts_applied():
 
 def test_rate_limit_client_id_uses_forwarded_for_from_trusted_proxy():
     with (
-        patch("routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
         _app.test_request_context(
             "/login",
             method="POST",
@@ -120,7 +120,7 @@ def test_rate_limit_client_id_uses_forwarded_for_from_trusted_proxy():
 
 def test_rate_limit_client_id_ignores_forwarded_for_from_untrusted_proxy():
     with (
-        patch("routes.auth.load_config", return_value={"TRUSTED_PROXIES": []}),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": []}),
         _app.test_request_context(
             "/login",
             method="POST",
@@ -134,7 +134,7 @@ def test_rate_limit_client_id_ignores_forwarded_for_from_untrusted_proxy():
 
 def test_rate_limit_client_id_falls_back_to_username_for_trusted_proxy_without_client_ip():
     with (
-        patch("routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
         _app.test_request_context(
             "/login",
             method="POST",
@@ -181,7 +181,10 @@ def test_default_is_root():
 
 def test_detect_no_methods():
     """No config keys set → password always present."""
-    with patch("routes.auth.load_config", return_value={}), patch.dict("os.environ", {}, clear=True):
+    with (
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={}),
+        patch.dict("os.environ", {}, clear=True),
+    ):
         methods = _detect_auth_methods()
     assert methods == ["password"]
 
@@ -189,7 +192,10 @@ def test_detect_no_methods():
 def test_detect_ma_method():
     """MA_API_URL + MA_API_TOKEN present → 'ma' in methods."""
     cfg = {"MA_API_URL": "http://ma:8095", "MA_API_TOKEN": "tok123"}
-    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+    with (
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
+        patch.dict("os.environ", {}, clear=True),
+    ):
         methods = _detect_auth_methods()
     assert "ma" in methods
 
@@ -197,7 +203,7 @@ def test_detect_ma_method():
 def test_detect_ha_method():
     """SUPERVISOR_TOKEN env → 'ha' in methods."""
     with (
-        patch("routes.auth.load_config", return_value={}),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={}),
         patch.dict("os.environ", {"SUPERVISOR_TOKEN": "abc"}, clear=False),
     ):
         methods = _detect_auth_methods()
@@ -206,7 +212,10 @@ def test_detect_ha_method():
 
 def test_detect_password_always_present():
     """'password' is always in methods, even without hash."""
-    with patch("routes.auth.load_config", return_value={}), patch.dict("os.environ", {}, clear=True):
+    with (
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value={}),
+        patch.dict("os.environ", {}, clear=True),
+    ):
         methods = _detect_auth_methods()
     assert "password" in methods
 
@@ -218,7 +227,7 @@ def test_detect_multiple_methods():
         "MA_API_TOKEN": "tok",
     }
     with (
-        patch("routes.auth.load_config", return_value=cfg),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
         patch.dict("os.environ", {}, clear=True),
     ):
         methods = _detect_auth_methods()
@@ -232,7 +241,7 @@ def test_detect_addon_mode_only_ha():
         "MA_API_TOKEN": "tok",
     }
     with (
-        patch("routes.auth.load_config", return_value=cfg),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
         patch.dict("os.environ", {"SUPERVISOR_TOKEN": "x"}, clear=False),
     ):
         methods = _detect_auth_methods()
@@ -242,7 +251,10 @@ def test_detect_addon_mode_only_ha():
 def test_detect_ha_via_ma():
     """MA_AUTH_PROVIDER == 'ha' → 'ha_via_ma' instead of 'ma'."""
     cfg = {"MA_API_URL": "http://ma:8095", "MA_API_TOKEN": "tok", "MA_AUTH_PROVIDER": "ha"}
-    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+    with (
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
+        patch.dict("os.environ", {}, clear=True),
+    ):
         methods = _detect_auth_methods()
     assert "ha_via_ma" in methods
     assert "ma" not in methods
@@ -251,7 +263,10 @@ def test_detect_ha_via_ma():
 def test_detect_ma_requires_both_url_and_token():
     """MA_API_URL without token → no 'ma' method."""
     cfg = {"MA_API_URL": "http://ma:8095"}
-    with patch("routes.auth.load_config", return_value=cfg), patch.dict("os.environ", {}, clear=True):
+    with (
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
+        patch.dict("os.environ", {}, clear=True),
+    ):
         methods = _detect_auth_methods()
     assert "ma" not in methods
 
@@ -261,7 +276,7 @@ def test_detect_ma_requires_both_url_and_token():
 
 def test_ma_validate_no_url():
     """No MA_API_URL → fails with descriptive message."""
-    with patch("routes.auth.load_config", return_value={}):
+    with patch("sendspin_bridge.web.routes.auth.load_config", return_value={}):
         ok, msg = _ma_validate_credentials("user", "pass")
     assert not ok
     assert "not connected" in msg.lower()
@@ -271,8 +286,8 @@ def test_ma_validate_success():
     """Successful MA login → True."""
     cfg = {"MA_API_URL": "http://ma:8095"}
     with (
-        patch("routes.auth.load_config", return_value=cfg),
-        patch("routes.ma_auth._ma_http_login", return_value="token123"),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
+        patch("sendspin_bridge.web.routes.ma_auth._ma_http_login", return_value="token123"),
     ):
         ok, msg = _ma_validate_credentials("user", "pass")
     assert ok
@@ -283,8 +298,11 @@ def test_ma_validate_bad_credentials():
     """RuntimeError from _ma_http_login → invalid credentials."""
     cfg = {"MA_API_URL": "http://ma:8095"}
     with (
-        patch("routes.auth.load_config", return_value=cfg),
-        patch("routes.ma_auth._ma_http_login", side_effect=RuntimeError("Invalid username or password")),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
+        patch(
+            "sendspin_bridge.web.routes.ma_auth._ma_http_login",
+            side_effect=RuntimeError("Invalid username or password"),
+        ),
     ):
         ok, msg = _ma_validate_credentials("user", "wrong")
     assert not ok
@@ -295,8 +313,8 @@ def test_ma_validate_unreachable():
     """ConnectionError → server unreachable message."""
     cfg = {"MA_API_URL": "http://ma:8095"}
     with (
-        patch("routes.auth.load_config", return_value=cfg),
-        patch("routes.ma_auth._ma_http_login", side_effect=ConnectionError("refused")),
+        patch("sendspin_bridge.web.routes.auth.load_config", return_value=cfg),
+        patch("sendspin_bridge.web.routes.ma_auth._ma_http_login", side_effect=ConnectionError("refused")),
     ):
         ok, msg = _ma_validate_credentials("user", "pass")
     assert not ok
@@ -311,7 +329,7 @@ def csrf_client():
     """Flask test client with auth blueprint and proper template setup."""
     import os
 
-    from routes.auth import auth_bp
+    from sendspin_bridge.web.routes.auth import auth_bp
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     app = Flask(
@@ -389,9 +407,9 @@ def test_ha_direct_mfa_step_preserves_csrf_and_completes_login(csrf_client):
     flow_id = "123e4567-e89b-12d3-a456-426614174000"
     with (
         patch.dict("os.environ", {"SUPERVISOR_TOKEN": "abc"}, clear=False),
-        patch("routes.auth._ha_flow_start", return_value={"flow_id": flow_id}),
+        patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value={"flow_id": flow_id}),
         patch(
-            "routes.auth._ha_flow_step",
+            "sendspin_bridge.web.routes.auth._ha_flow_step",
             side_effect=[
                 {
                     "type": "form",

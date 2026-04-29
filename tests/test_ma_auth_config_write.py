@@ -21,7 +21,7 @@ import json
 import pytest
 from flask import Flask
 
-from routes import ma_auth as ma_auth_module
+from sendspin_bridge.web.routes import ma_auth as ma_auth_module
 
 
 @pytest.fixture(autouse=True)

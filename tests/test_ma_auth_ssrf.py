@@ -14,8 +14,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Flask
 
-from routes import ma_auth as ma_auth_module
-from routes.api_ma import ma_bp
+from sendspin_bridge.web.routes import ma_auth as ma_auth_module
+from sendspin_bridge.web.routes.api_ma import ma_bp
 
 
 @pytest.fixture(autouse=True)

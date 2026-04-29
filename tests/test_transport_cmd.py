@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from routes.api_transport import transport_bp
+from sendspin_bridge.web.routes.api_transport import transport_bp
 
 
 @pytest.fixture()
@@ -68,7 +68,7 @@ class TestTransportEndpoint:
         )
         assert resp.status_code == 400
 
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_device_not_found_returns_404(self, mock_registry, transport_client):
         mock_registry.return_value = _make_registry_snapshot([])
         resp = transport_client.post(
@@ -78,8 +78,8 @@ class TestTransportEndpoint:
         )
         assert resp.status_code == 404
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_player_id_lookup_routes_to_correct_client(self, mock_registry, mock_loop, transport_client):
         """Reproduces the VM 105 mis-route: WH at frontend-index 0 but
         backend ``active_clients`` order is reversed, so
@@ -95,7 +95,7 @@ class TestTransportEndpoint:
 
         import concurrent.futures
 
-        with patch("routes.api_transport.asyncio") as mock_asyncio:
+        with patch("sendspin_bridge.web.routes.api_transport.asyncio") as mock_asyncio:
             future = concurrent.futures.Future()
             future.set_result(True)
             mock_asyncio.run_coroutine_threadsafe.return_value = future
@@ -112,8 +112,8 @@ class TestTransportEndpoint:
         wh.send_transport_command.assert_called_once_with("next", value=None)
         eneby.send_transport_command.assert_not_called()
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_player_id_unknown_returns_404(self, mock_registry, mock_loop, transport_client):
         """A stale frontend that sends a player_id no longer present
         (device removed live) gets a clear 404 with the bad id —
@@ -132,8 +132,8 @@ class TestTransportEndpoint:
         assert "missing-uuid" in resp.get_json()["error"]
         existing.send_transport_command.assert_not_called()
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_legacy_device_index_path_still_works_with_warning(self, mock_registry, mock_loop, transport_client):
         """Backward-compat: callers that haven't updated to player_id
         yet must still work — but the backend logs a warning so we
@@ -144,7 +144,7 @@ class TestTransportEndpoint:
 
         import concurrent.futures
 
-        with patch("routes.api_transport.asyncio") as mock_asyncio:
+        with patch("sendspin_bridge.web.routes.api_transport.asyncio") as mock_asyncio:
             future = concurrent.futures.Future()
             future.set_result(True)
             mock_asyncio.run_coroutine_threadsafe.return_value = future
@@ -158,8 +158,8 @@ class TestTransportEndpoint:
         assert resp.status_code == 200
         client.send_transport_command.assert_called_once_with("next", value=None)
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_unsupported_command_returns_400(self, mock_registry, mock_loop, transport_client):
         client = _make_mock_client(supported_commands=["play", "pause"])
         mock_registry.return_value = _make_registry_snapshot([client])
@@ -173,8 +173,8 @@ class TestTransportEndpoint:
         assert resp.status_code == 400
         assert "not supported" in resp.get_json()["error"]
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_supported_command_returns_success(self, mock_registry, mock_loop, transport_client):
         client = _make_mock_client(supported_commands=["play", "pause", "next"])
         mock_registry.return_value = _make_registry_snapshot([client])
@@ -182,7 +182,7 @@ class TestTransportEndpoint:
         import concurrent.futures
 
         # Patch run_coroutine_threadsafe to directly run the coroutine
-        with patch("routes.api_transport.asyncio") as mock_asyncio:
+        with patch("sendspin_bridge.web.routes.api_transport.asyncio") as mock_asyncio:
             future = concurrent.futures.Future()
             future.set_result(True)
             mock_asyncio.run_coroutine_threadsafe.return_value = future
@@ -196,15 +196,15 @@ class TestTransportEndpoint:
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_volume_command_passes_value(self, mock_registry, mock_loop, transport_client):
         client = _make_mock_client(supported_commands=["volume"])
         mock_registry.return_value = _make_registry_snapshot([client])
 
         import concurrent.futures
 
-        with patch("routes.api_transport.asyncio") as mock_asyncio:
+        with patch("sendspin_bridge.web.routes.api_transport.asyncio") as mock_asyncio:
             future = concurrent.futures.Future()
             future.set_result(True)
             mock_asyncio.run_coroutine_threadsafe.return_value = future
@@ -217,8 +217,8 @@ class TestTransportEndpoint:
 
         assert resp.status_code == 200
 
-    @patch("routes.api_transport.get_main_loop")
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_main_loop")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_null_supported_commands_allows_any(self, mock_registry, mock_loop, transport_client):
         """When supported_commands is None (not yet received), allow any valid action."""
         client = _make_mock_client(supported_commands=None)
@@ -226,7 +226,7 @@ class TestTransportEndpoint:
 
         import concurrent.futures
 
-        with patch("routes.api_transport.asyncio") as mock_asyncio:
+        with patch("sendspin_bridge.web.routes.api_transport.asyncio") as mock_asyncio:
             future = concurrent.futures.Future()
             future.set_result(True)
             mock_asyncio.run_coroutine_threadsafe.return_value = future
@@ -240,7 +240,7 @@ class TestTransportEndpoint:
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
 
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_null_client_returns_503(self, mock_registry, transport_client):
         mock_registry.return_value = _make_registry_snapshot([None])
         resp = transport_client.post(
@@ -272,7 +272,7 @@ class TestValidActions:
             "switch",
         ],
     )
-    @patch("routes.api_transport.get_device_registry_snapshot")
+    @patch("sendspin_bridge.web.routes.api_transport.get_device_registry_snapshot")
     def test_all_media_commands_are_valid(self, mock_registry, action, transport_client):
         """Verify the action passes initial validation (may fail later due to missing device)."""
         mock_registry.return_value = _make_registry_snapshot([])

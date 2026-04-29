@@ -15,15 +15,6 @@ import uuid
 from flask import jsonify
 
 from config import load_config
-from routes.api_config import _detect_runtime
-from routes.api_ma import (
-    _await_loop_result,
-    _bridge_players_snapshot,
-    _build_ma_integration_summary,
-    _debug_clients_snapshot,
-    _ma_host_from_sendspin_clients,
-    ma_bp,
-)
 from sendspin_bridge.services.ha.ha_addon import get_ma_addon_discovery_candidates
 from sendspin_bridge.services.lifecycle.async_job_state import create_async_job, finish_async_job, get_async_job
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
@@ -34,6 +25,15 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_now_playing_cache_snapshot,
     set_ma_api_credentials,
     set_ma_groups,
+)
+from sendspin_bridge.web.routes.api_config import _detect_runtime
+from sendspin_bridge.web.routes.api_ma import (
+    _await_loop_result,
+    _bridge_players_snapshot,
+    _build_ma_integration_summary,
+    _debug_clients_snapshot,
+    _ma_host_from_sendspin_clients,
+    ma_bp,
 )
 
 logger = logging.getLogger(__name__)

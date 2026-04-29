@@ -29,8 +29,8 @@ from demo.fixtures import (
     demo_player_id_for_name,
 )
 from demo.simulator import run_simulator
-from routes.auth import auth_bp
-from routes.views import views_bp
+from sendspin_bridge.web.routes.auth import auth_bp
+from sendspin_bridge.web.routes.views import views_bp
 
 
 def _reset_demo_shared_state() -> None:
@@ -52,7 +52,7 @@ def _reset_demo_shared_state() -> None:
 
 def _install_demo_runtime(monkeypatch, request):
     import demo
-    import routes.api_bt as api_bt_module
+    import sendspin_bridge.web.routes.api_bt as api_bt_module
 
     class StubSendspinClient:
         def __init__(self):
@@ -77,7 +77,7 @@ def _install_demo_runtime(monkeypatch, request):
 
     demo.install()
     monkeypatch.setattr("demo.time.sleep", lambda _delay: None)
-    monkeypatch.setattr("routes.api.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("sendspin_bridge.web.routes.api.time.sleep", lambda _delay: None)
     monkeypatch.setattr(api_bt_module, "_last_scan_completed", 0.0, raising=False)
     monkeypatch.setattr(api_bt_module, "_SCAN_COOLDOWN", 0.0, raising=False)
     return demo
@@ -347,8 +347,8 @@ async def test_demo_install_seeds_connected_ma_state_and_named_adapters(monkeypa
     assert client.player_id == demo_player_id_for_name("Office")
     assert client.status["reanchor_count"] == 0
 
-    from routes.api_bt import bt_bp
-    from routes.api_config import config_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_config import config_bp
 
     app = Flask(__name__)
     app.register_blueprint(bt_bp)
@@ -401,7 +401,7 @@ def test_demo_bt_manager_seeds_released_ready_and_stopping_states():
 def test_demo_bt_scan_pair_and_paired_inventory_are_dynamic(monkeypatch, request):
     _install_demo_runtime(monkeypatch, request)
 
-    from routes.api_bt import bt_bp
+    from sendspin_bridge.web.routes.api_bt import bt_bp
 
     app = Flask(__name__)
     app.register_blueprint(bt_bp)
@@ -467,9 +467,9 @@ def test_demo_bt_scan_pair_and_paired_inventory_are_dynamic(monkeypatch, request
 def test_demo_config_save_is_temporary_and_restart_resets_to_canonical(monkeypatch, request):
     _install_demo_runtime(monkeypatch, request)
 
-    from routes.api import api_bp
-    from routes.api_config import config_bp
-    from routes.api_status import status_bp
+    from sendspin_bridge.web.routes.api import api_bp
+    from sendspin_bridge.web.routes.api_config import config_bp
+    from sendspin_bridge.web.routes.api_status import status_bp
 
     app = Flask(__name__)
     app.register_blueprint(api_bp)
@@ -562,8 +562,8 @@ async def test_demo_install_patches_bridge_orchestrator_load_config(monkeypatch,
 async def test_demo_install_exposes_demo_logs_diagnostics_and_bugreport(monkeypatch, request):
     import demo
     import state
-    from routes.api_config import config_bp
-    from routes.api_status import status_bp
+    from sendspin_bridge.web.routes.api_config import config_bp
+    from sendspin_bridge.web.routes.api_status import status_bp
 
     class StubSendspinClient:
         def __init__(self):
@@ -707,11 +707,11 @@ def test_standalone_index_shows_short_web_port_hint(monkeypatch):
 def test_ha_addon_index_hides_logout_button(monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "test-token")
     monkeypatch.setattr(
-        "routes.views.get_ma_addon_ui_url",
+        "sendspin_bridge.web.routes.views.get_ma_addon_ui_url",
         lambda: "/api/hassio_ingress/ma-token",
     )
-    monkeypatch.setattr("routes.views.resolve_web_port", lambda: 8081)
-    monkeypatch.setattr("routes.views.detect_ha_addon_channel", lambda: "rc")
+    monkeypatch.setattr("sendspin_bridge.web.routes.views.resolve_web_port", lambda: 8081)
+    monkeypatch.setattr("sendspin_bridge.web.routes.views.detect_ha_addon_channel", lambda: "rc")
 
     template_root = Path(__file__).resolve().parents[1]
     app = Flask(

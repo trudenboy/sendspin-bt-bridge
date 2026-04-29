@@ -17,7 +17,6 @@ import time
 from flask import Blueprint, jsonify, request
 
 from config import save_device_volume
-from routes.api_config import _detect_runtime
 from sendspin_bridge.services.audio.pulse import (
     get_sink_mute,
     set_sink_mute,
@@ -27,6 +26,7 @@ from sendspin_bridge.services.bluetooth.device_registry import get_device_regist
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
+from sendspin_bridge.web.routes.api_config import _detect_runtime
 
 logger = logging.getLogger(__name__)
 

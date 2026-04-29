@@ -17,7 +17,7 @@ import os
 
 from flask import Flask
 
-from routes._helpers import config_write_error_response
+from sendspin_bridge.web.routes._helpers import config_write_error_response
 
 
 def _make_app():

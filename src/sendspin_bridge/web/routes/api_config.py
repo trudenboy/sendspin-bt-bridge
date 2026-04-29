@@ -619,7 +619,7 @@ def api_config_upload():
         try:
             write_config_file(uploaded, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
         except OSError as exc:
-            from routes._helpers import config_write_error_response
+            from sendspin_bridge.web.routes._helpers import config_write_error_response
 
             return config_write_error_response(exc, context="Cannot save uploaded config")
 
@@ -877,7 +877,7 @@ def api_config():
         try:
             write_config_file(config, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
         except OSError as exc:
-            from routes._helpers import config_write_error_response
+            from sendspin_bridge.web.routes._helpers import config_write_error_response
 
             return config_write_error_response(exc, context="Cannot save bridge config")
 
@@ -962,7 +962,7 @@ def api_set_password():
     try:
         update_config(lambda cfg: cfg.__setitem__("AUTH_PASSWORD_HASH", pw_hash))
     except OSError as exc:
-        from routes._helpers import config_write_error_response
+        from sendspin_bridge.web.routes._helpers import config_write_error_response
 
         return config_write_error_response(exc, context="Cannot save password")
     except (json.JSONDecodeError, ValueError):
@@ -984,7 +984,7 @@ def api_set_log_level():
     try:
         update_config(lambda cfg: cfg.__setitem__("LOG_LEVEL", level))
     except OSError as exc:
-        from routes._helpers import config_write_error_response
+        from sendspin_bridge.web.routes._helpers import config_write_error_response
 
         return config_write_error_response(exc, context=f"Cannot save log level {level}")
     except (json.JSONDecodeError, ValueError):

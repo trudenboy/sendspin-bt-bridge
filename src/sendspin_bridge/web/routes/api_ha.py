@@ -89,8 +89,8 @@ def api_status_events():
     """
     # Borrow the existing budget counter — the HA coordinator opens both
     # /api/status/stream (snapshots) and /api/status/events (deltas).
-    import routes.api_status as status_module
-    from routes.api_status import _MAX_SSE, _sse_lock
+    import sendspin_bridge.web.routes.api_status as status_module
+    from sendspin_bridge.web.routes.api_status import _MAX_SSE, _sse_lock
 
     with _sse_lock:
         if status_module._sse_count >= _MAX_SSE:
