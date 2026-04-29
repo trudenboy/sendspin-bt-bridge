@@ -36,30 +36,32 @@ jobs:
           sed -i "s/^VERSION = .*/VERSION = \"${VERSION}\"/" src/sendspin_bridge/config/__init__.py
           sed -i "s/^BUILD_DATE = .*/BUILD_DATE = \"$(date -u +%Y-%m-%d)\"/" src/sendspin_bridge/config/__init__.py
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.12"
-          cache: pip
+          version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev libglib2.0-dev libportaudio2
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libdbus-1-dev libglib2.0-dev libportaudio2
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt -r dev-requirements.txt pytest-cov
-          # Install the bridge package itself (no deps — they're already pinned
-          # via requirements.txt above) so `python -m sendspin_bridge` and
-          # `from sendspin_bridge import ...` resolve in scripts and tests.
-          pip install --no-deps -e .
+      - name: Install dependencies (sync from uv.lock)
+        # `uv sync` installs the bridge package as editable into the
+        # uv-managed venv along with all runtime + dev deps from uv.lock.
+        # Replaces the previous ``pip install -r requirements.txt -r
+        # dev-requirements.txt pytest-cov`` + ``pip install --no-deps -e .``
+        # dance — pytest-cov is now in [project.optional-dependencies].dev.
+        run: uv sync --frozen --extra dev
 
       - name: Audit dependencies for CVEs
-        # Audit the already-installed venv (no -r flag) so pip-audit
-        # doesn't spin up a fresh sandbox virtualenv that re-resolves
-        # metadata and tries to recompile dbus-python from source.
-        # The cheaper signal here is "audit what we just installed" —
-        # one network round-trip to the OSV/PyPI advisory feed, no
-        # extra meson/ninja work.  Failing CVEs block the workflow.
+        # Run pip-audit as an isolated tool (uv tool run) against the
+        # already-installed venv. Avoids polluting the project venv with
+        # pip-audit's transitive deps; uv tool caches the tool environment
+        # across runs.
         #
         # ``pip`` itself is the package manager, not a shipped runtime
         # dep — its CVEs only apply when running pip on attacker-
@@ -68,17 +70,16 @@ jobs:
         # ``--ignore-vuln`` per-ID with the rationale here so a new
         # pip CVE gets a deliberate review rather than a silent skip.
         run: |
-          pip install pip-audit
-          pip-audit \
+          uv tool run --from pip-audit pip-audit \
             --ignore-vuln CVE-2025-8869 \
             --ignore-vuln CVE-2026-1703 \
             --ignore-vuln CVE-2026-3219
 
       - name: Run sendspin compatibility smoke test
-        run: python scripts/check_sendspin_compat.py
+        run: uv run python scripts/check_sendspin_compat.py
 
       - name: Run tests
-        run: python -m pytest tests/ --cov=src/sendspin_bridge --cov-report=term-missing --cov-fail-under=50 -q
+        run: uv run python -m pytest tests/ --cov=src/sendspin_bridge --cov-report=term-missing --cov-fail-under=50 -q
 
       - name: Check test modifications are intentional
         if: github.event_name == 'pull_request'
