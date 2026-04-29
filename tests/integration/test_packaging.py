@@ -2,16 +2,27 @@ import re
 from pathlib import Path
 
 
-def test_dockerfile_copies_all_top_level_python_modules():
-    """After src-layout migration the runtime ships from src/sendspin_bridge/.
+def test_dockerfile_installs_bridge_package_in_builder():
+    """Post-uv migration: the bridge package ships via the builder's
+    `uv pip install --prefix=/install /build`, then arrives in the
+    runtime stage through `COPY --from=builder /install /usr/local`.
 
-    Verify the Dockerfile copies the src/ tree and pip-installs the package
-    rather than dropping bare *.py files at /app/.
+    Runtime stage no longer has pip and no longer needs `COPY src/`.
     """
     dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
 
-    assert "COPY src/ /app/src/" in dockerfile
-    assert "pip install --no-deps --no-cache-dir -e /app" in dockerfile
+    # Builder stage installs the package from /build/ via uv.
+    assert "COPY src/ /build/src/" in dockerfile
+    assert "COPY pyproject.toml VERSION /build/" in dockerfile
+    assert "uv pip install --system --no-cache --no-deps --prefix=/install /build" in dockerfile
+
+    # Runtime stage picks up the installed package via the existing /install copy.
+    assert "COPY --from=builder /install /usr/local" in dockerfile
+
+    # Runtime stage must NOT try to install pip-style — pip has been
+    # stripped from the runtime image.
+    assert "pip install --no-deps --no-cache-dir -e /app" not in dockerfile
+    assert "COPY src/ /app/src/" not in dockerfile
 
 
 def test_dockerfile_installs_ffmpeg_runtime_libraries():
