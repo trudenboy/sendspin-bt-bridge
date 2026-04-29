@@ -52,6 +52,7 @@ def _reset_demo_shared_state() -> None:
 
 def _install_demo_runtime(monkeypatch, request):
     import demo
+    import sendspin_bridge.web.routes.api as api_module
     import sendspin_bridge.web.routes.api_bt as api_bt_module
 
     class StubSendspinClient:
@@ -77,7 +78,14 @@ def _install_demo_runtime(monkeypatch, request):
 
     demo.install()
     monkeypatch.setattr("demo.time.sleep", lambda _delay: None)
-    monkeypatch.setattr("sendspin_bridge.web.routes.api.time.sleep", lambda _delay: None)
+    # Use the imported module reference instead of a dotted-string path —
+    # pytest's monkeypatch resolves "sendspin_bridge.web.routes.api.time.sleep"
+    # via getattr(routes, "api"), but `api` is only set as an attribute of
+    # the `routes` package when the import system explicitly added it from
+    # a top-level statement. After src-layout, the demo.install() local
+    # `import sendspin_bridge.web.routes.api as _api_mod` may not propagate
+    # the attribute on every Python/pytest combo.
+    monkeypatch.setattr(api_module.time, "sleep", lambda _delay: None)
     monkeypatch.setattr(api_bt_module, "_last_scan_completed", 0.0, raising=False)
     monkeypatch.setattr(api_bt_module, "_SCAN_COOLDOWN", 0.0, raising=False)
     return demo
