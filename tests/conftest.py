@@ -48,8 +48,21 @@ def _fast_bt_pair_timing(monkeypatch, request):
 
     import time as _time
 
-    import sendspin_bridge.bluetooth.manager as _mgr
-    import sendspin_bridge.web.routes.api_bt as _api_bt
+    try:
+        import sendspin_bridge.bluetooth.manager as _mgr
+        import sendspin_bridge.web.routes.api_bt as _api_bt
+    except ImportError:
+        # test_web_interface.py stubs sendspin_bridge.web.routes.api_bt
+        # at module-collection time with `types.ModuleType`. Subsequent
+        # imports return the stub which has no real submodules / attrs.
+        # Skip the optimization in that environment — those tests don't
+        # exercise the pair / scan timing paths anyway.
+        return
+
+    # If api_bt is a stub (test_web_interface monkey-patches it),
+    # `_PAIR_SCAN_DURATION` won't exist; skip.
+    if not hasattr(_api_bt, "_PAIR_SCAN_DURATION"):
+        return
 
     # 1. Shrink pair-flow durations from seconds to centiseconds.
     monkeypatch.setattr(_mgr, "_PAIRING_SCAN_DURATION", 0.1, raising=False)
