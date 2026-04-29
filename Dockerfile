@@ -6,7 +6,7 @@ ARG TARGETVARIANT
 
 # uv: single static binary, ~10–20× faster resolve/install than pip.
 # Pinned to a specific minor for reproducibility; bump deliberately.
-COPY --from=ghcr.io/astral-sh/uv:0.5.31 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.9.27 /uv /usr/local/bin/uv
 
 # Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
 # and PyAV on architectures without pre-built wheels)

@@ -16,6 +16,22 @@ repos:
           - --extend-ignore=UP038
       - id: ruff-format
 
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.27
+    hooks:
+      # `uv lock --check` — fail if uv.lock is out of sync with pyproject.toml.
+      - id: uv-lock
+      # Regenerate requirements.txt from uv.lock and abort the commit if the
+      # working tree's requirements.txt would change. Keeps the LXC pip3
+      # install path on the same dependency set as Docker / CI / local dev.
+      - id: uv-export
+        args:
+          - "--no-hashes"
+          - "--no-dev"
+          - "--no-emit-project"
+          - "--output-file"
+          - "requirements.txt"
+
   - repo: local
     hooks:
       - id: mypy
@@ -25,10 +41,3 @@ repos:
         types: [python]
         require_serial: true
         exclude: "(sendspin-cli/|scripts/)"
-
-      - id: sync-requirements
-        name: sync requirements.txt and pyproject.toml deps
-        entry: python3 scripts/sync_requirements.py --check
-        language: system
-        files: '^(requirements\.txt|pyproject\.toml)$'
-        pass_filenames: false

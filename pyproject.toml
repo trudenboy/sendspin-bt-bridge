@@ -34,6 +34,11 @@ dependencies = [
     "requests>=2.33.0",
 ]
 
+[tool.uv]
+# Pin uv version range so all contributors / CI / Dockerfile use a compatible
+# resolver and lockfile schema. Bump deliberately alongside the Dockerfile pin.
+required-version = ">=0.9.27,<0.10"
+
 [tool.hatch.version]
 path = "VERSION"
 pattern = "^(?P<version>.+)$"
