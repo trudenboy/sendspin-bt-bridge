@@ -1,6 +1,12 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
 [project]
 name = "sendspin-bt-bridge"
+description = "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
 requires-python = ">=3.12"
+dynamic = ["version"]
 dependencies = [
     "sendspin==7.0.0",
     "aiosendspin[server]==5.1.1",
@@ -27,6 +33,16 @@ dependencies = [
     "pygments>=2.20.0",
     "requests>=2.33.0",
 ]
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "^(?P<version>.+)$"
+
+[tool.hatch.build.targets.wheel]
+# Pre-src-layout: explicit packages list. Updated to a single
+# src/sendspin_bridge package in B1 of the structure migration.
+packages = ["routes", "services"]
+# Top-level *.py modules picked up automatically by hatchling.
 
 [project.optional-dependencies]
 dev = [
