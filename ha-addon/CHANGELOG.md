@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.18] - 2026-04-30
+
+### Fixed
+- HA MQTT publisher now logs `connecting to host:port` at startup and
+  applies a 10-second connection timeout (`aiomqtt` default is `None` —
+  no timeout — which caused the initial connection attempt to hang
+  silently for up to 2 minutes when the broker was unreachable, with no
+  log output and the UI permanently showing "not connected yet").
+
 ## [2.66.17] - 2026-04-30
 
 ### Fixed
@@ -4680,7 +4689,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.17...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.18...HEAD
+[2.66.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.17...v2.66.18
 [2.66.17]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.16...v2.66.17
 [2.66.16]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.15...v2.66.16
 [2.66.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.14...v2.66.15
