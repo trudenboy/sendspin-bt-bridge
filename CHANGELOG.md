@@ -7,17 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.14] - 2026-04-30
+
+### Added
+- HA Custom Component: the **MQTT broker host** field now accepts
+  full broker URIs.  Pasting `mqtt://host:1883`,
+  `mqtts://broker.example.com:8883`, `ssl://`, `tls://`, `ws://`,
+  `wss://`, `http://`, or `https://` works the same as a bare
+  hostname — the scheme is stripped, the URL port populates the
+  Port field, and TLS schemes (`mqtts`, `ssl`, `tls`, `https`,
+  `wss`) flip the TLS toggle automatically.  The broker host
+  blur handler flashes a transient hint summarising what changed
+  ("Cleaned up scheme · TLS enabled · port 8883").  Bare
+  hostnames, IPs, and `auto` pass through unchanged.
+
 ### Fixed
-- HACS config-flow CTA link now opens a user-reachable URL on
-  HAOS deployments.  The bridge addon's discovered host is the
-  Supervisor-internal address (e.g. ``172.30.32.1:62144``) which
-  HA Core can reach but a normal browser cannot — clicking the
-  CTA in the discovery / manual / reauth dialogs hit a dead
-  page.  The custom_component now queries Supervisor for the
-  addon list, finds the bridge by ``ingress_port``, and uses
-  its HA Frontend ``ingress_url`` as the CTA target.  Standalone
-  bridges (LAN IP via mDNS) keep the existing
-  ``http://host:port/`` form.
+- HACS custom_component **auto-pair on HAOS** no longer falls back
+  to the manual-token form.  The bridge's pair endpoint
+  (`/api/auth/ha-pair`) previously trusted only a handful of
+  explicit IPs, but Supervisor presents addon-side requests with
+  source IPs anywhere in the hassio Docker `/23` network.  The
+  trust list now covers the whole network, so configuring the
+  custom_component on HAOS works with zero input — no need to
+  open the bridge UI and copy a token.
+- HACS config-flow **CTA link** is now a recognisable URL.  On
+  HAOS the link is prefixed with the operator's HA Frontend URL
+  (`https://ha.example.com/api/hassio_ingress/.../`), matching
+  the URL they already see in their browser address bar.  On
+  standalone bridges with mDNS, the link prefers the friendly
+  hostname (`<bridge_id>.local`) over the discovered IP.
+  Previously the link rendered as a raw ingress path or a
+  Supervisor-internal IP, both unrecognisable.
 
 ## [2.66.13] - 2026-04-30
 
