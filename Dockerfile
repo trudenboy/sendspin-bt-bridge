@@ -76,13 +76,7 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
         uv pip install --system --no-cache --prefix=/install \
             --only-binary :all: \
             --extra-index-url https://www.piwheels.org/simple \
-            -r /tmp/requirements-deps.txt \
-            "aiosendspin-mpris~=2.1.1" \
-            "av>=15.0.0,<16.0.0" \
-            "qrcode>=8.0" \
-            "readchar>=4.0.0" \
-            "rich>=13.0.0" \
-            "sounddevice>=0.4.6"; \
+            -r /tmp/requirements-deps.txt; \
     else \
         uv pip install --system --no-cache --prefix=/install -r /tmp/requirements-deps.txt; \
     fi

@@ -22,7 +22,7 @@ aiosignal==1.4.0
     # via aiohttp
 attrs==26.1.0
     # via aiohttp
-av==17.0.1
+av==16.1.0
     # via
     #   aiosendspin
     #   sendspin

@@ -39,6 +39,15 @@ dependencies = [
 # resolver and lockfile schema. Bump deliberately alongside the Dockerfile pin.
 required-version = ">=0.9.27,<0.10"
 
+# Cap PyAV below 17.x so the armv7 release build can install from piwheels
+# under `--only-binary :all:`. piwheels publishes abi3 wheels for armv7 up to
+# av 16.1.0 and has not built av 17.x; PyPI ships no linux_armv7l wheels for
+# av at all. Lifting this cap requires a piwheels build of the desired av
+# version OR dropping `--only-binary :all:` on armv7 (slow source compile).
+constraint-dependencies = [
+    "av<17",
+]
+
 [tool.hatch.version]
 path = "VERSION"
 pattern = "^(?P<version>.+)$"
