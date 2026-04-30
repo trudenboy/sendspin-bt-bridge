@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.16] - 2026-04-30
+
+### Fixed
+- Docker HEALTHCHECK now probes the actual bound port instead of always
+  falling back to `:8080`.  In HA addon mode the web server binds on the
+  dynamically assigned Supervisor ingress port (e.g. 65217); the old
+  `${WEB_PORT:-8080}` fallback never matched, so every health-check curl
+  request failed.  After 60 s start-period + 3 × 30 s retries Docker
+  marked the container `(unhealthy)`, and users with the Watchdog toggle
+  enabled experienced a restart loop every ~2 minutes.  The fix writes
+  the resolved port to `/tmp/sendspin-web-port` at startup; the
+  HEALTHCHECK reads it with a safe `:8080` fallback for non-addon
+  deployments where the file may not exist yet.
+
 ## [2.66.15] - 2026-04-30
 
 ### Fixed
@@ -5157,8 +5171,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.15...HEAD
-[2.66.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.14...v2.66.15
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.14...HEAD
 [2.66.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.13...v2.66.14
 [2.66.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.12...v2.66.13
 [2.66.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...v2.66.12
@@ -5219,6 +5232,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 [2.50.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.2...v2.50.3
 [2.50.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.1...v2.50.2
 [2.50.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.1
+[2.49.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.49.0...v2.49.1
 [2.49.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.2...v2.49.0
 [2.48.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1...v2.48.2
 [2.48.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0...v2.48.1

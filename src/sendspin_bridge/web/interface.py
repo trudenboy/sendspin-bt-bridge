@@ -429,6 +429,10 @@ def _handle_500(e):
 def main():
     """Start the web interface"""
     port = resolve_web_port()
+    try:
+        Path("/tmp/sendspin-web-port").write_text(str(port))
+    except OSError:
+        pass
     additional_port = resolve_additional_web_port()
     threads = int(os.getenv("WEB_THREADS", 8))
     if additional_port is not None:

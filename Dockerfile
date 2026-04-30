@@ -268,9 +268,10 @@ ENV GITHUB_APP_PRIVATE_KEY=${BUGREPORTER_PRIVATE_KEY}
 # Expose web interface port
 EXPOSE 8080
 
-# Health check — hit /api/health directly via curl (no Python import; survives src-layout move)
+# Health check — read the actual bound port written by interface.py at startup
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -fsS "http://localhost:${WEB_PORT:-8080}/api/health" >/dev/null || exit 1
+    CMD port=$(cat /tmp/sendspin-web-port 2>/dev/null || echo "${WEB_PORT:-8080}") && \
+        curl -fsS "http://localhost:${port}/api/health" >/dev/null || exit 1
 
 # S6 init wrapper — /init permissions are set at build time (line 94).
 RUN printf '#!/bin/sh\nexec /init "$@"\n' > /s6-init && \
