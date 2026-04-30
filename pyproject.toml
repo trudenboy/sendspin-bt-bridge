@@ -46,6 +46,10 @@ required-version = ">=0.9.27,<0.10"
 # version OR dropping `--only-binary :all:` on armv7 (slow source compile).
 constraint-dependencies = [
     "av<17",
+    # piwheels' cp313 build for yarl lags PyPI by one minor release; the
+    # latest published cp313 armv7 wheel is yarl 1.22.0, while PyPI is on
+    # 1.23.0. Lift this cap when piwheels catches up.
+    "yarl<1.23",
 ]
 
 [tool.hatch.version]

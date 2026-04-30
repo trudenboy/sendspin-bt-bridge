@@ -47,7 +47,7 @@ from sendspin_bridge.config.network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.66.3"
+VERSION = "2.66.4"
 BUILD_DATE = "2026-04-30"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 

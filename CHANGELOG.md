@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.4] - 2026-04-30
+
+### Fixed
+- Restore the supplementary armv7 (RPi 1 / Zero W) Docker image. The
+  v2.66.3 release shipped on `python:3.13-slim` to match piwheels'
+  cp313 wheel coverage, but `yarl` was the one transitive whose cp313
+  armv7 wheel piwheels hadn't built for the latest published version
+  (1.23.0). Capped at `yarl<1.23` so the lockfile resolves to 1.22.0,
+  the latest piwheels-built cp313 wheel. Lift the cap when piwheels
+  catches up.
+
 ## [2.66.3] - 2026-04-30
 
 ### Changed
