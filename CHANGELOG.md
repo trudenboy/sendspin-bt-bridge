@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.3] - 2026-04-30
+
 ### Changed
 - Container base image bumped from `python:3.12-slim` to `python:3.13-slim`
   (HA add-on, Docker Hub / GHCR, LXC pip path unaffected). piwheels skips
