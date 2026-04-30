@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.services.bluetooth.device_registry import set_active_clients, set_disabled_devices
+
+if TYPE_CHECKING:
+    from sendspin_bridge.services.lifecycle.exit_breadcrumb import BreadcrumbStore
 
 
 class BridgeLifecycleState:
     """Own publication of bridge-wide lifecycle state into the shared store."""
 
-    def __init__(self, startup_steps: int = 6):
+    def __init__(self, startup_steps: int = 6, *, breadcrumbs: BreadcrumbStore | None = None):
         self.startup_steps = startup_steps
+        # ``breadcrumbs`` is optional so unit tests that construct
+        # ``BridgeLifecycleState`` directly aren't forced to wire one in.
+        # When absent, the ``_mark_phase`` shim is a no-op.
+        self.breadcrumbs = breadcrumbs
+
+    def _mark_phase(self, phase: str, status: str = "running", message: str = "") -> None:
+        if self.breadcrumbs is None:
+            return
+        self.breadcrumbs.mark_phase(phase, status=status, message=message)
 
     def begin_startup(self, *, demo_mode: bool) -> None:
         """Publish initial runtime mode and startup progress."""
@@ -30,6 +42,7 @@ class BridgeLifecycleState:
             current_step=1,
             details={"demo_mode": demo_mode},
         )
+        self._mark_phase("config", message="Loading configuration")
         _state.publish_bridge_event("bridge.startup.started", payload={"demo_mode": demo_mode})
 
     def publish_main_loop(self, loop, *, web_thread_name: str = "") -> None:
@@ -41,6 +54,7 @@ class BridgeLifecycleState:
             current_step=4,
             details={"web_thread": web_thread_name} if web_thread_name else {},
         )
+        self._mark_phase("web", message="Web interface and event loop ready")
 
     def publish_clients(self, clients: list[Any]) -> None:
         """Publish active clients for route and UI access."""
@@ -64,6 +78,7 @@ class BridgeLifecycleState:
                 "pulse_latency_msec": pulse_latency_msec,
             },
         )
+        self._mark_phase("runtime", message="Runtime configuration prepared")
 
     def publish_device_registry(
         self,
@@ -84,6 +99,7 @@ class BridgeLifecycleState:
                 "disabled_devices": len(disabled_devices),
             },
         )
+        self._mark_phase("devices", message="Device registry prepared")
 
     def publish_ma_integration(
         self,
@@ -111,6 +127,7 @@ class BridgeLifecycleState:
                 "ma_monitor_enabled": monitor_enabled,
             },
         )
+        self._mark_phase("integrations", message="Music Assistant integrations initialized")
 
     def publish_startup_failure(
         self,
@@ -124,6 +141,7 @@ class BridgeLifecycleState:
         if details:
             payload.update(details)
         _state.fail_startup_progress(message, details=payload)
+        self._mark_phase(phase or "unknown", status="error", message=message)
         _state.publish_bridge_event(
             "bridge.startup.failed",
             payload={"message": message, "startup_phase": phase, **payload},
@@ -145,6 +163,7 @@ class BridgeLifecycleState:
                 "demo_mode": demo_mode,
             },
         )
+        self._mark_phase("ready", status="ready", message="Startup complete")
         _state.publish_bridge_event(
             "bridge.startup.completed",
             payload={
@@ -164,6 +183,8 @@ class BridgeLifecycleState:
             status="stopping",
             details={"active_clients": active_clients},
         )
+        if self.breadcrumbs is not None:
+            self.breadcrumbs.mark_shutdown_started()
         _state.publish_bridge_event("bridge.shutdown.started", payload={"active_clients": active_clients})
 
     def publish_shutdown_complete(self, *, stopped_clients: int) -> None:
@@ -184,4 +205,6 @@ class BridgeLifecycleState:
             status="stopped",
             details={"stopped_clients": stopped_clients},
         )
+        if self.breadcrumbs is not None:
+            self.breadcrumbs.mark_shutdown_complete()
         _state.publish_bridge_event("bridge.shutdown.completed", payload={"stopped_clients": stopped_clients})

@@ -4,6 +4,32 @@
 EXIT_CODE=${1:-0}
 SIGNAL=${2:-0}
 
+# ---------------------------------------------------------------------------
+# Authoritative exit-info breadcrumb. Captures (exit_code, signal,
+# wall-clock timestamp) into ``$BC_DIR/exit.json`` so the next boot
+# can describe how this run died — even on SIGKILL/OOM where the
+# Python side never had a chance to write its own breadcrumb.
+#
+# CONFIG_DIR is set by entrypoint.sh AFTER s6 captured env, so we
+# can't rely on with-contenv exporting it.  Mirror entrypoint.sh's
+# detection: HA addon (/data/options.json present) → /data,
+# otherwise fall back to ${CONFIG_DIR:-/config}.
+#
+# Best-effort — every command tolerates failure so a write error
+# can't wedge the supervisor's restart loop below.
+# ---------------------------------------------------------------------------
+if [ -f /data/options.json ]; then
+    BC_DIR="/data/breadcrumbs"
+else
+    BC_DIR="${CONFIG_DIR:-/config}/breadcrumbs"
+fi
+mkdir -p "$BC_DIR" 2>/dev/null || true
+BC_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
+BC_NOW=$(date +%s 2>/dev/null || echo 0)
+printf '{"schema_version":1,"exit_recorded_at":"%s","exit_code":%s,"exit_signal":%s,"wall_clock_unix":%s}\n' \
+    "$BC_TS" "$EXIT_CODE" "$SIGNAL" "$BC_NOW" > "$BC_DIR/exit.json.tmp" 2>/dev/null || true
+mv -f "$BC_DIR/exit.json.tmp" "$BC_DIR/exit.json" 2>/dev/null || true
+
 if [ "$EXIT_CODE" -eq 0 ] || [ "$SIGNAL" -eq 15 ]; then
     echo "[s6-finish] Sendspin exited cleanly (code=$EXIT_CODE signal=$SIGNAL)"
 else

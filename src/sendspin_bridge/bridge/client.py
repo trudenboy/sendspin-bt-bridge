@@ -2006,6 +2006,12 @@ async def main():
     """Main entry point"""
     orchestrator = BridgeOrchestrator()
     bootstrap = await orchestrator.initialize_runtime()
+    # ``initialize_runtime`` calls ``BreadcrumbStore.init_boot`` which
+    # rotates the previous run's ``boot.json`` to ``boot.prev.json``.
+    # Logging the warning *before* rotation would describe a run two
+    # restarts ago, not the immediately prior one — so we wait until
+    # rotation has happened.
+    _log_previous_run_summary(orchestrator)
 
     try:
         from sendspin_bridge.services.bluetooth import persist_device_enabled as _persist_enabled
@@ -2024,6 +2030,34 @@ async def main():
         )
     except asyncio.CancelledError:
         logger.info("Client shutting down...")
+
+
+def _log_previous_run_summary(orchestrator: BridgeOrchestrator) -> None:
+    """Emit one WARNING line if the previous run ended ungracefully.
+
+    Reads ``boot.prev.json`` / ``exit.prev.json`` (rotated by
+    ``init_boot`` later in the startup path) and surfaces a single line
+    into the ring buffer + stdout.  Best-effort; any exception is
+    swallowed.
+    """
+    try:
+        prev = orchestrator.breadcrumbs.read_previous()
+    except Exception:
+        logger.debug("breadcrumbs: read_previous failed", exc_info=True)
+        return
+    if prev is None or prev.exit_kind in (None, "graceful"):
+        return
+    logger.warning(
+        "Previous run ended ungracefully: kind=%s last_phase=%s last_phase_status=%s "
+        "exit_code=%s exit_signal=%s started_at=%s bridge_version=%s",
+        prev.exit_kind,
+        prev.last_phase,
+        prev.last_phase_status,
+        prev.exit_code,
+        prev.exit_signal,
+        prev.started_at,
+        prev.bridge_version,
+    )
 
 
 def _handle_cli_short_circuits() -> None:

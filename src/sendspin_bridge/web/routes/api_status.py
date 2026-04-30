@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
@@ -1190,6 +1191,26 @@ def _sanitized_config() -> dict:
     return result
 
 
+def _collect_last_run_summary() -> dict | None:
+    """Return a dict describing the previous run, or None on first boot.
+
+    Reads the rotated breadcrumbs (``boot.prev.json`` + ``exit.prev.json``)
+    via :class:`BreadcrumbStore`.  Best-effort — any failure returns
+    ``None`` so the diagnostics bundle keeps generating.
+    """
+    try:
+        from sendspin_bridge.config import CONFIG_FILE
+        from sendspin_bridge.services.lifecycle.exit_breadcrumb import BreadcrumbStore
+
+        store = BreadcrumbStore(Path(CONFIG_FILE).parent)
+        prev = store.read_previous()
+        if prev is None:
+            return None
+        return prev.to_dict()
+    except Exception:
+        return None
+
+
 def _collect_recent_logs(n: int = 100) -> list[str]:
     """Read recent log lines from journalctl, HA Supervisor, or docker logs."""
     try:
@@ -1392,6 +1413,7 @@ def api_bugreport():
 
         log_lines = _collect_recent_logs(100)
         bt_device_info = _collect_bt_device_info()
+        last_run_summary = _collect_last_run_summary()
 
         # Detect runtime
         runtime = "unknown"
@@ -1418,6 +1440,7 @@ def api_bugreport():
             "bt_device_info": bt_device_info,
             "sendspin_bridge.config": config_info,
             "recent_issue_logs": issue_summary["issue_lines"],
+            "last_run": last_run_summary,
             "logs": log_lines,
         }
 
@@ -1519,6 +1542,33 @@ def _build_full_text_report(
     recovery = diag.get("recovery_assistant", {})
     guidance = diag.get("operator_guidance", {})
     recovery_timeline = recovery.get("timeline") or {}
+    last_run = masked.get("last_run") or {}
+
+    # Last run summary — surfaces ungraceful exits from the previous run
+    # via boot.json/exit.json breadcrumbs (see services.lifecycle.exit_breadcrumb).
+    if last_run:
+        full.append("--- LAST RUN SUMMARY ---")
+        full.append(f"  {'Exit kind:':<20s} {last_run.get('exit_kind', '?')}")
+        if last_run.get("bridge_version"):
+            full.append(f"  {'Prev version:':<20s} {last_run['bridge_version']}")
+        if last_run.get("started_at"):
+            full.append(f"  {'Started at:':<20s} {last_run['started_at']}")
+        if last_run.get("last_phase"):
+            phase_status = last_run.get("last_phase_status") or "?"
+            full.append(f"  {'Last phase:':<20s} {last_run['last_phase']} ({phase_status})")
+        if last_run.get("last_message"):
+            full.append(f"  {'Last message:':<20s} {last_run['last_message']}")
+        if last_run.get("exit_code") is not None or last_run.get("exit_signal") is not None:
+            full.append(
+                f"  {'Exit code/signal:':<20s} "
+                f"code={last_run.get('exit_code', '?')} signal={last_run.get('exit_signal', '?')}"
+            )
+        if last_run.get("exit_recorded_at"):
+            full.append(f"  {'Exit recorded at:':<20s} {last_run['exit_recorded_at']}")
+        notes = last_run.get("notes") or []
+        for note in notes:
+            full.append(f"  {'Note:':<20s} {note}")
+        full.append("")
 
     # Environment
     if env:
@@ -1723,6 +1773,7 @@ def api_diagnostics_download():
 
         config_info = _sanitized_config()
         log_lines = _collect_recent_logs(100)
+        last_run_summary = _collect_last_run_summary()
 
         uptime_str = str(get_bridge_uptime())
 
@@ -1746,6 +1797,7 @@ def api_diagnostics_download():
             "subprocesses": diag.get("subprocesses", []),
             "sendspin_bridge.config": config_info,
             "recent_issue_logs": issue_summary["issue_lines"],
+            "last_run": last_run_summary,
             "logs": log_lines,
         }
 

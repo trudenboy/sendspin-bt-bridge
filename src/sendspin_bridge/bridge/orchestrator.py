@@ -12,12 +12,14 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
 from sendspin_bridge.config import (
+    CONFIG_FILE,
     detect_ha_addon_channel,
     ensure_bridge_name,
     load_config,
@@ -33,6 +35,7 @@ from sendspin_bridge.services.diagnostics.sendspin_compat import (
 from sendspin_bridge.services.diagnostics.update_checker import run_update_checker
 from sendspin_bridge.services.infrastructure.port_bind_probe import is_port_available
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import set_activation_context
+from sendspin_bridge.services.lifecycle.exit_breadcrumb import BreadcrumbStore
 from sendspin_bridge.services.lifecycle.lifecycle_state import BridgeLifecycleState
 from sendspin_bridge.services.music_assistant.ma_integration_service import BridgeMaIntegrationService
 
@@ -44,6 +47,22 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _PA_FALLBACK_SINK = "sendspin_fallback"
+
+
+def _resolve_config_dir() -> Path:
+    """Return the directory that holds ``config.json`` (parent of CONFIG_FILE)."""
+    return Path(CONFIG_FILE).parent
+
+
+def _detect_runtime_label() -> str:
+    """Best-effort label of the deployment mode for breadcrumbs."""
+    if os.path.exists("/data/options.json"):
+        return "ha_addon"
+    if os.path.exists("/.dockerenv"):
+        return "docker"
+    if os.path.exists("/run/systemd/system"):
+        return "systemd"
+    return "unknown"
 
 
 def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:
@@ -247,14 +266,47 @@ class BridgeOrchestrator:
         *,
         lifecycle_state: BridgeLifecycleState | None = None,
         ma_integration_service: BridgeMaIntegrationService | None = None,
+        breadcrumbs: BreadcrumbStore | None = None,
     ):
         self.startup_steps = startup_steps
-        self.lifecycle_state = lifecycle_state or BridgeLifecycleState(startup_steps=startup_steps)
+        self.breadcrumbs = breadcrumbs or BreadcrumbStore(_resolve_config_dir())
+        self.lifecycle_state = lifecycle_state or BridgeLifecycleState(
+            startup_steps=startup_steps,
+            breadcrumbs=self.breadcrumbs,
+        )
+        # If a caller supplied their own BridgeLifecycleState (test
+        # injection that may use a duck-typed stub), wire the
+        # breadcrumb store onto it so phase transitions are recorded
+        # even when an external object owns the lifecycle publisher.
+        if getattr(self.lifecycle_state, "breadcrumbs", None) is None:
+            try:
+                self.lifecycle_state.breadcrumbs = self.breadcrumbs
+            except AttributeError:
+                # Stub objects in tests may use ``__slots__``; just skip.
+                pass
         self.ma_integration_service = ma_integration_service or BridgeMaIntegrationService()
 
     async def initialize_runtime(self) -> RuntimeBootstrap:
         """Load bridge config and apply process-wide runtime settings."""
         demo_mode = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
+        # Rotate prior breadcrumbs and write the new boot.json *before*
+        # any phase markers fire — init_boot is the only moment the
+        # store can promote the previous run's files to *.prev.json.
+        try:
+            from sendspin_bridge.config import get_runtime_version
+
+            self.breadcrumbs.init_boot(
+                bridge_version=get_runtime_version(),
+                pid=os.getpid(),
+                runtime=_detect_runtime_label(),
+                hostname=socket.gethostname(),
+                demo_mode=demo_mode,
+            )
+        except Exception:
+            logger.debug("breadcrumbs: init_boot failed", exc_info=True)
+        collision = self.breadcrumbs.warn_if_pid_collision(os.getpid())
+        if collision:
+            logger.warning(collision)
         self.lifecycle_state.begin_startup(demo_mode=demo_mode)
         if demo_mode:
             from demo import install
