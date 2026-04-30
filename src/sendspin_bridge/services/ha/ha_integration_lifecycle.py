@@ -115,9 +115,11 @@ class HaIntegrationLifecycle:
 
         # Closure-style providers so the publisher always sees the latest
         # state on reconnect / heartbeat republish.  ``config_provider``
-        # re-reads the config block each tick — cheap because load_config
-        # caches — and re-extracts MA_API_URL so a mid-session change is
-        # picked up by the standalone-fallback resolver.
+        # re-reads ``config.json`` from disk on every call and re-extracts
+        # MA_API_URL so a mid-session change is picked up by the
+        # standalone-fallback resolver.  The publisher only invokes this
+        # at reconnect / heartbeat boundaries (single-digit Hz at most),
+        # so the per-tick disk read is negligible.
         def _config_provider():
             cfg_now = load_config()
             return resolve_mqtt_config(
