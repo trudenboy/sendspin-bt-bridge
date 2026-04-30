@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.19] - 2026-05-01
+
+### Fixed
+- Scan results list now scrolls correctly when many devices are found
+  (follow-up to v2.66.17).  The v2.66.17 fix added `min-height: 0` to
+  the modal body, but the body is a flex column (`.ui-stack`) whose
+  children use the default `flex-shrink: 1` — so the results box shrank
+  to fit rather than overflowing.  The scrollbar never engaged.  Fixed
+  by capping `.bt-scan-results-box` directly at `min(420px, 45vh)` with
+  `overflow-y: auto`, making the list the scroll target instead of the
+  body.
+
 ## [2.66.18] - 2026-04-30
 
 ### Fixed
