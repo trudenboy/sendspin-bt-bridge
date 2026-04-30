@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.14] - 2026-04-30
+
+### Added
+- HA panel highlights fields that the bridge needs filled in for the
+  selected integration mode.  When *Mode = MQTT*, the **Broker host**
+  label gets a red asterisk and the field is flagged as required;
+  attempting to save with it empty surfaces a clear toast ("MQTT
+  broker host is required.  Use 'auto' or enter a hostname / IP, or
+  switch the integration mode to Off") and scrolls focus to the
+  field.  Inline error styling matches the rest of the form, and
+  starts typing clears it immediately.  Saving MQTT mode with empty
+  username **and** password also pops a soft confirm
+  ("Most brokers require credentials.  Save anyway?") so the
+  anonymous-broker edge case still works without nagging operators
+  who already filled the fields.
+- HA Custom Component: the **MQTT broker host** field now accepts
+  full broker URIs.  Pasting `mqtt://host:1883`,
+  `mqtts://broker.example.com:8883`, `ssl://`, `tls://`, `ws://`,
+  `wss://`, `http://`, or `https://` works the same as a bare
+  hostname — the scheme is stripped, the URL port populates the
+  Port field, and TLS schemes (`mqtts`, `ssl`, `tls`, `https`,
+  `wss`) flip the TLS toggle automatically.  The broker host
+  blur handler flashes a transient hint summarising what changed
+  ("Cleaned up scheme · TLS enabled · port 8883").  Bare
+  hostnames, IPs, and `auto` pass through unchanged.
+
+### Fixed
+- HACS custom_component **auto-pair on HAOS** no longer falls back
+  to the manual-token form.  The bridge's pair endpoint
+  (`/api/auth/ha-pair`) previously trusted only a handful of
+  explicit IPs, but Supervisor presents addon-side requests with
+  source IPs anywhere in the hassio Docker `/23` network.  The
+  trust list now covers the whole network, so configuring the
+  custom_component on HAOS works with zero input — no need to
+  open the bridge UI and copy a token.
+- HACS config-flow **CTA link** is now a recognisable URL.  On
+  HAOS the link is prefixed with the operator's HA Frontend URL
+  (`https://ha.example.com/api/hassio_ingress/.../`), matching
+  the URL they already see in their browser address bar.  On
+  standalone bridges with mDNS, the link prefers the friendly
+  hostname (`<bridge_id>.local`) over the discovered IP.
+  Previously the link rendered as a raw ingress path or a
+  Supervisor-internal IP, both unrecognisable.
+
 ## [2.66.13] - 2026-04-30
 
 ### Added
@@ -4592,7 +4636,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.13...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.14...HEAD
+[2.66.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.13...v2.66.14
 [2.66.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.12...v2.66.13
 [2.66.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...v2.66.12
 [2.66.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.10...v2.66.11
