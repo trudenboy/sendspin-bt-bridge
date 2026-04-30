@@ -10,17 +10,26 @@ updates:
       - dependencies
     commit-message:
       prefix: "chore(deps):"
-    # Pinned to the latest piwheels-built cp313 armv7l wheel — bumping
-    # past these caps forces an sdist build (5+ min compile of native
-    # extensions) or breaks the supplementary armv7 release entirely.
-    # Lift each cap (in pyproject.toml AND here) once piwheels publishes
-    # the matching cp313 armv7l wheel. See CHANGELOG v2.66.2 (av) and
-    # v2.66.4 (yarl) for the original incidents.
     ignore:
+      # piwheels armv7 cp313 wheel availability — bumping past these
+      # caps either fails the supplementary armv7 release outright
+      # (no wheel anywhere) or forces a multi-minute sdist compile.
+      # Lift each cap (in pyproject.toml AND here) once piwheels
+      # publishes the matching cp313 armv7l wheel. See CHANGELOG
+      # v2.66.2 (av) and v2.66.4 (yarl) for the original incidents.
       - dependency-name: "av"
         versions: [">=17.0.0"]
       - dependency-name: "yarl"
         versions: [">=1.23.0"]
+      # Transitive deps that dependabot only sees because they appear
+      # in the auto-generated `requirements.txt` (kept around for the
+      # LXC pip3 path). Their actual pin is enforced upstream by the
+      # parent package, so dependabot's bump PRs for them resolve to
+      # an unsatisfiable lockfile and never merge cleanly.
+      # When the parent package releases a new version that pins the
+      # newer transitive, dependabot will pick it up via the parent.
+      - dependency-name: "music-assistant-models"  # pinned by music-assistant-client
+      - dependency-name: "pulsectl"                # pinned by pulsectl-asyncio
 
   - package-ecosystem: docker
     directory: /
