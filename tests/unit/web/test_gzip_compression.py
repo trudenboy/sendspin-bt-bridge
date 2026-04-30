@@ -71,9 +71,10 @@ def app():
     def big_js():
         # Flask's send_file infers ``text/javascript`` for .js (RFC
         # 9239 / modern IANA preferred).  The pre-fix gzip middleware
-        # only matched ``application/javascript``, so app.js was
-        # shipped uncompressed and style.css wasn't — exactly the
-        # asymmetry seen in production v2.66.11 cold-load smoke.
+        # only matched ``application/javascript``, so app.js shipped
+        # uncompressed while style.css (matched on ``text/css``) was
+        # already gzipped — exactly the asymmetry seen in production
+        # v2.66.11 cold-load smoke.
         return Response("var x = 1; " * 400, content_type="text/javascript")
 
     @test_app.route("/big-binary")
