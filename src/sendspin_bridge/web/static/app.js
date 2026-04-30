@@ -5227,10 +5227,15 @@ function _updateHaIntegrationVisibility() {
     if (mqttCard) mqttCard.hidden = !showMqtt;
     var restCard = document.getElementById('ha-rest-card');
     if (restCard) restCard.hidden = !showRest;
-    // Tokens are only meaningful for the REST / custom_component path —
-    // MQTT auth uses broker credentials, not bearer tokens.
+    // Tokens are for the HACS custom_component, which talks to the
+    // BRIDGE over REST + bearer regardless of how the bridge itself
+    // talks to HA Core (MQTT vs REST integration mode).  Show the
+    // card unconditionally on this tab so operators don't have to
+    // click "Reconfigure" to find the Generate Token button — that
+    // was the v2.66.10 UX bug where the field disappeared as soon
+    // as the auto-pair MQTT path connected on HAOS.
     var tokensCard = document.getElementById('ha-tokens-card');
-    if (tokensCard) tokensCard.hidden = !showRest;
+    if (tokensCard) tokensCard.hidden = false;
 
     _updateMosquittoBannerVisibility();
 }

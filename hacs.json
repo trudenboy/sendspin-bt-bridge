@@ -1,6 +1,5 @@
 {
   "name": "Sendspin BT Bridge",
-  "render_readme": true,
   "content_in_root": false,
   "country": ["AU", "RU", "US"],
   "homeassistant": "2024.2.0"

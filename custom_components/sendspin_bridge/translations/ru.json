@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Подключение к Sendspin BT Bridge",
-        "description": "Укажите адрес моста, порт и долгоживущий bearer-токен (сгенерируйте в веб-интерфейсе моста: Настройки → Home Assistant).",
+        "description": "Укажите адрес моста, порт и долгоживущий bearer-токен. Откройте веб-интерфейс моста и выберите **Настройки → Home Assistant → Bearer tokens for HA custom_component → Generate token**.",
         "data": {
           "host": "Хост",
           "port": "Порт",
@@ -13,7 +13,7 @@
       },
       "pair": {
         "title": "Найден Sendspin BT Bridge: {host}:{port}",
-        "description": "Вставьте долгоживущий bearer-токен из веб-интерфейса моста (Настройки → Home Assistant → Сгенерировать токен).",
+        "description": "Откройте [{ui_url}]({ui_url}) → **Настройки → Home Assistant → Bearer tokens for HA custom_component → Generate token**, затем вставьте токен ниже.",
         "data": {
           "token": "Bearer-токен",
           "use_https": "Использовать HTTPS"
@@ -21,7 +21,7 @@
       },
       "reauth_confirm": {
         "title": "Повторная аутентификация Sendspin BT Bridge",
-        "description": "Bearer-токен отклонён. Создайте новый в веб-интерфейсе моста и вставьте сюда.",
+        "description": "Bearer-токен отклонён. Откройте [{ui_url}]({ui_url}) → **Настройки → Home Assistant → Bearer tokens for HA custom_component → Generate token** и вставьте новый токен ниже.",
         "data": {
           "token": "Bearer-токен"
         }
