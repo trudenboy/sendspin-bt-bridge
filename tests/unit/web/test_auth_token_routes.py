@@ -220,3 +220,66 @@ def test_ha_pair_mints_token_when_supervisor_indicators_present(client):
     assert body["success"] is True
     assert body["token"]
     assert body["record"]["label"] == "ha-custom-component"
+
+
+def test_ha_pair_mints_token_when_called_from_ha_core_container(client):
+    """Regression: the HACS custom_component's auto-pair flow runs in the
+    HA Core container (172.30.32.1 on the Supervisor hassio network),
+    NOT in Supervisor.  Pre-v2.66.11 the bridge only trusted
+    172.30.32.2 (Supervisor itself), so every auto-pair request from
+    HA Core landed on the 403 branch and the user was forced through
+    the manual token form.
+    """
+    resp = client.post(
+        "/api/auth/ha-pair",
+        environ_base={"REMOTE_ADDR": "172.30.32.1"},
+        headers={"X-Ingress-Path": "/api/auth/ha-pair"},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body["token"]
+    assert body["record"]["label"] == "ha-custom-component"
+
+
+# ---------------------------------------------------------------------------
+# Frontend CSRF token exposure (regression for "Invalid CSRF token" on the
+# Generate Token button when running as an HA addon)
+# ---------------------------------------------------------------------------
+
+
+def test_index_template_exposes_csrf_token_to_frontend_js():
+    """The "Generate Token" handler in app.js reads ``window._csrfToken``.
+
+    If the template stops rendering it into a JS-readable global, the
+    button silently posts an empty CSRF token and the server returns 403
+    "Invalid CSRF token" — but only when AUTH_ENABLED is on, which is
+    exactly the HA addon path users see.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[3]
+    index_html = (repo_root / "src" / "sendspin_bridge" / "web" / "templates" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'window._csrfToken = "{{ csrf_token }}"' in index_html, (
+        "index.html no longer exposes the CSRF token to JS via window._csrfToken; "
+        "the 'Generate Token' button under Settings → Home Assistant will fail "
+        "with 'Invalid CSRF token' on HA addon deployments"
+    )
+
+
+def test_app_js_reads_csrf_from_window_global():
+    """Catch the matching frontend half: the JS must still read the same
+    global. If app.js switches to a different mechanism (e.g. a meta tag),
+    the template-side test above needs to follow.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[3]
+    app_js = (repo_root / "src" / "sendspin_bridge" / "web" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "window._csrfToken" in app_js, (
+        "app.js no longer references window._csrfToken — verify the Generate "
+        "Token flow still reads the CSRF token from somewhere the template "
+        "actually exposes"
+    )

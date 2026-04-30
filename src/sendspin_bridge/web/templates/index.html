@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sendspin Bluetooth Bridge</title>
     <script nonce="{{ csp_nonce }}">
+        // Expose the per-session CSRF token to JS callers (e.g. the
+        // "Generate Token" action under Settings → Home Assistant) so
+        // they can echo it on JSON-content-type AJAX requests.  The
+        // token is also injected into hidden form inputs for plain
+        // form POSTs; this global is the JSON-path equivalent.
+        window._csrfToken = "{{ csrf_token }}";
+    </script>
+    <script nonce="{{ csp_nonce }}">
         (function() {
             var mode = 'auto';
             try {

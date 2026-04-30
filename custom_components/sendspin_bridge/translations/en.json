@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Sendspin BT Bridge",
-        "description": "Enter the bridge's host, port, and a long-lived bearer token (generate one in the bridge web UI under Settings → Home Assistant).",
+        "description": "Enter the bridge's host and port. **Leave the token blank to auto-pair on HAOS** — the bridge will mint a token via Supervisor automatically. If auto-pair isn't available, open the bridge web UI and pick **Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token**.",
         "data": {
           "host": "Host",
           "port": "Port",
@@ -13,7 +13,7 @@
       },
       "pair": {
         "title": "Sendspin BT Bridge discovered at {host}:{port}",
-        "description": "Paste a long-lived bearer token from the bridge web UI (Settings → Home Assistant → Generate token).",
+        "description": "Open [{ui_url}]({ui_url}) → **Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token**, then paste the token below.",
         "data": {
           "token": "Bearer token",
           "use_https": "Use HTTPS"
@@ -21,14 +21,15 @@
       },
       "reauth_confirm": {
         "title": "Re-authenticate Sendspin BT Bridge",
-        "description": "Your bearer token was rejected. Generate a fresh one in the bridge web UI and paste it here.",
+        "description": "Your bearer token was rejected. Open [{ui_url}]({ui_url}) → **Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token** to mint a fresh one, then paste it below.",
         "data": {
           "token": "Bearer token"
         }
       }
     },
     "error": {
-      "auth_failed": "Token rejected — make sure it was just minted and not revoked."
+      "auth_failed": "Token rejected — make sure it was just minted and not revoked.",
+      "auto_pair_failed": "Could not auto-pair via Supervisor — paste a token from the bridge web UI (Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token)."
     },
     "abort": {
       "already_configured": "This bridge is already configured.",

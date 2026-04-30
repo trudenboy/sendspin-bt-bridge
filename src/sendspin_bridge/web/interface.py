@@ -79,7 +79,7 @@ if _auth_enabled:
         logger.info("Web UI password protection is enabled (restart required to change)")
 
 
-_TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.2"}
+_TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.1", "172.30.32.2"}
 _extra = _startup_config.get("TRUSTED_PROXIES") or []
 if isinstance(_extra, list):
     _TRUSTED_PROXIES |= set(_extra)
@@ -181,6 +181,14 @@ def vstatic(version, filename):
     """
     resp = send_from_directory(app.static_folder, filename)
     resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    # ``send_from_directory`` returns a passthrough response (the file
+    # is streamed instead of read into memory).  Disable that so the
+    # gzip ``after_request`` middleware below can read the body and
+    # compress it — ``app.js`` (~620 KB) and ``style.css`` (~330 KB)
+    # land at ~150 KB total over the wire after gzip, which is a
+    # multi-second cold-load improvement through HA Ingress / Nabu
+    # Casa.  600 KB into RAM per request is well within budget.
+    resp.direct_passthrough = False
     return resp
 
 
@@ -212,6 +220,68 @@ def _set_cache_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     if not _is_ha_addon:
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    return response
+
+
+# Content types we'll gzip when the client asks for it.  Anything
+# binary (images, fonts, audio) is excluded — it's already compressed
+# upstream and gzipping it wastes CPU.
+_GZIPPABLE_PREFIXES = (
+    "text/html",
+    "text/css",
+    "text/plain",
+    "application/javascript",
+    "application/json",
+    "application/xml",
+    "image/svg+xml",
+)
+_GZIP_MIN_BYTES = 1024
+
+
+@app.after_request
+def _gzip_response(response):
+    """Gzip text-ish responses when the client advertises support.
+
+    Without this, the bridge ships ~960 KB of uncompressed JS+CSS on
+    every cold load, which through HA Ingress (or Nabu Casa) reads
+    as "the addon won't start" for several seconds.  Gzip drops the
+    payload by ~70-80 % at compresslevel=6, which is barely
+    measurable CPU for the request rate this bridge handles.
+
+    Skipped paths:
+
+    * ``response.direct_passthrough`` — covers the SSE endpoint at
+      ``/api/status/stream`` (must stay uncompressed; ingress's
+      ``Cache-Control: no-transform`` handshake assumes plain text)
+      and any other streamed body.
+    * Already-encoded responses (``Content-Encoding`` already set).
+    * Non-text content types.
+    * Bodies under ~1 KB (compression overhead exceeds savings).
+    """
+    if response.direct_passthrough:
+        return response
+    accept = (request.headers.get("Accept-Encoding") or "").lower()
+    if "gzip" not in accept:
+        return response
+    if response.headers.get("Content-Encoding"):
+        return response
+    ctype = (response.content_type or "").split(";")[0].strip().lower()
+    if not ctype or not any(ctype.startswith(p) for p in _GZIPPABLE_PREFIXES):
+        return response
+    if ctype == "text/event-stream":
+        return response
+    raw = response.get_data()
+    if len(raw) < _GZIP_MIN_BYTES:
+        return response
+    import gzip as _gzip
+
+    compressed = _gzip.compress(raw, compresslevel=6)
+    response.set_data(compressed)
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(compressed))
+    vary = response.headers.get("Vary", "")
+    if "accept-encoding" not in vary.lower():
+        response.headers["Vary"] = (vary + ", " if vary else "") + "Accept-Encoding"
     return response
 
 

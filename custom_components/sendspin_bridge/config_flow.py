@@ -103,31 +103,47 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
     # -- Manual entry ---------------------------------------------------
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Handle the manual user-init step."""
+        """Handle the manual user-init step.
+
+        Token is *optional* in the form: if the user leaves it blank
+        and the bridge is reachable, we try the same Supervisor pair
+        flow that the zeroconf path uses — on HAOS the bridge mints
+        a token via its ``/api/auth/ha-pair`` endpoint without any
+        further user interaction.  Otherwise the form re-renders
+        with a clear error pointing at the Generate Token button.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
-            ok, projection = await _validate_token(
-                self.hass,
-                user_input[CONF_HOST],
-                int(user_input.get(CONF_PORT, DEFAULT_PORT)),
-                user_input[CONF_TOKEN],
-                user_input.get(CONF_USE_HTTPS, False),
-            )
-            if not ok:
-                errors["base"] = "auth_failed"
-            else:
+            host = user_input[CONF_HOST]
+            port = int(user_input.get(CONF_PORT, DEFAULT_PORT))
+            use_https = bool(user_input.get(CONF_USE_HTTPS, False))
+            token = (user_input.get(CONF_TOKEN) or "").strip()
+
+            if not token:
+                token = await _attempt_supervisor_pair(self.hass, host, port, use_https=use_https) or ""
+                if not token:
+                    errors["base"] = "auto_pair_failed"
+
+            ok = False
+            projection: dict[str, Any] | None = None
+            if token and not errors:
+                ok, projection = await _validate_token(self.hass, host, port, token, use_https)
+                if not ok:
+                    errors["base"] = "auth_failed"
+
+            if ok and token:
                 bridge_meta = (projection or {}).get("bridge_meta") or {}
-                bridge_id = bridge_meta.get("bridge_id") or user_input[CONF_HOST]
+                bridge_id = bridge_meta.get("bridge_id") or host
                 bridge_name = bridge_meta.get("bridge_name") or "Sendspin Bridge"
                 await self.async_set_unique_id(f"sendspin_bridge_{bridge_id}")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=bridge_name,
                     data={
-                        CONF_HOST: user_input[CONF_HOST],
-                        CONF_PORT: int(user_input.get(CONF_PORT, DEFAULT_PORT)),
-                        CONF_TOKEN: user_input[CONF_TOKEN],
-                        CONF_USE_HTTPS: bool(user_input.get(CONF_USE_HTTPS, False)),
+                        CONF_HOST: host,
+                        CONF_PORT: port,
+                        CONF_TOKEN: token,
+                        CONF_USE_HTTPS: use_https,
                         CONF_BRIDGE_ID: bridge_id,
                         CONF_BRIDGE_NAME: bridge_name,
                     },
@@ -137,7 +153,7 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
             {
                 vol.Required(CONF_HOST): str,
                 vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-                vol.Required(CONF_TOKEN): str,
+                vol.Optional(CONF_TOKEN, default=""): str,
                 vol.Optional(CONF_USE_HTTPS, default=False): bool,
             }
         )
@@ -215,13 +231,16 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
                 vol.Optional(CONF_USE_HTTPS, default=False): bool,
             }
         )
+        host = self._discovered.get(CONF_HOST, "")
+        port = self._discovered.get(CONF_PORT, "")
         return self.async_show_form(
             step_id="pair",
             data_schema=schema,
             errors=errors,
             description_placeholders={
-                "host": self._discovered.get(CONF_HOST, ""),
-                "port": str(self._discovered.get(CONF_PORT, "")),
+                "host": host,
+                "port": str(port),
+                "ui_url": f"http://{host}:{port}/" if host else "",
             },
         )
 
@@ -250,4 +269,16 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
         schema = vol.Schema({vol.Required(CONF_TOKEN): str})
-        return self.async_show_form(step_id="reauth_confirm", data_schema=schema, errors=errors)
+        host = entry.data[CONF_HOST] if entry else ""
+        port = entry.data.get(CONF_PORT, DEFAULT_PORT) if entry else DEFAULT_PORT
+        scheme = "https" if (entry and entry.data.get(CONF_USE_HTTPS, False)) else "http"
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "host": host,
+                "port": str(port),
+                "ui_url": f"{scheme}://{host}:{port}/" if host else "",
+            },
+        )

@@ -59,7 +59,18 @@ _LOCKOUT_MAX_ATTEMPTS = 5
 _LOCKOUT_WINDOW_SECS = 60
 _LOCKOUT_DURATION_SECS = 300  # 5 minutes
 
-_TRUSTED_PROXY_DEFAULTS = frozenset({"127.0.0.1", "::1", "172.30.32.2"})
+#: Default proxy / supervisor network IPs the bridge implicitly trusts.
+#:
+#: * ``127.0.0.1`` / ``::1`` — local loopback (standalone Docker / LXC).
+#: * ``172.30.32.1`` — the **HA Core container** on the Supervisor
+#:   ``hassio`` Docker network.  Required so the HACS custom_component's
+#:   one-shot Supervisor-pair flow (``POST /api/auth/ha-pair``) actually
+#:   reaches us — the call originates from HA Core, not from Supervisor.
+#: * ``172.30.32.2`` — the Supervisor container itself.
+#:
+#: Operators can extend this set via ``TRUSTED_PROXIES`` in the bridge
+#: config when their deployment uses a different proxy chain.
+_TRUSTED_PROXY_DEFAULTS = frozenset({"127.0.0.1", "::1", "172.30.32.1", "172.30.32.2"})
 
 _failed: dict[str, tuple[int, float]] = {}  # client_id → (count, first_failure_ts)
 _failed_lock = threading.Lock()
