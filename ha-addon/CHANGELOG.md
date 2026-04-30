@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.2] - 2026-04-30
+
+### Fixed
+- Restored the supplementary armv7 (RPi 1 / Zero W) Docker image. The
+  v2.66.0 / v2.66.1 release builds failed at the dependency-install
+  step because the regenerated `requirements.txt` pinned `av==17.0.1`,
+  for which neither piwheels nor PyPI ships an armv7 wheel. PyAV is
+  now capped below 17 via a uv constraint so the lockfile resolves to
+  `av==16.1.0` (the latest piwheels armv7 abi3 wheel) on every arch.
+  Lifting the cap requires a piwheels build of a newer av release.
+
 ## [2.66.1] - 2026-04-29
 
 ### Fixed
@@ -4345,7 +4356,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.1...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.2...HEAD
+[2.66.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.1...v2.66.2
 [2.66.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...v2.66.1
 [2.66.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.1-rc.1...v2.66.0
 [2.65.1-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.0...v2.65.1-rc.1
