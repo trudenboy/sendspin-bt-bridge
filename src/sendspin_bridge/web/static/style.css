@@ -4800,6 +4800,24 @@ body {
         .diag-card--primary .diag-card-header {
             background: rgba(33, 150, 243, 0.08);
         }
+        /* "Last run" breadcrumb banner — only rendered when prior run was
+           non-graceful (sigkill, crash, etc.). Tone follows the err/warn
+           palette already established for diagnostics pills. */
+        .diag-last-run {
+            margin-bottom: 12px;
+        }
+        .diag-last-run.is-err {
+            border-color: rgba(244, 67, 54, 0.32);
+        }
+        .diag-last-run.is-err .diag-card-header {
+            background: rgba(244, 67, 54, 0.08);
+        }
+        .diag-last-run.is-warn {
+            border-color: rgba(255, 152, 0, 0.32);
+        }
+        .diag-last-run.is-warn .diag-card-header {
+            background: rgba(255, 152, 0, 0.08);
+        }
         .diag-card-header {
             display: flex;
             align-items: center;
