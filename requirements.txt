@@ -121,7 +121,7 @@ propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
-pulsectl==24.11.0
+pulsectl==24.12.0
     # via pulsectl-asyncio
 pulsectl-asyncio==1.2.2
     # via
