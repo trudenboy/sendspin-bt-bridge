@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.15] - 2026-04-30
+
+### Fixed
+- The HA-coordinator event stream (`/api/status/events`) no longer
+  spams `AssertionError: Connection is a "hop-by-hop" header` in
+  the bridge log on every reconnect.  The route was setting an
+  explicit `Connection: keep-alive` response header, which WSGI
+  applications are forbidden from setting (PEP 3333 / RFC 2616
+  §13.5.1).  Waitress correctly enforced the rule and tore the
+  stream down — coordinators were reconnecting roughly once a
+  minute.  Header removed; canonical `/api/status/stream` was
+  already correct.
+- HACS pair form's CTA link on HAOS deployments where HA's zeroconf
+  hands back the bridge's mDNS hostname (e.g.
+  `sendspin-bridge-XXX.local`) instead of the resolved
+  `172.30.32.x` IP now correctly resolves to the absolute HA URL
+  (`https://ha.example.com/api/hassio_ingress/.../`).  Earlier,
+  the v2.66.14 CIDR check skipped the Supervisor lookup whenever
+  `host` failed to parse as an IP, so the form rendered the bare
+  `.local` URL — which most browsers can't open.
+
 ## [2.66.14] - 2026-04-30
 
 ### Added
@@ -4636,7 +4657,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.14...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.15...HEAD
+[2.66.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.14...v2.66.15
 [2.66.14]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.13...v2.66.14
 [2.66.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.12...v2.66.13
 [2.66.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...v2.66.12
