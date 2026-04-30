@@ -5798,8 +5798,7 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
         liveHtml = '<span class="adapter-cod-live' + (match ? ' adapter-cod-live--match' : '') + '" title="Live Class of Device read from the adapter">' +
             escHtml(liveClass) + '</span>';
     }
-    return '<div class="adapter-cod-override adapter-cod-inline adapter-cod-override--experimental" data-experimental title="' + escHtmlAttr(helpText) + '">' +
-        '<span class="adapter-cod-warn" aria-hidden="true" title="' + escHtmlAttr(helpText) + '">⚠</span>' +
+    return '<div class="adapter-cod-override adapter-cod-inline" data-experimental title="' + escHtmlAttr(helpText) + '">' +
         '<select class="adp-cod-preset" title="' + escHtmlAttr(helpText) + '">' +
             '<option value="" ' + (presetValue === '' ? 'selected' : '') + '>CoD: default</option>' +
             '<option value="0x00010c" ' + (presetValue === '0x00010c' ? 'selected' : '') + '>CoD: 0x00010c (Samsung)</option>' +

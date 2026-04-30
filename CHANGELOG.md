@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.5] - 2026-04-30
+
+### Changed
+- Unify the experimental Class of Device override widget styling with
+  every other experimental row — same pale-red shadow, badge, and
+  border-radius, replacing the bespoke dashed border + inline ⚠ icon
+  it carried before.
+
+### Fixed
+- Restore the supplementary armv7 (RPi 1 / Zero W) Docker image (third
+  attempt). v2.66.4 still failed under `--only-binary :all:` because
+  four packages publish no `linux_armv7l` wheel anywhere — `dbus-fast`
+  (Cython, x86_64/aarch64 wheels only), and `dbus-python`,
+  `mpris-api`, `pyric` (sdist-only on PyPI, never built by piwheels).
+  The armv7 install step now whitelists those four via `--no-binary`
+  so they build from sdist while the protective `--only-binary :all:`
+  still guards against silent multi-minute source compiles of
+  `numpy`, `aiohttp`, `cryptography`, and `pillow`. Adds ~3 minutes
+  to the armv7 release build (Cython compile of `dbus-fast`).
+
 ## [2.66.4] - 2026-04-30
 
 ### Fixed

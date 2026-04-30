@@ -4483,16 +4483,6 @@ body {
             padding: 4px 6px;
             border-radius: 5px;
         }
-        .adapter-cod-override--experimental {
-            border: 1px dashed var(--error-color, #db4437);
-            background: rgba(219, 68, 55, 0.06);
-        }
-        .adapter-cod-warn {
-            font-size: 13px;
-            line-height: 1;
-            color: var(--error-color, #db4437);
-            cursor: help;
-        }
         .adapter-cod-inline .adp-cod-preset {
             flex: 1 1 auto;
             min-width: 0;
@@ -5741,14 +5731,14 @@ body {
            a wide text label) so the row stays compact while still
            carrying a non-colour-only signal. The hover hint comes from
            the row's own ``title=`` attribute. */
-        [data-experimental]:is(.config-setting-row, .bt-scan-toggle) {
+        [data-experimental]:is(.config-setting-row, .bt-scan-toggle, .adapter-cod-override) {
             position: relative;
             border-radius: 10px;
             box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.32);
             background: rgba(239, 68, 68, 0.05);
             padding-inline-end: 36px;
         }
-        [data-experimental]:is(.config-setting-row, .bt-scan-toggle)::before {
+        [data-experimental]:is(.config-setting-row, .bt-scan-toggle, .adapter-cod-override)::before {
             content: "!";
             position: absolute;
             top: 6px;
