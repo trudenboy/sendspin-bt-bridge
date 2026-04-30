@@ -1,0 +1,79 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -17,
+      "total": 1,
+      "owner": 0
+    },
+    {
+      "week_offset": -16,
+      "total": 13,
+      "owner": 0
+    },
+    {
+      "week_offset": -8,
+      "total": 292,
+      "owner": 283
+    },
+    {
+      "week_offset": -7,
+      "total": 492,
+      "owner": 395
+    },
+    {
+      "week_offset": -6,
+      "total": 243,
+      "owner": 213
+    },
+    {
+      "week_offset": -5,
+      "total": 317,
+      "owner": 249
+    },
+    {
+      "week_offset": -4,
+      "total": 322,
+      "owner": 94
+    },
+    {
+      "week_offset": -3,
+      "total": 161,
+      "owner": 8
+    },
+    {
+      "week_offset": -2,
+      "total": 36,
+      "owner": 0
+    },
+    {
+      "week_offset": -1,
+      "total": 97,
+      "owner": 23
+    },
+    {
+      "week_offset": 0,
+      "total": 254,
+      "owner": 34
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 9,
+    "ai_ratio": 0.045,
+    "agents": [
+      {
+        "name": "Renso",
+        "commits": 9
+      },
+      {
+        "name": "Claude Opus 4.7 (1M context)",
+        "commits": 5
+      },
+      {
+        "name": "Claude Sonnet 4.6",
+        "commits": 2
+      }
+    ]
+  }
+}
