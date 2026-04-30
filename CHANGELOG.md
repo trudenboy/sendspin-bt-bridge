@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.7] - 2026-04-30
+
+### Changed
+- HACS custom_component now declares MA's own device identifier
+  (`("music_assistant", "up<uuid>")`) alongside its native one, so
+  Home Assistant's device_registry merges Sendspin diagnostics into
+  the same device card MA already owns for each speaker. Previously
+  the bridge relied on a Bluetooth-MAC connection match, but MA's
+  Sendspin provider doesn't populate `connections` on its device, so
+  the merge silently failed and operators saw two cards per speaker.
+  Verified against a HAOS production deployment (issue #210
+  follow-up). The MQTT path still produces a separate card —
+  Home Assistant's MQTT discovery hardcodes the identifier domain to
+  `mqtt`, so this fix only lands on the REST / custom_component path.
+
+### Fixed
+- armv7 runtime image now ships `libopenblas0`, `libjpeg62-turbo`,
+  `libpng16-16`, `libtiff6`, `libwebp7`, `libfreetype6`. piwheels'
+  cp313 wheels for `numpy` / `pillow` are dynamically linked against
+  the distro libraries (unlike PyPI's manylinux wheels which bundle
+  their own under `numpy.libs/`), so the v2.66.6 image crashed at
+  `import numpy` with `libopenblas.so.0: cannot open shared object
+  file`. amd64 / arm64 are unaffected.
+
 ## [2.66.6] - 2026-04-30
 
 ### Fixed

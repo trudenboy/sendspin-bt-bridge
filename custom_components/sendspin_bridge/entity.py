@@ -14,8 +14,17 @@ from typing import Any
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from ._ma_compat import ma_identifier_for_player
 from .const import DOMAIN, UNIQUE_ID_PREFIX
 from .coordinator import SendspinDataUpdateCoordinator
+
+# Music Assistant exposes Sendspin BT speakers as ``media_player.<name>``
+# under a HA device whose ``identifiers`` set contains the canonical MA
+# entry but whose ``connections`` is empty — meaning the bridge's
+# bluetooth-MAC connection alone never merges the two device cards.
+# Adding MA's own identifier to our ``device_info`` is the load-bearing
+# signal that lets HA's device_registry collapse them into one card.
+_MA_IDENTIFIER_DOMAIN = "music_assistant"
 
 
 class SendspinDeviceEntity(CoordinatorEntity[SendspinDataUpdateCoordinator]):
@@ -53,7 +62,10 @@ class SendspinDeviceEntity(CoordinatorEntity[SendspinDataUpdateCoordinator]):
     def device_info(self) -> DeviceInfo:
         meta = self.coordinator.device_meta(self._player_id)
         mac = (meta.get("mac") or "").lower()
-        identifiers = {(DOMAIN, f"{UNIQUE_ID_PREFIX}_{self._player_id}")}
+        identifiers: set[tuple[str, str]] = {(DOMAIN, f"{UNIQUE_ID_PREFIX}_{self._player_id}")}
+        ma_id = ma_identifier_for_player(self._player_id)
+        if ma_id:
+            identifiers.add((_MA_IDENTIFIER_DOMAIN, ma_id))
         connections: set[tuple[str, str]] = set()
         if mac:
             connections.add((CONNECTION_BLUETOOTH, mac))
