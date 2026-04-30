@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.3] - 2026-04-30
+
+### Changed
+- Container base image bumped from `python:3.12-slim` to `python:3.13-slim`
+  (HA add-on, Docker Hub / GHCR, LXC pip path unaffected). piwheels skips
+  even Python versions, so `python:3.12-slim` could not satisfy the armv7
+  release build under `--only-binary :all:` for native packages like
+  `aiohttp`, `pillow`, `cryptography`, `numpy`. Switching to 3.13 picks
+  up piwheels' cp313 wheel coverage and unblocks future armv7 releases.
+  Source code still targets `requires-python = ">=3.12"`, so LXC operators
+  on Ubuntu 24.04's system Python 3.12 are unaffected.
+
+### Fixed
+- Persist the per-adapter Class of Device override on the HA add-on path.
+  Operators who set the Samsung Q-series workaround (CoD `0x00010c`)
+  via the bridge UI lost the value on every restart: the entrypoint
+  rebuilt `BLUETOOTH_ADAPTERS` from `options.json` + `bluetoothctl list`
+  and dropped the operator-saved `device_class`, so the HCI
+  `Write_Class_Of_Device` was never sent and the soundbar kept
+  refusing connections with `0x0d (Connection Rejected)`. The HA add-on
+  options schema now carries `device_class` per adapter, and the
+  translation step preserves a previously-saved value when the
+  add-on options don't specify one.
+
 ## [2.66.2] - 2026-04-30
 
 ### Fixed
@@ -4356,7 +4380,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.2...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.3...HEAD
+[2.66.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.2...v2.66.3
 [2.66.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.1...v2.66.2
 [2.66.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.0...v2.66.1
 [2.66.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.65.1-rc.1...v2.66.0
