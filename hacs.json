@@ -1,5 +1,5 @@
 {
-  "name": "Sendspin BT Bridge",
+  "name": "Sendspin BT Bridge Integration",
   "content_in_root": false,
   "country": ["AU", "RU", "US"],
   "homeassistant": "2024.2.0"
