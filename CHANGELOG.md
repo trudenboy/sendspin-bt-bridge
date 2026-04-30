@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.18] - 2026-04-30
+
+### Fixed
+- HA MQTT publisher now logs `connecting to host:port` at startup and
+  applies a 10-second connection timeout (`aiomqtt` default is `None` —
+  no timeout — which caused the initial connection attempt to hang
+  silently for up to 2 minutes when the broker was unreachable, with no
+  log output and the UI permanently showing "not connected yet").
+
 ## [2.66.17] - 2026-04-30
 
 ### Fixed

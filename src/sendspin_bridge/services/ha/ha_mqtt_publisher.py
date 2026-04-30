@@ -584,6 +584,7 @@ class HaMqttPublisher:
                 continue
             try:
                 self.state = "connecting"
+                logger.info("HA MQTT: connecting to %s:%s", cfg.host, cfg.port)
                 await self._serve(cfg)
                 backoff = self._backoff_initial
             except asyncio.CancelledError:
@@ -622,6 +623,7 @@ class HaMqttPublisher:
             identifier=cfg.client_id,
             tls_params=aiomqtt.TLSParameters() if cfg.tls else None,
             will=will,
+            timeout=10,
         ) as client:
             self._client = client
             self.connected_broker = f"{cfg.host}:{cfg.port}"
