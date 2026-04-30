@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.10] - 2026-04-30
+
 ### Added
 - "Previous run ended ungracefully" card at the top of the
   Diagnostics tab — surfaces the breadcrumb-derived `exit_kind`,
