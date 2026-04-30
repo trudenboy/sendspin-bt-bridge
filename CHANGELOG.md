@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.9] - 2026-04-30
+
 ### Added
 - Boot/exit breadcrumb files persisted under
   `<CONFIG_DIR>/breadcrumbs/`, surfaced as a new
