@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.12] - 2026-04-30
+
 ### Fixed
 - The CSRF-token inline `<script>` block in `index.html` had a JS
   comment that referenced `</script>` literally inside backticks.
