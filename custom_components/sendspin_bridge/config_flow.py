@@ -22,6 +22,7 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import (
     CONF_BRIDGE_ID,
@@ -65,6 +66,95 @@ async def _validate_token(
             return True, await resp.json()
     except aiohttp.ClientError:
         return False, None
+
+
+async def _resolve_user_facing_url(
+    hass,
+    host: str,
+    port: int,
+    *,
+    use_https: bool = False,
+    display_host: str | None = None,
+) -> str:
+    """Pick a CTA URL the operator can actually open in their browser.
+
+    On HAOS the bridge's discovered host is the Supervisor-internal
+    address (``172.30.32.x:<ingress_port>``) — that's reachable from
+    HA Core, but not from a normal browser.  When that's the case,
+    swap it for an absolute HA-Frontend ingress URL
+    (``<ha_frontend>/api/hassio_ingress/<token>/``) so the link in
+    the form description is human-readable (shows the user's HA
+    hostname instead of an opaque ingress path).
+
+    Standalone deployments advertise via mDNS — prefer the friendly
+    hostname (``<bridge_id>.local``) when ``display_host`` is given,
+    fall back to the discovered IP otherwise.
+    """
+    import ipaddress
+
+    scheme = "https" if use_https else "http"
+    fallback = f"{scheme}://{display_host or host}:{port}/"
+    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if not token:
+        return fallback
+    # Only the hassio Docker network (172.30.32.0/23 by default) sits
+    # behind Supervisor ingress.  A LAN IP needs no translation.  Use
+    # an exact CIDR membership check rather than a string prefix —
+    # ``172.30.x.x`` matches the entire ``172.30.0.0/16``, of which
+    # only ``172.30.32.0/23`` is the hassio network, so a prefix check
+    # would trigger an unnecessary Supervisor round-trip for hosts
+    # like ``172.30.0.5``.
+    try:
+        host_ip = ipaddress.ip_address(host)
+    except ValueError:
+        return fallback
+    if host_ip not in ipaddress.IPv4Network("172.30.32.0/23"):
+        return fallback
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            "http://supervisor/addons",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as resp:
+            if resp.status != 200:
+                return fallback
+            body = await resp.json()
+    except (aiohttp.ClientError, TimeoutError):
+        return fallback
+    addons = (body or {}).get("data", {}).get("addons", []) or []
+    for addon in addons:
+        # Supervisor occasionally returns malformed entries — be
+        # defensive about parsing user-supplied values out of an
+        # external JSON document so a typo doesn't crash the config
+        # flow while rendering the form.
+        try:
+            addon_port = int(addon.get("ingress_port") or 0)
+        except (TypeError, ValueError):
+            continue
+        if addon_port == int(port):
+            ingress_url = addon.get("ingress_url")
+            if ingress_url:
+                # Prefix with HA's user-facing frontend URL when known
+                # so the markdown link in the form shows something
+                # recognizable like ``https://ha.example.com/...``
+                # instead of a bare ingress path.  ``get_url`` picks
+                # external→internal→cloud as appropriate; if none are
+                # configured we fall back to the path which the HA
+                # Frontend still resolves against its current origin.
+                try:
+                    base = get_url(
+                        hass,
+                        prefer_external=True,
+                        allow_internal=True,
+                        allow_ip=True,
+                    )
+                except NoURLAvailableError:
+                    base = ""
+                if base:
+                    return f"{base.rstrip('/')}{ingress_url}"
+                return str(ingress_url)
+    return fallback
 
 
 async def _attempt_supervisor_pair(hass, host: str, port: int, use_https: bool) -> str | None:
@@ -173,10 +263,17 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
         await self.async_set_unique_id(f"sendspin_bridge_{host_id}")
         self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
 
+        # mDNS SRV target — typically ``<bridge_id>.local.``.  Used
+        # purely for the CTA link in the pair form so the operator
+        # sees a readable hostname instead of a raw IP.  We still
+        # store the IP as CONF_HOST since mDNS resolution can be
+        # flaky on some clients.
+        mdns_hostname = str(getattr(discovery_info, "hostname", "") or "").rstrip(".")
         self._discovered = {
             CONF_HOST: host,
             CONF_PORT: port,
             CONF_BRIDGE_ID: host_id,
+            "_mdns_hostname": mdns_hostname,
         }
         # Try one-click Supervisor pairing first.
         token = await _attempt_supervisor_pair(self.hass, host, port, use_https=False)
@@ -233,6 +330,12 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
         )
         host = self._discovered.get(CONF_HOST, "")
         port = self._discovered.get(CONF_PORT, "")
+        display_host = self._discovered.get("_mdns_hostname") or None
+        ui_url = (
+            await _resolve_user_facing_url(self.hass, host, int(port), display_host=display_host)
+            if host and port
+            else ""
+        )
         return self.async_show_form(
             step_id="pair",
             data_schema=schema,
@@ -240,7 +343,7 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
             description_placeholders={
                 "host": host,
                 "port": str(port),
-                "ui_url": f"http://{host}:{port}/" if host else "",
+                "ui_url": ui_url,
             },
         )
 
@@ -271,7 +374,8 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
         schema = vol.Schema({vol.Required(CONF_TOKEN): str})
         host = entry.data[CONF_HOST] if entry else ""
         port = entry.data.get(CONF_PORT, DEFAULT_PORT) if entry else DEFAULT_PORT
-        scheme = "https" if (entry and entry.data.get(CONF_USE_HTTPS, False)) else "http"
+        use_https = bool(entry and entry.data.get(CONF_USE_HTTPS, False))
+        ui_url = await _resolve_user_facing_url(self.hass, host, int(port), use_https=use_https) if host else ""
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=schema,
@@ -279,6 +383,6 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
             description_placeholders={
                 "host": host,
                 "port": str(port),
-                "ui_url": f"{scheme}://{host}:{port}/" if host else "",
+                "ui_url": ui_url,
             },
         )

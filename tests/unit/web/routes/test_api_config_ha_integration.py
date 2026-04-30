@@ -295,6 +295,161 @@ def test_post_disable_round_trips(client):
 
 
 # ---------------------------------------------------------------------------
+# Broker host normalisation — operators often paste full URIs from env vars
+# / docs (``mqtt://host:1883``).  POST handler strips the scheme and
+# promotes port / TLS hints.  See ``services/ha/ha_addon:normalise_broker_host``.
+# ---------------------------------------------------------------------------
+
+
+def test_post_strips_mqtt_scheme_from_broker_host(client):
+    cl, cfg_file = client
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "mqtt://192.168.10.10:1883",
+                "port": 1883,
+                "username": "u",
+                "password": "***REDACTED***",
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    persisted = _read_persisted(cfg_file)
+    mqtt = persisted["HA_INTEGRATION"]["mqtt"]
+    assert mqtt["broker"] == "192.168.10.10"
+    assert mqtt["port"] == 1883
+    assert mqtt["tls"] is False
+
+
+def test_post_mqtts_scheme_promotes_tls(client):
+    """``mqtts://`` is a strong intent signal — overrides the form's
+    default-false TLS toggle."""
+    cl, cfg_file = client
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "mqtts://broker.example.com:8883",
+                "port": 1883,
+                "username": "u",
+                "password": "***REDACTED***",
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    mqtt = _read_persisted(cfg_file)["HA_INTEGRATION"]["mqtt"]
+    assert mqtt["broker"] == "broker.example.com"
+    # Port from URL fills the field only when the dedicated field is at
+    # default (1883).  Here it overrides because 1883 is the default.
+    assert mqtt["port"] == 8883
+    assert mqtt["tls"] is True
+
+
+def test_post_url_port_wins_over_form_port_field(client):
+    """A URL port in the broker string is the strongest possible
+    intent signal — overrides whatever's in the dedicated port field.
+    The frontend blur handler keeps the form in sync so this case
+    only matters for direct ``POST /api/config`` callers."""
+    cl, cfg_file = client
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "mqtt://broker.example.com:8883",
+                "port": 12345,  # form field — overridden by URL port
+                "username": "u",
+                "password": "***REDACTED***",
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    mqtt = _read_persisted(cfg_file)["HA_INTEGRATION"]["mqtt"]
+    assert mqtt["broker"] == "broker.example.com"
+    assert mqtt["port"] == 8883
+
+
+def test_post_no_url_port_preserves_form_port_field(client):
+    """Bare ``host:port`` form has no URL signal — port comes from the
+    dedicated field as the operator typed it."""
+    cl, cfg_file = client
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "broker.example.com",
+                "port": 12345,
+                "username": "u",
+                "password": "***REDACTED***",
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    mqtt = _read_persisted(cfg_file)["HA_INTEGRATION"]["mqtt"]
+    assert mqtt["port"] == 12345
+
+
+def test_post_bare_hostname_passes_through_unchanged(client):
+    cl, cfg_file = client
+    payload = {
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {
+                "broker": "homeassistant.local",
+                "port": 1883,
+                "username": "u",
+                "password": "***REDACTED***",
+                "discovery_prefix": "homeassistant",
+                "tls": False,
+                "client_id": "",
+            },
+            "rest": {"advertise_mdns": True, "supervisor_pair": True},
+        },
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+    }
+    resp = cl.post("/api/config", json=payload)
+    assert resp.status_code == 200, resp.data
+    mqtt = _read_persisted(cfg_file)["HA_INTEGRATION"]["mqtt"]
+    assert mqtt["broker"] == "homeassistant.local"
+    assert mqtt["port"] == 1883
+    assert mqtt["tls"] is False
+
+
+# ---------------------------------------------------------------------------
 # Download endpoint redaction
 # ---------------------------------------------------------------------------
 

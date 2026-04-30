@@ -5238,6 +5238,93 @@ function _updateHaIntegrationVisibility() {
     if (tokensCard) tokensCard.hidden = false;
 
     _updateMosquittoBannerVisibility();
+    _applyHaRequiredHighlight();
+}
+
+// Mark required-when-mqtt fields with a small asterisk in the label and
+// re-validate inline-error state.  Called whenever the integration mode
+// changes and on initial form populate.
+function _applyHaRequiredHighlight() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+    if (brokerGroup) {
+        var marker = brokerGroup.querySelector('.required-marker');
+        var brokerInput = brokerGroup.querySelector('#ha-mqtt-broker');
+        var isRequired = mode === 'mqtt';
+        if (marker) marker.hidden = !isRequired;
+        if (brokerInput) {
+            if (isRequired) {
+                brokerInput.setAttribute('aria-required', 'true');
+            } else {
+                brokerInput.removeAttribute('aria-required');
+                // Mode flipped away from mqtt — clear stale error styling.
+                brokerInput.classList.remove('invalid');
+                brokerGroup.classList.remove('has-error');
+                var errEl = document.getElementById('ha-mqtt-broker-error');
+                if (errEl) errEl.textContent = '';
+            }
+        }
+    }
+}
+
+// Soft warning surfaced as a confirm dialog on save.  Distinct from
+// ``_validateHaIntegration`` (which hard-blocks for invariants) — this
+// only nudges for things that *usually* matter but legitimately may be
+// left blank (anonymous brokers being the canonical exception for
+// missing MQTT credentials).  Returns a string when the operator should
+// be asked to confirm, ``null`` otherwise.
+function _haIntegrationSoftWarning() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    if (mode !== 'mqtt') return null;
+    var userEl = document.getElementById('ha-mqtt-username');
+    var pwEl = document.getElementById('ha-mqtt-password');
+    var userVal = userEl ? (userEl.value || '').trim() : '';
+    var pwRaw = pwEl ? (pwEl.value || '') : '';
+    // ``***REDACTED***`` is the marker the GET endpoint sends for an
+    // existing-password preserve; treat it as "credentials present" so
+    // we don't nag operators who never touched the field.
+    var pwSet = pwRaw === '***REDACTED***' || pwRaw.trim().length > 0;
+    if (userVal || pwSet) return null;
+    return (
+        'Save MQTT integration without credentials?\n\n' +
+        'Most brokers (including the official Mosquitto add-on) require ' +
+        'a username and password.  Leave both empty only if your broker ' +
+        'is configured for anonymous access.'
+    );
+}
+
+// Returns ``{ok: true}`` when the HA integration block is consistent with
+// its declared mode, or ``{ok: false, error, focusFieldId}`` when an
+// operator-fixable invariant is broken (currently: ``mqtt`` mode with an
+// empty broker host).  Mutates DOM to reflect inline errors.
+function _validateHaIntegration() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+    var errEl = document.getElementById('ha-mqtt-broker-error');
+    // Always start from a clean slate so a previous error doesn't linger.
+    if (brokerInput) brokerInput.classList.remove('invalid');
+    if (brokerGroup) brokerGroup.classList.remove('has-error');
+    if (errEl) errEl.textContent = '';
+
+    if (mode !== 'mqtt') return {ok: true};
+    var value = brokerInput ? (brokerInput.value || '').trim() : '';
+    if (!value) {
+        if (brokerInput) brokerInput.classList.add('invalid');
+        if (brokerGroup) brokerGroup.classList.add('has-error');
+        if (errEl) {
+            errEl.textContent = 'Required for MQTT mode. Use "auto" to resolve at startup, or enter a hostname / IP.';
+        }
+        return {
+            ok: false,
+            error: 'MQTT broker host is required.  Use "auto" or enter a hostname / IP, or switch the integration mode to Off.',
+            focusFieldId: 'ha-mqtt-broker',
+        };
+    }
+    return {ok: true};
 }
 
 function _setHaStatus(state) {
@@ -8019,6 +8106,21 @@ async function saveConfig() {
         return false;
     }
 
+    var haCheck = _validateHaIntegration();
+    if (!haCheck.ok) {
+        showToast(haCheck.error, 'error');
+        var focusEl = haCheck.focusFieldId ? document.getElementById(haCheck.focusFieldId) : null;
+        if (focusEl) {
+            focusEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+            setTimeout(function() { focusEl.focus(); }, 250);
+        }
+        return {ok: false, error: haCheck.error};
+    }
+    var haWarning = _haIntegrationSoftWarning();
+    if (haWarning && !window.confirm(haWarning)) {
+        return {ok: false, error: 'Save cancelled — credentials warning declined.'};
+    }
+
     try {
         var resp = await fetch(API_BASE + '/api/config', {
             method: 'POST',
@@ -10370,6 +10472,122 @@ window.addEventListener('beforeunload', function(e) {
             _updateAuthMethodsHint();
         });
     }
+})();
+
+// MQTT broker host normaliser — operators paste full URIs from env vars
+// and docs (``mqtt://host:1883``, ``mqtts://broker.example.com``).  Mirror
+// of ``services/ha/ha_addon.py:normalise_broker_host``: same accepted
+// schemes, same outputs, same edge cases.  Backend re-runs the same logic
+// on save as defense in depth (direct POST /api/config bypasses the UI).
+function _normaliseBrokerHost(raw) {
+    var TLS_SCHEMES = {mqtts: 1, ssl: 1, tls: 1, https: 1, wss: 1};
+    var PLAIN_SCHEMES = {mqtt: 1, tcp: 1, http: 1, ws: 1};
+    var text = (raw || '').trim();
+    if (!text) return {host: '', port: null, tls: null, stripped: false};
+    var original = text;
+    var tls = null;
+    var port = null;
+    var schemeConsumed = false;
+    var schemeIdx = text.indexOf('://');
+    if (schemeIdx > 0) {
+        var scheme = text.substring(0, schemeIdx).toLowerCase();
+        if (TLS_SCHEMES[scheme]) {
+            tls = true;
+            text = text.substring(schemeIdx + 3);
+            schemeConsumed = true;
+        } else if (PLAIN_SCHEMES[scheme]) {
+            tls = false;
+            text = text.substring(schemeIdx + 3);
+            schemeConsumed = true;
+        }
+    }
+    if (schemeConsumed) {
+        ['/', '?', '#'].forEach(function(sep) {
+            var cut = text.indexOf(sep);
+            if (cut >= 0) text = text.substring(0, cut);
+        });
+    }
+    if (text.charAt(0) === '[') {
+        var close = text.indexOf(']');
+        if (close > 0) {
+            var hostPart = text.substring(1, close);
+            var tail = text.substring(close + 1);
+            if (tail.charAt(0) === ':') {
+                var p = parseInt(tail.substring(1), 10);
+                if (!isNaN(p)) port = p;
+            }
+            text = hostPart;
+        }
+    } else if ((text.match(/:/g) || []).length === 1) {
+        var parts = text.split(':');
+        var p2 = parseInt(parts[1], 10);
+        if (!isNaN(p2)) {
+            port = p2;
+            text = parts[0];
+        }
+    }
+    return {host: text, port: port, tls: tls, stripped: text !== original};
+}
+
+(function() {
+    var broker = document.getElementById('ha-mqtt-broker');
+    if (!broker) return;
+    var hint = document.getElementById('ha-mqtt-autodetect-hint');
+    var hintTimer = null;
+    function flash(text) {
+        if (!hint) return;
+        hint.textContent = text;
+        if (hintTimer) clearTimeout(hintTimer);
+        hintTimer = setTimeout(function() {
+            if (hint.textContent === text) hint.textContent = '';
+        }, 6000);
+    }
+    broker.addEventListener('blur', function() {
+        var result = _normaliseBrokerHost(broker.value);
+        if (!result.stripped && result.tls === null && result.port === null) {
+            _validateHaIntegration();
+            return;
+        }
+        var changed = false;
+        if (result.host && broker.value.trim() !== result.host) {
+            broker.value = result.host;
+            changed = true;
+        }
+        if (result.port !== null) {
+            var portEl = document.getElementById('ha-mqtt-port');
+            if (portEl && parseInt(portEl.value, 10) !== result.port) {
+                portEl.value = result.port;
+                changed = true;
+            }
+        }
+        if (result.tls !== null) {
+            var tlsEl = document.getElementById('ha-mqtt-tls');
+            if (tlsEl && tlsEl.checked !== result.tls) {
+                tlsEl.checked = result.tls;
+                changed = true;
+            }
+        }
+        if (changed) {
+            var msg = 'Cleaned up scheme';
+            if (result.tls === true) msg += ' · TLS enabled (mqtts/https)';
+            else if (result.tls === false) msg += ' · TLS off (mqtt/http)';
+            if (result.port !== null) msg += ' · port ' + result.port;
+            flash(msg);
+            _recomputeConfigDirtyState();
+        }
+        _validateHaIntegration();
+    });
+    // Clear the inline error as soon as the operator starts typing — the
+    // standard pattern for "validation that doesn't shame you".
+    broker.addEventListener('input', function() {
+        var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+        if (broker.value.trim().length > 0 && brokerGroup && brokerGroup.classList.contains('has-error')) {
+            broker.classList.remove('invalid');
+            brokerGroup.classList.remove('has-error');
+            var errEl = document.getElementById('ha-mqtt-broker-error');
+            if (errEl) errEl.textContent = '';
+        }
+    });
 })();
 
 function _syncSecurityPolicyState() {

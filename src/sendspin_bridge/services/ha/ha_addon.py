@@ -104,6 +104,102 @@ def get_mqtt_addon_credentials(timeout: float = 5.0) -> dict[str, Any] | None:
     }
 
 
+_TLS_SCHEMES = frozenset({"mqtts", "ssl", "tls", "https", "wss"})
+_PLAIN_SCHEMES = frozenset({"mqtt", "tcp", "http", "ws"})
+
+
+def normalise_broker_host(raw: str) -> dict[str, Any]:
+    """Strip URL noise from a manually-entered broker host string.
+
+    Operators often paste ``mqtt://192.168.10.10:1883`` or
+    ``mqtts://broker.example.com`` from environment variables, MA config,
+    or docs.  Rather than rejecting those, we accept liberally and store
+    the bare host — Postel's law.
+
+    Returns a dict with these keys (always present):
+
+    - ``host`` (str): bare hostname / IP without scheme, port, or path.
+    - ``port`` (int | None): port extracted from the input, or ``None``
+      when the input had no port.  Callers can treat ``None`` as "keep
+      whatever was in the dedicated port field."
+    - ``tls`` (bool | None): ``True`` when the scheme indicated TLS
+      (``mqtts``/``ssl``/``tls``/``https``/``wss``); ``False`` for an
+      explicitly plain scheme; ``None`` when no scheme was given (so
+      callers don't override the operator's TLS toggle).
+    - ``stripped`` (bool): ``True`` when a scheme or port was removed
+      from the input — UI uses this to flash a "scheme stripped" hint.
+
+    Always returns a dict — passes ``"auto"`` and bare hostnames through
+    unchanged.  Empty input returns ``host=""``.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return {"host": "", "port": None, "tls": None, "stripped": False}
+
+    original = text
+    tls: bool | None = None
+    port: int | None = None
+    scheme_consumed = False
+
+    # Scheme prefix.  Match case-insensitively and only when followed by
+    # ``://`` to avoid false positives on hostnames that happen to start
+    # with ``http`` etc.
+    scheme_idx = text.find("://")
+    if scheme_idx > 0:
+        scheme = text[:scheme_idx].lower()
+        if scheme in _TLS_SCHEMES:
+            tls = True
+            text = text[scheme_idx + 3 :]
+            scheme_consumed = True
+        elif scheme in _PLAIN_SCHEMES:
+            tls = False
+            text = text[scheme_idx + 3 :]
+            scheme_consumed = True
+        # Unknown scheme → leave string alone, let the user see their typo.
+
+    # Strip a path / query / fragment if present — broker URIs sometimes
+    # carry one.  Only do this when we've consumed a recognised scheme;
+    # otherwise a bare hostname with weird characters could lose part
+    # of itself silently.
+    if scheme_consumed:
+        for sep in ("/", "?", "#"):
+            cut = text.find(sep)
+            if cut >= 0:
+                text = text[:cut]
+
+    # Extract port — only for IPv4 / hostname.  IPv6 needs brackets so
+    # ``[::1]:1883`` is unambiguous; bare IPv6 like ``::1`` is left to
+    # the dedicated port field.
+    if text.startswith("["):
+        # IPv6 in brackets, optional ``]:port``.
+        close = text.find("]")
+        if close > 0:
+            host_part = text[1:close]
+            tail = text[close + 1 :]
+            if tail.startswith(":"):
+                try:
+                    port = int(tail[1:])
+                except ValueError:
+                    port = None
+            text = host_part
+    elif text.count(":") == 1:
+        host_part, _, port_part = text.partition(":")
+        try:
+            port = int(port_part)
+            text = host_part
+        except ValueError:
+            # Not a port — could be a hostname with a colon (rare).
+            # Leave the string intact.
+            pass
+
+    return {
+        "host": text,
+        "port": port,
+        "tls": tls,
+        "stripped": text != original,
+    }
+
+
 def derive_mqtt_broker_from_ma_url(ma_api_url: str) -> dict[str, Any] | None:
     """Derive a *suggested* MQTT broker host from a configured MA URL.
 
