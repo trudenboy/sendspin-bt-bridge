@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.12] - 2026-04-30
+
+### Fixed
+- The CSRF-token inline `<script>` block in `index.html` had a JS
+  comment that referenced `</script>` literally inside backticks.
+  HTML parsers close `<script>` on that sequence regardless of JS
+  comment context, so v2.66.11 leaked the orphaned tail of the
+  block — including the rendered CSRF token — into the page as
+  visible text.  Comment rephrased to avoid the literal sequence,
+  with a regression test that walks every inline `<script>` block
+  and rejects nested `</script` substrings.
+- `app.js` was shipped uncompressed despite the v2.66.11 gzip
+  middleware — Flask's `send_file` infers `text/javascript` for
+  `.js` (RFC 9239 / modern IANA preferred), but the middleware's
+  gzippable-prefix list only had `application/javascript`.  Both
+  forms are now covered, restoring the ~70 % cold-load reduction
+  for the largest single asset.
+
 ## [2.66.11] - 2026-04-30
 
 ### Added
@@ -4552,7 +4570,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.12...HEAD
+[2.66.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...v2.66.12
 [2.66.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.10...v2.66.11
 [2.66.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.9...v2.66.10
 [2.66.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.8...v2.66.9
