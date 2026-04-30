@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- HACS config-flow CTA link now opens a user-reachable URL on
+  HAOS deployments.  The bridge addon's discovered host is the
+  Supervisor-internal address (e.g. ``172.30.32.1:62144``) which
+  HA Core can reach but a normal browser cannot — clicking the
+  CTA in the discovery / manual / reauth dialogs hit a dead
+  page.  The custom_component now queries Supervisor for the
+  addon list, finds the bridge by ``ingress_port``, and uses
+  its HA Frontend ``ingress_url`` as the CTA target.  Standalone
+  bridges (LAN IP via mDNS) keep the existing
+  ``http://host:port/`` form.
+
 ## [2.66.13] - 2026-04-30
 
 ### Added

@@ -67,6 +67,51 @@ async def _validate_token(
         return False, None
 
 
+async def _resolve_user_facing_url(hass, host: str, port: int, *, use_https: bool = False) -> str:
+    """Pick a CTA URL the operator can actually open in their browser.
+
+    On HAOS the bridge's discovered host is the Supervisor-internal
+    address (``172.30.32.x:<ingress_port>``) — that's reachable from
+    HA Core, but not from a normal browser.  When that's the case,
+    swap it for the addon's HA Frontend ingress URL
+    (``/api/hassio_ingress/<token>/``) which IS user-reachable.
+
+    Standalone deployments advertise their real LAN IP via mDNS, so
+    the plain ``http://host:port/`` fallback works without changes.
+    """
+    fallback = f"{'https' if use_https else 'http'}://{host}:{port}/"
+    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if not token:
+        return fallback
+    # Only the hassio Docker network (172.30.32.0/23 by default) sits
+    # behind Supervisor ingress.  A LAN IP needs no translation.
+    if not host.startswith("172.30."):
+        return fallback
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(
+            "http://supervisor/addons",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as resp:
+            if resp.status != 200:
+                return fallback
+            body = await resp.json()
+    except (aiohttp.ClientError, TimeoutError):
+        return fallback
+    addons = (body or {}).get("data", {}).get("addons", []) or []
+    for addon in addons:
+        if int(addon.get("ingress_port") or 0) == int(port):
+            ingress_url = addon.get("ingress_url")
+            if ingress_url:
+                # Path-only — HA Frontend resolves it relative to the
+                # current origin so the link works for whichever URL
+                # the operator is using to access HA (LAN, Nabu Casa,
+                # custom domain).
+                return str(ingress_url)
+    return fallback
+
+
 async def _attempt_supervisor_pair(hass, host: str, port: int, use_https: bool) -> str | None:
     """Try to mint a token via the bridge's Supervisor pair endpoint.
 
@@ -233,6 +278,7 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
         )
         host = self._discovered.get(CONF_HOST, "")
         port = self._discovered.get(CONF_PORT, "")
+        ui_url = await _resolve_user_facing_url(self.hass, host, int(port)) if host and port else ""
         return self.async_show_form(
             step_id="pair",
             data_schema=schema,
@@ -240,7 +286,7 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
             description_placeholders={
                 "host": host,
                 "port": str(port),
-                "ui_url": f"http://{host}:{port}/" if host else "",
+                "ui_url": ui_url,
             },
         )
 
@@ -271,7 +317,8 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
         schema = vol.Schema({vol.Required(CONF_TOKEN): str})
         host = entry.data[CONF_HOST] if entry else ""
         port = entry.data.get(CONF_PORT, DEFAULT_PORT) if entry else DEFAULT_PORT
-        scheme = "https" if (entry and entry.data.get(CONF_USE_HTTPS, False)) else "http"
+        use_https = bool(entry and entry.data.get(CONF_USE_HTTPS, False))
+        ui_url = await _resolve_user_facing_url(self.hass, host, int(port), use_https=use_https) if host else ""
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=schema,
@@ -279,6 +326,6 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
             description_placeholders={
                 "host": host,
                 "port": str(port),
-                "ui_url": f"{scheme}://{host}:{port}/" if host else "",
+                "ui_url": ui_url,
             },
         )
