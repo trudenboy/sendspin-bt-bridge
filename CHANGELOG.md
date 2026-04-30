@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Boot/exit breadcrumb files persisted under
+  `<CONFIG_DIR>/breadcrumbs/`, surfaced as a new
+  **LAST RUN SUMMARY** section in the diagnostics bundle (and the
+  in-UI **Report** button output).  The bridge writes
+  `boot.json` incrementally during startup; the s6 finish script
+  writes `exit.json` with the actual exit code and signal.  On the
+  next boot the two are paired into a derived `exit_kind` —
+  `graceful`, `sigkill`, `crash_unhandled_exception`,
+  `terminated_during_startup`, `unknown_no_finish`,
+  `shutdown_interrupted`, `unknown_corrupt`, or `unknown_schema` —
+  and a single WARNING line lands in the ring buffer when the
+  previous run wasn't graceful.  Pure stdlib, atomic writes;
+  read-only filesystems degrade silently.  Pays off the first time
+  a user reports "the addon keeps restarting": the diagnostics they
+  attach already describes how the prior run died.
+
 ## [2.66.8] - 2026-04-30
 
 ### Changed
