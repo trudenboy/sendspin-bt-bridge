@@ -368,7 +368,7 @@ body {
             flex-shrink: 0;
         }
         .bugreport-close:hover { background: rgba(255,255,255,0.3); }
-        .bugreport-body { padding: 20px; overflow-y: auto; flex: 1; }
+        .bugreport-body { padding: 20px; overflow-y: auto; flex: 1; min-height: 0; }
         .bugreport-field { margin-bottom: 14px; }
         .bugreport-field label {
             display: block; font-size: 12px; font-weight: 600;

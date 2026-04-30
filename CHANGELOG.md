@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.17] - 2026-04-30
+
+### Fixed
+- Scan results list now scrolls when more devices are discovered than fit
+  in the visible modal area.  The modal body was missing `min-height: 0`
+  on its flex container, which prevented the browser from engaging
+  `overflow-y: auto` — content was clipped by the parent's
+  `overflow: hidden` with no scrollbar.
+
 ## [2.66.16] - 2026-04-30
 
 ### Fixed
