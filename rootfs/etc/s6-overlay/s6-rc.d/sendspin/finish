@@ -4,6 +4,16 @@
 EXIT_CODE=${1:-0}
 SIGNAL=${2:-0}
 
+# s6-supervise passes 256 as a sentinel meaning "killed by signal —
+# look at $2 for the signal number".  POSIX only allows 0-255 in
+# exit codes, so normalise to the conventional 128+signal value
+# that every shell uses (e.g. SIGKILL/9 -> 137, SIGTERM/15 -> 143).
+# This makes the exit_code we surface in breadcrumbs match what
+# users see in `docker ps` / `$?` / journald.
+if [ "$EXIT_CODE" -eq 256 ] && [ "$SIGNAL" -gt 0 ]; then
+    EXIT_CODE=$((128 + SIGNAL))
+fi
+
 # ---------------------------------------------------------------------------
 # Authoritative exit-info breadcrumb. Captures (exit_code, signal,
 # wall-clock timestamp) into ``$BC_DIR/exit.json`` so the next boot

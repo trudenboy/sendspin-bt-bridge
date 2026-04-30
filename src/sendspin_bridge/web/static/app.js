@@ -12644,6 +12644,41 @@ function renderDiagnostics(d) {
         },
     ].map(_renderDiagSummaryCard).join('');
 
+    var lastRun = d.last_run || null;
+    var lastRunHtml = '';
+    if (lastRun && lastRun.exit_kind && lastRun.exit_kind !== 'graceful') {
+        // exit_kind palette:
+        //   err  → process killed or crashed (sigkill, crash_unhandled_exception)
+        //   warn → softer ungraceful states or unknowns
+        var lrTone = (lastRun.exit_kind === 'sigkill' || lastRun.exit_kind === 'crash_unhandled_exception')
+            ? 'err'
+            : 'warn';
+        var lrPhase = lastRun.last_phase
+            ? (lastRun.last_phase + (lastRun.last_phase_status ? ' (' + lastRun.last_phase_status + ')' : ''))
+            : null;
+        var hasExit = (lastRun.exit_code !== null && lastRun.exit_code !== undefined)
+            || (lastRun.exit_signal !== null && lastRun.exit_signal !== undefined);
+        var lrCodeSignal = hasExit
+            ? ('code=' + (lastRun.exit_code != null ? lastRun.exit_code : '?')
+               + ' signal=' + (lastRun.exit_signal != null ? lastRun.exit_signal : '?'))
+            : null;
+        lastRunHtml = '<div class="diag-card diag-last-run is-' + lrTone + '">' +
+            '<div class="diag-card-header"><div>' +
+                '<div class="diag-card-title">' + dot(lrTone) + '<span>Previous run ended ungracefully</span></div>' +
+                '<div class="diag-card-subtitle">Captured from boot/exit breadcrumbs written before the most recent restart.</div>' +
+            '</div></div>' +
+            '<div class="diag-mini-meta">' +
+                _renderDiagMetaRow('Exit kind', lastRun.exit_kind, {code: true}) +
+                (lastRun.bridge_version ? _renderDiagMetaRow('Bridge version', lastRun.bridge_version, {code: true}) : '') +
+                (lrPhase ? _renderDiagMetaRow('Last phase', lrPhase, {stack: true}) : '') +
+                (lastRun.last_message ? _renderDiagMetaRow('Last message', lastRun.last_message, {stack: true}) : '') +
+                (lrCodeSignal ? _renderDiagMetaRow('Exit', lrCodeSignal, {code: true}) : '') +
+                (lastRun.started_at ? _renderDiagMetaRow('Started at', lastRun.started_at, {stack: true}) : '') +
+                (lastRun.exit_recorded_at ? _renderDiagMetaRow('Exit recorded', lastRun.exit_recorded_at, {stack: true}) : '') +
+            '</div>' +
+        '</div>';
+    }
+
     var healthStripHtml = '<div class="diag-health-strip">' + [
         {label: connectedDevices.length + '/' + activeDevices.length + ' speakers', tone: connectedDevices.length === activeDevices.length && activeDevices.length ? 'ok' : (connectedDevices.length ? 'warn' : 'err')},
         {label: routedDevices.length + '/' + activeDevices.length + ' sinks', tone: routedDevices.length === activeDevices.length && activeDevices.length ? 'ok' : (routedDevices.length ? 'warn' : 'err')},
@@ -12965,6 +13000,7 @@ function renderDiagnostics(d) {
                 (localStorage.getItem('sendspin-diag-mode') === 'advanced' ? 'Simple' : 'Advanced') +
             '</button>' +
         '</nav>' +
+        lastRunHtml +
         healthStripHtml +
         '<div class="diag-overview-head">' +
             '<div class="diag-overview-title">Overview</div>' +

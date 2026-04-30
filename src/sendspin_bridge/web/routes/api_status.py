@@ -961,6 +961,16 @@ def api_diagnostics():
                 log_message="Failed to build telemetry payload for diagnostics",
             )
 
+        # Surface the prior-run breadcrumb (boot.prev.json + exit.prev.json
+        # paired into a derived ``exit_kind``) so the live diagnostics UI
+        # can render a "Last run" card without needing the user to download
+        # the text bundle. Always include the key so the frontend can
+        # detect the absence of a prior run cleanly (value is ``None``).
+        try:
+            diag["last_run"] = _collect_last_run_summary()
+        except Exception:
+            diag["last_run"] = None
+
         diag["status"] = "degraded" if failed_collections else "ok"
         diag["failed_collections"] = failed_collections
         diag["collections_status"] = collections_status
