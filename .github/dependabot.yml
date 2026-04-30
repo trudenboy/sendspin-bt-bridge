@@ -10,6 +10,17 @@ updates:
       - dependencies
     commit-message:
       prefix: "chore(deps):"
+    # Pinned to the latest piwheels-built cp313 armv7l wheel — bumping
+    # past these caps forces an sdist build (5+ min compile of native
+    # extensions) or breaks the supplementary armv7 release entirely.
+    # Lift each cap (in pyproject.toml AND here) once piwheels publishes
+    # the matching cp313 armv7l wheel. See CHANGELOG v2.66.2 (av) and
+    # v2.66.4 (yarl) for the original incidents.
+    ignore:
+      - dependency-name: "av"
+        versions: [">=17.0.0"]
+      - dependency-name: "yarl"
+        versions: [">=1.23.0"]
 
   - package-ecosystem: docker
     directory: /
