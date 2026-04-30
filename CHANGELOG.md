@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.15] - 2026-04-30
+
+### Fixed
+- The HA-coordinator event stream (`/api/status/events`) no longer
+  spams `AssertionError: Connection is a "hop-by-hop" header` in
+  the bridge log on every reconnect.  The route was setting an
+  explicit `Connection: keep-alive` response header, which WSGI
+  applications are forbidden from setting (PEP 3333 / RFC 2616
+  §13.5.1).  Waitress correctly enforced the rule and tore the
+  stream down — coordinators were reconnecting roughly once a
+  minute.  Header removed; canonical `/api/status/stream` was
+  already correct.
+
 ## [2.66.14] - 2026-04-30
 
 ### Added
