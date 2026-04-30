@@ -71,7 +71,7 @@ dev = [
     "pytest-xdist>=3.6.0,<4.0",
     # CI's _test.yml runs pytest with --cov; keep coverage opt-in via the
     # dev extra so contributors can `uv run pytest --cov=...` locally too.
-    "pytest-cov>=5.0,<7.0",
+    "pytest-cov>=5.0,<8.0",
     "ruff==0.15.12",
     "mypy>=1.20.2,<2.0",
 ]
