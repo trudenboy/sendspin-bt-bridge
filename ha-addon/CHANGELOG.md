@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.10] - 2026-04-30
+
+### Added
+- "Previous run ended ungracefully" card at the top of the
+  Diagnostics tab — surfaces the breadcrumb-derived `exit_kind`,
+  last reached startup phase, last log message, and exit
+  code/signal from the prior run.  Hidden when the previous run
+  was graceful or there is no history yet.  Backed by a new
+  `last_run` field in `/api/diagnostics`.
+
+### Fixed
+- s6 finish now normalises s6-supervise's `256` sentinel exit code
+  ("killed by signal — see `$2`") into the conventional
+  `128 + signal` value used by every shell, so the breadcrumb's
+  `exit_code` matches what users see in `docker ps` /  `$?` /
+  journald (e.g. `137` for SIGKILL, `143` for SIGTERM).
+  Cosmetic — `exit_signal` was already authoritative.
+
 ## [2.66.9] - 2026-04-30
 
 ### Added
@@ -4486,7 +4504,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.9...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.10...HEAD
+[2.66.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.9...v2.66.10
 [2.66.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.8...v2.66.9
 [2.66.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.7...v2.66.8
 [2.66.7]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.6...v2.66.7
