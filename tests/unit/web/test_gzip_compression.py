@@ -67,6 +67,15 @@ def app():
     def big_css():
         return Response("body { color: red; } " * 200, content_type="text/css")
 
+    @test_app.route("/big-js")
+    def big_js():
+        # Flask's send_file infers ``text/javascript`` for .js (RFC
+        # 9239 / modern IANA preferred).  The pre-fix gzip middleware
+        # only matched ``application/javascript``, so app.js was
+        # shipped uncompressed and style.css wasn't — exactly the
+        # asymmetry seen in production v2.66.11 cold-load smoke.
+        return Response("var x = 1; " * 400, content_type="text/javascript")
+
     @test_app.route("/big-binary")
     def big_binary():
         return Response(b"\x00" * 4096, content_type="application/octet-stream")
@@ -104,7 +113,7 @@ def client(app):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/big-json", "/big-text", "/big-css"])
+@pytest.mark.parametrize("path", ["/big-json", "/big-text", "/big-css", "/big-js"])
 def test_gzip_applied_when_client_supports_and_body_is_text(client, path):
     """JS/CSS/JSON/text bodies above the threshold get gzipped when the
     request advertises ``Accept-Encoding: gzip``."""

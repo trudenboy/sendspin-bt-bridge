@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The CSRF-token inline `<script>` block in `index.html` had a JS
+  comment that referenced `</script>` literally inside backticks.
+  HTML parsers close `<script>` on that sequence regardless of JS
+  comment context, so v2.66.11 leaked the orphaned tail of the
+  block — including the rendered CSRF token — into the page as
+  visible text.  Comment rephrased to avoid the literal sequence,
+  with a regression test that walks every inline `<script>` block
+  and rejects nested `</script` substrings.
+- `app.js` was shipped uncompressed despite the v2.66.11 gzip
+  middleware — Flask's `send_file` infers `text/javascript` for
+  `.js` (RFC 9239 / modern IANA preferred), but the middleware's
+  gzippable-prefix list only had `application/javascript`.  Both
+  forms are now covered, restoring the ~70 % cold-load reduction
+  for the largest single asset.
+
 ## [2.66.11] - 2026-04-30
 
 ### Added
