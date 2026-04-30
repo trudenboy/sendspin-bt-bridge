@@ -5238,6 +5238,66 @@ function _updateHaIntegrationVisibility() {
     if (tokensCard) tokensCard.hidden = false;
 
     _updateMosquittoBannerVisibility();
+    _applyHaRequiredHighlight();
+}
+
+// Mark required-when-mqtt fields with a small asterisk in the label and
+// re-validate inline-error state.  Called whenever the integration mode
+// changes and on initial form populate.
+function _applyHaRequiredHighlight() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+    if (brokerGroup) {
+        var marker = brokerGroup.querySelector('.required-marker');
+        var brokerInput = brokerGroup.querySelector('#ha-mqtt-broker');
+        var isRequired = mode === 'mqtt';
+        if (marker) marker.hidden = !isRequired;
+        if (brokerInput) {
+            if (isRequired) {
+                brokerInput.setAttribute('aria-required', 'true');
+            } else {
+                brokerInput.removeAttribute('aria-required');
+                // Mode flipped away from mqtt — clear stale error styling.
+                brokerInput.classList.remove('invalid');
+                brokerGroup.classList.remove('has-error');
+                var errEl = document.getElementById('ha-mqtt-broker-error');
+                if (errEl) errEl.textContent = '';
+            }
+        }
+    }
+}
+
+// Returns ``{ok: true}`` when the HA integration block is consistent with
+// its declared mode, or ``{ok: false, error, focusFieldId}`` when an
+// operator-fixable invariant is broken (currently: ``mqtt`` mode with an
+// empty broker host).  Mutates DOM to reflect inline errors.
+function _validateHaIntegration() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+    var errEl = document.getElementById('ha-mqtt-broker-error');
+    // Always start from a clean slate so a previous error doesn't linger.
+    if (brokerInput) brokerInput.classList.remove('invalid');
+    if (brokerGroup) brokerGroup.classList.remove('has-error');
+    if (errEl) errEl.textContent = '';
+
+    if (mode !== 'mqtt') return {ok: true};
+    var value = brokerInput ? (brokerInput.value || '').trim() : '';
+    if (!value) {
+        if (brokerInput) brokerInput.classList.add('invalid');
+        if (brokerGroup) brokerGroup.classList.add('has-error');
+        if (errEl) {
+            errEl.textContent = 'Required for MQTT mode. Use "auto" to resolve at startup, or enter a hostname / IP.';
+        }
+        return {
+            ok: false,
+            error: 'MQTT broker host is required.  Use "auto" or enter a hostname / IP, or switch the integration mode to Off.',
+            focusFieldId: 'ha-mqtt-broker',
+        };
+    }
+    return {ok: true};
 }
 
 function _setHaStatus(state) {
@@ -8014,6 +8074,17 @@ async function saveConfig() {
         return false;
     }
 
+    var haCheck = _validateHaIntegration();
+    if (!haCheck.ok) {
+        showToast(haCheck.error, 'error');
+        var focusEl = haCheck.focusFieldId ? document.getElementById(haCheck.focusFieldId) : null;
+        if (focusEl) {
+            focusEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+            setTimeout(function() { focusEl.focus(); }, 250);
+        }
+        return {ok: false, error: haCheck.error};
+    }
+
     try {
         var resp = await fetch(API_BASE + '/api/config', {
             method: 'POST',
@@ -10437,7 +10508,10 @@ function _normaliseBrokerHost(raw) {
     }
     broker.addEventListener('blur', function() {
         var result = _normaliseBrokerHost(broker.value);
-        if (!result.stripped && result.tls === null && result.port === null) return;
+        if (!result.stripped && result.tls === null && result.port === null) {
+            _validateHaIntegration();
+            return;
+        }
         var changed = false;
         if (result.host && broker.value.trim() !== result.host) {
             broker.value = result.host;
@@ -10464,6 +10538,18 @@ function _normaliseBrokerHost(raw) {
             if (result.port !== null) msg += ' · port ' + result.port;
             flash(msg);
             _recomputeConfigDirtyState();
+        }
+        _validateHaIntegration();
+    });
+    // Clear the inline error as soon as the operator starts typing — the
+    // standard pattern for "validation that doesn't shame you".
+    broker.addEventListener('input', function() {
+        var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+        if (broker.value.trim().length > 0 && brokerGroup && brokerGroup.classList.contains('has-error')) {
+            broker.classList.remove('invalid');
+            brokerGroup.classList.remove('has-error');
+            var errEl = document.getElementById('ha-mqtt-broker-error');
+            if (errEl) errEl.textContent = '';
         }
     });
 })();

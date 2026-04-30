@@ -8263,9 +8263,30 @@ body {
 
         .bugreport-field input.invalid,
         .bugreport-field textarea.invalid,
-        .bt-device-row input.invalid {
+        .bt-device-row input.invalid,
+        .config-form-grid .form-group input.invalid {
             border-color: var(--ui-field-invalid-border);
             box-shadow: var(--ui-field-invalid-ring);
+        }
+
+        /* Required-field marker shown next to the label (filled in via JS
+           when the form's current mode makes the field required). */
+        .config-form-grid .form-group label .required-marker {
+            color: var(--error-color, #db4437);
+            margin-left: 0.2em;
+            font-weight: 600;
+        }
+
+        /* Inline error message rendered below an input.  Hidden by default;
+           shown by adding ``.has-error`` to the surrounding form-group. */
+        .config-form-grid .form-group .field-error {
+            display: none;
+            color: var(--error-color, #db4437);
+            font-size: 11px;
+            margin-top: 0.25em;
+        }
+        .config-form-grid .form-group.has-error .field-error {
+            display: block;
         }
 
         .config-setting-control--field > select {

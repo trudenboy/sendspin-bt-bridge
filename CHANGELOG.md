@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.66.14] - 2026-04-30
 
 ### Added
+- HA panel highlights fields that the bridge needs filled in for the
+  selected integration mode.  When *Mode = MQTT*, the **Broker host**
+  label gets a red asterisk and the field is flagged as required;
+  attempting to save with it empty surfaces a clear toast ("MQTT
+  broker host is required.  Use 'auto' or enter a hostname / IP, or
+  switch the integration mode to Off") and scrolls focus to the
+  field.  Inline error styling matches the rest of the form, and
+  starts typing clears it immediately.
 - HA Custom Component: the **MQTT broker host** field now accepts
   full broker URIs.  Pasting `mqtt://host:1883`,
   `mqtts://broker.example.com:8883`, `ssl://`, `tls://`, `ws://`,
