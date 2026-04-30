@@ -260,8 +260,9 @@ def _gzip_response(response):
     """
     if response.direct_passthrough:
         return response
-    accept = (request.headers.get("Accept-Encoding") or "").lower()
-    if "gzip" not in accept:
+    # Honour RFC 7231 quality values — ``gzip;q=0`` explicitly opts out
+    # and substring matching would compress those clients anyway.
+    if request.accept_encodings["gzip"] <= 0:
         return response
     if response.headers.get("Content-Encoding"):
         return response
@@ -275,10 +276,25 @@ def _gzip_response(response):
         return response
     import gzip as _gzip
 
-    compressed = _gzip.compress(raw, compresslevel=6)
+    # ``mtime=0`` keeps the gzip header timestamp deterministic so two
+    # identical bodies produce identical bytes — important for any
+    # caching proxy (and for ETag/If-None-Match round-trips below).
+    compressed = _gzip.compress(raw, compresslevel=6, mtime=0)
     response.set_data(compressed)
     response.headers["Content-Encoding"] = "gzip"
     response.headers["Content-Length"] = str(len(compressed))
+    # Distinguish the gzipped representation from the original in
+    # caching validators.  ``send_from_directory`` sets an ETag based
+    # on the *uncompressed* file inode/size; without a suffix here a
+    # ``If-None-Match`` from a gzip-supporting client could match
+    # against the wrong body.  RFC 9110 §8.8.3 explicitly allows
+    # encoding-tagged ETags.
+    etag = response.headers.get("ETag", "")
+    if etag and "-gzip" not in etag:
+        if etag.endswith('"'):
+            response.headers["ETag"] = etag[:-1] + '-gzip"'
+        else:
+            response.headers["ETag"] = etag + "-gzip"
     vary = response.headers.get("Vary", "")
     if "accept-encoding" not in vary.lower():
         response.headers["Vary"] = (vary + ", " if vary else "") + "Accept-Encoding"

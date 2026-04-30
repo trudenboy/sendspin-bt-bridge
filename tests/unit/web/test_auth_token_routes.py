@@ -262,7 +262,10 @@ def test_index_template_exposes_csrf_token_to_frontend_js():
     index_html = (repo_root / "src" / "sendspin_bridge" / "web" / "templates" / "index.html").read_text(
         encoding="utf-8"
     )
-    assert 'window._csrfToken = "{{ csrf_token }}"' in index_html, (
+    # ``|tojson`` produces a quoted JS string literal — guard the
+    # whole assignment so a switch to a different escaping path is
+    # noticed immediately.
+    assert "window._csrfToken = {{ csrf_token|tojson }}" in index_html, (
         "index.html no longer exposes the CSRF token to JS via window._csrfToken; "
         "the 'Generate Token' button under Settings → Home Assistant will fail "
         "with 'Invalid CSRF token' on HA addon deployments"

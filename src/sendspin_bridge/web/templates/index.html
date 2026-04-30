@@ -10,7 +10,11 @@
         // they can echo it on JSON-content-type AJAX requests.  The
         // token is also injected into hidden form inputs for plain
         // form POSTs; this global is the JSON-path equivalent.
-        window._csrfToken = "{{ csrf_token }}";
+        // ``|tojson`` produces a JS-safe string literal so any future
+        // change to the token format (e.g. inclusion of a quote or
+        // ``</script>``-like sequence) cannot break the script
+        // context.
+        window._csrfToken = {{ csrf_token|tojson }};
     </script>
     <script nonce="{{ csp_nonce }}">
         (function() {

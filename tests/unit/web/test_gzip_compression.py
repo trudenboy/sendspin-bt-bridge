@@ -81,6 +81,16 @@ def app():
         resp = Response(_gen(), content_type="text/event-stream")
         return resp
 
+    @test_app.route("/etagged")
+    def etagged_text():
+        # Mimics what send_from_directory produces: a gzippable body
+        # with an ETag pinned to the uncompressed representation.
+        # The gzip middleware must rewrite the ETag so a subsequent
+        # If-None-Match can't match against the wrong body.
+        resp = Response("x" * 4096, content_type="text/css")
+        resp.set_etag("abc123def456")
+        return resp
+
     return test_app
 
 
@@ -111,6 +121,50 @@ def test_gzip_skipped_when_client_does_not_advertise_support(client):
     resp = client.get("/big-json")
     assert resp.status_code == 200
     assert "Content-Encoding" not in resp.headers
+
+
+def test_gzip_skipped_when_client_disables_via_q_zero(client):
+    """``Accept-Encoding: gzip;q=0`` is the explicit RFC 7231 way to
+    opt out of gzip even when the client lists it.  Pre-fix the
+    middleware did a substring check and compressed anyway."""
+    resp = client.get("/big-json", headers={"Accept-Encoding": "gzip;q=0, identity"})
+    assert resp.status_code == 200
+    assert "Content-Encoding" not in resp.headers
+
+
+def test_gzip_output_is_deterministic(client):
+    """Two requests for the same body produce identical bytes — the
+    gzip header timestamp is pinned to 0 so any caching proxy can
+    safely deduplicate.  Pre-fix Python's default ``mtime=now``
+    leaked the request time into the header."""
+    r1 = client.get("/big-json", headers={"Accept-Encoding": "gzip"})
+    r2 = client.get("/big-json", headers={"Accept-Encoding": "gzip"})
+    assert r1.headers.get("Content-Encoding") == "gzip"
+    assert r2.headers.get("Content-Encoding") == "gzip"
+    assert r1.data == r2.data, "gzip output must be deterministic across requests"
+
+
+def test_gzip_rewrites_etag_to_distinguish_compressed_representation(client):
+    """A response that arrives with an ETag (e.g. from
+    ``send_from_directory``) must end up with a *different* ETag
+    after gzipping so an ``If-None-Match`` from a gzip-supporting
+    client doesn't match against the uncompressed cached entry.
+    """
+    resp = client.get("/etagged", headers={"Accept-Encoding": "gzip"})
+    assert resp.status_code == 200
+    assert resp.headers.get("Content-Encoding") == "gzip"
+    etag = resp.headers.get("ETag", "")
+    assert etag, "test fixture should always emit an ETag"
+    assert "-gzip" in etag, f"ETag must be tagged for the gzipped variant; got {etag!r}"
+
+
+def test_gzip_does_not_double_tag_etag_on_repeat_pass(client):
+    """If somehow the middleware sees a response that already has the
+    ``-gzip`` suffix, it must not append it again."""
+    resp = client.get("/etagged", headers={"Accept-Encoding": "gzip"})
+    etag = resp.headers.get("ETag", "")
+    # Exactly one suffix.
+    assert etag.count("-gzip") == 1, f"expected single -gzip suffix; got {etag!r}"
 
 
 def test_gzip_skipped_for_tiny_bodies(client):
