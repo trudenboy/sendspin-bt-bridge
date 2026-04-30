@@ -230,6 +230,11 @@ _GZIPPABLE_PREFIXES = (
     "text/html",
     "text/css",
     "text/plain",
+    # ``text/javascript`` is what Flask's ``send_file`` infers from
+    # ``.js`` (the modern IANA-preferred MIME type as of RFC 9239).
+    # ``application/javascript`` is the legacy form some frameworks
+    # still emit.  Cover both so cold-load assets always compress.
+    "text/javascript",
     "application/javascript",
     "application/json",
     "application/xml",

@@ -272,6 +272,35 @@ def test_index_template_exposes_csrf_token_to_frontend_js():
     )
 
 
+def test_index_template_inline_scripts_have_no_orphan_script_close_tag():
+    """HTML parsers close ``<script>`` blocks the moment they hit
+    ``</script>`` even if it appears inside a JS comment or string
+    literal.  The v2.66.11 first-cut had a JS-style comment that
+    referenced ``</script>`` literally; the parser closed the tag
+    early and rendered the rest of the inline block (including the
+    CSRF token) as visible page text.  This assertion catches the
+    same shape if it ever comes back.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[3]
+    index_html = (repo_root / "src" / "sendspin_bridge" / "web" / "templates" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    # Walk every <script>…</script> block and assert no nested
+    # </script> is present inside.  A matching close tag should be
+    # the *last* one for the block.
+    import re
+
+    for match in re.finditer(r"<script[^>]*>(.*?)</script>", index_html, flags=re.DOTALL):
+        body = match.group(1)
+        assert "</script" not in body.lower(), (
+            "Inline <script> block contains a literal '</script' sequence — "
+            "HTML parsers will close the tag early and leak the trailing "
+            f"content to the page. Offending body excerpt: {body[:200]!r}"
+        )
+
+
 def test_app_js_reads_csrf_from_window_global():
     """Catch the matching frontend half: the JS must still read the same
     global. If app.js switches to a different mechanism (e.g. a meta tag),
