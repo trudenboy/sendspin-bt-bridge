@@ -125,6 +125,7 @@ def resolve_mqtt_config(
     bridge_id: str,
     bridge_name: str,
     auto_lookup: Callable[[], dict[str, Any] | None] | None = None,
+    ma_api_url: str = "",
 ) -> MqttPublisherConfig | None:
     """Translate a config block into a connect-ready ``MqttPublisherConfig``.
 
@@ -159,13 +160,41 @@ def resolve_mqtt_config(
     if broker.lower() == "auto":
         creds = auto_lookup() if auto_lookup else None
         if not creds:
-            logger.info("HA MQTT: broker=auto but Supervisor MQTT service unavailable; publisher disabled")
-            return None
-        host = creds["host"]
-        port = int(creds.get("port") or port or 1883)
-        username = username or creds.get("username", "")
-        password = password or creds.get("password", "")
-        tls = tls or bool(creds.get("ssl"))
+            # Standalone fallback: derive broker host from a configured
+            # Music Assistant URL.  When MA runs as an HA add-on the
+            # Mosquitto broker sits on the same host, so the MA host is
+            # a strong default.  Credentials still come from the HA
+            # panel (or are left empty for an anonymous broker).
+            try:
+                from sendspin_bridge.services.ha.ha_addon import derive_mqtt_broker_from_ma_url
+
+                ma_creds = derive_mqtt_broker_from_ma_url(ma_api_url) if ma_api_url else None
+            except Exception:  # pragma: no cover
+                ma_creds = None
+            if ma_creds is None:
+                logger.info(
+                    "HA MQTT: broker=auto but Supervisor unavailable and no MA URL "
+                    "configured; publisher disabled.  Set Broker host on the HA "
+                    "panel to your HA host's IP.",
+                )
+                return None
+            logger.info(
+                "HA MQTT: broker=auto resolved to MA host %s (Supervisor unavailable)",
+                ma_creds["host"],
+            )
+            host = ma_creds["host"]
+            port = int(ma_creds.get("port") or port or 1883)
+            tls = tls or bool(ma_creds.get("ssl"))
+            # Username / password stay as the operator entered them on
+            # the form (possibly empty — Mosquitto can run anonymous).
+            # The connection attempt itself will surface auth failures
+            # via the publisher's last_error.
+        else:
+            host = creds["host"]
+            port = int(creds.get("port") or port or 1883)
+            username = username or creds.get("username", "")
+            password = password or creds.get("password", "")
+            tls = tls or bool(creds.get("ssl"))
     else:
         # ``broker`` may be a bare hostname or ``host:port``.
         if ":" in broker and not broker.startswith("["):  # IPv4 / hostname only — IPv6 needs brackets

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Standalone-bridge **MQTT broker auto-suggest** from the configured
+  Music Assistant URL.  When the bridge runs outside HAOS (no
+  Supervisor), the *Auto-detect MQTT add-on* button now derives the
+  broker host from the MA URL (the common case where MA is an HA
+  add-on and Mosquitto sits on the same host) instead of returning
+  the misleading "Install and start the official Mosquitto add-on"
+  hint.  The runtime resolver does the same: `broker = "auto"` on a
+  standalone deployment falls back to the MA host before disabling
+  the publisher.  The operator only has to type the Mosquitto
+  username / password — host / port are pre-filled.
+
+### Changed
+- The HA panel's *MQTT broker* card adapts copy to the deployment
+  mode: HAOS keeps the "click Auto-detect to fill from the
+  Mosquitto add-on" hint, standalone shows "set Broker host to
+  your HA host's IP / hostname (`auto` requires HA add-on mode)"
+  and a `homeassistant.local` placeholder.  The Auto-detect
+  button label becomes *Suggest broker host* on standalone.
+
 ## [2.66.12] - 2026-04-30
 
 ### Fixed

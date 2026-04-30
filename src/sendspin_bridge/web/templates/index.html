@@ -1029,22 +1029,34 @@
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">MQTT broker</div>
                                 <p class="config-card-subtitle">
+                                    {% if ha_mode %}
                                     On HAOS click <em>Auto-detect</em> to fill these in from the Mosquitto add-on, or set <code>auto</code> as the broker host to resolve at startup.
+                                    {% else %}
+                                    On a standalone bridge, <code>auto</code> resolves to the host of your configured Music Assistant URL — useful when MA + Mosquitto run as add-ons on the same HA host.  Click <em>Suggest broker host</em> to fill the field, or enter the broker IP / hostname manually.  Either way you must enter Mosquitto credentials below if your broker requires them.
+                                    {% endif %}
                                 </p>
                             </div>
                             <div class="form-inline-actions config-inline-row" style="margin-bottom: 0.75em;">
                                 <button type="button" class="btn btn-sm btn-secondary" data-action="ha-mqtt-autodetect">
                                     <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span>
-                                    Auto-detect MQTT add-on
+                                    {% if ha_mode %}Auto-detect MQTT add-on{% else %}Suggest broker host{% endif %}
                                 </button>
                                 <span class="form-hint" id="ha-mqtt-autodetect-hint" style="margin-left: 0.5em;"></span>
                             </div>
                             <div class="config-form-grid">
                                 <div class="form-group">
                                     <label>Broker host
-                                        <span class="form-hint">Hostname or IP. Use <code>auto</code> on HAOS to re-resolve from the Mosquitto add-on at startup.</span>
+                                        <span class="form-hint">
+                                            {% if ha_mode %}
+                                            Hostname or IP.  Use <code>auto</code> on HAOS to re-resolve from the Mosquitto add-on at startup.
+                                            {% else %}
+                                            Hostname or IP of your MQTT broker (typically your HA host's IP).  <code>auto</code> resolves to your configured Music Assistant URL host on standalone — set MA first or fill the field in manually.
+                                            {% endif %}
+                                        </span>
                                     </label>
-                                    <input type="text" id="ha-mqtt-broker" placeholder="auto" autocomplete="off">
+                                    <input type="text" id="ha-mqtt-broker"
+                                           placeholder="{% if ha_mode %}auto{% else %}homeassistant.local{% endif %}"
+                                           autocomplete="off">
                                 </div>
                                 <div class="form-group">
                                     <label>Port</label>

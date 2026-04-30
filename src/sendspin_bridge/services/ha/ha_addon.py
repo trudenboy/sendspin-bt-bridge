@@ -104,6 +104,47 @@ def get_mqtt_addon_credentials(timeout: float = 5.0) -> dict[str, Any] | None:
     }
 
 
+def derive_mqtt_broker_from_ma_url(ma_api_url: str) -> dict[str, Any] | None:
+    """Derive a *suggested* MQTT broker host from a configured MA URL.
+
+    Standalone bridges can't query Supervisor for the Mosquitto add-on's
+    broker info, but a user who already configured Music Assistant has
+    its URL on file (e.g. ``http://192.168.10.10:8095``).  When MA runs
+    as an HA add-on, the Mosquitto broker is on the same host — so the
+    MA host is a strong heuristic for the broker host.
+
+    Returns a dict containing the same broker connection fields as
+    :func:`get_mqtt_addon_credentials` (``host``, ``port``, ``username``,
+    ``password``, and ``ssl``), but with empty ``username`` /
+    ``password`` because the operator must enter Mosquitto credentials
+    manually (or leave them blank for an anonymous broker).  The
+    returned dict also includes an extra ``source="ma_url"`` key so
+    callers can flag the value as a suggestion rather than
+    authoritative.
+
+    Returns ``None`` when ``ma_api_url`` is empty / unparseable.
+    """
+    if not ma_api_url:
+        return None
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(ma_api_url.strip())
+    except Exception:
+        return None
+    host = (parsed.hostname or "").strip()
+    if not host:
+        return None
+    return {
+        "host": host,
+        "port": 1883,
+        "username": "",
+        "password": "",
+        "ssl": False,
+        "source": "ma_url",
+    }
+
+
 def get_mosquitto_addon_state(timeout: float = 5.0) -> dict[str, Any]:
     """Report the install/start state of the official Mosquitto add-on.
 
