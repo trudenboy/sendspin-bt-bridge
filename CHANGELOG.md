@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stream down — coordinators were reconnecting roughly once a
   minute.  Header removed; canonical `/api/status/stream` was
   already correct.
+- HACS pair form's CTA link on HAOS deployments where HA's zeroconf
+  hands back the bridge's mDNS hostname (e.g.
+  `sendspin-bridge-XXX.local`) instead of the resolved
+  `172.30.32.x` IP now correctly resolves to the absolute HA URL
+  (`https://ha.example.com/api/hassio_ingress/.../`).  Earlier,
+  the v2.66.14 CIDR check skipped the Supervisor lookup whenever
+  `host` failed to parse as an IP, so the form rendered the bare
+  `.local` URL — which most browsers can't open.
 
 ## [2.66.14] - 2026-04-30
 
