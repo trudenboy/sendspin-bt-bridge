@@ -165,7 +165,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
             libavcodec61 libavdevice61 libavfilter10 libavformat61 \
             libavutil59 libswresample5 libswscale8 \
             libopenblas0 \
-            libjpeg62-turbo libpng16-16 libtiff6 libwebp7 libfreetype6; \
+            libjpeg62-turbo libpng16-16t64 libtiff6 libwebp7 libfreetype6; \
     else \
         # On amd64/arm64 PyAV bundles its own FFmpeg in av.libs/.
         # Remove transitive FFmpeg/GStreamer/codec deps pulled by pulseaudio

@@ -1701,7 +1701,7 @@ wheels = [
 
 [[package]]
 name = "sendspin"
-version = "7.0.0"
+version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosendspin", extra = ["server"] },
@@ -1714,18 +1714,18 @@ dependencies = [
     { name = "rich" },
     { name = "sounddevice" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/25/448751c1204628b9449c853043c8b59a83690d0ffb97464a580c8b31b4e7/sendspin-7.0.0.tar.gz", hash = "sha256:8dd4654e5ce10c301115629e3762abf8b75d6308c8edbc48179a5e316372e6df", size = 109345, upload-time = "2026-04-15T18:53:24.763Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/80/79da4996977bf56b4cfc9e3c52009c5eebf4ae70c0e66fcbc2b892ecdeae/sendspin-7.1.0.tar.gz", hash = "sha256:76e270d6bb6998139cdabf2d7cb81447652e766414b91f390173ae9cfb82ac0d", size = 116610, upload-time = "2026-04-29T00:42:53.85Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/7d/d8dd7ea61e0ab4b5faeb5fb38a3f72440dfbebe5e09009762e37f8efd191/sendspin-7.0.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:cb57482fbb549695249152eab7d63180dc878b5a57c40dff11dc6dfd36528434", size = 108992, upload-time = "2026-04-15T18:53:10.059Z" },
-    { url = "https://files.pythonhosted.org/packages/6c/07/f7823f65ef8875f1f3561cfd31b6081c01ca8aac72b7ffcbafca59047f61/sendspin-7.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:33a4369f79ceaf2eca6a016094cf793d332d49cec35d4b8354d34e64d9e9c3c7", size = 109992, upload-time = "2026-04-15T18:53:11.74Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/a3/364d57a85a4f014c6e9df7cd8dc9e4742cdff0d7f51582aaa641f19d2167/sendspin-7.0.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:ee8b7d1e64203fcaa82f86422b8d72885f87e8a23f4660a0cdfaf1251af02ae6", size = 117833, upload-time = "2026-04-15T18:53:13.33Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/fd/8b09abcb104cfea6ab08648095811c3eb0966ca1bd66530925cdd9c7b5fa/sendspin-7.0.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:91cc4497f2a6939f6918442b4ca93e968a7bc0e03b556e1c293671fd6c4c8143", size = 116121, upload-time = "2026-04-15T18:53:14.863Z" },
-    { url = "https://files.pythonhosted.org/packages/88/b0/225756622b5100c28a54fe9f7917dc4f587ce1b9f14ff3aa6b24d1772cd7/sendspin-7.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:c8e6bf2fbd931cd561afccf3d48d066106977e618b0874d075bbcb63b9670fb2", size = 111779, upload-time = "2026-04-15T18:53:16.338Z" },
-    { url = "https://files.pythonhosted.org/packages/75/c6/962c8729986459ffce1cb7f092cac18c1c6f7e99c4e1237dc7a092024830/sendspin-7.0.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:5f1e069787ee9b49653864824b4b3cff2fdca6dee912998e8985dac1d5e9c296", size = 108993, upload-time = "2026-04-15T18:53:17.832Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/8d/bf12dfdfaafe157eaff7b030f19f1177e5617aefdb4a8d10708490647e70/sendspin-7.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:cc9cc691c9b39f5403378fb86d89b15098d3cbe5822ca8ce3eefa38262decd49", size = 109992, upload-time = "2026-04-15T18:53:19.375Z" },
-    { url = "https://files.pythonhosted.org/packages/2c/30/2a7eff02ef8c0ee056da32577c6794f188f94fc03e32e7bcad156b6c8058/sendspin-7.0.0-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:44d20a0cd38c09d888031667e3c6ebbd43a3bd5b61725ca1021cf95af1b06225", size = 117852, upload-time = "2026-04-15T18:53:20.675Z" },
-    { url = "https://files.pythonhosted.org/packages/83/de/a6e748fb0cbf0297d5889555e7e93a6cf20e2eb343fe1909bea7fb17e5a5/sendspin-7.0.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:ed3d8f97f6aa2c7c3a8fb77760b0447455b87783536fcead83c31bf495f2ed43", size = 116146, upload-time = "2026-04-15T18:53:22.186Z" },
-    { url = "https://files.pythonhosted.org/packages/8d/39/c51ec48f680faf28027e3ce3e848ab157c828be5584ef4c87c3a5c9de3c0/sendspin-7.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:4b3562c1fce7ed5a5ac8397744a238a5dadd159685e99d10eca64e11a40e4af7", size = 111770, upload-time = "2026-04-15T18:53:23.554Z" },
+    { url = "https://files.pythonhosted.org/packages/82/26/668f26065dc96174e944b0b0a351c4cdcc90db5857c6b96497799477125e/sendspin-7.1.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:a9350ee34288370c3722aa67e51e599ae3effce5fe05293f82199f90ee815980", size = 117373, upload-time = "2026-04-29T00:42:39.847Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/74/5999cd59f5dcfa5cf296f07caef4cc1493bf0b2839d6c733e7f46adccbe6/sendspin-7.1.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:1038a3933cdd7c6431968ff61a769fb077d1c2f7c60f9ae95f1dcdd411e3609b", size = 118366, upload-time = "2026-04-29T00:42:41.845Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/b6/84a6dcb349e6c7038641bae38bb8f275ca43150693e65c5a5171182b5c1d/sendspin-7.1.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:369324292f83798f96545b1a9d0c6d18860baa1c9cbf6000dc2c37b84bb70368", size = 126210, upload-time = "2026-04-29T00:42:43.232Z" },
+    { url = "https://files.pythonhosted.org/packages/79/b2/5d47b4a7927b96fdeb4a372d050d14dde63453402f35ecc779a5a7a47aeb/sendspin-7.1.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:247569b29d2d0dfe2d30331d87a40f032383c2a4138192db834e974b605fa28d", size = 124499, upload-time = "2026-04-29T00:42:44.672Z" },
+    { url = "https://files.pythonhosted.org/packages/99/1c/ea42d757ff84497d158307bdfb56eb56c7816e271c63f18327b1b1814cc0/sendspin-7.1.0-cp312-cp312-win_amd64.whl", hash = "sha256:0e7141c94276939093bfc1b61a74d138f6c94a6471b5a6d2c40c9da649a02e4f", size = 120215, upload-time = "2026-04-29T00:42:45.872Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/e7/bcdec08503229cca17f68f10e39f8ad6e93ad7711beabdbb8364b86ed1bd/sendspin-7.1.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:317884644a1420f9832c339140aaa88492293c2072de91b5d68c2e81c7efc517", size = 117368, upload-time = "2026-04-29T00:42:47.16Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/91/e733f7d7daf670bfc71fbc003178d46b74b2b6bd3beba3099e58b2161c51/sendspin-7.1.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:006afd9c853501a8202445b5a7e2ad3780fb7c82ec7095cb5e123987e50c9559", size = 118362, upload-time = "2026-04-29T00:42:48.284Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/c2/b1e61f654984834b2592f8fd89b2fc3b9badd556a9a8ffa55265aa378973/sendspin-7.1.0-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:93679caa121017cab23c7fc750f08ef6d433a2f73420a836d0f4ad7f76e9aa4e", size = 126230, upload-time = "2026-04-29T00:42:49.682Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/d8/9f36b1b62f7b7e14eb11e60543be281b9722d35ded9d375b65bdd7932b15/sendspin-7.1.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5d1c7e3332ef5e093d42dd21dce95a3b02b5e983d23d9590216956b11d9ab887", size = 124524, upload-time = "2026-04-29T00:42:51.251Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/dd/1dd3b2eafd47a4044b46b6c0e468c6610dfcc941e341f684b1bd1e805567/sendspin-7.1.0-cp313-cp313-win_amd64.whl", hash = "sha256:7acde67e945116b5b6edcc0a56864356f5567b04af88f03ddc7f1ebd61d326b0", size = 120207, upload-time = "2026-04-29T00:42:52.744Z" },
 ]
 
 [[package]]
@@ -1786,7 +1786,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.0,<4.0" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.12" },
-    { name = "sendspin", specifier = "==7.0.0" },
+    { name = "sendspin", specifier = "==7.1.0" },
     { name = "waitress", specifier = "==3.0.2" },
     { name = "websockets", specifier = "==16.0" },
     { name = "zeroconf", specifier = "==0.148.0" },

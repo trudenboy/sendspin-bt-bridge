@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.8] - 2026-04-30
+
+### Changed
+- **Upgrade sendspin 7.0.0 → 7.1.0** — fixes audio underflow at the
+  start of a stream by buffering before playback (upstream PR #238),
+  and scopes ALSA `get_state()` to Playback channels on mixed
+  Capture/Playback controls (upstream PR #237). The remaining 7.1.0
+  changes (`--interface` CLI flag, multi-worker serve mode for
+  Sendspin Party) don't apply to the bridge — it consumes the
+  Python API as a receiver, not the CLI or the server side.
+
+### Fixed
+- armv7 Docker build no longer fails on Debian 13 trixie. The
+  `libpng16-16` package was renamed to `libpng16-16t64` as part of
+  the 64-bit `time_t` ABI transition (same migration that already
+  affected `libglib2.0-0t64` and `libcurl4t64`); the v2.66.7 release
+  job aborted at apt-get with `Package 'libpng16-16' has no
+  installation candidate`. amd64 / arm64 are unaffected — they don't
+  enter the armv7 branch in the Dockerfile.
+
 ## [2.66.7] - 2026-04-30
 
 ### Changed

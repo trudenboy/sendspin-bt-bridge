@@ -159,7 +159,7 @@ requests==2.33.1
     # via sendspin-bt-bridge
 rich==15.0.0
     # via sendspin
-sendspin==7.0.0
+sendspin==7.1.0
     # via sendspin-bt-bridge
 sounddevice==0.5.5
     # via sendspin
