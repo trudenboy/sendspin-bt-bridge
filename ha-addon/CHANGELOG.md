@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.6] - 2026-04-30
+
+### Fixed
+- Restore the supplementary armv7 (RPi 1 / Zero W) Docker image
+  (fourth attempt). uv defaults to "first index that lists a package
+  wins", so once piwheels returned an empty page for `dbus-fast` the
+  resolver stopped looking and never consulted PyPI for the sdist.
+  Adding `--index-strategy unsafe-best-match` to the armv7 install
+  step lets uv consider PyPI alongside piwheels for every package —
+  matching pip's default behaviour. Both indexes are trusted upstream
+  registries so the "unsafe" in the strategy name is a misnomer here.
+
 ## [2.66.5] - 2026-04-30
 
 ### Changed
@@ -4411,7 +4423,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.5...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.6...HEAD
+[2.66.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.5...v2.66.6
 [2.66.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.4...v2.66.5
 [2.66.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.3...v2.66.4
 [2.66.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.2...v2.66.3
