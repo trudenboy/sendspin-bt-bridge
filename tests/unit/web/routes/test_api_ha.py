@@ -84,13 +84,43 @@ def test_ha_state_handles_internal_errors_gracefully(client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_mqtt_probe_returns_not_found_when_no_supervisor(client, monkeypatch):
+def test_mqtt_probe_returns_not_found_when_no_supervisor_and_no_ma(client, monkeypatch):
+    """No Supervisor *and* no MA URL — probe really has nothing to suggest."""
     monkeypatch.setattr("sendspin_bridge.services.ha.ha_addon.get_mqtt_addon_credentials", lambda: None)
+    # ``load_config`` is imported lazily inside the route — patch the
+    # source module so any call resolves to our stub.
+    monkeypatch.setattr("sendspin_bridge.config.load_config", lambda: {"MA_API_URL": ""})
     resp = client.get("/api/ha/mqtt/probe")
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["found"] is False
+    assert body["source"] is None
     assert "hint" in body
+    # Hint must NOT say "install Mosquitto" — that was the misleading
+    # message in v2.66.11 that confused harryfine on the forum.
+    assert "Install" not in body["hint"]
+    assert "Music Assistant" in body["hint"]
+
+
+def test_mqtt_probe_falls_back_to_ma_url_when_no_supervisor(client, monkeypatch):
+    """Standalone bridge with a configured MA URL — derive a suggested
+    broker host so the operator only has to enter Mosquitto credentials,
+    not the host (the v2.66.11 harryfine workflow on the forum).
+    """
+    monkeypatch.setattr("sendspin_bridge.services.ha.ha_addon.get_mqtt_addon_credentials", lambda: None)
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"MA_API_URL": "http://192.168.10.10:8095"},
+    )
+    resp = client.get("/api/ha/mqtt/probe")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["found"] is True
+    assert body["source"] == "ma_url"
+    assert body["host"] == "192.168.10.10"
+    assert body["port"] == 1883
+    assert body["password_present"] is False
+    assert "Music Assistant" in body["hint"]
 
 
 def test_mqtt_probe_masks_password(client, monkeypatch):

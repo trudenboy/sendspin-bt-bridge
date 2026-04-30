@@ -173,36 +173,86 @@ def api_status_events():
 
 @ha_bp.route("/api/ha/mqtt/probe", methods=["GET"])
 def api_ha_mqtt_probe():
-    """Probe Supervisor for the MQTT add-on broker credentials.
+    """Probe for an MQTT broker the bridge can talk to.
 
-    Used by the web UI's "Auto-detect MQTT add-on" button.  Returns the
-    credentials WITHOUT the password (the password lives in config.json
-    after a save) and a ``found`` flag.
+    Used by the web UI's "Auto-detect MQTT add-on" button.  Two paths:
+
+    1. **HA add-on (Supervisor available)** — query Supervisor for the
+       Mosquitto add-on's full credentials (host, port, user, pass).
+       Returns ``source: "supervisor"`` and ``password_present`` so the
+       UI knows the secret is already on the bridge side.
+
+    2. **Standalone (no Supervisor)** — derive a *suggested* broker
+       host from the configured Music Assistant URL.  When MA runs as
+       an HA add-on (the common harryfine-style topology — bridge in
+       Docker, MA on HAOS), Mosquitto sits on the same host, so the
+       MA host is a strong default.  Returns ``source: "ma_url"`` and
+       ``password_present: false`` so the UI prompts for credentials.
+
+    Returns the credentials *without* the password (the password lives
+    in ``config.json`` after a save) and a ``found`` flag.
     """
     try:
-        from sendspin_bridge.services.ha.ha_addon import get_mqtt_addon_credentials
+        from sendspin_bridge.services.ha.ha_addon import (
+            derive_mqtt_broker_from_ma_url,
+            get_mqtt_addon_credentials,
+        )
 
         creds = get_mqtt_addon_credentials()
     except Exception as exc:  # pragma: no cover
         logger.exception("MQTT probe failed")
         return jsonify({"found": False, "error": str(exc)}), 500
 
-    if creds is None:
+    if creds is not None:
+        # Supervisor path: full credentials including password.
         return jsonify(
             {
-                "found": False,
-                "hint": "Install and start the official Mosquitto add-on, then try again.",
+                "found": True,
+                "source": "supervisor",
+                "host": creds.get("host"),
+                "port": creds.get("port"),
+                "username": creds.get("username"),
+                "password_present": bool(creds.get("password")),
+                "ssl": creds.get("ssl"),
             }
         )
-    # Mask the password — operator can paste it manually if they want.
+
+    # Fallback: derive from MA URL on standalone deployments.
+    try:
+        from sendspin_bridge.config import load_config
+
+        ma_api_url = str(load_config().get("MA_API_URL", "")).strip()
+    except Exception:  # pragma: no cover
+        ma_api_url = ""
+
+    suggested = derive_mqtt_broker_from_ma_url(ma_api_url) if ma_api_url else None
+    if suggested is not None:
+        return jsonify(
+            {
+                "found": True,
+                "source": "ma_url",
+                "host": suggested["host"],
+                "port": suggested["port"],
+                "username": "",
+                "password_present": False,
+                "ssl": False,
+                "hint": (
+                    f"Suggested host {suggested['host']!r} taken from your Music Assistant URL. "
+                    "Enter Mosquitto credentials below — the password is required."
+                ),
+            }
+        )
+
+    # Nothing to suggest — neither Supervisor nor a configured MA URL.
     return jsonify(
         {
-            "found": True,
-            "host": creds.get("host"),
-            "port": creds.get("port"),
-            "username": creds.get("username"),
-            "password_present": bool(creds.get("password")),
-            "ssl": creds.get("ssl"),
+            "found": False,
+            "source": None,
+            "hint": (
+                "Auto-detect needs either HA add-on mode (Supervisor) or a "
+                "configured Music Assistant URL.  Enter the broker host and "
+                "Mosquitto credentials manually."
+            ),
         }
     )
 

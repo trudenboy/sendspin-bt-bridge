@@ -159,13 +159,54 @@ def resolve_mqtt_config(
     if broker.lower() == "auto":
         creds = auto_lookup() if auto_lookup else None
         if not creds:
-            logger.info("HA MQTT: broker=auto but Supervisor MQTT service unavailable; publisher disabled")
-            return None
-        host = creds["host"]
-        port = int(creds.get("port") or port or 1883)
-        username = username or creds.get("username", "")
-        password = password or creds.get("password", "")
-        tls = tls or bool(creds.get("ssl"))
+            # Standalone fallback: derive broker host from a configured
+            # Music Assistant URL.  When MA runs as an HA add-on the
+            # Mosquitto broker sits on the same host, so the MA host is
+            # a strong default.  We can't get credentials this way —
+            # the operator must have entered them on the form.
+            ma_url = str(block.get("_ma_api_url") or "").strip()
+            if not ma_url:
+                # Caller didn't pass MA URL through; pull it from config.
+                try:
+                    from sendspin_bridge.config import load_config as _load_config
+
+                    ma_url = str(_load_config().get("MA_API_URL", "")).strip()
+                except Exception:  # pragma: no cover
+                    ma_url = ""
+            try:
+                from sendspin_bridge.services.ha.ha_addon import derive_mqtt_broker_from_ma_url
+
+                ma_creds = derive_mqtt_broker_from_ma_url(ma_url) if ma_url else None
+            except Exception:  # pragma: no cover
+                ma_creds = None
+            if ma_creds is None:
+                logger.info(
+                    "HA MQTT: broker=auto but Supervisor unavailable and no MA URL "
+                    "configured; publisher disabled.  Set Broker host on the HA "
+                    "panel to your HA host's IP.",
+                )
+                return None
+            if not (username or password):
+                logger.warning(
+                    "HA MQTT: broker=auto resolved to MA host %s, but no Mosquitto "
+                    "credentials are configured.  Enter username/password on the "
+                    "HA panel; publisher disabled until then.",
+                    ma_creds["host"],
+                )
+                return None
+            logger.info(
+                "HA MQTT: broker=auto resolved to MA host %s (Supervisor unavailable)",
+                ma_creds["host"],
+            )
+            host = ma_creds["host"]
+            port = int(ma_creds.get("port") or port or 1883)
+            tls = tls or bool(ma_creds.get("ssl"))
+        else:
+            host = creds["host"]
+            port = int(creds.get("port") or port or 1883)
+            username = username or creds.get("username", "")
+            password = password or creds.get("password", "")
+            tls = tls or bool(creds.get("ssl"))
     else:
         # ``broker`` may be a bare hostname or ``host:port``.
         if ":" in broker and not broker.startswith("["):  # IPv4 / hostname only — IPv6 needs brackets

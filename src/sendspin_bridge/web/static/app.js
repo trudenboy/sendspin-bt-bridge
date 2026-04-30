@@ -5431,7 +5431,7 @@ function _readHaIntegrationFromForm(existingBlock) {
 
 async function _haMqttAutoDetect() {
     var hint = document.getElementById('ha-mqtt-autodetect-hint');
-    if (hint) hint.textContent = 'Probing Supervisor…';
+    if (hint) hint.textContent = 'Probing for an MQTT broker…';
     try {
         var resp = await fetch(API_BASE + '/api/ha/mqtt/probe');
         if (resp.status === 401) { _handleUnauthorized(); return; }
@@ -5439,7 +5439,7 @@ async function _haMqttAutoDetect() {
         if (!body || !body.found) {
             if (hint) hint.textContent = body && body.hint
                 ? body.hint
-                : 'No Mosquitto add-on detected (Supervisor unavailable or not on HAOS).';
+                : 'No broker detected.  Enter host and credentials manually.';
             return;
         }
         var broker = document.getElementById('ha-mqtt-broker');
@@ -5451,9 +5451,20 @@ async function _haMqttAutoDetect() {
         var tls = document.getElementById('ha-mqtt-tls');
         if (tls) tls.checked = !!body.ssl;
         if (hint) {
-            hint.textContent = body.password_present
-                ? 'Filled host/port/user. Password not exposed by Supervisor — paste it manually if needed.'
-                : 'Filled host/port/user (broker has no password set).';
+            // Two paths: Supervisor (full creds) vs MA-URL fallback
+            // (host only, operator must add credentials).
+            if (body.source === 'ma_url') {
+                hint.textContent = body.hint || (
+                    'Suggested host ' + (body.host || '?') +
+                    ' — taken from the configured Music Assistant URL. ' +
+                    'Enter Mosquitto credentials below.'
+                );
+            } else if (body.password_present) {
+                hint.textContent = 'Filled host/port/user from Supervisor. ' +
+                    'Password not exposed — paste it manually if needed.';
+            } else {
+                hint.textContent = 'Filled host/port/user (broker has no password set).';
+            }
         }
         _markConfigDirty();
     } catch (exc) {
