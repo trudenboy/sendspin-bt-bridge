@@ -5268,6 +5268,33 @@ function _applyHaRequiredHighlight() {
     }
 }
 
+// Soft warning surfaced as a confirm dialog on save.  Distinct from
+// ``_validateHaIntegration`` (which hard-blocks for invariants) — this
+// only nudges for things that *usually* matter but legitimately may be
+// left blank (anonymous brokers being the canonical exception for
+// missing MQTT credentials).  Returns a string when the operator should
+// be asked to confirm, ``null`` otherwise.
+function _haIntegrationSoftWarning() {
+    var modeEl = document.getElementById('ha-integration-mode');
+    var mode = modeEl ? (modeEl.value || 'off') : 'off';
+    if (mode !== 'mqtt') return null;
+    var userEl = document.getElementById('ha-mqtt-username');
+    var pwEl = document.getElementById('ha-mqtt-password');
+    var userVal = userEl ? (userEl.value || '').trim() : '';
+    var pwRaw = pwEl ? (pwEl.value || '') : '';
+    // ``***REDACTED***`` is the marker the GET endpoint sends for an
+    // existing-password preserve; treat it as "credentials present" so
+    // we don't nag operators who never touched the field.
+    var pwSet = pwRaw === '***REDACTED***' || pwRaw.trim().length > 0;
+    if (userVal || pwSet) return null;
+    return (
+        'Save MQTT integration without credentials?\n\n' +
+        'Most brokers (including the official Mosquitto add-on) require ' +
+        'a username and password.  Leave both empty only if your broker ' +
+        'is configured for anonymous access.'
+    );
+}
+
 // Returns ``{ok: true}`` when the HA integration block is consistent with
 // its declared mode, or ``{ok: false, error, focusFieldId}`` when an
 // operator-fixable invariant is broken (currently: ``mqtt`` mode with an
@@ -8083,6 +8110,10 @@ async function saveConfig() {
             setTimeout(function() { focusEl.focus(); }, 250);
         }
         return {ok: false, error: haCheck.error};
+    }
+    var haWarning = _haIntegrationSoftWarning();
+    if (haWarning && !window.confirm(haWarning)) {
+        return {ok: false, error: 'Save cancelled — credentials warning declined.'};
     }
 
     try {

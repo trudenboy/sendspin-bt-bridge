@@ -17,7 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   broker host is required.  Use 'auto' or enter a hostname / IP, or
   switch the integration mode to Off") and scrolls focus to the
   field.  Inline error styling matches the rest of the form, and
-  starts typing clears it immediately.
+  starts typing clears it immediately.  Saving MQTT mode with empty
+  username **and** password also pops a soft confirm
+  ("Most brokers require credentials.  Save anyway?") so the
+  anonymous-broker edge case still works without nagging operators
+  who already filled the fields.
 - HA Custom Component: the **MQTT broker host** field now accepts
   full broker URIs.  Pasting `mqtt://host:1883`,
   `mqtts://broker.example.com:8883`, `ssl://`, `tls://`, `ws://`,
