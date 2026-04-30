@@ -213,7 +213,7 @@ winrt-windows-foundation-collections==3.2.1 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
     # via bleak
-yarl==1.22.0
+yarl==1.23.0
     # via aiohttp
 zeroconf==0.148.0
     # via
