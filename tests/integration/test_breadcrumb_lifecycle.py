@@ -174,24 +174,6 @@ def test_sigkill_paired_with_exit_json_yields_sigkill(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-_FINISH_BREADCRUMB_BLOCK = """
-EXIT_CODE=$1
-SIGNAL=$2
-# Normalise s6's 256 sentinel ("killed by signal — see $2") into the
-# conventional 128+signal exit code that every shell uses.
-if [ "$EXIT_CODE" -eq 256 ] && [ "$SIGNAL" -gt 0 ]; then
-    EXIT_CODE=$((128 + SIGNAL))
-fi
-if [ -f /data/options.json ]; then BC_DIR="/data/breadcrumbs"; else BC_DIR="${CONFIG_DIR:-/config}/breadcrumbs"; fi
-mkdir -p "$BC_DIR" 2>/dev/null || true
-BC_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
-BC_NOW=$(date +%s 2>/dev/null || echo 0)
-printf '{"schema_version":1,"exit_recorded_at":"%s","exit_code":%s,"exit_signal":%s,"wall_clock_unix":%s}\\n' \\
-    "$BC_TS" "$EXIT_CODE" "$SIGNAL" "$BC_NOW" > "$BC_DIR/exit.json.tmp" 2>/dev/null || true
-mv -f "$BC_DIR/exit.json.tmp" "$BC_DIR/exit.json" 2>/dev/null || true
-"""
-
-
 @pytest.mark.skipif(not FINISH_SCRIPT.exists(), reason="s6 finish script not present in checkout")
 @pytest.mark.parametrize(
     ("raw_exit_code", "signal", "expected_code"),
@@ -209,13 +191,23 @@ mv -f "$BC_DIR/exit.json.tmp" "$BC_DIR/exit.json" 2>/dev/null || true
         (256, 0, 256),
     ],
 )
-def test_finish_shell_block_writes_valid_exit_json(tmp_path: Path, raw_exit_code: int, signal: int, expected_code: int):
-    """Run the breadcrumb portion of ``finish`` against a temp CONFIG_DIR."""
-    # Extract just the breadcrumb-writing portion so we don't have to
-    # invoke /command/with-contenv (only present inside the container).
+def test_finish_writes_valid_exit_json(tmp_path: Path, raw_exit_code: int, signal: int, expected_code: int):
+    """Execute the in-tree ``finish`` script and verify its breadcrumb output.
+
+    Sources the actual file at ``rootfs/.../sendspin/finish`` rather than a
+    duplicated copy so any drift in the production script is caught
+    immediately.  Stubs out ``sleep`` so the supervisor restart-delay
+    branch returns instantly during tests, and bypasses the
+    ``/command/with-contenv`` shebang (not present outside the container)
+    by sourcing under a plain bash invocation.
+    """
     env = {**os.environ, "CONFIG_DIR": str(tmp_path)}
+    # ``sleep() { :; }`` shadows both the bash builtin and the binary,
+    # so the script's ``sleep 5`` on the unexpected-exit branch is a
+    # no-op in tests but unchanged in production.
+    wrapper = f"sleep() {{ :; }}; . {FINISH_SCRIPT}"
     subprocess.run(
-        ["bash", "-c", _FINISH_BREADCRUMB_BLOCK, "_", str(raw_exit_code), str(signal)],
+        ["bash", "-c", wrapper, "_", str(raw_exit_code), str(signal)],
         check=True,
         env=env,
         timeout=10,
@@ -234,6 +226,19 @@ def test_finish_shell_block_writes_valid_exit_json(tmp_path: Path, raw_exit_code
 def test_finish_script_passes_bash_n(tmp_path: Path):
     """Defence in depth: the file in tree must parse cleanly under bash -n."""
     subprocess.run(["bash", "-n", str(FINISH_SCRIPT)], check=True, timeout=10)
+
+
+@pytest.mark.skipif(not FINISH_SCRIPT.exists(), reason="s6 finish script not present in checkout")
+def test_finish_script_contains_exit_code_normalization():
+    """Cheap explicit guard: the production script must keep the 256→128+signal
+    normalization. ``test_finish_writes_valid_exit_json`` already asserts the
+    behaviour by sourcing the real file, but this string-level assertion
+    surfaces a much clearer failure if the line is accidentally deleted in
+    a refactor.
+    """
+    src = FINISH_SCRIPT.read_text()
+    assert "EXIT_CODE=$((128 + SIGNAL))" in src, "rootfs/.../finish lost the s6 exit-code normalization line"
+    assert "-eq 256" in src, "rootfs/.../finish lost the 256 sentinel guard"
 
 
 # ---------------------------------------------------------------------------
