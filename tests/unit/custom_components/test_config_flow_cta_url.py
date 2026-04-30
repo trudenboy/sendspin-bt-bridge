@@ -179,16 +179,62 @@ def test_172_30_outside_hassio_subnet_skips_lookup(monkeypatch):
     assert session.calls == []
 
 
-def test_non_ip_host_skips_lookup(monkeypatch):
-    """A bare hostname (``bridge.local``) can't be in the hassio
-    subnet by definition — fallback without crashing on the
-    ``ipaddress`` parse."""
+def test_mdns_host_on_haos_resolves_to_ingress_url(monkeypatch):
+    """HA's zeroconf sometimes hands the SRV target back unresolved
+    instead of an A-record IP — the bridge addon advertises itself
+    as ``sendspin-bridge-XXX.local`` and HA Core may not resolve it
+    to the underlying ``172.30.32.x`` IP before invoking the
+    config_flow.  When ``SUPERVISOR_TOKEN`` is present (we're on
+    HAOS), we must still attempt the Supervisor lookup so the CTA
+    points at the absolute ingress URL instead of the bare ``.local``
+    hostname (which the operator's browser usually can't reach).
+
+    Regression for the production prod report on v2.66.14:
+    ``Open http://sendspin-bridge-af367d852d7d.local:62144/`` rendered
+    in the HACS pair form on a HAOS addon."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession(
+        {
+            "data": {
+                "addons": [
+                    {
+                        "slug": "85b1ecde_sendspin_bt_bridge",
+                        "ingress_port": 62144,
+                        "ingress_url": "/api/hassio_ingress/abc/",
+                    },
+                ]
+            }
+        }
+    )
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+    monkeypatch.setattr(_cf, "get_url", lambda h, **kw: "https://ha.example.com/")
+    url = asyncio.run(_resolve_user_facing_url(hass, "sendspin-bridge-af367d852d7d.local", 62144))
+    assert url == "https://ha.example.com/api/hassio_ingress/abc/"
+    assert session.calls == ["http://supervisor/addons"]
+
+
+def test_mdns_host_on_haos_no_matching_addon_falls_back(monkeypatch):
+    """If the Supervisor lookup runs but no addon matches our port,
+    fall back to the discovered ``host:port`` URL (the operator's
+    LAN can usually still resolve the mDNS hostname)."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession({"data": {"addons": []}})
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+    url = asyncio.run(_resolve_user_facing_url(hass, "bridge.local", 8080))
+    assert url == "http://bridge.local:8080/"
+    assert session.calls == ["http://supervisor/addons"]
+
+
+def test_lan_ip_outside_hassio_net_still_skips_lookup(monkeypatch):
+    """LAN IPs are clearly not addons — skip the round-trip."""
     monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
     hass = MagicMock()
     session = _FakeSession({})
     monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
-    url = asyncio.run(_resolve_user_facing_url(hass, "bridge.local", 8080))
-    assert url == "http://bridge.local:8080/"
+    url = asyncio.run(_resolve_user_facing_url(hass, "192.168.10.10", 8080))
+    assert url == "http://192.168.10.10:8080/"
     assert session.calls == []
 
 

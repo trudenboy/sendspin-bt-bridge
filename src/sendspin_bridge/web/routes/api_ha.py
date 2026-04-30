@@ -158,10 +158,15 @@ def api_status_events():
         _generate(),
         mimetype="text/event-stream",
         headers={
+            # ``no-transform`` (RFC 7234 §5.2.2.4) keeps the HA
+            # Supervisor ingress proxy from compressing the SSE chunks
+            # — see ``/api/status/stream`` for the full rationale.
             "Cache-Control": "no-cache, no-transform",
             "Content-Encoding": "identity",
             "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
+            # NB: ``Connection`` is a hop-by-hop header (PEP 3333 /
+            # RFC 2616 §13.5.1) and waitress raises AssertionError if
+            # a WSGI app sets it.  Don't add it here.
         },
     )
 

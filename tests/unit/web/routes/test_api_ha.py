@@ -262,3 +262,38 @@ def test_status_events_endpoint_is_event_stream(client):
         # short read instead.  Easier: just ensure the route exists.
         rules = [r.rule for r in client.application.url_map.iter_rules()]
         assert "/api/status/events" in rules
+
+
+def test_status_events_does_not_set_hop_by_hop_headers(client):
+    """Regression for the production AssertionError on
+    ``/api/status/events``: WSGI applications must not set hop-by-hop
+    headers (PEP 3333 / RFC 2616 §13.5.1).  Waitress raises
+    ``AssertionError: Connection is a "hop-by-hop" header`` and tears
+    the SSE connection down.
+
+    The bridge runs behind waitress on production HAOS, so any
+    hop-by-hop header the response sets makes the endpoint unusable.
+    """
+    resp = client.get("/api/status/events", buffered=False)
+    try:
+        # Hop-by-hop headers per RFC 2616 §13.5.1 (case-insensitive).
+        for forbidden in (
+            "Connection",
+            "Keep-Alive",
+            "Proxy-Authenticate",
+            "Proxy-Authorization",
+            "TE",
+            "Trailer",
+            "Transfer-Encoding",
+            "Upgrade",
+        ):
+            assert forbidden not in resp.headers, (
+                f"{forbidden!r} is a hop-by-hop header — WSGI apps must "
+                f"not set it.  See PEP 3333 and waitress's start_response."
+            )
+        # Sanity-check the rest of the SSE response shape stays intact.
+        assert resp.headers.get("Content-Type", "").startswith("text/event-stream")
+        assert resp.headers.get("Cache-Control") == "no-cache, no-transform"
+        assert resp.headers.get("Content-Encoding") == "identity"
+    finally:
+        resp.close()

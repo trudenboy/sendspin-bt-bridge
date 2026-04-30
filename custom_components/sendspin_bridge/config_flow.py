@@ -97,18 +97,24 @@ async def _resolve_user_facing_url(
     token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
     if not token:
         return fallback
-    # Only the hassio Docker network (172.30.32.0/23 by default) sits
-    # behind Supervisor ingress.  A LAN IP needs no translation.  Use
-    # an exact CIDR membership check rather than a string prefix —
-    # ``172.30.x.x`` matches the entire ``172.30.0.0/16``, of which
-    # only ``172.30.32.0/23`` is the hassio network, so a prefix check
-    # would trigger an unnecessary Supervisor round-trip for hosts
-    # like ``172.30.0.5``.
+    # Decide whether to do a Supervisor lookup.  Three buckets for
+    # ``host``:
+    #   1. IP in ``172.30.32.0/23`` (hassio Docker network) → lookup,
+    #      it's almost certainly an addon
+    #   2. IP outside that net (LAN: ``192.168.*``, ``10.*``, etc.) →
+    #      skip the lookup, clearly a standalone bridge on the same
+    #      network as HA Core
+    #   3. Hostname / mDNS name (e.g. ``sendspin-bridge-XXX.local``)
+    #      → lookup, since HA's zeroconf often hands the SRV target
+    #      back unresolved and the only way to know whether this is
+    #      our own addon is to ask Supervisor.  Without this branch,
+    #      HAOS bridges advertised via mDNS show the bare ``.local``
+    #      hostname in the CTA instead of the absolute HA URL.
     try:
         host_ip = ipaddress.ip_address(host)
     except ValueError:
-        return fallback
-    if host_ip not in ipaddress.IPv4Network("172.30.32.0/23"):
+        host_ip = None  # hostname → fall through to lookup
+    if host_ip is not None and host_ip not in ipaddress.IPv4Network("172.30.32.0/23"):
         return fallback
     session = async_get_clientsession(hass)
     try:
