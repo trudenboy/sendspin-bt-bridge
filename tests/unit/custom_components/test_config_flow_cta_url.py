@@ -40,6 +40,7 @@ def _load_config_flow():
         "homeassistant.config_entries",
         "homeassistant.helpers",
         "homeassistant.helpers.aiohttp_client",
+        "homeassistant.helpers.network",
         "homeassistant.helpers.service_info",
         "homeassistant.helpers.service_info.zeroconf",
         "voluptuous",
@@ -51,6 +52,12 @@ def _load_config_flow():
     )
     sys.modules["homeassistant.config_entries"].ConfigFlowResult = dict
     sys.modules["homeassistant.helpers.aiohttp_client"].async_get_clientsession = MagicMock()
+
+    class _NoURLAvailableError(Exception):
+        pass
+
+    sys.modules["homeassistant.helpers.network"].NoURLAvailableError = _NoURLAvailableError
+    sys.modules["homeassistant.helpers.network"].get_url = MagicMock(side_effect=_NoURLAvailableError)
     # voluptuous: only ``Schema``, ``Required``, ``Optional`` are referenced.
     vol = sys.modules["voluptuous"]
     vol.Schema = lambda x: x
@@ -196,3 +203,80 @@ def test_supervisor_query_failure_falls_back(monkeypatch):
     monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
     url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
     assert url == "http://172.30.32.1:62144/"
+
+
+# ---------------------------------------------------------------------------
+# When HA Frontend URL is configured, prepend it so the markdown link in
+# the form description shows the operator's actual HA hostname instead of
+# a bare ingress path.
+# ---------------------------------------------------------------------------
+
+
+def test_supervisor_host_with_ha_frontend_url_returns_absolute(monkeypatch):
+    """``get_url(hass)`` succeeds → absolute URL with HA hostname."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession(
+        {
+            "data": {
+                "addons": [
+                    {
+                        "slug": "85b1ecde_sendspin_bt_bridge",
+                        "ingress_port": 62144,
+                        "ingress_url": "/api/hassio_ingress/abc123/",
+                    },
+                ]
+            }
+        }
+    )
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+    monkeypatch.setattr(_cf, "get_url", lambda h, **kw: "https://ha.example.com/")
+    url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
+    assert url == "https://ha.example.com/api/hassio_ingress/abc123/"
+
+
+def test_supervisor_host_no_ha_url_falls_back_to_path_only(monkeypatch):
+    """``get_url`` raises NoURLAvailableError → return path-only ingress."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession(
+        {
+            "data": {
+                "addons": [
+                    {
+                        "slug": "85b1ecde_sendspin_bt_bridge",
+                        "ingress_port": 62144,
+                        "ingress_url": "/api/hassio_ingress/abc123/",
+                    },
+                ]
+            }
+        }
+    )
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+
+    def _raise(*_a, **_k):
+        raise _cf.NoURLAvailableError
+
+    monkeypatch.setattr(_cf, "get_url", _raise)
+    url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
+    assert url == "/api/hassio_ingress/abc123/"
+
+
+# ---------------------------------------------------------------------------
+# Standalone with mDNS hostname — prefer the friendly hostname over the IP.
+# ---------------------------------------------------------------------------
+
+
+def test_lan_host_prefers_mdns_display_host(monkeypatch):
+    """``display_host`` (from zeroconf SRV target) wins over raw IP."""
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    hass = MagicMock()
+    url = asyncio.run(_resolve_user_facing_url(hass, "192.168.10.10", 8080, display_host="bridge-7af3.local"))
+    assert url == "http://bridge-7af3.local:8080/"
+
+
+def test_lan_host_display_host_none_keeps_ip(monkeypatch):
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    hass = MagicMock()
+    url = asyncio.run(_resolve_user_facing_url(hass, "192.168.10.10", 8080, display_host=None))
+    assert url == "http://192.168.10.10:8080/"
