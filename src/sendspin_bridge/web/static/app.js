@@ -10367,6 +10367,107 @@ window.addEventListener('beforeunload', function(e) {
     }
 })();
 
+// MQTT broker host normaliser — operators paste full URIs from env vars
+// and docs (``mqtt://host:1883``, ``mqtts://broker.example.com``).  Mirror
+// of ``services/ha/ha_addon.py:normalise_broker_host``: same accepted
+// schemes, same outputs, same edge cases.  Backend re-runs the same logic
+// on save as defense in depth (direct POST /api/config bypasses the UI).
+function _normaliseBrokerHost(raw) {
+    var TLS_SCHEMES = {mqtts: 1, ssl: 1, tls: 1, https: 1, wss: 1};
+    var PLAIN_SCHEMES = {mqtt: 1, tcp: 1, http: 1, ws: 1};
+    var text = (raw || '').trim();
+    if (!text) return {host: '', port: null, tls: null, stripped: false};
+    var original = text;
+    var tls = null;
+    var port = null;
+    var schemeConsumed = false;
+    var schemeIdx = text.indexOf('://');
+    if (schemeIdx > 0) {
+        var scheme = text.substring(0, schemeIdx).toLowerCase();
+        if (TLS_SCHEMES[scheme]) {
+            tls = true;
+            text = text.substring(schemeIdx + 3);
+            schemeConsumed = true;
+        } else if (PLAIN_SCHEMES[scheme]) {
+            tls = false;
+            text = text.substring(schemeIdx + 3);
+            schemeConsumed = true;
+        }
+    }
+    if (schemeConsumed) {
+        ['/', '?', '#'].forEach(function(sep) {
+            var cut = text.indexOf(sep);
+            if (cut >= 0) text = text.substring(0, cut);
+        });
+    }
+    if (text.charAt(0) === '[') {
+        var close = text.indexOf(']');
+        if (close > 0) {
+            var hostPart = text.substring(1, close);
+            var tail = text.substring(close + 1);
+            if (tail.charAt(0) === ':') {
+                var p = parseInt(tail.substring(1), 10);
+                if (!isNaN(p)) port = p;
+            }
+            text = hostPart;
+        }
+    } else if ((text.match(/:/g) || []).length === 1) {
+        var parts = text.split(':');
+        var p2 = parseInt(parts[1], 10);
+        if (!isNaN(p2)) {
+            port = p2;
+            text = parts[0];
+        }
+    }
+    return {host: text, port: port, tls: tls, stripped: text !== original};
+}
+
+(function() {
+    var broker = document.getElementById('ha-mqtt-broker');
+    if (!broker) return;
+    var hint = document.getElementById('ha-mqtt-autodetect-hint');
+    var hintTimer = null;
+    function flash(text) {
+        if (!hint) return;
+        hint.textContent = text;
+        if (hintTimer) clearTimeout(hintTimer);
+        hintTimer = setTimeout(function() {
+            if (hint.textContent === text) hint.textContent = '';
+        }, 6000);
+    }
+    broker.addEventListener('blur', function() {
+        var result = _normaliseBrokerHost(broker.value);
+        if (!result.stripped && result.tls === null && result.port === null) return;
+        var changed = false;
+        if (result.host && broker.value.trim() !== result.host) {
+            broker.value = result.host;
+            changed = true;
+        }
+        if (result.port !== null) {
+            var portEl = document.getElementById('ha-mqtt-port');
+            if (portEl && parseInt(portEl.value, 10) !== result.port) {
+                portEl.value = result.port;
+                changed = true;
+            }
+        }
+        if (result.tls !== null) {
+            var tlsEl = document.getElementById('ha-mqtt-tls');
+            if (tlsEl && tlsEl.checked !== result.tls) {
+                tlsEl.checked = result.tls;
+                changed = true;
+            }
+        }
+        if (changed) {
+            var msg = 'Cleaned up scheme';
+            if (result.tls === true) msg += ' · TLS enabled (mqtts/https)';
+            else if (result.tls === false) msg += ' · TLS off (mqtt/http)';
+            if (result.port !== null) msg += ' · port ' + result.port;
+            flash(msg);
+            _recomputeConfigDirtyState();
+        }
+    });
+})();
+
 function _syncSecurityPolicyState() {
     var bruteForceCheck = document.getElementById('brute-force-protection');
     var fieldsWrap = document.getElementById('security-policy-fields');

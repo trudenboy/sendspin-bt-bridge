@@ -756,6 +756,31 @@ def api_config():
                 incoming_mqtt["password"] = existing_mqtt.get("password", "")
             # else: explicit "" → preserved as "" (clear), or non-empty → overwrite
 
+            # Operators paste broker URLs from environment variables / docs
+            # (``mqtt://host:1883``, ``mqtts://broker.example.com``).  Strip
+            # the scheme so the bridge's MQTT client gets a bare host, and
+            # promote port / TLS hints from the URL to the dedicated
+            # fields when the operator didn't fill them explicitly.
+            from sendspin_bridge.services.ha.ha_addon import normalise_broker_host
+
+            broker_raw = incoming_mqtt.get("broker")
+            if isinstance(broker_raw, str) and broker_raw.strip():
+                normalised = normalise_broker_host(broker_raw)
+                if normalised["host"]:
+                    incoming_mqtt["broker"] = normalised["host"]
+                # URL-derived signals always win — operators who paste a
+                # full URI (``mqtts://broker:8883``) are giving the
+                # strongest possible intent.  Frontend's blur handler
+                # syncs the port / TLS form fields so the UI stays in
+                # sync; backend defense-in-depth applies the same rule
+                # for direct ``POST /api/config`` callers.  An explicit
+                # operator-typed port in a non-URL broker string is
+                # preserved (``normalised["port"]`` is None then).
+                if normalised["port"] is not None:
+                    incoming_mqtt["port"] = normalised["port"]
+                if normalised["tls"] is not None:
+                    incoming_mqtt["tls"] = normalised["tls"]
+
     try:
         sendspin_port = _parse_optional_int(config.get("SENDSPIN_PORT"), "SENDSPIN_PORT", min_value=1, max_value=65535)
         if sendspin_port is not None:
