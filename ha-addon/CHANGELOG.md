@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.11] - 2026-04-30
+
+### Added
+- gzip compression for text responses (HTML, JS, CSS, JSON, SVG).
+  Cold load through HA Ingress / Nabu Casa drops from ~960 KB
+  uncompressed (`app.js` 620 KB + `style.css` 330 KB + small JSON)
+  to ~200 KB on the wire — multi-second improvement on the path
+  that previously felt like "the addon never started".  Skips SSE
+  streams (the v2.63.0-rc.4 ingress no-transform handshake stays
+  intact) and bodies under 1 KB.
+- Focused HACS landing page (`info.md`) replaces the verbose
+  repository README that HACS used to render as the integration
+  description.
+- HACS config-flow dialog now embeds a clickable link to the
+  bridge's *Settings → Home Assistant → Bearer tokens for HA
+  custom_component* card on the discovery, manual, and reauth
+  steps.
+- HACS **manual** add-integration flow now auto-pairs on HAOS
+  when the operator leaves the token field blank — the same
+  Supervisor-mediated mint that the zeroconf path already used.
+  No more "I have to copy a token across two tabs" round-trip.
+
+### Fixed
+- HACS auto-pair on HAOS no longer gets rejected with 403.  The
+  ``/api/auth/ha-pair`` endpoint trusted only the Supervisor
+  container (`172.30.32.2`), but the call originates from
+  **HA Core** (`172.30.32.1` on the same `hassio` network).
+  Operators on HAOS were therefore always pushed through the
+  manual token form even though the bridge was already
+  configured.  HA Core's IP is now in the default trusted-proxy
+  set.
+- "Invalid CSRF token" when clicking **Generate token** under
+  *Settings → Home Assistant → Bearer tokens for HA
+  custom_component* in HA add-on mode.  The frontend reads
+  `window._csrfToken` but the template never set it, so JSON
+  POSTs sent an empty CSRF and the server rejected them.  The
+  template now exposes the per-session token via that global
+  (Docker / standalone deployments were unaffected because the
+  global auth gate is off there).
+- The **Bearer tokens for HA custom_component** card is now
+  always visible on the *Settings → Home Assistant* tab.
+  Previously it disappeared as soon as the bridge auto-paired
+  via MQTT on HAOS, forcing operators to click **Reconfigure**
+  to find the *Generate token* button.  Tokens are an
+  HACS-side concern independent of the bridge's own MA
+  integration mode, so collapsing them with the connection
+  card was wrong.
+
 ## [2.66.10] - 2026-04-30
 
 ### Added
@@ -4504,7 +4552,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.10...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...HEAD
+[2.66.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.10...v2.66.11
 [2.66.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.9...v2.66.10
 [2.66.9]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.8...v2.66.9
 [2.66.8]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.7...v2.66.8
