@@ -59,18 +59,62 @@ _LOCKOUT_MAX_ATTEMPTS = 5
 _LOCKOUT_WINDOW_SECS = 60
 _LOCKOUT_DURATION_SECS = 300  # 5 minutes
 
-#: Default proxy / supervisor network IPs the bridge implicitly trusts.
+#: Default proxy / supervisor networks the bridge implicitly trusts for
+#: forwarded-client and ingress-bridged calls.  Mix of literal addresses
+#: and CIDR networks:
 #:
 #: * ``127.0.0.1`` / ``::1`` — local loopback (standalone Docker / LXC).
-#: * ``172.30.32.1`` — the **HA Core container** on the Supervisor
-#:   ``hassio`` Docker network.  Required so the HACS custom_component's
-#:   one-shot Supervisor-pair flow (``POST /api/auth/ha-pair``) actually
-#:   reaches us — the call originates from HA Core, not from Supervisor.
-#: * ``172.30.32.2`` — the Supervisor container itself.
+#: * ``172.30.32.0/23`` — the entire HAOS ``hassio`` Docker network.
+#:   Supervisor sits at ``172.30.32.2`` and HA Core at ``172.30.32.1``,
+#:   but addons get IPs in the **second half** (``172.30.33.x``) and
+#:   the ingress proxy can present any of those as the immediate peer
+#:   from the bridge's perspective.  Trusting the whole hassio range is
+#:   acceptable because every container in it is a vetted addon and
+#:   Supervisor is already trusted to do anything.
 #:
 #: Operators can extend this set via ``TRUSTED_PROXIES`` in the bridge
-#: config when their deployment uses a different proxy chain.
-_TRUSTED_PROXY_DEFAULTS = frozenset({"127.0.0.1", "::1", "172.30.32.1", "172.30.32.2"})
+#: config when their deployment uses a different proxy chain.  Entries
+#: there may be either literal IPs or CIDR networks.
+_TRUSTED_PROXY_DEFAULTS = frozenset({"127.0.0.1", "::1", "172.30.32.0/23"})
+
+
+def _parse_trusted_entry(entry: str):
+    """Return an ``ip_network`` for *entry* (single IP or CIDR), or None.
+
+    ``entry`` is taken from either ``_TRUSTED_PROXY_DEFAULTS`` or the
+    operator-managed ``TRUSTED_PROXIES`` config key, so it must tolerate
+    bad input gracefully — invalid entries are silently dropped from
+    the trust set rather than crashing the request.
+    """
+    import ipaddress as _ip
+
+    entry = (entry or "").strip()
+    if not entry:
+        return None
+    try:
+        # ``strict=False`` lets ``172.30.32.0/24`` host-bits work, and
+        # also accepts a bare IP like ``172.30.32.1``.
+        return _ip.ip_network(entry, strict=False)
+    except ValueError:
+        return None
+
+
+def _peer_in_trust_set(peer: str, trust_set) -> bool:
+    """True when *peer* falls inside any IP / CIDR entry in *trust_set*."""
+    import ipaddress as _ip
+
+    if not peer:
+        return False
+    try:
+        ip_obj = _ip.ip_address(peer)
+    except ValueError:
+        return False
+    for entry in trust_set:
+        net = _parse_trusted_entry(entry)
+        if net is not None and ip_obj in net:
+            return True
+    return False
+
 
 _failed: dict[str, tuple[int, float]] = {}  # client_id → (count, first_failure_ts)
 _failed_lock = threading.Lock()
@@ -134,6 +178,11 @@ def _get_trusted_proxies() -> set[str]:
     return trusted
 
 
+def _peer_is_trusted(peer: str) -> bool:
+    """True when *peer* is in the merged trust set (defaults + config)."""
+    return _peer_in_trust_set(peer, _get_trusted_proxies())
+
+
 def _get_forwarded_client_ip() -> str:
     """Return the rightmost untrusted hop from X-Forwarded-For.
 
@@ -147,7 +196,11 @@ def _get_forwarded_client_ip() -> str:
     if forwarded_for:
         hops = [p.strip() for p in forwarded_for.split(",") if p.strip()]
         for hop in reversed(hops):
-            if hop not in trusted:
+            # Match against the merged set of literal IPs and CIDR
+            # ranges so a hassio-network proxy (172.30.32.0/23) is
+            # treated as trusted regardless of which addon container
+            # actually forwarded the request.
+            if not _peer_in_trust_set(hop, trusted):
                 return hop
     return request.headers.get("X-Real-IP", "").strip()
 
@@ -948,16 +1001,12 @@ def api_auth_ha_pair():
     that header.
     """
     peer = (request.remote_addr or "").strip()
-    if peer not in _TRUSTED_PROXY_DEFAULTS:
-        # Allow the operator-configurable proxy list as well so tests /
-        # split deployments work.
-        try:
-            cfg = load_config()
-            extra = cfg.get("TRUSTED_PROXIES") or []
-            if peer not in {str(p).strip() for p in extra}:
-                return jsonify({"success": False, "error": "Not allowed from this network"}), 403
-        except Exception:
-            return jsonify({"success": False, "error": "Not allowed from this network"}), 403
+    # ``_get_trusted_proxies`` already merges defaults + the operator
+    # ``TRUSTED_PROXIES`` config key.  Both can be literal IPs or CIDR
+    # ranges.  The hassio Docker network is /23, with addons in the
+    # 172.30.33.x half — a literal-IP whitelist would miss them.
+    if not _peer_is_trusted(peer):
+        return jsonify({"success": False, "error": "Not allowed from this network"}), 403
 
     if not request.headers.get("X-Ingress-Path"):
         return jsonify({"success": False, "error": "Supervisor ingress required"}), 403

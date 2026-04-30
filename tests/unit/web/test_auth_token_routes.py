@@ -242,6 +242,42 @@ def test_ha_pair_mints_token_when_called_from_ha_core_container(client):
     assert body["record"]["label"] == "ha-custom-component"
 
 
+def test_ha_pair_mints_token_when_called_via_addon_in_upper_half_of_hassio_network(client):
+    """The hassio Docker network is /23, with addon containers in the
+    upper half (172.30.33.x).  When HA Core proxies through Supervisor's
+    ingress, the bridge sees ``request.remote_addr`` as that addon-side
+    container IP — NOT the literal 172.30.32.1 of HA Core itself.
+
+    Production smoke on a HAOS instance: ``DEBUG ha-pair: remote_addr=
+    '172.30.33.2'`` for an SSH-addon-originated curl through ingress.
+    Trusting only the lower half of the network breaks that path.
+    """
+    for peer in ("172.30.33.2", "172.30.33.42", "172.30.32.150"):
+        resp = client.post(
+            "/api/auth/ha-pair",
+            environ_base={"REMOTE_ADDR": peer},
+            headers={"X-Ingress-Path": "/api/auth/ha-pair"},
+        )
+        assert resp.status_code == 200, f"peer {peer!r} unexpectedly rejected"
+        body = resp.get_json()
+        assert body["success"] is True
+        assert body["token"]
+
+
+def test_ha_pair_still_rejects_outside_hassio_network(client):
+    """A LAN-side caller — even with the magic header — must still be
+    rejected.  ``172.30.32.0/23`` boundaries: ``172.30.34.1`` is one
+    octet past the end of the trusted CIDR.
+    """
+    for peer in ("192.168.10.5", "10.0.0.1", "172.30.34.1", "172.30.31.255"):
+        resp = client.post(
+            "/api/auth/ha-pair",
+            environ_base={"REMOTE_ADDR": peer},
+            headers={"X-Ingress-Path": "/api/auth/ha-pair"},
+        )
+        assert resp.status_code == 403, f"peer {peer!r} unexpectedly accepted"
+
+
 # ---------------------------------------------------------------------------
 # Frontend CSRF token exposure (regression for "Invalid CSRF token" on the
 # Generate Token button when running as an HA addon)
