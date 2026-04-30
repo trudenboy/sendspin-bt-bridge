@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.13] - 2026-04-30
+
+### Added
+- Standalone-bridge **MQTT broker auto-suggest** from the configured
+  Music Assistant URL.  When the bridge runs outside HAOS (no
+  Supervisor), the *Auto-detect MQTT add-on* button now derives the
+  broker host from the MA URL (the common case where MA is an HA
+  add-on and Mosquitto sits on the same host) instead of returning
+  the misleading "Install and start the official Mosquitto add-on"
+  hint.  The runtime resolver does the same: `broker = "auto"` on a
+  standalone deployment falls back to the MA host before disabling
+  the publisher.  The operator only has to type the Mosquitto
+  username / password — host / port are pre-filled.
+
+### Changed
+- The HA panel's *MQTT broker* card adapts copy to the deployment
+  mode: HAOS keeps the "click Auto-detect to fill from the
+  Mosquitto add-on" hint, standalone shows "set Broker host to
+  your HA host's IP / hostname (`auto` requires HA add-on mode)"
+  and a `homeassistant.local` placeholder.  The Auto-detect
+  button label becomes *Suggest broker host* on standalone.
+
 ## [2.66.12] - 2026-04-30
 
 ### Fixed
@@ -4570,7 +4592,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.12...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.13...HEAD
+[2.66.13]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.12...v2.66.13
 [2.66.12]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.11...v2.66.12
 [2.66.11]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.10...v2.66.11
 [2.66.10]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.66.9...v2.66.10
