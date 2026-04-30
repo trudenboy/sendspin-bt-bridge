@@ -5470,7 +5470,12 @@ async function _haMqttAutoDetect() {
                 hint.textContent = 'Filled host/port/user (broker has no password set).';
             }
         }
-        _markConfigDirty();
+        // Mark the form dirty so the Save button enables and the
+        // operator sees that auto-detect changed something.  Pre
+        // v2.66.14 this called a non-existent helper that only
+        // surfaced once v2.66.13 started taking the success branch
+        // on standalone deployments.
+        _recomputeConfigDirtyState();
     } catch (exc) {
         if (hint) hint.textContent = 'Probe failed: ' + (exc && exc.message ? exc.message : exc);
     }
