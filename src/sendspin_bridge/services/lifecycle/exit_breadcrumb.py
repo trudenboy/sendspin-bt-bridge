@@ -111,7 +111,7 @@ class BreadcrumbStore:
         self._exit_prev_path = self._dir / _EXIT_PREV_FILENAME
         self._lock = threading.Lock()
         self._state: dict[str, Any] = {}
-        self._last_phase_key: tuple[str, str] | None = None
+        self._last_phase_key: tuple[str, str, str] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -174,8 +174,14 @@ class BreadcrumbStore:
                 # ``init_boot`` was never called (e.g. read-only fs at
                 # startup); silently accept the call and skip the write.
                 return
-            key = (str(phase), str(status))
             already_seen = phase in self._state.get("phase_timestamps", {})
+            current_message = self._state.get("last_message") or ""
+            new_message = message or current_message
+            # Coalesce only when the entire (phase, status, message)
+            # tuple matches what we already have — including the
+            # message, because that's what the diagnostics surface
+            # uses to describe what the bridge was last doing.
+            key = (str(phase), str(status), str(new_message))
             if already_seen and key == self._last_phase_key:
                 return
             self._last_phase_key = key

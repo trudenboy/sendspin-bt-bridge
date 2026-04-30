@@ -213,3 +213,64 @@ def test_finish_shell_block_writes_valid_exit_json(tmp_path: Path):
 def test_finish_script_passes_bash_n(tmp_path: Path):
     """Defence in depth: the file in tree must parse cleanly under bash -n."""
     subprocess.run(["bash", "-n", str(FINISH_SCRIPT)], check=True, timeout=10)
+
+
+# ---------------------------------------------------------------------------
+# Regression: the warning must describe the IMMEDIATELY PRIOR run, not the
+# one before that.  Original wiring called read_previous() *before*
+# init_boot() rotated the files, so the warning either reported nothing
+# (first crash) or a run two restarts old.
+# ---------------------------------------------------------------------------
+
+
+def test_read_previous_after_init_boot_describes_immediate_prior_run(tmp_path: Path):
+    sys.path.insert(0, str(SRC_ROOT))
+    try:
+        from sendspin_bridge.services.lifecycle.exit_breadcrumb import BreadcrumbStore
+    finally:
+        sys.path.pop(0)
+
+    # --- Boot 1: writes boot.json + exit.json (simulating s6 finish) ---
+    store1 = BreadcrumbStore(tmp_path)
+    store1.init_boot(
+        bridge_version="boot-1",
+        pid=111,
+        runtime="test",
+        hostname="ci",
+        demo_mode=False,
+    )
+    store1.mark_phase("config", message="cfg")
+    store1.mark_phase("runtime", message="rt")
+    breadcrumbs = tmp_path / "breadcrumbs"
+    (breadcrumbs / "exit.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "exit_recorded_at": "2026-04-30T10:00:00Z",
+                "exit_code": 137,
+                "exit_signal": 9,
+                "wall_clock_unix": 1745944938,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # --- Boot 2: rotates boot.json -> boot.prev.json, then reads ---
+    store2 = BreadcrumbStore(tmp_path)
+    store2.init_boot(
+        bridge_version="boot-2",
+        pid=222,
+        runtime="test",
+        hostname="ci",
+        demo_mode=False,
+    )
+    prev = store2.read_previous()
+    assert prev is not None
+    # Must describe boot 1, not nothing.  Original wiring read
+    # boot.prev.json BEFORE init_boot rotated it — at this point
+    # boot.prev.json didn't exist yet, so read_previous() returned
+    # None and the WARNING line was never emitted.
+    assert prev.exit_kind == "sigkill"
+    assert prev.bridge_version == "boot-1"
+    assert prev.pid == 111
+    assert prev.last_phase == "runtime"

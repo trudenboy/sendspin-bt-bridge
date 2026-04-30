@@ -88,7 +88,7 @@ def test_mark_phase_coalesces_repeated_calls(store: BreadcrumbStore):
     _init(store)
     store.mark_phase("config", status="running", message="m1")
     mtime_after_first = store.boot_path.stat().st_mtime_ns
-    # Same (phase, status) should not rewrite.  Sleep skipped — mtime
+    # Same (phase, status, message) should not rewrite. Sleep skipped — mtime
     # comparison alone is fine because os.replace assigns a fresh inode.
     store.mark_phase("config", status="running", message="m1")
     mtime_after_second = store.boot_path.stat().st_mtime_ns
@@ -97,6 +97,24 @@ def test_mark_phase_coalesces_repeated_calls(store: BreadcrumbStore):
     store.mark_phase("config", status="ready")
     payload = json.loads(store.boot_path.read_text())
     assert payload["last_phase_status"] == "ready"
+
+
+def test_mark_phase_rewrites_when_message_changes(store: BreadcrumbStore):
+    """Repeated (phase, status) with a *different* message must rewrite.
+
+    Regression: ``last_message`` is the diagnostics surface that
+    describes what the bridge was last doing. Coalescing by
+    ``(phase, status)`` alone would drop later messages and leave
+    stale forensic data in ``boot.json``.
+    """
+    _init(store)
+    store.mark_phase("config", status="running", message="opening config.json")
+    payload = json.loads(store.boot_path.read_text())
+    assert payload["last_message"] == "opening config.json"
+    # Same phase+status, different message — must update.
+    store.mark_phase("config", status="running", message="parsing config.json")
+    payload = json.loads(store.boot_path.read_text())
+    assert payload["last_message"] == "parsing config.json"
 
 
 def test_init_boot_rotates_existing_files(tmp_path: Path):

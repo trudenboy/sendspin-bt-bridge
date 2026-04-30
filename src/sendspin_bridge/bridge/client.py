@@ -2005,8 +2005,13 @@ class SendspinClient:
 async def main():
     """Main entry point"""
     orchestrator = BridgeOrchestrator()
-    _log_previous_run_summary(orchestrator)
     bootstrap = await orchestrator.initialize_runtime()
+    # ``initialize_runtime`` calls ``BreadcrumbStore.init_boot`` which
+    # rotates the previous run's ``boot.json`` to ``boot.prev.json``.
+    # Logging the warning *before* rotation would describe a run two
+    # restarts ago, not the immediately prior one — so we wait until
+    # rotation has happened.
+    _log_previous_run_summary(orchestrator)
 
     try:
         from sendspin_bridge.services.bluetooth import persist_device_enabled as _persist_enabled
