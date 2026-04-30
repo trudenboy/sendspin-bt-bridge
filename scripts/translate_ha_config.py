@@ -87,16 +87,27 @@ def _merge_adapters(detected: list[dict], raw_adapters: list[dict]) -> list[dict
     existing_ids = {a["id"]: a for a in detected if a.get("id")}
     for a in raw_adapters:
         opt_name = (a.get("name") or "").strip()
+        opt_class = (a.get("device_class") or "").strip()
         if a.get("mac") and a["mac"] in existing_macs:
             if opt_name:
                 existing_macs[a["mac"]]["name"] = opt_name
+            if opt_class:
+                existing_macs[a["mac"]]["device_class"] = opt_class
         elif a.get("id") and a["id"] in existing_ids:
             if opt_name:
                 existing_ids[a["id"]]["name"] = opt_name
+            if opt_class:
+                existing_ids[a["id"]]["device_class"] = opt_class
         elif a.get("mac") and a["mac"] not in existing_macs:
-            detected.append({"id": a.get("id", ""), "mac": a["mac"], "name": opt_name or a.get("id", "")})
+            entry = {"id": a.get("id", ""), "mac": a["mac"], "name": opt_name or a.get("id", "")}
+            if opt_class:
+                entry["device_class"] = opt_class
+            detected.append(entry)
         elif a.get("id") and a["id"] not in existing_ids:
-            detected.append({"id": a["id"], "mac": a.get("mac", ""), "name": opt_name or a["id"]})
+            entry = {"id": a["id"], "mac": a.get("mac", ""), "name": opt_name or a["id"]}
+            if opt_class:
+                entry["device_class"] = opt_class
+            detected.append(entry)
     return detected
 
 
@@ -258,6 +269,28 @@ def main() -> None:
         for key, option_name in preserved_optional_int_fields.items():
             if opts.get(option_name) in (None, "") and existing.get(key) not in (None, ""):
                 config[key] = int(existing[key])
+        # Preserve per-adapter web UI settings (currently only ``device_class``)
+        # not exposed by the options.json schema. Without this, a bridge-UI
+        # save of the Samsung Q-series CoD workaround would be wiped on every
+        # addon restart because ``_merge_adapters`` rebuilds the list from
+        # options.json + bluetoothctl. Indexed by ``mac`` first (stable across
+        # USB hotplug), falling back to ``id`` for adapter entries that
+        # predate MAC capture. Operator-explicit values from options.json
+        # already won inside ``_merge_adapters`` — only fill blanks here.
+        existing_adapters_by_mac = {
+            a["mac"].upper(): a for a in existing.get("BLUETOOTH_ADAPTERS", []) if isinstance(a, dict) and a.get("mac")
+        }
+        existing_adapters_by_id = {
+            a["id"]: a for a in existing.get("BLUETOOTH_ADAPTERS", []) if isinstance(a, dict) and a.get("id")
+        }
+        for adapter in config["BLUETOOTH_ADAPTERS"]:
+            if not isinstance(adapter, dict) or adapter.get("device_class"):
+                continue
+            mac = (adapter.get("mac") or "").upper()
+            prior = existing_adapters_by_mac.get(mac) or existing_adapters_by_id.get(adapter.get("id") or "")
+            if prior and prior.get("device_class"):
+                adapter["device_class"] = prior["device_class"]
+
         # Preserve per-device web UI settings (e.g. keepalive) not present in options.json
         existing_devs = {
             d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if isinstance(d, dict) and d.get("mac")

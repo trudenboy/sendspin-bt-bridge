@@ -13,17 +13,17 @@ FROM ghcr.io/astral-sh/uv:0.9.27 AS uv-default
 
 # armv7 fallback. ghcr.io/astral-sh/uv ships no linux/arm/v7 manifest,
 # so the COPY in the default stage above would fail with "no match for
-# platform in manifest". Install uv via pip on a python:3.12-slim base
+# platform in manifest". Install uv via pip on a python:3.13-slim base
 # instead — functionally identical, just adds a couple seconds at
 # layer build time. Selected by passing --build-arg UV_STAGE=uv-armv7
 # in the release workflow.
-FROM python:3.12-slim AS uv-armv7
+FROM python:3.13-slim AS uv-armv7
 RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.9.27" && \
     cp "$(command -v uv)" /uv
 
 FROM ${UV_STAGE} AS uv-source
 
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ARG TARGETARCH
@@ -104,8 +104,8 @@ RUN uv pip install --system --no-cache --no-deps --prefix=/install /build
 RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
     find /install -type d -name tests -path '*/numpy/*' -exec rm -rf {} + 2>/dev/null; \
     find /install -type d -name '*.dist-info' -exec sh -c 'rm -rf "$1"/RECORD "$1"/LICENSE* "$1"/NOTICE*' _ {} \; 2>/dev/null; \
-    rm -rf /install/lib/python3.12/site-packages/pip \
-           /install/lib/python3.12/site-packages/pygments \
+    rm -rf /install/lib/python3.13/site-packages/pip \
+           /install/lib/python3.13/site-packages/pygments \
            /install/bin/pip* \
            /install/bin/pygmentize; \
     # Strip debug symbols from native libraries (~20-40 MB savings)
@@ -113,7 +113,7 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
     true
 
 # ──────────────────────────────────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # S6 overlay version
 ARG S6_OVERLAY_VERSION=3.2.0.2
@@ -167,7 +167,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Strip unused Python stdlib modules + runtime cruft.
-# - pip: builder stage strips it from /install, but the python:3.12-slim base
+# - pip: builder stage strips it from /install, but the python:3.13-slim base
 #   image ships its own pip in /usr/local — the COPY --from=builder /install
 #   merges over that, leaving the base image's pip behind.  Remove it here.
 # - /usr/lib/udev/hwdb.{bin,d}: 22 MB of hardware database for udev — we do
@@ -179,24 +179,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # - /usr/share/doc, /usr/share/man, /usr/share/info: package documentation
 #   pulled in by apt-installed runtime deps; no consumer at runtime.
 # - tests/ inside pulled wheels: qrcode and pulsectl ship test suites.
-RUN rm -rf /usr/local/lib/python3.12/ensurepip \
-           /usr/local/lib/python3.12/idlelib \
-           /usr/local/lib/python3.12/lib2to3 \
-           /usr/local/lib/python3.12/pydoc_data \
-           /usr/local/lib/python3.12/turtledemo \
-           /usr/local/lib/python3.12/turtle.py \
-           /usr/local/lib/python3.12/test \
-           /usr/local/lib/python3.12/site-packages/pip \
-           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 \
+RUN rm -rf /usr/local/lib/python3.13/ensurepip \
+           /usr/local/lib/python3.13/idlelib \
+           /usr/local/lib/python3.13/lib2to3 \
+           /usr/local/lib/python3.13/pydoc_data \
+           /usr/local/lib/python3.13/turtledemo \
+           /usr/local/lib/python3.13/turtle.py \
+           /usr/local/lib/python3.13/test \
+           /usr/local/lib/python3.13/site-packages/pip \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.13 \
            /usr/lib/udev/hwdb.bin /usr/lib/udev/hwdb.d \
            /usr/lib/systemd \
-           /usr/local/lib/python3.12/site-packages/pulsectl/tests \
-           /usr/local/lib/python3.12/site-packages/qrcode/tests \
-           /usr/local/lib/python3.12/site-packages/numpy/doc \
+           /usr/local/lib/python3.13/site-packages/pulsectl/tests \
+           /usr/local/lib/python3.13/site-packages/qrcode/tests \
+           /usr/local/lib/python3.13/site-packages/numpy/doc \
     && find /usr/share/doc -mindepth 1 -delete 2>/dev/null \
     && find /usr/share/man -mindepth 1 -delete 2>/dev/null \
     && find /usr/share/info -mindepth 1 -delete 2>/dev/null \
-    && find /usr/local/lib/python3.12 -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+    && find /usr/local/lib/python3.13 -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
 
 # Install S6 overlay (multi-arch aware)
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

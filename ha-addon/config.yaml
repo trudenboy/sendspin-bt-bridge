@@ -108,6 +108,7 @@ schema:
     - id: str
       mac: str?
       name: str?
+      device_class: str?
   ha_integration:
     enabled: bool?
     mode: "list(off|mqtt|rest)?"

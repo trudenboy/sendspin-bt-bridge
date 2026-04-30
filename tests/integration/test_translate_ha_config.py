@@ -203,6 +203,80 @@ def test_merge_adapters_with_bluetoothctl(tmp_path):
     assert dongle["name"] == "dongle"  # detected name preserved
 
 
+def test_merge_adapters_propagates_device_class_from_options():
+    """User-supplied ``device_class`` must reach the merged config (issue #210)."""
+    detected = [{"id": "hci0", "mac": "11:22:33:44:55:66", "name": "hci0"}]
+    user = [{"id": "hci0", "mac": "11:22:33:44:55:66", "name": "Pi", "device_class": "0x00010c"}]
+    result = _merge_adapters(detected, user)
+    hci0 = next(a for a in result if a["mac"] == "11:22:33:44:55:66")
+    assert hci0["device_class"] == "0x00010c"
+
+
+def test_merge_adapters_propagates_device_class_for_unknown_id():
+    """``device_class`` must survive even when adapter is only matched by ``id``."""
+    detected = [{"id": "hci0", "mac": "11:22:33:44:55:66", "name": "hci0"}]
+    user = [{"id": "hci1", "name": "Manual", "device_class": "0x00010c"}]
+    result = _merge_adapters(detected, user)
+    hci1 = next(a for a in result if a["id"] == "hci1")
+    assert hci1["device_class"] == "0x00010c"
+
+
+def test_translation_preserves_existing_adapter_device_class(tmp_path):
+    """Bridge-UI-saved ``device_class`` must survive an addon restart even when
+    options.json doesn't carry it (issue #210)."""
+    existing = {
+        "BLUETOOTH_ADAPTERS": [
+            {"id": "hci0", "mac": "11:22:33:44:55:66", "name": "hci0", "device_class": "0x00010c"},
+        ],
+        "BLUETOOTH_DEVICES": [],
+    }
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(
+        tmp_path / "options.json",
+        _minimal_options(bluetooth_adapters=[{"id": "hci0", "mac": "11:22:33:44:55:66", "name": "Pi"}]),
+    )
+
+    with patch(
+        "scripts.translate_ha_config._detect_adapters",
+        return_value=[{"id": "hci0", "mac": "11:22:33:44:55:66", "name": "hci0"}],
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    hci0 = next(a for a in cfg["BLUETOOTH_ADAPTERS"] if a.get("mac") == "11:22:33:44:55:66")
+    assert hci0.get("device_class") == "0x00010c"
+
+
+def test_translation_options_device_class_overrides_existing(tmp_path):
+    """When options.json carries a ``device_class``, it must win over the
+    previously persisted value (operator-explicit setting beats stale state)."""
+    existing = {
+        "BLUETOOTH_ADAPTERS": [
+            {"id": "hci0", "mac": "11:22:33:44:55:66", "name": "hci0", "device_class": "0x00010c"},
+        ],
+        "BLUETOOTH_DEVICES": [],
+    }
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(
+        tmp_path / "options.json",
+        _minimal_options(
+            bluetooth_adapters=[
+                {"id": "hci0", "mac": "11:22:33:44:55:66", "name": "Pi", "device_class": "0x000100"},
+            ]
+        ),
+    )
+
+    with patch(
+        "scripts.translate_ha_config._detect_adapters",
+        return_value=[{"id": "hci0", "mac": "11:22:33:44:55:66", "name": "hci0"}],
+    ):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    hci0 = next(a for a in cfg["BLUETOOTH_ADAPTERS"] if a.get("mac") == "11:22:33:44:55:66")
+    assert hci0.get("device_class") == "0x000100"
+
+
 # ── Full translation ─────────────────────────────────────────────────────
 
 

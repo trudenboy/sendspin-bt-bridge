@@ -36,7 +36,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install 3.13
 
       - name: Install system build dependencies
         # dbus-python ships sdist-only on PyPI; building requires the

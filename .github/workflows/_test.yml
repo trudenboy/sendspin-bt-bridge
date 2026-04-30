@@ -44,7 +44,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install 3.13
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libdbus-1-dev libglib2.0-dev libportaudio2
