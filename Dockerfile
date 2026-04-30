@@ -87,6 +87,7 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
             --no-binary mpris-api \
             --no-binary pyric \
             --extra-index-url https://www.piwheels.org/simple \
+            --index-strategy unsafe-best-match \
             -r /tmp/requirements-deps.txt; \
     else \
         uv pip install --system --no-cache --prefix=/install -r /tmp/requirements-deps.txt; \
