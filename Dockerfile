@@ -9,7 +9,7 @@ ARG UV_STAGE=uv-default
 # Default — pull the static binary directly from the upstream image.
 # This is what amd64/arm64 builds use; the COPY --from below short-
 # circuits to a single layer copy (~50 MB pull amortised across builds).
-FROM ghcr.io/astral-sh/uv:0.9.27 AS uv-default
+FROM ghcr.io/astral-sh/uv:0.11.8 AS uv-default
 
 # armv7 fallback. ghcr.io/astral-sh/uv ships no linux/arm/v7 manifest,
 # so the COPY in the default stage above would fail with "no match for
