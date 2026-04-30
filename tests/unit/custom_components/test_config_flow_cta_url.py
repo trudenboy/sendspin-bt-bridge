@@ -34,7 +34,16 @@ def _load_config_flow():
     Stub every external runtime the file imports at top so we don't
     drag HA Core into the bridge test env.
     """
-    # Create stub modules for HA + voluptuous imports.
+    # Create stub modules for HA + voluptuous imports.  Parents need
+    # ``__path__`` to be treated as packages — without it
+    # ``from homeassistant.helpers.aiohttp_client import …`` raises
+    # ``ModuleNotFoundError: 'homeassistant' is not a package`` even
+    # though the child modules are pre-populated in ``sys.modules``.
+    package_names = {
+        "homeassistant",
+        "homeassistant.helpers",
+        "homeassistant.helpers.service_info",
+    }
     for mod_name in (
         "homeassistant",
         "homeassistant.config_entries",
@@ -46,7 +55,10 @@ def _load_config_flow():
         "voluptuous",
     ):
         if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
+            mod = types.ModuleType(mod_name)
+            if mod_name in package_names:
+                mod.__path__ = []
+            sys.modules[mod_name] = mod
     sys.modules["homeassistant.config_entries"].ConfigFlow = type(
         "ConfigFlow", (), {"__init_subclass__": classmethod(lambda cls, **k: None)}
     )
@@ -152,6 +164,34 @@ def test_supervisor_token_present_but_lan_host_skips_lookup(monkeypatch):
     assert session.calls == []
 
 
+def test_172_30_outside_hassio_subnet_skips_lookup(monkeypatch):
+    """``172.30.x.x`` is a /16 — only the ``172.30.32.0/23`` slice is
+    the hassio Docker network.  Hosts elsewhere in the /16 must NOT
+    trigger the Supervisor lookup (would cost a 5s timeout in the
+    common case where Supervisor isn't reachable)."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession({})
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+    for outside_host in ("172.30.0.5", "172.30.31.255", "172.30.34.1", "172.30.255.1"):
+        url = asyncio.run(_resolve_user_facing_url(hass, outside_host, 8080))
+        assert url == f"http://{outside_host}:8080/"
+    assert session.calls == []
+
+
+def test_non_ip_host_skips_lookup(monkeypatch):
+    """A bare hostname (``bridge.local``) can't be in the hassio
+    subnet by definition — fallback without crashing on the
+    ``ipaddress`` parse."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession({})
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+    url = asyncio.run(_resolve_user_facing_url(hass, "bridge.local", 8080))
+    assert url == "http://bridge.local:8080/"
+    assert session.calls == []
+
+
 # ---------------------------------------------------------------------------
 # HAOS path — Supervisor-internal host, swap for ingress URL.
 # ---------------------------------------------------------------------------
@@ -203,6 +243,35 @@ def test_supervisor_query_failure_falls_back(monkeypatch):
     monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
     url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
     assert url == "http://172.30.32.1:62144/"
+
+
+def test_supervisor_returns_malformed_addon_entry(monkeypatch):
+    """Defensive parse — a non-numeric ``ingress_port`` in the addon
+    list must not crash the form, the entry is just skipped."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
+    hass = MagicMock()
+    session = _FakeSession(
+        {
+            "data": {
+                "addons": [
+                    # Malformed entries that would have crashed the
+                    # earlier ``int(addon.get("ingress_port") or 0)``.
+                    {"slug": "weird", "ingress_port": "not-a-number"},
+                    {"slug": "weirder", "ingress_port": [62144]},
+                    {"slug": "weirdest", "ingress_port": None},
+                    # The real bridge entry is still resolved.
+                    {
+                        "slug": "85b1ecde_sendspin_bt_bridge",
+                        "ingress_port": 62144,
+                        "ingress_url": "/api/hassio_ingress/abc/",
+                    },
+                ]
+            }
+        }
+    )
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
+    url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
+    assert url == "/api/hassio_ingress/abc/"
 
 
 # ---------------------------------------------------------------------------

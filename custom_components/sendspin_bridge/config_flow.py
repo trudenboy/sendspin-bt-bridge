@@ -90,14 +90,25 @@ async def _resolve_user_facing_url(
     hostname (``<bridge_id>.local``) when ``display_host`` is given,
     fall back to the discovered IP otherwise.
     """
+    import ipaddress
+
     scheme = "https" if use_https else "http"
     fallback = f"{scheme}://{display_host or host}:{port}/"
     token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
     if not token:
         return fallback
     # Only the hassio Docker network (172.30.32.0/23 by default) sits
-    # behind Supervisor ingress.  A LAN IP needs no translation.
-    if not host.startswith("172.30."):
+    # behind Supervisor ingress.  A LAN IP needs no translation.  Use
+    # an exact CIDR membership check rather than a string prefix —
+    # ``172.30.x.x`` matches the entire ``172.30.0.0/16``, of which
+    # only ``172.30.32.0/23`` is the hassio network, so a prefix check
+    # would trigger an unnecessary Supervisor round-trip for hosts
+    # like ``172.30.0.5``.
+    try:
+        host_ip = ipaddress.ip_address(host)
+    except ValueError:
+        return fallback
+    if host_ip not in ipaddress.IPv4Network("172.30.32.0/23"):
         return fallback
     session = async_get_clientsession(hass)
     try:
@@ -113,7 +124,15 @@ async def _resolve_user_facing_url(
         return fallback
     addons = (body or {}).get("data", {}).get("addons", []) or []
     for addon in addons:
-        if int(addon.get("ingress_port") or 0) == int(port):
+        # Supervisor occasionally returns malformed entries — be
+        # defensive about parsing user-supplied values out of an
+        # external JSON document so a typo doesn't crash the config
+        # flow while rendering the form.
+        try:
+            addon_port = int(addon.get("ingress_port") or 0)
+        except (TypeError, ValueError):
+            continue
+        if addon_port == int(port):
             ingress_url = addon.get("ingress_url")
             if ingress_url:
                 # Prefix with HA's user-facing frontend URL when known
