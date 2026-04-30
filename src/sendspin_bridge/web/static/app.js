@@ -5446,18 +5446,22 @@ async function _haMqttAutoDetect() {
         if (broker) broker.value = body.host || 'auto';
         var port = document.getElementById('ha-mqtt-port');
         if (port) port.value = body.port || 1883;
-        var username = document.getElementById('ha-mqtt-username');
-        if (username) username.value = body.username || '';
-        var tls = document.getElementById('ha-mqtt-tls');
-        if (tls) tls.checked = !!body.ssl;
+        // Two paths: Supervisor (full creds) vs MA-URL fallback (host only).
+        // The MA-URL path must not overwrite username/tls — the operator
+        // may have already typed them and would lose their input on
+        // clicking the Suggest-host button.
+        if (body.source !== 'ma_url') {
+            var username = document.getElementById('ha-mqtt-username');
+            if (username) username.value = body.username || '';
+            var tls = document.getElementById('ha-mqtt-tls');
+            if (tls) tls.checked = !!body.ssl;
+        }
         if (hint) {
-            // Two paths: Supervisor (full creds) vs MA-URL fallback
-            // (host only, operator must add credentials).
             if (body.source === 'ma_url') {
                 hint.textContent = body.hint || (
                     'Suggested host ' + (body.host || '?') +
                     ' — taken from the configured Music Assistant URL. ' +
-                    'Enter Mosquitto credentials below.'
+                    'Enter Mosquitto credentials below if your broker requires them.'
                 );
             } else if (body.password_present) {
                 hint.textContent = 'Filled host/port/user from Supervisor. ' +

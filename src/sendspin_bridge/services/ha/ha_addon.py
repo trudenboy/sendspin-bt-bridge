@@ -113,11 +113,14 @@ def derive_mqtt_broker_from_ma_url(ma_api_url: str) -> dict[str, Any] | None:
     as an HA add-on, the Mosquitto broker is on the same host — so the
     MA host is a strong heuristic for the broker host.
 
-    Returns a dict with the same shape as
-    :func:`get_mqtt_addon_credentials` but **without** username /
-    password (the operator must enter Mosquitto credentials manually)
-    and with ``source="ma_url"`` so callers can flag the value as a
-    suggestion rather than authoritative.
+    Returns a dict containing the same broker connection fields as
+    :func:`get_mqtt_addon_credentials` (``host``, ``port``, ``username``,
+    ``password``, and ``ssl``), but with empty ``username`` /
+    ``password`` because the operator must enter Mosquitto credentials
+    manually (or leave them blank for an anonymous broker).  The
+    returned dict also includes an extra ``source="ma_url"`` key so
+    callers can flag the value as a suggestion rather than
+    authoritative.
 
     Returns ``None`` when ``ma_api_url`` is empty / unparseable.
     """

@@ -99,6 +99,7 @@ class HaIntegrationLifecycle:
     def _build_publisher(self) -> HaMqttPublisher | None:
         config = load_config()
         block = config.get("HA_INTEGRATION") or {}
+        ma_api_url = str(config.get("MA_API_URL") or "").strip()
         bridge_id = self._bridge_id_provider() or "bridge"
         bridge_name = self._bridge_name_provider() or "Sendspin Bridge"
 
@@ -107,6 +108,7 @@ class HaIntegrationLifecycle:
             bridge_id=bridge_id,
             bridge_name=bridge_name,
             auto_lookup=get_mqtt_addon_credentials,
+            ma_api_url=ma_api_url,
         )
         if cfg is None:
             return None
@@ -114,13 +116,16 @@ class HaIntegrationLifecycle:
         # Closure-style providers so the publisher always sees the latest
         # state on reconnect / heartbeat republish.  ``config_provider``
         # re-reads the config block each tick — cheap because load_config
-        # caches.
+        # caches — and re-extracts MA_API_URL so a mid-session change is
+        # picked up by the standalone-fallback resolver.
         def _config_provider():
+            cfg_now = load_config()
             return resolve_mqtt_config(
-                load_config().get("HA_INTEGRATION") or {},
+                cfg_now.get("HA_INTEGRATION") or {},
                 bridge_id=bridge_id,
                 bridge_name=bridge_name,
                 auto_lookup=get_mqtt_addon_credentials,
+                ma_api_url=str(cfg_now.get("MA_API_URL") or "").strip(),
             )
 
         return HaMqttPublisher(

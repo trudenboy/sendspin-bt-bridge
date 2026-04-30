@@ -176,6 +176,57 @@ def test_resolve_mqtt_config_auto_falls_back_to_none_when_no_addon():
     assert cfg is None
 
 
+def test_resolve_mqtt_config_auto_falls_back_to_ma_url_on_standalone():
+    """Standalone bridge: Supervisor unavailable + MA URL configured →
+    use MA host as the broker, preserve operator-entered creds.
+    """
+    block = {
+        "enabled": True,
+        "mode": "mqtt",
+        "mqtt": {
+            "broker": "auto",
+            "username": "homeassistant",
+            "password": "secret",
+        },
+    }
+    cfg = resolve_mqtt_config(
+        block,
+        bridge_id="x",
+        bridge_name="x",
+        auto_lookup=lambda: None,
+        ma_api_url="http://192.168.10.10:8095",
+    )
+    assert cfg is not None
+    assert cfg.host == "192.168.10.10"
+    assert cfg.port == 1883
+    assert cfg.username == "homeassistant"
+    assert cfg.password == "secret"
+
+
+def test_resolve_mqtt_config_auto_ma_fallback_allows_anonymous_creds():
+    """Anonymous Mosquitto setups MUST not be silently disabled — the
+    publisher should attempt the connection with empty creds and let
+    the broker reject it (surfacing the error via last_error) rather
+    than refusing to start.
+    """
+    block = {
+        "enabled": True,
+        "mode": "mqtt",
+        "mqtt": {"broker": "auto"},  # no username/password
+    }
+    cfg = resolve_mqtt_config(
+        block,
+        bridge_id="x",
+        bridge_name="x",
+        auto_lookup=lambda: None,
+        ma_api_url="http://192.168.10.10:8095",
+    )
+    assert cfg is not None
+    assert cfg.host == "192.168.10.10"
+    assert cfg.username == ""
+    assert cfg.password == ""
+
+
 def test_resolve_mqtt_config_legacy_both_mode_normalised_to_mqtt():
     """``both`` was removed in v2.65.0-rc.3.  Saved configs from earlier
     rc builds must not silently disable MQTT publishing — treat the legacy

@@ -238,7 +238,8 @@ def api_ha_mqtt_probe():
                 "ssl": False,
                 "hint": (
                     f"Suggested host {suggested['host']!r} taken from your Music Assistant URL. "
-                    "Enter Mosquitto credentials below — the password is required."
+                    "Enter Mosquitto credentials below if your broker requires authentication "
+                    "(anonymous-access brokers can be left blank)."
                 ),
             }
         )
