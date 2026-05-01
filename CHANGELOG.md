@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **HACS custom_component manifest now bumps automatically on each
+  release.**  The release workflow's version-sync step writes
+  `VERSION` into `custom_components/sendspin_bridge/manifest.json`
+  alongside the existing `sendspin_bridge.config` update.  HACS reads
+  the manifest version to decide whether to offer an update — without
+  this sync the integration sat at v2.66.13 even after the bridge had
+  shipped 2.67.0, so HACS users wouldn't see the update prompt.
+
 ### Changed
 - **HA Configuration tab — REST status card no longer shows MQTT
   fields.**  In REST mode the Broker URL and Last connect rows are
