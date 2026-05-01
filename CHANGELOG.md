@@ -26,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lineage of every override directly.
 
 ### Fixed
+- **HA MQTT publisher now hard-bounds the initial connect (15 s).** The
+  v2.66.18 fix added `timeout=10` to `aiomqtt.Client(...)`, but in
+  `aiomqtt` 2.5.x that parameter only bounds CONNACK and per-operation
+  acks — the underlying `paho.connect()` runs via `run_in_executor`
+  without a wait_for, so a broker that silently drops SYN packets
+  (e.g. HAOS Mosquitto add-on listening only on the Docker bridge,
+  or a host firewall blocking the bridge container's IP) could leave
+  the publisher stuck in `state="connecting"` indefinitely with no
+  error log and the UI permanently showing "Configured but not
+  connected yet". The connect phase is now wrapped in
+  `asyncio.timeout(15)`; failures surface as a regular exception,
+  the reconnect loop logs them and backs off, and an explicit
+  `HA MQTT: connected to host:port` line marks successful connects.
+  Reported in [#249](https://github.com/trudenboy/sendspin-bt-bridge/issues/249).
 - **Demo mode crashed every per-device task at startup.** The
   simulated Bluetooth layer was missing the live-RSSI refresh hook
   the real layer now ships, so each device's run loop died with an

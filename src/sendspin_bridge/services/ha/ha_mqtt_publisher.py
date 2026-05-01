@@ -47,6 +47,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Hard wall-clock bound on the initial connect phase.  ``aiomqtt.Client``'s
+# own ``timeout=`` parameter only bounds CONNACK + per-operation acks; the
+# underlying ``paho.connect()`` runs via ``loop.run_in_executor`` without a
+# wait_for, so an unreachable broker that silently drops SYN packets can
+# leave ``__aenter__`` hanging indefinitely.  We wrap the entry in an
+# explicit ``asyncio.timeout`` so connect failures surface as a regular
+# exception and the reconnect loop can back off and retry instead of
+# leaving the publisher stuck in ``state="connecting"`` forever.
+_CONNECT_TIMEOUT_S = 15.0
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -615,7 +626,7 @@ class HaMqttPublisher:
             retain=True,
         )
 
-        async with aiomqtt.Client(
+        client = aiomqtt.Client(
             hostname=cfg.host,
             port=cfg.port,
             username=cfg.username or None,
@@ -624,19 +635,28 @@ class HaMqttPublisher:
             tls_params=aiomqtt.TLSParameters() if cfg.tls else None,
             will=will,
             timeout=10,
-        ) as client:
+        )
+        # Bound only the connect (``__aenter__``) — the long
+        # ``_stop_event.wait()`` below must NOT be inside the timeout
+        # context.  Connect failures (TimeoutError or otherwise) propagate
+        # to ``_run`` which logs and retries with exponential backoff.
+        async with asyncio.timeout(_CONNECT_TIMEOUT_S):
+            await client.__aenter__()
+        try:
             self._client = client
             self.connected_broker = f"{cfg.host}:{cfg.port}"
             self.state = "connected"
             self.last_error = None
+            logger.info("HA MQTT: connected to %s:%s", cfg.host, cfg.port)
 
-            await self._on_connect(client, cfg)
-
-            tasks = [
-                asyncio.create_task(self._command_loop(client, cfg), name="ha_mqtt_cmd"),
-                asyncio.create_task(self._publish_loop(client, cfg), name="ha_mqtt_pub"),
-            ]
+            tasks: list[asyncio.Task[Any]] = []
             try:
+                await self._on_connect(client, cfg)
+
+                tasks = [
+                    asyncio.create_task(self._command_loop(client, cfg), name="ha_mqtt_cmd"),
+                    asyncio.create_task(self._publish_loop(client, cfg), name="ha_mqtt_pub"),
+                ]
                 await self._stop_event.wait()
             finally:
                 # Flush 'offline' before closing if we can.
@@ -651,8 +671,13 @@ class HaMqttPublisher:
                         await t
                     except (asyncio.CancelledError, Exception):
                         pass
-                self._client = None
-                self.state = "disconnected"
+        finally:
+            self._client = None
+            self.state = "disconnected"
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception:  # pragma: no cover
+                pass
 
     # -- on-connect publish ------------------------------------------
 
