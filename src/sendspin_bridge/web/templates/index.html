@@ -1139,12 +1139,15 @@
                             </div>
 
                             <fieldset class="ha-mqtt-fieldset">
-                                <legend class="ha-mqtt-legend">Advertised address</legend>
+                                <legend class="ha-mqtt-legend">Address advertised to Home Assistant</legend>
+                                <p class="form-hint" style="margin: 0 0 0.6em;">
+                                    The bridge publishes a host and port via mDNS so Home Assistant's Zeroconf discovery can find it and the HACS integration can connect over REST/SSE.  These are the values HA will use — they describe <em>where this bridge is reachable from HA's network</em>, not where the bridge itself connects to.
+                                </p>
                                 <label class="config-setting-row config-setting-row--compact">
                                     <span class="config-setting-copy ui-stack ui-stack--xs">
                                         <strong id="ha-rest-autodetect-label">Use auto-detect</strong>
                                         <span class="form-hint" id="ha-rest-autodetect-hint">
-                                            Auto-resolve from this host's hostname and the configured Web UI port.  Turn off to override the address Home Assistant connects to — useful behind a reverse proxy or NAT.
+                                            Auto-resolve from this host's hostname and the configured Web UI port.  Turn off to publish a different host/port — useful when the bridge sits behind a reverse proxy or NAT and HA needs to reach it through that.
                                         </span>
                                     </span>
                                     <span class="config-setting-control">
@@ -1163,8 +1166,8 @@
                                 </div>
                                 <div class="config-form-grid">
                                     <div class="form-group form-group--span-2" id="ha-rest-host-group">
-                                        <label for="ha-rest-advertise-host">Bridge host
-                                            <span class="form-hint">Hostname or IP that Home Assistant should use to reach the bridge.</span>
+                                        <label for="ha-rest-advertise-host">Bridge host (HA connects to this)
+                                            <span class="form-hint">Hostname or IP that Home Assistant will use to open REST/SSE connections to the bridge.  Published in the bridge's mDNS record.</span>
                                         </label>
                                         <input type="text" id="ha-rest-advertise-host"
                                                placeholder="auto-detect (resolved at startup)"
@@ -1172,7 +1175,9 @@
                                         <span class="field-error" id="ha-rest-advertise-host-error"></span>
                                     </div>
                                     <div class="form-group">
-                                        <label for="ha-rest-advertise-port">Port</label>
+                                        <label for="ha-rest-advertise-port">Port (HA connects to this)
+                                            <span class="form-hint">TCP port this bridge serves the API on.</span>
+                                        </label>
                                         <input type="number" id="ha-rest-advertise-port" min="1" max="65535" placeholder="auto (web UI port)">
                                         <span class="field-error" id="ha-rest-advertise-port-error"></span>
                                     </div>
@@ -1180,7 +1185,7 @@
                                 <label class="config-setting-row config-setting-row--compact">
                                     <span class="config-setting-copy ui-stack ui-stack--xs">
                                         <strong id="ha-rest-advertise-label">Advertise via mDNS</strong>
-                                        <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for Home Assistant Zeroconf discovery.</span>
+                                        <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> so Home Assistant's Zeroconf discovery picks the bridge up automatically.  Turn off only when HA is configured to reach the bridge by a fixed URL (e.g. configured manually in HACS).</span>
                                     </span>
                                     <span class="config-setting-control">
                                         <span class="config-switch">
