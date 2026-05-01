@@ -5994,6 +5994,24 @@ function _haIntegrationModeChange() {
     if (hidden) hidden.value = picked;
     _haCurrentMode = picked;
     _updateHaIntegrationVisibility();
+    // Repaint the connection-status banner immediately with the new
+    // mode.  Without this the banner keeps showing the previous mode's
+    // text ("Connected via REST to <host_id>" or similar) until the
+    // next 5-10 s polling cycle, which makes operators conclude the
+    // mode switch didn't take.  ``_setHaStatus`` accepts an explicit
+    // ``state.mode``; we feed an unconnected-yet payload so the
+    // operator immediately sees "Configured for MQTT but not connected
+    // yet" / "Configured for REST but not connected yet" / "Off — pick
+    // a transport below to connect."  The next poll-cycle refresh will
+    // overlay live status on top of that within a few seconds.
+    _setHaStatus({connected: false, mode: picked});
+    // Kick a status re-poll so the banner converges to live publisher
+    // / mDNS state without waiting for the periodic tick.  Fire-and-
+    // forget — failure is non-fatal (banner just stays at the
+    // synthesized "not connected yet" message until the next tick).
+    if (typeof _refreshHaIntegrationStatus === 'function') {
+        _refreshHaIntegrationStatus();
+    }
     _recomputeConfigDirtyState();
 }
 
@@ -10757,6 +10775,17 @@ document.getElementById('config-form').addEventListener('submit', async function
         var result = await saveConfig();
         if (result && result.ok) {
             _markConfigSnapshotClean();
+            // Re-poll HA integration status so the connection-status
+            // banner converges to the new transport's live state
+            // (publisher idle / connecting / connected for MQTT, mDNS
+            // advertise state for REST, neutral for Off) without
+            // waiting for the next periodic tick.  Without this the
+            // banner would keep showing the previous mode's text for
+            // up to 10 s after a Save click \u2014 operators on PR #253
+            // testing read that as "save didn't take".
+            if (typeof _refreshHaIntegrationStatus === 'function') {
+                _refreshHaIntegrationStatus();
+            }
             var reconfigMsg = _formatReconfigSummary(result.reconfig);
             if (result.maReloaded) {
                 showToast('\u2713 Configuration saved \u2014 Music Assistant reloaded without full restart', 'success');

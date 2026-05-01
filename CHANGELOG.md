@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **HA Configuration tab — connection-status banner now repaints
+  immediately on mode switch.**  Clicking a different transport radio
+  (Off / MQTT / Direct REST) only updated the form layout; the
+  green/yellow status banner kept showing the previous mode's text
+  ("Connected via REST to <host_id>" or similar) for up to 10 s
+  until the next periodic poll, which several operators read as
+  "save didn't take" or "mode never changed".  The radio-change
+  handler now (a) synthesises a "Configured for <mode> but not
+  connected yet" / "Off — pick a transport below to connect."
+  message in-place via ``_setHaStatus`` and (b) kicks an immediate
+  ``_refreshHaIntegrationStatus`` so the banner converges to live
+  publisher / mDNS state without the lag.  The bare Save (no
+  restart) submit handler does the same refresh post-save.
+
 ## [2.67.1] - 2026-05-01
 
 ### Added
