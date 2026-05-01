@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **HA Configuration tab — REST status card no longer shows MQTT
+  fields.**  In REST mode the Broker URL and Last connect rows are
+  hidden — those belong to the MQTT publisher's lifecycle and have no
+  meaning when the bridge is the HTTP server (HA pulls from us, not
+  the other way round).
+- **HA Configuration tab — Access tokens (HACS only) card hidden in
+  Off / MQTT modes.**  Tokens are only consumed by the HACS REST path,
+  so showing the card outside REST was misleading.  Tokens persist
+  across mode flips; revoke them inside REST mode.
+- **HA Configuration tab — friendlier hint right after HACS pairing.**
+  When a token was issued in the last 15 min but hasn't been used
+  yet, the inline transport hint now reads "Pairing detected.  Finish
+  setup in Home Assistant → Settings → Devices & Services if the
+  bridge hasn't been added there yet." instead of the alarming
+  "paired before but isn't currently active" — the latter still fires
+  for tokens older than 15 min that have gone quiet.
+
+### Fixed
+- **HA → Direct REST: auto-detected host no longer leaks `127.0.1.1`.**
+  On Debian / Ubuntu the system hostname maps to a `127.0.1.1` loopback
+  alias in `/etc/hosts`, so `gethostbyname(hostname)` returned that
+  unreachable address as the auto-detected advertise host.  Resolution
+  now filters loopback results and falls back to the standard
+  open-UDP-socket-and-read-`getsockname` trick to discover the LAN IP
+  the kernel would actually use to reach the network.
+
 ## [2.67.0] - 2026-05-01
 
 ### Added

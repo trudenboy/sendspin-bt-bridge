@@ -240,20 +240,67 @@ def test_rest_probe_returns_resolved_host(client, monkeypatch):
 
 
 def test_rest_probe_falls_back_when_hostname_resolves_to_zero(client, monkeypatch):
-    """``socket.gethostbyname`` failure → 0.0.0.0 fallback marked as
-    ``source="fallback"`` so the UI hint can warn the operator."""
+    """Hostname lookup fails AND the UDP-socket trick fails → 0.0.0.0
+    fallback marked as ``source="fallback"`` so the UI hint can warn
+    the operator."""
     import socket as _socket
 
-    def _raise(*_a, **_kw):
+    def _raise_gai(*_a, **_kw):
         raise _socket.gaierror("no hostname")
 
-    monkeypatch.setattr("sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname", _raise)
+    monkeypatch.setattr("sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname", _raise_gai)
     monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+
+    class _FailingUdpSocket:
+        def connect(self, *_a, **_kw):
+            raise OSError("network unreachable")
+
+        def getsockname(self):
+            return ("0.0.0.0", 0)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.socket",
+        lambda *_a, **_kw: _FailingUdpSocket(),
+    )
     resp = client.get("/api/ha/rest/probe")
     body = resp.get_json()
     assert body["ok"] is True
     assert body["host"] == "0.0.0.0"
     assert body["source"] == "fallback"
+
+
+def test_rest_probe_filters_loopback_via_udp_trick(client, monkeypatch):
+    """``gethostbyname`` returns ``127.0.1.1`` (Debian/Ubuntu /etc/hosts
+    quirk) → fall back to UDP-getsockname trick to discover the real
+    LAN IP.  This is the exact bug reported on Proxmox VM 105."""
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname",
+        lambda *_a, **_kw: "127.0.1.1",
+    )
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+
+    class _FakeUdpSocket:
+        def connect(self, *_a, **_kw):
+            pass
+
+        def getsockname(self):
+            return ("192.168.10.105", 12345)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.socket",
+        lambda *_a, **_kw: _FakeUdpSocket(),
+    )
+    resp = client.get("/api/ha/rest/probe")
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "192.168.10.105"
+    assert body["source"] == "hostname"
 
 
 # ---------------------------------------------------------------------------

@@ -5372,13 +5372,13 @@ function _updateHaIntegrationVisibility() {
     if (restCard) restCard.hidden = !showRest;
     // Progressive disclosure for the Tokens card: tokens are only used
     // by the HACS / Direct REST integration, so we show the card only
-    // when mode = "rest" or when tokens already exist (so the operator
-    // can manage them after switching modes).  This guards the v2.66.10
-    // regression where the Generate Token button vanished on HAOS
-    // auto-pair while still keeping the noise out of the MQTT setup
-    // flow, where tokens have no role.
+    // when mode = "rest".  Off and MQTT modes hide it unconditionally
+    // — leaving stale tokens visible in those modes was misleading
+    // (operators read it as "MQTT also uses tokens").  Existing tokens
+    // remain stored and re-appear the moment the operator flips to
+    // REST; revoke them there if no longer needed.
     var tokensCard = document.getElementById('ha-tokens-card');
-    if (tokensCard) tokensCard.hidden = mode !== 'rest' && !_haTokensListHasItems;
+    if (tokensCard) tokensCard.hidden = mode !== 'rest';
 
     _updateMosquittoBannerVisibility();
     _updateCustomComponentHintVisibility();
@@ -5533,23 +5533,35 @@ function _setHaStatus(state) {
     // Detail rows (broker URL / last connect / last error) under the
     // status pill.  Visible whenever any field has content; hidden when
     // off and nothing to report so the card stays compact.
+    //
+    // REST mode skips the broker/last-connect rows entirely — those
+    // belong to the MQTT publisher's lifecycle (broker URL, last
+    // CONNACK).  REST is server-side: HA pulls from the bridge, not
+    // the other way round, so there's no "broker" or "last connect"
+    // event the bridge owns.  The HACS integration's last-seen
+    // timestamp lives in the inline transport hint instead.
     var detail = document.getElementById('ha-status-detail');
+    var brokerRow = document.getElementById('ha-status-broker-row');
     var brokerEl = document.getElementById('ha-status-broker');
+    var lastConnectRow = document.getElementById('ha-status-last-connect-row');
     var lastConnectEl = document.getElementById('ha-status-last-connect');
     var lastErrorRow = document.getElementById('ha-status-last-error-row');
     var lastErrorEl = document.getElementById('ha-status-last-error');
+    var hideMqttRows = (mode === 'rest' || mode === 'off');
     var anyDetail = false;
+    if (brokerRow) brokerRow.hidden = hideMqttRows;
     if (brokerEl) {
-        if (state.broker) {
+        if (state.broker && !hideMqttRows) {
             brokerEl.textContent = String(state.broker);
             anyDetail = true;
         } else {
             brokerEl.textContent = '—';
         }
     }
+    if (lastConnectRow) lastConnectRow.hidden = hideMqttRows;
     if (lastConnectEl) {
         var ts = _formatHaStatusTimestamp(state.lastEventAt);
-        if (ts) {
+        if (ts && !hideMqttRows) {
             lastConnectEl.textContent = ts;
             anyDetail = true;
         } else {
@@ -5726,6 +5738,17 @@ function _updateCustomComponentHintVisibility() {
     if (s.installed && s.started) {
         hint.hidden = false;
         hint.innerHTML = 'HACS custom_component paired and currently active.' + escHtml(lastSeen);
+        hint.classList.add('ha-mosquitto-inline-hint--ok');
+        hint.classList.remove('ha-mosquitto-inline-hint--warn');
+    } else if (s.installed && s.recently_paired) {
+        // Token was just issued — HA may still be loading the integration
+        // entry, so don't shout "isn't currently active" yet.  Show a
+        // neutral / positive state and point at the setup guide for the
+        // remaining HA-side step.
+        hint.hidden = false;
+        hint.innerHTML = 'Pairing detected. Finish setup in Home Assistant → ' +
+            'Settings → Devices &amp; Services if the bridge hasn\'t been ' +
+            'added there yet.' + docsLink;
         hint.classList.add('ha-mosquitto-inline-hint--ok');
         hint.classList.remove('ha-mosquitto-inline-hint--warn');
     } else if (s.installed) {

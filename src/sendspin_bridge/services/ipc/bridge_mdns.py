@@ -47,12 +47,46 @@ def _resolve_host_address() -> str:
     are on a LAN where Zeroconf will advertise on whatever interface is
     listening.  We avoid forcing a specific interface here because the
     bridge often runs on hosts with multiple BT-capable adapters.
+
+    ``gethostbyname(gethostname())`` is unreliable on Debian/Ubuntu
+    because ``/etc/hosts`` typically maps the hostname to ``127.0.1.1``
+    (a loopback alias) — Home Assistant can't reach the bridge on that
+    address.  We filter loopback results and fall back to the standard
+    "open a UDP socket to a non-routable address and read getsockname"
+    trick to discover the LAN-routable IP without sending any packets.
     """
+    candidate = ""
     try:
-        host = socket.gethostbyname(socket.gethostname())
+        candidate = socket.gethostbyname(socket.gethostname())
     except OSError:
-        host = ""
-    return host or "0.0.0.0"
+        candidate = ""
+
+    if candidate and not candidate.startswith("127."):
+        return candidate
+
+    # Loopback or lookup failure — discover the outbound-facing IP via a
+    # connectionless UDP socket.  No packets are actually transmitted;
+    # the kernel just picks the source IP it would use for the route.
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("8.8.8.8", 80))
+        local_ip = sock.getsockname()[0]
+        if local_ip and not local_ip.startswith("127."):
+            return str(local_ip)
+    except OSError:
+        pass
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+    # Last resort: return whatever the hostname lookup gave us (even if
+    # loopback) so the SRV record still has something — better than
+    # 0.0.0.0 which some Zeroconf clients reject.
+    return candidate or "0.0.0.0"
 
 
 def _derive_host_id(bridge_name: str) -> str:
