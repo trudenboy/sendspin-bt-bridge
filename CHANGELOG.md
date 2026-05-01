@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HACS custom_component now ships its own brand icon.**  Home
+  Assistant 2026.3+ supports local brand images for custom
+  integrations via a `brand/` directory inside the integration —
+  bypassing the `home-assistant/brands` repo, which no longer
+  accepts PRs for custom integrations.  The icon (256×256 + 512×512)
+  ships in `custom_components/sendspin_bridge/brand/` and appears
+  automatically in the HA UI after a HACS update.  Older HA
+  versions render no icon (no functional change).
 - **HACS custom_component manifest now bumps automatically on each
   release.**  The release workflow's version-sync step writes
   `VERSION` into `custom_components/sendspin_bridge/manifest.json`
