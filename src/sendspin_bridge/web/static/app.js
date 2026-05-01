@@ -6210,8 +6210,12 @@ function _haRestAutoDetectToggle() {
             portInput.classList.remove('invalid');
         }
         // Show the auto-detected values so the operator sees what HA
-        // would receive, even though the field is read-only.
-        _refreshRestAdvertiseDefaults();
+        // would receive, even though the field is read-only.  Force
+        // overwrite of any previously-typed override values so the
+        // disabled fields actually reflect the resolved defaults
+        // (otherwise stale overrides would sit there mislabelled as
+        // "auto-detected").
+        _refreshRestAdvertiseDefaults({fillEvenIfDirty: true});
     } else {
         if (hostInput) hostInput.disabled = false;
         if (portInput) portInput.disabled = false;
