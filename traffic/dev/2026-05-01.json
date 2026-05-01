@@ -1,0 +1,78 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -17,
+      "total": 14,
+      "owner": 0
+    },
+    {
+      "week_offset": -8,
+      "total": 430,
+      "owner": 393
+    },
+    {
+      "week_offset": -7,
+      "total": 458,
+      "owner": 373
+    },
+    {
+      "week_offset": -6,
+      "total": 183,
+      "owner": 161
+    },
+    {
+      "week_offset": -5,
+      "total": 416,
+      "owner": 288
+    },
+    {
+      "week_offset": -4,
+      "total": 198,
+      "owner": 20
+    },
+    {
+      "week_offset": -3,
+      "total": 154,
+      "owner": 7
+    },
+    {
+      "week_offset": -2,
+      "total": 38,
+      "owner": 2
+    },
+    {
+      "week_offset": -1,
+      "total": 94,
+      "owner": 21
+    },
+    {
+      "week_offset": 0,
+      "total": 302,
+      "owner": 45
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 15,
+    "ai_ratio": 0.075,
+    "agents": [
+      {
+        "name": "Renso",
+        "commits": 12
+      },
+      {
+        "name": "Claude Opus 4.7 (1M context)",
+        "commits": 8
+      },
+      {
+        "name": "dependabot[bot]",
+        "commits": 3
+      },
+      {
+        "name": "Claude Sonnet 4.6",
+        "commits": 2
+      }
+    ]
+  }
+}
