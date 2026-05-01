@@ -40,6 +40,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the reconnect loop logs them and backs off, and an explicit
   `HA MQTT: connected to host:port` line marks successful connects.
   Reported in [#249](https://github.com/trudenboy/sendspin-bt-bridge/issues/249).
+- **HA MQTT publisher now reconnects deterministically on mid-session
+  drops.** When the broker dropped a connected session (network
+  flake, NAT timeout, WiFi-BT coexistence on Pi Zero W-class boards),
+  the command-loop task died with `Disconnected during message
+  iteration` but the publisher kept blocking on the stop event,
+  relying on aiomqtt's internal disconnect detection to bubble up via
+  side effects.  In practice that meant unpredictable multi-minute
+  gaps before reconnect, and could silently leave both worker tasks
+  dead while the UI still showed "connected".  The publisher now
+  awaits the first of `stop_event` / command-loop / publish-loop to
+  finish (`asyncio.wait(..., FIRST_COMPLETED)`), and any worker-task
+  exception is raised so the outer reconnect loop can log it and
+  back off normally.  Surfaced from #249 forum diagnostics.
 - **Demo mode crashed every per-device task at startup.** The
   simulated Bluetooth layer was missing the live-RSSI refresh hook
   the real layer now ships, so each device's run loop died with an

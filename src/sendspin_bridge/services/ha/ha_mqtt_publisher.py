@@ -653,11 +653,23 @@ class HaMqttPublisher:
             try:
                 await self._on_connect(client, cfg)
 
-                tasks = [
-                    asyncio.create_task(self._command_loop(client, cfg), name="ha_mqtt_cmd"),
-                    asyncio.create_task(self._publish_loop(client, cfg), name="ha_mqtt_pub"),
-                ]
-                await self._stop_event.wait()
+                cmd_task = asyncio.create_task(self._command_loop(client, cfg), name="ha_mqtt_cmd")
+                pub_task = asyncio.create_task(self._publish_loop(client, cfg), name="ha_mqtt_pub")
+                stop_task = asyncio.create_task(self._stop_event.wait(), name="ha_mqtt_stop")
+                tasks = [cmd_task, pub_task, stop_task]
+                # Wake on whichever happens first: graceful stop, command-loop
+                # death, or publish-loop death.  A worker task that dies because
+                # the broker dropped the connection (e.g. WiFi / NAT timeout
+                # mid-session) needs to surface as an exception so ``_run``
+                # logs it and reconnects with backoff — otherwise we'd silently
+                # block in ``stop_event.wait()`` while the connection is dead.
+                done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for t in done:
+                    if t is stop_task:
+                        continue
+                    task_exc = t.exception()
+                    if task_exc is not None:
+                        raise task_exc
             finally:
                 # Flush 'offline' before closing if we can.
                 try:
