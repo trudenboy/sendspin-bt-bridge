@@ -119,3 +119,62 @@ def test_default_advertiser_set_get_round_trip():
     M.set_default_advertiser(adv)
     assert M.get_default_advertiser() is adv
     M.set_default_advertiser(None)
+
+
+@pytest.mark.asyncio
+async def test_start_honours_host_and_port_overrides():
+    """When the operator configures ``rest.advertise_host`` /
+    ``rest.advertise_port`` (typically for setups behind a reverse proxy
+    or NAT), those values must end up in the published mDNS records
+    instead of the auto-detected hostname / web_port."""
+    fake_zc = MagicMock()
+    fake_zc.async_register_service = AsyncMock()
+    fake_zc.async_unregister_service = AsyncMock()
+    fake_zc.async_close = AsyncMock()
+
+    adv = M.BridgeMdnsAdvertiser(
+        bridge_name="HAOS Bridge",
+        version="2.67.0",
+        web_port=8080,
+        ingress_active=False,
+        host_override="bridge.example.com",
+        port_override=8443,
+    )
+    with patch("zeroconf.asyncio.AsyncZeroconf", return_value=fake_zc):
+        await adv.start()
+
+    assert adv.advertisement is not None
+    # Advertised port reflects the override, not the bridge's local web port.
+    assert adv.advertisement.port == 8443
+    assert adv.advertisement.txt_records["web_port"] == "8443"
+    # ServiceInfo passed to zeroconf should also carry the overridden port.
+    register_call = fake_zc.async_register_service.await_args
+    info = register_call.args[0]
+    assert info.port == 8443
+
+
+@pytest.mark.asyncio
+async def test_start_falls_back_when_overrides_empty():
+    """Empty / zero overrides must fall back to the auto-detected
+    hostname and web_port — same defaults as before the override
+    knob existed."""
+    fake_zc = MagicMock()
+    fake_zc.async_register_service = AsyncMock()
+    fake_zc.async_unregister_service = AsyncMock()
+    fake_zc.async_close = AsyncMock()
+
+    with patch("sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname", return_value="192.168.1.10"):
+        adv = M.BridgeMdnsAdvertiser(
+            bridge_name="HAOS Bridge",
+            version="2.67.0",
+            web_port=8080,
+            ingress_active=False,
+            host_override="",
+            port_override=0,
+        )
+        with patch("zeroconf.asyncio.AsyncZeroconf", return_value=fake_zc):
+            await adv.start()
+
+    assert adv.advertisement is not None
+    assert adv.advertisement.port == 8080
+    assert adv.advertisement.txt_records["web_port"] == "8080"

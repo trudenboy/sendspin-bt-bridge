@@ -218,6 +218,245 @@ def test_mqtt_status_when_no_publisher(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/custom_component/status — HACS integration heuristic
+# ---------------------------------------------------------------------------
+
+
+def test_custom_component_status_no_tokens_means_not_installed(client, monkeypatch):
+    """A bridge that has never paired with a custom_component reports
+    ``installed=False`` so the UI surfaces the install prompt."""
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": []},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["available"] is True
+    assert body["installed"] is False
+    assert body["started"] is False
+    assert body["last_seen"] is None
+    assert "hacs_repository" in body["install_url"]
+
+
+def test_custom_component_status_token_present_means_installed(client, monkeypatch):
+    """At least one issued token (even if never used) tells us the
+    integration paired at least once → ``installed=True``."""
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": [{"id": "abc", "label": "ha", "last_used": None}]},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is False
+    assert body["last_seen"] is None
+
+
+def test_custom_component_status_recent_use_means_started(client, monkeypatch):
+    """A token used within the active-window threshold flags the
+    integration as currently connected."""
+    from datetime import UTC, datetime, timedelta
+
+    recent = (datetime.now(tz=UTC) - timedelta(minutes=5)).isoformat()
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": [{"id": "abc", "label": "ha", "last_used": recent}]},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is True
+    assert body["last_seen"] == recent
+
+
+def test_custom_component_status_stale_use_means_idle(client, monkeypatch):
+    """A token used long ago surfaces as ``installed=True, started=False``
+    so the UI tells the operator the integration paired but isn't
+    currently active — different remediation than "never paired"."""
+    from datetime import UTC, datetime, timedelta
+
+    stale = (datetime.now(tz=UTC) - timedelta(days=7)).isoformat()
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": [{"id": "abc", "label": "ha", "last_used": stale}]},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is False
+    assert body["last_seen"] == stale
+
+
+# ---------------------------------------------------------------------------
+# /api/ha/mqtt/test — pre-save broker reachability + auth check
+# ---------------------------------------------------------------------------
+
+
+def _patch_open_connection_ok(monkeypatch):
+    """Make ``asyncio.open_connection`` succeed with a stub stream pair."""
+
+    class _StubWriter:
+        def close(self):
+            return None
+
+        async def wait_closed(self):
+            return None
+
+    async def _ok(host, port):
+        del host, port
+        return object(), _StubWriter()
+
+    import asyncio
+
+    monkeypatch.setattr(asyncio, "open_connection", _ok)
+
+
+def _patch_aiomqtt_client(monkeypatch, *, raise_on_enter=None):
+    """Replace ``aiomqtt.Client`` with a stub that succeeds (or raises)."""
+
+    class _StubClient:
+        def __init__(self, **kwargs):
+            del kwargs
+
+        async def __aenter__(self):
+            if raise_on_enter is not None:
+                raise raise_on_enter
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    import aiomqtt
+
+    monkeypatch.setattr(aiomqtt, "Client", _StubClient)
+    monkeypatch.setattr(aiomqtt, "Will", lambda **kw: type("Will", (), kw)())
+    monkeypatch.setattr(aiomqtt, "TLSParameters", lambda: object())
+
+
+def test_mqtt_test_returns_400_when_host_missing(client):
+    resp = client.post("/api/ha/mqtt/test", json={})
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert body["error_class"] == "ValueError"
+
+
+def test_mqtt_test_returns_400_when_port_invalid(client):
+    resp = client.post("/api/ha/mqtt/test", json={"host": "broker.local", "port": 99999})
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert "port" in body["error"].lower()
+
+
+def test_mqtt_test_succeeds_when_broker_reachable(client, monkeypatch):
+    _patch_open_connection_ok(monkeypatch)
+    _patch_aiomqtt_client(monkeypatch)
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "broker.local", "port": 1883, "username": "u", "password": "p"},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert "elapsed_ms" in body
+
+
+def test_mqtt_test_surfaces_tcp_timeout_as_error(client, monkeypatch):
+    """Pre-flight TCP probe must surface unreachable broker as an
+    OSError/TimeoutError with a structured error_class so the UI can
+    render it inline.  Closes Copilot follow-up on the executor-leak fix."""
+    import asyncio
+
+    async def _hang(host, port):
+        del host, port
+        raise TimeoutError("simulated broker drop")
+
+    monkeypatch.setattr(asyncio, "open_connection", _hang)
+    resp = client.post("/api/ha/mqtt/test", json={"host": "does.not.exist", "port": 1883})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert body["error_class"] == "TimeoutError"
+    assert "unreachable" in body["error"].lower()
+
+
+def test_mqtt_test_surfaces_mqtt_auth_failure(client, monkeypatch):
+    """A reachable broker that rejects auth must surface as a non-ok
+    result with the aiomqtt-raised error class."""
+    _patch_open_connection_ok(monkeypatch)
+
+    class _AuthError(Exception):
+        pass
+
+    _patch_aiomqtt_client(monkeypatch, raise_on_enter=_AuthError("not authorised"))
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "broker.local", "port": 1883, "username": "u", "password": "wrong"},
+    )
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert body["error_class"] == "_AuthError"
+    assert "not authorised" in body["error"]
+
+
+def test_mqtt_test_resolves_redacted_password_from_saved_config(client, monkeypatch, tmp_path):
+    """When the form sends ``***REDACTED***`` (the wire-protocol marker
+    for "password unchanged"), the test endpoint must look up the actual
+    password from saved config so editing host without retyping the
+    password works.  Captured by patching the stub Client to record the
+    constructor arg."""
+    captured: dict[str, object] = {}
+
+    class _CapturingClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    import aiomqtt
+
+    _patch_open_connection_ok(monkeypatch)
+    monkeypatch.setattr(aiomqtt, "Client", _CapturingClient)
+    monkeypatch.setattr(aiomqtt, "TLSParameters", lambda: object())
+
+    # Override config to seed a saved password.
+    cfg_payload = {
+        "BRIDGE_NAME": "TestBridge",
+        "BLUETOOTH_DEVICES": [],
+        "AUTH_TOKENS": [],
+        "HA_INTEGRATION": {
+            "enabled": True,
+            "mode": "mqtt",
+            "mqtt": {"broker": "broker.local", "port": 1883, "username": "u", "password": "saved-pw"},
+        },
+    }
+
+    def _fake_load_config():
+        return cfg_payload
+
+    monkeypatch.setattr("sendspin_bridge.config.load_config", _fake_load_config)
+
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={
+            "host": "broker.local",
+            "port": 1883,
+            "username": "u",
+            "password": "***REDACTED***",
+        },
+    )
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert captured["password"] == "saved-pw"
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mdns/status
 # ---------------------------------------------------------------------------
 

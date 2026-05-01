@@ -10138,3 +10138,165 @@ body {
         min-width: 0;
     }
 }
+
+/* ===================================================================
+   HA tab UX refactor (v2.67.0-rc.2)
+   =================================================================== */
+
+/* Segmented control replacing the Mode <select>. Three equal-width
+   radio labels in a single pill; the :checked option highlights with
+   the same accent-on-surface treatment used by .config-tab. */
+.segmented-control {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--color-surface-3, rgba(127, 127, 127, 0.12));
+    margin: 0.4em 0 0.6em;
+    width: 100%;
+    max-width: 540px;
+}
+.segmented-option {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin: 0;
+    position: relative;
+}
+.segmented-option input[type="radio"] {
+    /* Visually hidden but kept in DOM for radiogroup semantics. */
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.segmented-option-label {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 0.45em 0.8em;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-2, inherit);
+    transition: background 0.15s ease, color 0.15s ease;
+    user-select: none;
+}
+.segmented-option:hover .segmented-option-label {
+    background: var(--color-surface-2, rgba(127, 127, 127, 0.08));
+}
+.segmented-option input:checked + .segmented-option-label {
+    background: var(--color-accent, #2563eb);
+    color: var(--color-on-accent, #fff);
+    font-weight: 600;
+}
+.segmented-option input:focus-visible + .segmented-option-label {
+    outline: 2px solid var(--color-accent, #2563eb);
+    outline-offset: 2px;
+}
+
+/* HA Connection-status detail rows under the status pill — broker URL,
+   last connect time, last error.  Hidden until the status panel has
+   data to show. */
+.ha-status-detail {
+    margin: 0.6em 0 0;
+    padding: 0.6em 0 0;
+    border-top: 1px solid var(--color-divider, rgba(127, 127, 127, 0.18));
+    font-size: 12.5px;
+    display: grid;
+    gap: 0.3em;
+}
+.ha-status-detail-row {
+    display: grid;
+    grid-template-columns: 7em 1fr;
+    gap: 0.6em;
+    align-items: baseline;
+}
+.ha-status-detail dt {
+    color: var(--color-text-2, rgba(127, 127, 127, 0.85));
+    margin: 0;
+    font-weight: 500;
+}
+.ha-status-detail dd {
+    margin: 0;
+    color: var(--color-text-1, inherit);
+    word-break: break-word;
+}
+#ha-status-last-error {
+    color: var(--color-danger, #c43a3a);
+}
+
+/* Inline Mosquitto add-on hint that lives next to the MQTT radio
+   instead of the full install banner when the add-on is OK. */
+.ha-mosquitto-inline-hint {
+    margin-top: 0.5em;
+    padding: 0.35em 0.6em;
+    border-radius: 4px;
+    background: var(--color-surface-2, rgba(127, 127, 127, 0.08));
+    font-size: 12.5px;
+}
+.ha-mosquitto-inline-hint--ok {
+    color: var(--color-success, #2a8a4f);
+}
+.ha-mosquitto-inline-hint--warn {
+    color: var(--color-warning, #b07a18);
+}
+
+/* MQTT broker form regrouping into Broker / Authentication fieldsets. */
+.ha-mqtt-fieldset {
+    border: 1px solid var(--color-divider, rgba(127, 127, 127, 0.18));
+    border-radius: 6px;
+    padding: 0.7em 0.9em 0.9em;
+    margin: 0 0 0.9em;
+}
+.ha-mqtt-legend {
+    padding: 0 0.4em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-2, rgba(127, 127, 127, 0.9));
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ha-mqtt-advanced {
+    margin-top: 0.4em;
+}
+.ha-mqtt-advanced > summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--color-text-2, rgba(127, 127, 127, 0.85));
+    padding: 0.3em 0;
+    user-select: none;
+}
+.ha-mqtt-advanced[open] > summary {
+    color: var(--color-text-1, inherit);
+    font-weight: 500;
+}
+
+/* Test-connection feedback colours next to the button. */
+#ha-mqtt-test-feedback.test-feedback--ok {
+    color: var(--color-success, #2a8a4f);
+    font-weight: 500;
+}
+#ha-mqtt-test-feedback.test-feedback--err {
+    color: var(--color-danger, #c43a3a);
+    font-weight: 500;
+}
+#ha-mqtt-test-feedback.test-feedback--pending {
+    color: var(--color-text-2, rgba(127, 127, 127, 0.85));
+}
+
+/* Form-group spans for the two-column broker-address grid. */
+.form-group--span-2 {
+    grid-column: span 2;
+}
+@media (max-width: 540px) {
+    .form-group--span-2 {
+        grid-column: auto;
+    }
+    .segmented-control {
+        max-width: 100%;
+    }
+}

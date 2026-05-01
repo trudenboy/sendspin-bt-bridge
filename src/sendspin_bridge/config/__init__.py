@@ -177,6 +177,10 @@ DEFAULT_CONFIG = {
         "rest": {
             "advertise_mdns": True,
             "supervisor_pair": True,
+            # Optional explicit overrides for setups behind a reverse proxy
+            # or NAT — empty / 0 means "auto-resolve from hostname / web port".
+            "advertise_host": "",
+            "advertise_port": 0,
         },
     },
     # Long-lived API tokens (Bearer auth) used by the HA custom_component.

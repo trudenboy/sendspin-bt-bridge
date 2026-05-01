@@ -934,39 +934,17 @@
                     <div class="config-group-heading ui-stack ui-stack--xs">
                         <h4 class="config-group-title"><span class="cg-icon ui-icon-slot" data-ui-icon="ha" aria-hidden="true"></span> Home Assistant integration</h4>
                         <p class="config-group-subtitle">
-                            Direct control of the bridge from HA dashboards and automations. Bridge-only diagnostics
-                            (RSSI, battery, BT state) and BT-level commands (reconnect, wake, standby) — never
-                            duplicates Music Assistant's <code>media_player</code> surface.
+                            Control the bridge from Home Assistant dashboards and automations.
+                            <a href="https://trudenboy.github.io/sendspin-bt-bridge/troubleshooting/" target="_blank" rel="noopener">Learn more</a>
                         </p>
                     </div>
 
                     <div class="config-card-stack">
-                        <div class="config-settings-card" id="ha-naming-card">
-                            <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Naming</div>
-                                <p class="config-card-subtitle">
-                                    Pull manual name suggestions for the bridge and Bluetooth adapters from the Home Assistant area registry, so devices line up with the rooms HA already knows about.
-                                </p>
-                            </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Use Home Assistant area suggestions for names</strong>
-                                    <span class="form-hint">When on, the bridge name and adapter name fields surface a dropdown of HA areas. Suggestions only — nothing is renamed automatically. Defaults on in HA add-on mode.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" data-action="ha-area-assist-change" data-event="change">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                        </div>
-
                         <div id="ha-connect-panel" class="config-settings-card">
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div>
                                     <div class="config-card-title">Connection status</div>
-                                    <p class="config-card-subtitle">Current Home Assistant integration state for this bridge. Reconfigure to expand the transport settings.</p>
+                                    <p class="config-card-subtitle" id="ha-connect-subtitle">Current Home Assistant integration state for this bridge.</p>
                                 </div>
                             </div>
                             <div id="ha-status-bar" class="panel-status panel-status--neutral">
@@ -974,6 +952,20 @@
                                 <span id="ha-status-text" class="panel-status-text">Off — pick a transport below to connect.</span>
                                 <button type="button" id="ha-reconfigure" class="btn btn-sm btn-secondary panel-status-action" hidden data-action="ha-reconfigure">Reconfigure</button>
                             </div>
+                            <dl id="ha-status-detail" class="ha-status-detail" hidden>
+                                <div class="ha-status-detail-row">
+                                    <dt>Broker</dt>
+                                    <dd id="ha-status-broker">—</dd>
+                                </div>
+                                <div class="ha-status-detail-row">
+                                    <dt>Last connect</dt>
+                                    <dd id="ha-status-last-connect">—</dd>
+                                </div>
+                                <div class="ha-status-detail-row" id="ha-status-last-error-row" hidden>
+                                    <dt>Last error</dt>
+                                    <dd id="ha-status-last-error">—</dd>
+                                </div>
+                            </dl>
                         </div>
 
                         <div id="ha-mosquitto-banner" class="config-settings-card" hidden>
@@ -1006,139 +998,205 @@
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">Transport</div>
                                 <p class="config-card-subtitle">
-                                    Pick how Home Assistant reaches the bridge.  Off disables the integration entirely.
+                                    Pick how Home Assistant reaches the bridge.
                                 </p>
                             </div>
-                            <label class="config-setting-row">
+                            <div class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Mode</strong>
-                                    <span class="form-hint"><code>MQTT</code> publishes discovery payloads to a broker — zero install in HA when the Mosquitto add-on is present.  <code>REST</code> advertises the bridge via mDNS so the HACS custom_component can attach over REST + SSE.  Pick the path that matches how you want to wire HA.</span>
+                                    <strong id="ha-mode-label">Mode</strong>
+                                    <span class="form-hint" id="ha-mode-hint"><code>MQTT</code> publishes discovery payloads to a broker. <code>Direct REST</code> advertises the bridge via mDNS so the HACS integration attaches over HTTP.</span>
                                 </span>
-                                <span class="config-setting-control">
-                                    <select id="ha-integration-mode" class="config-inline-select"
-                                            data-action="ha-integration-mode-change" data-event="change">
-                                        <option value="off">Off — disabled</option>
-                                        <option value="mqtt">MQTT — Mosquitto add-on</option>
-                                        <option value="rest">REST — HACS custom_component</option>
-                                    </select>
-                                </span>
-                            </label>
+                            </div>
+                            <div class="segmented-control" role="radiogroup" aria-labelledby="ha-mode-label" id="ha-integration-mode-radiogroup">
+                                <label class="segmented-option">
+                                    <input type="radio" name="ha-integration-mode-radio" id="ha-integration-mode-off" value="off"
+                                           data-action="ha-integration-mode-change" data-event="change">
+                                    <span class="segmented-option-label">Off</span>
+                                </label>
+                                <label class="segmented-option">
+                                    <input type="radio" name="ha-integration-mode-radio" id="ha-integration-mode-mqtt" value="mqtt"
+                                           data-action="ha-integration-mode-change" data-event="change">
+                                    <span class="segmented-option-label">MQTT</span>
+                                </label>
+                                <label class="segmented-option">
+                                    <input type="radio" name="ha-integration-mode-radio" id="ha-integration-mode-rest" value="rest"
+                                           data-action="ha-integration-mode-change" data-event="change">
+                                    <span class="segmented-option-label">Direct REST</span>
+                                </label>
+                            </div>
+                            <input type="hidden" id="ha-integration-mode" value="off">
+                            <div class="form-hint ha-mosquitto-inline-hint" id="ha-transport-mosquitto-hint" hidden></div>
+                            <div class="form-hint ha-mosquitto-inline-hint" id="ha-transport-customcomp-hint" hidden></div>
                         </div>
 
-                        <div class="config-settings-card" id="ha-mqtt-card">
+                        <div class="config-settings-card" id="ha-mqtt-card" hidden>
                             <div class="config-card-header ui-stack ui-stack--sm">
                                 <div class="config-card-title">MQTT broker</div>
                                 <p class="config-card-subtitle">
-                                    {% if ha_mode %}
-                                    On HAOS click <em>Auto-detect</em> to fill these in from the Mosquitto add-on, or set <code>auto</code> as the broker host to resolve at startup.
-                                    {% else %}
-                                    On a standalone bridge, <code>auto</code> resolves to the host of your configured Music Assistant URL — useful when MA + Mosquitto run as add-ons on the same HA host.  Click <em>Suggest broker host</em> to fill the field, or enter the broker IP / hostname manually.  Either way you must enter Mosquitto credentials below if your broker requires them.
-                                    {% endif %}
+                                    Connect the bridge to your MQTT broker — typically the Mosquitto add-on running on your Home Assistant host.
                                 </p>
                             </div>
-                            <div class="form-inline-actions config-inline-row" style="margin-bottom: 0.75em;">
-                                <button type="button" class="btn btn-sm btn-secondary" data-action="ha-mqtt-autodetect">
-                                    <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span>
-                                    {% if ha_mode %}Auto-detect MQTT add-on{% else %}Suggest broker host{% endif %}
-                                </button>
-                                <span class="form-hint" id="ha-mqtt-autodetect-hint" style="margin-left: 0.5em;"></span>
-                            </div>
-                            <div class="config-form-grid">
-                                <div class="form-group" id="ha-mqtt-broker-group">
-                                    <label>Broker host<span class="required-marker" hidden aria-hidden="true">*</span>
-                                        <span class="form-hint">
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Broker address</legend>
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-autodetect-toggle-label">Use auto-detect</strong>
+                                        <span class="form-hint" id="ha-autodetect-toggle-hint">
                                             {% if ha_mode %}
-                                            Hostname or IP.  Use <code>auto</code> on HAOS to re-resolve from the Mosquitto add-on at startup.
+                                            On HAOS, the bridge fetches broker host + credentials from the Mosquitto add-on at startup.
                                             {% else %}
-                                            Hostname or IP of your MQTT broker (typically your HA host's IP).  <code>auto</code> resolves to your configured Music Assistant URL host on standalone — set MA first or fill the field in manually.
+                                            Resolves the broker host from your Music Assistant URL at startup. Useful when MA and Mosquitto run on the same Home Assistant host.
                                             {% endif %}
                                         </span>
-                                    </label>
-                                    <input type="text" id="ha-mqtt-broker"
-                                           placeholder="{% if ha_mode %}auto{% else %}homeassistant.local{% endif %}"
-                                           autocomplete="off">
-                                    <span class="field-error" id="ha-mqtt-broker-error"></span>
+                                    </span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-mqtt-use-autodetect" role="switch" aria-checked="false" aria-labelledby="ha-autodetect-toggle-label" data-action="ha-auto-detect-toggle" data-event="change">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </span>
+                                </label>
+                                <div class="form-inline-actions config-inline-row" id="ha-mqtt-autodetect-row" style="margin-bottom: 0.75em;">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-action="ha-mqtt-autodetect">
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span>
+                                        {% if ha_mode %}Fetch from Mosquitto add-on{% else %}Suggest broker host{% endif %}
+                                    </button>
+                                    <span class="form-hint" id="ha-mqtt-autodetect-hint" style="margin-left: 0.5em;"></span>
                                 </div>
-                                <div class="form-group">
-                                    <label>Port</label>
-                                    <input type="number" id="ha-mqtt-port" min="1" max="65535" placeholder="1883">
+                                <div class="config-form-grid">
+                                    <div class="form-group form-group--span-2" id="ha-mqtt-broker-group">
+                                        <label for="ha-mqtt-broker">Broker host<span class="required-marker" hidden aria-hidden="true">*</span>
+                                            <span class="form-hint">Hostname or IP of your MQTT broker.</span>
+                                        </label>
+                                        <input type="text" id="ha-mqtt-broker"
+                                               placeholder="{% if ha_mode %}homeassistant.local{% else %}homeassistant.local{% endif %}"
+                                               autocomplete="off">
+                                        <span class="field-error" id="ha-mqtt-broker-error"></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ha-mqtt-port">Port</label>
+                                        <input type="number" id="ha-mqtt-port" min="1" max="65535" placeholder="1883">
+                                        <span class="field-error" id="ha-mqtt-port-error"></span>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Username</label>
-                                    <input type="text" id="ha-mqtt-username" autocomplete="off">
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-mqtt-tls-label">TLS</strong>
+                                        <span class="form-hint">Connect to broker over TLS (mTLS not supported). Toggling on suggests port 8883.</span>
+                                    </span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-mqtt-tls" role="switch" aria-checked="false" aria-labelledby="ha-mqtt-tls-label" data-action="ha-mqtt-tls-toggle" data-event="change">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </span>
+                                </label>
+                            </fieldset>
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Authentication</legend>
+                                <div class="config-form-grid">
+                                    <div class="form-group">
+                                        <label for="ha-mqtt-username">Username</label>
+                                        <input type="text" id="ha-mqtt-username" autocomplete="off">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ha-mqtt-password">Password</label>
+                                        <input type="password" id="ha-mqtt-password" autocomplete="new-password" placeholder="(no password)">
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Password</label>
-                                    <input type="password" id="ha-mqtt-password" autocomplete="new-password">
+                                <div class="form-inline-actions config-inline-row" style="margin-top: 0.75em;">
+                                    <button type="button" class="btn btn-sm btn-primary" data-action="ha-mqtt-test">
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="plug" aria-hidden="true"></span>
+                                        Test connection
+                                    </button>
+                                    <span class="form-hint" id="ha-mqtt-test-feedback" style="margin-left: 0.5em;"></span>
                                 </div>
-                                <div class="form-group">
-                                    <label>Discovery prefix
+                            </fieldset>
+
+                            <details class="ha-mqtt-advanced">
+                                <summary>Advanced</summary>
+                                <div class="form-group" style="margin-top: 0.5em;">
+                                    <label for="ha-mqtt-discovery-prefix">Discovery prefix
                                         <span class="form-hint">HA's discovery topic prefix; default <code>homeassistant</code>.</span>
                                     </label>
                                     <input type="text" id="ha-mqtt-discovery-prefix" placeholder="homeassistant">
                                 </div>
-                            </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>TLS</strong>
-                                    <span class="form-hint">Connect to broker over TLS (mTLS not supported).</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="ha-mqtt-tls">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
+                            </details>
+
                             <div class="config-inline-note" id="ha-mqtt-status" hidden>
                                 <span class="form-hint" id="ha-mqtt-status-text"></span>
                             </div>
                         </div>
 
-                        <div class="config-settings-card" id="ha-rest-card">
+                        <div class="config-settings-card" id="ha-rest-card" hidden>
                             <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">REST + Zeroconf (custom_component)</div>
+                                <div class="config-card-title">Direct REST connection (HACS integration)</div>
                                 <p class="config-card-subtitle">
-                                    Used by the HACS custom_component. mDNS advertises the bridge so HA's Zeroconf
-                                    discovery offers our integration automatically.
+                                    For the HACS custom integration. The bridge advertises itself via mDNS so Home Assistant discovers it automatically.
                                 </p>
                             </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Advertise via mDNS</strong>
-                                    <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for HA Zeroconf discovery.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="ha-rest-advertise-mdns" checked>
-                                        <span class="config-switch-track"></span>
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Advertised address</legend>
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-rest-advertise-label">Advertise via mDNS</strong>
+                                        <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for Home Assistant Zeroconf discovery.</span>
                                     </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Allow Supervisor pairing</strong>
-                                    <span class="form-hint">On HAOS, let the custom_component mint a token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="ha-rest-supervisor-pair" checked>
-                                        <span class="config-switch-track"></span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-rest-advertise-mdns" checked role="switch" aria-checked="true" aria-labelledby="ha-rest-advertise-label">
+                                            <span class="config-switch-track"></span>
+                                        </span>
                                     </span>
-                                </span>
-                            </label>
+                                </label>
+                                <div class="config-form-grid">
+                                    <div class="form-group form-group--span-2" id="ha-rest-host-group">
+                                        <label for="ha-rest-advertise-host">Bridge host (override)
+                                            <span class="form-hint">Hostname or IP that Home Assistant should use to reach the bridge. Leave empty to auto-detect — set this only when the bridge sits behind a reverse proxy or NAT.</span>
+                                        </label>
+                                        <input type="text" id="ha-rest-advertise-host"
+                                               placeholder="auto-detect (resolved from hostname)"
+                                               autocomplete="off">
+                                        <span class="field-error" id="ha-rest-advertise-host-error"></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ha-rest-advertise-port">Port (override)</label>
+                                        <input type="number" id="ha-rest-advertise-port" min="1" max="65535" placeholder="auto (web UI port)">
+                                        <span class="field-error" id="ha-rest-advertise-port-error"></span>
+                                    </div>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Pairing</legend>
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-rest-supervisor-label">Allow Supervisor pairing</strong>
+                                        <span class="form-hint">On HAOS, let the integration mint a token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
+                                    </span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-rest-supervisor-pair" checked role="switch" aria-checked="true" aria-labelledby="ha-rest-supervisor-label">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </span>
+                                </label>
+                            </fieldset>
+
                             <div class="config-inline-note" id="ha-mdns-status" hidden>
                                 <span class="form-hint" id="ha-mdns-status-text"></span>
                             </div>
                         </div>
 
-                        <div class="config-settings-card" id="ha-tokens-card">
+                        <div class="config-settings-card" id="ha-tokens-card" hidden>
                             <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title">Bearer tokens for HA custom_component</div>
+                                <div class="config-card-title">Access tokens (HACS only)</div>
                                 <p class="config-card-subtitle">
-                                    Long-lived tokens the HACS integration sends in <code>Authorization: Bearer …</code>.
-                                    On HAOS the custom_component mints one automatically via the Supervisor pair flow —
-                                    use this card only for manual setups.
+                                    Long-lived tokens used by the HACS integration to authenticate to the bridge.
+                                    On HAOS, tokens are issued automatically — use this card only for manual setups.
                                 </p>
                             </div>
                             <div class="form-inline-actions config-inline-row">
@@ -1158,6 +1216,27 @@
                             <div id="ha-tokens-list" class="config-form-grid" style="margin-top: 0.75em;">
                                 <span class="form-hint">No tokens issued yet.</span>
                             </div>
+                        </div>
+
+                        <div class="config-settings-card" id="ha-naming-card">
+                            <div class="config-card-header ui-stack ui-stack--sm">
+                                <div class="config-card-title">Preferences</div>
+                                <p class="config-card-subtitle">
+                                    Optional convenience: pull room/area name suggestions from Home Assistant when naming the bridge and adapters.
+                                </p>
+                            </div>
+                            <label class="config-setting-row config-setting-row--compact">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong id="ha-area-assist-label">Use Home Assistant areas for name suggestions</strong>
+                                    <span class="form-hint">When on, the bridge name and adapter name fields surface a dropdown of HA areas. Suggestions only — nothing is renamed automatically. Defaults on in HA add-on mode.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="HA_AREA_NAME_ASSIST_ENABLED" id="ha-area-name-assist-enabled" role="switch" aria-checked="false" aria-labelledby="ha-area-assist-label" data-action="ha-area-assist-change" data-event="change">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>

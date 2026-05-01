@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import queue
+import secrets
 import time
 from typing import Any
 
@@ -309,6 +310,33 @@ def api_ha_mosquitto_status():
 # ---------------------------------------------------------------------------
 
 
+@ha_bp.route("/api/ha/custom_component/status", methods=["GET"])
+def api_ha_custom_component_status():
+    """Heuristic install/active state for the HACS custom_component.
+
+    Mirrors ``/api/ha/mosquitto/status`` so the UI can render the two
+    transports' install indicators with the same code path.  See
+    ``services.ha.ha_addon.get_custom_component_state`` for the
+    detection logic (token-presence + last_used recency).
+    """
+    try:
+        from sendspin_bridge.services.ha.ha_addon import get_custom_component_state
+
+        return jsonify(get_custom_component_state())
+    except Exception as exc:
+        logger.exception("custom_component status query failed")
+        return jsonify(
+            {
+                "available": True,
+                "installed": False,
+                "started": False,
+                "last_seen": None,
+                "install_url": "https://my.home-assistant.io/redirect/hacs_repository/?owner=trudenboy&repository=sendspin-bt-bridge&category=integration",
+                "error": str(exc),
+            }
+        )
+
+
 @ha_bp.route("/api/ha/mqtt/status", methods=["GET"])
 def api_ha_mqtt_status():
     """Read-only snapshot of the MQTT publisher state for the UI."""
@@ -332,6 +360,170 @@ def api_ha_mqtt_status():
                 "last_event_at": None,
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# /api/ha/mqtt/test — pre-save broker reachability + auth check
+# ---------------------------------------------------------------------------
+
+
+_MQTT_TEST_TCP_TIMEOUT_S = 5.0
+_MQTT_TEST_CONNACK_TIMEOUT_S = 10.0
+# Wire-protocol marker for "password unchanged" — see ``routes/api_config.py``
+# for the matching round-trip logic on save.
+_REDACTED_PASSWORD_MARKER = "***REDACTED***"
+
+
+async def _probe_mqtt_broker(
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    tls: bool,
+) -> dict[str, Any]:
+    """Run a one-shot reachability + auth probe against an MQTT broker.
+
+    Mirrors the pre-flight + bounded-CONNACK pattern in
+    ``ha_mqtt_publisher._serve``: TCP open via ``asyncio.open_connection``
+    (asyncio-native, cancellable on timeout), then a full ``aiomqtt`` CONNACK
+    round-trip inside ``asyncio.timeout``.  No retained state, no
+    publishes — purely "do these credentials reach this broker".
+    """
+    import asyncio
+
+    started = time.monotonic()
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=_MQTT_TEST_TCP_TIMEOUT_S,
+        )
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        del reader  # only needed to satisfy the open_connection return shape
+    except (TimeoutError, OSError) as exc:
+        return {
+            "ok": False,
+            "error_class": type(exc).__name__,
+            "error": f"broker {host}:{port} unreachable: {exc}",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+
+    try:
+        import aiomqtt
+    except ImportError as exc:
+        return {
+            "ok": False,
+            "error_class": "ImportError",
+            "error": f"aiomqtt not installed: {exc}",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+
+    # Use a unique-per-call identifier so two simultaneous tests (rapid
+    # double-click, two operator browsers) can't collide on the broker
+    # side and trigger spurious disconnects.  ``secrets.token_hex`` gives
+    # us 64 random bits — far below the MQTT v3.1.1 23-byte client_id
+    # limit, plenty for collision-free fanout.
+    client = aiomqtt.Client(
+        hostname=host,
+        port=port,
+        username=username or None,
+        password=password or None,
+        identifier=f"sendspin-test-{secrets.token_hex(8)}",
+        tls_params=aiomqtt.TLSParameters() if tls else None,
+        timeout=10,
+    )
+    try:
+        async with asyncio.timeout(_MQTT_TEST_CONNACK_TIMEOUT_S):
+            await client.__aenter__()
+        try:
+            return {"ok": True, "elapsed_ms": int((time.monotonic() - started) * 1000)}
+        finally:
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception:
+                pass
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error_class": type(exc).__name__,
+            "error": f"connect failed: {exc}",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+
+
+def _resolve_redacted_password(submitted: str) -> str:
+    """If the form submitted the redacted-password marker, resolve the
+    actual password from saved config so testing host/user/TLS edits
+    works without forcing the operator to retype the password."""
+    if submitted != _REDACTED_PASSWORD_MARKER:
+        return submitted
+    try:
+        from sendspin_bridge.config import load_config
+
+        cfg = load_config()
+        block = cfg.get("HA_INTEGRATION") or {}
+        mqtt = block.get("mqtt") or {}
+        return str(mqtt.get("password") or "")
+    except Exception:
+        logger.debug("Could not resolve redacted MQTT password from config", exc_info=True)
+        return ""
+
+
+@ha_bp.route("/api/ha/mqtt/test", methods=["POST"])
+def api_ha_mqtt_test():
+    """Probe an MQTT broker with the values currently in the form.
+
+    Used by the HA tab's "Test connection" button so operators can
+    iterate on broker / credentials without saving partial configs and
+    watching the publisher fail in the status panel.
+
+    Accepts a JSON body so the password (or the ``***REDACTED***``
+    marker that triggers a saved-config lookup) is not exposed in URL
+    query params, browser history, or proxy access logs:
+
+      ``{"host": str, "port": int, "username": str,
+         "password": str, "tls": bool}``
+
+    Validation errors (missing ``host``, out-of-range ``port``) return
+    HTTP 400 with the same error-shaped body the success path uses
+    (``{"ok": false, "error_class", "error"}``).  Probe outcomes —
+    success and runtime failures (TCP timeout, auth rejection, TLS
+    mismatch) — return HTTP 200 with the result in the body so the UI
+    can render the error class + message inline next to the form.
+    """
+    import asyncio
+
+    payload = request.get_json(silent=True) or {}
+    host = str(payload.get("host") or "").strip()
+    if not host:
+        return jsonify({"ok": False, "error_class": "ValueError", "error": "host required"}), 400
+    try:
+        port = int(payload.get("port") or 1883)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error_class": "ValueError", "error": "port must be an integer"}), 400
+    if not (1 <= port <= 65535):
+        return jsonify({"ok": False, "error_class": "ValueError", "error": "port out of range"}), 400
+    username = str(payload.get("username") or "").strip()
+    password = _resolve_redacted_password(str(payload.get("password") or ""))
+    tls_raw = payload.get("tls")
+    if isinstance(tls_raw, bool):
+        tls = tls_raw
+    else:
+        tls = str(tls_raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+    try:
+        result = asyncio.run(_probe_mqtt_broker(host, port, username, password, tls))
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("MQTT test probe crashed unexpectedly")
+        result = {
+            "ok": False,
+            "error_class": type(exc).__name__,
+            "error": f"probe crashed: {exc}",
+        }
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

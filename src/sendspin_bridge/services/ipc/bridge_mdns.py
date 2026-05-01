@@ -76,11 +76,23 @@ class BridgeMdnsAdvertiser:
         version: str,
         web_port: int,
         ingress_active: bool,
+        host_override: str = "",
+        port_override: int = 0,
     ) -> None:
         self._bridge_name = bridge_name or "Sendspin Bridge"
         self._version = version or ""
         self._web_port = int(web_port or 8080)
         self._ingress_active = bool(ingress_active)
+        # Optional explicit overrides for setups behind a reverse proxy or
+        # NAT — empty string / 0 means "auto-resolve".  When set the value
+        # is published in the mDNS SRV/TXT records so HA Core's Zeroconf
+        # discovery hands the HACS integration a reachable address even
+        # when the bridge's own hostname is not directly routable from HA.
+        self._host_override = (host_override or "").strip()
+        try:
+            self._port_override = int(port_override or 0)
+        except (TypeError, ValueError):
+            self._port_override = 0
         self._zc: Any = None
         self._info: Any = None
         self._advertisement: MdnsAdvertisement | None = None
@@ -99,12 +111,13 @@ class BridgeMdnsAdvertiser:
 
         host_id = _derive_host_id(self._bridge_name)
         instance_name = f"sendspin-bridge-{host_id}._sendspin-bridge._tcp.local."
-        host = _resolve_host_address()
+        host = self._host_override or _resolve_host_address()
+        advertised_port = self._port_override if self._port_override > 0 else self._web_port
 
         txt: dict[str, str] = {
             "version": self._version,
             "host_id": host_id,
-            "web_port": str(self._web_port),
+            "web_port": str(advertised_port),
             "auth": "bearer",
             "ingress": "1" if self._ingress_active else "0",
         }
@@ -112,13 +125,21 @@ class BridgeMdnsAdvertiser:
         properties = {k.encode("utf-8"): v.encode("utf-8") for k, v in txt.items()}
 
         try:
-            address_packed = socket.inet_aton(host) if host and "." in host else b""
+            # Pack only when ``host`` is actually a dotted-quad IPv4
+            # literal — operator-supplied FQDN overrides (e.g.
+            # ``bridge.example.com``) would crash ``inet_aton`` here, but
+            # zeroconf is fine with an empty address list and a populated
+            # ``server=`` field in that case.
+            try:
+                address_packed = socket.inet_aton(host) if host else b""
+            except OSError:
+                address_packed = b""
             addresses = [address_packed] if address_packed else []
             info = ServiceInfo(
                 type_=_SERVICE_TYPE,
                 name=instance_name,
                 addresses=addresses,
-                port=self._web_port,
+                port=advertised_port,
                 properties=properties,
                 server=f"sendspin-bridge-{host_id}.local.",
             )
@@ -133,14 +154,16 @@ class BridgeMdnsAdvertiser:
         self._advertisement = MdnsAdvertisement(
             service_name=instance_name,
             host_id=host_id,
-            port=self._web_port,
+            port=advertised_port,
             txt_records=txt,
         )
+        host_suffix = f" host={self._host_override}" if self._host_override else ""
         logger.info(
-            "Bridge mDNS: advertised %s on :%s (host_id=%s)",
+            "Bridge mDNS: advertised %s on :%s (host_id=%s)%s",
             _SERVICE_TYPE,
-            self._web_port,
+            advertised_port,
             host_id,
+            host_suffix,
         )
 
     async def stop(self) -> None:
