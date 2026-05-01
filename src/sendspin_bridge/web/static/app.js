@@ -6172,70 +6172,6 @@ function _haRestSuggest() {
     _refreshRestAdvertiseDefaults({fillEvenIfDirty: true});
 }
 
-async function _haRestTestConnection() {
-    var feedback = document.getElementById('ha-rest-test-feedback');
-    function setFeedback(text, kind) {
-        if (!feedback) return;
-        feedback.textContent = text;
-        feedback.classList.remove('test-feedback--ok', 'test-feedback--err', 'test-feedback--pending');
-        if (kind) feedback.classList.add('test-feedback--' + kind);
-    }
-    setFeedback('Testing…', 'pending');
-
-    var toggle = document.getElementById('ha-rest-use-autodetect');
-    var hostInput = document.getElementById('ha-rest-advertise-host');
-    var portInput = document.getElementById('ha-rest-advertise-port');
-    var host = '';
-    var port = 0;
-    if (toggle && toggle.checked) {
-        // Auto-detect: send empty body so the endpoint resolves
-        // host/port itself.  Endpoint surfaces what was tried in the
-        // response, so we'll render the resolved values back in the
-        // feedback text.
-        host = '';
-        port = 0;
-    } else {
-        host = hostInput ? (hostInput.value || '').trim() : '';
-        port = parseInt((portInput || {}).value, 10) || 0;
-        if (!host) {
-            setFeedback('Enter a Bridge host before testing, or turn on Use auto-detect.', 'err');
-            return;
-        }
-    }
-
-    var csrf = (window._csrfToken || '').toString();
-    var headers = {'Content-Type': 'application/json'};
-    if (csrf) headers['X-CSRF-Token'] = csrf;
-    try {
-        var resp = await fetch(API_BASE + '/api/ha/rest/test', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({host: host, port: port})
-        });
-        if (resp.status === 401) { _handleUnauthorized(); return; }
-        var body = await resp.json().catch(function() { return null; });
-        if (resp.status === 400) {
-            setFeedback('Test failed: ' + ((body && body.error) || ('HTTP ' + resp.status)), 'err');
-            return;
-        }
-        var resolvedHost = (body && body.host) || host;
-        var resolvedPort = (body && body.port) || port;
-        var ms = body && typeof body.elapsed_ms === 'number' ? (' (' + body.elapsed_ms + ' ms)') : '';
-        if (body && body.ok && !body.warn) {
-            var httpInfo = body.http_status ? (' · HTTP ' + body.http_status) : '';
-            setFeedback('Reachable at ' + resolvedHost + ':' + resolvedPort + httpInfo + ms + '.', 'ok');
-        } else if (body && body.ok && body.warn) {
-            // TCP ok but HTTP probe failed — flag as warning, not error.
-            setFeedback('TCP ok at ' + resolvedHost + ':' + resolvedPort + ms + '. ' + body.warn, 'err');
-        } else {
-            var errMsg = (body && body.error) || (body && body.error_class) || ('HTTP ' + resp.status);
-            setFeedback('Test failed: ' + errMsg, 'err');
-        }
-    } catch (exc) {
-        setFeedback('Test failed: ' + (exc && exc.message ? exc.message : String(exc)), 'err');
-    }
-}
-
 async function _refreshHaIntegrationStatus() {
     // Fire both probes in parallel; failure is non-fatal — the form still
     // works for editing config without a live publisher / mDNS.
@@ -14491,7 +14427,6 @@ const _ACTION_REGISTRY = {
         return false;
     },
     'ha-mqtt-test':             () => { _haMqttTestConnection(); return false; },
-    'ha-rest-test':             () => { _haRestTestConnection(); return false; },
     'ha-rest-suggest':          () => { _haRestSuggest(); return false; },
     'ha-rest-auto-detect-toggle': () => { _haRestAutoDetectToggle(); return false; },
     'ha-mqtt-tls-toggle':       () => { _haMqttTlsToggle(); return false; },
