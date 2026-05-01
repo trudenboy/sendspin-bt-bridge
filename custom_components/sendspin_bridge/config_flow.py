@@ -78,89 +78,104 @@ async def _resolve_user_facing_url(
 ) -> str:
     """Pick a CTA URL the operator can actually open in their browser.
 
-    On HAOS the bridge's discovered host is the Supervisor-internal
-    address (``172.30.32.x:<ingress_port>``) — that's reachable from
-    HA Core, but not from a normal browser.  When that's the case,
-    swap it for an absolute HA-Frontend ingress URL
-    (``<ha_frontend>/api/hassio_ingress/<token>/``) so the link in
-    the form description is human-readable (shows the user's HA
-    hostname instead of an opaque ingress path).
-
-    Standalone deployments advertise via mDNS — prefer the friendly
-    hostname (``<bridge_id>.local``) when ``display_host`` is given,
-    fall back to the discovered IP otherwise.
+    Returns:
+      * an absolute https://ha.example.com/api/hassio_ingress/.../ URL
+        when running on HAOS and we can match the discovered host:port
+        against an ingress-enabled add-on
+      * a friendly ``http://<mdns>.local:<port>/`` for standalone
+        bridges where HA Core is on the same LAN and mDNS resolves
+      * an empty string when neither is reliable (e.g. HAOS lookup
+        missed, ``.local`` won't resolve from the operator's browser
+        because their LAN doesn't speak mDNS).  An empty result tells
+        the caller to drop the URL block from the form description
+        entirely rather than render a broken link.
     """
     import ipaddress
 
     scheme = "https" if use_https else "http"
     fallback = f"{scheme}://{display_host or host}:{port}/"
-    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
-    if not token:
+
+    sv_token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if not sv_token:
+        # Standalone deployment — discovered host is the bridge's real
+        # LAN address (or mDNS hostname).  Both work in a browser.
         return fallback
+
+    # ---- HAOS path -----------------------------------------------------
     # Decide whether to do a Supervisor lookup.  Three buckets for
     # ``host``:
-    #   1. IP in ``172.30.32.0/23`` (hassio Docker network) → lookup,
-    #      it's almost certainly an addon
-    #   2. IP outside that net (LAN: ``192.168.*``, ``10.*``, etc.) →
-    #      skip the lookup, clearly a standalone bridge on the same
-    #      network as HA Core
-    #   3. Hostname / mDNS name (e.g. ``sendspin-bridge-XXX.local``)
-    #      → lookup, since HA's zeroconf often hands the SRV target
-    #      back unresolved and the only way to know whether this is
-    #      our own addon is to ask Supervisor.  Without this branch,
-    #      HAOS bridges advertised via mDNS show the bare ``.local``
-    #      hostname in the CTA instead of the absolute HA URL.
+    #   1. IP in ``172.30.32.0/23`` (hassio Docker network) → addon
+    #      candidate, look up its ingress URL
+    #   2. IP outside that net (LAN: 192.168.x, 10.x, 172.30.0.x …) →
+    #      not an addon, the LAN URL is browser-reachable, return as-is
+    #   3. Hostname / mDNS name → addon candidate (HA's zeroconf often
+    #      hands the SRV target back unresolved); ask Supervisor
     try:
         host_ip = ipaddress.ip_address(host)
+        host_is_addon_candidate = host_ip in ipaddress.IPv4Network("172.30.32.0/23")
     except ValueError:
-        host_ip = None  # hostname → fall through to lookup
-    if host_ip is not None and host_ip not in ipaddress.IPv4Network("172.30.32.0/23"):
+        host_is_addon_candidate = True  # hostname → try lookup
+
+    if not host_is_addon_candidate:
         return fallback
+
     session = async_get_clientsession(hass)
     try:
         async with session.get(
             "http://supervisor/addons",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {sv_token}"},
             timeout=aiohttp.ClientTimeout(total=5),
         ) as resp:
-            if resp.status != 200:
-                return fallback
-            body = await resp.json()
+            if resp.status == 200:
+                body = await resp.json()
+                addons = (body or {}).get("data", {}).get("addons", []) or []
+                for addon in addons:
+                    try:
+                        addon_port = int(addon.get("ingress_port") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    if addon_port != int(port):
+                        continue
+                    ingress_url = addon.get("ingress_url")
+                    if not ingress_url:
+                        continue
+                    try:
+                        base = get_url(
+                            hass,
+                            prefer_external=True,
+                            allow_internal=True,
+                            allow_ip=True,
+                        )
+                    except NoURLAvailableError:
+                        base = ""
+                    if base:
+                        return f"{base.rstrip('/')}{ingress_url}"
+                    return str(ingress_url)
     except (aiohttp.ClientError, TimeoutError):
-        return fallback
-    addons = (body or {}).get("data", {}).get("addons", []) or []
-    for addon in addons:
-        # Supervisor occasionally returns malformed entries — be
-        # defensive about parsing user-supplied values out of an
-        # external JSON document so a typo doesn't crash the config
-        # flow while rendering the form.
-        try:
-            addon_port = int(addon.get("ingress_port") or 0)
-        except (TypeError, ValueError):
-            continue
-        if addon_port == int(port):
-            ingress_url = addon.get("ingress_url")
-            if ingress_url:
-                # Prefix with HA's user-facing frontend URL when known
-                # so the markdown link in the form shows something
-                # recognizable like ``https://ha.example.com/...``
-                # instead of a bare ingress path.  ``get_url`` picks
-                # external→internal→cloud as appropriate; if none are
-                # configured we fall back to the path which the HA
-                # Frontend still resolves against its current origin.
-                try:
-                    base = get_url(
-                        hass,
-                        prefer_external=True,
-                        allow_internal=True,
-                        allow_ip=True,
-                    )
-                except NoURLAvailableError:
-                    base = ""
-                if base:
-                    return f"{base.rstrip('/')}{ingress_url}"
-                return str(ingress_url)
-    return fallback
+        pass
+    # HAOS addon-candidate but lookup didn't yield a match.  ``host:port``
+    # here is the supervisor-internal address (172.30.32.x:<ingress_port>)
+    # or an mDNS hostname (``<bridge_id>.local:<ingress_port>``); neither
+    # is reliably reachable from the operator's browser.  Return empty so
+    # the caller drops the broken markdown link from the form description.
+    # Regression for the v2.66.14 production prod report:
+    # ``Open http://sendspin-bridge-af367d852d7d.local:62144/`` was being
+    # rendered in the HACS pair form and the link 404'd in the user's
+    # browser because their LAN didn't speak mDNS.
+    return ""
+
+
+def _ui_url_block(ui_url: str) -> str:
+    """Render the optional clickable-URL line for the form description.
+
+    When ``ui_url`` is non-empty we emit a markdown link followed by an
+    arrow that flows into the rest of the description.  When it's empty
+    (HAOS without a working absolute URL) we return an empty string so
+    the description reads naturally without "Open  → Settings → ...".
+    """
+    if not ui_url:
+        return ""
+    return f"Open [{ui_url}]({ui_url}) → "
 
 
 async def _attempt_supervisor_pair(hass, host: str, port: int, use_https: bool) -> str | None:
@@ -350,6 +365,7 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
                 "host": host,
                 "port": str(port),
                 "ui_url": ui_url,
+                "ui_url_block": _ui_url_block(ui_url),
             },
         )
 
@@ -390,5 +406,6 @@ class SendspinBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # typ
                 "host": host,
                 "port": str(port),
                 "ui_url": ui_url,
+                "ui_url_block": _ui_url_block(ui_url),
             },
         )

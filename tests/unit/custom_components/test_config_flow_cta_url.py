@@ -214,16 +214,22 @@ def test_mdns_host_on_haos_resolves_to_ingress_url(monkeypatch):
     assert session.calls == ["http://supervisor/addons"]
 
 
-def test_mdns_host_on_haos_no_matching_addon_falls_back(monkeypatch):
+def test_mdns_host_on_haos_no_matching_addon_returns_empty(monkeypatch):
     """If the Supervisor lookup runs but no addon matches our port,
-    fall back to the discovered ``host:port`` URL (the operator's
-    LAN can usually still resolve the mDNS hostname)."""
+    return empty so the caller drops the broken markdown link.
+
+    Why empty rather than the literal ``http://<mdns>.local:<port>/``
+    fallback: the operator's browser usually can't resolve ``.local``
+    hostnames + the supervisor-internal ingress port — that's exactly
+    the v2.66.14 production prod report (``Open
+    http://sendspin-bridge-af367d852d7d.local:62144/`` 404'd in the
+    HACS pair form).  Better no link than a broken link."""
     monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
     hass = MagicMock()
     session = _FakeSession({"data": {"addons": []}})
     monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
     url = asyncio.run(_resolve_user_facing_url(hass, "bridge.local", 8080))
-    assert url == "http://bridge.local:8080/"
+    assert url == ""
     assert session.calls == ["http://supervisor/addons"]
 
 
@@ -270,25 +276,30 @@ def test_supervisor_host_maps_to_ingress_url(monkeypatch):
     assert session.calls == ["http://supervisor/addons"]
 
 
-def test_supervisor_host_falls_back_when_addon_not_found(monkeypatch):
+def test_supervisor_host_returns_empty_when_addon_not_found(monkeypatch):
     """Discovered host is on hassio network but no addon matches the
-    port — fall back to plain http://host:port/."""
+    port — return empty so the caller drops the broken markdown link.
+
+    Plain ``http://172.30.32.1:62144/`` would 404 in the operator's
+    browser (172.30.32/23 is supervisor-internal), so empty is the
+    safer answer here too."""
     monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
     hass = MagicMock()
     session = _FakeSession({"data": {"addons": [{"slug": "other", "ingress_port": 99}]}})
     monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
     url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
-    assert url == "http://172.30.32.1:62144/"
+    assert url == ""
 
 
-def test_supervisor_query_failure_falls_back(monkeypatch):
-    """Supervisor unreachable / non-200 — same fallback."""
+def test_supervisor_query_failure_returns_empty(monkeypatch):
+    """Supervisor unreachable / non-200 — same outcome: drop the link
+    instead of rendering a broken supervisor-internal URL."""
     monkeypatch.setenv("SUPERVISOR_TOKEN", "tok")
     hass = MagicMock()
     session = _FakeSession({}, status=502)
     monkeypatch.setattr(_cf, "async_get_clientsession", lambda h: session)
     url = asyncio.run(_resolve_user_facing_url(hass, "172.30.32.1", 62144))
-    assert url == "http://172.30.32.1:62144/"
+    assert url == ""
 
 
 def test_supervisor_returns_malformed_addon_entry(monkeypatch):
