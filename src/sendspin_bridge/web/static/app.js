@@ -5212,14 +5212,21 @@ function _populateHaIntegrationForm(block) {
     }
     var broker = document.getElementById('ha-mqtt-broker');
     if (broker) {
-        // Auto-detect toggle on → host input is read-only with the value
-        // ``auto`` rendered as a hint; toggle off → editable with the saved
-        // value.  This replaces the v2.66.x convention of typing the
-        // literal string ``auto`` into the host field.
+        // Auto-detect toggle on → host input is read-only and shows the
+        // values the bridge would actually resolve at startup.  Toggle
+        // off → editable with the saved override value.  This replaces
+        // the v2.66.x convention of typing the literal string ``auto``
+        // into the host field; mirrors the REST card's auto-detect
+        // preview flow.
         if (brokerValue === 'auto') {
             broker.value = '';
             broker.disabled = true;
-            broker.placeholder = 'auto-detect (resolved at startup)';
+            broker.placeholder = 'auto-detect…';
+            // Populate the read-only preview from the probe — what
+            // Supervisor (HAOS) or the MA URL fallback (standalone)
+            // would hand back at startup.  Best-effort; failure is
+            // non-fatal and the placeholder hint stays.
+            _refreshMqttAutoDetectDefaults();
         } else {
             broker.value = brokerValue;
             broker.disabled = false;
@@ -5852,6 +5859,46 @@ function _readHaIntegrationFromForm(existingBlock) {
     };
 }
 
+// Quietly fetch the auto-detect probe and surface the resolved values
+// as a read-only preview in the form fields.  Used during populate
+// (so the operator sees what the bridge would resolve at startup
+// without having to click anything) and on toggle-flip from off→on.
+// Symmetric with ``_refreshRestAdvertiseDefaults`` for the REST card.
+//
+// Unlike ``_haMqttAutoDetect`` (the Suggest button handler), this:
+//   * keeps the host input disabled (preview, not editable);
+//   * does NOT mark the form dirty — populating defaults is not an
+//     operator-driven change;
+//   * does NOT overwrite operator-edited username / TLS toggle —
+//     those are write paths the saved config controls.
+async function _refreshMqttAutoDetectDefaults() {
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    var portInput = document.getElementById('ha-mqtt-port');
+    if (!brokerInput) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/mqtt/probe');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        if (!body || !body.found) {
+            // Probe missed — leave the placeholder text in place so
+            // the operator at least knows auto-detect will be tried at
+            // startup.
+            brokerInput.placeholder = 'auto-detect (no broker resolved yet)';
+            return;
+        }
+        // Display only — keep ``broker`` disabled so the operator
+        // can't accidentally mistake it for a typed override.
+        brokerInput.value = String(body.host || '');
+        brokerInput.disabled = true;
+        brokerInput.placeholder = 'auto-detect (resolved at startup)';
+        if (portInput && body.port && !portInput.value) {
+            portInput.value = String(body.port);
+        }
+    } catch (_) {
+        // Silent — preview is best-effort.
+    }
+}
+
 async function _haMqttAutoDetect() {
     var hint = document.getElementById('ha-mqtt-autodetect-hint');
     if (hint) hint.textContent = 'Probing for an MQTT broker…';
@@ -5937,12 +5984,16 @@ function _haAutoDetectToggle() {
     if (on) {
         brokerInput.value = '';
         brokerInput.disabled = true;
-        brokerInput.placeholder = 'auto-detect (resolved at startup)';
+        brokerInput.placeholder = 'auto-detect…';
         brokerInput.classList.remove('invalid');
         var brokerGroup = document.getElementById('ha-mqtt-broker-group');
         if (brokerGroup) brokerGroup.classList.remove('has-error');
         var errEl = document.getElementById('ha-mqtt-broker-error');
         if (errEl) errEl.textContent = '';
+        // Surface the auto-detected values as a read-only preview so
+        // the operator can see what the bridge will resolve to at
+        // startup (mirrors REST card's behaviour).
+        _refreshMqttAutoDetectDefaults();
     } else {
         brokerInput.disabled = false;
         brokerInput.placeholder = 'homeassistant.local';
