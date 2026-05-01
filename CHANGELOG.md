@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.67.2] - 2026-05-01
+
 ### Fixed
 - **HA Configuration tab — connection-status banner now repaints
   immediately on mode switch.**  Clicking a different transport radio
