@@ -85,6 +85,8 @@ class DemoBluetoothManager:
                     "stopping": initial.get("stopping", False),
                     "bt_management_enabled": initial.get("bt_management_enabled", True),
                     "bt_released_by": initial.get("bt_released_by"),
+                    "rssi_dbm": initial.get("rssi_dbm"),
+                    "rssi_at_ts": time.time() if initial.get("rssi_dbm") is not None else None,
                 }
             )
 
@@ -161,6 +163,11 @@ class DemoBluetoothManager:
         """Async no-op loop — keeps the task alive without real BT polling."""
         while self._running:
             await asyncio.sleep(10)
+
+    async def run_rssi_refresh_loop(self, interval: float = 5.0) -> None:
+        """Async no-op — demo RSSI is seeded from fixtures, not polled from hardware."""
+        while self._running:
+            await asyncio.sleep(interval)
 
     def shutdown(self) -> None:
         self._running = False

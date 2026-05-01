@@ -5901,9 +5901,16 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     // opts: { liveClass: string|null }
     var liveClass = (opts && opts.liveClass) || null;
     var current = String(currentValue || '').toLowerCase();
-    var presetValue = current === '0x00010c' ? '0x00010c' : (current ? 'custom' : '');
-    var customValue = current && current !== '0x00010c' ? current : '';
-    var helpText = 'Experimental: Class of Device override. Default leaves the kernel value untouched. Use 0x00010c (Computer/Laptop) for Samsung Q-series soundbars (bluez/bluez#1025).';
+    // Documented presets — see docs/troubleshooting.md "Class of Device override
+    // — preset reference" for the full case-by-case table.  Anything outside
+    // this list falls into the ``custom`` branch.
+    var COD_PRESETS = ['0x00010c', '0x000100', '0x000414', '0x240404'];
+    var isPreset = current && COD_PRESETS.indexOf(current) !== -1;
+    var presetValue = isPreset ? current : (current ? 'custom' : '');
+    var customValue = isPreset ? '' : (current || '');
+    var helpText = 'Experimental: Class of Device override. Default leaves the kernel value untouched. ' +
+        'Common presets: Computer/Laptop (Samsung Q-series), Computer/generic (broad fallback), ' +
+        'A/V Loudspeaker (LG-style filters), A/V Headset (Anker-style). See troubleshooting docs for the full table.';
     var liveHtml = '';
     if (liveClass) {
         var match = current && liveClass.toLowerCase() === current.toLowerCase();
@@ -5913,7 +5920,10 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     return '<div class="adapter-cod-override adapter-cod-inline" data-experimental title="' + escHtmlAttr(helpText) + '">' +
         '<select class="adp-cod-preset" title="' + escHtmlAttr(helpText) + '">' +
             '<option value="" ' + (presetValue === '' ? 'selected' : '') + '>CoD: default</option>' +
-            '<option value="0x00010c" ' + (presetValue === '0x00010c' ? 'selected' : '') + '>CoD: 0x00010c (Samsung)</option>' +
+            '<option value="0x00010c" ' + (presetValue === '0x00010c' ? 'selected' : '') + '>0x00010c — Computer / Laptop (Samsung Q-series)</option>' +
+            '<option value="0x000100" ' + (presetValue === '0x000100' ? 'selected' : '') + '>0x000100 — Computer / generic (broad fallback)</option>' +
+            '<option value="0x000414" ' + (presetValue === '0x000414' ? 'selected' : '') + '>0x000414 — A/V / Loudspeaker (LG-style filters)</option>' +
+            '<option value="0x240404" ' + (presetValue === '0x240404' ? 'selected' : '') + '>0x240404 — A/V / Headset (Anker-style)</option>' +
             '<option value="custom" ' + (presetValue === 'custom' ? 'selected' : '') + '>CoD: custom…</option>' +
         '</select>' +
         '<input type="text" class="adp-cod-custom mono" placeholder="0x000000" value="' + escHtmlAttr(customValue) + '"' +

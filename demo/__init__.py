@@ -190,11 +190,14 @@ def install() -> None:
     os.environ["DBUS_SYSTEM_BUS_ADDRESS"] = f"unix:path={demo_dbus_path}"
 
     bluetooth_manager.BluetoothManager = DemoBluetoothManager  # type: ignore[misc,assignment]
-    # Also patch the already-imported name in __main__ (sendspin_client.py)
+    # Patch the local binding in bridge.client (imported via `from X import Y`).
+    import sendspin_bridge.bridge.client as _bridge_client_mod
+
+    _bridge_client_mod.BluetoothManager = DemoBluetoothManager  # type: ignore[attr-defined]
+    # Also patch the already-imported name in __main__ (legacy sendspin_client.py path).
+    # When running as `python -m sendspin_bridge` __main__ has no BluetoothManager, skip.
     _sc_mod = sys.modules.get("__main__")
-    if not (_sc_mod and hasattr(_sc_mod, "SendspinClient")):
-        raise RuntimeError("demo.install() must be called from sendspin_client.py main()")
-    if hasattr(_sc_mod, "BluetoothManager"):
+    if _sc_mod and hasattr(_sc_mod, "BluetoothManager"):
         _sc_mod.BluetoothManager = DemoBluetoothManager  # type: ignore[attr-defined]
 
     # ------------------------------------------------------------------
@@ -296,7 +299,11 @@ def install() -> None:
     # ------------------------------------------------------------------
     # 4. Patch SendspinClient methods
     # ------------------------------------------------------------------
-    _SendspinClient = _sc_mod.SendspinClient
+    # Import directly so the patch works with both the legacy monolithic entry
+    # point (where SendspinClient lived in __main__) and `python -m sendspin_bridge`.
+    import sendspin_bridge.bridge.client as _client_mod
+
+    _SendspinClient = _client_mod.SendspinClient
 
     async def _demo_start_sendspin_inner(self: Any) -> None:
         """Set status as if connected — no real subprocess spawned."""
@@ -362,6 +369,8 @@ def install() -> None:
                 "bt_released_by": initial.get("bt_released_by"),
                 "group_id": initial.get("group_id"),
                 "group_name": initial.get("group_name"),
+                "rssi_dbm": initial.get("rssi_dbm"),
+                "rssi_at_ts": time.time() if initial.get("rssi_dbm") is not None else None,
             }
         )
         logger.info("[demo] Player '%s' started (no subprocess)", self.player_name)
@@ -722,7 +731,7 @@ def install() -> None:
     os.environ["CONFIG_DIR"] = str(_demo_config_dir)
     _config_mod.CONFIG_DIR = _demo_config_dir
     _config_mod.CONFIG_FILE = _demo_config_file
-    if hasattr(_sc_mod, "CONFIG_FILE"):
+    if _sc_mod and hasattr(_sc_mod, "CONFIG_FILE"):
         _sc_mod.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
     bluetooth_manager.CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
     _sbt._CONFIG_FILE = _demo_config_file  # type: ignore[attr-defined]
@@ -767,7 +776,8 @@ def install() -> None:
     _config_mod.load_config = _demo_load_config
     _config_mod.write_config_file = _demo_write_config_file  # type: ignore[assignment]
     _config_mod.update_config = _demo_update_config  # type: ignore[assignment]
-    _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
+    if _sc_mod and hasattr(_sc_mod, "load_config"):
+        _sc_mod.load_config = _demo_load_config  # type: ignore[attr-defined]
     import sendspin_bridge.bridge.orchestrator as _bridge_orchestrator
     import sendspin_bridge.web.routes.api_config as _api_config_mod
 

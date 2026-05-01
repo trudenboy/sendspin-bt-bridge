@@ -114,7 +114,9 @@ Tracked upstream as [bluez/bluez#1025](https://github.com/bluez/bluez/issues/102
 **Fix.** Two steps:
 
 1. **Enable the experimental flag.** Open **Configuration → Advanced → Experimental features** and toggle on **Per-adapter Class of Device override (Samsung Q-series workaround)**. Save and restart the bridge.
-2. **Set the CoD value.** Go to **Configuration → Bluetooth**, find your adapter row — the **Class of Device** dropdown is now editable. Pick **Computer/Laptop (0x00010c) — Samsung-compat**. Save the config and restart the bridge, then re-pair the soundbar.
+2. **Set the CoD value.** Go to **Configuration → Bluetooth**, find your adapter row — the **Class of Device** dropdown is now editable. Pick **0x00010c — Computer / Laptop (Samsung Q-series)**. Save the config and restart the bridge, then re-pair the soundbar.
+
+If the laptop preset doesn't fix it, the dropdown also exposes three other documented presets (generic Computer, A/V Loudspeaker, A/V Headset) plus a custom-hex field. See **[Class of Device override — preset reference](#class-of-device-override--preset-reference)** below for a per-value table of which speakers each one was reported to fix.
 
 The bridge applies the override via a raw HCI `Write_Class_Of_Device` command at startup and **re-applies it immediately before each pair attempt** — so an intervening adapter power-cycle by `bluetoothd` doesn't undo the override right before the soundbar's CoD filter runs.
 
@@ -135,6 +137,47 @@ docker exec sendspin-client hcitool -i hci0 cmd 0x03 0x0024 0c 01 00
 Expected output: `< HCI Command: ... > HCI Event: 0x0e ... 00`. If you see a non-zero status byte, the adapter's firmware doesn't support `Write_Class_Of_Device` and the in-bridge path won't help; try the host-level `main.conf` approach above instead.
 
 The bridge will also surface this as a recovery card automatically when it detects the `AuthenticationCanceled` + "No Resources" fingerprint during pairing — clicking the card opens the Bluetooth tab where the dropdown lives.
+
+## Class of Device override — preset reference
+
+The CoD dropdown in **Configuration → Bluetooth** ships four presets plus a custom-hex field. Every preset corresponds to a documented case where that exact value unblocked a Bluetooth audio device that filters incoming connections by the initiator's Class of Device. The table below is the canonical reference — pick the preset that matches the speaker family you are trying to pair, restart the bridge, and re-pair.
+
+If the speaker's vendor / chipset isn't listed and the laptop preset doesn't help, try the rest in the order shown (broader first), then fall back to **Custom hex** with a value derived from the [Bluetooth Core spec, Vol 4 Part E §7.3.26](https://www.bluetooth.com/specifications/assigned-numbers/) plus the [BT Class of Device reference table](https://github.com/CityofToronto/bdit_data-sources/blob/master/bluetooth/BT_ClassOfDevice.csv). Report any new value that helps in [issue #210](https://github.com/trudenboy/sendspin-bt-bridge/issues/210) so we can promote it to a preset.
+
+| CoD hex     | Major / Minor             | Reported to fix                                              | Source |
+|-------------|---------------------------|--------------------------------------------------------------|--------|
+| `0x00010c`  | Computer / Laptop          | **Samsung HW-Q910B / Q990B / Q990D** Q-series soundbars; same fingerprint observed on LG SN-series clones running Samsung-derived firmware. The canonical fix from the BlueZ thread. | [bluez/bluez#1025](https://github.com/bluez/bluez/issues/1025), [issue #210](https://github.com/trudenboy/sendspin-bt-bridge/issues/210) |
+| `0x000100`  | Computer / generic         | Broad fallback when the laptop variant doesn't match. Distro default in `hcid.conf` and `/etc/bluetooth/main.conf` template — older Bluetooth speakers that only check the **Major Device Class = Computer** bit accept it. Reported to make Linux PCs visible to phones / cheap speakers when the kernel default `0x0c0000` failed. | [hcid.conf(5)](https://linux.die.net/man/5/hcid.conf), [Linux Mint forum](https://forums.linuxmint.com/viewtopic.php?t=425698), [Arch BBS](https://bbs.archlinux.org/viewtopic.php?id=226633) |
+| `0x000414`  | Audio/Video / Loudspeaker  | **LG TVs** and similar appliances that only allow connections from devices that themselves identify as audio targets. ArchWiki: "LG TVs (and some others) are discoverable from their audio devices, so using `000414` (the soundbar class) will make such devices appear." | [ArchWiki — Bluetooth](https://wiki.archlinux.org/title/Bluetooth), [Raspberry Pi forum (audio receiver setup)](https://forums.raspberrypi.com/viewtopic.php?t=161944) |
+| `0x240404`  | Audio/Video / Headset audio | **Anker Soundcore family** (Life P2, Q20, Q45, Space series) — these speakers report themselves with this exact CoD and a few firmware revisions reciprocate by accepting connections only from initiators in the same A/V class. Used for symmetric-CoD acceptance bugs. | Anker Soundcore PulseAudio output (`bluez.class = "0x240404"`) reported on [Linux Mint](https://forums.linuxmint.com/viewtopic.php?t=417263) and [Manjaro](https://forum.manjaro.org/t/anker-soundcore-life-q20-bluetooth-headset-doesnt-show-up-as-output-input-device/35914) forums |
+
+### Other CoD values worth knowing about
+
+These are spec-valid but **not** in the dropdown — we don't have public bug reports proving they help, so they're available via the **Custom hex** field if the four presets fall short. Listed for completeness so support tickets can reference them.
+
+| CoD hex     | Major / Minor                | Why you might try it |
+|-------------|------------------------------|---------------------|
+| `0x000104`  | Computer / Desktop            | Same Major as `0x00010c` but Desktop minor — try when the speaker filters on the full Major+Minor pair and rejects "Laptop" specifically. |
+| `0x000108`  | Computer / Server             | Enterprise soundbar / conferencing dock filters that reject consumer device classes. |
+| `0x000400`  | Audio/Video / Uncategorized   | Generic A/V — a few cheap receivers expect *any* A/V class without caring about the minor. |
+| `0x000418`  | Audio/Video / Headphones      | Equivalent of `0x000414` but headphone-class — useful if the speaker filters Loudspeaker minor specifically. |
+| `0x200404`  | A/V / Headset audio + service bit `Audio` set | Same Major+Minor as `0x000404` plus the **Audio** service bit (bit 21). Some firmware checks both fields. |
+| `0x200414`  | A/V / Loudspeaker + service bit `Audio` set   | `0x000414` with the Audio service bit — used in some [Raspberry Pi A2DP-receiver guides](https://forums.raspberrypi.com/viewtopic.php?t=161944). |
+| `0x240414`  | A/V / Loudspeaker + service bits `Audio` and `Rendering` | Belt-and-braces variant for speakers that check service bits. |
+| `0x340404`  | A/V / Wearable Headset         | Documented for **Kenwood KCA-BT300** in the [BT Class of Device CSV](https://github.com/CityofToronto/bdit_data-sources/blob/master/bluetooth/BT_ClassOfDevice.csv) — relevant for car-audio Bluetooth bridges. |
+| `0x340408`  | A/V / Hands-free               | Documented for **Kenwood BT Adapter KCA-BT200** in the same reference. |
+
+The CoD field is a 24-bit value structured as `[service classes (11 bits)][major class (5 bits)][minor class (6 bits)][format type (2 bits)]`. The format-type field (lowest 2 bits) is always `00` for Bluetooth Core 5.x devices, so all valid values end in a hex digit divisible by 4 (`0`, `4`, `8`, `c`).
+
+### How the override is applied
+
+When you save a non-default CoD value, the bridge:
+
+1. Sends a raw HCI `Write_Class_Of_Device` command (OGF=0x03, OCF=0x0024) on a `BTPROTO_HCI` socket bound to the chosen controller — same capability surface (`CAP_NET_RAW`) the AVRCP HCI monitor and live-RSSI readout already use.
+2. Re-applies the value immediately before each outbound pair attempt, so an intervening adapter power-cycle by `bluetoothd` (or by the BlueZ adapter-recovery ladder) doesn't undo the override right before the speaker's CoD filter inspects the initiator.
+3. Reads the live CoD back via `HCI_Read_Class_Of_Device` so the **Configuration → Bluetooth** adapter row can show the live value next to the configured one — green when they match.
+
+If the controller's firmware rejects the write (`Write_Class_Of_Device returned HCI status=0x0d` in the bridge log) the in-bridge path can't help; persist the value at the host level instead by adding `Class = 0x00010c` (or whichever value you want) under `[General]` in `/etc/bluetooth/main.conf` and restarting `bluetooth.service`. On HAOS the host's `main.conf` is part of the read-only OS image, so the in-bridge override is the only path — adapters that reject the HCI write on HAOS aren't currently fixable without a host-level shell.
 
 ## Bluetooth does not connect
 

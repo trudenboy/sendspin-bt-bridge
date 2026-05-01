@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Class of Device dropdown — four documented presets.** The
+  per-adapter CoD override widget now ships preset entries covering
+  the speaker families that filter incoming connections by the
+  initiator's class: Computer/Laptop (`0x00010c` — Samsung Q-series),
+  Computer/generic (`0x000100` — broad fallback), A/V Loudspeaker
+  (`0x000414` — LG-style filters), and A/V Headset (`0x240404` —
+  Anker Soundcore family). Each value corresponds to a documented
+  case where that exact CoD unblocked pairing. The custom-hex field
+  is still available for values outside the list.
+- **Troubleshooting reference — Class of Device override preset
+  table.** New section in the troubleshooting docs listing which
+  speakers each preset is reported to fix, plus a secondary table of
+  spec-valid but undocumented values for the custom-hex path. Each
+  row links to the upstream bug tracker, ArchWiki entry, or forum
+  thread that surfaced the value, so support tickets can reference
+  the lineage of every override directly.
+
+### Fixed
+- **Demo mode crashed every per-device task at startup.** The
+  simulated Bluetooth layer was missing the live-RSSI refresh hook
+  the real layer now ships, so each device's run loop died with an
+  `AttributeError` immediately after coming up. The simulated layer
+  now mirrors the full surface as a no-op coroutine.
+- **Demo mode now installs cleanly under `python -m sendspin_bridge`.**
+  The previous install path required the legacy single-file entry
+  point to be the Python `__main__`; the new path resolves runtime
+  classes directly so demo works regardless of how the bridge is
+  started.
+- **Demo dashboard — RSSI badges on every connected fixture device.**
+  Cards now exercise the full delta-mode colour scale (4 bars green
+  through 1 bar error). Disconnected and released fixtures correctly
+  render no badge.
+- **Demo BT scan — twelve discoverable devices returned** (each with
+  an absolute dBm value covering the full signal-strength scale), so
+  scan-result chips render the same way they would on real hardware.
+
 ## [2.66.20] - 2026-05-01
 
 ### Fixed
