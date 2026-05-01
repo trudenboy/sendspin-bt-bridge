@@ -1,0 +1,34 @@
+# Curated dependency set for the Render.com demo deployment.
+#
+# Render's Python runtime ("Native") doesn't allow apt-install, so any
+# wheel that requires building against system C headers will fail.
+# This file is a strict subset of pyproject.toml's runtime dependencies
+# minus the Linux-BT/D-Bus packages — those are lazy-imported throughout
+# the bridge code (every consumer is wrapped in try/except ImportError),
+# so they degrade gracefully when absent.
+#
+# Excluded (Linux-only / system-header dependent):
+#   dbus-python              — needs libdbus-1-dev
+#   btsocket                 — Linux Bluetooth mgmt socket
+#   bluetooth-auto-recovery  — Linux rfkill / hci_mgmt
+#
+# Keep this list synchronized with pyproject.toml ``dependencies`` minus
+# the three excluded packages above.  When bumping a runtime dep version,
+# bump it here too.
+
+sendspin==7.1.0
+aiosendspin[server]==5.1.1
+flask==3.1.3
+waitress==3.0.2
+dbus-fast==4.0.4
+pulsectl-asyncio==1.2.2
+music-assistant-client==1.3.5
+websockets==16.0
+zeroconf==0.148.0
+PyJWT>=2.8.0
+cryptography>=46.0.7
+aiomqtt>=2.0
+aiohttp>=3.13.4
+pillow>=12.2.0
+pygments>=2.20.0
+requests>=2.33.0

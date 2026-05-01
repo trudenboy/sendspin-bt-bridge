@@ -43,6 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for tokens older than 15 min that have gone quiet.
 
 ### Fixed
+- **Live demo deployment on Render broken since the v2.62 package
+  move.**  The Render service's start command still pointed at the
+  long-removed legacy entry-point script at the repo root, and the
+  build command pulled only a hand-picked subset of deps that was
+  missing several pure-Python packages the bridge expects.  The
+  Render Blueprint manifest now sits at the repo root (where
+  Render's discovery actually looks), installs from a curated demo
+  requirements list — the runtime dependency set minus the Linux-BT
+  / D-Bus packages that need apt-installable system headers Render's
+  Native Python runtime can't provide — and starts the bridge with
+  the demo simulator on the import path so the dashboard, scan list,
+  and now-playing fixtures render again.
 - **Album artwork now renders when the daemon already has its own
   track metadata.**  The artwork-fallback path was gated on
   ``!daemonHasTrack`` (a guard meant for ynison-style sourceplugin
