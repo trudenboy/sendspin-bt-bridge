@@ -5152,45 +5152,122 @@ var _haIntegrationDefaults = {
     }
 };
 
+// Track whether the last loaded config had a password, so the form-read
+// path knows to substitute ``***REDACTED***`` (the wire-protocol marker
+// for "preserve the saved password") when the visible password field is
+// left empty.  Without this we'd silently clear the saved password every
+// time the operator re-saved the form.
+var _haOriginalPasswordPresent = false;
+// Cache the last-known token count from ``/api/auth/tokens`` so the
+// progressive disclosure rule can hide the Tokens card when mode=off
+// AND no tokens exist yet.
+var _haTokensListHasItems = false;
+
+// Mirror selected mode into the hidden ``<input id="ha-integration-mode">``
+// so existing form-read code (_readHaIntegrationFromForm,
+// _validateHaIntegration, _haAutoConfigure) keeps working unchanged after
+// the segmented-radio swap.  Single source of truth: the hidden input.
+function _syncHaModeRadios(mode) {
+    var radios = document.querySelectorAll('input[name="ha-integration-mode-radio"]');
+    var matched = false;
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].value === mode) {
+            radios[i].checked = true;
+            matched = true;
+        } else {
+            radios[i].checked = false;
+        }
+    }
+    if (!matched && radios.length) {
+        radios[0].checked = true;
+    }
+    var hidden = document.getElementById('ha-integration-mode');
+    if (hidden) hidden.value = mode || 'off';
+}
+
 function _populateHaIntegrationForm(block) {
     block = block || _haIntegrationDefaults;
     var mqtt = block.mqtt || {};
     var rest = block.rest || {};
-    var mode = document.getElementById('ha-integration-mode');
     // Drop the legacy ``Enable HA integration`` checkbox in favour of the
-    // single mode dropdown.  Inconsistent legacy configs are treated as
-    // off in *both* directions:
+    // single mode picker.  Inconsistent legacy configs are treated as off
+    // in *both* directions:
     //   * ``enabled=true, mode=off``  → stays off (mode is the master)
     //   * ``enabled=false, mode=mqtt`` → also off, so loading an older
     //     config never auto-enables the integration unexpectedly.
     var effectiveMode = block.enabled === false ? 'off' : (block.mode || 'off');
-    if (mode) mode.value = effectiveMode;
+    _syncHaModeRadios(effectiveMode);
+    // Track whether the saved config had a password so the form-read
+    // path can substitute the redaction marker on save when the field is
+    // left untouched (otherwise we'd clear the password on every save).
+    _haOriginalPasswordPresent = !!(
+        mqtt.password === '***REDACTED***' ||
+        (typeof mqtt.password === 'string' && mqtt.password.length > 0)
+    );
+    var brokerValue = mqtt.broker == null ? 'auto' : String(mqtt.broker);
+    var autodetect = document.getElementById('ha-mqtt-use-autodetect');
+    if (autodetect) {
+        autodetect.checked = brokerValue === 'auto';
+        autodetect.setAttribute('aria-checked', autodetect.checked ? 'true' : 'false');
+    }
     var broker = document.getElementById('ha-mqtt-broker');
-    if (broker) broker.value = mqtt.broker == null ? 'auto' : String(mqtt.broker);
+    if (broker) {
+        // Auto-detect toggle on → host input is read-only with the value
+        // ``auto`` rendered as a hint; toggle off → editable with the saved
+        // value.  This replaces the v2.66.x convention of typing the
+        // literal string ``auto`` into the host field.
+        if (brokerValue === 'auto') {
+            broker.value = '';
+            broker.disabled = true;
+            broker.placeholder = 'auto-detect (resolved at startup)';
+        } else {
+            broker.value = brokerValue;
+            broker.disabled = false;
+            broker.placeholder = 'homeassistant.local';
+        }
+    }
     var port = document.getElementById('ha-mqtt-port');
     if (port) port.value = mqtt.port == null ? 1883 : mqtt.port;
     var username = document.getElementById('ha-mqtt-username');
     if (username) username.value = mqtt.username || '';
     var password = document.getElementById('ha-mqtt-password');
     if (password) {
-        // The GET response masks an existing password as ``***REDACTED***``;
-        // populate the field with that marker so leaving it untouched
-        // preserves the value, while explicitly clearing the field saves
-        // an empty password (broker switched to no-auth).  See the round
-        // trip semantics in routes/api_config.py.
-        password.value = mqtt.password === '***REDACTED***' || (mqtt.password && mqtt.password.length)
-            ? '***REDACTED***'
-            : '';
-        password.placeholder = mqtt.password ? '' : '(no password)';
+        // Always render the password field empty regardless of saved state.
+        // A non-empty placeholder signals to the operator that there is a
+        // saved password they can preserve by leaving the field blank — the
+        // ``***REDACTED***`` literal is no longer shown to the user.  See
+        // _readHaIntegrationFromForm for the matching wire-protocol round
+        // trip (empty + had-password → marker; empty + no-password → "";
+        // anything else → typed value).
+        password.value = '';
+        password.placeholder = _haOriginalPasswordPresent
+            ? '(password is set — leave empty to keep)'
+            : '(no password)';
     }
     var prefix = document.getElementById('ha-mqtt-discovery-prefix');
     if (prefix) prefix.value = mqtt.discovery_prefix || 'homeassistant';
+    var advancedDetails = document.querySelector('.ha-mqtt-advanced');
+    if (advancedDetails) {
+        // Default-open Advanced when discovery prefix differs from default,
+        // so operators see their non-default value without hunting for it.
+        var prefixVal = (mqtt.discovery_prefix || 'homeassistant').trim();
+        advancedDetails.open = prefixVal !== 'homeassistant';
+    }
     var tls = document.getElementById('ha-mqtt-tls');
-    if (tls) tls.checked = !!mqtt.tls;
+    if (tls) {
+        tls.checked = !!mqtt.tls;
+        tls.setAttribute('aria-checked', tls.checked ? 'true' : 'false');
+    }
     var advertise = document.getElementById('ha-rest-advertise-mdns');
-    if (advertise) advertise.checked = rest.advertise_mdns !== false;
+    if (advertise) {
+        advertise.checked = rest.advertise_mdns !== false;
+        advertise.setAttribute('aria-checked', advertise.checked ? 'true' : 'false');
+    }
     var supervisorPair = document.getElementById('ha-rest-supervisor-pair');
-    if (supervisorPair) supervisorPair.checked = rest.supervisor_pair !== false;
+    if (supervisorPair) {
+        supervisorPair.checked = rest.supervisor_pair !== false;
+        supervisorPair.setAttribute('aria-checked', supervisorPair.checked ? 'true' : 'false');
+    }
     _updateHaIntegrationVisibility();
 }
 
@@ -5221,21 +5298,22 @@ function _updateHaIntegrationVisibility() {
     var showMqtt = !collapseDetails && mode === 'mqtt';
     var showRest = !collapseDetails && mode === 'rest';
 
+    // Transport card stays visible always — read-only summary view
+    // collapses the form fields when connected, but the segmented
+    // control + Edit affordance must stay reachable.
     var transportCard = document.getElementById('ha-transport-card');
-    if (transportCard) transportCard.hidden = collapseDetails;
+    if (transportCard) transportCard.hidden = false;
     var mqttCard = document.getElementById('ha-mqtt-card');
     if (mqttCard) mqttCard.hidden = !showMqtt;
     var restCard = document.getElementById('ha-rest-card');
     if (restCard) restCard.hidden = !showRest;
-    // Tokens are for the HACS custom_component, which talks to the
-    // BRIDGE over REST + bearer regardless of how the bridge itself
-    // talks to HA Core (MQTT vs REST integration mode).  Show the
-    // card unconditionally on this tab so operators don't have to
-    // click "Reconfigure" to find the Generate Token button — that
-    // was the v2.66.10 UX bug where the field disappeared as soon
-    // as the auto-pair MQTT path connected on HAOS.
+    // Progressive disclosure for the Tokens card: hide when nothing is
+    // configured AND no tokens exist yet.  Once the operator picks a
+    // transport (or has at least one token issued) the card becomes
+    // visible — guarding the v2.66.10 regression where the Generate
+    // Token button vanished on HAOS auto-pair.
     var tokensCard = document.getElementById('ha-tokens-card');
-    if (tokensCard) tokensCard.hidden = false;
+    if (tokensCard) tokensCard.hidden = mode === 'off' && !_haTokensListHasItems;
 
     _updateMosquittoBannerVisibility();
     _applyHaRequiredHighlight();
@@ -5327,6 +5405,17 @@ function _validateHaIntegration() {
     return {ok: true};
 }
 
+function _formatHaStatusTimestamp(epochSeconds) {
+    if (!epochSeconds) return '';
+    try {
+        var d = new Date(Number(epochSeconds) * 1000);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleString();
+    } catch (_) {
+        return '';
+    }
+}
+
 function _setHaStatus(state) {
     state = state || {};
     _haConnected = !!state.connected;
@@ -5368,6 +5457,44 @@ function _setHaStatus(state) {
     if (text) text.textContent = msg;
     if (reconf) reconf.hidden = !state.connected;
 
+    // Detail rows (broker URL / last connect / last error) under the
+    // status pill.  Visible whenever any field has content; hidden when
+    // off and nothing to report so the card stays compact.
+    var detail = document.getElementById('ha-status-detail');
+    var brokerEl = document.getElementById('ha-status-broker');
+    var lastConnectEl = document.getElementById('ha-status-last-connect');
+    var lastErrorRow = document.getElementById('ha-status-last-error-row');
+    var lastErrorEl = document.getElementById('ha-status-last-error');
+    var anyDetail = false;
+    if (brokerEl) {
+        if (state.broker) {
+            brokerEl.textContent = String(state.broker);
+            anyDetail = true;
+        } else {
+            brokerEl.textContent = '—';
+        }
+    }
+    if (lastConnectEl) {
+        var ts = _formatHaStatusTimestamp(state.lastEventAt);
+        if (ts) {
+            lastConnectEl.textContent = ts;
+            anyDetail = true;
+        } else {
+            lastConnectEl.textContent = '—';
+        }
+    }
+    if (lastErrorRow && lastErrorEl) {
+        if (state.lastError) {
+            lastErrorEl.textContent = String(state.lastError);
+            lastErrorRow.hidden = false;
+            anyDetail = true;
+        } else {
+            lastErrorEl.textContent = '—';
+            lastErrorRow.hidden = true;
+        }
+    }
+    if (detail) detail.hidden = !anyDetail;
+
     _updateHaIntegrationVisibility();
 }
 
@@ -5393,16 +5520,50 @@ function _haReconfigure() {
 // Outside HA addon mode (no SUPERVISOR_TOKEN) the banner stays hidden.
 function _updateMosquittoBannerVisibility() {
     var banner = document.getElementById('ha-mosquitto-banner');
-    if (!banner) return;
+    var inlineHint = document.getElementById('ha-transport-mosquitto-hint');
     var s = _haMosquittoState;
     var inHaAddon = !!(s && s.available);
     var mode = _haCurrentMode || 'off';
 
+    // Inline hint next to the MQTT radio.  Three states on HAOS, hidden
+    // off-HAOS:
+    //   * installed && started → green "running" confirmation
+    //   * installed but stopped → warning "start the add-on"
+    //   * not installed → warning "install Mosquitto"
+    if (inlineHint) {
+        if (!inHaAddon) {
+            inlineHint.hidden = true;
+            inlineHint.textContent = '';
+            inlineHint.classList.remove('ha-mosquitto-inline-hint--ok', 'ha-mosquitto-inline-hint--warn');
+        } else if (s.installed && s.started) {
+            inlineHint.hidden = false;
+            inlineHint.textContent = 'Mosquitto add-on is installed and running.';
+            inlineHint.classList.add('ha-mosquitto-inline-hint--ok');
+            inlineHint.classList.remove('ha-mosquitto-inline-hint--warn');
+        } else if (s.installed) {
+            inlineHint.hidden = false;
+            inlineHint.textContent = 'Mosquitto add-on is installed but not running — start it before saving the MQTT transport.';
+            inlineHint.classList.add('ha-mosquitto-inline-hint--warn');
+            inlineHint.classList.remove('ha-mosquitto-inline-hint--ok');
+        } else {
+            inlineHint.hidden = false;
+            inlineHint.textContent = 'Mosquitto add-on is not installed — the MQTT transport needs it.';
+            inlineHint.classList.add('ha-mosquitto-inline-hint--warn');
+            inlineHint.classList.remove('ha-mosquitto-inline-hint--ok');
+        }
+    }
+
+    if (!banner) return;
     if (!inHaAddon || _haConnected) {
         banner.hidden = true;
         return;
     }
-    var showInstall = mode === 'mqtt' && (!s.installed || !s.started);
+    // Banner is now reserved for two CTAs that the inline hint can't
+    // express on its own: the install deep-link and the one-click
+    // auto-configure flow.  When the add-on is healthy and mode is
+    // already MQTT, the inline hint covers it and we don't show the
+    // banner.
+    var showInstall = mode === 'mqtt' && !s.installed;
     var showAutoConfig = mode === 'off' && s.installed && s.started;
     if (!showInstall && !showAutoConfig) {
         banner.hidden = true;
@@ -5454,10 +5615,19 @@ async function _haAutoConfigure() {
     }
     if (hint) hint.textContent = 'Setting up MQTT integration…';
 
-    var modeEl = document.getElementById('ha-integration-mode');
-    if (modeEl) modeEl.value = 'mqtt';
+    _syncHaModeRadios('mqtt');
     var brokerEl = document.getElementById('ha-mqtt-broker');
-    if (brokerEl && (!brokerEl.value || brokerEl.value === '')) brokerEl.value = 'auto';
+    if (brokerEl) {
+        // Auto-configure flow always uses broker=auto; toggle reflects it.
+        brokerEl.value = '';
+        brokerEl.disabled = true;
+        brokerEl.placeholder = 'auto-detect (resolved at startup)';
+    }
+    var autodetectEl = document.getElementById('ha-mqtt-use-autodetect');
+    if (autodetectEl) {
+        autodetectEl.checked = true;
+        autodetectEl.setAttribute('aria-checked', 'true');
+    }
     _updateHaIntegrationVisibility();
 
     try {
@@ -5488,20 +5658,36 @@ function _readHaIntegrationFromForm(existingBlock) {
     var pwValue = pwField ? pwField.value : '';
     // Password handling — three cases the bridge POST handler distinguishes
     // (see ``routes/api_config.py:api_config``):
-    //   * ``***REDACTED***`` (the marker we populate from GET) — keep existing
-    //   * ``""`` (operator cleared the field) — explicit clear (broker
-    //     switches to no-auth)
-    //   * anything else — overwrite with the typed plaintext
-    // The merge happens server-side, not via translate_ha_config / config_diff.
-    var pwToSend = pwValue;
+    //   * empty + saved password existed → send ``***REDACTED***`` so the
+    //     server preserves the saved value
+    //   * empty + nothing was saved → send ``""`` (anonymous broker)
+    //   * non-empty → send the typed plaintext
+    // The placeholder hint in the UI tells the operator that an empty
+    // field preserves the saved password; the redaction marker stays
+    // strictly server↔serializer and is no longer shown to users.
+    var pwToSend;
+    if (pwValue === '') {
+        pwToSend = _haOriginalPasswordPresent ? '***REDACTED***' : '';
+    } else {
+        pwToSend = pwValue;
+    }
     var mode = (document.getElementById('ha-integration-mode') || {}).value || 'off';
+    var autodetectEl = document.getElementById('ha-mqtt-use-autodetect');
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    var brokerValue;
+    if (autodetectEl && autodetectEl.checked) {
+        brokerValue = 'auto';
+    } else {
+        brokerValue = brokerInput ? (brokerInput.value || '').trim() : '';
+        if (!brokerValue) brokerValue = 'auto';
+    }
     return {
-        // ``enabled`` is derived from the mode dropdown — the dedicated
+        // ``enabled`` is derived from the mode picker — the dedicated
         // checkbox was retired in favour of a single source of truth.
         enabled: mode !== 'off',
         mode: mode,
         mqtt: {
-            broker: ((document.getElementById('ha-mqtt-broker') || {}).value || 'auto').trim() || 'auto',
+            broker: brokerValue,
             port: parseInt((document.getElementById('ha-mqtt-port') || {}).value, 10) || 1883,
             username: ((document.getElementById('ha-mqtt-username') || {}).value || '').trim(),
             password: pwToSend,
@@ -5568,6 +5754,147 @@ async function _haMqttAutoDetect() {
     }
 }
 
+// Mode picker — radiogroup change handler.  Mirrors the radio selection
+// into the hidden ``#ha-integration-mode`` input so all the existing
+// form-read code (``_readHaIntegrationFromForm``, ``_validateHaIntegration``,
+// ``_haAutoConfigure``) keeps working without changes.
+function _haIntegrationModeChange() {
+    var radios = document.querySelectorAll('input[name="ha-integration-mode-radio"]');
+    var picked = 'off';
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) {
+            picked = radios[i].value;
+            break;
+        }
+    }
+    var hidden = document.getElementById('ha-integration-mode');
+    if (hidden) hidden.value = picked;
+    _haCurrentMode = picked;
+    _updateHaIntegrationVisibility();
+    _recomputeConfigDirtyState();
+}
+
+// "Use auto-detect" toggle.  Replaces the v2.66.x convention of typing
+// the literal string ``auto`` into the broker host field.  When on, the
+// host input is disabled and the form-read path serializes ``auto``
+// regardless of input value; when off, the host is editable.
+function _haAutoDetectToggle() {
+    var toggle = document.getElementById('ha-mqtt-use-autodetect');
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    if (!toggle || !brokerInput) return;
+    var on = !!toggle.checked;
+    toggle.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (on) {
+        brokerInput.value = '';
+        brokerInput.disabled = true;
+        brokerInput.placeholder = 'auto-detect (resolved at startup)';
+        brokerInput.classList.remove('invalid');
+        var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+        if (brokerGroup) brokerGroup.classList.remove('has-error');
+        var errEl = document.getElementById('ha-mqtt-broker-error');
+        if (errEl) errEl.textContent = '';
+    } else {
+        brokerInput.disabled = false;
+        brokerInput.placeholder = 'homeassistant.local';
+    }
+    _recomputeConfigDirtyState();
+}
+
+// TLS toggle — when the operator enables TLS, suggest port 8883 if the
+// current port is the plaintext default.  We don't force the change,
+// just nudge with a confirm prompt the operator can accept or reject.
+function _haMqttTlsToggle() {
+    var toggle = document.getElementById('ha-mqtt-tls');
+    var portInput = document.getElementById('ha-mqtt-port');
+    if (toggle) toggle.setAttribute('aria-checked', toggle.checked ? 'true' : 'false');
+    if (toggle && toggle.checked && portInput) {
+        var currentPort = parseInt(portInput.value, 10);
+        if (currentPort === 1883 || isNaN(currentPort)) {
+            // Use a non-blocking suggestion: write the value directly,
+            // operator can override.  A confirm() would steal focus on
+            // every toggle and quickly become annoying.
+            portInput.value = 8883;
+        }
+    } else if (toggle && !toggle.checked && portInput) {
+        var maybePort = parseInt(portInput.value, 10);
+        if (maybePort === 8883) {
+            portInput.value = 1883;
+        }
+    }
+    _recomputeConfigDirtyState();
+}
+
+// Test connection — calls the new ``GET /api/ha/mqtt/test`` endpoint
+// with the values currently in the form (not the saved config).  Renders
+// the outcome inline next to the button so operators can iterate
+// without the save → restart → tail-logs cycle.
+async function _haMqttTestConnection() {
+    var feedback = document.getElementById('ha-mqtt-test-feedback');
+    if (feedback) {
+        feedback.textContent = 'Testing…';
+        feedback.classList.remove('test-feedback--ok', 'test-feedback--err');
+        feedback.classList.add('test-feedback--pending');
+    }
+    var autodetectEl = document.getElementById('ha-mqtt-use-autodetect');
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    var host;
+    if (autodetectEl && autodetectEl.checked) {
+        host = 'auto';
+    } else {
+        host = brokerInput ? (brokerInput.value || '').trim() : '';
+    }
+    if (!host || host === 'auto') {
+        if (feedback) {
+            feedback.textContent = 'Enter a specific broker host before testing — auto-detect resolves only at startup.';
+            feedback.classList.remove('test-feedback--ok', 'test-feedback--pending');
+            feedback.classList.add('test-feedback--err');
+        }
+        return;
+    }
+    var port = parseInt((document.getElementById('ha-mqtt-port') || {}).value, 10) || 1883;
+    var username = ((document.getElementById('ha-mqtt-username') || {}).value || '').trim();
+    var pwField = document.getElementById('ha-mqtt-password');
+    var pwValue = pwField ? pwField.value : '';
+    var pwToSend;
+    if (pwValue === '') {
+        pwToSend = _haOriginalPasswordPresent ? '***REDACTED***' : '';
+    } else {
+        pwToSend = pwValue;
+    }
+    var tls = !!(document.getElementById('ha-mqtt-tls') || {}).checked;
+    var qs = new URLSearchParams({
+        host: host,
+        port: String(port),
+        username: username,
+        password: pwToSend,
+        tls: tls ? 'true' : 'false'
+    }).toString();
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/mqtt/test?' + qs);
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        if (!feedback) return;
+        feedback.classList.remove('test-feedback--pending');
+        if (body && body.ok) {
+            var ms = typeof body.elapsed_ms === 'number' ? (' (' + body.elapsed_ms + ' ms)') : '';
+            feedback.textContent = 'Connected successfully' + ms + '.';
+            feedback.classList.remove('test-feedback--err');
+            feedback.classList.add('test-feedback--ok');
+        } else {
+            var errMsg = (body && body.error) || (body && body.error_class) || ('HTTP ' + resp.status);
+            feedback.textContent = 'Test failed: ' + errMsg;
+            feedback.classList.remove('test-feedback--ok');
+            feedback.classList.add('test-feedback--err');
+        }
+    } catch (exc) {
+        if (feedback) {
+            feedback.textContent = 'Test failed: ' + (exc && exc.message ? exc.message : String(exc));
+            feedback.classList.remove('test-feedback--ok', 'test-feedback--pending');
+            feedback.classList.add('test-feedback--err');
+        }
+    }
+}
+
 async function _refreshHaIntegrationStatus() {
     // Fire both probes in parallel; failure is non-fatal — the form still
     // works for editing config without a live publisher / mDNS.
@@ -5621,27 +5948,53 @@ async function _refreshHaIntegrationStatus() {
 // expand the form again, otherwise show the form.
 function _applyHaConnectionStatus(mqttBody, mdnsBody) {
     var mode = _haCurrentMode || 'off';
+    var broker = mqttBody && mqttBody.broker;
+    var lastEventAt = mqttBody && mqttBody.last_event_at;
+    var lastError = mqttBody && mqttBody.last_error;
     if (mode === 'mqtt') {
         var state = (mqttBody && mqttBody.state) || 'idle';
         if (state === 'connected') {
-            _setHaStatus({connected: true, mode: 'mqtt', broker: mqttBody && mqttBody.broker});
+            _setHaStatus({
+                connected: true,
+                mode: 'mqtt',
+                broker: broker,
+                lastEventAt: lastEventAt,
+                lastError: null
+            });
             return;
         }
-        if (state === 'error' || (mqttBody && mqttBody.last_error)) {
-            _setHaStatus({connected: false, mode: 'mqtt', error: (mqttBody && mqttBody.last_error) || state});
+        if (state === 'error' || lastError) {
+            _setHaStatus({
+                connected: false,
+                mode: 'mqtt',
+                error: lastError || state,
+                broker: broker,
+                lastEventAt: lastEventAt,
+                lastError: lastError
+            });
             return;
         }
         if (state === 'connecting') {
-            _setHaStatus({connected: false, mode: 'mqtt', message: 'Connecting to MQTT broker…'});
+            _setHaStatus({
+                connected: false,
+                mode: 'mqtt',
+                message: 'Connecting to MQTT broker…',
+                broker: broker,
+                lastEventAt: lastEventAt
+            });
             return;
         }
         // idle / stopped / disabled — publisher hasn't been started yet.
-        _setHaStatus({connected: false, mode: 'mqtt'});
+        _setHaStatus({connected: false, mode: 'mqtt', broker: broker, lastEventAt: lastEventAt});
         return;
     }
     if (mode === 'rest') {
         if (mdnsBody && mdnsBody.advertised) {
-            _setHaStatus({connected: true, mode: 'rest', broker: mdnsBody.host_id || 'sendspin-bridge'});
+            _setHaStatus({
+                connected: true,
+                mode: 'rest',
+                broker: mdnsBody.host_id || 'sendspin-bridge'
+            });
             return;
         }
         _setHaStatus({connected: false, mode: 'rest'});
@@ -5659,6 +6012,11 @@ async function _refreshHaTokensList() {
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var body = await resp.json();
         var tokens = (body && body.tokens) || [];
+        _haTokensListHasItems = tokens.length > 0;
+        // The visibility of the Tokens card depends on this flag plus
+        // the current mode — re-run the visibility pass whenever the
+        // token count changes.
+        _updateHaIntegrationVisibility();
         if (!tokens.length) {
             listEl.innerHTML = '<span class="form-hint">No tokens issued yet.</span>';
             return;
@@ -10557,6 +10915,17 @@ function _normaliseBrokerHost(raw) {
     return {host: text, port: port, tls: tls, stripped: text !== original};
 }
 
+// Hostname / IP regex — accepts FQDN labels, dotted-quad IPv4, the
+// literal ``auto`` sentinel, and bracketed IPv6 (``[::1]``).  Must mirror
+// what the bridge's normalize logic accepts on save; intentionally
+// permissive (operators may enter LAN-only hostnames).
+var _HA_BROKER_HOST_RE = /^(auto|\[[0-9a-fA-F:]+\]|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*|(?:\d{1,3}\.){3}\d{1,3})$/;
+
+function _haBrokerHostLooksValid(value) {
+    if (!value) return true;  // empty passes — required-marker handles "blank when MQTT" case
+    return _HA_BROKER_HOST_RE.test(value);
+}
+
 (function() {
     var broker = document.getElementById('ha-mqtt-broker');
     if (!broker) return;
@@ -10570,9 +10939,30 @@ function _normaliseBrokerHost(raw) {
             if (hint.textContent === text) hint.textContent = '';
         }, 6000);
     }
+    function applyShapeError(message) {
+        var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+        var errEl = document.getElementById('ha-mqtt-broker-error');
+        broker.classList.add('invalid');
+        if (brokerGroup) brokerGroup.classList.add('has-error');
+        if (errEl) errEl.textContent = message;
+    }
+    function clearShapeError() {
+        var brokerGroup = document.getElementById('ha-mqtt-broker-group');
+        var errEl = document.getElementById('ha-mqtt-broker-error');
+        broker.classList.remove('invalid');
+        if (brokerGroup) brokerGroup.classList.remove('has-error');
+        if (errEl) errEl.textContent = '';
+    }
     broker.addEventListener('blur', function() {
         var result = _normaliseBrokerHost(broker.value);
         if (!result.stripped && result.tls === null && result.port === null) {
+            // No scheme to strip; still check hostname shape.
+            var raw = broker.value.trim();
+            if (raw && !_haBrokerHostLooksValid(raw)) {
+                applyShapeError('Doesn\'t look like a hostname or IP. Examples: homeassistant.local, 192.168.1.10, auto.');
+                return;
+            }
+            clearShapeError();
             _validateHaIntegration();
             return;
         }
@@ -10592,6 +10982,7 @@ function _normaliseBrokerHost(raw) {
             var tlsEl = document.getElementById('ha-mqtt-tls');
             if (tlsEl && tlsEl.checked !== result.tls) {
                 tlsEl.checked = result.tls;
+                tlsEl.setAttribute('aria-checked', tlsEl.checked ? 'true' : 'false');
                 changed = true;
             }
         }
@@ -10603,6 +10994,12 @@ function _normaliseBrokerHost(raw) {
             flash(msg);
             _recomputeConfigDirtyState();
         }
+        var rawHost = (broker.value || '').trim();
+        if (rawHost && !_haBrokerHostLooksValid(rawHost)) {
+            applyShapeError('Doesn\'t look like a hostname or IP. Examples: homeassistant.local, 192.168.1.10, auto.');
+            return;
+        }
+        clearShapeError();
         _validateHaIntegration();
     });
     // Clear the inline error as soon as the operator starts typing — the
@@ -10616,6 +11013,28 @@ function _normaliseBrokerHost(raw) {
             if (errEl) errEl.textContent = '';
         }
     });
+    // Port range validation on blur.  1..65535 per IANA; values outside
+    // that range surface inline rather than at save time.
+    var portInput = document.getElementById('ha-mqtt-port');
+    if (portInput) {
+        portInput.addEventListener('blur', function() {
+            var portErr = document.getElementById('ha-mqtt-port-error');
+            var raw = (portInput.value || '').trim();
+            if (raw === '') {
+                portInput.classList.remove('invalid');
+                if (portErr) portErr.textContent = '';
+                return;
+            }
+            var n = parseInt(raw, 10);
+            if (isNaN(n) || n < 1 || n > 65535) {
+                portInput.classList.add('invalid');
+                if (portErr) portErr.textContent = 'Port must be between 1 and 65535.';
+            } else {
+                portInput.classList.remove('invalid');
+                if (portErr) portErr.textContent = '';
+            }
+        });
+    }
 })();
 
 function _syncSecurityPolicyState() {
@@ -13722,13 +14141,16 @@ const _ACTION_REGISTRY = {
     'ha-token-copy':            () => { _haTokenCopy(); return false; },
     'ha-token-once-dismiss':    () => { _haTokenOnceDismiss(); return false; },
     'ha-integration-mode-change': () => {
-        _updateHaIntegrationVisibility();
-        // Switching the dropdown should re-evaluate the Mosquitto banner —
+        _haIntegrationModeChange();
+        // Switching the picker should re-evaluate the Mosquitto banner —
         // e.g. picking MQTT while the add-on is missing should immediately
         // surface the install prompt without waiting for the next refresh.
         _updateMosquittoBannerVisibility();
         return false;
     },
+    'ha-mqtt-test':             () => { _haMqttTestConnection(); return false; },
+    'ha-mqtt-tls-toggle':       () => { _haMqttTlsToggle(); return false; },
+    'ha-auto-detect-toggle':    () => { _haAutoDetectToggle(); return false; },
     'ha-reconfigure':           () => { _haReconfigure(); return false; },
     'ha-auto-configure':        () => { _haAutoConfigure(); return false; },
     'save-and-restart':         saveAndRestart,
