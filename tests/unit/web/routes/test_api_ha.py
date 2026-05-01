@@ -335,7 +335,7 @@ def _patch_aiomqtt_client(monkeypatch, *, raise_on_enter=None):
 
 
 def test_mqtt_test_returns_400_when_host_missing(client):
-    resp = client.get("/api/ha/mqtt/test")
+    resp = client.post("/api/ha/mqtt/test", json={})
     assert resp.status_code == 400
     body = resp.get_json()
     assert body["ok"] is False
@@ -343,7 +343,7 @@ def test_mqtt_test_returns_400_when_host_missing(client):
 
 
 def test_mqtt_test_returns_400_when_port_invalid(client):
-    resp = client.get("/api/ha/mqtt/test?host=broker.local&port=99999")
+    resp = client.post("/api/ha/mqtt/test", json={"host": "broker.local", "port": 99999})
     assert resp.status_code == 400
     body = resp.get_json()
     assert body["ok"] is False
@@ -353,7 +353,10 @@ def test_mqtt_test_returns_400_when_port_invalid(client):
 def test_mqtt_test_succeeds_when_broker_reachable(client, monkeypatch):
     _patch_open_connection_ok(monkeypatch)
     _patch_aiomqtt_client(monkeypatch)
-    resp = client.get("/api/ha/mqtt/test?host=broker.local&port=1883&username=u&password=p")
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "broker.local", "port": 1883, "username": "u", "password": "p"},
+    )
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["ok"] is True
@@ -371,7 +374,7 @@ def test_mqtt_test_surfaces_tcp_timeout_as_error(client, monkeypatch):
         raise TimeoutError("simulated broker drop")
 
     monkeypatch.setattr(asyncio, "open_connection", _hang)
-    resp = client.get("/api/ha/mqtt/test?host=does.not.exist&port=1883")
+    resp = client.post("/api/ha/mqtt/test", json={"host": "does.not.exist", "port": 1883})
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["ok"] is False
@@ -388,7 +391,10 @@ def test_mqtt_test_surfaces_mqtt_auth_failure(client, monkeypatch):
         pass
 
     _patch_aiomqtt_client(monkeypatch, raise_on_enter=_AuthError("not authorised"))
-    resp = client.get("/api/ha/mqtt/test?host=broker.local&port=1883&username=u&password=wrong")
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "broker.local", "port": 1883, "username": "u", "password": "wrong"},
+    )
     body = resp.get_json()
     assert body["ok"] is False
     assert body["error_class"] == "_AuthError"
@@ -436,7 +442,15 @@ def test_mqtt_test_resolves_redacted_password_from_saved_config(client, monkeypa
 
     monkeypatch.setattr("sendspin_bridge.config.load_config", _fake_load_config)
 
-    resp = client.get("/api/ha/mqtt/test?host=broker.local&port=1883&username=u&password=%2A%2A%2AREDACTED%2A%2A%2A")
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={
+            "host": "broker.local",
+            "port": 1883,
+            "username": "u",
+            "password": "***REDACTED***",
+        },
+    )
     body = resp.get_json()
     assert body["ok"] is True
     assert captured["password"] == "saved-pw"

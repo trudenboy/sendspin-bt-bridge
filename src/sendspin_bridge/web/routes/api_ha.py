@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import queue
+import secrets
 import time
 from typing import Any
 
@@ -420,12 +421,17 @@ async def _probe_mqtt_broker(
             "elapsed_ms": int((time.monotonic() - started) * 1000),
         }
 
+    # Use a unique-per-call identifier so two simultaneous tests (rapid
+    # double-click, two operator browsers) can't collide on the broker
+    # side and trigger spurious disconnects.  ``secrets.token_hex`` gives
+    # us 64 random bits — far below the MQTT v3.1.1 23-byte client_id
+    # limit, plenty for collision-free fanout.
     client = aiomqtt.Client(
         hostname=host,
         port=port,
         username=username or None,
         password=password or None,
-        identifier=f"sendspin-test-{int(time.time())}",
+        identifier=f"sendspin-test-{secrets.token_hex(8)}",
         tls_params=aiomqtt.TLSParameters() if tls else None,
         timeout=10,
     )
@@ -466,31 +472,47 @@ def _resolve_redacted_password(submitted: str) -> str:
         return ""
 
 
-@ha_bp.route("/api/ha/mqtt/test", methods=["GET"])
+@ha_bp.route("/api/ha/mqtt/test", methods=["POST"])
 def api_ha_mqtt_test():
     """Probe an MQTT broker with the values currently in the form.
 
     Used by the HA tab's "Test connection" button so operators can
     iterate on broker / credentials without saving partial configs and
-    watching the publisher fail in the status panel.  Always returns
-    HTTP 200 — failures live in the body so the UI can render the error
-    class + message inline next to the form.
+    watching the publisher fail in the status panel.
+
+    Accepts a JSON body so the password (or the ``***REDACTED***``
+    marker that triggers a saved-config lookup) is not exposed in URL
+    query params, browser history, or proxy access logs:
+
+      ``{"host": str, "port": int, "username": str,
+         "password": str, "tls": bool}``
+
+    Validation errors (missing ``host``, out-of-range ``port``) return
+    HTTP 400 with the same error-shaped body the success path uses
+    (``{"ok": false, "error_class", "error"}``).  Probe outcomes —
+    success and runtime failures (TCP timeout, auth rejection, TLS
+    mismatch) — return HTTP 200 with the result in the body so the UI
+    can render the error class + message inline next to the form.
     """
     import asyncio
 
-    host = (request.args.get("host") or "").strip()
+    payload = request.get_json(silent=True) or {}
+    host = str(payload.get("host") or "").strip()
     if not host:
         return jsonify({"ok": False, "error_class": "ValueError", "error": "host required"}), 400
     try:
-        port = int(request.args.get("port") or 1883)
-    except ValueError:
+        port = int(payload.get("port") or 1883)
+    except (TypeError, ValueError):
         return jsonify({"ok": False, "error_class": "ValueError", "error": "port must be an integer"}), 400
     if not (1 <= port <= 65535):
         return jsonify({"ok": False, "error_class": "ValueError", "error": "port out of range"}), 400
-    username = (request.args.get("username") or "").strip()
-    password = _resolve_redacted_password(request.args.get("password") or "")
-    tls_arg = (request.args.get("tls") or "").strip().lower()
-    tls = tls_arg in ("1", "true", "yes", "on")
+    username = str(payload.get("username") or "").strip()
+    password = _resolve_redacted_password(str(payload.get("password") or ""))
+    tls_raw = payload.get("tls")
+    if isinstance(tls_raw, bool):
+        tls = tls_raw
+    else:
+        tls = str(tls_raw or "").strip().lower() in ("1", "true", "yes", "on")
 
     try:
         result = asyncio.run(_probe_mqtt_broker(host, port, username, password, tls))

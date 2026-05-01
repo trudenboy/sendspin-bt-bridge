@@ -5294,6 +5294,31 @@ var _haCurrentMode = 'off';
 var _haMosquittoState = null;
 var _haCustomComponentState = null;
 
+// Delegated aria-checked sync for every ``role="switch"`` checkbox
+// inside the HA tab.  Without this, screen readers see whatever
+// ``aria-checked`` value the HTML author hard-coded and never learn
+// that the operator toggled the switch — regression risk that's hard
+// to spot without an a11y tester present.  We listen on the HA panel
+// container so per-switch handlers don't have to remember to call
+// ``setAttribute('aria-checked', …)`` themselves.
+(function() {
+    function _wireHaAriaCheckedSync() {
+        var panel = document.getElementById('config-panel-ha');
+        if (!panel) return;
+        panel.addEventListener('change', function(ev) {
+            var t = ev.target;
+            if (!t || t.type !== 'checkbox') return;
+            if (t.getAttribute('role') !== 'switch') return;
+            t.setAttribute('aria-checked', t.checked ? 'true' : 'false');
+        }, true);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _wireHaAriaCheckedSync, {once: true});
+    } else {
+        _wireHaAriaCheckedSync();
+    }
+})();
+
 function _updateHaIntegrationVisibility() {
     var modeEl = document.getElementById('ha-integration-mode');
     var mode = modeEl ? (modeEl.value || 'off') : 'off';
@@ -5397,16 +5422,23 @@ function _validateHaIntegration() {
     if (errEl) errEl.textContent = '';
 
     if (mode !== 'mqtt') return {ok: true};
+    // Auto-detect path is valid even with an empty visible host: the
+    // form-read serializer writes ``"auto"`` regardless of input value
+    // when the toggle is on, and the runtime resolves it at startup.
+    var autodetectEl = document.getElementById('ha-mqtt-use-autodetect');
+    if (autodetectEl && autodetectEl.checked) {
+        return {ok: true};
+    }
     var value = brokerInput ? (brokerInput.value || '').trim() : '';
     if (!value) {
         if (brokerInput) brokerInput.classList.add('invalid');
         if (brokerGroup) brokerGroup.classList.add('has-error');
         if (errEl) {
-            errEl.textContent = 'Required for MQTT mode. Use "auto" to resolve at startup, or enter a hostname / IP.';
+            errEl.textContent = 'Required for MQTT mode. Turn on "Use auto-detect" above, or enter a hostname / IP here.';
         }
         return {
             ok: false,
-            error: 'MQTT broker host is required.  Use "auto" or enter a hostname / IP, or switch the integration mode to Off.',
+            error: 'MQTT broker host is required.  Turn on "Use auto-detect" or enter a hostname / IP, or switch the integration mode to Off.',
             focusFieldId: 'ha-mqtt-broker',
         };
     }
@@ -5971,15 +6003,24 @@ async function _haMqttTestConnection() {
         resolvedFromProbe ? ('Testing ' + host + ':' + port + '…') : 'Testing…',
         'pending'
     );
-    var qs = new URLSearchParams({
-        host: host,
-        port: String(port),
-        username: username,
-        password: pwToSend,
-        tls: tls ? 'true' : 'false'
-    }).toString();
+    var csrf = (window._csrfToken || '').toString();
+    var headers = {'Content-Type': 'application/json'};
+    if (csrf) headers['X-CSRF-Token'] = csrf;
     try {
-        var resp = await fetch(API_BASE + '/api/ha/mqtt/test?' + qs);
+        // POST + JSON body so the password is never serialized into the
+        // URL (browser history / proxy access logs were a leakage risk
+        // when this was a GET with query params).
+        var resp = await fetch(API_BASE + '/api/ha/mqtt/test', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                host: host,
+                port: port,
+                username: username,
+                password: pwToSend,
+                tls: !!tls
+            })
+        });
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var body = await resp.json().catch(function() { return null; });
         if (body && body.ok) {
