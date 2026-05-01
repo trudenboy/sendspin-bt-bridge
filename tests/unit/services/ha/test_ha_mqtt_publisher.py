@@ -580,3 +580,104 @@ def test_delta_runtime_change_mirrors_to_legacy_topic(cfg, projection):
     legacy_writes = [(t, p) for t, p in client.calls if t == cfg.availability_topic_device("player-aaa")]
     assert legacy_writes, "legacy availability topic was not mirrored on delta"
     assert legacy_writes[-1][1] == "offline"  # mirrors the runtime flip
+
+
+# ---------------------------------------------------------------------------
+# _serve lifecycle — connect timeout + worker-task death (Copilot #250 review)
+# ---------------------------------------------------------------------------
+
+
+def test_serve_pre_flight_raises_oserror_when_broker_unreachable(cfg, projection, monkeypatch):
+    """Pre-flight TCP probe must surface an unreachable broker as an
+    OSError so the outer reconnect loop can log and back off — not as a
+    silent hang inside paho's run_in_executor.  Closes Copilot review on
+    PR #250."""
+
+    async def fake_open_connection(host, port):
+        raise TimeoutError("simulated unreachable broker")
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open_connection)
+
+    publisher = HaMqttPublisher(
+        config_provider=lambda: cfg,
+        projection_provider=lambda: projection,
+        dispatcher=MagicMock(),
+        event_subscribe=lambda cb: lambda: None,
+    )
+
+    with pytest.raises(OSError, match="unreachable"):
+        asyncio.run(publisher._serve(cfg))
+
+
+def test_serve_propagates_worker_exception_so_run_can_reconnect(cfg, projection, monkeypatch):
+    """When a worker task dies (e.g. broker drops the session mid-stream
+    and the command loop raises ``Disconnected during message iteration``),
+    ``_serve`` must surface that exception so ``_run`` reconnects with
+    backoff.  The previous ``await self._stop_event.wait()`` swallowed
+    worker deaths — closes Copilot review on PR #250."""
+
+    class _FakeAsyncCm:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        @staticmethod
+        async def wait_closed():
+            return None
+
+        def close(self):
+            return None
+
+    async def fake_open_connection(host, port):
+        cm = _FakeAsyncCm()
+        return cm, cm
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open_connection)
+
+    class _FakeAiomqttClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def publish(self, *_args, **_kwargs):
+            return None
+
+        async def subscribe(self, *_args, **_kwargs):
+            return None
+
+    import aiomqtt as _aiomqtt
+
+    monkeypatch.setattr(_aiomqtt, "Client", _FakeAiomqttClient)
+    monkeypatch.setattr(
+        _aiomqtt,
+        "Will",
+        lambda **kw: SimpleNamespace(**kw),
+    )
+
+    class _FailingCommandPublisher(HaMqttPublisher):
+        async def _on_connect(self, client, cfg):
+            return None
+
+        async def _command_loop(self, client, cfg):
+            await asyncio.sleep(0.01)
+            raise RuntimeError("Disconnected during message iteration")
+
+        async def _publish_loop(self, client, cfg):
+            await asyncio.Event().wait()  # block forever — should be cancelled in finally
+
+    publisher = _FailingCommandPublisher(
+        config_provider=lambda: cfg,
+        projection_provider=lambda: projection,
+        dispatcher=MagicMock(),
+        event_subscribe=lambda cb: lambda: None,
+    )
+
+    with pytest.raises(RuntimeError, match="Disconnected during message iteration"):
+        asyncio.run(publisher._serve(cfg))

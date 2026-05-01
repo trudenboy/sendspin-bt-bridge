@@ -5901,9 +5901,9 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     // opts: { liveClass: string|null }
     var liveClass = (opts && opts.liveClass) || null;
     var current = String(currentValue || '').toLowerCase();
-    // Documented presets — see docs/troubleshooting.md "Class of Device override
-    // — preset reference" for the full case-by-case table.  Anything outside
-    // this list falls into the ``custom`` branch.
+    // Documented presets — see docs-site/src/content/docs/troubleshooting.md
+    // ("Class of Device override — preset reference") for the full case-by-case
+    // table.  Anything outside this list falls into the ``custom`` branch.
     var COD_PRESETS = ['0x00010c', '0x000100', '0x000414', '0x240404'];
     var isPreset = current && COD_PRESETS.indexOf(current) !== -1;
     var presetValue = isPreset ? current : (current ? 'custom' : '');

@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -636,10 +637,30 @@ class HaMqttPublisher:
             will=will,
             timeout=10,
         )
-        # Bound only the connect (``__aenter__``) — the long
-        # ``_stop_event.wait()`` below must NOT be inside the timeout
-        # context.  Connect failures (TimeoutError or otherwise) propagate
-        # to ``_run`` which logs and retries with exponential backoff.
+        # Pre-flight TCP probe with asyncio-native sockets — paho's
+        # ``client.connect()`` runs via ``loop.run_in_executor`` and
+        # ignores task cancellation, so ``asyncio.timeout`` around
+        # ``__aenter__`` would cancel the await but leave the executor
+        # thread blocked in ``socket.connect()`` for the OS-level SYN
+        # retry budget (~127 s on Linux).  Repeated retries against an
+        # unreachable broker would slowly accumulate stuck executor
+        # threads and starve the default threadpool.
+        # ``asyncio.open_connection`` uses non-blocking sockets driven by
+        # the event loop, so ``wait_for`` cancels it cleanly.  We probe,
+        # close immediately, then hand off to aiomqtt — by which point
+        # the broker is known reachable and paho's connect returns
+        # quickly.  The ``asyncio.timeout`` around ``__aenter__`` is
+        # kept as a defence in depth for slow CONNACK on a healthy TCP.
+        try:
+            _reader, _writer = await asyncio.wait_for(
+                asyncio.open_connection(cfg.host, cfg.port),
+                timeout=_CONNECT_TIMEOUT_S,
+            )
+            _writer.close()
+            with suppress(Exception):
+                await _writer.wait_closed()
+        except (TimeoutError, OSError) as exc:
+            raise OSError(f"HA MQTT: broker {cfg.host}:{cfg.port} unreachable: {exc}") from exc
         async with asyncio.timeout(_CONNECT_TIMEOUT_S):
             await client.__aenter__()
         try:
