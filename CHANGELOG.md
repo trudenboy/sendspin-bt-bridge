@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.67.1] - 2026-05-01
+
 ### Added
 - **HACS custom_component now ships its own brand icon.**  Home
   Assistant 2026.3+ supports local brand images for custom
