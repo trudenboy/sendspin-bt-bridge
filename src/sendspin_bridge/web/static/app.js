@@ -5165,10 +5165,6 @@ var _haIntegrationDefaults = {
 // left empty.  Without this we'd silently clear the saved password every
 // time the operator re-saved the form.
 var _haOriginalPasswordPresent = false;
-// Cache the last-known token count from ``/api/auth/tokens`` so the
-// progressive disclosure rule can hide the Tokens card when mode=off
-// AND no tokens exist yet.
-var _haTokensListHasItems = false;
 
 // Mirror selected mode into the hidden ``<input id="ha-integration-mode">``
 // so existing form-read code (_readHaIntegrationFromForm,
@@ -6374,11 +6370,6 @@ async function _refreshHaTokensList() {
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var body = await resp.json();
         var tokens = (body && body.tokens) || [];
-        _haTokensListHasItems = tokens.length > 0;
-        // The visibility of the Tokens card depends on this flag plus
-        // the current mode — re-run the visibility pass whenever the
-        // token count changes.
-        _updateHaIntegrationVisibility();
         if (!tokens.length) {
             listEl.innerHTML = '<span class="form-hint">No tokens issued yet.</span>';
             return;

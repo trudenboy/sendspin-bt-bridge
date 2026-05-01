@@ -10,7 +10,7 @@
   "issue_tracker": "https://github.com/trudenboy/sendspin-bt-bridge/issues",
   "loggers": ["custom_components.sendspin_bridge"],
   "requirements": [],
-  "version": "2.67.0",
+  "version": "2.67.1",
   "zeroconf": [
     {"type": "_sendspin-bridge._tcp.local."}
   ]

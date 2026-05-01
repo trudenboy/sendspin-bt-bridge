@@ -272,6 +272,45 @@ def test_rest_probe_falls_back_when_hostname_resolves_to_zero(client, monkeypatc
     assert body["source"] == "fallback"
 
 
+def test_rest_probe_falls_back_to_zero_when_loopback_and_udp_trick_fails(client, monkeypatch):
+    """Hostname lookup returns the Debian/Ubuntu ``127.0.1.1`` loopback
+    alias AND the UDP-getsockname fallback fails (offline / unusual
+    routing) → must return ``0.0.0.0`` with ``source="fallback"``.
+
+    Regression guard: an earlier version returned the loopback
+    candidate as a "last resort" — but ``/api/ha/rest/probe`` then
+    classified it as ``source="hostname"`` and the operator UI would
+    show "auto-detected 127.0.1.1", which is exactly the bug the
+    loopback filter was added to prevent.
+    """
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname",
+        lambda *_a, **_kw: "127.0.1.1",
+    )
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+
+    class _FailingUdpSocket:
+        def connect(self, *_a, **_kw):
+            raise OSError("network unreachable")
+
+        def getsockname(self):
+            return ("0.0.0.0", 0)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.socket",
+        lambda *_a, **_kw: _FailingUdpSocket(),
+    )
+    resp = client.get("/api/ha/rest/probe")
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "0.0.0.0"
+    assert body["source"] == "fallback"
+
+
 def test_rest_probe_filters_loopback_via_udp_trick(client, monkeypatch):
     """``gethostbyname`` returns ``127.0.1.1`` (Debian/Ubuntu /etc/hosts
     quirk) → fall back to UDP-getsockname trick to discover the real
@@ -372,6 +411,70 @@ def test_custom_component_status_stale_use_means_idle(client, monkeypatch):
     assert body["installed"] is True
     assert body["started"] is False
     assert body["last_seen"] == stale
+
+
+def test_custom_component_status_recently_paired_within_window(client, monkeypatch):
+    """A token issued within the last 15 min flags ``recently_paired=True``
+    even if HA's coordinator hasn't called the bridge yet
+    (``last_used`` still null).  This drives the friendly "Pairing
+    detected — finish in HA → Devices & Services" hint instead of the
+    alarming "paired before but isn't currently active"."""
+    from datetime import UTC, datetime, timedelta
+
+    just_now = (datetime.now(tz=UTC) - timedelta(minutes=2)).isoformat()
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {
+            "AUTH_TOKENS": [
+                {"id": "abc", "label": "ha", "created": just_now, "last_used": None},
+            ]
+        },
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is False
+    assert body["recently_paired"] is True
+    assert body["last_seen"] is None
+
+
+def test_custom_component_status_recently_paired_expires_after_window(client, monkeypatch):
+    """Once a token is older than 15 min and still hasn't been used,
+    ``recently_paired`` flips back to False so the UI escalates from
+    "Pairing detected" to "paired before but isn't currently active"."""
+    from datetime import UTC, datetime, timedelta
+
+    aged = (datetime.now(tz=UTC) - timedelta(minutes=20)).isoformat()
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {
+            "AUTH_TOKENS": [
+                {"id": "abc", "label": "ha", "created": aged, "last_used": None},
+            ]
+        },
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["recently_paired"] is False
+
+
+def test_custom_component_status_recently_paired_handles_invalid_timestamp(client, monkeypatch):
+    """A malformed ``created`` timestamp must not crash the heuristic —
+    silently fall back to ``recently_paired=False`` so the UI still
+    renders something sensible."""
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {
+            "AUTH_TOKENS": [
+                {"id": "abc", "label": "ha", "created": "not-a-timestamp", "last_used": None},
+            ]
+        },
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["recently_paired"] is False
 
 
 # ---------------------------------------------------------------------------

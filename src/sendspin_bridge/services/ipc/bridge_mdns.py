@@ -52,8 +52,10 @@ def _resolve_host_address() -> str:
     because ``/etc/hosts`` typically maps the hostname to ``127.0.1.1``
     (a loopback alias) — Home Assistant can't reach the bridge on that
     address.  We filter loopback results and fall back to the standard
-    "open a UDP socket to a non-routable address and read getsockname"
-    trick to discover the LAN-routable IP without sending any packets.
+    "open a UDP socket to a well-known external address and read
+    ``getsockname``" trick — connectionless UDP doesn't actually send
+    any packets, the kernel just picks the source IP it would use for
+    that route, so this works offline too.
     """
     candidate = ""
     try:
@@ -83,10 +85,12 @@ def _resolve_host_address() -> str:
             except OSError:
                 pass
 
-    # Last resort: return whatever the hostname lookup gave us (even if
-    # loopback) so the SRV record still has something — better than
-    # 0.0.0.0 which some Zeroconf clients reject.
-    return candidate or "0.0.0.0"
+    # Last resort: ``0.0.0.0`` (bind-any).  Returning the loopback
+    # candidate would defeat the filter — callers downstream (notably
+    # ``/api/ha/rest/probe``) classify a non-``0.0.0.0`` host as
+    # ``source="hostname"`` and the operator gets a UI that says
+    # "auto-detected 127.0.1.1" — exactly the bug we set out to fix.
+    return "0.0.0.0"
 
 
 def _derive_host_id(bridge_name: str) -> str:
