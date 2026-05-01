@@ -5592,12 +5592,12 @@ function _updateMosquittoBannerVisibility() {
     var mode = _haCurrentMode || 'off';
 
     // Inline hint next to the MQTT radio.  Three states on HAOS, hidden
-    // off-HAOS:
+    // off-HAOS or when the operator picked a different transport:
     //   * installed && started → green "running" confirmation
     //   * installed but stopped → warning "start the add-on"
     //   * not installed → warning "install Mosquitto"
     if (inlineHint) {
-        if (!inHaAddon) {
+        if (!inHaAddon || mode !== 'mqtt') {
             inlineHint.hidden = true;
             inlineHint.textContent = '';
             inlineHint.classList.remove('ha-mosquitto-inline-hint--ok', 'ha-mosquitto-inline-hint--warn');
@@ -5686,6 +5686,12 @@ async function _refreshCustomComponentState() {
     _updateCustomComponentHintVisibility();
 }
 
+// Path to the HA integration docs page that covers HACS install +
+// custom_component setup.  Centralised so the help links across the
+// tab stay consistent.
+var _HA_INTEGRATION_DOCS_URL = 'https://trudenboy.github.io/sendspin-bt-bridge/home-assistant-integration/';
+var _HA_HACS_DOCS_URL = _HA_INTEGRATION_DOCS_URL + '#path-a1--custom_component-hacs';
+
 function _updateCustomComponentHintVisibility() {
     var hint = document.getElementById('ha-transport-customcomp-hint');
     if (!hint) return;
@@ -5696,6 +5702,7 @@ function _updateCustomComponentHintVisibility() {
     if (!s || mode !== 'rest') {
         hint.hidden = true;
         hint.textContent = '';
+        hint.innerHTML = '';
         hint.classList.remove('ha-mosquitto-inline-hint--ok', 'ha-mosquitto-inline-hint--warn');
         return;
     }
@@ -5707,19 +5714,28 @@ function _updateCustomComponentHintVisibility() {
             lastSeen = '';
         }
     }
+    var docsLink = ' <a href="' + _HA_HACS_DOCS_URL +
+        '" target="_blank" rel="noopener">Setup guide</a>.';
     if (s.installed && s.started) {
         hint.hidden = false;
-        hint.textContent = 'HACS custom_component paired and currently active.' + lastSeen;
+        hint.innerHTML = 'HACS custom_component paired and currently active.' + escHtml(lastSeen);
         hint.classList.add('ha-mosquitto-inline-hint--ok');
         hint.classList.remove('ha-mosquitto-inline-hint--warn');
     } else if (s.installed) {
         hint.hidden = false;
-        hint.textContent = 'HACS custom_component has paired before but isn\'t currently active.' + lastSeen;
+        hint.innerHTML = 'HACS custom_component paired before but isn\'t currently active.' +
+            escHtml(lastSeen) + docsLink;
         hint.classList.add('ha-mosquitto-inline-hint--warn');
         hint.classList.remove('ha-mosquitto-inline-hint--ok');
     } else {
+        // No issued bearer token yet.  Could be either: HACS not installed
+        // at all, or HACS has the component but the integration entry
+        // hasn't been added in Settings → Devices & Services.  We can't
+        // tell those apart from the bridge's POV — point at the setup
+        // guide that walks through both states.
         hint.hidden = false;
-        hint.textContent = 'HACS custom_component hasn\'t paired with this bridge yet — install it via HACS, then add the integration in Home Assistant.';
+        hint.innerHTML = 'No HACS pairing detected yet.  If the integration is already installed via HACS, ' +
+            'add it in Home Assistant → Settings → Devices &amp; Services.' + docsLink;
         hint.classList.add('ha-mosquitto-inline-hint--warn');
         hint.classList.remove('ha-mosquitto-inline-hint--ok');
     }
