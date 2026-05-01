@@ -2755,7 +2755,14 @@ function _getDeviceNowPlayingState(dev, i) {
     var artist = _firstOfSlash(safeDev.current_artist || (useMaFallback ? (ma.artist || '') : '') || '');
     var track = _firstOfSlash(safeDev.current_track || (deviceMaActive ? (ma.track || '') : '') || '');
     var album = _firstOfSlash(safeDev.current_album || (useMaFallback ? (ma.album || '') : '') || '');
-    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (useMaFallback ? (ma.image_url || '') : '') || '';
+    // Artwork falls back to MA whenever the device is MA-active and the
+    // daemon doesn't ship its own ``artwork_url`` — the ynison "daemon
+    // metadata != MA queue" guard that gates text fallback isn't useful
+    // here because the daemon never provides an artwork URL of its
+    // own, so suppressing the MA image just leaves an empty placeholder.
+    // Showing MA artwork that's off by one queue item is strictly
+    // better than showing none at all.
+    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (deviceMaActive ? (ma.image_url || '') : '') || '';
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,

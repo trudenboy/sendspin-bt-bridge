@@ -43,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for tokens older than 15 min that have gone quiet.
 
 ### Fixed
+- **Album artwork now renders when the daemon already has its own
+  track metadata.**  The artwork-fallback path was gated on
+  ``!daemonHasTrack`` (a guard meant for ynison-style sourceplugin
+  providers where MA's queue might disagree with what the daemon is
+  actually playing) — but the daemon never ships its own
+  ``artwork_url``, so the gate just left an empty placeholder
+  whenever the daemon had a track name.  Demo mode hit this every
+  card.  Artwork now falls back to MA's image whenever the device is
+  MA-active, regardless of daemon-track presence; text fields keep
+  the original "daemon takes priority" semantics.
 - **HA → Direct REST: auto-detected host no longer leaks `127.0.1.1`.**
   On Debian / Ubuntu the system hostname maps to a `127.0.1.1` loopback
   alias in `/etc/hosts`, so `gethostbyname(hostname)` returned that
