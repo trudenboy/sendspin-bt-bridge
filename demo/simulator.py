@@ -154,6 +154,13 @@ async def run_simulator(clients: list) -> None:
             if level is not None and level > 5:
                 client._update_status({"battery_level": level - 1})
 
+    async def _refresh_rssi_ts() -> None:
+        """Refresh rssi_at_ts for connected devices so the badge stays non-stale."""
+        now = time.time()
+        for client in clients:
+            if client.status.get("bluetooth_connected") and client.status.get("rssi_dbm") is not None:
+                client._update_status({"rssi_at_ts": now})
+
     logger.info("[demo-sim] Canonical simulator started for %d device(s)", len(clients))
     tick = 0
     try:
@@ -161,6 +168,7 @@ async def run_simulator(clients: list) -> None:
             await asyncio.sleep(5)
             tick += 1
             await _advance_tracks()
+            await _refresh_rssi_ts()
             if tick % 60 == 0:
                 await _drain_battery()
     except asyncio.CancelledError:

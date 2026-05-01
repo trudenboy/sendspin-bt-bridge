@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +46,17 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
+
+
+# Hard wall-clock bound on the initial connect phase.  ``aiomqtt.Client``'s
+# own ``timeout=`` parameter only bounds CONNACK + per-operation acks; the
+# underlying ``paho.connect()`` runs via ``loop.run_in_executor`` without a
+# wait_for, so an unreachable broker that silently drops SYN packets can
+# leave ``__aenter__`` hanging indefinitely.  We wrap the entry in an
+# explicit ``asyncio.timeout`` so connect failures surface as a regular
+# exception and the reconnect loop can back off and retry instead of
+# leaving the publisher stuck in ``state="connecting"`` forever.
+_CONNECT_TIMEOUT_S = 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -615,7 +627,7 @@ class HaMqttPublisher:
             retain=True,
         )
 
-        async with aiomqtt.Client(
+        client = aiomqtt.Client(
             hostname=cfg.host,
             port=cfg.port,
             username=cfg.username or None,
@@ -624,20 +636,61 @@ class HaMqttPublisher:
             tls_params=aiomqtt.TLSParameters() if cfg.tls else None,
             will=will,
             timeout=10,
-        ) as client:
+        )
+        # Pre-flight TCP probe with asyncio-native sockets — paho's
+        # ``client.connect()`` runs via ``loop.run_in_executor`` and
+        # ignores task cancellation, so ``asyncio.timeout`` around
+        # ``__aenter__`` would cancel the await but leave the executor
+        # thread blocked in ``socket.connect()`` for the OS-level SYN
+        # retry budget (~127 s on Linux).  Repeated retries against an
+        # unreachable broker would slowly accumulate stuck executor
+        # threads and starve the default threadpool.
+        # ``asyncio.open_connection`` uses non-blocking sockets driven by
+        # the event loop, so ``wait_for`` cancels it cleanly.  We probe,
+        # close immediately, then hand off to aiomqtt — by which point
+        # the broker is known reachable and paho's connect returns
+        # quickly.  The ``asyncio.timeout`` around ``__aenter__`` is
+        # kept as a defence in depth for slow CONNACK on a healthy TCP.
+        try:
+            _reader, _writer = await asyncio.wait_for(
+                asyncio.open_connection(cfg.host, cfg.port),
+                timeout=_CONNECT_TIMEOUT_S,
+            )
+            _writer.close()
+            with suppress(Exception):
+                await _writer.wait_closed()
+        except (TimeoutError, OSError) as exc:
+            raise OSError(f"HA MQTT: broker {cfg.host}:{cfg.port} unreachable: {exc}") from exc
+        async with asyncio.timeout(_CONNECT_TIMEOUT_S):
+            await client.__aenter__()
+        try:
             self._client = client
             self.connected_broker = f"{cfg.host}:{cfg.port}"
             self.state = "connected"
             self.last_error = None
+            logger.info("HA MQTT: connected to %s:%s", cfg.host, cfg.port)
 
-            await self._on_connect(client, cfg)
-
-            tasks = [
-                asyncio.create_task(self._command_loop(client, cfg), name="ha_mqtt_cmd"),
-                asyncio.create_task(self._publish_loop(client, cfg), name="ha_mqtt_pub"),
-            ]
+            tasks: list[asyncio.Task[Any]] = []
             try:
-                await self._stop_event.wait()
+                await self._on_connect(client, cfg)
+
+                cmd_task = asyncio.create_task(self._command_loop(client, cfg), name="ha_mqtt_cmd")
+                pub_task = asyncio.create_task(self._publish_loop(client, cfg), name="ha_mqtt_pub")
+                stop_task = asyncio.create_task(self._stop_event.wait(), name="ha_mqtt_stop")
+                tasks = [cmd_task, pub_task, stop_task]
+                # Wake on whichever happens first: graceful stop, command-loop
+                # death, or publish-loop death.  A worker task that dies because
+                # the broker dropped the connection (e.g. WiFi / NAT timeout
+                # mid-session) needs to surface as an exception so ``_run``
+                # logs it and reconnects with backoff — otherwise we'd silently
+                # block in ``stop_event.wait()`` while the connection is dead.
+                done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for t in done:
+                    if t is stop_task:
+                        continue
+                    task_exc = t.exception()
+                    if task_exc is not None:
+                        raise task_exc
             finally:
                 # Flush 'offline' before closing if we can.
                 try:
@@ -651,8 +704,13 @@ class HaMqttPublisher:
                         await t
                     except (asyncio.CancelledError, Exception):
                         pass
-                self._client = None
-                self.state = "disconnected"
+        finally:
+            self._client = None
+            self.state = "disconnected"
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception:  # pragma: no cover
+                pass
 
     # -- on-connect publish ------------------------------------------
 

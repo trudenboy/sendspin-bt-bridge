@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Class of Device dropdown — four documented presets.** The
+  per-adapter CoD override widget now ships preset entries covering
+  the speaker families that filter incoming connections by the
+  initiator's class: Computer/Laptop (`0x00010c` — Samsung Q-series),
+  Computer/generic (`0x000100` — broad fallback), A/V Loudspeaker
+  (`0x000414` — LG-style filters), and A/V Headset (`0x240404` —
+  Anker Soundcore family). Each value corresponds to a documented
+  case where that exact CoD unblocked pairing. The custom-hex field
+  is still available for values outside the list.
+- **Troubleshooting reference — Class of Device override preset
+  table.** New section in the troubleshooting docs listing which
+  speakers each preset is reported to fix, plus a secondary table of
+  spec-valid but undocumented values for the custom-hex path. Each
+  row links to the upstream bug tracker, ArchWiki entry, or forum
+  thread that surfaced the value, so support tickets can reference
+  the lineage of every override directly.
+
+### Fixed
+- **HA MQTT publisher now hard-bounds the initial connect (15 s).** The
+  v2.66.18 fix added `timeout=10` to `aiomqtt.Client(...)`, but in
+  `aiomqtt` 2.5.x that parameter only bounds CONNACK and per-operation
+  acks — the underlying `paho.connect()` runs via `run_in_executor`
+  without a wait_for, so a broker that silently drops SYN packets
+  (e.g. HAOS Mosquitto add-on listening only on the Docker bridge,
+  or a host firewall blocking the bridge container's IP) could leave
+  the publisher stuck in `state="connecting"` indefinitely with no
+  error log and the UI permanently showing "Configured but not
+  connected yet". The connect phase is now wrapped in
+  `asyncio.timeout(15)`; failures surface as a regular exception,
+  the reconnect loop logs them and backs off, and an explicit
+  `HA MQTT: connected to host:port` line marks successful connects.
+  Reported in [#249](https://github.com/trudenboy/sendspin-bt-bridge/issues/249).
+- **HA MQTT publisher now reconnects deterministically on mid-session
+  drops.** When the broker dropped a connected session (network
+  flake, NAT timeout, WiFi-BT coexistence on Pi Zero W-class boards),
+  the command-loop task died with `Disconnected during message
+  iteration` but the publisher kept blocking on the stop event,
+  relying on aiomqtt's internal disconnect detection to bubble up via
+  side effects.  In practice that meant unpredictable multi-minute
+  gaps before reconnect, and could silently leave both worker tasks
+  dead while the UI still showed "connected".  The publisher now
+  awaits the first of `stop_event` / command-loop / publish-loop to
+  finish (`asyncio.wait(..., FIRST_COMPLETED)`), and any worker-task
+  exception is raised so the outer reconnect loop can log it and
+  back off normally.  Surfaced from #249 forum diagnostics.
+- **Demo mode crashed every per-device task at startup.** The
+  simulated Bluetooth layer was missing the live-RSSI refresh hook
+  the real layer now ships, so each device's run loop died with an
+  `AttributeError` immediately after coming up. The simulated layer
+  now mirrors the full surface as a no-op coroutine.
+- **Demo mode now installs cleanly under `python -m sendspin_bridge`.**
+  The previous install path required the legacy single-file entry
+  point to be the Python `__main__`; the new path resolves runtime
+  classes directly so demo works regardless of how the bridge is
+  started.
+- **Demo dashboard — RSSI badges on every connected fixture device.**
+  Cards now exercise the full delta-mode colour scale (4 bars green
+  through 1 bar error). Disconnected and released fixtures correctly
+  render no badge.
+- **Demo BT scan — twelve discoverable devices returned** (each with
+  an absolute dBm value covering the full signal-strength scale), so
+  scan-result chips render the same way they would on real hardware.
+
 ## [2.66.20] - 2026-05-01
 
 ### Fixed

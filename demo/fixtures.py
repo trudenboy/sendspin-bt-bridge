@@ -243,6 +243,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "group_name": "Main Floor",
         "reanchor_count": 5,
         "last_reanchor_at": 1012.4,
+        "rssi_dbm": 2,  # delta: 4 bars green — above golden range
     },
     "AA:BB:CC:DD:EE:02": {
         "bluetooth_connected": True,
@@ -263,6 +264,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "last_sync_error_ms": 286.4,
         "last_reanchor_at": 1021.8,
         "reanchoring": True,
+        "rssi_dbm": -8,  # delta: 3 bars green — strong
     },
     "AA:BB:CC:DD:EE:03": {
         "bluetooth_connected": True,
@@ -281,6 +283,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "group_name": "Main Floor",
         "reanchor_count": 15,
         "last_reanchor_at": 998.1,
+        "rssi_dbm": -16,  # delta: 2 bars yellow — fair
     },
     "AA:BB:CC:DD:EE:04": {
         "bluetooth_connected": True,
@@ -297,6 +300,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "track_progress_ms": 131000,
         "group_id": "syncgroup_focus_zone",
         "group_name": "Focus Zone",
+        "rssi_dbm": -29,  # delta: 1 bar red — bad signal
     },
     "AA:BB:CC:DD:EE:05": {
         "bluetooth_connected": False,
@@ -315,6 +319,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "group_name": "Focus Zone",
         "reconnecting": True,
         "reconnect_attempt": 2,
+        # no rssi_dbm — disconnected
     },
     "AA:BB:CC:DD:EE:06": {
         "bluetooth_connected": True,
@@ -330,6 +335,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "track_duration_ms": SOLO_TRACK["duration_ms"],
         "track_progress_ms": 42000,
         "buffering": True,
+        "rssi_dbm": 0,  # delta: 4 bars green — at golden range
     },
     "AA:BB:CC:DD:EE:07": {
         "bluetooth_connected": False,
@@ -342,6 +348,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "audio_format": "AAC 44100Hz 16bit 2ch",
         "bt_management_enabled": False,
         "bt_released_by": "user",
+        # no rssi_dbm — released
     },
     "AA:BB:CC:DD:EE:08": {
         "bluetooth_connected": True,
@@ -356,6 +363,7 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "current_artist": "Fleetwood Mac",
         "track_duration_ms": 257000,
         "track_progress_ms": 0,
+        "rssi_dbm": -23,  # delta: 1 bar yellow — poor signal (warning)
     },
     "AA:BB:CC:DD:EE:09": {
         "bluetooth_connected": True,
@@ -371,13 +379,15 @@ DEMO_DEVICE_STATUS: dict[str, dict] = {
         "track_duration_ms": 257000,
         "track_progress_ms": 201000,
         "stopping": True,
+        "rssi_dbm": -9,  # delta: 3 bars green — strong
     },
 }
 
 # ---------------------------------------------------------------------------
 # BT scan results — mix of configured and discoverable audio devices
 # ---------------------------------------------------------------------------
-DEMO_SCAN_RESULTS = [
+DEMO_SCAN_RESULTS: list[dict[str, str | int]] = [
+    # configured devices — filtered out by _demo_run_bt_scan (already in config)
     {"mac": "AA:BB:CC:DD:EE:01", "name": "Living Room", "adapter": "hci0"},
     {"mac": "AA:BB:CC:DD:EE:02", "name": "Kitchen", "adapter": "hci1"},
     {"mac": "AA:BB:CC:DD:EE:03", "name": "Studio", "adapter": "hci2"},
@@ -387,9 +397,19 @@ DEMO_SCAN_RESULTS = [
     {"mac": "AA:BB:CC:DD:EE:07", "name": "Guest Room", "adapter": "hci0"},
     {"mac": "AA:BB:CC:DD:EE:08", "name": "Bathroom", "adapter": "hci1"},
     {"mac": "AA:BB:CC:DD:EE:09", "name": "Balcony", "adapter": "hci0"},
-    {"mac": "11:22:33:44:55:01", "name": "Guest Speaker", "adapter": "hci0"},
-    {"mac": "11:22:33:44:55:02", "name": "Desk Headphones", "adapter": "hci2"},
-    {"mac": "11:22:33:44:55:03", "name": "Portable Boom", "adapter": "hci1"},
+    # 12 new discoverable devices (not in config/paired — shown in scan results)
+    {"mac": "11:22:33:44:55:01", "name": "Guest Speaker", "adapter": "hci0", "rssi_dbm": -54},
+    {"mac": "11:22:33:44:55:02", "name": "Desk Headphones", "adapter": "hci2", "rssi_dbm": -69},
+    {"mac": "11:22:33:44:55:03", "name": "Portable Boom", "adapter": "hci1", "rssi_dbm": -79},
+    {"mac": "22:33:44:55:66:01", "name": "Conference Room Speaker", "adapter": "hci0", "rssi_dbm": -48},
+    {"mac": "22:33:44:55:66:02", "name": "Lounge Speaker", "adapter": "hci1", "rssi_dbm": -55},
+    {"mac": "22:33:44:55:66:03", "name": "Garden Speaker", "adapter": "hci0", "rssi_dbm": -60},
+    {"mac": "22:33:44:55:66:04", "name": "Workshop BT Box", "adapter": "hci2", "rssi_dbm": -68},
+    {"mac": "22:33:44:55:66:05", "name": "Gym Speaker", "adapter": "hci1", "rssi_dbm": -73},
+    {"mac": "22:33:44:55:66:06", "name": "Garage Audio", "adapter": "hci2", "rssi_dbm": -78},
+    {"mac": "22:33:44:55:66:07", "name": "Pool Speaker", "adapter": "hci0", "rssi_dbm": -83},
+    {"mac": "22:33:44:55:66:08", "name": "Entrance Speaker", "adapter": "hci1", "rssi_dbm": -65},
+    {"mac": "22:33:44:55:66:09", "name": "Rooftop Speaker", "adapter": "hci2", "rssi_dbm": -71},
 ]
 
 # ---------------------------------------------------------------------------
