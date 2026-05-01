@@ -5265,13 +5265,39 @@ function _populateHaIntegrationForm(block) {
     }
     var supervisorPair = document.getElementById('ha-rest-supervisor-pair');
     if (supervisorPair) {
-        supervisorPair.checked = rest.supervisor_pair !== false;
-        supervisorPair.setAttribute('aria-checked', supervisorPair.checked ? 'true' : 'false');
+        // Outside HA addon mode the element is rendered as ``<input
+        // type="hidden">``, which has no ``.checked`` — guard with a
+        // falsy default so the form-read path stays sane.
+        if (typeof supervisorPair.checked === 'boolean') {
+            supervisorPair.checked = rest.supervisor_pair !== false;
+            supervisorPair.setAttribute('aria-checked', supervisorPair.checked ? 'true' : 'false');
+        }
     }
-    var restHost = document.getElementById('ha-rest-advertise-host');
-    if (restHost) restHost.value = rest.advertise_host || '';
-    var restPort = document.getElementById('ha-rest-advertise-port');
-    if (restPort) restPort.value = rest.advertise_port ? String(rest.advertise_port) : '';
+    var savedRestHost = String(rest.advertise_host || '').trim();
+    var savedRestPort = rest.advertise_port ? String(rest.advertise_port) : '';
+    var restAutoDetect = document.getElementById('ha-rest-use-autodetect');
+    var hasOverride = !!savedRestHost || !!savedRestPort;
+    if (restAutoDetect) {
+        restAutoDetect.checked = !hasOverride;
+        restAutoDetect.setAttribute('aria-checked', restAutoDetect.checked ? 'true' : 'false');
+    }
+    var restHostInput = document.getElementById('ha-rest-advertise-host');
+    var restPortInput = document.getElementById('ha-rest-advertise-port');
+    if (restHostInput) {
+        restHostInput.value = savedRestHost;
+        restHostInput.disabled = !hasOverride;
+    }
+    if (restPortInput) {
+        restPortInput.value = savedRestPort;
+        restPortInput.disabled = !hasOverride;
+    }
+    // When in auto-detect mode and no saved override, fetch the
+    // bridge's actually-resolved hostname/port and surface them as
+    // visible-but-disabled placeholders so the operator sees what HA
+    // would receive — symmetric with the MQTT auto-detect flow.
+    if (!hasOverride) {
+        _refreshRestAdvertiseDefaults();
+    }
     _updateHaIntegrationVisibility();
 }
 
@@ -5790,12 +5816,23 @@ function _readHaIntegrationFromForm(existingBlock) {
             tls: !!(document.getElementById('ha-mqtt-tls') || {}).checked,
             client_id: existingMqtt.client_id || ''
         },
-        rest: {
-            advertise_mdns: !!(document.getElementById('ha-rest-advertise-mdns') || {}).checked,
-            supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked,
-            advertise_host: ((document.getElementById('ha-rest-advertise-host') || {}).value || '').trim(),
-            advertise_port: parseInt((document.getElementById('ha-rest-advertise-port') || {}).value, 10) || 0
-        }
+        rest: (function() {
+            var restAuto = document.getElementById('ha-rest-use-autodetect');
+            var restAutoOn = !!(restAuto && restAuto.checked);
+            return {
+                advertise_mdns: !!(document.getElementById('ha-rest-advertise-mdns') || {}).checked,
+                supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked,
+                // Auto-detect on → emit ``""`` / ``0`` so the runtime
+                // resolves at startup.  The displayed values are just
+                // the operator's preview of what would be advertised.
+                advertise_host: restAutoOn
+                    ? ''
+                    : ((document.getElementById('ha-rest-advertise-host') || {}).value || '').trim(),
+                advertise_port: restAutoOn
+                    ? 0
+                    : (parseInt((document.getElementById('ha-rest-advertise-port') || {}).value, 10) || 0)
+            };
+        })()
     };
 }
 
@@ -6031,6 +6068,152 @@ async function _haMqttTestConnection() {
             var errMsg = (body && body.error) || (body && body.error_class) || ('HTTP ' + resp.status);
             var hostInfo = resolvedFromProbe ? (' (auto-detect resolved to ' + host + ':' + port + ')') : '';
             setFeedback('Test failed: ' + errMsg + hostInfo, 'err');
+        }
+    } catch (exc) {
+        setFeedback('Test failed: ' + (exc && exc.message ? exc.message : String(exc)), 'err');
+    }
+}
+
+// REST mode helpers — symmetric with the MQTT helpers above so the two
+// transport cards behave the same way for the operator.
+//
+// ``_refreshRestAdvertiseDefaults`` fills the host/port fields with
+// the values the bridge would actually advertise via mDNS — pulled
+// from the ``/api/ha/rest/probe`` endpoint.  Used in two places:
+//   1. on form populate when no override is saved (so the operator
+//      sees the auto-detected values rather than empty placeholders);
+//   2. by the Suggest button to prefill the override fields with
+//      "what would auto-detect produce right now?"
+
+async function _refreshRestAdvertiseDefaults(opts) {
+    opts = opts || {};
+    var hostInput = document.getElementById('ha-rest-advertise-host');
+    var portInput = document.getElementById('ha-rest-advertise-port');
+    if (!hostInput || !portInput) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/rest/probe');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        if (!body || !body.ok) return;
+        // ``opts.fillEvenIfDirty`` is set by the Suggest button — it
+        // explicitly wants to replace any operator input.  In the
+        // populate-on-load branch we only fill when the field is empty
+        // so we don't blow away an operator's edits on form refresh.
+        if (opts.fillEvenIfDirty || !hostInput.value) hostInput.value = String(body.host || '');
+        if (opts.fillEvenIfDirty || !portInput.value) portInput.value = String(body.port || '');
+        if (opts.fillEvenIfDirty) {
+            // Suggest also flips off auto-detect so the values stick on
+            // save — otherwise the form-read path would discard them.
+            var toggle = document.getElementById('ha-rest-use-autodetect');
+            if (toggle) {
+                toggle.checked = false;
+                toggle.setAttribute('aria-checked', 'false');
+            }
+            hostInput.disabled = false;
+            portInput.disabled = false;
+            _recomputeConfigDirtyState();
+        }
+        var hint = document.getElementById('ha-rest-suggest-hint');
+        if (hint && opts.fillEvenIfDirty) {
+            hint.textContent = body.hint || ('Auto-detected ' + body.host + ':' + body.port + '.');
+        }
+    } catch (exc) {
+        var hintEl = document.getElementById('ha-rest-suggest-hint');
+        if (hintEl && opts.fillEvenIfDirty) {
+            hintEl.textContent = 'Probe failed: ' + (exc && exc.message ? exc.message : exc);
+        }
+    }
+}
+
+function _haRestAutoDetectToggle() {
+    var toggle = document.getElementById('ha-rest-use-autodetect');
+    var hostInput = document.getElementById('ha-rest-advertise-host');
+    var portInput = document.getElementById('ha-rest-advertise-port');
+    if (!toggle) return;
+    var on = !!toggle.checked;
+    toggle.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (on) {
+        // Disable inputs and clear validation styling.
+        if (hostInput) {
+            hostInput.disabled = true;
+            hostInput.classList.remove('invalid');
+        }
+        if (portInput) {
+            portInput.disabled = true;
+            portInput.classList.remove('invalid');
+        }
+        // Show the auto-detected values so the operator sees what HA
+        // would receive, even though the field is read-only.
+        _refreshRestAdvertiseDefaults();
+    } else {
+        if (hostInput) hostInput.disabled = false;
+        if (portInput) portInput.disabled = false;
+    }
+    _recomputeConfigDirtyState();
+}
+
+function _haRestSuggest() {
+    _refreshRestAdvertiseDefaults({fillEvenIfDirty: true});
+}
+
+async function _haRestTestConnection() {
+    var feedback = document.getElementById('ha-rest-test-feedback');
+    function setFeedback(text, kind) {
+        if (!feedback) return;
+        feedback.textContent = text;
+        feedback.classList.remove('test-feedback--ok', 'test-feedback--err', 'test-feedback--pending');
+        if (kind) feedback.classList.add('test-feedback--' + kind);
+    }
+    setFeedback('Testing…', 'pending');
+
+    var toggle = document.getElementById('ha-rest-use-autodetect');
+    var hostInput = document.getElementById('ha-rest-advertise-host');
+    var portInput = document.getElementById('ha-rest-advertise-port');
+    var host = '';
+    var port = 0;
+    if (toggle && toggle.checked) {
+        // Auto-detect: send empty body so the endpoint resolves
+        // host/port itself.  Endpoint surfaces what was tried in the
+        // response, so we'll render the resolved values back in the
+        // feedback text.
+        host = '';
+        port = 0;
+    } else {
+        host = hostInput ? (hostInput.value || '').trim() : '';
+        port = parseInt((portInput || {}).value, 10) || 0;
+        if (!host) {
+            setFeedback('Enter a Bridge host before testing, or turn on Use auto-detect.', 'err');
+            return;
+        }
+    }
+
+    var csrf = (window._csrfToken || '').toString();
+    var headers = {'Content-Type': 'application/json'};
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/rest/test', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({host: host, port: port})
+        });
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        if (resp.status === 400) {
+            setFeedback('Test failed: ' + ((body && body.error) || ('HTTP ' + resp.status)), 'err');
+            return;
+        }
+        var resolvedHost = (body && body.host) || host;
+        var resolvedPort = (body && body.port) || port;
+        var ms = body && typeof body.elapsed_ms === 'number' ? (' (' + body.elapsed_ms + ' ms)') : '';
+        if (body && body.ok && !body.warn) {
+            var httpInfo = body.http_status ? (' · HTTP ' + body.http_status) : '';
+            setFeedback('Reachable at ' + resolvedHost + ':' + resolvedPort + httpInfo + ms + '.', 'ok');
+        } else if (body && body.ok && body.warn) {
+            // TCP ok but HTTP probe failed — flag as warning, not error.
+            setFeedback('TCP ok at ' + resolvedHost + ':' + resolvedPort + ms + '. ' + body.warn, 'err');
+        } else {
+            var errMsg = (body && body.error) || (body && body.error_class) || ('HTTP ' + resp.status);
+            setFeedback('Test failed: ' + errMsg, 'err');
         }
     } catch (exc) {
         setFeedback('Test failed: ' + (exc && exc.message ? exc.message : String(exc)), 'err');
@@ -14292,6 +14475,9 @@ const _ACTION_REGISTRY = {
         return false;
     },
     'ha-mqtt-test':             () => { _haMqttTestConnection(); return false; },
+    'ha-rest-test':             () => { _haRestTestConnection(); return false; },
+    'ha-rest-suggest':          () => { _haRestSuggest(); return false; },
+    'ha-rest-auto-detect-toggle': () => { _haRestAutoDetectToggle(); return false; },
     'ha-mqtt-tls-toggle':       () => { _haMqttTlsToggle(); return false; },
     'ha-auto-detect-toggle':    () => { _haAutoDetectToggle(); return false; },
     'ha-reconfigure':           () => { _haReconfigure(); return false; },

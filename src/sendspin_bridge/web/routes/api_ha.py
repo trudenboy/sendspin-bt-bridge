@@ -527,6 +527,200 @@ def api_ha_mqtt_test():
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/rest/probe — auto-detected advertise host/port for the form
+# ---------------------------------------------------------------------------
+
+
+@ha_bp.route("/api/ha/rest/probe", methods=["GET"])
+def api_ha_rest_probe():
+    """Return the host + port the bridge would advertise via mDNS by default.
+
+    Mirrors ``/api/ha/mqtt/probe`` so the REST card can fill its
+    "Bridge host" / "Bridge port" override fields with sensible
+    initial values.  Auto-detection mirrors the mDNS advertiser:
+    ``socket.gethostbyname(socket.gethostname())`` for the host and
+    ``resolve_web_port()`` for the port.
+
+    Always returns 200 with ``{"ok": bool, "host": str, "port": int,
+    "source": str, "hint": str}``.  ``source`` is ``"hostname"`` for
+    a successful gethostbyname lookup or ``"fallback"`` when only a
+    bind-any (``0.0.0.0``) address is available.
+    """
+    try:
+        from sendspin_bridge.config import resolve_web_port
+        from sendspin_bridge.services.ipc.bridge_mdns import _resolve_host_address
+
+        host = _resolve_host_address()
+        port = int(resolve_web_port() or 8080)
+        source = "hostname" if host and host != "0.0.0.0" else "fallback"
+        hint = (
+            f"Auto-detected from this host's hostname ({host}:{port})."
+            if source == "hostname"
+            else (
+                f"Could not resolve a specific LAN address — using bind-any ({host}:{port}).  "
+                "Set Bridge host explicitly if Home Assistant cannot reach this bridge "
+                "on its hostname."
+            )
+        )
+        return jsonify({"ok": True, "host": host, "port": port, "source": source, "hint": hint})
+    except Exception as exc:
+        logger.exception("REST advertise probe failed")
+        return jsonify(
+            {
+                "ok": False,
+                "host": "",
+                "port": 0,
+                "source": "error",
+                "hint": f"Probe failed: {exc}",
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
+# /api/ha/rest/test — TCP reachability + HTTP probe of the configured host:port
+# ---------------------------------------------------------------------------
+
+
+async def _probe_rest_endpoint(host: str, port: int) -> dict[str, Any]:
+    """Reachability probe for the bridge's own REST surface.
+
+    Two-phase like the MQTT test: pre-flight TCP open via
+    ``asyncio.open_connection`` (cancellable timeout), then a short
+    HTTP GET to confirm something speaks HTTP on the target — useful
+    for catching reverse-proxy misroutes that accept TCP but return
+    503 / wrong content type.
+
+    Always returns a structured dict; never raises.
+    """
+    import asyncio
+
+    started = time.monotonic()
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=5.0,
+        )
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        del reader
+    except (TimeoutError, OSError) as exc:
+        return {
+            "ok": False,
+            "phase": "tcp",
+            "error_class": type(exc).__name__,
+            "error": f"TCP probe to {host}:{port} failed: {exc}",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+
+    # HTTP probe — best-effort.  We don't want to hard-fail the whole
+    # test on a non-200 here because the bridge may be behind an auth
+    # gateway; the TCP probe already confirms reachability.  We
+    # surface the HTTP status as an info field and only flag an error
+    # when the request itself raises.
+    try:
+        import urllib.request
+
+        loop = asyncio.get_event_loop()
+
+        def _do_get():
+            req = urllib.request.Request(
+                f"http://{host}:{port}/api/ha/state",
+                method="GET",
+                headers={"User-Agent": "sendspin-bridge-rest-probe"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    return resp.status
+            except urllib.error.HTTPError as e:
+                return e.code
+
+        http_status = await loop.run_in_executor(None, _do_get)
+        return {
+            "ok": True,
+            "phase": "http",
+            "http_status": int(http_status),
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+    except Exception as exc:
+        return {
+            "ok": True,
+            "phase": "tcp",
+            "warn_class": type(exc).__name__,
+            "warn": f"TCP reachable but HTTP probe failed: {exc}",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+
+
+@ha_bp.route("/api/ha/rest/test", methods=["POST"])
+def api_ha_rest_test():
+    """Probe the REST advertise host/port from the bridge's own POV.
+
+    Mirrors ``/api/ha/mqtt/test`` but for the Direct REST transport:
+    operators editing the Bridge host / Bridge port override fields
+    can verify the values resolve and accept TCP before saving.
+
+    Accepts a JSON body so the shape mirrors the MQTT test:
+
+      ``{"host": str, "port": int}``
+
+    Empty / missing values fall back to the bridge's auto-detected
+    advertise host/port (same defaults as ``/api/ha/rest/probe``), so
+    the operator can also click Test before filling the override
+    fields to verify the auto-detected values.
+    """
+    import asyncio
+
+    payload = request.get_json(silent=True) or {}
+    host = str(payload.get("host") or "").strip()
+    port_raw = payload.get("port")
+    if not host or not port_raw:
+        try:
+            from sendspin_bridge.config import resolve_web_port
+            from sendspin_bridge.services.ipc.bridge_mdns import _resolve_host_address
+
+            if not host:
+                host = _resolve_host_address()
+            if not port_raw:
+                port_raw = int(resolve_web_port() or 8080)
+        except Exception as exc:
+            return jsonify(
+                {
+                    "ok": False,
+                    "phase": "validation",
+                    "error_class": type(exc).__name__,
+                    "error": f"could not resolve auto-detect defaults: {exc}",
+                }
+            ), 400
+    try:
+        port = int(port_raw)
+    except (TypeError, ValueError):
+        return jsonify(
+            {"ok": False, "phase": "validation", "error_class": "ValueError", "error": "port must be an integer"}
+        ), 400
+    if not (1 <= port <= 65535):
+        return jsonify(
+            {"ok": False, "phase": "validation", "error_class": "ValueError", "error": "port out of range"}
+        ), 400
+
+    try:
+        result = asyncio.run(_probe_rest_endpoint(host, port))
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.exception("REST test probe crashed unexpectedly")
+        result = {
+            "ok": False,
+            "phase": "tcp",
+            "error_class": type(exc).__name__,
+            "error": f"probe crashed: {exc}",
+        }
+    result.setdefault("host", host)
+    result.setdefault("port", port)
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mdns/status — mDNS advertiser diagnostics
 # ---------------------------------------------------------------------------
 

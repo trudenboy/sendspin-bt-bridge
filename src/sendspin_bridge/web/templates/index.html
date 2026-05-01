@@ -1142,6 +1142,43 @@
                                 <legend class="ha-mqtt-legend">Advertised address</legend>
                                 <label class="config-setting-row config-setting-row--compact">
                                     <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-rest-autodetect-label">Use auto-detect</strong>
+                                        <span class="form-hint" id="ha-rest-autodetect-hint">
+                                            Auto-resolve from this host's hostname and the configured Web UI port.  Turn off to override the address Home Assistant connects to — useful behind a reverse proxy or NAT.
+                                        </span>
+                                    </span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-rest-use-autodetect" role="switch" aria-checked="true" aria-labelledby="ha-rest-autodetect-label" checked data-action="ha-rest-auto-detect-toggle" data-event="change">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </span>
+                                </label>
+                                <div class="form-inline-actions config-inline-row" id="ha-rest-suggest-row" style="margin-bottom: 0.75em;">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-action="ha-rest-suggest">
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="search" aria-hidden="true"></span>
+                                        Suggest from hostname
+                                    </button>
+                                    <span class="form-hint" id="ha-rest-suggest-hint" style="margin-left: 0.5em;"></span>
+                                </div>
+                                <div class="config-form-grid">
+                                    <div class="form-group form-group--span-2" id="ha-rest-host-group">
+                                        <label for="ha-rest-advertise-host">Bridge host
+                                            <span class="form-hint">Hostname or IP that Home Assistant should use to reach the bridge.</span>
+                                        </label>
+                                        <input type="text" id="ha-rest-advertise-host"
+                                               placeholder="auto-detect (resolved at startup)"
+                                               autocomplete="off">
+                                        <span class="field-error" id="ha-rest-advertise-host-error"></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ha-rest-advertise-port">Port</label>
+                                        <input type="number" id="ha-rest-advertise-port" min="1" max="65535" placeholder="auto (web UI port)">
+                                        <span class="field-error" id="ha-rest-advertise-port-error"></span>
+                                    </div>
+                                </div>
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
                                         <strong id="ha-rest-advertise-label">Advertise via mDNS</strong>
                                         <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for Home Assistant Zeroconf discovery.</span>
                                     </span>
@@ -1152,30 +1189,26 @@
                                         </span>
                                     </span>
                                 </label>
-                                <div class="config-form-grid">
-                                    <div class="form-group form-group--span-2" id="ha-rest-host-group">
-                                        <label for="ha-rest-advertise-host">Bridge host (override)
-                                            <span class="form-hint">Hostname or IP that Home Assistant should use to reach the bridge. Leave empty to auto-detect — set this only when the bridge sits behind a reverse proxy or NAT.</span>
-                                        </label>
-                                        <input type="text" id="ha-rest-advertise-host"
-                                               placeholder="auto-detect (resolved from hostname)"
-                                               autocomplete="off">
-                                        <span class="field-error" id="ha-rest-advertise-host-error"></span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="ha-rest-advertise-port">Port (override)</label>
-                                        <input type="number" id="ha-rest-advertise-port" min="1" max="65535" placeholder="auto (web UI port)">
-                                        <span class="field-error" id="ha-rest-advertise-port-error"></span>
-                                    </div>
+                            </fieldset>
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Verify</legend>
+                                <div class="form-inline-actions config-inline-row">
+                                    <button type="button" class="btn btn-sm btn-primary" data-action="ha-rest-test">
+                                        <span class="btn-icon-slot ui-icon-slot" data-ui-icon="plug" aria-hidden="true"></span>
+                                        Test connection
+                                    </button>
+                                    <span class="form-hint" id="ha-rest-test-feedback" style="margin-left: 0.5em;"></span>
                                 </div>
                             </fieldset>
 
+                            {% if ha_mode %}
                             <fieldset class="ha-mqtt-fieldset">
                                 <legend class="ha-mqtt-legend">Pairing</legend>
                                 <label class="config-setting-row config-setting-row--compact">
                                     <span class="config-setting-copy ui-stack ui-stack--xs">
                                         <strong id="ha-rest-supervisor-label">Allow Supervisor pairing</strong>
-                                        <span class="form-hint">On HAOS, let the integration mint a token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
+                                        <span class="form-hint">Let the HACS integration mint a bearer token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
                                     </span>
                                     <span class="config-setting-control">
                                         <span class="config-switch">
@@ -1185,6 +1218,9 @@
                                     </span>
                                 </label>
                             </fieldset>
+                            {% else %}
+                            <input type="hidden" id="ha-rest-supervisor-pair" value="off">
+                            {% endif %}
 
                             <div class="config-inline-note" id="ha-mdns-status" hidden>
                                 <span class="form-hint" id="ha-mdns-status-text"></span>

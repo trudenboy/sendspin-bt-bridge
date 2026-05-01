@@ -218,6 +218,126 @@ def test_mqtt_status_when_no_publisher(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/rest/probe — auto-detected advertise host/port
+# ---------------------------------------------------------------------------
+
+
+def test_rest_probe_returns_resolved_host(client, monkeypatch):
+    """Happy path: gethostbyname resolves to a LAN IP, web_port comes
+    back from resolve_web_port."""
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname",
+        lambda *_a, **_kw: "192.168.10.10",
+    )
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+    resp = client.get("/api/ha/rest/probe")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "192.168.10.10"
+    assert body["port"] == 8080
+    assert body["source"] == "hostname"
+
+
+def test_rest_probe_falls_back_when_hostname_resolves_to_zero(client, monkeypatch):
+    """``socket.gethostbyname`` failure → 0.0.0.0 fallback marked as
+    ``source="fallback"`` so the UI hint can warn the operator."""
+    import socket as _socket
+
+    def _raise(*_a, **_kw):
+        raise _socket.gaierror("no hostname")
+
+    monkeypatch.setattr("sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname", _raise)
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+    resp = client.get("/api/ha/rest/probe")
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "0.0.0.0"
+    assert body["source"] == "fallback"
+
+
+# ---------------------------------------------------------------------------
+# /api/ha/rest/test — REST advertise host/port reachability probe
+# ---------------------------------------------------------------------------
+
+
+def test_rest_test_falls_back_to_auto_detect_when_host_missing(client, monkeypatch):
+    """Empty host in the request body → endpoint resolves the bridge's
+    auto-detected advertise host/port and probes that."""
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname",
+        lambda *_a, **_kw: "192.168.10.10",
+    )
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+    _patch_open_connection_ok(monkeypatch)
+    # Stub urlopen so the inner HTTP probe doesn't actually go out.
+    import urllib.request
+
+    class _StubResp:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: _StubResp())
+    resp = client.post("/api/ha/rest/test", json={})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "192.168.10.10"
+    assert body["port"] == 8080
+
+
+def test_rest_test_returns_400_when_port_invalid(client):
+    resp = client.post("/api/ha/rest/test", json={"host": "192.168.10.10", "port": 99999})
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert "port" in body["error"].lower()
+
+
+def test_rest_test_surfaces_tcp_unreachable(client, monkeypatch):
+    """TCP probe failure → ``ok=False, phase="tcp"`` so the UI renders
+    the right error class inline."""
+    import asyncio
+
+    async def _hang(host, port):
+        del host, port
+        raise OSError("simulated unreachable")
+
+    monkeypatch.setattr(asyncio, "open_connection", _hang)
+    resp = client.post("/api/ha/rest/test", json={"host": "192.168.10.10", "port": 8080})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is False
+    assert body["phase"] == "tcp"
+    assert body["error_class"] == "OSError"
+
+
+def test_rest_test_tcp_ok_http_failure_reported_as_warning(client, monkeypatch):
+    """A reachable TCP but non-HTTP service should still report
+    ``ok=True`` (the configured host *is* reachable) plus a ``warn``
+    field so the UI can hint that something other than the bridge is
+    listening on that port."""
+    _patch_open_connection_ok(monkeypatch)
+    import urllib.request
+
+    def _raise(*_a, **_kw):
+        raise OSError("not http")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _raise)
+    resp = client.post("/api/ha/rest/test", json={"host": "192.168.10.10", "port": 8080})
+    body = resp.get_json()
+    assert body["ok"] is True
+    # The TCP phase succeeded; HTTP phase warning is non-fatal.
+    assert body["phase"] == "tcp"
+    assert "warn" in body
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/custom_component/status — HACS integration heuristic
 # ---------------------------------------------------------------------------
 

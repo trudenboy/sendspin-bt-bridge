@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HA → Direct REST: "Test connection" button + auto-fill of advertised
+  address.** The REST card now mirrors the MQTT card's verification
+  flow: a Test connection button calls a new `POST /api/ha/rest/test`
+  endpoint that does a TCP probe (and a best-effort HTTP probe) of the
+  configured Bridge host / Bridge port from the bridge's own POV;
+  empty form values fall back to the bridge's auto-detected advertise
+  host/port (same defaults as the mDNS advertiser).  A "Suggest from
+  hostname" button calls `GET /api/ha/rest/probe` and pre-fills the
+  override fields with the values the bridge would advertise right
+  now.  A Use auto-detect toggle disables the host/port inputs and
+  surfaces the resolved values as a read-only preview, symmetric with
+  the MQTT auto-detect path.  Allow Supervisor pairing toggle is now
+  hidden outside HA add-on mode (the Supervisor proxy isn't reachable
+  in standalone Docker / LXC so the toggle had no effect there).
 - **HA → MQTT broker "Test connection" button.** A pre-flight check
   inside the HA Configuration tab calls a new `GET /api/ha/mqtt/test`
   endpoint, which does a TCP probe + full `aiomqtt` CONNACK round-trip
