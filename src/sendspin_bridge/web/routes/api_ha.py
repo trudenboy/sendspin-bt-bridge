@@ -309,6 +309,33 @@ def api_ha_mosquitto_status():
 # ---------------------------------------------------------------------------
 
 
+@ha_bp.route("/api/ha/custom_component/status", methods=["GET"])
+def api_ha_custom_component_status():
+    """Heuristic install/active state for the HACS custom_component.
+
+    Mirrors ``/api/ha/mosquitto/status`` so the UI can render the two
+    transports' install indicators with the same code path.  See
+    ``services.ha.ha_addon.get_custom_component_state`` for the
+    detection logic (token-presence + last_used recency).
+    """
+    try:
+        from sendspin_bridge.services.ha.ha_addon import get_custom_component_state
+
+        return jsonify(get_custom_component_state())
+    except Exception as exc:
+        logger.exception("custom_component status query failed")
+        return jsonify(
+            {
+                "available": True,
+                "installed": False,
+                "started": False,
+                "last_seen": None,
+                "install_url": "https://my.home-assistant.io/redirect/hacs_repository/?owner=trudenboy&repository=sendspin-bt-bridge&category=integration",
+                "error": str(exc),
+            }
+        )
+
+
 @ha_bp.route("/api/ha/mqtt/status", methods=["GET"])
 def api_ha_mqtt_status():
     """Read-only snapshot of the MQTT publisher state for the UI."""

@@ -218,6 +218,77 @@ def test_mqtt_status_when_no_publisher(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/custom_component/status — HACS integration heuristic
+# ---------------------------------------------------------------------------
+
+
+def test_custom_component_status_no_tokens_means_not_installed(client, monkeypatch):
+    """A bridge that has never paired with a custom_component reports
+    ``installed=False`` so the UI surfaces the install prompt."""
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": []},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["available"] is True
+    assert body["installed"] is False
+    assert body["started"] is False
+    assert body["last_seen"] is None
+    assert "hacs_repository" in body["install_url"]
+
+
+def test_custom_component_status_token_present_means_installed(client, monkeypatch):
+    """At least one issued token (even if never used) tells us the
+    integration paired at least once → ``installed=True``."""
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": [{"id": "abc", "label": "ha", "last_used": None}]},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is False
+    assert body["last_seen"] is None
+
+
+def test_custom_component_status_recent_use_means_started(client, monkeypatch):
+    """A token used within the active-window threshold flags the
+    integration as currently connected."""
+    from datetime import UTC, datetime, timedelta
+
+    recent = (datetime.now(tz=UTC) - timedelta(minutes=5)).isoformat()
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": [{"id": "abc", "label": "ha", "last_used": recent}]},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is True
+    assert body["last_seen"] == recent
+
+
+def test_custom_component_status_stale_use_means_idle(client, monkeypatch):
+    """A token used long ago surfaces as ``installed=True, started=False``
+    so the UI tells the operator the integration paired but isn't
+    currently active — different remediation than "never paired"."""
+    from datetime import UTC, datetime, timedelta
+
+    stale = (datetime.now(tz=UTC) - timedelta(days=7)).isoformat()
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {"AUTH_TOKENS": [{"id": "abc", "label": "ha", "last_used": stale}]},
+    )
+    resp = client.get("/api/ha/custom_component/status")
+    body = resp.get_json()
+    assert body["installed"] is True
+    assert body["started"] is False
+    assert body["last_seen"] == stale
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mqtt/test — pre-save broker reachability + auth check
 # ---------------------------------------------------------------------------
 

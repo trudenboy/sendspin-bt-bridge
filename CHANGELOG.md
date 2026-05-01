@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status banner now renders broker URL, connected-since timestamp, and
   last error when present, sourced from the existing
   `/api/ha/mqtt/status` payload.
+- **HA → Direct REST advertised host/port overrides.** The REST card
+  now exposes optional Bridge host / Bridge port fields, written into
+  the mDNS SRV record at advertise time.  Empty values keep the
+  existing auto-detect behaviour.  Use these when the bridge sits
+  behind a reverse proxy or NAT and the auto-detected hostname is not
+  reachable from Home Assistant.
+- **HA → Direct REST: HACS custom_component install indicator.** A new
+  `GET /api/ha/custom_component/status` endpoint and an inline hint
+  next to the Direct REST radio surface whether the HACS integration
+  has paired with the bridge and whether it's currently active —
+  mirrors the Mosquitto add-on indicator for the MQTT path.  Detection
+  is heuristic: presence of an issued bearer token implies the
+  integration paired at least once; recent ``last_used`` implies it's
+  currently connected.
 - **Class of Device dropdown — four documented presets.** The
   per-adapter CoD override widget now ships preset entries covering
   the speaker families that filter incoming connections by the
@@ -47,7 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plain-text trick replaced by an explicit "Use auto-detect" toggle.
   Mosquitto add-on running indicator collapsed into an inline hint next
   to the MQTT option (HAOS).  Naming card moved to the bottom of the
-  tab.  Access tokens card hidden when mode = Off and no tokens exist.
+  tab.  Access tokens card hidden unless mode = Direct REST (HACS) or
+  tokens already exist — they have no role in the MQTT setup flow.
   Password field no longer pre-fills with `***REDACTED***` — empty +
   placeholder hint instead, with the wire-protocol marker still
   preserved on save when the field is left untouched.  Card titles

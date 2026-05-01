@@ -1026,6 +1026,7 @@
                             </div>
                             <input type="hidden" id="ha-integration-mode" value="off">
                             <div class="form-hint ha-mosquitto-inline-hint" id="ha-transport-mosquitto-hint" hidden></div>
+                            <div class="form-hint ha-mosquitto-inline-hint" id="ha-transport-customcomp-hint" hidden></div>
                         </div>
 
                         <div class="config-settings-card" id="ha-mqtt-card" hidden>
@@ -1136,30 +1137,55 @@
                                     For the HACS custom integration. The bridge advertises itself via mDNS so Home Assistant discovers it automatically.
                                 </p>
                             </div>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong id="ha-rest-advertise-label">Advertise via mDNS</strong>
-                                    <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for Home Assistant Zeroconf discovery.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="ha-rest-advertise-mdns" checked role="switch" aria-checked="true" aria-labelledby="ha-rest-advertise-label">
-                                        <span class="config-switch-track"></span>
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Advertised address</legend>
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-rest-advertise-label">Advertise via mDNS</strong>
+                                        <span class="form-hint">Publish <code>_sendspin-bridge._tcp.local.</code> for Home Assistant Zeroconf discovery.</span>
                                     </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row config-setting-row--compact">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong id="ha-rest-supervisor-label">Allow Supervisor pairing</strong>
-                                    <span class="form-hint">On HAOS, let the integration mint a token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" id="ha-rest-supervisor-pair" checked role="switch" aria-checked="true" aria-labelledby="ha-rest-supervisor-label">
-                                        <span class="config-switch-track"></span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-rest-advertise-mdns" checked role="switch" aria-checked="true" aria-labelledby="ha-rest-advertise-label">
+                                            <span class="config-switch-track"></span>
+                                        </span>
                                     </span>
-                                </span>
-                            </label>
+                                </label>
+                                <div class="config-form-grid">
+                                    <div class="form-group form-group--span-2" id="ha-rest-host-group">
+                                        <label for="ha-rest-advertise-host">Bridge host (override)
+                                            <span class="form-hint">Hostname or IP that Home Assistant should use to reach the bridge. Leave empty to auto-detect — set this only when the bridge sits behind a reverse proxy or NAT.</span>
+                                        </label>
+                                        <input type="text" id="ha-rest-advertise-host"
+                                               placeholder="auto-detect (resolved from hostname)"
+                                               autocomplete="off">
+                                        <span class="field-error" id="ha-rest-advertise-host-error"></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="ha-rest-advertise-port">Port (override)</label>
+                                        <input type="number" id="ha-rest-advertise-port" min="1" max="65535" placeholder="auto (web UI port)">
+                                        <span class="field-error" id="ha-rest-advertise-port-error"></span>
+                                    </div>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="ha-mqtt-fieldset">
+                                <legend class="ha-mqtt-legend">Pairing</legend>
+                                <label class="config-setting-row config-setting-row--compact">
+                                    <span class="config-setting-copy ui-stack ui-stack--xs">
+                                        <strong id="ha-rest-supervisor-label">Allow Supervisor pairing</strong>
+                                        <span class="form-hint">On HAOS, let the integration mint a token via the Supervisor proxy without operator input. Off = manual token paste only.</span>
+                                    </span>
+                                    <span class="config-setting-control">
+                                        <span class="config-switch">
+                                            <input type="checkbox" id="ha-rest-supervisor-pair" checked role="switch" aria-checked="true" aria-labelledby="ha-rest-supervisor-label">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </span>
+                                </label>
+                            </fieldset>
+
                             <div class="config-inline-note" id="ha-mdns-status" hidden>
                                 <span class="form-hint" id="ha-mdns-status-text"></span>
                             </div>

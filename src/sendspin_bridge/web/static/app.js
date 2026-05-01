@@ -5268,6 +5268,10 @@ function _populateHaIntegrationForm(block) {
         supervisorPair.checked = rest.supervisor_pair !== false;
         supervisorPair.setAttribute('aria-checked', supervisorPair.checked ? 'true' : 'false');
     }
+    var restHost = document.getElementById('ha-rest-advertise-host');
+    if (restHost) restHost.value = rest.advertise_host || '';
+    var restPort = document.getElementById('ha-rest-advertise-port');
+    if (restPort) restPort.value = rest.advertise_port ? String(rest.advertise_port) : '';
     _updateHaIntegrationVisibility();
 }
 
@@ -5288,6 +5292,7 @@ var _haReconfigureRequested = false;
 var _haConnected = false;
 var _haCurrentMode = 'off';
 var _haMosquittoState = null;
+var _haCustomComponentState = null;
 
 function _updateHaIntegrationVisibility() {
     var modeEl = document.getElementById('ha-integration-mode');
@@ -5307,15 +5312,18 @@ function _updateHaIntegrationVisibility() {
     if (mqttCard) mqttCard.hidden = !showMqtt;
     var restCard = document.getElementById('ha-rest-card');
     if (restCard) restCard.hidden = !showRest;
-    // Progressive disclosure for the Tokens card: hide when nothing is
-    // configured AND no tokens exist yet.  Once the operator picks a
-    // transport (or has at least one token issued) the card becomes
-    // visible — guarding the v2.66.10 regression where the Generate
-    // Token button vanished on HAOS auto-pair.
+    // Progressive disclosure for the Tokens card: tokens are only used
+    // by the HACS / Direct REST integration, so we show the card only
+    // when mode = "rest" or when tokens already exist (so the operator
+    // can manage them after switching modes).  This guards the v2.66.10
+    // regression where the Generate Token button vanished on HAOS
+    // auto-pair while still keeping the noise out of the MQTT setup
+    // flow, where tokens have no role.
     var tokensCard = document.getElementById('ha-tokens-card');
-    if (tokensCard) tokensCard.hidden = mode === 'off' && !_haTokensListHasItems;
+    if (tokensCard) tokensCard.hidden = mode !== 'rest' && !_haTokensListHasItems;
 
     _updateMosquittoBannerVisibility();
+    _updateCustomComponentHintVisibility();
     _applyHaRequiredHighlight();
 }
 
@@ -5604,6 +5612,61 @@ async function _refreshMosquittoState() {
     _updateMosquittoBannerVisibility();
 }
 
+// Custom_component install/active heuristic — analog to Mosquitto's
+// install/started state for the MQTT path.  Renders an inline hint
+// next to the Direct REST radio so operators see at a glance whether
+// the HACS integration has paired and whether it's currently active.
+async function _refreshCustomComponentState() {
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/custom_component/status');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        _haCustomComponentState = body || null;
+    } catch (_) {
+        _haCustomComponentState = null;
+    }
+    _updateCustomComponentHintVisibility();
+}
+
+function _updateCustomComponentHintVisibility() {
+    var hint = document.getElementById('ha-transport-customcomp-hint');
+    if (!hint) return;
+    var s = _haCustomComponentState;
+    var mode = _haCurrentMode || 'off';
+    // Show only when REST is the chosen mode — the install heuristic is
+    // about the HACS path and would be noise on MQTT / Off.
+    if (!s || mode !== 'rest') {
+        hint.hidden = true;
+        hint.textContent = '';
+        hint.classList.remove('ha-mosquitto-inline-hint--ok', 'ha-mosquitto-inline-hint--warn');
+        return;
+    }
+    var lastSeen = '';
+    if (s.last_seen) {
+        try {
+            lastSeen = ' Last seen ' + new Date(s.last_seen).toLocaleString() + '.';
+        } catch (_) {
+            lastSeen = '';
+        }
+    }
+    if (s.installed && s.started) {
+        hint.hidden = false;
+        hint.textContent = 'HACS custom_component paired and currently active.' + lastSeen;
+        hint.classList.add('ha-mosquitto-inline-hint--ok');
+        hint.classList.remove('ha-mosquitto-inline-hint--warn');
+    } else if (s.installed) {
+        hint.hidden = false;
+        hint.textContent = 'HACS custom_component has paired before but isn\'t currently active.' + lastSeen;
+        hint.classList.add('ha-mosquitto-inline-hint--warn');
+        hint.classList.remove('ha-mosquitto-inline-hint--ok');
+    } else {
+        hint.hidden = false;
+        hint.textContent = 'HACS custom_component hasn\'t paired with this bridge yet — install it via HACS, then add the integration in Home Assistant.';
+        hint.classList.add('ha-mosquitto-inline-hint--warn');
+        hint.classList.remove('ha-mosquitto-inline-hint--ok');
+    }
+}
+
 // One-click flow: pick mqtt mode, broker=auto, save, refresh.  Guarded
 // on the form being clean — saving while other fields are dirty would
 // silently flush them too.
@@ -5697,7 +5760,9 @@ function _readHaIntegrationFromForm(existingBlock) {
         },
         rest: {
             advertise_mdns: !!(document.getElementById('ha-rest-advertise-mdns') || {}).checked,
-            supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked
+            supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked,
+            advertise_host: ((document.getElementById('ha-rest-advertise-host') || {}).value || '').trim(),
+            advertise_port: parseInt((document.getElementById('ha-rest-advertise-port') || {}).value, 10) || 0
         }
     };
 }
@@ -5828,40 +5893,84 @@ function _haMqttTlsToggle() {
 // with the values currently in the form (not the saved config).  Renders
 // the outcome inline next to the button so operators can iterate
 // without the save → restart → tail-logs cycle.
+//
+// When the "Use auto-detect" toggle is on, run the existing probe
+// endpoint first to resolve a real host (otherwise we'd send the literal
+// string ``auto`` to the test endpoint, which can't reach a TCP socket).
+// The probe resolves the same way the bridge will at startup — Supervisor
+// add-on creds on HAOS, MA-URL host on standalone — so the test reflects
+// what would actually happen on save.
 async function _haMqttTestConnection() {
     var feedback = document.getElementById('ha-mqtt-test-feedback');
-    if (feedback) {
-        feedback.textContent = 'Testing…';
-        feedback.classList.remove('test-feedback--ok', 'test-feedback--err');
-        feedback.classList.add('test-feedback--pending');
+    function setFeedback(text, kind) {
+        if (!feedback) return;
+        feedback.textContent = text;
+        feedback.classList.remove('test-feedback--ok', 'test-feedback--err', 'test-feedback--pending');
+        if (kind) feedback.classList.add('test-feedback--' + kind);
     }
+    setFeedback('Testing…', 'pending');
+
     var autodetectEl = document.getElementById('ha-mqtt-use-autodetect');
     var brokerInput = document.getElementById('ha-mqtt-broker');
-    var host;
-    if (autodetectEl && autodetectEl.checked) {
-        host = 'auto';
-    } else {
-        host = brokerInput ? (brokerInput.value || '').trim() : '';
-    }
-    if (!host || host === 'auto') {
-        if (feedback) {
-            feedback.textContent = 'Enter a specific broker host before testing — auto-detect resolves only at startup.';
-            feedback.classList.remove('test-feedback--ok', 'test-feedback--pending');
-            feedback.classList.add('test-feedback--err');
-        }
-        return;
-    }
     var port = parseInt((document.getElementById('ha-mqtt-port') || {}).value, 10) || 1883;
     var username = ((document.getElementById('ha-mqtt-username') || {}).value || '').trim();
     var pwField = document.getElementById('ha-mqtt-password');
     var pwValue = pwField ? pwField.value : '';
+    var tls = !!(document.getElementById('ha-mqtt-tls') || {}).checked;
+
+    var host;
+    var resolvedFromProbe = false;
+    if (autodetectEl && autodetectEl.checked) {
+        // Resolve via the same probe the bridge runs at startup.  Pulls
+        // either Supervisor add-on creds (HAOS) or the MA-URL host
+        // fallback (standalone).
+        setFeedback('Auto-detecting broker…', 'pending');
+        try {
+            var probeResp = await fetch(API_BASE + '/api/ha/mqtt/probe');
+            if (probeResp.status === 401) { _handleUnauthorized(); return; }
+            var probeBody = await probeResp.json().catch(function() { return null; });
+            if (!probeBody || !probeBody.found) {
+                var hint = (probeBody && probeBody.hint)
+                    || 'Turn off auto-detect and enter a host manually to test.';
+                setFeedback('Auto-detect couldn\'t find a broker. ' + hint, 'err');
+                return;
+            }
+            host = probeBody.host;
+            if (probeBody.port) port = probeBody.port;
+            if (probeBody.source !== 'ma_url') {
+                // Supervisor path — broker may give us a username; do not
+                // overwrite a user-typed username.
+                if (!username && probeBody.username) username = probeBody.username;
+                if (probeBody.ssl) tls = true;
+            }
+            resolvedFromProbe = true;
+        } catch (exc) {
+            setFeedback('Auto-detect probe failed: ' + (exc && exc.message ? exc.message : exc), 'err');
+            return;
+        }
+    } else {
+        host = brokerInput ? (brokerInput.value || '').trim() : '';
+        if (!host) {
+            setFeedback('Enter a broker host before testing.', 'err');
+            return;
+        }
+    }
+
     var pwToSend;
     if (pwValue === '') {
+        // Empty field — send the redaction marker so the backend resolves
+        // the saved password from config (if any).  For Mosquitto add-on
+        // credentials picked up by the probe, the saved-config password
+        // may or may not be the right one — but it's our best guess and
+        // the test result will tell the operator whether it works.
         pwToSend = _haOriginalPasswordPresent ? '***REDACTED***' : '';
     } else {
         pwToSend = pwValue;
     }
-    var tls = !!(document.getElementById('ha-mqtt-tls') || {}).checked;
+    setFeedback(
+        resolvedFromProbe ? ('Testing ' + host + ':' + port + '…') : 'Testing…',
+        'pending'
+    );
     var qs = new URLSearchParams({
         host: host,
         port: String(port),
@@ -5873,25 +5982,17 @@ async function _haMqttTestConnection() {
         var resp = await fetch(API_BASE + '/api/ha/mqtt/test?' + qs);
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var body = await resp.json().catch(function() { return null; });
-        if (!feedback) return;
-        feedback.classList.remove('test-feedback--pending');
         if (body && body.ok) {
             var ms = typeof body.elapsed_ms === 'number' ? (' (' + body.elapsed_ms + ' ms)') : '';
-            feedback.textContent = 'Connected successfully' + ms + '.';
-            feedback.classList.remove('test-feedback--err');
-            feedback.classList.add('test-feedback--ok');
+            var prefix = resolvedFromProbe ? ('Connected to ' + host + ':' + port) : 'Connected successfully';
+            setFeedback(prefix + ms + '.', 'ok');
         } else {
             var errMsg = (body && body.error) || (body && body.error_class) || ('HTTP ' + resp.status);
-            feedback.textContent = 'Test failed: ' + errMsg;
-            feedback.classList.remove('test-feedback--ok');
-            feedback.classList.add('test-feedback--err');
+            var hostInfo = resolvedFromProbe ? (' (auto-detect resolved to ' + host + ':' + port + ')') : '';
+            setFeedback('Test failed: ' + errMsg + hostInfo, 'err');
         }
     } catch (exc) {
-        if (feedback) {
-            feedback.textContent = 'Test failed: ' + (exc && exc.message ? exc.message : String(exc));
-            feedback.classList.remove('test-feedback--ok', 'test-feedback--pending');
-            feedback.classList.add('test-feedback--err');
-        }
+        setFeedback('Test failed: ' + (exc && exc.message ? exc.message : String(exc)), 'err');
     }
 }
 
@@ -11222,6 +11323,7 @@ async function loadConfig(options) {
         _refreshHaIntegrationStatus();
         _refreshHaTokensList();
         _refreshMosquittoState();
+        _refreshCustomComponentState();
         var authPw = document.getElementById('auth-password-fields');
         if (authPw && authCheck) authPw.hidden = !authCheck.checked;
         window._passwordSet = !!config._password_set;

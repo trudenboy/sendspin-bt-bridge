@@ -848,12 +848,21 @@ class BridgeOrchestrator:
 
         web_port = resolve_web_port() or 8080
         ingress_active = bool(os.environ.get("SUPERVISOR_TOKEN"))
+        # Optional advertise host/port overrides for setups behind a
+        # reverse proxy or NAT — empty / 0 means "auto-resolve".
+        host_override = str(rest_block.get("advertise_host") or "").strip()
+        try:
+            port_override = int(rest_block.get("advertise_port") or 0)
+        except (TypeError, ValueError):
+            port_override = 0
 
         adv = BridgeMdnsAdvertiser(
             bridge_name=bridge_name,
             version=version,
             web_port=web_port,
             ingress_active=ingress_active,
+            host_override=host_override,
+            port_override=port_override,
         )
         set_default_advertiser(adv)
         # Kick the registration onto the running loop.  We don't await

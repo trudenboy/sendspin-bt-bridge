@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import urllib.request as _ur
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,19 @@ KNOWN_MA_ADDON_SLUGS = (
 # missing.
 MOSQUITTO_ADDON_SLUG = "core_mosquitto"
 MOSQUITTO_ADDON_DEEP_LINK = "https://my.home-assistant.io/redirect/supervisor_addon/?addon=core_mosquitto"
+
+# HACS deep-link to add the bridge's custom-component repository.  Works
+# only when HACS itself is already installed on the operator's HA Core
+# instance — but that's also the only setup where the link makes sense.
+CUSTOM_COMPONENT_HACS_DEEP_LINK = (
+    "https://my.home-assistant.io/redirect/hacs_repository/"
+    "?owner=trudenboy&repository=sendspin-bt-bridge&category=integration"
+)
+# How recent does a token's ``last_used`` have to be for us to call the
+# custom_component "currently connected"?  6 hours is generous — covers
+# overnight inactivity on a household setup but flags genuinely stale
+# pair records.
+_CUSTOM_COMPONENT_ACTIVE_WINDOW_S = 6 * 3600
 
 
 def _get_supervisor_payload(path: str, timeout: float = 5.0) -> dict[str, Any] | None:
@@ -288,6 +302,76 @@ def get_mosquitto_addon_state(timeout: float = 5.0) -> dict[str, Any]:
         return base
     base["installed"] = True
     base["started"] = str(info.get("state") or "").lower() == "started"
+    return base
+
+
+def get_custom_component_state() -> dict[str, Any]:
+    """Heuristic detection of the HACS custom_component install/active state.
+
+    The custom_component is a Python package installed via HACS into
+    ``/config/custom_components/sendspin_bridge/`` on the operator's
+    Home Assistant Core instance.  The bridge runs in its own
+    container / process and can't see HA Core's filesystem, so direct
+    "is the file there" detection isn't possible.
+
+    What we *can* observe is the side effect of the integration being
+    set up: it talks to the bridge over REST + bearer auth, and every
+    issued bearer token has an ``id`` / ``label`` / ``last_used`` row
+    in ``AUTH_TOKENS``.  So:
+
+      ``installed`` = at least one bearer token has ever been issued
+        (the integration successfully paired at least once).
+      ``started`` = at least one bearer token has been used within the
+        last few hours (the integration is currently talking to us).
+      ``last_seen`` = the most recent ``last_used`` ISO timestamp across
+        all tokens (or ``None`` when no token has been used yet).
+
+    Returns a dict shaped like ``get_mosquitto_addon_state`` so the UI
+    can render the two transports' install indicators with the same
+    code path.
+
+    Outside HA addon mode this still returns useful data — bearer
+    tokens are a standalone concept too, so the heuristic works
+    everywhere.
+    """
+    base: dict[str, Any] = {
+        "available": True,
+        "installed": False,
+        "started": False,
+        "last_seen": None,
+        "install_url": CUSTOM_COMPONENT_HACS_DEEP_LINK,
+        "error": None,
+    }
+    try:
+        from sendspin_bridge.config import load_config
+
+        cfg = load_config()
+    except Exception as exc:
+        base["error"] = f"config unavailable: {exc}"
+        return base
+    tokens = cfg.get("AUTH_TOKENS") or []
+    if not tokens:
+        return base
+    base["installed"] = True
+    last_used_strs = [str(tok.get("last_used") or "") for tok in tokens if isinstance(tok, dict)]
+    last_used_strs = [s for s in last_used_strs if s]
+    if not last_used_strs:
+        return base
+    most_recent = max(last_used_strs)
+    base["last_seen"] = most_recent
+    try:
+        # Tokens persist ``last_used`` as an ISO-8601 timestamp; tolerate
+        # both ``Z`` suffix (UTC) and explicit offsets.
+        as_utc = datetime.fromisoformat(most_recent.replace("Z", "+00:00"))
+        if as_utc.tzinfo is None:
+            as_utc = as_utc.replace(tzinfo=UTC)
+        delta = (datetime.now(tz=UTC) - as_utc).total_seconds()
+        if 0 <= delta < _CUSTOM_COMPONENT_ACTIVE_WINDOW_S:
+            base["started"] = True
+    except (TypeError, ValueError):
+        # Malformed timestamp — leave ``started`` false; ``last_seen`` is
+        # still surfaced so the operator can investigate manually.
+        pass
     return base
 
 
