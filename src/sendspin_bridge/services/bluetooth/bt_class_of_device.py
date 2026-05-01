@@ -221,8 +221,16 @@ def set_device_class(adapter_index: int, cod: int) -> bool:
                     return_params[0],
                 )
             else:
+                # Most common cause: the controller didn't ACK because
+                # bluetoothd is down or the adapter isn't powered.  This
+                # warning is informational only — adapter detection
+                # itself is independent of CoD writes; if the bridge
+                # also reports "no Bluetooth controller", fix that
+                # first and the CoD override will reapply on its own.
                 logger.warning(
-                    "CoD: hci%d Write_Class_Of_Device timed out or failed",
+                    "CoD: hci%d no Command Complete event from controller "
+                    "(controller may be unpowered or bluetoothd inactive — "
+                    "fix adapter access first; CoD override is independent)",
                     adapter_index,
                 )
             return False

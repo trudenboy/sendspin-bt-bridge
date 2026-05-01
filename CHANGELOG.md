@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.67.1] - 2026-05-01
+
+### Added
+- **HACS custom_component now ships its own brand icon.**  Home
+  Assistant 2026.3+ supports local brand images for custom
+  integrations via a `brand/` directory inside the integration —
+  bypassing the `home-assistant/brands` repo, which no longer
+  accepts PRs for custom integrations.  The icon (256×256 + 512×512)
+  ships in `custom_components/sendspin_bridge/brand/` and appears
+  automatically in the HA UI after a HACS update.  Older HA
+  versions render no icon (no functional change).
+- **HACS custom_component manifest now bumps automatically on each
+  release.**  The release workflow's version-sync step writes
+  `VERSION` into `custom_components/sendspin_bridge/manifest.json`
+  alongside the existing `sendspin_bridge.config` update.  HACS reads
+  the manifest version to decide whether to offer an update — without
+  this sync the integration sat at v2.66.13 even after the bridge had
+  shipped 2.67.0, so HACS users wouldn't see the update prompt.
+
+### Changed
+- **HA Configuration tab — REST status card no longer shows MQTT
+  fields.**  In REST mode the Broker URL and Last connect rows are
+  hidden — those belong to the MQTT publisher's lifecycle and have no
+  meaning when the bridge is the HTTP server (HA pulls from us, not
+  the other way round).
+- **HA Configuration tab — Access tokens (HACS only) card hidden in
+  Off / MQTT modes.**  Tokens are only consumed by the HACS REST path,
+  so showing the card outside REST was misleading.  Tokens persist
+  across mode flips; revoke them inside REST mode.
+- **HA Configuration tab — friendlier hint right after HACS pairing.**
+  When a token was issued in the last 15 min but hasn't been used
+  yet, the inline transport hint now reads "Pairing detected.  Finish
+  setup in Home Assistant → Settings → Devices & Services if the
+  bridge hasn't been added there yet." instead of the alarming
+  "paired before but isn't currently active" — the latter still fires
+  for tokens older than 15 min that have gone quiet.
+- **Onboarding banner now leads with the host-side fix when the
+  Bluetooth daemon is down.**  The bridge already knew bluetoothd was
+  inactive (Service Status section of diagnostics), but the operator-
+  facing onboarding step still suggested generic "Refresh adapters" /
+  "verify passthrough" actions, sending people on a UI wild-goose
+  chase for a problem they could only fix on the host.  Preflight now
+  probes `systemctl is-active bluetooth` when no controller surfaces;
+  when the daemon comes back as `inactive` / `failed`, the onboarding
+  step renames to "Bluetooth daemon (bluetoothd) is not running on
+  the host" and the leading action is the actual fix:
+  `sudo systemctl start bluetooth` (plus `enable` for persistence).
+- **Class of Device override warning text rewritten to clarify the
+  failure isn't blocking adapter detection.**  The original "CoD: hci0
+  Write_Class_Of_Device timed out or failed" looked like a hard
+  blocker — operators on issue #254 misread it as the cause of their
+  adapter-not-detected problem and went down a CoD-tweaking
+  rabbit-hole.  Reworded to "no Command Complete event from
+  controller (controller may be unpowered or bluetoothd inactive —
+  fix adapter access first; CoD override is independent)" so the
+  symptom-vs-cause direction is obvious.  The CoD picker tooltip in
+  the bridge UI gained a matching note: "Won't help if the adapter
+  itself isn't detected — fix Bluetooth daemon / passthrough first".
+
+### Fixed
+- **Live demo deployment on Render broken since the v2.62 package
+  move.**  The Render service's start command still pointed at the
+  long-removed legacy entry-point script at the repo root, and the
+  build command pulled only a hand-picked subset of deps that was
+  missing several pure-Python packages the bridge expects.  The
+  Render Blueprint manifest now sits at the repo root (where
+  Render's discovery actually looks), installs from a curated demo
+  requirements list — the runtime dependency set minus the Linux-BT
+  / D-Bus packages that need apt-installable system headers Render's
+  Native Python runtime can't provide — and starts the bridge with
+  the demo simulator on the import path so the dashboard, scan list,
+  and now-playing fixtures render again.
+- **Album artwork now renders when the daemon already has its own
+  track metadata.**  The artwork-fallback path was gated on
+  ``!daemonHasTrack`` (a guard meant for ynison-style sourceplugin
+  providers where MA's queue might disagree with what the daemon is
+  actually playing) — but the daemon never ships its own
+  ``artwork_url``, so the gate just left an empty placeholder
+  whenever the daemon had a track name.  Demo mode hit this every
+  card.  Artwork now falls back to MA's image whenever the device is
+  MA-active, regardless of daemon-track presence; text fields keep
+  the original "daemon takes priority" semantics.
+- **HA → Direct REST: auto-detected host no longer leaks `127.0.1.1`.**
+  On Debian / Ubuntu the system hostname maps to a `127.0.1.1` loopback
+  alias in `/etc/hosts`, so `gethostbyname(hostname)` returned that
+  unreachable address as the auto-detected advertise host.  Resolution
+  now filters loopback results and falls back to the standard
+  open-UDP-socket-and-read-`getsockname` trick to discover the LAN IP
+  the kernel would actually use to reach the network.
+
 ## [2.67.0] - 2026-05-01
 
 ### Added

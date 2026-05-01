@@ -248,7 +248,18 @@ def collect_preflight_status(
             failed_collections.append("audio")
             collections_status["audio"] = collection_status_payload("error", error=collection_error_payload(exc))
 
-    bt_info: dict[str, Any] = {"controller": False, "adapter": None, "paired_devices": 0}
+    bt_info: dict[str, Any] = {
+        "controller": False,
+        "adapter": None,
+        "paired_devices": 0,
+        # Populated only when ``bluetoothctl list`` returns no Controller —
+        # distinguishes "BlueZ daemon is down" (most common cause: host
+        # ``bluetooth.service`` not running) from "daemon is up but no
+        # adapter passed through" (Docker passthrough / rfkill / etc).
+        # ``"active"`` / ``"inactive"`` / ``"failed"`` / ``"unknown"`` /
+        # empty string when the probe itself didn't run.
+        "daemon": "",
+    }
     try:
         result = subprocess_module.run(
             ["bluetoothctl", "list"],
@@ -259,6 +270,22 @@ def collect_preflight_status(
         if "Controller" in result.stdout:
             bt_info["controller"] = True
             bt_info["adapter"] = _parse_bluetoothctl_adapter(result.stdout)
+            bt_info["daemon"] = "active"
+        else:
+            # No controller surfaced — probe systemd to disambiguate
+            # "daemon down" from "daemon up but no adapter".  Treat any
+            # subprocess failure as "unknown" so we don't false-flag a
+            # non-systemd host.
+            try:
+                daemon_probe = subprocess_module.run(
+                    ["systemctl", "is-active", "bluetooth"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                bt_info["daemon"] = (daemon_probe.stdout or "").strip() or "unknown"
+            except Exception:
+                bt_info["daemon"] = "unknown"
         paired = subprocess_module.run(
             ["bluetoothctl", "devices", "Paired"],
             capture_output=True,

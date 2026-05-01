@@ -1,0 +1,37 @@
+# Render.com Blueprint for the live demo deployment.
+#
+# Connect this repo to Render as a Blueprint
+# (https://render.com/docs/blueprint-spec) and it'll spin up the
+# DEMO_MODE bridge automatically — no Linux-BT / D-Bus integration
+# (Render's Python runtime can't apt-install the system headers those
+# need), but enough of the stack to render the dashboard, scan list,
+# now-playing fixtures, and config flows for screenshots.
+#
+# If you're updating an existing manually-created service, change the
+# Build Command + Start Command in the Render UI to match this file —
+# the historic ``python sendspin_client.py`` start command was orphaned
+# when the project moved to a proper Python package in v2.62.0.
+
+services:
+  - type: web
+    name: sendspin-demo
+    runtime: python
+    plan: free
+    # Install demo-only deps (omits Linux-BT / D-Bus packages that
+    # would fail on Render's no-apt runtime).  We don't ``pip install .``
+    # because the wheel only ships ``src/sendspin_bridge`` — the
+    # ``demo/`` simulator package lives at the repo root and is loaded
+    # directly off the checkout via PYTHONPATH below.
+    buildCommand: pip install -r requirements-demo.txt
+    # Run from source: ``src/`` exposes ``sendspin_bridge``, ``.`` (repo
+    # root) exposes ``demo`` so ``from demo import install`` in
+    # bridge/orchestrator.py resolves.
+    startCommand: PYTHONPATH=src:. python -m sendspin_bridge
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: WEB_PORT
+        value: "10000"
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+    healthCheckPath: /api/health

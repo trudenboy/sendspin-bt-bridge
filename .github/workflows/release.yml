@@ -185,11 +185,20 @@ jobs:
           echo "Updated ${CONFIG_FILE}: VERSION=${VERSION}, BUILD_DATE=${BUILD_DATE}"
           grep -E '^(VERSION|BUILD_DATE)' "${CONFIG_FILE}"
 
-          git add "${CONFIG_FILE}"
+          # Sync HACS custom_component manifest version. HACS reads this
+          # to decide whether to offer an update; out-of-sync values
+          # mean the integration appears stale even after we ship a new
+          # bridge release.
+          MANIFEST_FILE="custom_components/sendspin_bridge/manifest.json"
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" "${MANIFEST_FILE}"
+          echo "Updated ${MANIFEST_FILE}:"
+          grep '"version"' "${MANIFEST_FILE}"
+
+          git add "${CONFIG_FILE}" "${MANIFEST_FILE}"
           if git diff --cached --quiet; then
-            echo "${CONFIG_FILE} already up to date"
+            echo "${CONFIG_FILE} and ${MANIFEST_FILE} already up to date"
           else
-            git commit -m "release: ${TAG} — update sendspin_bridge.config version"
+            git commit -m "release: ${TAG} — update sendspin_bridge.config + custom_component manifest version"
           fi
 
           git tag -a "${TAG}" -m "Release ${VERSION}"

@@ -2755,7 +2755,14 @@ function _getDeviceNowPlayingState(dev, i) {
     var artist = _firstOfSlash(safeDev.current_artist || (useMaFallback ? (ma.artist || '') : '') || '');
     var track = _firstOfSlash(safeDev.current_track || (deviceMaActive ? (ma.track || '') : '') || '');
     var album = _firstOfSlash(safeDev.current_album || (useMaFallback ? (ma.album || '') : '') || '');
-    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (useMaFallback ? (ma.image_url || '') : '') || '';
+    // Artwork falls back to MA whenever the device is MA-active and the
+    // daemon doesn't ship its own ``artwork_url`` — the ynison "daemon
+    // metadata != MA queue" guard that gates text fallback isn't useful
+    // here because the daemon never provides an artwork URL of its
+    // own, so suppressing the MA image just leaves an empty placeholder.
+    // Showing MA artwork that's off by one queue item is strictly
+    // better than showing none at all.
+    var artUrl = _getSafeArtworkUrl(safeDev.artwork_url) || (deviceMaActive ? (ma.image_url || '') : '') || '';
     return {
         ma: ma,
         deviceMaActive: deviceMaActive,
@@ -5158,10 +5165,6 @@ var _haIntegrationDefaults = {
 // left empty.  Without this we'd silently clear the saved password every
 // time the operator re-saved the form.
 var _haOriginalPasswordPresent = false;
-// Cache the last-known token count from ``/api/auth/tokens`` so the
-// progressive disclosure rule can hide the Tokens card when mode=off
-// AND no tokens exist yet.
-var _haTokensListHasItems = false;
 
 // Mirror selected mode into the hidden ``<input id="ha-integration-mode">``
 // so existing form-read code (_readHaIntegrationFromForm,
@@ -5372,13 +5375,13 @@ function _updateHaIntegrationVisibility() {
     if (restCard) restCard.hidden = !showRest;
     // Progressive disclosure for the Tokens card: tokens are only used
     // by the HACS / Direct REST integration, so we show the card only
-    // when mode = "rest" or when tokens already exist (so the operator
-    // can manage them after switching modes).  This guards the v2.66.10
-    // regression where the Generate Token button vanished on HAOS
-    // auto-pair while still keeping the noise out of the MQTT setup
-    // flow, where tokens have no role.
+    // when mode = "rest".  Off and MQTT modes hide it unconditionally
+    // — leaving stale tokens visible in those modes was misleading
+    // (operators read it as "MQTT also uses tokens").  Existing tokens
+    // remain stored and re-appear the moment the operator flips to
+    // REST; revoke them there if no longer needed.
     var tokensCard = document.getElementById('ha-tokens-card');
-    if (tokensCard) tokensCard.hidden = mode !== 'rest' && !_haTokensListHasItems;
+    if (tokensCard) tokensCard.hidden = mode !== 'rest';
 
     _updateMosquittoBannerVisibility();
     _updateCustomComponentHintVisibility();
@@ -5533,23 +5536,35 @@ function _setHaStatus(state) {
     // Detail rows (broker URL / last connect / last error) under the
     // status pill.  Visible whenever any field has content; hidden when
     // off and nothing to report so the card stays compact.
+    //
+    // REST mode skips the broker/last-connect rows entirely — those
+    // belong to the MQTT publisher's lifecycle (broker URL, last
+    // CONNACK).  REST is server-side: HA pulls from the bridge, not
+    // the other way round, so there's no "broker" or "last connect"
+    // event the bridge owns.  The HACS integration's last-seen
+    // timestamp lives in the inline transport hint instead.
     var detail = document.getElementById('ha-status-detail');
+    var brokerRow = document.getElementById('ha-status-broker-row');
     var brokerEl = document.getElementById('ha-status-broker');
+    var lastConnectRow = document.getElementById('ha-status-last-connect-row');
     var lastConnectEl = document.getElementById('ha-status-last-connect');
     var lastErrorRow = document.getElementById('ha-status-last-error-row');
     var lastErrorEl = document.getElementById('ha-status-last-error');
+    var hideMqttRows = (mode === 'rest' || mode === 'off');
     var anyDetail = false;
+    if (brokerRow) brokerRow.hidden = hideMqttRows;
     if (brokerEl) {
-        if (state.broker) {
+        if (state.broker && !hideMqttRows) {
             brokerEl.textContent = String(state.broker);
             anyDetail = true;
         } else {
             brokerEl.textContent = '—';
         }
     }
+    if (lastConnectRow) lastConnectRow.hidden = hideMqttRows;
     if (lastConnectEl) {
         var ts = _formatHaStatusTimestamp(state.lastEventAt);
-        if (ts) {
+        if (ts && !hideMqttRows) {
             lastConnectEl.textContent = ts;
             anyDetail = true;
         } else {
@@ -5726,6 +5741,17 @@ function _updateCustomComponentHintVisibility() {
     if (s.installed && s.started) {
         hint.hidden = false;
         hint.innerHTML = 'HACS custom_component paired and currently active.' + escHtml(lastSeen);
+        hint.classList.add('ha-mosquitto-inline-hint--ok');
+        hint.classList.remove('ha-mosquitto-inline-hint--warn');
+    } else if (s.installed && s.recently_paired) {
+        // Token was just issued — HA may still be loading the integration
+        // entry, so don't shout "isn't currently active" yet.  Show a
+        // neutral / positive state and point at the setup guide for the
+        // remaining HA-side step.
+        hint.hidden = false;
+        hint.innerHTML = 'Pairing detected. Finish setup in Home Assistant → ' +
+            'Settings → Devices &amp; Services if the bridge hasn\'t been ' +
+            'added there yet.' + docsLink;
         hint.classList.add('ha-mosquitto-inline-hint--ok');
         hint.classList.remove('ha-mosquitto-inline-hint--warn');
     } else if (s.installed) {
@@ -6344,11 +6370,6 @@ async function _refreshHaTokensList() {
         if (resp.status === 401) { _handleUnauthorized(); return; }
         var body = await resp.json();
         var tokens = (body && body.tokens) || [];
-        _haTokensListHasItems = tokens.length > 0;
-        // The visibility of the Tokens card depends on this flag plus
-        // the current mode — re-run the visibility pass whenever the
-        // token count changes.
-        _updateHaIntegrationVisibility();
         if (!tokens.length) {
             listEl.innerHTML = '<span class="form-hint">No tokens issued yet.</span>';
             return;
@@ -6600,7 +6621,10 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     var customValue = isPreset ? '' : (current || '');
     var helpText = 'Experimental: Class of Device override. Default leaves the kernel value untouched. ' +
         'Common presets: Computer/Laptop (Samsung Q-series), Computer/generic (broad fallback), ' +
-        'A/V Loudspeaker (LG-style filters), A/V Headset (Anker-style). See troubleshooting docs for the full table.';
+        'A/V Loudspeaker (LG-style filters), A/V Headset (Anker-style). ' +
+        "Note: this only filters how peers identify the bridge during pairing — it doesn't help if " +
+        'the adapter itself isn\'t detected (fix Bluetooth daemon / passthrough first). ' +
+        'See troubleshooting docs for the full table.';
     var liveHtml = '';
     if (liveClass) {
         var match = current && liveClass.toLowerCase() === current.toLowerCase();

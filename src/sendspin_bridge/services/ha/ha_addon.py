@@ -38,6 +38,11 @@ CUSTOM_COMPONENT_HACS_DEEP_LINK = (
 # overnight inactivity on a household setup but flags genuinely stale
 # pair records.
 _CUSTOM_COMPONENT_ACTIVE_WINDOW_S = 6 * 3600
+# How recently must a token have been *issued* (``created``) for us to
+# treat it as "just paired, HA may still be initialising the integration
+# entry".  Kept short so a stale token doesn't masquerade as a fresh
+# pair forever.
+_CUSTOM_COMPONENT_RECENT_PAIR_S = 15 * 60
 
 
 def _get_supervisor_payload(path: str, timeout: float = 5.0) -> dict[str, Any] | None:
@@ -338,6 +343,7 @@ def get_custom_component_state() -> dict[str, Any]:
         "available": True,
         "installed": False,
         "started": False,
+        "recently_paired": False,
         "last_seen": None,
         "install_url": CUSTOM_COMPONENT_HACS_DEEP_LINK,
         "error": None,
@@ -353,6 +359,26 @@ def get_custom_component_state() -> dict[str, Any]:
     if not tokens:
         return base
     base["installed"] = True
+
+    # ``recently_paired`` — token was *issued* in the last 15 min, even if
+    # HA hasn't called the bridge yet.  Distinguishes "just paired,
+    # waiting on HA to load the integration entry" from "paired weeks
+    # ago and went dark".  Avoids "paired before but isn't currently
+    # active" alarmism right after the operator clicks Generate.
+    created_strs = [str(tok.get("created") or "") for tok in tokens if isinstance(tok, dict)]
+    created_strs = [s for s in created_strs if s]
+    if created_strs:
+        try:
+            most_recent_created = max(created_strs)
+            as_utc = datetime.fromisoformat(most_recent_created.replace("Z", "+00:00"))
+            if as_utc.tzinfo is None:
+                as_utc = as_utc.replace(tzinfo=UTC)
+            delta = (datetime.now(tz=UTC) - as_utc).total_seconds()
+            if 0 <= delta < _CUSTOM_COMPONENT_RECENT_PAIR_S:
+                base["recently_paired"] = True
+        except (TypeError, ValueError):
+            pass
+
     last_used_strs = [str(tok.get("last_used") or "") for tok in tokens if isinstance(tok, dict)]
     last_used_strs = [s for s in last_used_strs if s]
     if not last_used_strs:
