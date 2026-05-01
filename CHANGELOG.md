@@ -43,6 +43,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bridge hasn't been added there yet." instead of the alarming
   "paired before but isn't currently active" — the latter still fires
   for tokens older than 15 min that have gone quiet.
+- **Onboarding banner now leads with the host-side fix when the
+  Bluetooth daemon is down.**  The bridge already knew bluetoothd was
+  inactive (Service Status section of diagnostics), but the operator-
+  facing onboarding step still suggested generic "Refresh adapters" /
+  "verify passthrough" actions, sending people on a UI wild-goose
+  chase for a problem they could only fix on the host.  Preflight now
+  probes `systemctl is-active bluetooth` when no controller surfaces;
+  when the daemon comes back as `inactive` / `failed`, the onboarding
+  step renames to "Bluetooth daemon (bluetoothd) is not running on
+  the host" and the leading action is the actual fix:
+  `sudo systemctl start bluetooth` (plus `enable` for persistence).
+- **Class of Device override warning text rewritten to clarify the
+  failure isn't blocking adapter detection.**  The original "CoD: hci0
+  Write_Class_Of_Device timed out or failed" looked like a hard
+  blocker — operators on issue #254 misread it as the cause of their
+  adapter-not-detected problem and went down a CoD-tweaking
+  rabbit-hole.  Reworded to "no Command Complete event from
+  controller (controller may be unpowered or bluetoothd inactive —
+  fix adapter access first; CoD override is independent)" so the
+  symptom-vs-cause direction is obvious.  The CoD picker tooltip in
+  the bridge UI gained a matching note: "Won't help if the adapter
+  itself isn't detected — fix Bluetooth daemon / passthrough first".
 
 ### Fixed
 - **Live demo deployment on Render broken since the v2.62 package

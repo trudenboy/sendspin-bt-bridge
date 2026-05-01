@@ -6630,7 +6630,10 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     var customValue = isPreset ? '' : (current || '');
     var helpText = 'Experimental: Class of Device override. Default leaves the kernel value untouched. ' +
         'Common presets: Computer/Laptop (Samsung Q-series), Computer/generic (broad fallback), ' +
-        'A/V Loudspeaker (LG-style filters), A/V Headset (Anker-style). See troubleshooting docs for the full table.';
+        'A/V Loudspeaker (LG-style filters), A/V Headset (Anker-style). ' +
+        "Note: this only filters how peers identify the bridge during pairing — it doesn't help if " +
+        'the adapter itself isn\'t detected (fix Bluetooth daemon / passthrough first). ' +
+        'See troubleshooting docs for the full table.';
     var liveHtml = '';
     if (liveClass) {
         var match = current && liveClass.toLowerCase() === current.toLowerCase();

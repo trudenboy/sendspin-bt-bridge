@@ -69,6 +69,44 @@ def test_onboarding_bluetooth_step_cross_references_audio_when_both_fail():
     )
 
 
+def test_onboarding_bluetooth_step_calls_out_inactive_daemon():
+    """When preflight reports the BlueZ daemon as inactive on the host,
+    the bluetooth OnboardingCheck should lead with the host-side fix
+    (``systemctl start bluetooth``) instead of the generic "press Refresh
+    adapters" guidance — the latter sends the operator on a wild goose
+    chase through the bridge UI for a problem they can only fix on the
+    host.  Issue #254 hit this: BlueZ daemon was inactive after a fresh
+    Docker host install, the bridge correctly reported "no controller",
+    but the actionable next step lived outside the UI.
+    """
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {
+                "system": "pipewire",
+                "sinks": 2,
+                "socket": "unix:/run/user/1000/pulse/native",
+                "socket_exists": True,
+                "socket_reachable": True,
+                "last_error": None,
+            },
+            "bluetooth": {"controller": False, "paired_devices": 0, "daemon": "inactive"},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    bluetooth = next(check for check in snapshot.checks if check.key == "bluetooth")
+    assert bluetooth.status == "error"
+    assert "bluetoothd" in bluetooth.summary.lower()
+    joined_actions = " ".join(bluetooth.actions).lower()
+    assert "systemctl start bluetooth" in joined_actions
+    # Cross-check: the generic "Refresh adapters" prompt is *not* the
+    # leading action when the daemon is the actual blocker.
+    assert not bluetooth.actions[0].lower().startswith("open bluetooth settings")
+
+
 def test_onboarding_bluetooth_step_skips_audio_hint_when_audio_healthy():
     """Regression guard: when the BT step fails on its own (audio is fine),
     we must not muddy the BT remediation with a misleading audio/UID hint.

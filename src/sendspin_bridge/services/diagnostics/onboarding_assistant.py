@@ -503,10 +503,33 @@ def build_onboarding_assistant_snapshot(
         )
 
     if not controller_present:
-        bluetooth_actions = [
-            "Open Bluetooth settings and press Refresh adapters.",
-            "If no adapter appears, verify Bluetooth passthrough or host access, then add the adapter manually.",
-        ]
+        # Distinguish "BlueZ daemon is down on the host" from "daemon is
+        # up but no adapter passed through".  Most common operator case
+        # — especially after a fresh Docker host install — is the
+        # former: ``bluetooth.service`` was never enabled, so the
+        # bridge correctly reports "no controller" but the actionable
+        # fix lives on the host (``systemctl start bluetooth``), not
+        # in the bridge UI's adapter list.
+        bluetooth_daemon = str(bluetooth.get("daemon") or "").strip().lower()
+        daemon_down = bluetooth_daemon in {"inactive", "failed", "deactivating", "activating"}
+        if daemon_down:
+            bluetooth_actions = [
+                "Start the BlueZ daemon on the host: `sudo systemctl start bluetooth` "
+                "(make it persistent with `sudo systemctl enable bluetooth`), then restart "
+                "this container.",
+                "If you're on Home Assistant OS, the Supervisor manages BlueZ for you — "
+                "check that the host's Bluetooth integration isn't disabled.",
+            ]
+            bluetooth_summary = (
+                "Bluetooth daemon (bluetoothd) is not running on the host — "
+                "the bridge can't see any controller until it's started."
+            )
+        else:
+            bluetooth_actions = [
+                "Open Bluetooth settings and press Refresh adapters.",
+                "If no adapter appears, verify Bluetooth passthrough or host access, then add the adapter manually.",
+            ]
+            bluetooth_summary = "No Bluetooth controller detected by preflight checks."
         audio_socket_mounted_but_unreachable = (
             bool(audio.get("socket_exists")) and audio.get("socket_reachable") is False
         )
@@ -521,8 +544,8 @@ def build_onboarding_assistant_snapshot(
             OnboardingCheck(
                 key="bluetooth",
                 status="error",
-                summary="No Bluetooth controller detected by preflight checks.",
-                details={"paired_devices": paired_devices},
+                summary=bluetooth_summary,
+                details={"paired_devices": paired_devices, "daemon": bluetooth_daemon or None},
                 actions=bluetooth_actions,
             )
         )
