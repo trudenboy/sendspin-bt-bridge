@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HA → Direct REST: auto-fill of advertised address.** The REST
+  card now mirrors the MQTT card's address-handling flow: a Use
+  auto-detect toggle disables the Bridge host / Bridge port inputs
+  and surfaces the resolved values as a read-only preview; a
+  "Suggest from hostname" button calls a new `GET /api/ha/rest/probe`
+  endpoint and pre-fills the override fields with what the bridge
+  would advertise right now.  Use the override fields when the bridge
+  sits behind a reverse proxy or NAT and the auto-detected hostname
+  isn't routable from Home Assistant.  Allow Supervisor pairing
+  toggle is now hidden outside HA add-on mode — the Supervisor proxy
+  isn't reachable in standalone Docker / LXC so the toggle had no
+  effect there.
 - **HA → MQTT broker "Test connection" button.** A pre-flight check
   inside the HA Configuration tab calls a new `GET /api/ha/mqtt/test`
   endpoint, which does a TCP probe + full `aiomqtt` CONNACK round-trip

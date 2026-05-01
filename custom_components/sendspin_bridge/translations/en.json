@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Sendspin BT Bridge",
-        "description": "Enter the bridge's host and port. **Leave the token blank to auto-pair on HAOS** — the bridge will mint a token via Supervisor automatically. If auto-pair isn't available, open the bridge web UI and pick **Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token**.",
+        "description": "Enter the bridge's host and port. **Leave the token blank to auto-pair on HAOS** — the bridge will mint a token via Supervisor automatically. If auto-pair is unavailable, open the bridge web UI and pick **Configuration → Home Assistant → Access tokens (HACS only) → Generate token**.\n\n_To connect several bridges, run this flow once per bridge — each one shows up separately under Settings → Devices & Services._",
         "data": {
           "host": "Host",
           "port": "Port",
@@ -13,7 +13,7 @@
       },
       "pair": {
         "title": "Sendspin BT Bridge discovered at {host}:{port}",
-        "description": "Open [{ui_url}]({ui_url}) → **Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token**, then paste the token below.",
+        "description": "{ui_url_block}In the bridge web UI go to **Configuration → Home Assistant → Access tokens (HACS only) → Generate token**, then paste the token below.\n\n_Discovered multiple bridges?  Run this step for each — Home Assistant treats every bridge as a separate config entry._",
         "data": {
           "token": "Bearer token",
           "use_https": "Use HTTPS"
@@ -21,7 +21,7 @@
       },
       "reauth_confirm": {
         "title": "Re-authenticate Sendspin BT Bridge",
-        "description": "Your bearer token was rejected. Open [{ui_url}]({ui_url}) → **Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token** to mint a fresh one, then paste it below.",
+        "description": "Your bearer token was rejected. {ui_url_block}In the bridge web UI go to **Configuration → Home Assistant → Access tokens (HACS only) → Generate token** to mint a fresh one, then paste it below.",
         "data": {
           "token": "Bearer token"
         }
@@ -29,7 +29,7 @@
     },
     "error": {
       "auth_failed": "Token rejected — make sure it was just minted and not revoked.",
-      "auto_pair_failed": "Could not auto-pair via Supervisor — paste a token from the bridge web UI (Settings → Home Assistant → Bearer tokens for HA custom_component → Generate token)."
+      "auto_pair_failed": "Could not auto-pair via Supervisor — paste a token from the bridge web UI (Configuration → Home Assistant → Access tokens (HACS only) → Generate token)."
     },
     "abort": {
       "already_configured": "This bridge is already configured.",

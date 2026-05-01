@@ -5212,14 +5212,21 @@ function _populateHaIntegrationForm(block) {
     }
     var broker = document.getElementById('ha-mqtt-broker');
     if (broker) {
-        // Auto-detect toggle on → host input is read-only with the value
-        // ``auto`` rendered as a hint; toggle off → editable with the saved
-        // value.  This replaces the v2.66.x convention of typing the
-        // literal string ``auto`` into the host field.
+        // Auto-detect toggle on → host input is read-only and shows the
+        // values the bridge would actually resolve at startup.  Toggle
+        // off → editable with the saved override value.  This replaces
+        // the v2.66.x convention of typing the literal string ``auto``
+        // into the host field; mirrors the REST card's auto-detect
+        // preview flow.
         if (brokerValue === 'auto') {
             broker.value = '';
             broker.disabled = true;
-            broker.placeholder = 'auto-detect (resolved at startup)';
+            broker.placeholder = 'auto-detect…';
+            // Populate the read-only preview from the probe — what
+            // Supervisor (HAOS) or the MA URL fallback (standalone)
+            // would hand back at startup.  Best-effort; failure is
+            // non-fatal and the placeholder hint stays.
+            _refreshMqttAutoDetectDefaults();
         } else {
             broker.value = brokerValue;
             broker.disabled = false;
@@ -5265,13 +5272,39 @@ function _populateHaIntegrationForm(block) {
     }
     var supervisorPair = document.getElementById('ha-rest-supervisor-pair');
     if (supervisorPair) {
-        supervisorPair.checked = rest.supervisor_pair !== false;
-        supervisorPair.setAttribute('aria-checked', supervisorPair.checked ? 'true' : 'false');
+        // Outside HA addon mode the element is rendered as ``<input
+        // type="hidden">``, which has no ``.checked`` — guard with a
+        // falsy default so the form-read path stays sane.
+        if (typeof supervisorPair.checked === 'boolean') {
+            supervisorPair.checked = rest.supervisor_pair !== false;
+            supervisorPair.setAttribute('aria-checked', supervisorPair.checked ? 'true' : 'false');
+        }
     }
-    var restHost = document.getElementById('ha-rest-advertise-host');
-    if (restHost) restHost.value = rest.advertise_host || '';
-    var restPort = document.getElementById('ha-rest-advertise-port');
-    if (restPort) restPort.value = rest.advertise_port ? String(rest.advertise_port) : '';
+    var savedRestHost = String(rest.advertise_host || '').trim();
+    var savedRestPort = rest.advertise_port ? String(rest.advertise_port) : '';
+    var restAutoDetect = document.getElementById('ha-rest-use-autodetect');
+    var hasOverride = !!savedRestHost || !!savedRestPort;
+    if (restAutoDetect) {
+        restAutoDetect.checked = !hasOverride;
+        restAutoDetect.setAttribute('aria-checked', restAutoDetect.checked ? 'true' : 'false');
+    }
+    var restHostInput = document.getElementById('ha-rest-advertise-host');
+    var restPortInput = document.getElementById('ha-rest-advertise-port');
+    if (restHostInput) {
+        restHostInput.value = savedRestHost;
+        restHostInput.disabled = !hasOverride;
+    }
+    if (restPortInput) {
+        restPortInput.value = savedRestPort;
+        restPortInput.disabled = !hasOverride;
+    }
+    // When in auto-detect mode and no saved override, fetch the
+    // bridge's actually-resolved hostname/port and surface them as
+    // visible-but-disabled placeholders so the operator sees what HA
+    // would receive — symmetric with the MQTT auto-detect flow.
+    if (!hasOverride) {
+        _refreshRestAdvertiseDefaults();
+    }
     _updateHaIntegrationVisibility();
 }
 
@@ -5566,12 +5599,12 @@ function _updateMosquittoBannerVisibility() {
     var mode = _haCurrentMode || 'off';
 
     // Inline hint next to the MQTT radio.  Three states on HAOS, hidden
-    // off-HAOS:
+    // off-HAOS or when the operator picked a different transport:
     //   * installed && started → green "running" confirmation
     //   * installed but stopped → warning "start the add-on"
     //   * not installed → warning "install Mosquitto"
     if (inlineHint) {
-        if (!inHaAddon) {
+        if (!inHaAddon || mode !== 'mqtt') {
             inlineHint.hidden = true;
             inlineHint.textContent = '';
             inlineHint.classList.remove('ha-mosquitto-inline-hint--ok', 'ha-mosquitto-inline-hint--warn');
@@ -5660,6 +5693,12 @@ async function _refreshCustomComponentState() {
     _updateCustomComponentHintVisibility();
 }
 
+// Path to the HA integration docs page that covers HACS install +
+// custom_component setup.  Centralised so the help links across the
+// tab stay consistent.
+var _HA_INTEGRATION_DOCS_URL = 'https://trudenboy.github.io/sendspin-bt-bridge/home-assistant-integration/';
+var _HA_HACS_DOCS_URL = _HA_INTEGRATION_DOCS_URL + '#path-a1--custom_component-hacs';
+
 function _updateCustomComponentHintVisibility() {
     var hint = document.getElementById('ha-transport-customcomp-hint');
     if (!hint) return;
@@ -5670,6 +5709,7 @@ function _updateCustomComponentHintVisibility() {
     if (!s || mode !== 'rest') {
         hint.hidden = true;
         hint.textContent = '';
+        hint.innerHTML = '';
         hint.classList.remove('ha-mosquitto-inline-hint--ok', 'ha-mosquitto-inline-hint--warn');
         return;
     }
@@ -5681,19 +5721,28 @@ function _updateCustomComponentHintVisibility() {
             lastSeen = '';
         }
     }
+    var docsLink = ' <a href="' + _HA_HACS_DOCS_URL +
+        '" target="_blank" rel="noopener">Setup guide</a>.';
     if (s.installed && s.started) {
         hint.hidden = false;
-        hint.textContent = 'HACS custom_component paired and currently active.' + lastSeen;
+        hint.innerHTML = 'HACS custom_component paired and currently active.' + escHtml(lastSeen);
         hint.classList.add('ha-mosquitto-inline-hint--ok');
         hint.classList.remove('ha-mosquitto-inline-hint--warn');
     } else if (s.installed) {
         hint.hidden = false;
-        hint.textContent = 'HACS custom_component has paired before but isn\'t currently active.' + lastSeen;
+        hint.innerHTML = 'HACS custom_component paired before but isn\'t currently active.' +
+            escHtml(lastSeen) + docsLink;
         hint.classList.add('ha-mosquitto-inline-hint--warn');
         hint.classList.remove('ha-mosquitto-inline-hint--ok');
     } else {
+        // No issued bearer token yet.  Could be either: HACS not installed
+        // at all, or HACS has the component but the integration entry
+        // hasn't been added in Settings → Devices & Services.  We can't
+        // tell those apart from the bridge's POV — point at the setup
+        // guide that walks through both states.
         hint.hidden = false;
-        hint.textContent = 'HACS custom_component hasn\'t paired with this bridge yet — install it via HACS, then add the integration in Home Assistant.';
+        hint.innerHTML = 'No HACS pairing detected yet.  If the integration is already installed via HACS, ' +
+            'add it in Home Assistant → Settings → Devices &amp; Services.' + docsLink;
         hint.classList.add('ha-mosquitto-inline-hint--warn');
         hint.classList.remove('ha-mosquitto-inline-hint--ok');
     }
@@ -5790,13 +5839,64 @@ function _readHaIntegrationFromForm(existingBlock) {
             tls: !!(document.getElementById('ha-mqtt-tls') || {}).checked,
             client_id: existingMqtt.client_id || ''
         },
-        rest: {
-            advertise_mdns: !!(document.getElementById('ha-rest-advertise-mdns') || {}).checked,
-            supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked,
-            advertise_host: ((document.getElementById('ha-rest-advertise-host') || {}).value || '').trim(),
-            advertise_port: parseInt((document.getElementById('ha-rest-advertise-port') || {}).value, 10) || 0
-        }
+        rest: (function() {
+            var restAuto = document.getElementById('ha-rest-use-autodetect');
+            var restAutoOn = !!(restAuto && restAuto.checked);
+            return {
+                advertise_mdns: !!(document.getElementById('ha-rest-advertise-mdns') || {}).checked,
+                supervisor_pair: !!(document.getElementById('ha-rest-supervisor-pair') || {}).checked,
+                // Auto-detect on → emit ``""`` / ``0`` so the runtime
+                // resolves at startup.  The displayed values are just
+                // the operator's preview of what would be advertised.
+                advertise_host: restAutoOn
+                    ? ''
+                    : ((document.getElementById('ha-rest-advertise-host') || {}).value || '').trim(),
+                advertise_port: restAutoOn
+                    ? 0
+                    : (parseInt((document.getElementById('ha-rest-advertise-port') || {}).value, 10) || 0)
+            };
+        })()
     };
+}
+
+// Quietly fetch the auto-detect probe and surface the resolved values
+// as a read-only preview in the form fields.  Used during populate
+// (so the operator sees what the bridge would resolve at startup
+// without having to click anything) and on toggle-flip from off→on.
+// Symmetric with ``_refreshRestAdvertiseDefaults`` for the REST card.
+//
+// Unlike ``_haMqttAutoDetect`` (the Suggest button handler), this:
+//   * keeps the host input disabled (preview, not editable);
+//   * does NOT mark the form dirty — populating defaults is not an
+//     operator-driven change;
+//   * does NOT overwrite operator-edited username / TLS toggle —
+//     those are write paths the saved config controls.
+async function _refreshMqttAutoDetectDefaults() {
+    var brokerInput = document.getElementById('ha-mqtt-broker');
+    var portInput = document.getElementById('ha-mqtt-port');
+    if (!brokerInput) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/mqtt/probe');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        if (!body || !body.found) {
+            // Probe missed — leave the placeholder text in place so
+            // the operator at least knows auto-detect will be tried at
+            // startup.
+            brokerInput.placeholder = 'auto-detect (no broker resolved yet)';
+            return;
+        }
+        // Display only — keep ``broker`` disabled so the operator
+        // can't accidentally mistake it for a typed override.
+        brokerInput.value = String(body.host || '');
+        brokerInput.disabled = true;
+        brokerInput.placeholder = 'auto-detect (resolved at startup)';
+        if (portInput && body.port && !portInput.value) {
+            portInput.value = String(body.port);
+        }
+    } catch (_) {
+        // Silent — preview is best-effort.
+    }
 }
 
 async function _haMqttAutoDetect() {
@@ -5884,12 +5984,16 @@ function _haAutoDetectToggle() {
     if (on) {
         brokerInput.value = '';
         brokerInput.disabled = true;
-        brokerInput.placeholder = 'auto-detect (resolved at startup)';
+        brokerInput.placeholder = 'auto-detect…';
         brokerInput.classList.remove('invalid');
         var brokerGroup = document.getElementById('ha-mqtt-broker-group');
         if (brokerGroup) brokerGroup.classList.remove('has-error');
         var errEl = document.getElementById('ha-mqtt-broker-error');
         if (errEl) errEl.textContent = '';
+        // Surface the auto-detected values as a read-only preview so
+        // the operator can see what the bridge will resolve to at
+        // startup (mirrors REST card's behaviour).
+        _refreshMqttAutoDetectDefaults();
     } else {
         brokerInput.disabled = false;
         brokerInput.placeholder = 'homeassistant.local';
@@ -6035,6 +6139,92 @@ async function _haMqttTestConnection() {
     } catch (exc) {
         setFeedback('Test failed: ' + (exc && exc.message ? exc.message : String(exc)), 'err');
     }
+}
+
+// REST mode helpers — symmetric with the MQTT helpers above so the two
+// transport cards behave the same way for the operator.
+//
+// ``_refreshRestAdvertiseDefaults`` fills the host/port fields with
+// the values the bridge would actually advertise via mDNS — pulled
+// from the ``/api/ha/rest/probe`` endpoint.  Used in two places:
+//   1. on form populate when no override is saved (so the operator
+//      sees the auto-detected values rather than empty placeholders);
+//   2. by the Suggest button to prefill the override fields with
+//      "what would auto-detect produce right now?"
+
+async function _refreshRestAdvertiseDefaults(opts) {
+    opts = opts || {};
+    var hostInput = document.getElementById('ha-rest-advertise-host');
+    var portInput = document.getElementById('ha-rest-advertise-port');
+    if (!hostInput || !portInput) return;
+    try {
+        var resp = await fetch(API_BASE + '/api/ha/rest/probe');
+        if (resp.status === 401) { _handleUnauthorized(); return; }
+        var body = await resp.json().catch(function() { return null; });
+        if (!body || !body.ok) return;
+        // ``opts.fillEvenIfDirty`` is set by the Suggest button — it
+        // explicitly wants to replace any operator input.  In the
+        // populate-on-load branch we only fill when the field is empty
+        // so we don't blow away an operator's edits on form refresh.
+        if (opts.fillEvenIfDirty || !hostInput.value) hostInput.value = String(body.host || '');
+        if (opts.fillEvenIfDirty || !portInput.value) portInput.value = String(body.port || '');
+        if (opts.fillEvenIfDirty) {
+            // Suggest also flips off auto-detect so the values stick on
+            // save — otherwise the form-read path would discard them.
+            var toggle = document.getElementById('ha-rest-use-autodetect');
+            if (toggle) {
+                toggle.checked = false;
+                toggle.setAttribute('aria-checked', 'false');
+            }
+            hostInput.disabled = false;
+            portInput.disabled = false;
+            _recomputeConfigDirtyState();
+        }
+        var hint = document.getElementById('ha-rest-suggest-hint');
+        if (hint && opts.fillEvenIfDirty) {
+            hint.textContent = body.hint || ('Auto-detected ' + body.host + ':' + body.port + '.');
+        }
+    } catch (exc) {
+        var hintEl = document.getElementById('ha-rest-suggest-hint');
+        if (hintEl && opts.fillEvenIfDirty) {
+            hintEl.textContent = 'Probe failed: ' + (exc && exc.message ? exc.message : exc);
+        }
+    }
+}
+
+function _haRestAutoDetectToggle() {
+    var toggle = document.getElementById('ha-rest-use-autodetect');
+    var hostInput = document.getElementById('ha-rest-advertise-host');
+    var portInput = document.getElementById('ha-rest-advertise-port');
+    if (!toggle) return;
+    var on = !!toggle.checked;
+    toggle.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (on) {
+        // Disable inputs and clear validation styling.
+        if (hostInput) {
+            hostInput.disabled = true;
+            hostInput.classList.remove('invalid');
+        }
+        if (portInput) {
+            portInput.disabled = true;
+            portInput.classList.remove('invalid');
+        }
+        // Show the auto-detected values so the operator sees what HA
+        // would receive, even though the field is read-only.  Force
+        // overwrite of any previously-typed override values so the
+        // disabled fields actually reflect the resolved defaults
+        // (otherwise stale overrides would sit there mislabelled as
+        // "auto-detected").
+        _refreshRestAdvertiseDefaults({fillEvenIfDirty: true});
+    } else {
+        if (hostInput) hostInput.disabled = false;
+        if (portInput) portInput.disabled = false;
+    }
+    _recomputeConfigDirtyState();
+}
+
+function _haRestSuggest() {
+    _refreshRestAdvertiseDefaults({fillEvenIfDirty: true});
 }
 
 async function _refreshHaIntegrationStatus() {
@@ -14292,6 +14482,8 @@ const _ACTION_REGISTRY = {
         return false;
     },
     'ha-mqtt-test':             () => { _haMqttTestConnection(); return false; },
+    'ha-rest-suggest':          () => { _haRestSuggest(); return false; },
+    'ha-rest-auto-detect-toggle': () => { _haRestAutoDetectToggle(); return false; },
     'ha-mqtt-tls-toggle':       () => { _haMqttTlsToggle(); return false; },
     'ha-auto-detect-toggle':    () => { _haAutoDetectToggle(); return false; },
     'ha-reconfigure':           () => { _haReconfigure(); return false; },

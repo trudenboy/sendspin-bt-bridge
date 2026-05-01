@@ -218,6 +218,45 @@ def test_mqtt_status_when_no_publisher(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/rest/probe — auto-detected advertise host/port
+# ---------------------------------------------------------------------------
+
+
+def test_rest_probe_returns_resolved_host(client, monkeypatch):
+    """Happy path: gethostbyname resolves to a LAN IP, web_port comes
+    back from resolve_web_port."""
+    monkeypatch.setattr(
+        "sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname",
+        lambda *_a, **_kw: "192.168.10.10",
+    )
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+    resp = client.get("/api/ha/rest/probe")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "192.168.10.10"
+    assert body["port"] == 8080
+    assert body["source"] == "hostname"
+
+
+def test_rest_probe_falls_back_when_hostname_resolves_to_zero(client, monkeypatch):
+    """``socket.gethostbyname`` failure → 0.0.0.0 fallback marked as
+    ``source="fallback"`` so the UI hint can warn the operator."""
+    import socket as _socket
+
+    def _raise(*_a, **_kw):
+        raise _socket.gaierror("no hostname")
+
+    monkeypatch.setattr("sendspin_bridge.services.ipc.bridge_mdns.socket.gethostbyname", _raise)
+    monkeypatch.setattr("sendspin_bridge.config.resolve_web_port", lambda: 8080)
+    resp = client.get("/api/ha/rest/probe")
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert body["host"] == "0.0.0.0"
+    assert body["source"] == "fallback"
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/custom_component/status — HACS integration heuristic
 # ---------------------------------------------------------------------------
 

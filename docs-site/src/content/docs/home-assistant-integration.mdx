@@ -119,12 +119,26 @@ sendspin/bridge/cmd/<command>                                       (subscribed)
 2. Install **Sendspin BT Bridge**.
 3. Restart Home Assistant.
 4. HA auto-discovers the bridge via mDNS and offers
-   **"Sendspin BT Bridge discovered"** in *Settings → Devices*.
+   **"Sendspin BT Bridge discovered"** in *Settings → Devices &
+   Services*.
 5. **On HAOS** — click *Configure*; the integration mints a token via
    the Supervisor pair endpoint with no further input.
-   **Off HAOS** — open the bridge web UI, *Home Assistant* panel, click
-   **Generate token**, copy it once, and paste into HA's confirmation
-   dialog.
+   **Off HAOS** — open the bridge web UI, *Configuration → Home
+   Assistant → Access tokens (HACS only)*, click **Generate token**,
+   copy it once, and paste into HA's confirmation dialog.
+
+### Multiple bridges on one Home Assistant
+
+Each bridge advertises a unique mDNS host_id (sha1 of its
+`BRIDGE_NAME`), so HA's Zeroconf flow surfaces a separate "Sendspin
+BT Bridge discovered" card for each bridge it sees on the LAN.  Run
+the pair flow once per bridge — they end up as independent config
+entries under *Settings → Devices & Services*, and their entities
+stay distinct because the bridge prefixes them with the bridge id.
+
+If two bridges advertise the same `BRIDGE_NAME` they collide on
+host_id; rename one (Configuration → General → Bridge name) before
+adding the second to HA.
 
 ### What you can automate
 

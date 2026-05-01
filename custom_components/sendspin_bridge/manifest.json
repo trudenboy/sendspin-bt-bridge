@@ -4,7 +4,7 @@
   "codeowners": ["@trudenboy"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://trudenboy.github.io/sendspin-bt-bridge/hacs_component",
+  "documentation": "https://trudenboy.github.io/sendspin-bt-bridge/home-assistant-integration/#path-a1--custom_component-hacs",
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/trudenboy/sendspin-bt-bridge/issues",

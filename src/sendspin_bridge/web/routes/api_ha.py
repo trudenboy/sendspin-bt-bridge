@@ -527,6 +527,56 @@ def api_ha_mqtt_test():
 
 
 # ---------------------------------------------------------------------------
+# /api/ha/rest/probe — auto-detected advertise host/port for the form
+# ---------------------------------------------------------------------------
+
+
+@ha_bp.route("/api/ha/rest/probe", methods=["GET"])
+def api_ha_rest_probe():
+    """Return the host + port the bridge would advertise via mDNS by default.
+
+    Mirrors ``/api/ha/mqtt/probe`` so the REST card can fill its
+    "Bridge host" / "Bridge port" override fields with sensible
+    initial values.  Auto-detection mirrors the mDNS advertiser:
+    ``socket.gethostbyname(socket.gethostname())`` for the host and
+    ``resolve_web_port()`` for the port.
+
+    Always returns 200 with ``{"ok": bool, "host": str, "port": int,
+    "source": str, "hint": str}``.  ``source`` is ``"hostname"`` for
+    a successful gethostbyname lookup or ``"fallback"`` when only a
+    bind-any (``0.0.0.0``) address is available.
+    """
+    try:
+        from sendspin_bridge.config import resolve_web_port
+        from sendspin_bridge.services.ipc.bridge_mdns import _resolve_host_address
+
+        host = _resolve_host_address()
+        port = int(resolve_web_port() or 8080)
+        source = "hostname" if host and host != "0.0.0.0" else "fallback"
+        hint = (
+            f"Auto-detected from this host's hostname ({host}:{port})."
+            if source == "hostname"
+            else (
+                f"Could not resolve a specific LAN address — using bind-any ({host}:{port}).  "
+                "Set Bridge host explicitly if Home Assistant cannot reach this bridge "
+                "on its hostname."
+            )
+        )
+        return jsonify({"ok": True, "host": host, "port": port, "source": source, "hint": hint})
+    except Exception as exc:
+        logger.exception("REST advertise probe failed")
+        return jsonify(
+            {
+                "ok": False,
+                "host": "",
+                "port": 0,
+                "source": "error",
+                "hint": f"Probe failed: {exc}",
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
 # /api/ha/mdns/status — mDNS advertiser diagnostics
 # ---------------------------------------------------------------------------
 
