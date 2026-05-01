@@ -4137,8 +4137,10 @@ body {
         }
         .bt-scan-results-box {
             margin-top: 0;
+        }
+        #scan-results-list {
             overflow-y: auto;
-            max-height: min(420px, 45vh);
+            max-height: min(380px, 44vh);
         }
         .bt-scan-modal-footer {
             justify-content: flex-end;

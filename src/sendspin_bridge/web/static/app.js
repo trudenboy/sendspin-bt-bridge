@@ -7401,6 +7401,24 @@ function _renderBtScanResults(devices) {
             pairAndAdd(d.mac, d.name, d.adapter, this);
         });
     });
+    // Position the "More options" split-menu popup via fixed coords so it
+    // escapes the scroll container without being clipped by overflow:auto.
+    listDiv.querySelectorAll('.scan-action-split-menu').forEach(function(details) {
+        details.addEventListener('toggle', function() {
+            var popup = details.querySelector('.scan-action-split-menu-list');
+            if (!popup) return;
+            if (details.open) {
+                var summary = details.querySelector('summary');
+                var rect = summary.getBoundingClientRect();
+                popup.style.position = 'fixed';
+                popup.style.right = (window.innerWidth - rect.right) + 'px';
+                popup.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+                popup.style.top = 'auto';
+            } else {
+                popup.style.cssText = '';
+            }
+        });
+    });
     box.hidden = !devices.length;
 }
 

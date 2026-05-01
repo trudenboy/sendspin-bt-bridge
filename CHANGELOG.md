@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.66.20] - 2026-05-01
+
+### Fixed
+- Scan results list now scrolls correctly when many Bluetooth devices are
+  found (third and final fix, follow-up to v2.66.17 and v2.66.19).
+  Previous attempts targeted `.bt-scan-results-box`, but a later CSS rule
+  (`overflow: visible !important`) intentionally resets overflow on that
+  element so the split-menu dropdown can escape clipping — that rule won
+  the cascade and `overflow-y: auto` never engaged.  Fixed by applying
+  `overflow-y: auto; max-height: min(380px, 44vh)` to the inner
+  `#scan-results-list` element directly, which is not subject to the
+  `overflow: visible` override.  The split-menu dropdown is repositioned
+  via `position: fixed` in JavaScript so it can still escape the scroll
+  container without requiring `overflow: visible` on any ancestor.
+
 ## [2.66.19] - 2026-05-01
 
 ### Fixed
