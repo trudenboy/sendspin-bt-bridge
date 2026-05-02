@@ -29,8 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   players in the same MA sync group: increase the delay on the
   *other* (faster) players to match the slowest BT one.
   ([#237](https://github.com/trudenboy/sendspin-bt-bridge/issues/237))
-- Project support channels documented in README — Liberapay, NOWPayments, and direct crypto (Lightning, BTC, USDT). Boosty kept on Russian-language surfaces only.
-- Documentation site now has a dedicated **Sponsor the project** page (English + Russian) with the full crypto address table, scannable QR codes, FAQ, and non-monetary contribution options.
+- Project support channels documented in README — Liberapay, Ko-fi, NOWPayments, and direct crypto (Lightning, BTC, USDT). Boosty kept on Russian-language surfaces only.
+- Documentation site now has a dedicated **Sponsor the project** page (English + Russian) with the full crypto address table, scannable QR codes (including Ko-fi profile QR), FAQ, and non-monetary contribution options.
 - Web UI header now includes a discreet **Sponsor** link next to Report / Docs / GitHub, opening the documentation site's Sponsor page in a new tab.
 
 ### Changed

@@ -154,12 +154,14 @@ Bridge уже рассматривает несколько runtime-поверх
 ## Поддержать проект
 
 [![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/trudenboy/donate)
+[![Buy Me a Coffee at Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/trudenboy)
 [![Donate Crypto via NOWPayments](https://img.shields.io/badge/Donate-Crypto-1976D2?style=for-the-badge&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
 [![Tip on Lightning](https://img.shields.io/badge/⚡-Tip_Sats-F7931A?style=for-the-badge&logoColor=white)](https://getalby.com/p/treepersistent936456)
 
 Если этот мост сэкономил вам время или хорошо лёг в вашу систему — можно поддержать разработку:
 
 - 💛 [Liberapay](https://liberapay.com/trudenboy) — регулярные донаты, дружественно к open-source, 0% комиссии платформы
+- ☕ [Ko-fi](https://ko-fi.com/trudenboy) — разовые «угостить кофе» донаты или месячные membership, принимает карты
 - 💜 [Boosty](https://boosty.to/trudenboy) — для аудитории СНГ, разовые и регулярные донаты
 - 💎 [Крипта через NOWPayments](https://nowpayments.io/donation/trudenboy) — one-click страница доната, 70+ монет, без регистрации
 

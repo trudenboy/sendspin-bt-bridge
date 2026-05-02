@@ -1,6 +1,6 @@
 ---
 title: Поддержать проект
-description: Способы поддержать разработку Sendspin Bluetooth Bridge — Liberapay, Boosty, NOWPayments и прямые крипто-донаты
+description: Способы поддержать разработку Sendspin Bluetooth Bridge — Liberapay, Ko-fi, Boosty, NOWPayments и прямые крипто-донаты
 ---
 
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
@@ -14,6 +14,11 @@ import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
     title="💛 Liberapay"
     description="Регулярные донаты, дружественно к open-source, 0% комиссии платформы. Подходит для западной аудитории."
     href="https://liberapay.com/trudenboy"
+  />
+  <LinkCard
+    title="☕ Ko-fi"
+    description="Разовые «угостить кофе» донаты или месячные membership. Принимает карты, известная платформа, без комиссий за tips."
+    href="https://ko-fi.com/trudenboy"
   />
   <LinkCard
     title="💜 Boosty"
@@ -34,6 +39,12 @@ import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 ### Отсканировать и оплатить
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; margin: 1.5rem 0; text-align: center;">
+
+<div>
+  <p style="margin: 0 0 0.5rem; font-weight: 600;">☕ Ko-fi</p>
+  <img src="/sendspin-bt-bridge/qr/kofi.png" alt="QR-код Ko-fi профиля" width="200" height="200" style="background: #fff; border-radius: 8px; padding: 8px; max-width: 100%; height: auto;" />
+  <p style="margin: 0.5rem 0 0; font-size: 0.75em; word-break: break-all;"><a href="https://ko-fi.com/trudenboy">ko-fi.com/trudenboy</a></p>
+</div>
 
 <div>
   <p style="margin: 0 0 0.5rem; font-weight: 600;">⚡ Lightning</p>
@@ -94,7 +105,7 @@ import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 Нет — это личный open-source проект, не зарегистрированная НКО. Донаты — это добровольный взнос, а не благотворительность в налоговом смысле.
 
-### Моей страны нет в списке поддерживаемых Liberapay / Boosty / NOWPayments. Что делать?
+### Моей страны нет в списке поддерживаемых Liberapay / Ko-fi / Boosty / NOWPayments. Что делать?
 
 Прямые крипто-адреса работают из любой точки мира. Если крипта тоже не вариант — напишите в [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge/issues), для крупных разовых донатов можно организовать SWIFT/Wise-перевод.
 
