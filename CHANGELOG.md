@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.68.0-rc.3] - 2026-05-02
+
 ### Added
 - Project support channels documented in README — Liberapay, Boosty, NOWPayments, and direct crypto (Lightning, BTC, USDT).
 - Documentation site now has a dedicated **Support the project** page (English + Russian) with the full crypto address table, FAQ, and non-monetary contribution options.
