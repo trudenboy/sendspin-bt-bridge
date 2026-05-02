@@ -37,6 +37,16 @@ UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
+# aiosendspin <5.1 doesn't define SET_STATIC_DELAY on PlayerCommand. Resolving
+# the enum lazily via getattr lets the bridge keep advertising VOLUME/MUTE and
+# handling other server commands on those older runtimes — the new code paths
+# (capability advertising in client/state, MA-inbound delay handling) just
+# short-circuit. The bridge currently pins aiosendspin==5.1.1, but the
+# <5.x compat code in this module (e.g. _handle_disconnect fallback) shows
+# this surface still ships to environments where defensive lookups are
+# the established pattern.
+_SET_STATIC_DELAY_CMD: Any = getattr(PlayerCommand, "SET_STATIC_DELAY", None)
+
 
 class BridgeDaemon(SendspinDaemon):
     """SendspinDaemon subclass that mirrors status into the bridge status dict.
@@ -145,9 +155,12 @@ class BridgeDaemon(SendspinDaemon):
                 "initial_volume": self._audio_handler.volume,
                 "initial_muted": self._audio_handler.muted,
                 # client/state advertises SET_STATIC_DELAY so MA can drive the
-                # per-player delay slider. Older aiosendspin (<5.1) drops this
-                # kwarg via filter_supported_call_kwargs and degrades silently.
-                "state_supported_commands": [PlayerCommand.SET_STATIC_DELAY],
+                # per-player delay slider. On aiosendspin <5.1 the enum value
+                # itself doesn't exist (resolved at module import as None);
+                # we send an empty list in that case so filter_supported_call_kwargs
+                # can drop the unknown kwarg without ever evaluating a
+                # missing attribute. The pin (5.1.1) covers this in production.
+                "state_supported_commands": ([_SET_STATIC_DELAY_CMD] if _SET_STATIC_DELAY_CMD is not None else []),
             },
         )
 
@@ -401,7 +414,11 @@ class BridgeDaemon(SendspinDaemon):
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._bridge_status["muted"] = cmd.mute
             self._notify()
-        elif cmd.command == PlayerCommand.SET_STATIC_DELAY and cmd.static_delay_ms is not None:
+        elif (
+            _SET_STATIC_DELAY_CMD is not None
+            and cmd.command == _SET_STATIC_DELAY_CMD
+            and cmd.static_delay_ms is not None
+        ):
             # aiosendspin's SendspinClient._handle_server_command auto-applied
             # the new delay via self.set_static_delay_ms(value) before this
             # listener fires. The sendspin AudioPlayer reads the post-clamp
@@ -415,6 +432,14 @@ class BridgeDaemon(SendspinDaemon):
                 else max(0, min(5000, int(cmd.static_delay_ms)))
             )
             self._bridge_status["static_delay_ms"] = applied
+            # IMPORTANT: also update the daemon-level cache. _handle_server_connection
+            # rebuilds the aiosendspin client via _create_client(self._static_delay_ms)
+            # on every server reconnect; without this the next reconnect would
+            # snap the delay back to the previous value (the one we were spawned
+            # with), undoing the MA-pushed change until the whole subprocess
+            # restarts. This mirrors what the local IPC path in daemon_process.py
+            # already does for parent-driven set_static_delay_ms commands.
+            self._static_delay_ms = float(applied)
             self._notify()
 
     # ── MA group updates ─────────────────────────────────────────────────────

@@ -161,6 +161,36 @@ def test_static_delay_ms_preserved_across_addon_restart(tmp_path):
     assert devs["AA:BB:CC:DD:EE:FF"]["static_delay_ms"] == 1200
 
 
+def test_static_delay_ms_preserved_across_mac_case_mismatch(tmp_path):
+    """Existing config.json stores MAC upper-case (config.save_device_*
+    normalizes), but options.json may carry the lower-case form the user
+    typed in the HA addon UI. The translator must normalize both sides
+    before looking up the preserve dict, otherwise the MA-driven delay
+    is silently lost on the next addon restart."""
+    existing = {
+        "BLUETOOTH_DEVICES": [
+            {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 850},
+        ],
+    }
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(
+        tmp_path / "options.json",
+        _minimal_options(
+            bluetooth_devices=[
+                {"mac": "aa:bb:cc:dd:ee:ff", "name": "Speaker"},
+            ],
+        ),
+    )
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    devs = cfg["BLUETOOTH_DEVICES"]
+    assert len(devs) == 1
+    assert devs[0]["static_delay_ms"] == 850
+
+
 def test_static_delay_ms_in_options_overrides_existing(tmp_path):
     """When options.json carries static_delay_ms, it must win over the existing config.
 

@@ -10800,6 +10800,16 @@ document.getElementById('config-form').addEventListener('submit', async function
         var result = await saveConfig();
         if (result && result.ok) {
             _markConfigSnapshotClean();
+            // Recalibrate the per-device delay baseline to the just-saved
+            // value. Without this the data-applied-delay attribute keeps
+            // pointing at the pre-save value, so the dirty-edit guard in
+            // refreshBtDeviceRowsRuntime() would treat any later MA-driven
+            // SSE update as conflicting with a "pending edit" and silently
+            // drop it until the page reloads. Save IS the explicit user
+            // confirmation we use to reset the baseline.
+            document.querySelectorAll('#bt-devices-table .bt-delay').forEach(function(el) {
+                el.dataset.appliedDelay = String(el.value || 0);
+            });
             // Re-poll HA integration status so the connection-status
             // banner converges to the new transport's live state
             // (publisher idle / connecting / connected for MQTT, mDNS
