@@ -41,12 +41,22 @@ for _mod in _MOCK_MODULES:
 
 # Provide minimal type stubs so bridge_daemon.py can import
 _types_mod = sys.modules["aiosendspin.models.types"]
-_types_mod.PlayerCommand = type("PlayerCommand", (), {"VOLUME": "volume", "MUTE": "mute"})  # type: ignore[attr-defined]
+_types_mod.PlayerCommand = type(  # type: ignore[attr-defined]
+    "PlayerCommand", (), {"VOLUME": "volume", "MUTE": "mute", "SET_STATIC_DELAY": "set_static_delay"}
+)
 _types_mod.UndefinedField = type("UndefinedField", (), {})  # type: ignore[attr-defined]
 
 _daemon_mod = sys.modules["sendspin.daemon.daemon"]
 _daemon_mod.DaemonArgs = MagicMock  # type: ignore[attr-defined]
-_daemon_mod.SendspinDaemon = type("SendspinDaemon", (), {"__init__": lambda self, args: None})  # type: ignore[attr-defined]
+_daemon_mod.SendspinDaemon = type(  # type: ignore[attr-defined]
+    "SendspinDaemon",
+    (),
+    {
+        "__init__": lambda self, args: None,
+        # No-op super for handlers BridgeDaemon overrides.
+        "_handle_server_command": lambda self, payload: None,
+    },
+)
 
 
 # Provide a real-ish ClientListener stub so BridgeDaemon._run_server_initiated can subclass it
@@ -262,6 +272,208 @@ class TestClientHelloRoles:
         assert captured_kwargs["roles"] == ["player-role", "metadata-role", "controller-role"]
         assert "artwork_support" not in captured_kwargs
         assert "visualizer_support" not in captured_kwargs
+        # Issue #237: bridge advertises SET_STATIC_DELAY via state_supported_commands
+        # so MA exposes the per-player static delay slider.
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+        assert captured_kwargs["state_supported_commands"] == [PlayerCommand.SET_STATIC_DELAY]
+
+    def test_create_client_omits_state_supported_commands_when_enum_missing(self, monkeypatch):
+        """On aiosendspin <5.1 PlayerCommand.SET_STATIC_DELAY doesn't exist.
+
+        Building `[PlayerCommand.SET_STATIC_DELAY]` directly would raise
+        AttributeError before filter_supported_call_kwargs ever sees it,
+        breaking _create_client entirely. The module resolves the enum value
+        once at import via getattr; when it's None we must pass an empty
+        list so the kwarg is harmless and gets dropped by the filter.
+        """
+        import sendspin_bridge.services.diagnostics.sendspin_compat as compat_mod
+        import sendspin_bridge.services.ipc.bridge_daemon as bd_mod
+
+        monkeypatch.setattr(bd_mod, "_SET_STATIC_DELAY_CMD", None)
+
+        daemon = _make_bridge_daemon()
+        daemon._audio_handler = SimpleNamespace(volume=25, muted=False)
+
+        _types_mod.Roles = type(
+            "Roles",
+            (),
+            {
+                "PLAYER": "player-role",
+                "METADATA": "metadata-role",
+                "CONTROLLER": "controller-role",
+                "ARTWORK": "artwork-role",
+                "VISUALIZER": "visualizer-role",
+            },
+        )
+
+        player_mod = sys.modules["aiosendspin.models.player"]
+        player_mod.ClientHelloPlayerSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
+
+        captured_kwargs: dict[str, object] = {}
+
+        class FakeSendspinClient:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+
+            def add_group_update_listener(self, _l):
+                return None
+
+            def add_metadata_listener(self, _l):
+                return None
+
+            def add_controller_state_listener(self, _l):
+                return None
+
+            def add_disconnect_listener(self, _l):
+                return None
+
+        sys.modules["aiosendspin.client"].SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]
+        monkeypatch.setattr(
+            compat_mod,
+            "detect_supported_audio_formats_for_device",
+            lambda _audio_device: [SimpleNamespace(codec="flac", channels=2, sample_rate=44100, bit_depth=16)],
+        )
+        monkeypatch.setattr(compat_mod, "filter_supported_call_kwargs", lambda _c, kwargs: dict(kwargs))
+
+        daemon._create_client()
+
+        # Empty list, not [None] — must not poison the upstream payload either.
+        assert captured_kwargs["state_supported_commands"] == []
+
+
+class TestServerCommandStaticDelay:
+    """Tests for inbound SET_STATIC_DELAY handling (issue #237)."""
+
+    def test_set_static_delay_mirrors_post_clamp_value_into_status(self):
+        daemon = _make_bridge_daemon()
+        # Simulate aiosendspin client that already auto-applied + clamped the
+        # inbound value (e.g. MA pushed 6000 → client clamped to 5000).
+        daemon._client = SimpleNamespace(static_delay_ms=5000)
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+        cmd = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=6000,  # raw inbound, pre-clamp
+        )
+        payload = SimpleNamespace(player=cmd)
+
+        daemon._handle_server_command(payload)
+
+        # Mirror the post-clamp value, NOT the raw inbound.
+        assert daemon._bridge_status["static_delay_ms"] == 5000
+        assert len(daemon._notified) == 1
+
+    def test_set_static_delay_falls_back_to_clamped_cmd_when_client_missing(self):
+        daemon = _make_bridge_daemon()
+        daemon._client = None  # subprocess startup race — client not yet attached
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+        cmd = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=750,
+        )
+        payload = SimpleNamespace(player=cmd)
+
+        daemon._handle_server_command(payload)
+
+        assert daemon._bridge_status["static_delay_ms"] == 750
+        assert len(daemon._notified) == 1
+
+    def test_set_static_delay_fallback_clamps_out_of_range_inbound(self):
+        daemon = _make_bridge_daemon()
+        daemon._client = None
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+        cmd = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=-10,
+        )
+        daemon._handle_server_command(SimpleNamespace(player=cmd))
+        assert daemon._bridge_status["static_delay_ms"] == 0
+
+        cmd2 = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=99999,
+        )
+        daemon._handle_server_command(SimpleNamespace(player=cmd2))
+        assert daemon._bridge_status["static_delay_ms"] == 5000
+
+    def test_set_static_delay_with_none_value_is_noop(self):
+        daemon = _make_bridge_daemon()
+        daemon._client = SimpleNamespace(static_delay_ms=300)
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+        cmd = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=None,
+        )
+        daemon._handle_server_command(SimpleNamespace(player=cmd))
+        assert "static_delay_ms" not in daemon._bridge_status
+        assert len(daemon._notified) == 0
+
+    def test_set_static_delay_updates_daemon_cache_for_reconnect_survival(self):
+        """Regression: MA-pushed delay must update self._static_delay_ms so a
+        subsequent server reconnect (which calls _create_client(self._static_delay_ms))
+        keeps the new value instead of snapping back to the old ctor arg."""
+        daemon = _make_bridge_daemon()
+        daemon._client = SimpleNamespace(static_delay_ms=1200)
+        daemon._static_delay_ms = 0.0  # the old ctor value
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+        cmd = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=1200,
+        )
+
+        daemon._handle_server_command(SimpleNamespace(player=cmd))
+
+        assert daemon._bridge_status["static_delay_ms"] == 1200
+        assert daemon._static_delay_ms == 1200.0
+
+    def test_set_static_delay_branch_skipped_when_enum_missing(self, monkeypatch):
+        """On aiosendspin <5.1 PlayerCommand.SET_STATIC_DELAY doesn't exist;
+        the bridge must not raise AttributeError when the elif comparison runs.
+
+        This regression guards against the dispatch path that handles VOLUME/MUTE
+        for older aiosendspin builds — a missing enum value MUST NOT crash the
+        dispatcher just because we added a new elif branch.
+        """
+        import sendspin_bridge.services.ipc.bridge_daemon as bd_mod
+
+        # Simulate the older-runtime case: module-level resolved sentinel is None.
+        monkeypatch.setattr(bd_mod, "_SET_STATIC_DELAY_CMD", None)
+
+        daemon = _make_bridge_daemon()
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+
+        # Even if the inbound payload somehow has a SET_STATIC_DELAY-like value,
+        # the elif must short-circuit on the None sentinel and not touch status.
+        cmd = SimpleNamespace(
+            command=PlayerCommand.SET_STATIC_DELAY,
+            volume=None,
+            mute=None,
+            static_delay_ms=400,
+        )
+        daemon._handle_server_command(SimpleNamespace(player=cmd))
+        assert "static_delay_ms" not in daemon._bridge_status
+        assert len(daemon._notified) == 0
+
+        # And ordinary VOLUME commands continue to work in the same dispatcher.
+        vol_cmd = SimpleNamespace(
+            command=PlayerCommand.VOLUME,
+            volume=42,
+            mute=None,
+            static_delay_ms=None,
+        )
+        daemon._handle_server_command(SimpleNamespace(player=vol_cmd))
+        assert daemon._bridge_status["volume"] == 42
 
 
 class TestExtendedMetadata:

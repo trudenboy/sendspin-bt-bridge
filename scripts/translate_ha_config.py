@@ -291,12 +291,22 @@ def main() -> None:
             if prior and prior.get("device_class"):
                 adapter["device_class"] = prior["device_class"]
 
-        # Preserve per-device web UI settings (e.g. keepalive) not present in options.json
+        # Preserve per-device web UI settings (e.g. keepalive) not present in options.json.
+        # MAC keys are normalized to upper-case on both sides because:
+        #   - save_device_volume / save_device_static_delay write upper-case
+        #     into config.json, but
+        #   - the Supervisor's options.json reflects the case the user typed
+        #     in the HA addon UI (often lowercase).
+        # Without normalization, a case mismatch silently drops ALL preserved
+        # fields for that device, not just static_delay_ms.
         existing_devs = {
-            d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if isinstance(d, dict) and d.get("mac")
+            d["mac"].strip().upper(): d
+            for d in existing.get("BLUETOOTH_DEVICES", [])
+            if isinstance(d, dict) and isinstance(d.get("mac"), str) and d["mac"].strip()
         }
         for dev in config["BLUETOOTH_DEVICES"]:
-            mac = dev.get("mac") if isinstance(dev, dict) else None
+            raw_mac = dev.get("mac") if isinstance(dev, dict) else None
+            mac = raw_mac.strip().upper() if isinstance(raw_mac, str) else None
             if mac and mac in existing_devs:
                 for field in (
                     "keepalive_silence",
@@ -306,6 +316,13 @@ def main() -> None:
                     "idle_disconnect_minutes",
                     "idle_mode",
                     "power_save_delay_minutes",
+                    # Preserve MA-pushed static_delay_ms across addon restarts.
+                    # The Supervisor options.json is the source of truth for
+                    # fields the user touched in the HA addon UI; everything
+                    # else (including delay set via MA) lives only in
+                    # config.json and would otherwise be reset on every
+                    # addon restart that triggers a config rebuild.
+                    "static_delay_ms",
                 ):
                     if field not in dev and field in existing_devs[mac]:
                         dev[field] = existing_devs[mac][field]

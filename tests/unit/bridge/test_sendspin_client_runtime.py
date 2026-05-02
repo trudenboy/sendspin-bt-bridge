@@ -891,3 +891,72 @@ async def _noop_async(*_args, **_kwargs):
 
 async def _eof_readline():
     return b""
+
+
+@pytest.mark.asyncio
+async def test_read_subprocess_output_persists_static_delay_from_ma(monkeypatch):
+    """When MA pushes SET_STATIC_DELAY → daemon mirrors to status → parent persists.
+
+    Issue #237: per-device static_delay_ms must be saved to BLUETOOTH_DEVICES[i]
+    (not a LAST_* runtime cache) so the value survives container restart.
+    """
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF")
+    client._daemon_proc = SimpleNamespace(
+        returncode=None,
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "static_delay_ms": 750,
+                    }
+                ).encode(),
+            ]
+        ),
+    )
+
+    saved: list[tuple[str, int]] = []
+
+    def _fake_save(mac, delay_ms):
+        saved.append((mac, delay_ms))
+
+    monkeypatch.setattr("sendspin_bridge.bridge.client.save_device_static_delay", _fake_save)
+
+    await client._read_subprocess_output()
+
+    assert saved == [("AA:BB:CC:DD:EE:FF", 750)]
+    # Parent-side cache also updated so warm_restart re-spawns with the new value.
+    assert client.static_delay_ms == 750.0
+
+
+@pytest.mark.asyncio
+async def test_read_subprocess_output_skips_static_delay_persist_when_no_mac(monkeypatch):
+    """No MAC (BT manager not initialized) → no save attempt; no crash."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.bt_manager = None  # type: ignore[assignment]
+    client._daemon_proc = SimpleNamespace(
+        returncode=None,
+        stdout=_FakeStdoutLines(
+            [
+                json.dumps(
+                    {
+                        "type": "status",
+                        "protocol_version": IPC_PROTOCOL_VERSION,
+                        "static_delay_ms": 400,
+                    }
+                ).encode(),
+            ]
+        ),
+    )
+
+    saved: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        "sendspin_bridge.bridge.client.save_device_static_delay",
+        lambda mac, val: saved.append((mac, val)),
+    )
+
+    await client._read_subprocess_output()
+
+    assert saved == []

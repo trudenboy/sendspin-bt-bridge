@@ -7142,7 +7142,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '</div>' +
         '<div class="bt-cell bt-cell--delay" data-label="Delay">' +
             '<input type="number" class="bt-delay" title="Extra delay on top of DAC-anchored sync (0\u20135000 ms)" aria-label="Static delay in milliseconds" placeholder="0" min="0" max="5000" value="' +
-                escHtmlAttr(String(delayVal)) + '" step="50">' +
+                escHtmlAttr(String(delayVal)) + '" step="50" data-applied-delay="' +
+                escHtmlAttr(String(delayVal)) + '">' +
         '</div>' +
         '<div class="bt-cell bt-cell--runtime" data-label="Live">' +
             '<div class="bt-runtime" aria-live="polite"></div>' +
@@ -7385,6 +7386,30 @@ function refreshBtDeviceRowsRuntime() {
         if (relBtn && runtime) {
             var mgmt = runtime.bt_management_enabled !== false;
             relBtn.textContent = mgmt ? 'Release Bluetooth' : 'Reclaim Bluetooth';
+        }
+        // Live-sync the .bt-delay input when the daemon reports a new
+        // static_delay_ms (e.g. MA pushed SET_STATIC_DELAY). Two guards:
+        //  1. Skip if the user is currently focused on the field
+        //     (overwriting active typing is jarring even if the value
+        //     happens to match the baseline).
+        //  2. Skip if the input value differs from the last applied
+        //     baseline (data-applied-delay) — that means the user typed
+        //     a new value but hasn't pressed Save yet, and an SSE poll
+        //     must NOT silently discard their pending edit.
+        // The baseline is updated when the row is first rendered, after
+        // a successful save, AND here when we accept a runtime push.
+        var delayEl = row.querySelector('.bt-delay');
+        if (delayEl && runtime && typeof runtime.static_delay_ms === 'number') {
+            var runtimeStr = String(runtime.static_delay_ms);
+            var appliedStr = delayEl.dataset.appliedDelay != null
+                ? String(delayEl.dataset.appliedDelay)
+                : delayEl.value;
+            var hasPendingEdit = String(delayEl.value) !== appliedStr;
+            if (!hasPendingEdit && document.activeElement !== delayEl
+                && delayEl.value !== runtimeStr) {
+                delayEl.value = runtimeStr;
+                delayEl.dataset.appliedDelay = runtimeStr;
+            }
         }
     });
 }
@@ -10775,6 +10800,16 @@ document.getElementById('config-form').addEventListener('submit', async function
         var result = await saveConfig();
         if (result && result.ok) {
             _markConfigSnapshotClean();
+            // Recalibrate the per-device delay baseline to the just-saved
+            // value. Without this the data-applied-delay attribute keeps
+            // pointing at the pre-save value, so the dirty-edit guard in
+            // refreshBtDeviceRowsRuntime() would treat any later MA-driven
+            // SSE update as conflicting with a "pending edit" and silently
+            // drop it until the page reloads. Save IS the explicit user
+            // confirmation we use to reset the baseline.
+            document.querySelectorAll('#bt-devices-table .bt-delay').forEach(function(el) {
+                el.dataset.appliedDelay = String(el.value || 0);
+            });
             // Re-poll HA integration status so the connection-status
             // banner converges to the new transport's live state
             // (publisher idle / connecting / connected for MQTT, mDNS

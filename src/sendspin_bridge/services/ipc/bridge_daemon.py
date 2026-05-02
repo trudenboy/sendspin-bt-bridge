@@ -37,6 +37,16 @@ UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
+# aiosendspin <5.1 doesn't define SET_STATIC_DELAY on PlayerCommand. Resolving
+# the enum lazily via getattr lets the bridge keep advertising VOLUME/MUTE and
+# handling other server commands on those older runtimes — the new code paths
+# (capability advertising in client/state, MA-inbound delay handling) just
+# short-circuit. The bridge currently pins aiosendspin==5.1.1, but the
+# <5.x compat code in this module (e.g. _handle_disconnect fallback) shows
+# this surface still ships to environments where defensive lookups are
+# the established pattern.
+_SET_STATIC_DELAY_CMD: Any = getattr(PlayerCommand, "SET_STATIC_DELAY", None)
+
 
 class BridgeDaemon(SendspinDaemon):
     """SendspinDaemon subclass that mirrors status into the bridge status dict.
@@ -49,6 +59,17 @@ class BridgeDaemon(SendspinDaemon):
                           Used by daemon_process.py to flush status to parent.
     """
 
+    # Single source of truth for the player state advertised in client/state
+    # messages we emit (e.g. when pushing a Web-UI-driven static_delay_ms back
+    # to MA). aiosendspin's handshake calls send_player_state with
+    # PlayerStateType.SYNCHRONIZED once at connect, and the bridge currently
+    # has no concept of error / buffering states surfaced over client/state —
+    # the AudioPlayer either streams or stops, with errors reported out-of-band
+    # (status envelope, daemon stderr). Keeping this as a class attribute lets
+    # future state-management code mutate it in one place without touching
+    # every send_player_state call site.
+    _last_player_state: object | None = None  # set in __init__ from PlayerStateType
+
     def __init__(
         self,
         args: DaemonArgs,
@@ -60,6 +81,14 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
+        # Initialise the synchronized state lazily so test fixtures that
+        # build a BridgeDaemon without aiosendspin installed still work.
+        try:
+            from aiosendspin.models.types import PlayerStateType
+
+            self._last_player_state = PlayerStateType.SYNCHRONIZED
+        except Exception:
+            self._last_player_state = None
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -125,6 +154,13 @@ class BridgeDaemon(SendspinDaemon):
                 "static_delay_ms": static_delay_ms,
                 "initial_volume": self._audio_handler.volume,
                 "initial_muted": self._audio_handler.muted,
+                # client/state advertises SET_STATIC_DELAY so MA can drive the
+                # per-player delay slider. On aiosendspin <5.1 the enum value
+                # itself doesn't exist (resolved at module import as None);
+                # we send an empty list in that case so filter_supported_call_kwargs
+                # can drop the unknown kwarg without ever evaluating a
+                # missing attribute. The pin (5.1.1) covers this in production.
+                "state_supported_commands": ([_SET_STATIC_DELAY_CMD] if _SET_STATIC_DELAY_CMD is not None else []),
             },
         )
 
@@ -377,6 +413,33 @@ class BridgeDaemon(SendspinDaemon):
             self._notify()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._bridge_status["muted"] = cmd.mute
+            self._notify()
+        elif (
+            _SET_STATIC_DELAY_CMD is not None
+            and cmd.command == _SET_STATIC_DELAY_CMD
+            and cmd.static_delay_ms is not None
+        ):
+            # aiosendspin's SendspinClient._handle_server_command auto-applied
+            # the new delay via self.set_static_delay_ms(value) before this
+            # listener fires. The sendspin AudioPlayer reads the post-clamp
+            # value per chunk so audio shifts naturally — we only mirror the
+            # value into bridge_status so the parent persists it and the
+            # web UI repaints.
+            client = getattr(self, "_client", None)
+            applied = (
+                int(client.static_delay_ms)
+                if client is not None and hasattr(client, "static_delay_ms")
+                else max(0, min(5000, int(cmd.static_delay_ms)))
+            )
+            self._bridge_status["static_delay_ms"] = applied
+            # IMPORTANT: also update the daemon-level cache. _handle_server_connection
+            # rebuilds the aiosendspin client via _create_client(self._static_delay_ms)
+            # on every server reconnect; without this the next reconnect would
+            # snap the delay back to the previous value (the one we were spawned
+            # with), undoing the MA-pushed change until the whole subprocess
+            # restarts. This mirrors what the local IPC path in daemon_process.py
+            # already does for parent-driven set_static_delay_ms commands.
+            self._static_delay_ms = float(applied)
             self._notify()
 
     # ── MA group updates ─────────────────────────────────────────────────────
