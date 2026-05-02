@@ -1,0 +1,83 @@
+---
+title: Support the project
+description: Ways to support development of Sendspin Bluetooth Bridge — Liberapay, Boosty, NOWPayments, and direct crypto donations
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+If this bridge saves you time or fits your setup well, you can support development directly. The project is MIT-licensed and stays free regardless of donations — there is no premium tier, no paywalled feature, no donor-only Discord. Filing a clear bug report or contributing a fix is just as valuable.
+
+## Quick options
+
+<CardGrid>
+  <LinkCard
+    title="💛 Liberapay"
+    description="Recurring donations, opensource-friendly, 0% platform fee. Best for Western supporters."
+    href="https://liberapay.com/trudenboy"
+  />
+  <LinkCard
+    title="💜 Boosty"
+    description="Для аудитории СНГ. Разовые и регулярные донаты, RU-карты принимаются напрямую."
+    href="https://boosty.to/trudenboy"
+  />
+  <LinkCard
+    title="💎 Crypto via NOWPayments"
+    description="One-click donation page. 70+ cryptocurrencies supported, no account required, Stripe-like UX."
+    href="https://nowpayments.io/donation/trudenboy"
+  />
+</CardGrid>
+
+## Direct crypto (zero fees, no intermediaries)
+
+Send directly from any wallet — no third party touches your contribution. Funds arrive instantly on the respective network.
+
+| Currency | Network | Address |
+|----------|---------|---------|
+| ⚡ Lightning | Bitcoin Lightning Network | `treepersistent936456@getalby.com` |
+| ₿ BTC | Bitcoin (Native SegWit) | `bc1qkxj9fgc78288udyn7mu4d3m5t0mvw8qsj8zga8` |
+| 💵 USDT | Tron (TRC20) — lowest fees | `TYX4TVFNkfJWhSVNLQiJK8o3Yafw8WxAgJ` |
+| 💵 USDT | Ethereum (ERC20) | `0x1ed18de295f3448538d36204dbc156da038046e8` |
+| 💵 USDT | BNB Smart Chain (BEP20) | `0x1ed18de295f3448538d36204dbc156da038046e8` |
+| 💵 USDT | Polygon | `0x1ed18de295f3448538d36204dbc156da038046e8` |
+| 💎 ETH | Ethereum mainnet | `0x1ed18de295f3448538d36204dbc156da038046e8` |
+| 🟡 BNB | BNB Smart Chain | `0x1ed18de295f3448538d36204dbc156da038046e8` |
+
+<Aside type="caution" title="Network selection matters">
+  Always pick the right network when sending. USDT on Tron (TRC20) cannot be received on an Ethereum address and vice versa — funds sent to the wrong network may be unrecoverable.
+</Aside>
+
+## What support funds
+
+- **🛠️ Test hardware.** Each new Bluetooth speaker model — IKEA, Sony, JBL, Yandex, no-name brands — has its own BlueZ quirks that can only be debugged on a real device.
+- **🌐 Infrastructure** — domain, documentation hosting, CI runners, occasional VPS for the test stand.
+- **⏱️ Time** to chase regressions in BlueZ and the broader Linux Bluetooth stack — where most of the unglamorous maintenance work lives.
+
+## FAQ
+
+### What does my donation buy me?
+
+Honestly: nothing exclusive. All features are available to everyone, all source code is public, all releases ship to GitHub the same day. You're supporting the project, not buying access.
+
+### Are donations tax-deductible?
+
+No — this is a personal opensource project, not a registered nonprofit. Donations are voluntary contributions, not charitable gifts in any tax-recognized sense.
+
+### My country is not in the supported list of Liberapay / Boosty / NOWPayments. What now?
+
+The direct crypto addresses above work from anywhere. If crypto isn't an option for you either, drop a note via [GitHub Issues](https://github.com/trudenboy/sendspin-bt-bridge/issues) — we can sort out a SWIFT/Wise transfer for larger one-time contributions.
+
+### Why no Stripe / PayPal / GitHub Sponsors / Buy Me a Coffee?
+
+All of those depend on Stripe for payouts, and Stripe doesn't currently support Kazakhstan or Russia (where the maintainer resides). Working around it would require establishing a US LLC or UK Ltd, which adds compliance overhead disproportionate to opensource donation volumes.
+
+### Can I see how donations are spent?
+
+Spending breakdown is summarized periodically in the [project changelog](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/CHANGELOG.md) and release notes when relevant (e.g., when new test hardware drives a compatibility fix).
+
+## Other ways to help (no money required)
+
+- 🐛 **File good bug reports** — clear repro steps and `docker logs` output save hours of guesswork.
+- 🔧 **Send pull requests** — even small fixes (typos, README clarifications, BlueZ quirk workarounds) are appreciated.
+- ⭐ **Star the repo** — helps discoverability for others looking for a Bluetooth bridge solution.
+- 📣 **Share the project** — Home Assistant forum, Reddit r/homeassistant, Discord servers, your homelab buddies.
+- 🌍 **Translate** — the bridge speaks English by default; native-language documentation contributions are welcome.
