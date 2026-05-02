@@ -628,3 +628,152 @@ async def test_read_commands_set_static_delay_falls_back_when_state_attr_missing
     assert applied == [300.0]
     assert len(send_state.calls) == 1
     assert send_state.calls[0]["state"] == "synchronized-fallback"
+
+
+# ── transport IPC parametric coverage (Track 2B controller audit) ─────────
+
+
+def _stub_media_command(monkeypatch):
+    """Provide a real-enum-shaped MediaCommand stub for the transport handler.
+
+    The daemon's transport branch does
+        ``_TRANSPORT_MAP = {mc.value: mc for mc in MediaCommand}``
+    so the stub must be iterable with ``.value`` per entry. The bare MagicMock
+    from the module-level stub block is neither.
+    """
+    from enum import Enum
+
+    class FakeMediaCommand(str, Enum):
+        PLAY = "play"
+        PAUSE = "pause"
+        STOP = "stop"
+        NEXT = "next"
+        PREVIOUS = "previous"
+        VOLUME = "volume"
+        MUTE = "mute"
+        REPEAT_OFF = "repeat_off"
+        REPEAT_ONE = "repeat_one"
+        REPEAT_ALL = "repeat_all"
+        SHUFFLE = "shuffle"
+        UNSHUFFLE = "unshuffle"
+
+    monkeypatch.setattr(
+        sys.modules["aiosendspin.models.types"],
+        "MediaCommand",
+        FakeMediaCommand,
+        raising=False,
+    )
+    return FakeMediaCommand
+
+
+def _make_transport_daemon():
+    """Build a daemon mock whose send_group_command captures call args.
+
+    The dispatcher fires the coroutine via ``asyncio.ensure_future``, so the
+    coroutine body may not run before the test asserts. We record args at
+    sync call time (when ``ensure_future(send_group_command(...))`` evaluates
+    the inner expression) and return a no-op coroutine — that way the call
+    is observable the moment the dispatcher reaches it.
+    """
+
+    class _CapturingCallable:
+        def __init__(self):
+            self.calls: list[tuple[object, dict]] = []
+
+        def __call__(self, mc, **kwargs):
+            self.calls.append((mc, dict(kwargs)))
+
+            async def _noop():
+                return None
+
+            return _noop()
+
+    send_group = _CapturingCallable()
+    daemon = MagicMock()
+    daemon._client = SimpleNamespace(connected=True, send_group_command=send_group)
+    return daemon, send_group
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "action",
+    [
+        "play",
+        "pause",
+        "stop",
+        "next",
+        "previous",
+        "repeat_off",
+        "repeat_one",
+        "repeat_all",
+        "shuffle",
+        "unshuffle",
+    ],
+)
+async def test_read_commands_transport_dispatches_all_media_commands(monkeypatch, action):
+    """Track 2B audit: every MediaCommand value MA's SUPPORTED_GROUP_COMMANDS
+    advertises must round-trip through the transport IPC handler.
+
+    Locks in the wiring so a future refactor of `_TRANSPORT_MAP` doesn't
+    silently drop a command MA's group UI relies on.
+    """
+    fake_mc = _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": action})
+
+    assert len(send_group.calls) == 1, f"action={action!r} did not dispatch"
+    dispatched_mc, kwargs = send_group.calls[0]
+    assert dispatched_mc == fake_mc(action)
+    # Pure transport actions don't pass volume/mute kwargs.
+    assert kwargs == {}
+
+
+@pytest.mark.asyncio
+async def test_read_commands_transport_volume_passes_clamped_value(monkeypatch):
+    fake_mc = _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "volume", "value": 150})
+
+    assert len(send_group.calls) == 1
+    dispatched_mc, kwargs = send_group.calls[0]
+    assert dispatched_mc == fake_mc.VOLUME
+    assert kwargs == {"volume": 100}  # clamped from 150
+
+
+@pytest.mark.asyncio
+async def test_read_commands_transport_mute_passes_bool(monkeypatch):
+    fake_mc = _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "mute", "value": True})
+
+    assert len(send_group.calls) == 1
+    dispatched_mc, kwargs = send_group.calls[0]
+    assert dispatched_mc == fake_mc.MUTE
+    assert kwargs == {"mute": True}
+
+
+@pytest.mark.asyncio
+async def test_read_commands_transport_unknown_action_no_dispatch(monkeypatch):
+    """Unknown action must warn + skip; no crash, no spurious dispatch."""
+    _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "fast_forward"})
+
+    assert send_group.calls == []
+
+
+@pytest.mark.asyncio
+async def test_read_commands_transport_ignored_when_client_disconnected(monkeypatch):
+    """No dispatch attempted if the aiosendspin client isn't connected — the
+    transport handler short-circuits with a 'client not connected' warning."""
+    _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+    daemon._client = SimpleNamespace(connected=False, send_group_command=send_group)
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "play"})
+
+    assert send_group.calls == []

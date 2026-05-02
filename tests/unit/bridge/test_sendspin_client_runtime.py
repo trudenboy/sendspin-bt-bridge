@@ -960,3 +960,100 @@ async def test_read_subprocess_output_skips_static_delay_persist_when_no_mac(mon
     await client._read_subprocess_output()
 
     assert saved == []
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_passes_bt_identity_in_subprocess_params(monkeypatch):
+    """Track 1: parent reads BT Alias/Modalias via D-Bus and threads them
+    through to the daemon subprocess as JSON params.
+
+    Without this, every bridged BT speaker shows up in MA as the same
+    "Sendspin BT Bridge vX" / hostname pair (#237 follow-up).
+    """
+    client = SendspinClient("ENEBY20", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+
+    # BluetoothManager exposes the D-Bus path; the parent walks Alias/Modalias.
+    client.bt_manager = SimpleNamespace(
+        connected=True,
+        configure_bluetooth_audio=lambda: True,
+        _dbus_device_path="/org/bluez/hci0/dev_FC_58_FA_EB_08_6C",
+    )
+    client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
+
+    def _fake_dbus_prop(_path, prop, **_kw):
+        return {
+            "Alias": "ENEBY20",
+            "Name": "ENEBY20",
+            # Sony vendor (0x009E) — picked up by vendor_from_modalias.
+            "Modalias": "bluetooth:v009Ep4020d0001",
+        }.get(prop)
+
+    monkeypatch.setattr("sendspin_bridge.bridge.client._dbus_get_device_property", _fake_dbus_prop)
+    # Find an available port immediately so we don't probe the network.
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8928)
+
+    captured_params: list[str] = []
+
+    async def _fake_subprocess_exec(*args, **_kw):
+        # The JSON params blob is the 4th positional arg (after python, -m, module name).
+        captured_params.append(args[3])
+        # Raise to short-circuit the rest of _start_sendspin_inner — we've
+        # captured what we need.
+        raise RuntimeError("intentional short-circuit")
+
+    with (
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_subprocess_exec),
+        patch.object(client, "is_running", return_value=False),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        # _start_sendspin_inner swallows subprocess-spawn exceptions and logs
+        # them; it does NOT re-raise. Just await — params were captured before
+        # the simulated failure.
+        await client._start_sendspin_inner()
+
+    assert captured_params, "create_subprocess_exec was never called"
+    payload = json.loads(captured_params[0])
+    assert payload["bt_product_name"] == "ENEBY20"
+    assert payload["bt_manufacturer"] == "Sony"
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_falls_back_to_empty_bt_identity(monkeypatch):
+    """When BlueZ returns None (no Alias/Modalias), the params carry empty
+    strings so the daemon falls back to the bridge-wide identity."""
+    client = SendspinClient("Unknown Speaker", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bt_manager = SimpleNamespace(
+        connected=True,
+        configure_bluetooth_audio=lambda: True,
+        _dbus_device_path="/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF",
+    )
+    client.bluetooth_sink_name = "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
+
+    monkeypatch.setattr(
+        "sendspin_bridge.bridge.client._dbus_get_device_property",
+        lambda _path, _prop, **_kw: None,
+    )
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8928)
+
+    captured_params: list[str] = []
+
+    async def _fake_subprocess_exec(*args, **_kw):
+        captured_params.append(args[3])
+        raise RuntimeError("intentional short-circuit")
+
+    with (
+        patch("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", side_effect=_fake_subprocess_exec),
+        patch.object(client, "is_running", return_value=False),
+        patch.object(client, "stop_sendspin", return_value=None),
+    ):
+        # _start_sendspin_inner swallows subprocess-spawn exceptions and logs
+        # them; it does NOT re-raise. Just await — params were captured before
+        # the simulated failure.
+        await client._start_sendspin_inner()
+
+    assert captured_params
+    payload = json.loads(captured_params[0])
+    assert payload["bt_product_name"] == ""
+    assert payload["bt_manufacturer"] == ""
