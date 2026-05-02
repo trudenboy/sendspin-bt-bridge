@@ -8,6 +8,7 @@
 [![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 [![Liberapay patrons](https://img.shields.io/liberapay/patrons/trudenboy.svg?logo=liberapay&color=f6c915)](https://liberapay.com/trudenboy/donate)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy_a_Coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/trudenboy)
 
 **🏠 [Лендинг](https://sendspin-bt-bridge.pages.dev/ru/)** · **📖 [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/)** · **🚀 [Демо](https://sendspin-demo.onrender.com)** · **💜 [Поддержать](#поддержать-проект)** · **🇬🇧 [English version](README.md)**
 

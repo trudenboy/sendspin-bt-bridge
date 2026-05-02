@@ -9,6 +9,7 @@
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom_Repository-41BDF5?style=flat&logo=homeassistant)](https://hacs.xyz/)
 [![Liberapay patrons](https://img.shields.io/liberapay/patrons/trudenboy.svg?logo=liberapay&color=f6c915)](https://liberapay.com/trudenboy/donate)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy_a_Coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/trudenboy)
 
 **🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **💜 [Sponsor](#sponsor-the-project)** · **RU [Русская версия](README.ru.md)**
 
