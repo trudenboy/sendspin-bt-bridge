@@ -158,6 +158,8 @@ Use the docs site for the full guides and reference:
 ## Sponsor the project
 
 [![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/trudenboy/donate)
+[![Donate Crypto via NOWPayments](https://img.shields.io/badge/Donate-Crypto-1976D2?style=for-the-badge&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
+[![Tip on Lightning](https://img.shields.io/badge/⚡-Tip_Sats-F7931A?style=for-the-badge&logoColor=white)](https://getalby.com/p/treepersistent936456)
 
 If this bridge saves you time or fits your setup well, consider sponsoring development:
 
