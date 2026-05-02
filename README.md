@@ -8,8 +8,9 @@
 [![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom_Repository-41BDF5?style=flat&logo=homeassistant)](https://hacs.xyz/)
+[![Liberapay patrons](https://img.shields.io/liberapay/patrons/trudenboy.svg?logo=liberapay&color=f6c915)](https://liberapay.com/trudenboy/donate)
 
-**🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **💜 [Support](#support-the-project)** · **RU [Русская версия](README.ru.md)**
+**🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **💜 [Sponsor](#sponsor-the-project)** · **RU [Русская версия](README.ru.md)**
 
 [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
@@ -154,9 +155,11 @@ Use the docs site for the full guides and reference:
 - [Home Assistant community thread](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762)
 - [Discord channel](https://discord.com/channels/330944238910963714/1479933490991599836)
 
-## Support the project
+## Sponsor the project
 
-If this bridge saves you time or fits your setup well, consider supporting development:
+[![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/trudenboy/donate)
+
+If this bridge saves you time or fits your setup well, consider sponsoring development:
 
 - 💛 [Liberapay](https://liberapay.com/trudenboy) — recurring, opensource-friendly, 0% platform fee
 - 💜 [Boosty](https://boosty.to/trudenboy) — для аудитории СНГ, разовые и регулярные донаты
@@ -171,7 +174,7 @@ If this bridge saves you time or fits your setup well, consider supporting devel
 
 The project is MIT-licensed and stays free regardless of donations — there is no premium tier or paywalled features. Filing a clear bug report or contributing a fix is just as valuable.
 
-See the [full Support page](https://trudenboy.github.io/sendspin-bt-bridge/support/) for the complete FAQ and additional payment networks.
+See the [full Sponsor page](https://trudenboy.github.io/sendspin-bt-bridge/support/) for the complete FAQ and additional payment networks.
 
 ## Project links
 
