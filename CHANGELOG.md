@@ -7,33 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.68.0-rc.3] - 2026-05-02
-
-### Added
-- Project support channels documented in README — Liberapay, Boosty, NOWPayments, and direct crypto (Lightning, BTC, USDT).
-- Documentation site now has a dedicated **Support the project** page (English + Russian) with the full crypto address table, FAQ, and non-monetary contribution options.
-- Web UI header now includes a discreet **Support** link next to Report / Docs / GitHub, opening the documentation site's Support page in a new tab.
-
-## [2.68.0-rc.2] - 2026-05-02
-
-### Changed
-- **Each bridged Bluetooth speaker now shows its own model and
-  manufacturer in Music Assistant's player card.**  Previously every
-  bridged speaker (ENEBY20, JBL Charge, WH-1000XM4, …) appeared as the
-  same `Sendspin BT Bridge vX` from the bridge host — there was no way
-  to tell them apart in MA without checking the player ID.  The bridge
-  now reads each speaker's BlueZ alias and Modalias at subprocess
-  spawn and surfaces them as the per-player `model` / `manufacturer`
-  in MA, with a curated vendor map covering common consumer brands
-  (Sony, Bose, JBL/Harman, IKEA/Sonos, Apple, Samsung, Yandex,
-  Beats, Skullcandy, Garmin, Logitech, …).  Unknown vendor IDs fall
-  back to the bridge host name (the prior behaviour, no regression).
-  The `software_version` field now consistently carries the bridge
-  release plus the underlying `aiosendspin` library version, so
-  operators can correlate behaviour across players from a single
-  glance at the MA UI.
-
-## [2.68.0-rc.1] - 2026-05-02
+## [2.68.0] - 2026-05-02
 
 ### Added
 - **Music Assistant can now set the per-player sync delay (0–5000 ms)
@@ -55,6 +29,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   players in the same MA sync group: increase the delay on the
   *other* (faster) players to match the slowest BT one.
   ([#237](https://github.com/trudenboy/sendspin-bt-bridge/issues/237))
+- Project support channels documented in README — Liberapay, NOWPayments, and direct crypto (Lightning, BTC, USDT). Boosty kept on Russian-language surfaces only.
+- Documentation site now has a dedicated **Sponsor the project** page (English + Russian) with the full crypto address table, scannable QR codes, FAQ, and non-monetary contribution options.
+- Web UI header now includes a discreet **Sponsor** link next to Report / Docs / GitHub, opening the documentation site's Sponsor page in a new tab.
+
+### Changed
+- **Each bridged Bluetooth speaker now shows its own model and
+  manufacturer in Music Assistant's player card.**  Previously every
+  bridged speaker (ENEBY20, JBL Charge, WH-1000XM4, …) appeared as the
+  same `Sendspin BT Bridge vX` from the bridge host — there was no way
+  to tell them apart in MA without checking the player ID.  The bridge
+  now reads each speaker's BlueZ alias and Modalias at subprocess
+  spawn and surfaces them as the per-player `model` / `manufacturer`
+  in MA, with a curated vendor map covering common consumer brands
+  (Sony, Bose, JBL/Harman, IKEA/Sonos, Apple, Samsung, Yandex,
+  Beats, Skullcandy, Garmin, Logitech, …).  Unknown vendor IDs fall
+  back to the bridge host name (the prior behaviour, no regression).
+  The `software_version` field now consistently carries the bridge
+  release plus the underlying `aiosendspin` library version, so
+  operators can correlate behaviour across players from a single
+  glance at the MA UI.
 
 ## [2.67.2] - 2026-05-01
 
