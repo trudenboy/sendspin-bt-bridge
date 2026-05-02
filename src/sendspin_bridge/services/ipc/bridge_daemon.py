@@ -57,6 +57,16 @@ class BridgeDaemon(SendspinDaemon):
         bluetooth_sink_name: PulseAudio/PipeWire sink name for volume sync.
         on_status_change: Optional callback() called whenever status is mutated.
                           Used by daemon_process.py to flush status to parent.
+        bt_product_name: BT-derived friendly speaker name (Alias / Name) read
+                         by the parent from BlueZ at spawn. Surfaced as
+                         `client/hello.device_info.product_name` so MA's
+                         player card shows each bridged speaker distinctly.
+                         Empty string falls back to the bridge-wide identity
+                         (`Sendspin BT Bridge vX`) for backward compatibility.
+        bt_manufacturer: BT vendor name resolved from `org.bluez.Device1.Modalias`
+                         via `bluetooth.vendor_map.vendor_from_modalias`.
+                         Surfaced as `client/hello.device_info.manufacturer`.
+                         Empty string falls back to the bridge host name.
     """
 
     # Single source of truth for the player state advertised in client/state
