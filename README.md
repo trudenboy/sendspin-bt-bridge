@@ -164,7 +164,6 @@ Use the docs site for the full guides and reference:
 If this bridge saves you time or fits your setup well, consider sponsoring development:
 
 - 💛 [Liberapay](https://liberapay.com/trudenboy) — recurring, opensource-friendly, 0% platform fee
-- 💜 [Boosty](https://boosty.to/trudenboy) — для аудитории СНГ, разовые и регулярные донаты
 - 💎 [Crypto via NOWPayments](https://nowpayments.io/donation/trudenboy) — one-click donation page, 70+ coins, no account required
 
 ### Direct crypto (zero fees, no intermediaries)
