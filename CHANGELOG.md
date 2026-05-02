@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Music Assistant can now set the per-player sync delay (0–5000 ms)
+  for bridged Bluetooth speakers directly from the player settings
+  panel.**  Until now the bridge persisted a per-device static delay
+  internally (configurable via the bridge Web UI), but never advertised
+  the capability to MA — so the "Static playback delay (ms)" slider
+  never appeared next to the bridged BT player.  The bridge now
+  advertises `set_static_delay` via `client/state`, applies inbound
+  changes from MA without restarting the audio stream, persists the
+  new value to the device config so it survives a restart, and pushes
+  Web-UI-driven changes back to MA so both UIs stay aligned.  Use it
+  to compensate when a Bluetooth speaker plays audibly later than
+  Sonos / AirPlay players in the same MA sync group: increase the
+  delay on the *other* (faster) players to match the slowest BT one.
+  ([#237](https://github.com/trudenboy/sendspin-bt-bridge/issues/237))
+
 ## [2.67.2] - 2026-05-01
 
 ### Fixed

@@ -85,6 +85,7 @@ __all__ = [
     "resolve_device_room_context",
     "resolve_web_port",
     "save_device_sink",
+    "save_device_static_delay",
     "save_device_volume",
     "update_config",
     "write_config_file",
@@ -402,6 +403,40 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
         update_config(_set_sink)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save sink for %s: %s", mac, e)
+
+
+def save_device_static_delay(mac: str | None, delay_ms: int) -> None:
+    """Persist per-device static_delay_ms to BLUETOOTH_DEVICES[i].static_delay_ms.
+
+    Used when MA pushes a SET_STATIC_DELAY command — the parent extracts the
+    new value from the daemon's status update and writes it through to config
+    so the change survives a restart. Unlike LAST_VOLUMES (a runtime cache),
+    static_delay_ms is a per-device config field, so it is mutated in-place
+    on the device dict.
+    """
+    if not mac or not CONFIG_FILE.exists():
+        return
+    try:
+        clamped = max(0, min(5000, int(delay_ms)))
+    except (TypeError, ValueError):
+        logger.warning("Skipping static_delay_ms save for %s: invalid value %r", mac, delay_ms)
+        return
+
+    def _set_delay(cfg: dict) -> None:
+        normalized_mac = mac.strip().upper()
+        for device in cfg.get("BLUETOOTH_DEVICES", []):
+            if not isinstance(device, dict):
+                continue
+            device_mac = device.get("mac", "")
+            if isinstance(device_mac, str) and device_mac.strip().upper() == normalized_mac:
+                device["static_delay_ms"] = clamped
+                return
+        logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", normalized_mac)
+
+    try:
+        update_config(_set_delay)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save static_delay_ms for %s: %s", mac, e)
 
 
 def load_config() -> dict:

@@ -7386,6 +7386,16 @@ function refreshBtDeviceRowsRuntime() {
             var mgmt = runtime.bt_management_enabled !== false;
             relBtn.textContent = mgmt ? 'Release Bluetooth' : 'Reclaim Bluetooth';
         }
+        // Live-sync the .bt-delay input when the daemon reports a new
+        // static_delay_ms (e.g. MA pushed SET_STATIC_DELAY). Skip if the
+        // user is currently editing the field — overwriting active input
+        // would clobber what they're typing.
+        var delayEl = row.querySelector('.bt-delay');
+        if (delayEl && runtime && typeof runtime.static_delay_ms === 'number'
+            && document.activeElement !== delayEl
+            && Number(delayEl.value) !== runtime.static_delay_ms) {
+            delayEl.value = String(runtime.static_delay_ms);
+        }
     });
 }
 

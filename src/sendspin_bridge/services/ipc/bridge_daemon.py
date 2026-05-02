@@ -125,6 +125,10 @@ class BridgeDaemon(SendspinDaemon):
                 "static_delay_ms": static_delay_ms,
                 "initial_volume": self._audio_handler.volume,
                 "initial_muted": self._audio_handler.muted,
+                # client/state advertises SET_STATIC_DELAY so MA can drive the
+                # per-player delay slider. Older aiosendspin (<5.1) drops this
+                # kwarg via filter_supported_call_kwargs and degrades silently.
+                "state_supported_commands": [PlayerCommand.SET_STATIC_DELAY],
             },
         )
 
@@ -377,6 +381,21 @@ class BridgeDaemon(SendspinDaemon):
             self._notify()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._bridge_status["muted"] = cmd.mute
+            self._notify()
+        elif cmd.command == PlayerCommand.SET_STATIC_DELAY and cmd.static_delay_ms is not None:
+            # aiosendspin's SendspinClient._handle_server_command auto-applied
+            # the new delay via self.set_static_delay_ms(value) before this
+            # listener fires. The sendspin AudioPlayer reads the post-clamp
+            # value per chunk so audio shifts naturally — we only mirror the
+            # value into bridge_status so the parent persists it and the
+            # web UI repaints.
+            client = getattr(self, "_client", None)
+            applied = (
+                int(client.static_delay_ms)
+                if client is not None and hasattr(client, "static_delay_ms")
+                else max(0, min(5000, int(cmd.static_delay_ms)))
+            )
+            self._bridge_status["static_delay_ms"] = applied
             self._notify()
 
     # ── MA group updates ─────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ from sendspin_bridge.config import (
     _player_id_from_mac,
     config_lock,
     get_runtime_version,
+    save_device_static_delay,
     save_device_volume,
 )
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
@@ -200,6 +201,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "track_progress_ms",
         "track_duration_ms",
         "ma_reconnecting",
+        "static_delay_ms",
     }
 )
 
@@ -1495,6 +1497,17 @@ class SendspinClient:
                     _mac = self.bt_manager.mac_address if self.bt_manager else None
                     if isinstance(new_volume, int) and _mac:
                         save_device_volume(_mac, new_volume)
+                    # MA-driven static_delay_ms changes flow through the daemon's
+                    # status mirror (BridgeDaemon._handle_server_command). Persist
+                    # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
+                    # survives restart and the bridge UI repaints from config.
+                    new_delay = updates.get("static_delay_ms")
+                    if isinstance(new_delay, int) and _mac:
+                        save_device_static_delay(_mac, new_delay)
+                        # Keep the parent-side cache in sync so a subsequent
+                        # warm_restart doesn't re-spawn the subprocess with a
+                        # stale ctor value.
+                        self.static_delay_ms = float(new_delay)
                     # Sync unmute to MA after reconnect (#132) and after
                     # initial spawn (the daemon mutes the PA sink during
                     # startup to hide format-probe noise; MA polls

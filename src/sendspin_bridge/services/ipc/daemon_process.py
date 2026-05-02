@@ -458,9 +458,11 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             delay_ms = max(0.0, min(5000.0, delay_ms))
             client = getattr(daemon, "_client", None) if daemon else None
             setter = getattr(client, "set_static_delay_ms", None) if client else None
+            applied = False
             if callable(setter):
                 try:
                     setter(delay_ms)
+                    applied = True
                 except Exception as exc:
                     logger.warning("set_static_delay_ms failed: %s", exc)
             else:
@@ -470,6 +472,23 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             # uses the new value, not the stale ctor arg.
             if daemon is not None:
                 daemon._static_delay_ms = delay_ms
+            # Push the updated player state to MA so its slider repaints.
+            # aiosendspin.set_static_delay_ms updates _static_delay_us locally
+            # but does NOT auto-emit client/state — explicit push is required.
+            if applied and client is not None and getattr(client, "connected", False):
+                try:
+                    from aiosendspin.models.types import PlayerStateType
+
+                    audio_handler = getattr(daemon, "_audio_handler", None)
+                    cur_volume = int(getattr(audio_handler, "volume", 100)) if audio_handler else 100
+                    cur_muted = bool(getattr(audio_handler, "muted", False)) if audio_handler else False
+                    await client.send_player_state(
+                        state=PlayerStateType.SYNCHRONIZED,
+                        volume=cur_volume,
+                        muted=cur_muted,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to push static_delay_ms to MA: %s", exc)
         elif cmd.cmd == "transport":
             daemon = daemon_ref[0] if daemon_ref else None
             action = str(cmd.payload.get("action", "")).strip()
