@@ -154,6 +154,22 @@ Use the docs site for the full guides and reference:
 - [Home Assistant community thread](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762)
 - [Discord channel](https://discord.com/channels/330944238910963714/1479933490991599836)
 
+## Support the project
+
+If this bridge saves you time or fits your setup well, consider supporting development:
+
+- 💛 [Liberapay](https://liberapay.com/trudenboy) — recurring, opensource-friendly, 0% platform fee
+- 💜 [Boosty](https://boosty.to/trudenboy) — для аудитории СНГ, разовые и регулярные донаты
+
+### Direct crypto (zero fees, no intermediaries)
+
+- ⚡ **Lightning:** `treepersistent936456@getalby.com`
+- ₿ **BTC:** `bc1qkxj9fgc78288udyn7mu4d3m5t0mvw8qsj8zga8`
+- 💵 **USDT (TRC20):** `TYX4TVFNkfJWhSVNLQiJK8o3Yafw8WxAgJ`
+- 💵 **USDT / ETH (ERC20 / BSC / Polygon):** `0x1ed18de295f3448538d36204dbc156da038046e8`
+
+The project is MIT-licensed and stays free regardless of donations — there is no premium tier or paywalled features. Filing a clear bug report or contributing a fix is just as valuable.
+
 ## Project links
 
 - [Contributing](CONTRIBUTING.md)
