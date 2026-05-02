@@ -475,6 +475,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             # Push the updated player state to MA so its slider repaints.
             # aiosendspin.set_static_delay_ms updates _static_delay_us locally
             # but does NOT auto-emit client/state — explicit push is required.
+            # Reuse the daemon's tracked _last_player_state instead of
+            # hard-coding SYNCHRONIZED so future state machinery can drive
+            # this without touching the IPC layer.
             if applied and client is not None and getattr(client, "connected", False):
                 try:
                     from aiosendspin.models.types import PlayerStateType
@@ -482,8 +485,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     audio_handler = getattr(daemon, "_audio_handler", None)
                     cur_volume = int(getattr(audio_handler, "volume", 100)) if audio_handler else 100
                     cur_muted = bool(getattr(audio_handler, "muted", False)) if audio_handler else False
+                    cur_state = getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED
                     await client.send_player_state(
-                        state=PlayerStateType.SYNCHRONIZED,
+                        state=cur_state,
                         volume=cur_volume,
                         muted=cur_muted,
                     )

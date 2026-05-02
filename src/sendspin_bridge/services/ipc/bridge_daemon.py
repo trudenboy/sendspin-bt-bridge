@@ -49,6 +49,17 @@ class BridgeDaemon(SendspinDaemon):
                           Used by daemon_process.py to flush status to parent.
     """
 
+    # Single source of truth for the player state advertised in client/state
+    # messages we emit (e.g. when pushing a Web-UI-driven static_delay_ms back
+    # to MA). aiosendspin's handshake calls send_player_state with
+    # PlayerStateType.SYNCHRONIZED once at connect, and the bridge currently
+    # has no concept of error / buffering states surfaced over client/state —
+    # the AudioPlayer either streams or stops, with errors reported out-of-band
+    # (status envelope, daemon stderr). Keeping this as a class attribute lets
+    # future state-management code mutate it in one place without touching
+    # every send_player_state call site.
+    _last_player_state: object | None = None  # set in __init__ from PlayerStateType
+
     def __init__(
         self,
         args: DaemonArgs,
@@ -60,6 +71,14 @@ class BridgeDaemon(SendspinDaemon):
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
+        # Initialise the synchronized state lazily so test fixtures that
+        # build a BridgeDaemon without aiosendspin installed still work.
+        try:
+            from aiosendspin.models.types import PlayerStateType
+
+            self._last_player_state = PlayerStateType.SYNCHRONIZED
+        except Exception:
+            self._last_player_state = None
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""

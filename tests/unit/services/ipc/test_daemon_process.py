@@ -441,3 +441,156 @@ async def test_read_commands_invalid_volume_no_crash():
 
     # Volume should remain unchanged
     assert daemon._bridge_status["volume"] == 50
+
+
+# ── set_static_delay_ms IPC branch (issue #237) ──────────────────────────
+
+
+def _make_static_delay_daemon(*, connected: bool = True, setter=None, raise_on_setter: bool = False):
+    """Build a MagicMock daemon for set_static_delay_ms tests.
+
+    The local IPC path calls daemon._client.set_static_delay_ms(N) and then,
+    on success, awaits daemon._client.send_player_state(...). Tests assert
+    against the mocked client.
+    """
+
+    class _AsyncMock:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def __call__(self, **kwargs):
+            self.calls.append(kwargs)
+
+    if setter is None:
+        applied: list[float] = []
+
+        def _setter(value):
+            if raise_on_setter:
+                raise RuntimeError("simulated setter failure")
+            applied.append(value)
+
+        setter = _setter
+        applied_ref = applied
+    else:
+        applied_ref = []
+
+    send_state = _AsyncMock()
+    daemon = MagicMock()
+    daemon._client = SimpleNamespace(
+        connected=connected,
+        set_static_delay_ms=setter,
+        send_player_state=send_state,
+    )
+    daemon._audio_handler = SimpleNamespace(volume=42, muted=False)
+    daemon._last_player_state = "synchronized-sentinel"
+    daemon._static_delay_ms = 0.0
+    return daemon, send_state, applied_ref
+
+
+async def _run_one_command(daemon, cmd_payload):
+    daemon_ref = [daemon]
+    stop_event = asyncio.Event()
+    cmd_line = json.dumps(cmd_payload) + "\n"
+
+    async def _fake_connect_read_pipe(protocol_factory, pipe):
+        protocol = protocol_factory()
+        protocol.connection_made(MagicMock())
+        protocol.data_received(cmd_line.encode())
+        protocol.eof_received()
+
+    with pytest.MonkeyPatch.context() as mp:
+        loop = asyncio.get_running_loop()
+        mp.setattr(loop, "connect_read_pipe", _fake_connect_read_pipe)
+        await asyncio.wait_for(_read_commands(daemon_ref, stop_event), timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_applies_and_pushes_to_ma():
+    """Happy path: setter applies, daemon caches new value, send_player_state pushes to MA."""
+    daemon, send_state, applied = _make_static_delay_daemon(connected=True)
+
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 750})
+
+    assert applied == [750.0]
+    assert daemon._static_delay_ms == 750.0
+    assert len(send_state.calls) == 1
+    pushed = send_state.calls[0]
+    assert pushed["volume"] == 42
+    assert pushed["muted"] is False
+    # Reuses daemon's tracked _last_player_state instead of hard-coding.
+    assert pushed["state"] == "synchronized-sentinel"
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_clamps_above_5000():
+    daemon, send_state, applied = _make_static_delay_daemon(connected=True)
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 9999})
+    assert applied == [5000.0]
+    assert daemon._static_delay_ms == 5000.0
+    assert len(send_state.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_clamps_below_zero():
+    daemon, send_state, applied = _make_static_delay_daemon(connected=True)
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": -250})
+    assert applied == [0.0]
+    assert daemon._static_delay_ms == 0.0
+    assert len(send_state.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_skips_push_when_disconnected():
+    """If the aiosendspin client isn't connected, no client/state push is attempted."""
+    daemon, send_state, applied = _make_static_delay_daemon(connected=False)
+
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 500})
+
+    # Local apply still happens (so subsequent reconnect picks it up via the cache)
+    assert applied == [500.0]
+    assert daemon._static_delay_ms == 500.0
+    # but the bridge→MA push is gated on connected=True
+    assert send_state.calls == []
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_skips_push_when_setter_raises():
+    """If aiosendspin.set_static_delay_ms raises, the push must NOT fire (applied=False)."""
+    daemon, send_state, _applied = _make_static_delay_daemon(connected=True, raise_on_setter=True)
+
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 600})
+
+    # Daemon-level cache still updated for next reconnect (existing behaviour).
+    assert daemon._static_delay_ms == 600.0
+    # But MA isn't told about a value the local setter rejected.
+    assert send_state.calls == []
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_invalid_value_no_crash_no_push():
+    """Non-numeric value should warn + skip; no setter, no push, no cache write."""
+    daemon, send_state, applied = _make_static_delay_daemon(connected=True)
+
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": "loud"})
+
+    assert applied == []
+    assert send_state.calls == []
+    assert daemon._static_delay_ms == 0.0  # untouched
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_falls_back_when_state_attr_missing():
+    """Older daemon instances without _last_player_state still emit a SYNCHRONIZED push."""
+    daemon, send_state, applied = _make_static_delay_daemon(connected=True)
+    # Simulate an old daemon that hasn't been initialised with the attribute.
+    del daemon._last_player_state
+
+    # Need PlayerStateType to be a real enum-ish object so the fallback works.
+    fake_pst = SimpleNamespace(SYNCHRONIZED="synchronized-fallback")
+    sys.modules["aiosendspin.models.types"].PlayerStateType = fake_pst
+
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 300})
+
+    assert applied == [300.0]
+    assert len(send_state.calls) == 1
+    assert send_state.calls[0]["state"] == "synchronized-fallback"

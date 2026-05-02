@@ -306,6 +306,13 @@ def main() -> None:
                     "idle_disconnect_minutes",
                     "idle_mode",
                     "power_save_delay_minutes",
+                    # Preserve MA-pushed static_delay_ms across addon restarts.
+                    # The Supervisor options.json is the source of truth for
+                    # fields the user touched in the HA addon UI; everything
+                    # else (including delay set via MA) lives only in
+                    # config.json and would otherwise be reset on every
+                    # addon restart that triggers a config rebuild.
+                    "static_delay_ms",
                 ):
                     if field not in dev and field in existing_devs[mac]:
                         dev[field] = existing_devs[mac][field]

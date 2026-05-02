@@ -134,6 +134,63 @@ def test_zero_bt_check_interval(tmp_path):
 # ── Runtime state preservation ───────────────────────────────────────────
 
 
+def test_static_delay_ms_preserved_across_addon_restart(tmp_path):
+    """MA-pushed static_delay_ms must survive an addon restart (issue #237).
+
+    options.json (the Supervisor's per-addon config the user edits in the HA
+    addon UI) doesn't carry static_delay_ms when it's set externally — MA
+    pushes the value via the sendspin protocol, the bridge writes it to
+    BLUETOOTH_DEVICES[i].static_delay_ms in config.json, and that's the
+    only place the value lives. On addon restart, translate_ha_config
+    rebuilds config.json from options.json; without preservation, the
+    MA-driven delay would be silently reset on every restart.
+    """
+    existing = {
+        "BLUETOOTH_DEVICES": [
+            {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 1200},
+        ],
+    }
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    devs = {d["mac"]: d for d in cfg["BLUETOOTH_DEVICES"]}
+    assert devs["AA:BB:CC:DD:EE:FF"]["static_delay_ms"] == 1200
+
+
+def test_static_delay_ms_in_options_overrides_existing(tmp_path):
+    """When options.json carries static_delay_ms, it must win over the existing config.
+
+    The Supervisor's options.json is authoritative for fields the user
+    edited in the HA addon UI. Preservation is only a fallback for fields
+    options doesn't carry.
+    """
+    existing = {
+        "BLUETOOTH_DEVICES": [
+            {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 1200},
+        ],
+    }
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(
+        tmp_path / "options.json",
+        _minimal_options(
+            bluetooth_devices=[
+                {"mac": "AA:BB:CC:DD:EE:FF", "name": "Speaker", "static_delay_ms": 300},
+            ],
+        ),
+    )
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    devs = {d["mac"]: d for d in cfg["BLUETOOTH_DEVICES"]}
+    assert devs["AA:BB:CC:DD:EE:FF"]["static_delay_ms"] == 300
+
+
 def test_runtime_state_preserved(tmp_path):
     """LAST_VOLUMES, AUTH_PASSWORD_HASH, SECRET_KEY should survive translation."""
     existing = {

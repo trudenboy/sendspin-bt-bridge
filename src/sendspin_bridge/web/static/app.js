@@ -7142,7 +7142,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '</div>' +
         '<div class="bt-cell bt-cell--delay" data-label="Delay">' +
             '<input type="number" class="bt-delay" title="Extra delay on top of DAC-anchored sync (0\u20135000 ms)" aria-label="Static delay in milliseconds" placeholder="0" min="0" max="5000" value="' +
-                escHtmlAttr(String(delayVal)) + '" step="50">' +
+                escHtmlAttr(String(delayVal)) + '" step="50" data-applied-delay="' +
+                escHtmlAttr(String(delayVal)) + '">' +
         '</div>' +
         '<div class="bt-cell bt-cell--runtime" data-label="Live">' +
             '<div class="bt-runtime" aria-live="polite"></div>' +
@@ -7387,14 +7388,28 @@ function refreshBtDeviceRowsRuntime() {
             relBtn.textContent = mgmt ? 'Release Bluetooth' : 'Reclaim Bluetooth';
         }
         // Live-sync the .bt-delay input when the daemon reports a new
-        // static_delay_ms (e.g. MA pushed SET_STATIC_DELAY). Skip if the
-        // user is currently editing the field — overwriting active input
-        // would clobber what they're typing.
+        // static_delay_ms (e.g. MA pushed SET_STATIC_DELAY). Two guards:
+        //  1. Skip if the user is currently focused on the field
+        //     (overwriting active typing is jarring even if the value
+        //     happens to match the baseline).
+        //  2. Skip if the input value differs from the last applied
+        //     baseline (data-applied-delay) — that means the user typed
+        //     a new value but hasn't pressed Save yet, and an SSE poll
+        //     must NOT silently discard their pending edit.
+        // The baseline is updated when the row is first rendered, after
+        // a successful save, AND here when we accept a runtime push.
         var delayEl = row.querySelector('.bt-delay');
-        if (delayEl && runtime && typeof runtime.static_delay_ms === 'number'
-            && document.activeElement !== delayEl
-            && Number(delayEl.value) !== runtime.static_delay_ms) {
-            delayEl.value = String(runtime.static_delay_ms);
+        if (delayEl && runtime && typeof runtime.static_delay_ms === 'number') {
+            var runtimeStr = String(runtime.static_delay_ms);
+            var appliedStr = delayEl.dataset.appliedDelay != null
+                ? String(delayEl.dataset.appliedDelay)
+                : delayEl.value;
+            var hasPendingEdit = String(delayEl.value) !== appliedStr;
+            if (!hasPendingEdit && document.activeElement !== delayEl
+                && delayEl.value !== runtimeStr) {
+                delayEl.value = runtimeStr;
+                delayEl.dataset.appliedDelay = runtimeStr;
+            }
         }
     });
 }

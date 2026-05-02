@@ -17,10 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   advertises `set_static_delay` via `client/state`, applies inbound
   changes from MA without restarting the audio stream, persists the
   new value to the device config so it survives a restart, and pushes
-  Web-UI-driven changes back to MA so both UIs stay aligned.  Use it
-  to compensate when a Bluetooth speaker plays audibly later than
-  Sonos / AirPlay players in the same MA sync group: increase the
-  delay on the *other* (faster) players to match the slowest BT one.
+  Web-UI-driven changes back to MA so both UIs stay aligned.  On HA
+  addon restarts, the MA-driven delay is preserved across the
+  options-to-config rebuild so the value isn't silently reset on every
+  Supervisor reload.  In the bridge Web UI, the per-device delay input
+  tracks the last-applied baseline and refuses to overwrite a typed
+  but unsaved edit when MA pushes a new value.  Use it to compensate
+  when a Bluetooth speaker plays audibly later than Sonos / AirPlay
+  players in the same MA sync group: increase the delay on the
+  *other* (faster) players to match the slowest BT one.
   ([#237](https://github.com/trudenboy/sendspin-bt-bridge/issues/237))
 
 ## [2.67.2] - 2026-05-01
