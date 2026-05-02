@@ -41,7 +41,7 @@ export default defineConfig({
         { label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' }, slug: 'troubleshooting' },
         { label: 'Test Stand', translations: { ru: 'Тестовый стенд' }, slug: 'test-stand' },
         { label: 'Contributing', translations: { ru: 'Разработка' }, slug: 'contributing' },
-        { label: 'Support the project', translations: { ru: 'Поддержать проект' }, slug: 'support' },
+        { label: 'Sponsor the project', translations: { ru: 'Поддержать проект' }, slug: 'support' },
         { label: 'Project Stats', translations: { ru: 'Статистика проекта' }, link: '/stats/' },
         {
           label: 'Journey log',

@@ -7,8 +7,9 @@
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
 [![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
+[![Liberapay patrons](https://img.shields.io/liberapay/patrons/trudenboy.svg?logo=liberapay&color=f6c915)](https://liberapay.com/trudenboy/donate)
 
-**🏠 [Лендинг](https://sendspin-bt-bridge.pages.dev/ru/)** · **📖 [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/)** · **🚀 [Демо](https://sendspin-demo.onrender.com)** · **🇬🇧 [English version](README.md)**
+**🏠 [Лендинг](https://sendspin-bt-bridge.pages.dev/ru/)** · **📖 [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/)** · **🚀 [Демо](https://sendspin-demo.onrender.com)** · **💜 [Поддержать](#поддержать-проект)** · **🇬🇧 [English version](README.md)**
 
 [История изменений](CHANGELOG.md) · [Дорожная карта](ROADMAP.ru.md) · [Участие в разработке](CONTRIBUTING.md) · [Безопасность](SECURITY.md)
 
@@ -149,6 +150,29 @@ Bridge уже рассматривает несколько runtime-поверх
 - [Обсуждение в сообществе Music Assistant](https://github.com/orgs/music-assistant/discussions/5061)
 - [Тема в сообществе Home Assistant](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762)
 - [Канал в Discord](https://discord.com/channels/330944238910963714/1479933490991599836)
+
+## Поддержать проект
+
+[![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/trudenboy/donate)
+[![Donate Crypto via NOWPayments](https://img.shields.io/badge/Donate-Crypto-1976D2?style=for-the-badge&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
+[![Tip on Lightning](https://img.shields.io/badge/⚡-Tip_Sats-F7931A?style=for-the-badge&logoColor=white)](https://getalby.com/p/treepersistent936456)
+
+Если этот мост сэкономил вам время или хорошо лёг в вашу систему — можно поддержать разработку:
+
+- 💛 [Liberapay](https://liberapay.com/trudenboy) — регулярные донаты, дружественно к open-source, 0% комиссии платформы
+- 💜 [Boosty](https://boosty.to/trudenboy) — для аудитории СНГ, разовые и регулярные донаты
+- 💎 [Крипта через NOWPayments](https://nowpayments.io/donation/trudenboy) — one-click страница доната, 70+ монет, без регистрации
+
+### Прямые крипто-адреса (0% комиссии, без посредников)
+
+- ⚡ Lightning: `treepersistent936456@getalby.com`
+- ₿ BTC: `bc1qkxj9fgc78288udyn7mu4d3m5t0mvw8qsj8zga8`
+- 💵 USDT (TRC20): `TYX4TVFNkfJWhSVNLQiJK8o3Yafw8WxAgJ`
+- 💵 USDT / ETH (ERC20 / BSC / Polygon): `0x1ed18de295f3448538d36204dbc156da038046e8`
+
+Проект под лицензией MIT и останется бесплатным независимо от донатов — нет premium-тиров и платных функций. Хороший баг-репорт или pull request не менее ценны.
+
+См. [полную страницу поддержки](https://trudenboy.github.io/sendspin-bt-bridge/ru/support/) с FAQ и дополнительными платёжными сетями.
 
 ## Ссылки по проекту
 
