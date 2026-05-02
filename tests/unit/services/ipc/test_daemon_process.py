@@ -554,16 +554,40 @@ async def test_read_commands_set_static_delay_skips_push_when_disconnected():
 
 
 @pytest.mark.asyncio
-async def test_read_commands_set_static_delay_skips_push_when_setter_raises():
-    """If aiosendspin.set_static_delay_ms raises, the push must NOT fire (applied=False)."""
+async def test_read_commands_set_static_delay_skips_cache_when_setter_raises():
+    """Regression: a failed apply must NOT update daemon._static_delay_ms.
+
+    The cache feeds _create_client(self._static_delay_ms) on the next server
+    reconnect; updating it after a failed apply would silently retry the broken
+    value across reconnects, contradicting the "failed" log line.
+    """
     daemon, send_state, _applied = _make_static_delay_daemon(connected=True, raise_on_setter=True)
 
     await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 600})
 
-    # Daemon-level cache still updated for next reconnect (existing behaviour).
-    assert daemon._static_delay_ms == 600.0
-    # But MA isn't told about a value the local setter rejected.
+    # Cache untouched — next reconnect uses the prior value, not the failed one.
+    assert daemon._static_delay_ms == 0.0
+    # And MA isn't told about a value the local setter rejected.
     assert send_state.calls == []
+
+
+@pytest.mark.asyncio
+async def test_read_commands_set_static_delay_skips_cache_when_setter_unsupported():
+    """Older sendspin without set_static_delay_ms must not poison the cache.
+
+    Logged as 'not supported — value ignored'; reconnects rebuild the same
+    incompatible client, so caching the user's value would just re-emit the
+    same warning forever. Keep the cache stable instead.
+    """
+    daemon = MagicMock()
+    daemon._client = SimpleNamespace(connected=True)  # no set_static_delay_ms attribute
+    daemon._audio_handler = SimpleNamespace(volume=42, muted=False)
+    daemon._last_player_state = "synchronized-sentinel"
+    daemon._static_delay_ms = 100.0  # prior value
+
+    await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 800})
+
+    assert daemon._static_delay_ms == 100.0  # untouched
 
 
 @pytest.mark.asyncio
@@ -579,15 +603,25 @@ async def test_read_commands_set_static_delay_invalid_value_no_crash_no_push():
 
 
 @pytest.mark.asyncio
-async def test_read_commands_set_static_delay_falls_back_when_state_attr_missing():
-    """Older daemon instances without _last_player_state still emit a SYNCHRONIZED push."""
+async def test_read_commands_set_static_delay_falls_back_when_state_attr_missing(monkeypatch):
+    """Older daemon instances without _last_player_state still emit a SYNCHRONIZED push.
+
+    Uses monkeypatch.setattr so the PlayerStateType stub mutation is reverted
+    automatically after the test — the aiosendspin.models.types MagicMock is
+    shared across the entire test suite, so leaking attributes here would
+    make later tests order-dependent.
+    """
     daemon, send_state, applied = _make_static_delay_daemon(connected=True)
     # Simulate an old daemon that hasn't been initialised with the attribute.
     del daemon._last_player_state
 
-    # Need PlayerStateType to be a real enum-ish object so the fallback works.
     fake_pst = SimpleNamespace(SYNCHRONIZED="synchronized-fallback")
-    sys.modules["aiosendspin.models.types"].PlayerStateType = fake_pst
+    monkeypatch.setattr(
+        sys.modules["aiosendspin.models.types"],
+        "PlayerStateType",
+        fake_pst,
+        raising=False,
+    )
 
     await _run_one_command(daemon, {"cmd": "set_static_delay_ms", "value": 300})
 

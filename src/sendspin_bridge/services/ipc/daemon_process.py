@@ -467,10 +467,13 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     logger.warning("set_static_delay_ms failed: %s", exc)
             else:
                 logger.warning("set_static_delay_ms not supported by current sendspin client — value ignored")
-            # Update the daemon-level cache so a subsequent server reconnect
-            # (which re-creates _client via _create_client(self._static_delay_ms))
-            # uses the new value, not the stale ctor arg.
-            if daemon is not None:
+            # Only refresh the daemon-level cache if the local apply actually
+            # succeeded. The cache feeds _create_client(self._static_delay_ms)
+            # on the next server reconnect; updating it after a failed/ignored
+            # apply would silently retry the broken value across reconnects,
+            # which contradicts the "value ignored" / "failed" log line we
+            # just emitted.
+            if applied and daemon is not None:
                 daemon._static_delay_ms = delay_ms
             # Push the updated player state to MA so its slider repaints.
             # aiosendspin.set_static_delay_ms updates _static_delay_us locally
