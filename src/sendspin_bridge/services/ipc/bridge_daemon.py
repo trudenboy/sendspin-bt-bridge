@@ -76,11 +76,20 @@ class BridgeDaemon(SendspinDaemon):
         status: dict,
         bluetooth_sink_name: str | None,
         on_status_change: Callable[[], None] | None = None,
+        *,
+        bt_product_name: str = "",
+        bt_manufacturer: str = "",
     ) -> None:
         super().__init__(args)
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
+        # Per-device identity advertised to MA via client/hello.device_info.
+        # Empty strings mean "fall back to the bridge-wide identity" so MA
+        # always sees something useful even when BlueZ Modalias is missing
+        # or the speaker hasn't reported a friendly Name/Alias yet.
+        self._bt_product_name = bt_product_name
+        self._bt_manufacturer = bt_manufacturer
         # Initialise the synchronized state lazily so test fixtures that
         # build a BridgeDaemon without aiosendspin installed still work.
         try:
@@ -115,10 +124,16 @@ class BridgeDaemon(SendspinDaemon):
         except PackageNotFoundError:
             sw_ver = "aiosendspin"
 
+        # Prefer the per-device BT-derived identity (read from BlueZ by the
+        # parent at spawn time) so each bridged speaker shows up distinctly
+        # in MA's player card. Fall back to the bridge-wide identity when
+        # the BT props weren't resolvable (e.g. no Modalias for the vendor).
+        # software_version always carries the bridge version so MA can
+        # correlate behaviour across players regardless of the model surface.
         device_info = DeviceInfo(
-            product_name=f"Sendspin BT Bridge v{_BRIDGE_VERSION}",
-            manufacturer=socket.gethostname(),
-            software_version=sw_ver,
+            product_name=self._bt_product_name or f"Sendspin BT Bridge v{_BRIDGE_VERSION}",
+            manufacturer=self._bt_manufacturer or socket.gethostname(),
+            software_version=f"sendspin-bt-bridge {_BRIDGE_VERSION} ({sw_ver})",
         )
 
         if self._audio_handler is None:

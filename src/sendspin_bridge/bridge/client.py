@@ -25,7 +25,9 @@ if TYPE_CHECKING:
     import concurrent.futures
 
 import sendspin_bridge.bridge.state as _state
+from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property
 from sendspin_bridge.bluetooth.manager import BluetoothManager
+from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_FILE,
@@ -1390,6 +1392,22 @@ class SendspinClient:
                     self._update_status({"port_collision": False, "active_listen_port": None})
             self.listen_port = available_port
 
+            # Pull per-device BT identity from BlueZ so the daemon can advertise
+            # the real speaker name + vendor in client/hello.device_info instead
+            # of the generic "Sendspin BT Bridge vX" / hostname pair (#237 follow-up).
+            # Empty strings on read failure → daemon falls back to bridge identity.
+            bt_product_name = ""
+            bt_manufacturer = ""
+            bt_dbus_path = getattr(self.bt_manager, "_dbus_device_path", None) if self.bt_manager else None
+            if bt_dbus_path:
+                # Alias is user-renamable in HAOS BT UI / bluetoothctl; prefer it.
+                bt_product_name = (
+                    _dbus_get_device_property(bt_dbus_path, "Alias")
+                    or _dbus_get_device_property(bt_dbus_path, "Name")
+                    or ""
+                )
+                bt_manufacturer = vendor_from_modalias(_dbus_get_device_property(bt_dbus_path, "Modalias"))
+
             params = json.dumps(
                 with_protocol_version(
                     {
@@ -1404,6 +1422,8 @@ class SendspinClient:
                         "settings_dir": f"/tmp/sendspin-{self._safe_id}",
                         "preferred_format": self.preferred_format,
                         "config_schema_version": CONFIG_SCHEMA_VERSION,
+                        "bt_product_name": bt_product_name,
+                        "bt_manufacturer": bt_manufacturer,
                     }
                 )
             )

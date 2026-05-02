@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Each bridged Bluetooth speaker now shows its own model and
+  manufacturer in Music Assistant's player card.**  Previously every
+  bridged speaker (ENEBY20, JBL Charge, WH-1000XM4, …) appeared as the
+  same `Sendspin BT Bridge vX` from the bridge host — there was no way
+  to tell them apart in MA without checking the player ID.  The bridge
+  now reads each speaker's BlueZ alias and Modalias at subprocess
+  spawn and surfaces them as the per-player `model` / `manufacturer`
+  in MA, with a curated vendor map covering common consumer brands
+  (Sony, Bose, JBL/Harman, IKEA/Sonos, Apple, Samsung, Yandex,
+  Beats, Skullcandy, Garmin, Logitech, …).  Unknown vendor IDs fall
+  back to the bridge host name (the prior behaviour, no regression).
+  The `software_version` field now consistently carries the bridge
+  release plus the underlying `aiosendspin` library version, so
+  operators can correlate behaviour across players from a single
+  glance at the MA UI.
+
 ## [2.68.0-rc.1] - 2026-05-02
 
 ### Added

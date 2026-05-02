@@ -119,6 +119,9 @@ def _make_bridge_daemon(status: dict | None = None) -> BridgeDaemon:
     daemon._static_delay_ms = 0.0
     daemon._connection_lock = None  # type: ignore[assignment]
     daemon._server_url = None
+    # Per-device BT identity (empty = fall back to bridge identity in DeviceInfo).
+    daemon._bt_product_name = ""
+    daemon._bt_manufacturer = ""
 
     daemon._notified = notified
     return daemon
@@ -276,6 +279,147 @@ class TestClientHelloRoles:
         # so MA exposes the per-player static delay slider.
         PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
         assert captured_kwargs["state_supported_commands"] == [PlayerCommand.SET_STATIC_DELAY]
+
+    def test_create_client_uses_per_device_bt_identity(self, monkeypatch):
+        """Track 1: BT-derived product/manufacturer flow through to DeviceInfo.
+
+        Each bridged BT speaker should show its own model + vendor in MA's
+        player card instead of the generic "Sendspin BT Bridge" / hostname
+        pair every speaker shared before this change.
+        """
+        import sendspin_bridge.services.diagnostics.sendspin_compat as compat_mod
+        from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
+
+        daemon = _make_bridge_daemon()
+        daemon._audio_handler = SimpleNamespace(volume=25, muted=False)
+        daemon._bt_product_name = "WH-1000XM4"
+        daemon._bt_manufacturer = "Sony"
+
+        _types_mod.Roles = type(
+            "Roles",
+            (),
+            {
+                "PLAYER": "player",
+                "METADATA": "metadata",
+                "CONTROLLER": "controller",
+                "ARTWORK": "artwork",
+                "VISUALIZER": "visualizer",
+            },
+        )
+        player_mod = sys.modules["aiosendspin.models.player"]
+        player_mod.ClientHelloPlayerSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
+        # Replace DeviceInfo with a transparent factory so we can inspect what
+        # _create_client passed in (the default MagicMock factory hides the
+        # kwargs). bridge_daemon imports DeviceInfo at module-load time, so
+        # the binding has already been resolved against the original stub —
+        # patch the name on the module that actually uses it.
+        import sendspin_bridge.services.ipc.bridge_daemon as _bd_mod
+
+        monkeypatch.setattr(_bd_mod, "DeviceInfo", lambda **kwargs: SimpleNamespace(**kwargs))
+
+        captured_kwargs: dict[str, object] = {}
+
+        class FakeSendspinClient:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+
+            def add_group_update_listener(self, _l):
+                return None
+
+            def add_metadata_listener(self, _l):
+                return None
+
+            def add_controller_state_listener(self, _l):
+                return None
+
+            def add_disconnect_listener(self, _l):
+                return None
+
+        sys.modules["aiosendspin.client"].SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]
+        monkeypatch.setattr(
+            compat_mod,
+            "detect_supported_audio_formats_for_device",
+            lambda _audio_device: [SimpleNamespace(codec="flac", channels=2, sample_rate=44100, bit_depth=16)],
+        )
+        monkeypatch.setattr(compat_mod, "filter_supported_call_kwargs", lambda _c, kwargs: dict(kwargs))
+
+        daemon._create_client()
+
+        device_info = captured_kwargs["device_info"]
+        assert device_info.product_name == "WH-1000XM4"
+        assert device_info.manufacturer == "Sony"
+        # software_version always carries the bridge version + aiosendspin lib
+        # version regardless of BT-derived identity, so MA can correlate
+        # behaviour across players running the same bridge build.
+        assert "sendspin-bt-bridge" in device_info.software_version
+        assert _BRIDGE_VERSION in device_info.software_version
+
+    def test_create_client_falls_back_to_bridge_identity_without_bt_data(self, monkeypatch):
+        """When BT props weren't resolvable (empty strings from parent), DeviceInfo
+        falls back to the legacy bridge-wide identity so MA always sees something."""
+        import socket
+
+        import sendspin_bridge.services.diagnostics.sendspin_compat as compat_mod
+        from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
+
+        daemon = _make_bridge_daemon()
+        daemon._audio_handler = SimpleNamespace(volume=25, muted=False)
+        # Both empty → both fields fall back.
+        daemon._bt_product_name = ""
+        daemon._bt_manufacturer = ""
+
+        _types_mod.Roles = type(
+            "Roles",
+            (),
+            {
+                "PLAYER": "player",
+                "METADATA": "metadata",
+                "CONTROLLER": "controller",
+                "ARTWORK": "artwork",
+                "VISUALIZER": "visualizer",
+            },
+        )
+        sys.modules["aiosendspin.models.player"].ClientHelloPlayerSupport = lambda **kwargs: SimpleNamespace(**kwargs)  # type: ignore[attr-defined]
+        # bridge_daemon imports DeviceInfo at module-load time, so the binding
+        # has already been resolved against the original stub — patching
+        # sys.modules now wouldn't update the reference. Patch the name on
+        # the module that actually uses it.
+        import sendspin_bridge.services.ipc.bridge_daemon as _bd_mod
+
+        monkeypatch.setattr(_bd_mod, "DeviceInfo", lambda **kwargs: SimpleNamespace(**kwargs))
+
+        captured_kwargs: dict[str, object] = {}
+
+        class FakeSendspinClient:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+
+            def add_group_update_listener(self, _l):
+                return None
+
+            def add_metadata_listener(self, _l):
+                return None
+
+            def add_controller_state_listener(self, _l):
+                return None
+
+            def add_disconnect_listener(self, _l):
+                return None
+
+        sys.modules["aiosendspin.client"].SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]
+        monkeypatch.setattr(
+            compat_mod,
+            "detect_supported_audio_formats_for_device",
+            lambda _audio_device: [SimpleNamespace(codec="flac", channels=2, sample_rate=44100, bit_depth=16)],
+        )
+        monkeypatch.setattr(compat_mod, "filter_supported_call_kwargs", lambda _c, kwargs: dict(kwargs))
+
+        daemon._create_client()
+
+        device_info = captured_kwargs["device_info"]
+        assert device_info.product_name == f"Sendspin BT Bridge v{_BRIDGE_VERSION}"
+        assert device_info.manufacturer == socket.gethostname()
+        assert "sendspin-bt-bridge" in device_info.software_version
 
     def test_create_client_omits_state_supported_commands_when_enum_missing(self, monkeypatch):
         """On aiosendspin <5.1 PlayerCommand.SET_STATIC_DELAY doesn't exist.
@@ -654,6 +798,37 @@ class TestControllerState:
         daemon._on_controller_state(payload)
         assert "supported_commands" not in daemon._bridge_status
         assert len(daemon._notified) == 0
+
+    def test_controller_state_persists_full_ma_supported_group_commands(self):
+        """Track 2B audit: lock in that the full SUPPORTED_GROUP_COMMANDS set
+        MA's sendspin provider advertises (player.py:67-77) round-trips into
+        the bridge's status dict so the Web UI can render every group control.
+
+        If MA adds another `MediaCommand` to its set, this test will still
+        pass (we just store whatever the controller advertises) — but the
+        regression we guard is "all 10 known commands flow through today".
+        """
+        # Mirror MA's SUPPORTED_GROUP_COMMANDS exactly (player.py:67-77).
+        ma_commands = [
+            "play",
+            "pause",
+            "stop",
+            "next",
+            "previous",
+            "repeat_off",
+            "repeat_one",
+            "repeat_all",
+            "shuffle",
+            "unshuffle",
+        ]
+        daemon = _make_bridge_daemon()
+        controller = SimpleNamespace(
+            supported_commands=[SimpleNamespace(value=v) for v in ma_commands],
+            volume=50,
+            muted=False,
+        )
+        daemon._on_controller_state(SimpleNamespace(metadata=None, controller=controller))
+        assert daemon._bridge_status["supported_commands"] == ma_commands
 
 
 class TestHeartbeatListenerOverride:

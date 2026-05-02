@@ -556,6 +556,12 @@ async def _run(params: dict) -> None:
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))
+    # Per-device identity surfaced to MA in client/hello.device_info. Empty
+    # strings here mean the parent couldn't resolve the BT props (no D-Bus
+    # path yet, BlueZ silent on Modalias, etc.) — BridgeDaemon falls back
+    # to the bridge-wide identity so MA always sees something.
+    bt_product_name: str = params.get("bt_product_name", "") or ""
+    bt_manufacturer: str = params.get("bt_manufacturer", "") or ""
     # sanitize client_id for safe path usage
     safe_id = re.sub(r"[^a-zA-Z0-9_:-]", "_", client_id)
     settings_dir: str = params.get("settings_dir", f"/tmp/sendspin-{safe_id}")
@@ -702,6 +708,8 @@ async def _run(params: dict) -> None:
         status=status,
         bluetooth_sink_name=bluetooth_sink_name,
         on_status_change=_on_status_change,
+        bt_product_name=bt_product_name,
+        bt_manufacturer=bt_manufacturer,
     )
     daemon_ref.append(daemon)
 
