@@ -171,6 +171,8 @@ If this bridge saves you time or fits your setup well, consider supporting devel
 
 The project is MIT-licensed and stays free regardless of donations — there is no premium tier or paywalled features. Filing a clear bug report or contributing a fix is just as valuable.
 
+See the [full Support page](https://trudenboy.github.io/sendspin-bt-bridge/support/) for the complete FAQ and additional payment networks.
+
 ## Project links
 
 - [Contributing](CONTRIBUTING.md)
