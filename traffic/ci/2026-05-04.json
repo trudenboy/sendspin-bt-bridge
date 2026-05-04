@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Deploy Docs to GitHub Pages",
+    "total_runs": 168,
+    "success_runs": 165,
+    "failure_runs": 3,
+    "last_status": "success",
+    "last_run_at": "2026-05-02T18:49:06Z"
+  },
+  {
+    "name": "Copilot code review",
+    "total_runs": 111,
+    "success_runs": 111,
+    "failure_runs": 0,
+    "last_status": "success",
+    "last_run_at": "2026-05-02T15:53:14Z"
+  },
+  {
+    "name": "Archive Traffic Stats",
+    "total_runs": 79,
+    "success_runs": 70,
+    "failure_runs": 8,
+    "last_status": "in_progress",
+    "last_run_at": "2026-05-04T04:22:23Z"
+  },
+  {
+    "name": "Copilot coding agent",
+    "total_runs": 9,
+    "success_runs": 9,
+    "failure_runs": 0,
+    "last_status": "success",
+    "last_run_at": "2026-04-04T10:48:56Z"
+  },
+  {
+    "name": "Dependabot Updates",
+    "total_runs": 50,
+    "success_runs": 50,
+    "failure_runs": 0,
+    "last_status": "success",
+    "last_run_at": "2026-04-30T11:39:49Z"
+  },
+  {
+    "name": "CI",
+    "total_runs": 598,
+    "success_runs": 532,
+    "failure_runs": 29,
+    "last_status": "success",
+    "last_run_at": "2026-05-02T18:49:06Z"
+  },
+  {
+    "name": "Release",
+    "total_runs": 225,
+    "success_runs": 176,
+    "failure_runs": 25,
+    "last_status": "success",
+    "last_run_at": "2026-05-02T16:08:14Z"
+  }
+]
