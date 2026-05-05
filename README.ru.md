@@ -7,8 +7,8 @@
 [![GitHub Stars](https://img.shields.io/github/stars/trudenboy/sendspin-bt-bridge?style=flat&logo=github)](https://github.com/trudenboy/sendspin-bt-bridge/stargazers)
 [![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
-[![Liberapay patrons](https://img.shields.io/liberapay/patrons/trudenboy.svg?logo=liberapay&color=f6c915)](https://liberapay.com/trudenboy/donate)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy_a_Coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/trudenboy)
+[![Donate via WhyDonate](https://img.shields.io/badge/WhyDonate-Support-00a884?style=flat&logoColor=white)](https://whydonate.com/donate/sendspin-bluetooth-bridge)
+[![Donate Crypto via NOWPayments](https://img.shields.io/badge/Crypto-NOWPayments-1976D2?style=flat&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
 
 **🏠 [Лендинг](https://sendspin-bt-bridge.pages.dev/ru/)** · **📖 [Документация](https://trudenboy.github.io/sendspin-bt-bridge/ru/)** · **🚀 [Демо](https://sendspin-demo.onrender.com)** · **💜 [Поддержать](#поддержать-проект)** · **🇬🇧 [English version](README.md)**
 
@@ -154,15 +154,13 @@ Bridge уже рассматривает несколько runtime-поверх
 
 ## Поддержать проект
 
-[![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/trudenboy/donate)
-[![Buy Me a Coffee at Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/trudenboy)
+[![Donate via WhyDonate](https://img.shields.io/badge/Donate-WhyDonate-00a884?style=for-the-badge&logoColor=white)](https://whydonate.com/donate/sendspin-bluetooth-bridge)
 [![Donate Crypto via NOWPayments](https://img.shields.io/badge/Donate-Crypto-1976D2?style=for-the-badge&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
 [![Tip on Lightning](https://img.shields.io/badge/⚡-Tip_Sats-F7931A?style=for-the-badge&logoColor=white)](https://getalby.com/p/treepersistent936456)
 
 Если этот мост сэкономил вам время или хорошо лёг в вашу систему — можно поддержать разработку:
 
-- 💛 [Liberapay](https://liberapay.com/trudenboy) — регулярные донаты, дружественно к open-source, 0% комиссии платформы
-- ☕ [Ko-fi](https://ko-fi.com/trudenboy) — разовые «угостить кофе» донаты или месячные membership, принимает карты
+- 💚 [WhyDonate](https://whydonate.com/donate/sendspin-bluetooth-bridge) — разовые и регулярные донаты, карты / iDEAL / SEPA, донор выбирает сумму
 - 💜 [Boosty](https://boosty.to/trudenboy) — для аудитории СНГ, разовые и регулярные донаты
 - 💎 [Крипта через NOWPayments](https://nowpayments.io/donation/trudenboy) — one-click страница доната, 70+ монет, без регистрации
 

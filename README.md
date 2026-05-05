@@ -8,8 +8,8 @@
 [![License: MIT](https://img.shields.io/github/license/trudenboy/sendspin-bt-bridge?style=flat&color=9070B8)](LICENSE)
 [![Try Demo](https://img.shields.io/badge/Try_Demo-Live-brightgreen?style=flat&logo=render)](https://sendspin-demo.onrender.com)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom_Repository-41BDF5?style=flat&logo=homeassistant)](https://hacs.xyz/)
-[![Liberapay patrons](https://img.shields.io/liberapay/patrons/trudenboy.svg?logo=liberapay&color=f6c915)](https://liberapay.com/trudenboy/donate)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy_a_Coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/trudenboy)
+[![Donate via WhyDonate](https://img.shields.io/badge/WhyDonate-Support-00a884?style=flat&logoColor=white)](https://whydonate.com/donate/sendspin-bluetooth-bridge)
+[![Donate Crypto via NOWPayments](https://img.shields.io/badge/Crypto-NOWPayments-1976D2?style=flat&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
 
 **🏠 [Landing Page](https://sendspin-bt-bridge.pages.dev/)** · **📖 [Documentation](https://trudenboy.github.io/sendspin-bt-bridge/)** · **🚀 [Live Demo](https://sendspin-demo.onrender.com)** · **💜 [Sponsor](#sponsor-the-project)** · **RU [Русская версия](README.ru.md)**
 
@@ -158,15 +158,13 @@ Use the docs site for the full guides and reference:
 
 ## Sponsor the project
 
-[![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/trudenboy/donate)
-[![Buy Me a Coffee at Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/trudenboy)
+[![Donate via WhyDonate](https://img.shields.io/badge/Donate-WhyDonate-00a884?style=for-the-badge&logoColor=white)](https://whydonate.com/donate/sendspin-bluetooth-bridge)
 [![Donate Crypto via NOWPayments](https://img.shields.io/badge/Donate-Crypto-1976D2?style=for-the-badge&logo=bitcoin&logoColor=white)](https://nowpayments.io/donation/trudenboy)
 [![Tip on Lightning](https://img.shields.io/badge/⚡-Tip_Sats-F7931A?style=for-the-badge&logoColor=white)](https://getalby.com/p/treepersistent936456)
 
 If this bridge saves you time or fits your setup well, consider sponsoring development:
 
-- 💛 [Liberapay](https://liberapay.com/trudenboy) — recurring, opensource-friendly, 0% platform fee
-- ☕ [Ko-fi](https://ko-fi.com/trudenboy) — one-time tips or monthly memberships, card-friendly
+- 💚 [WhyDonate](https://whydonate.com/donate/sendspin-bluetooth-bridge) — one-time and recurring donations, cards / iDEAL / SEPA, donor picks the amount
 - 💎 [Crypto via NOWPayments](https://nowpayments.io/donation/trudenboy) — one-click donation page, 70+ coins, no account required
 
 ### Direct crypto (zero fees, no intermediaries)
