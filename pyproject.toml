@@ -73,7 +73,7 @@ dev = [
     # dev extra so contributors can `uv run pytest --cov=...` locally too.
     "pytest-cov>=5.0,<8.0",
     "ruff==0.15.12",
-    "mypy>=1.20.2,<2.0",
+    "mypy>=1.20.2,<3.0",
 ]
 
 [tool.ruff]
