@@ -11,7 +11,7 @@ aiomqtt==2.5.1
     # via sendspin-bt-bridge
 aiooui==0.1.9
     # via bluetooth-adapters
-aiosendspin==5.1.1
+aiosendspin==5.2.0
     # via
     #   aiosendspin-mpris
     #   sendspin
