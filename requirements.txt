@@ -26,7 +26,7 @@ av==16.1.0
     # via
     #   aiosendspin
     #   sendspin
-bleak==3.0.1
+bleak==3.0.2
     # via bluetooth-adapters
 blinker==1.9.0
     # via flask
