@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Bumped the bundled Sendspin audio engine from 7.1.0 to 7.3.0.** Pulls in upstream PulseAudio / PipeWire integration improvements and better audio device discovery (7.2.0), plus two playback-stability fixes that show up regularly in this bridge's flows: mid-stream joins (after a Bluetooth reconnect or a hot config save that triggers a speaker restart) no longer audibly catch up, and changing the per-player sync delay from Music Assistant no longer produces a brief audio glitch from a wrong sync delta. No configuration changes required.
+
 ### Fixed
 - **HA addon: "Release Bluetooth" toggle now survives an addon or Home Assistant restart.** Previously the released state was forgotten on restart, the bridge silently re-grabbed the BT device, and only released it again after the configured idle timeout — which interrupted whatever else was using the speaker (for example a TV soundbar over HDMI/ARC). The released flag now carries forward in the addon's options-to-config rebuild so reclaiming requires an explicit user action. ([#276](https://github.com/trudenboy/sendspin-bt-bridge/issues/276))
 - **Hot-apply settings now stay consistent with the speaker process.** When a settings save couldn't reach a speaker's audio process (process exiting, broken pipe), the bridge previously updated its own copy of the value anyway, so the UI showed a value the speaker had never received. The save path now writes the command to the speaker process first and only commits the bridge-side value after that write succeeds — failures are surfaced as an error in the save summary instead of a silent split-brain.
