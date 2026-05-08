@@ -29,8 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   players in the same MA sync group: increase the delay on the
   *other* (faster) players to match the slowest BT one.
   ([#237](https://github.com/trudenboy/sendspin-bt-bridge/issues/237))
-- Project support channels documented in README — Liberapay, NOWPayments, and direct crypto (Lightning, BTC, USDT). Boosty kept on Russian-language surfaces only.
-- Documentation site now has a dedicated **Sponsor the project** page (English + Russian) with the full crypto address table, scannable QR codes, FAQ, and non-monetary contribution options.
+- Project support channels documented in README — Liberapay, Ko-fi, NOWPayments, and direct crypto (Lightning, BTC, USDT). Boosty kept on Russian-language surfaces only.
+- Documentation site now has a dedicated **Sponsor the project** page (English + Russian) with the full crypto address table, scannable QR codes (including Ko-fi profile QR), FAQ, and non-monetary contribution options.
 - Web UI header now includes a discreet **Sponsor** link next to Report / Docs / GitHub, opening the documentation site's Sponsor page in a new tab.
 
 ### Changed
@@ -4991,7 +4991,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.68.0...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.69.0-rc.1...HEAD
 [2.68.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.2...v2.68.0
 [2.67.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.1...v2.67.2
 [2.67.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.0...v2.67.1
