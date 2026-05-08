@@ -853,7 +853,7 @@ class TestHeartbeatListenerOverride:
 
         _StubClientListener.start = _intercept_start
         try:
-            task = asyncio.create_task(daemon._run_server_initiated(0.0))
+            task = asyncio.create_task(daemon._run_server_initiated())
             try:
                 await asyncio.wait_for(started.wait(), timeout=5.0)
             finally:
@@ -883,7 +883,7 @@ class TestHeartbeatListenerOverride:
 
         _StubClientListener.start = _intercept_start
         try:
-            task = asyncio.create_task(daemon._run_server_initiated(0.0))
+            task = asyncio.create_task(daemon._run_server_initiated())
             try:
                 await asyncio.wait_for(started.wait(), timeout=5.0)
             finally:

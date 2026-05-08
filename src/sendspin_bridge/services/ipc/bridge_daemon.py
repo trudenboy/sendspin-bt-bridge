@@ -238,7 +238,7 @@ class BridgeDaemon(SendspinDaemon):
         else:
             self._on_server_disconnect()
 
-    async def _run_server_initiated(self, static_delay_ms: float) -> None:
+    async def _run_server_initiated(self) -> None:
         """Override upstream to add WebSocket heartbeat on the listener side.
 
         The upstream ``ClientListener`` creates ``web.WebSocketResponse()``
@@ -253,6 +253,13 @@ class BridgeDaemon(SendspinDaemon):
         (``aiosendspin.client.client``, line 331).
 
         See: music-assistant/support#4598, trudenboy/sendspin-bt-bridge#120.
+
+        sendspin 7.3.0 dropped the ``static_delay_ms`` parameter from this
+        method; upstream now sets ``self._static_delay_ms`` from
+        ``self._args``/``self._settings`` before calling here, so the
+        override no longer needs the argument.  Mirror the upstream
+        ``host=self._args.interface ...`` listener-bind addition (7.1.0)
+        so the bridge honours the ``--interface`` daemon flag end-to-end.
         """
         from aiohttp import web as _web
         from aiosendspin.client import ClientListener as _BaseListener
@@ -282,14 +289,16 @@ class BridgeDaemon(SendspinDaemon):
             self._args.listen_port,
         )
 
-        self._static_delay_ms = static_delay_ms
         self._connection_lock = asyncio.Lock()
 
+        interface = getattr(self._args, "interface", None)
+        host = interface if interface is not None else "0.0.0.0"
         self._listener = _HeartbeatListener(
             client_id=self._args.client_id,
             on_connection=self._handle_server_connection,
             port=self._args.listen_port,
             client_name=self._args.client_name,
+            host=host,
         )
         await self._listener.start()
 
