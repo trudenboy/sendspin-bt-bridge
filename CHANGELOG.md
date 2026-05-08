@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.69.0] - 2026-05-08
+
 ### Changed
 - **Bumped the bundled Sendspin audio engine from 7.1.0 to 7.3.0.** Pulls in upstream PulseAudio / PipeWire integration improvements and better audio device discovery (7.2.0), plus two playback-stability fixes that show up regularly in this bridge's flows: mid-stream joins (after a Bluetooth reconnect or a hot config save that triggers a speaker restart) no longer audibly catch up, and changing the per-player sync delay from Music Assistant no longer produces a brief audio glitch from a wrong sync delta. No configuration changes required.
 
