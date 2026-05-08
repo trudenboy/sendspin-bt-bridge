@@ -28,6 +28,7 @@ import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
+from sendspin_bridge.bridge.exceptions import IPCError
 from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_FILE,
@@ -967,7 +968,10 @@ class SendspinClient:
 
             if await aensure_null_sink():
                 # Redirect PULSE_SINK so new streams go to null sink (not missing BT sink)
-                await self._send_subprocess_command({"cmd": "set_standby", "sink": STANDBY_SINK_NAME})
+                try:
+                    await self._send_subprocess_command({"cmd": "set_standby", "sink": STANDBY_SINK_NAME})
+                except IPCError as exc:
+                    logger.debug("[%s] set_standby IPC failed (daemon may have exited): %s", self.player_name, exc)
                 moved = await amove_pid_sink_inputs(daemon_pid, STANDBY_SINK_NAME)
                 logger.info("[%s] Moved %d stream(s) to null sink", self.player_name, moved)
             else:
@@ -1047,7 +1051,10 @@ class SendspinClient:
         from sendspin_bridge.services.audio.pulse import amove_pid_sink_inputs
 
         # Restore PULSE_SINK to BT sink before rerouting so future streams target it
-        await self._send_subprocess_command({"cmd": "set_standby"})
+        try:
+            await self._send_subprocess_command({"cmd": "set_standby"})
+        except IPCError as exc:
+            logger.debug("[%s] set_standby clear IPC failed: %s", self.player_name, exc)
         moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
         # Clear standby state regardless of streams moved
         self._update_status(
@@ -1065,15 +1072,22 @@ class SendspinClient:
             self._on_sink_idle()
         if moved > 0:
             logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
-            await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
-            logger.info("[%s] Sent reanchor after wake", self.player_name)
+            try:
+                await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
+            except IPCError as exc:
+                logger.debug("[%s] reanchor IPC failed after wake: %s", self.player_name, exc)
+            else:
+                logger.info("[%s] Sent reanchor after wake", self.player_name)
             return True
 
         # No streams survived (ALSA errors destroyed them) — trigger MA
         # reconnect inside the daemon.  This is much faster than a full
         # subprocess restart because it skips process spawn + mDNS registration.
         logger.info("[%s] No streams to reroute — sending MA reconnect to daemon", self.player_name)
-        await self._send_subprocess_command({"cmd": "reconnect", "delay": 0.5})
+        try:
+            await self._send_subprocess_command({"cmd": "reconnect", "delay": 0.5})
+        except IPCError as exc:
+            logger.debug("[%s] MA reconnect IPC failed: %s", self.player_name, exc)
         return True
 
     def _cancel_ma_reconnect_task(self) -> None:
@@ -1129,8 +1143,16 @@ class SendspinClient:
         await self.start_sendspin()
 
     async def send_subprocess_command(self, cmd: dict) -> None:
-        """Send command to daemon stdin (BluetoothManagerHost protocol)."""
-        await self._send_subprocess_command(cmd)
+        """Send command to daemon stdin (BluetoothManagerHost protocol).
+
+        Best-effort: IPC errors are logged at DEBUG and swallowed so BT-monitor
+        callers (``services/bluetooth/monitor.py``) don't crash their tasks
+        when a daemon happens to be exiting concurrently.
+        """
+        try:
+            await self._send_subprocess_command(cmd)
+        except IPCError as exc:
+            logger.debug("[%s] %s IPC failed: %s", self.player_name, cmd.get("cmd"), exc)
 
     def get_subprocess_pid(self) -> int | None:
         """Return daemon subprocess PID if alive (BluetoothManagerHost protocol)."""
@@ -1621,7 +1643,11 @@ class SendspinClient:
         if proc is None or proc.returncode is not None or not self.status.get("server_connected"):
             return
         self._mark_ma_reconnecting()
-        await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
+        try:
+            await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
+        except IPCError as exc:
+            logger.debug("[%s] MA reconnect IPC failed: %s", self.player_name, exc)
+            self._clear_ma_reconnecting()
 
     async def send_transport_command(self, action: str, value: object = None) -> bool:
         """Send a native Sendspin transport command to the daemon subprocess.
@@ -1633,7 +1659,11 @@ class SendspinClient:
         cmd: dict = {"cmd": "transport", "action": action}
         if value is not None:
             cmd["value"] = value
-        await self._send_subprocess_command(cmd)
+        try:
+            await self._send_subprocess_command(cmd)
+        except IPCError as exc:
+            logger.debug("[%s] transport %s IPC failed: %s", self.player_name, action, exc)
+            return False
         return True
 
     # ── Reconfigure (hot-apply / warm-restart) ────────────────────────────
@@ -1657,6 +1687,14 @@ class SendspinClient:
         UI summary).  Unknown fields are silently ignored — the caller is
         expected to pass only keys classified as HOT_APPLY by
         :mod:`services.config_diff`.
+
+        Per-key transactional: for fields that round-trip through the daemon
+        (currently only ``static_delay_ms``), the IPC command is sent first;
+        parent-side state (``self.<field>``) is committed only after the IPC
+        succeeded.  When the daemon is alive but the write fails, the field
+        is dropped from the returned list and parent-state stays consistent
+        with what the daemon actually saw.  Parent-only fields apply
+        unconditionally.
         """
         applied: list[str] = []
 
@@ -1667,9 +1705,17 @@ class SendspinClient:
                 except (TypeError, ValueError):
                     logger.warning("[%s] Ignoring invalid static_delay_ms: %r", self.player_name, value)
                     continue
-                self.static_delay_ms = delay_ms
                 if self.is_running():
-                    await self._send_subprocess_command({"cmd": "set_static_delay_ms", "value": delay_ms})
+                    try:
+                        await self._send_subprocess_command({"cmd": "set_static_delay_ms", "value": delay_ms})
+                    except IPCError as exc:
+                        logger.warning(
+                            "[%s] hot-apply static_delay_ms IPC failed: %s — parent-state unchanged",
+                            self.player_name,
+                            exc,
+                        )
+                        continue
+                self.static_delay_ms = delay_ms
                 applied.append(key)
             elif key == "keepalive_interval":
                 try:

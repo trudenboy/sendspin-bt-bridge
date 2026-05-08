@@ -38,6 +38,7 @@ from sendspin_bridge.config import (
     update_config,
     write_config_file,
 )
+from sendspin_bridge.config.logging_setup import apply_log_level
 from sendspin_bridge.services import (
     bt_remove_device as _bt_remove_device,
 )
@@ -731,36 +732,17 @@ def api_config():
     except ValueError as exc:
         return _error_response(str(exc))
 
-    # HA_INTEGRATION password round-trip semantics — the GET response
-    # surfaces an existing password as the marker ``***REDACTED***`` and
-    # the UI puts that marker into the input field on load.  Three cases:
-    #   * ``***REDACTED***`` (operator didn't touch the field) — keep existing
-    #   * ``""`` (operator cleared the field) — explicit clear, broker
-    #     switches to no-auth
-    #   * anything else — overwrite with the typed plaintext
-    # ``None``/whitespace inherit "keep existing" so a clumsy client
-    # submitting an unset field doesn't accidentally clear the password,
-    # but explicit ``""`` is honoured.
+    # HA_INTEGRATION broker URL normalisation runs pre-lock because it has no
+    # dependency on the existing config — operators paste broker URLs like
+    # ``mqtt://host:1883`` / ``mqtts://broker.example.com`` and we strip the
+    # scheme + promote port/TLS hints to dedicated fields.  Password merge
+    # (which DOES depend on the existing on-disk value) is deferred until
+    # after we read ``existing`` under ``config_lock`` so a parallel save
+    # can't slip a different password in between our pre-lock read and write.
     incoming_ha = config.get("HA_INTEGRATION")
     if isinstance(incoming_ha, dict):
-        existing_full_config = load_config()
-        existing_ha = existing_full_config.get("HA_INTEGRATION") or {}
-        existing_mqtt = existing_ha.get("mqtt") if isinstance(existing_ha.get("mqtt"), dict) else {}
         incoming_mqtt = incoming_ha.get("mqtt")
         if isinstance(incoming_mqtt, dict):
-            pw = incoming_mqtt.get("password")
-            if pw == "***REDACTED***" or pw is None:
-                incoming_mqtt["password"] = existing_mqtt.get("password", "")
-            elif isinstance(pw, str) and pw.strip() == "" and pw != "":
-                # Whitespace-only — treat as untouched / unset, not clear.
-                incoming_mqtt["password"] = existing_mqtt.get("password", "")
-            # else: explicit "" → preserved as "" (clear), or non-empty → overwrite
-
-            # Operators paste broker URLs from environment variables / docs
-            # (``mqtt://host:1883``, ``mqtts://broker.example.com``).  Strip
-            # the scheme so the bridge's MQTT client gets a bare host, and
-            # promote port / TLS hints from the URL to the dedicated
-            # fields when the operator didn't fill them explicitly.
             from sendspin_bridge.services.ha.ha_addon import normalise_broker_host
 
             broker_raw = incoming_mqtt.get("broker")
@@ -862,6 +844,31 @@ def api_config():
                     config["MA_USERNAME"] = existing["MA_USERNAME"]
             except Exception as _exc:
                 logger.debug("Could not read existing config for merge: %s", _exc)
+
+        # HA_INTEGRATION password round-trip semantics — under the lock so a
+        # parallel ``POST /api/config`` from another Waitress thread can't
+        # change the on-disk password between our existing-read and write.
+        # The GET response surfaces an existing password as ``***REDACTED***``
+        # and the UI puts that marker into the input field on load.  Three cases:
+        #   * ``***REDACTED***`` (operator didn't touch the field) — keep existing
+        #   * ``""`` (operator cleared the field) — explicit clear, broker no-auth
+        #   * anything else — overwrite with the typed plaintext
+        # ``None``/whitespace inherit "keep existing" so a clumsy client
+        # submitting an unset field doesn't accidentally clear the password,
+        # but explicit ``""`` is honoured.
+        incoming_ha_locked = config.get("HA_INTEGRATION")
+        if isinstance(incoming_ha_locked, dict):
+            incoming_mqtt_locked = incoming_ha_locked.get("mqtt")
+            if isinstance(incoming_mqtt_locked, dict):
+                existing_ha = existing.get("HA_INTEGRATION") or {}
+                existing_mqtt = existing_ha.get("mqtt") if isinstance(existing_ha.get("mqtt"), dict) else {}
+                pw = incoming_mqtt_locked.get("password")
+                if pw == "***REDACTED***" or pw is None:
+                    incoming_mqtt_locked["password"] = existing_mqtt.get("password", "")
+                elif isinstance(pw, str) and pw.strip() == "" and pw != "":
+                    # Whitespace-only — treat as untouched / unset, not clear.
+                    incoming_mqtt_locked["password"] = existing_mqtt.get("password", "")
+                # else: explicit "" → preserved as "" (clear), or non-empty → overwrite
 
         # Normalize MA_API_URL: add http:// scheme if missing
         ma_url = config.get("MA_API_URL", "").strip()
@@ -1017,8 +1024,7 @@ def api_set_log_level():
         return jsonify({"success": False, "error": "Could not persist log level"}), 500
 
     # Apply to main process root logger immediately after persistence succeeds
-    logging.getLogger().setLevel(getattr(logging, level))
-    os.environ["LOG_LEVEL"] = level
+    apply_log_level(level)
 
     # Propagate to all running subprocesses via stdin IPC
     loop = get_main_loop()

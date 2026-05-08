@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.infrastructure.config_diff import ActionKind, ReconfigAction
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from concurrent.futures import Future
 
     from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext
@@ -24,10 +26,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# How long to wait for hot-apply IPC to flush before falling back to background
-# dispatch.  IPC writes finish in <50 ms in practice but we give 500 ms of slack
-# so the request handler never hangs on a busy event loop.
-_HOT_APPLY_TIMEOUT_S = 0.5
+# How long to wait for hot-apply IPC to flush before bucketing the action as
+# pending instead of synchronously applied.  IPC writes finish in <50 ms in
+# practice, but the asyncio loop on HAOS-VM (``pulse_latency_msec=800``) can
+# stall for several hundred ms during BlueZ/PA churn — 1.5 s leaves headroom
+# without pushing past the HA Supervisor ingress 60 s ceiling for a save that
+# touches multiple devices.
+_HOT_APPLY_TIMEOUT_S = 1.5
+
+# Time between starts of consecutive ``warm_restart`` calls when a global
+# field changes (``GLOBAL_RESTART``).  300 ms is enough for BlueZ/PulseAudio
+# to absorb each daemon stop+respawn without piling up reconnect storms,
+# without serializing all clients and stretching the cascade to N x T(restart).
+_GLOBAL_RESTART_STAGGER_S = 0.3
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +49,7 @@ _HOT_APPLY_TIMEOUT_S = 0.5
 @dataclass
 class ReconfigSummary:
     hot_applied: list[dict[str, Any]] = field(default_factory=list)
+    hot_pending: list[dict[str, Any]] = field(default_factory=list)
     warm_restarting: list[dict[str, Any]] = field(default_factory=list)
     global_broadcast: list[dict[str, Any]] = field(default_factory=list)
     global_restart: list[dict[str, Any]] = field(default_factory=list)
@@ -51,6 +63,7 @@ class ReconfigSummary:
     def to_dict(self) -> dict[str, Any]:
         return {
             "hot": self.hot_applied,
+            "hot_pending": self.hot_pending,
             "warm_restarting": self.warm_restarting,
             "global_broadcast": self.global_broadcast,
             "global_restart": self.global_restart,
@@ -67,6 +80,7 @@ class ReconfigSummary:
         return any(
             (
                 self.hot_applied,
+                self.hot_pending,
                 self.warm_restarting,
                 self.global_broadcast,
                 self.global_restart,
@@ -216,14 +230,14 @@ class ReconfigOrchestrator:
             )
             return
         try:
-            future.result(timeout=_HOT_APPLY_TIMEOUT_S)
-        except Exception as exc:
-            # IPC didn't flush within the HTTP-response window.  Report as an
-            # error so the UI doesn't falsely claim "Applied live", and attach
-            # a completion callback so a late exception is logged rather than
-            # swallowed.  The coroutine keeps running in the background, so
-            # the change may still land — the UI just won't over-promise.
-            logger.warning(
+            applied_keys = future.result(timeout=_HOT_APPLY_TIMEOUT_S)
+        except FutureTimeoutError as exc:
+            # IPC didn't flush within the HTTP-response window.  Bucket as
+            # "pending live" rather than an error so the UI shows a neutral
+            # "still applying" hint instead of a red failure: the coroutine
+            # keeps running in the background and the change may still land.
+            # A completion callback logs late exceptions so they aren't lost.
+            logger.info(
                 "Hot-apply for %s did not complete within %.1fs: %s — continuing in background",
                 action.label or action.mac,
                 _HOT_APPLY_TIMEOUT_S,
@@ -237,17 +251,50 @@ class ReconfigOrchestrator:
                     logger.warning("Late hot-apply failure for %s: %s", _lbl, late_exc)
 
             future.add_done_callback(_log_late_failure)
+            summary.hot_pending.append(action.to_summary())
+            return
+        except Exception as exc:
+            # ``apply_hot_config`` itself raised — validation bug, internal
+            # state error, etc.  Surface as an explicit error so the UI shows
+            # a red failure instead of misleading "Pending live": this is a
+            # genuine problem, not a slow IPC.
+            logger.warning(
+                "Hot-apply for %s failed: %s",
+                action.label or action.mac,
+                exc,
+            )
             summary.errors.append(
                 {
                     "kind": action.kind.value,
                     "mac": action.mac,
                     "label": action.label,
                     "fields": list(action.fields),
-                    "error": f"hot-apply pending ({type(exc).__name__})",
+                    "error": f"hot-apply failed ({type(exc).__name__}: {exc})",
                 }
             )
             return
-        summary.hot_applied.append(action.to_summary())
+
+        applied_set = set(applied_keys or [])
+        applied_fields = [f for f in action.fields if f in applied_set]
+        not_applied_fields = [f for f in action.fields if f not in applied_set]
+
+        if applied_fields:
+            applied_summary = action.to_summary()
+            applied_summary["fields"] = applied_fields
+            summary.hot_applied.append(applied_summary)
+        if not_applied_fields:
+            # Per-key transactional ``apply_hot_config`` skips a field when its
+            # IPC fails (parent-state stays consistent with daemon).  Surface
+            # those as errors so the UI doesn't falsely claim "Applied live".
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": action.mac,
+                    "label": action.label,
+                    "fields": not_applied_fields,
+                    "error": "hot-apply not_applied (IPC failed or value rejected)",
+                }
+            )
 
     def _apply_warm(
         self,
@@ -564,18 +611,24 @@ class ReconfigOrchestrator:
     ) -> None:
         payload = dict(action.payload)
         log_level = payload.get("LOG_LEVEL")
-        if isinstance(log_level, str) and self._loop is not None:
-            level_upper = log_level.upper()
-            cmd = {"cmd": "set_log_level", "level": level_upper}
-            for client in clients_by_mac.values():
-                if not getattr(client, "is_running", None):
-                    continue
-                if not client.is_running():
-                    continue
-                self._schedule_background(
-                    client._send_subprocess_command(cmd),
-                    description=f"set_log_level:{getattr(client, 'player_name', '?')}",
-                )
+        if isinstance(log_level, str):
+            # Update the bridge's own root logger so log-level changes saved
+            # via the main settings form take effect immediately, matching
+            # the behaviour of the dedicated ``/api/settings/log_level`` route.
+            from sendspin_bridge.config.logging_setup import apply_log_level
+
+            level_upper = apply_log_level(log_level)
+            if self._loop is not None:
+                cmd = {"cmd": "set_log_level", "level": level_upper}
+                for client in clients_by_mac.values():
+                    if not getattr(client, "is_running", None):
+                        continue
+                    if not client.is_running():
+                        continue
+                    self._schedule_background(
+                        client._send_subprocess_command(cmd),
+                        description=f"set_log_level:{getattr(client, 'player_name', '?')}",
+                    )
         summary.global_broadcast.append(action.to_summary())
 
     def _apply_global_restart(
@@ -587,17 +640,50 @@ class ReconfigOrchestrator:
         if self._loop is None:
             summary.global_restart.append(action.to_summary())
             return
-        for client in clients_by_mac.values():
-            if not getattr(client, "is_running", None):
-                continue
-            if not client.is_running():
-                continue
-            device = self._build_device_snapshot_from_client(client)
+        running = [
+            client
+            for client in clients_by_mac.values()
+            if callable(getattr(client, "is_running", None)) and client.is_running()
+        ]
+        if running:
             self._schedule_background(
-                client.warm_restart(device),
-                description=f"global_restart:{getattr(client, 'player_name', '?')}",
+                self._global_restart_sequence(running),
+                description="global_restart_sequence",
             )
         summary.global_restart.append(action.to_summary())
+
+    async def _global_restart_sequence(self, clients: list[Any]) -> None:
+        """Trigger ``warm_restart`` on each client with a fixed-delay stagger.
+
+        Starts are spaced ``_GLOBAL_RESTART_STAGGER_S`` apart so BlueZ /
+        PulseAudio absorb the reconnect cascade smoothly; restarts run in
+        parallel after their staggered launch, so total wall time is roughly
+        ``max(warm_restart) + (N-1) * stagger`` rather than ``N × T``.
+        """
+        for idx, client in enumerate(clients):
+            if idx:
+                await asyncio.sleep(_GLOBAL_RESTART_STAGGER_S)
+            device = self._build_device_snapshot_from_client(client)
+            label = getattr(client, "player_name", "?")
+            task = asyncio.create_task(
+                client.warm_restart(device),
+                name=f"global_restart:{label}",
+            )
+            task.add_done_callback(self._make_warm_restart_done_callback(label))
+
+    @staticmethod
+    def _make_warm_restart_done_callback(label: str) -> Callable[[Any], None]:
+        def _on_done(done_task: Any) -> None:
+            ReconfigOrchestrator._log_warm_restart_done(done_task, label)
+
+        return _on_done
+
+    @staticmethod
+    def _log_warm_restart_done(task: Any, label: str) -> None:
+        try:
+            task.result()
+        except Exception as exc:
+            logger.warning("global_restart warm_restart for %s failed: %s", label, exc)
 
     def _apply_ha_integration_lifecycle(self, action: ReconfigAction, summary: ReconfigSummary) -> None:
         """Reload the HA integration subsystem (MQTT publisher / mDNS).

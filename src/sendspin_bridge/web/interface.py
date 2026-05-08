@@ -27,6 +27,7 @@ from sendspin_bridge.config import (
     resolve_additional_web_port,
     resolve_web_port,
 )
+from sendspin_bridge.config.logging_setup import apply_log_level
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,10 +41,7 @@ _startup_config = load_config()
 app.secret_key = ensure_secret_key(_startup_config)
 
 # Apply configured log level to root logger
-_startup_log_level = _startup_config.get("LOG_LEVEL", "INFO").upper()
-if _startup_log_level not in ("INFO", "DEBUG"):
-    _startup_log_level = "INFO"
-logging.getLogger().setLevel(getattr(logging, _startup_log_level))
+apply_log_level(_startup_config.get("LOG_LEVEL"))
 
 
 def _coerce_session_timeout_hours(raw_value) -> int:

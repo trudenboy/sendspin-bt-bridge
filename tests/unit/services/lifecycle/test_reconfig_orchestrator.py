@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -44,7 +45,7 @@ class _ThrowingFuture:
         return self._exc
 
 
-def test_apply_hot_reports_timeout_as_error_not_applied(monkeypatch):
+def test_apply_hot_reports_timeout_as_pending_not_error(monkeypatch):
     client = MagicMock()
 
     # The orchestrator calls client.apply_hot_config(...) to build the coroutine
@@ -81,11 +82,120 @@ def test_apply_hot_reports_timeout_as_error_not_applied(monkeypatch):
 
         summary = orch.apply([action])
 
-        assert summary.hot_applied == []  # NOT reported as "Applied live"
+        # Timeout should bucket as "pending live" — the coroutine keeps running
+        # in the background and the change may still land.  No false-positive
+        # error in the UI.
+        assert summary.hot_applied == []
+        assert summary.errors == []
+        assert len(summary.hot_pending) == 1
+        assert summary.hot_pending[0]["kind"] == "hot_apply"
+        assert summary.hot_pending[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+        assert summary.to_dict()["hot_pending"] == summary.hot_pending
+    finally:
+        loop.close()
+
+
+def test_apply_hot_routes_unapplied_fields_to_errors(monkeypatch):
+    """When ``apply_hot_config`` skips a field (per-key transactional IPC
+    failure), the orchestrator must surface the unapplied field via
+    ``summary.errors`` so the UI doesn't claim a successful live apply."""
+
+    client = MagicMock()
+
+    async def _coro_returns_empty(*args, **kwargs):
+        return []
+
+    client.apply_hot_config = _coro_returns_empty
+
+    snapshot = _FakeSnapshot({"AA:BB:CC:DD:EE:FF": client})
+    loop = _fake_loop()
+    try:
+        orch = ReconfigOrchestrator(loop, snapshot)  # type: ignore[arg-type]
+
+        def _resolve_to_empty(coro, _loop):
+            coro.close()
+            fut: Any = _ThrowingFuture(None)
+            fut._exc = None
+            fut._result = []  # type: ignore[attr-defined]
+
+            def result(timeout=None):
+                return []
+
+            fut.result = result  # type: ignore[method-assign]
+            return fut
+
+        monkeypatch.setattr(
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            _resolve_to_empty,
+        )
+
+        action = ReconfigAction(
+            kind=ActionKind.HOT_APPLY,
+            mac="AA:BB:CC:DD:EE:FF",
+            fields=["static_delay_ms"],
+            payload={"static_delay_ms": 250.0},
+            label="Test Speaker",
+        )
+
+        summary = orch.apply([action])
+
+        assert summary.hot_applied == []
+        assert summary.hot_pending == []
         assert len(summary.errors) == 1
-        assert summary.errors[0]["kind"] == "hot_apply"
-        assert summary.errors[0]["mac"] == "AA:BB:CC:DD:EE:FF"
-        assert "pending" in summary.errors[0]["error"].lower()
+        assert summary.errors[0]["fields"] == ["static_delay_ms"]
+        assert "not_applied" in summary.errors[0]["error"]
+    finally:
+        loop.close()
+
+
+def test_apply_hot_filters_summary_fields_by_actually_applied(monkeypatch):
+    """Mixed payload — some keys applied, some skipped due to IPC failure.
+    ``hot_applied`` lists only the applied keys; ``errors`` carries the rest."""
+
+    client = MagicMock()
+
+    async def _coro_partial(*args, **kwargs):
+        # Only ``idle_mode`` applied — the parent-only field always succeeds;
+        # ``static_delay_ms`` was IPC-skipped (per-key transactional drop).
+        return ["idle_mode"]
+
+    client.apply_hot_config = _coro_partial
+
+    snapshot = _FakeSnapshot({"AA:BB:CC:DD:EE:FF": client})
+    loop = _fake_loop()
+    try:
+        orch = ReconfigOrchestrator(loop, snapshot)  # type: ignore[arg-type]
+
+        def _resolve(coro, _loop):
+            coro.close()
+            fut: Any = _ThrowingFuture(None)
+            fut._exc = None
+
+            def result(timeout=None):
+                return ["idle_mode"]
+
+            fut.result = result  # type: ignore[method-assign]
+            return fut
+
+        monkeypatch.setattr(
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            _resolve,
+        )
+
+        action = ReconfigAction(
+            kind=ActionKind.HOT_APPLY,
+            mac="AA:BB:CC:DD:EE:FF",
+            fields=["static_delay_ms", "idle_mode"],
+            payload={"static_delay_ms": 250.0, "idle_mode": "default"},
+            label="Test Speaker",
+        )
+
+        summary = orch.apply([action])
+
+        assert len(summary.hot_applied) == 1
+        assert summary.hot_applied[0]["fields"] == ["idle_mode"]
+        assert len(summary.errors) == 1
+        assert summary.errors[0]["fields"] == ["static_delay_ms"]
     finally:
         loop.close()
 
@@ -240,3 +350,150 @@ def test_build_device_snapshot_includes_keepalive_enabled():
 
     assert snapshot["idle_mode"] == "default"
     assert snapshot["keepalive_enabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# GLOBAL_RESTART staggered start
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_global_restart_sequence_staggers_starts_with_fixed_delay(monkeypatch):
+    """``_global_restart_sequence`` must wait the configured stagger between
+    consecutive ``warm_restart`` starts so PA/BlueZ aren't flooded by
+    simultaneous reconnects when a global field changes."""
+    from sendspin_bridge.services.lifecycle import reconfig_orchestrator as rom
+
+    sleep_calls: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def _record_sleep(delay):
+        sleep_calls.append(float(delay))
+        # Yield so create_task'd warm_restarts get a chance to run between
+        # staggered launches - otherwise the test sees zero ``started`` events.
+        await real_sleep(0)
+
+    started: list[str] = []
+
+    def _make_client(name: str):
+        client = MagicMock()
+        client.player_name = name
+        client.listen_port = 8928
+        client.listen_host = "0.0.0.0"
+        client.preferred_format = None
+        client.static_delay_ms = 0.0
+        client.idle_mode = "default"
+        client.keepalive_enabled = False
+        client.keepalive_interval = 30
+        client.idle_disconnect_minutes = 0
+        client.power_save_delay_minutes = 1
+
+        async def _warm(_device, _name=name):
+            started.append(_name)
+
+        client.warm_restart = _warm
+        client.is_running = MagicMock(return_value=True)
+        return client
+
+    clients = [_make_client(f"S{i}") for i in range(3)]
+    orch = ReconfigOrchestrator(asyncio.get_running_loop(), _FakeSnapshot({}))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(rom.asyncio, "sleep", _record_sleep)
+
+    await orch._global_restart_sequence(clients)
+    # Give the create_task'd warm_restarts a chance to run.
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+    # Filter out the 0-delay drain sleeps from the test itself; only the
+    # stagger sleeps issued *by* the sequence should remain.
+    real_sleep_calls = [d for d in sleep_calls if d > 0]
+    assert real_sleep_calls == [rom._GLOBAL_RESTART_STAGGER_S, rom._GLOBAL_RESTART_STAGGER_S]
+    assert started == ["S0", "S1", "S2"]
+
+
+# ---------------------------------------------------------------------------
+# LOG_LEVEL parent-process update
+# ---------------------------------------------------------------------------
+
+
+def test_apply_global_broadcast_log_level_updates_root_logger(monkeypatch):
+    import logging
+
+    captured: list[str] = []
+
+    real_setLevel = logging.Logger.setLevel
+
+    def _spy(self, level):
+        if self.name == "root":
+            captured.append(logging.getLevelName(level))
+        return real_setLevel(self, level)
+
+    monkeypatch.setattr(logging.Logger, "setLevel", _spy)
+
+    snapshot = _FakeSnapshot({})
+    orch = ReconfigOrchestrator(None, snapshot)  # type: ignore[arg-type]
+
+    action = ReconfigAction(
+        kind=ActionKind.GLOBAL_BROADCAST,
+        mac=None,
+        fields=["LOG_LEVEL"],
+        payload={"LOG_LEVEL": "DEBUG"},
+        label="global",
+    )
+
+    orch.apply([action])
+
+    assert "DEBUG" in captured
+    # Restore root logger to a sane level so subsequent tests aren't affected.
+    logging.getLogger().setLevel(logging.WARNING)
+
+
+def test_apply_hot_routes_non_timeout_exception_to_errors_not_pending(monkeypatch):
+    """Only ``concurrent.futures.TimeoutError`` should bucket as ``hot_pending``.
+    Any other exception leaking from ``future.result()`` (validation bug,
+    internal state error, late ``RuntimeError`` from a shutting-down loop)
+    is a genuine failure and must surface in ``summary.errors`` so the UI
+    shows a red banner instead of a misleading "Pending live"."""
+
+    client = MagicMock()
+
+    async def _coro(*args, **kwargs):
+        return []
+
+    client.apply_hot_config = _coro
+
+    snapshot = _FakeSnapshot({"AA:BB:CC:DD:EE:FF": client})
+    loop = _fake_loop()
+    try:
+        orch = ReconfigOrchestrator(loop, snapshot)  # type: ignore[arg-type]
+
+        def _raising_with_value_error(coro, _loop):
+            coro.close()
+            return _ThrowingFuture(ValueError("simulated apply_hot_config bug"))
+
+        monkeypatch.setattr(
+            "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe",
+            _raising_with_value_error,
+        )
+
+        action = ReconfigAction(
+            kind=ActionKind.HOT_APPLY,
+            mac="AA:BB:CC:DD:EE:FF",
+            fields=["static_delay_ms"],
+            payload={"static_delay_ms": 250.0},
+            label="Test Speaker",
+        )
+
+        summary = orch.apply([action])
+
+        assert summary.hot_applied == []
+        assert summary.hot_pending == []
+        assert len(summary.errors) == 1
+        assert summary.errors[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+        # ValueError from apply_hot_config must be surfaced; the message
+        # should mention the underlying exception type so operators can
+        # distinguish bugs from slow IPC.
+        assert "ValueError" in summary.errors[0]["error"]
+    finally:
+        loop.close()

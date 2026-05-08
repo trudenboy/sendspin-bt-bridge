@@ -26,6 +26,7 @@ from sendspin_bridge.config import (
     resolve_base_listen_port,
     resolve_web_port,
 )
+from sendspin_bridge.config.logging_setup import apply_log_level
 from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext, activate_device
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
@@ -365,11 +366,7 @@ class BridgeOrchestrator:
             base_listen_port,
         )
 
-        log_level = config.get("LOG_LEVEL", "INFO").upper()
-        if log_level not in ("INFO", "DEBUG"):
-            log_level = "INFO"
-        logging.getLogger().setLevel(getattr(logging, log_level))
-        os.environ["LOG_LEVEL"] = log_level
+        log_level = apply_log_level(config.get("LOG_LEVEL"))
         logger.info("Log level: %s", log_level)
         logger.info("Runtime deps: %s", format_dependency_versions(get_runtime_dependency_versions()))
 

@@ -8958,6 +8958,10 @@ function _formatReconfigSummary(reconfig) {
     if (reconfig.hot && reconfig.hot.length) {
         parts.push('\u2713 Applied live: ' + summariseGroup(reconfig.hot));
     }
+    if (reconfig.hot_pending && reconfig.hot_pending.length) {
+        parts.push('\u231b Pending live: ' + summariseGroup(reconfig.hot_pending));
+        if (severity === 'success') severity = 'info';
+    }
     if (reconfig.started && reconfig.started.length) {
         parts.push('\u2713 Live added: ' + summariseGroup(reconfig.started));
     }

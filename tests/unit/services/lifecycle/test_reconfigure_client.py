@@ -254,3 +254,54 @@ async def test_warm_restart_recomputes_keepalive_enabled_from_new_idle_mode(monk
 
     assert client.idle_mode == "default"
     assert client.keepalive_enabled is False
+
+
+# ---------------------------------------------------------------------------
+# Per-key transactional apply_hot_config: parent-state follows IPC success.
+# ---------------------------------------------------------------------------
+
+
+class _FailingCommandService:
+    """``send`` always raises ``IPCError`` to simulate a dead/broken daemon."""
+
+    def __init__(self):
+        self.calls: list[tuple[object, dict]] = []
+
+    async def send(self, proc, cmd):
+        from sendspin_bridge.bridge.exceptions import IPCError
+
+        self.calls.append((proc, cmd))
+        raise IPCError("simulated daemon write failure")
+
+
+@pytest.mark.asyncio
+async def test_apply_hot_config_does_not_commit_parent_state_when_ipc_fails():
+    client = _make_client()
+    client._command_service = _FailingCommandService()  # type: ignore[assignment]
+    before = client.static_delay_ms
+
+    applied = await client.apply_hot_config({"static_delay_ms": 250})
+
+    # Parent-state must stay aligned with what the daemon actually saw —
+    # which is *nothing*, because the IPC raised before completion.
+    assert applied == []
+    assert client.static_delay_ms == before
+    # IPC was attempted exactly once before bailing out.
+    assert len(client._command_service.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_apply_hot_config_per_key_transactional_does_not_block_parent_only_keys():
+    """A failing IPC for ``static_delay_ms`` must not prevent unrelated
+    parent-only keys (``idle_mode``) in the same payload from applying."""
+    client = _make_client()
+    client._command_service = _FailingCommandService()  # type: ignore[assignment]
+
+    applied = await client.apply_hot_config(
+        {"static_delay_ms": 250, "idle_mode": "power_save"},
+    )
+
+    assert applied == ["idle_mode"]
+    assert client.idle_mode == "power_save"
+    # static_delay_ms stayed untouched because its IPC failed.
+    assert client.static_delay_ms != 250
