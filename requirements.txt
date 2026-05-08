@@ -26,7 +26,7 @@ av==16.1.0
     # via
     #   aiosendspin
     #   sendspin
-bleak==3.0.1
+bleak==3.0.2
     # via bluetooth-adapters
 blinker==1.9.0
     # via flask
@@ -79,7 +79,7 @@ itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
     # via flask
-markdown-it-py==4.0.0
+markdown-it-py==4.2.0
     # via rich
 markupsafe==3.0.3
     # via
@@ -106,7 +106,7 @@ numpy==2.4.4
     # via
     #   aiosendspin
     #   sendspin
-orjson==3.11.8
+orjson==3.11.9
     # via
     #   aiosendspin
     #   music-assistant-client
