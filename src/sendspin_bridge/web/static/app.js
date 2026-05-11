@@ -12145,6 +12145,60 @@ var _BR_ICON_GITHUB = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 
 var _BR_ICON_COPY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 011.5-1.5H11"/></svg>';
 var _BR_ICON_INFO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><line x1="8" y1="7" x2="8" y2="11"/><line x1="8" y1="5" x2="8" y2="5" stroke-width="2"/></svg>';
 
+function _renderLikelyCauses(container, causes) {
+    // v2.70.0-rc.2 (#262) — render the pre-submit likely-causes list above
+    // the bug-report form when the backend classifier matched at least one
+    // pattern. Each row links to a remediation surface; a "Report anyway"
+    // link hides the block so genuine bug paths are never gated.
+    if (!container) return;
+    container.innerHTML = '';
+    if (!Array.isArray(causes) || causes.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    var heading = document.createElement('div');
+    heading.className = 'bugreport-likely-causes-heading';
+    heading.textContent = 'Before you submit — did one of these apply?';
+    container.appendChild(heading);
+    var list = document.createElement('ul');
+    list.className = 'bugreport-likely-causes-list';
+    causes.forEach(function(cause) {
+        if (!cause || !cause.code) return;
+        var item = document.createElement('li');
+        item.className = 'bugreport-likely-cause';
+        var title = document.createElement('div');
+        title.className = 'bugreport-likely-cause-title';
+        title.textContent = cause.title || cause.code;
+        item.appendChild(title);
+        if (cause.hint) {
+            var hint = document.createElement('div');
+            hint.className = 'bugreport-likely-cause-hint';
+            hint.textContent = cause.hint;
+            item.appendChild(hint);
+        }
+        if (cause.action_url) {
+            var actionLink = document.createElement('a');
+            actionLink.className = 'bugreport-likely-cause-action';
+            actionLink.href = cause.action_url;
+            actionLink.textContent = 'Try this first';
+            item.appendChild(actionLink);
+        }
+        list.appendChild(item);
+    });
+    container.appendChild(list);
+    var dismiss = document.createElement('a');
+    dismiss.href = '#';
+    dismiss.className = 'bugreport-likely-causes-dismiss';
+    dismiss.textContent = 'Report anyway →';
+    dismiss.onclick = function(ev) {
+        ev.preventDefault();
+        container.style.display = 'none';
+    };
+    container.appendChild(dismiss);
+    container.style.display = '';
+}
+
+
 function _openBugReport(e, context) {
     e.preventDefault();
 
@@ -12181,6 +12235,14 @@ function _openBugReport(e, context) {
         '<span class="bugreport-hint-icon">' + _BR_ICON_INFO + '</span>' +
         '<span>Diagnostics are collected automatically. Choose a submission method below.</span>';
     body.appendChild(hint);
+
+    // v2.70.0-rc.2 (#262) — pre-submit "likely causes" hint. Populated
+    // from /api/bugreport.likely_causes after the diagnostics fetch
+    // resolves. Hidden while empty so the form renders unguarded.
+    var likelyCausesEl = document.createElement('div');
+    likelyCausesEl.className = 'bugreport-likely-causes';
+    likelyCausesEl.style.display = 'none';
+    body.appendChild(likelyCausesEl);
 
     // Title field
     var titleField = document.createElement('div');
@@ -12485,6 +12547,7 @@ function _openBugReport(e, context) {
                 descInput.value = suggestedDescription;
             }
             previewBox.textContent = reportFull || 'No data available';
+            _renderLikelyCauses(likelyCausesEl, data.likely_causes);
             dataReady = true;
             validateForm();
             _wireUpButtons();
