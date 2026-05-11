@@ -562,6 +562,12 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     if device.room_confidence:
         device.extra["room_confidence"] = device.room_confidence
     device.extra["bluetooth_paired"] = _snap_paired
+    # v2.70.0-rc.2 (#260, #263) — propagate the "never paired in this bridge
+    # session" signal raised by BluetoothManager. Drives the recovery banner
+    # branch, the Start pairing device-card affordance, the auto-disable
+    # threshold, and the bug-report classifier.
+    device.extra["never_paired"] = bool(status.get("never_paired", False))
+    device.extra["never_paired_since"] = status.get("never_paired_since")
     if bt_mgr:
         device.extra["max_reconnect_fails"] = _snap_max_reconn
         threshold = _snap_max_reconn

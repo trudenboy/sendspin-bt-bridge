@@ -162,6 +162,42 @@ def test_build_device_snapshot_includes_capability_payload():
     assert data["capabilities"]["actions"]["queue_control"]["blocked_reason"] == "Sendspin is not connected."
 
 
+def test_build_device_snapshot_propagates_never_paired_flag():
+    """The DeviceStatus.never_paired signal must reach DeviceSnapshot.extra
+    so SSE consumers and the recovery banner can distinguish "never paired"
+    from "paired but offline" (#260, #263)."""
+    client = _make_client()
+    client.status.update(
+        {
+            "bluetooth_connected": False,
+            "reconnecting": True,
+            "never_paired": True,
+            "never_paired_since": "2026-05-11T08:30:00+00:00",
+            "last_error": "Bluetooth speaker unreachable: BlueZ has no record of this device.",
+        }
+    )
+
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+
+    assert data["never_paired"] is True
+    assert data["never_paired_since"] == "2026-05-11T08:30:00+00:00"
+    # State model bluetooth block must mirror the flag for guidance consumers
+    assert data["state_model"]["bluetooth"]["never_paired"] is True
+    assert data["state_model"]["bluetooth"]["never_paired_since"] == "2026-05-11T08:30:00+00:00"
+
+
+def test_build_device_snapshot_defaults_never_paired_false():
+    """Devices in normal state must report never_paired=False so the existing
+    'is disconnected' banner path is preserved."""
+    client = _make_client()
+    snapshot = build_device_snapshot(client)
+    data = snapshot.to_dict()
+    assert data["never_paired"] is False
+    assert data["never_paired_since"] is None
+    assert data["state_model"]["bluetooth"]["never_paired"] is False
+
+
 def test_build_device_snapshot_prefers_repair_when_device_is_unpaired():
     client = _make_client()
     client.status.update(
