@@ -5079,6 +5079,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 [2.50.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.2...v2.50.3
 [2.50.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.1...v2.50.2
 [2.50.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.1
+[2.49.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.49.0...v2.49.1
 [2.49.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.2...v2.49.0
 [2.48.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1...v2.48.2
 [2.48.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0...v2.48.1

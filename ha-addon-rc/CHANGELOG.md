@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.70.0-rc.3] - 2026-05-11
+
+### Fixed
+- **RSSI refresh task no longer dies on permission-constrained sandboxes.** On Proxmox LXC (or any environment without `CAP_NET_RAW`) the kernel denies the `AF_BLUETOOTH` raw-socket bind and the underlying `btsocket` library raises `BluetoothSocketError("Unable to open PF_BLUETOOTH socket")` — a class that inherits from `BaseException` rather than `Exception`, so the existing safety net let it slip through and kill the per-device RSSI refresh task on its very first tick. The signal-strength chip then stopped updating for the lifetime of the bridge process. The wrapper now degrades silently for every failure mode of the socket open while still propagating cooperative-shutdown signals (task cancellation, `KeyboardInterrupt`, `SystemExit`, `GeneratorExit`). Audio playback was unaffected; this purely restores the RSSI badge on LXC. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+
 ## [2.70.0-rc.2] - 2026-05-11
 
 ### Added
