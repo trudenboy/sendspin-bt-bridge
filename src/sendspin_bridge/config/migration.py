@@ -378,6 +378,19 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         default=DEFAULT_UPDATE_CHANNEL,
     )
 
+    # v2.70.0-rc.2 (#263) — ``BT_MAX_RECONNECT_FAILS`` default flipped
+    # from 0 (unlimited) to 5 to power the never-paired auto-disable
+    # feature. Configs that still carry the old default are migrated to
+    # the new default so the feature engages without an explicit user
+    # action. Operators who genuinely want unlimited reconnects can
+    # re-set 0 after upgrade — the migration runs once per stale value.
+    if config.get("BT_MAX_RECONNECT_FAILS") == 0:
+        logger.warning(
+            "Migrated BT_MAX_RECONNECT_FAILS from 0 (legacy unlimited default) "
+            "to 5 (v2.70.0 default). Set back to 0 to opt out of auto-disable."
+        )
+        config["BT_MAX_RECONNECT_FAILS"] = 5
+
     # ``EXPERIMENTAL_RSSI_BADGE`` was promoted to ``RSSI_BADGE`` (default
     # True) in v2.64.0 once it stabilised.  Migrate any pre-existing
     # config silently — preserve the user's setting (whether True or
