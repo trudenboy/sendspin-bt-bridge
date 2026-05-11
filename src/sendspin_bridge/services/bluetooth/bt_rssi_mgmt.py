@@ -55,6 +55,7 @@ never propagate an exception into the asyncio refresh loop".
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import struct
 import time
@@ -141,7 +142,7 @@ def _query_rssi_byte(adapter_index: int, mac: str) -> int | None:
     except ImportError:
         logger.debug("btsocket unavailable — RSSI read skipped for %s", mac)
         return None
-    except (KeyboardInterrupt, SystemExit, GeneratorExit):
+    except (KeyboardInterrupt, SystemExit, GeneratorExit, asyncio.CancelledError):
         raise
     except BaseException as exc:
         # btsocket.btmgmt_socket.BluetoothSocketError inherits from
@@ -151,7 +152,9 @@ def _query_rssi_byte(adapter_index: int, mac: str) -> int | None:
         # capability-constrained sandboxes like Proxmox LXC without
         # CAP_NET_RAW — climb up and kill the refresh task on its first
         # tick (issue #291).  We still re-raise the cooperative-shutdown
-        # signals above so asyncio cancellation and Ctrl-C behave.
+        # signals above (including ``asyncio.CancelledError``, which is
+        # a ``BaseException`` subclass on 3.8+) so task cancellation,
+        # Ctrl-C, and interpreter exit continue to propagate.
         logger.debug("mgmt socket open failed for %s: %s", mac, exc)
         return None
 

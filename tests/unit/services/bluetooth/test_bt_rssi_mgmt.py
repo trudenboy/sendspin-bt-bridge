@@ -15,8 +15,11 @@ We can't open that socket in CI, so the tests target two seams:
 
 from __future__ import annotations
 
+import asyncio
 import struct
 from unittest.mock import MagicMock
+
+import pytest
 
 from sendspin_bridge.services.bluetooth import bt_rssi_mgmt
 
@@ -255,6 +258,38 @@ def test_query_returns_none_when_open_raises_base_exception(monkeypatch):
     monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", _raise)
 
     assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
+
+
+@pytest.mark.parametrize(
+    "shutdown_exc",
+    [
+        asyncio.CancelledError,
+        KeyboardInterrupt,
+        SystemExit,
+        GeneratorExit,
+    ],
+)
+def test_query_propagates_cooperative_shutdown_signals(monkeypatch, shutdown_exc):
+    """The broader ``except BaseException`` net that swallows
+    ``BluetoothSocketError`` must NOT also swallow cooperative-shutdown
+    signals — those are all ``BaseException`` subclasses too.
+
+    Critically, ``asyncio.CancelledError`` became a ``BaseException``
+    subclass in Python 3.8; if the wrapper ate it, a task cancel
+    issued during the mgmt socket open (e.g. bridge shutdown racing
+    with a refresh tick) would silently turn into ``None`` and the
+    refresh task would keep spinning past shutdown.
+
+    Asserts each signal is re-raised unchanged from ``_query_rssi_byte``.
+    """
+
+    def _raise():
+        raise shutdown_exc
+
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", _raise)
+
+    with pytest.raises(shutdown_exc):
+        bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF")
 
 
 def test_query_returns_none_on_malformed_mac(monkeypatch):
