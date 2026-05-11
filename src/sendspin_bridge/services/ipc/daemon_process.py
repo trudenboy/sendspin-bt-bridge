@@ -297,6 +297,59 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
 # Seconds after audio_streaming=True before unmuting the sink
 _STARTUP_UNMUTE_DELAY_S = 1.5
 
+# Issue #269: maximum time to wait for BlueZ MediaTransport1 to leave the
+# 'idle' state before muting anyway. Most BlueZ stacks move to 'pending'
+# within ~200 ms after Connect when the peer is opening a stream endpoint;
+# 1.5 s is a comfortable upper bound that still beats the audio-streaming
+# path of MA (which on the issue-269 stack arrives ~12 s after Connect).
+_STARTUP_MUTE_TRANSPORT_TIMEOUT_S = 1.5
+
+
+def _dbus_get_media_transport_state(device_path: str | None) -> str | None:
+    """Thin re-export so the daemon can stay independent of bluetooth/dbus
+    module import paths and tests can monkeypatch us locally."""
+    from sendspin_bridge.bluetooth.dbus import (
+        _dbus_get_media_transport_state as _impl,
+    )
+
+    return _impl(device_path)
+
+
+async def _mute_when_transport_ready(
+    *,
+    sink_name: str,
+    device_path: str | None,
+    do_mute,
+    poll_interval: float = 0.2,
+    timeout: float = _STARTUP_MUTE_TRANSPORT_TIMEOUT_S,
+) -> bool:
+    """Mute *sink_name* only once BlueZ AVDTP transport is non-idle.
+
+    Issue #269: when the daemon mutes immediately on startup, certain
+    A2DP sinks (Sony WH-1000XM4 confirmed) interpret the silence as
+    "no inbound stream" and proactively send AVDTP-Suspend. If MA then
+    starts streaming, PipeWire's AVDTP-Start races with the Suspend and
+    bluetoothd reports ``cancel_request() Start: Operation canceled``.
+
+    We delay the mute until ``MediaTransport1.State`` is
+    ``"pending"`` / ``"active"`` (the peer has opened or is opening the
+    stream endpoint), or until ``timeout`` elapses — whichever is first.
+    When ``device_path`` is None (no D-Bus introspection available),
+    mute immediately to preserve pre-#269 behavior.
+    """
+    if not device_path:
+        return await do_mute(sink_name, True)
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + max(0.0, timeout)
+    while True:
+        state = _dbus_get_media_transport_state(device_path)
+        if state in ("pending", "active"):
+            return await do_mute(sink_name, True)
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return await do_mute(sink_name, True)
+        await asyncio.sleep(min(poll_interval, remaining))
+
 
 async def _startup_unmute_watcher(
     status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str, on_status_change=None
@@ -554,6 +607,7 @@ async def _run(params: dict) -> None:
     server_url: str | None = params.get("url")
     static_delay_ms: float = params.get("static_delay_ms", 0.0)
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
+    bluetooth_device_path: str | None = params.get("bluetooth_device_path")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))
     # Per-device identity surfaced to MA in client/hello.device_info. Empty
@@ -734,12 +788,21 @@ async def _run(params: dict) -> None:
 
     # Mute the PA sink before audio starts to hide re-anchor clicks and routing glitches.
     # The _startup_unmute_watcher will unmute after audio_streaming becomes True + stabilization delay.
+    # Issue #269: defer the mute until BlueZ's AVDTP transport leaves the
+    # 'idle' state — some A2DP sinks (Sony WH-1000XM4 confirmed) interpret
+    # silence on a half-formed transport as "no inbound stream" and send
+    # AVDTP-Suspend, which then collides with PipeWire's later AVDTP-Start.
     _startup_muted = False
     if bluetooth_sink_name:
         try:
             from sendspin_bridge.services.audio.pulse import aset_sink_mute
 
-            if await aset_sink_mute(bluetooth_sink_name, True):
+            ok = await _mute_when_transport_ready(
+                sink_name=bluetooth_sink_name,
+                device_path=bluetooth_device_path,
+                do_mute=aset_sink_mute,
+            )
+            if ok:
                 _startup_muted = True
                 status["sink_muted"] = True
                 logger.info("[%s] Muted sink %s during startup", player_name, bluetooth_sink_name)

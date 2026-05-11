@@ -1439,6 +1439,7 @@ class SendspinClient:
                         "url": server_url,
                         "static_delay_ms": static_delay_ms,
                         "bluetooth_sink_name": self.bluetooth_sink_name,
+                        "bluetooth_device_path": bt_dbus_path,
                         "volume": self.status.get("volume", 100),
                         "muted": bool(self.status.get("muted", False)),
                         "settings_dir": f"/tmp/sendspin-{self._safe_id}",
