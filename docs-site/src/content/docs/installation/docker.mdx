@@ -217,11 +217,15 @@ Then restart the container and see whether `pactl` starts working. Treat that as
 
 ## Headless PipeWire: Bluetooth sinks not appearing after reboot
 
-On PipeWire systems (Ubuntu 22.04+, Fedora, Raspberry Pi OS Bookworm), Bluetooth A2DP audio sinks are created by **WirePlumber** — a session manager that runs as a `systemd --user` service. By default, user services only start when the user logs in (GUI or SSH).
+On PipeWire systems (Ubuntu 22.04+, Fedora, Raspberry Pi OS Bookworm), Bluetooth A2DP audio sinks are created by **WirePlumber** — a session manager that runs as a `systemd --user` service. By default, user services only start when the user logs in (GUI or SSH), and they may only be active when there's an active interactive session.
 
 **Symptom:** After a host reboot the bridge connects to the Bluetooth speaker (`bluetoothctl` shows `Connected: yes`), but `pactl list sinks short` shows no `bluez_output.*` or `bluez_sink.*` sink — only `sendspin_fallback`. Audio works again once you log in interactively.
 
-**Fix:** Enable *linger* for the audio user so PipeWire + WirePlumber start at boot:
+**Fix:**
+
+1. Enable system-wide (instead of per active user) persistent Bluetooth connections. In the file `/usr/share/wireplumber/bluetooth.lua.d/50-bluez-config.lua`, change `["with-logind"] = true` to `false`. 
+
+2. Enable *linger* for the audio user so PipeWire + WirePlumber start at boot:
 
 ```bash
 # Replace 1000 with your AUDIO_UID if different
