@@ -166,3 +166,123 @@ async def test_mute_fires_immediately_when_transport_active(monkeypatch):
 
     assert ok is True
     assert mute_calls == [("bluez_output.AA_BB_CC_DD_EE_FF.1", True)]
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: unmute watchdog early-bail when sink object is gone
+# ---------------------------------------------------------------------------
+
+
+def _install_pulse_stubs(monkeypatch, *, mute_fn, list_sinks_fn, move_fn):
+    """Patch the stubbed pulse module's attributes so the watcher's
+    ``from sendspin_bridge.services.audio.pulse import ...`` picks them up."""
+    pulse_module = sys.modules["sendspin_bridge.services.audio.pulse"]
+    monkeypatch.setattr(pulse_module, "aset_sink_mute", mute_fn, raising=False)
+    monkeypatch.setattr(pulse_module, "alist_sinks", list_sinks_fn, raising=False)
+    monkeypatch.setattr(pulse_module, "amove_pid_sink_inputs", move_fn, raising=False)
+
+
+@pytest.mark.asyncio
+async def test_unmute_watchdog_bails_when_sink_gone(monkeypatch):
+    """When the sink object has disappeared (BlueZ teardown after AVDTP
+    failure), the unmute watchdog must bail after the first failed
+    aset_sink_mute call rather than spending 6+ s on doomed 3 retries
+    (issue #269)."""
+    import asyncio as _asyncio
+    import time as _time
+
+    from sendspin_bridge.services.ipc import daemon_process
+
+    status: dict = {}
+    stop_event = _asyncio.Event()
+
+    # Bump time past the watcher's 15 s streaming-wait deadline so the
+    # control flow goes straight to the unmute path.
+    real_monotonic = _time.monotonic
+    monkeypatch.setattr(daemon_process.time, "monotonic", lambda: real_monotonic() + 1e6)
+
+    mute_calls: list[tuple[str, bool]] = []
+
+    async def _fake_mute(sink, muted):
+        mute_calls.append((sink, muted))
+        return False  # always fail — sink is gone
+
+    async def _fake_alist_sinks():
+        return []  # sink no longer in the system
+
+    async def _fake_amove(_pid, _sink):
+        return 0
+
+    _install_pulse_stubs(
+        monkeypatch,
+        mute_fn=_fake_mute,
+        list_sinks_fn=_fake_alist_sinks,
+        move_fn=_fake_amove,
+    )
+
+    await daemon_process._startup_unmute_watcher(
+        status=status,
+        sink_name="bluez_output.AA_BB_CC_DD_EE_FF.1",
+        stop_event=stop_event,
+        player_name="TEST",
+        on_status_change=None,
+    )
+
+    assert len(mute_calls) == 1, (
+        f"Expected single unmute attempt when sink is gone, got {len(mute_calls)} (retry storm — issue #269)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_unmute_watchdog_retries_when_sink_present(monkeypatch):
+    """When the sink IS present but the mute call transiently failed, keep
+    the existing 3-retry behavior — only the missing-sink case should
+    short-circuit."""
+    import asyncio as _asyncio
+    import time as _time
+
+    from sendspin_bridge.services.ipc import daemon_process
+
+    status: dict = {}
+    stop_event = _asyncio.Event()
+
+    real_monotonic = _time.monotonic
+    monkeypatch.setattr(daemon_process.time, "monotonic", lambda: real_monotonic() + 1e6)
+
+    async def _no_sleep(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(daemon_process.asyncio, "sleep", _no_sleep)
+
+    mute_calls: list[tuple[str, bool]] = []
+
+    async def _fake_mute(sink, muted):
+        mute_calls.append((sink, muted))
+        # Succeed on the 3rd call (1 initial + 2 retries)
+        return len(mute_calls) >= 3
+
+    async def _fake_alist_sinks():
+        # Sink IS present — retries should run
+        return [{"name": "bluez_output.AA_BB_CC_DD_EE_FF.1"}]
+
+    async def _fake_amove(_pid, _sink):
+        return 0
+
+    _install_pulse_stubs(
+        monkeypatch,
+        mute_fn=_fake_mute,
+        list_sinks_fn=_fake_alist_sinks,
+        move_fn=_fake_amove,
+    )
+
+    await daemon_process._startup_unmute_watcher(
+        status=status,
+        sink_name="bluez_output.AA_BB_CC_DD_EE_FF.1",
+        stop_event=stop_event,
+        player_name="TEST",
+        on_status_change=None,
+    )
+
+    assert len(mute_calls) == 3, (
+        f"Expected exactly 3 unmute attempts (1 initial + 2 retries before success), got {len(mute_calls)}"
+    )

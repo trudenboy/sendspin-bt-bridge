@@ -368,7 +368,7 @@ async def _startup_unmute_watcher(
     sink-inputs to the correct sink.
     """
     _logger = logging.getLogger(__name__)
-    from sendspin_bridge.services.audio.pulse import amove_pid_sink_inputs, aset_sink_mute
+    from sendspin_bridge.services.audio.pulse import alist_sinks, amove_pid_sink_inputs, aset_sink_mute
 
     streamed = False
     deadline = time.monotonic() + 15.0
@@ -397,6 +397,24 @@ async def _startup_unmute_watcher(
     try:
         ok = await aset_sink_mute(sink_name, False)
         if not ok:
+            # Issue #269: when the BT sink object has been torn down by
+            # BlueZ (e.g. AVDTP collision aborted the connect cycle),
+            # retries are guaranteed to fail. Probe sink presence once
+            # and short-circuit the 3x2s retry storm if the sink is
+            # already gone.
+            try:
+                sinks = await alist_sinks()
+                sink_present = any(s.get("name") == sink_name for s in sinks)
+            except Exception as exc:
+                _logger.debug("[%s] alist_sinks failed during unmute bail-check: %s", player_name, exc)
+                sink_present = True  # err on the safe side, allow retries
+            if not sink_present:
+                _logger.info(
+                    "[%s] Sink %s no longer present, skipping unmute retries",
+                    player_name,
+                    sink_name,
+                )
+                return
             for retry in range(1, 4):
                 _logger.info("[%s] Unmute retry %d/3 for %s", player_name, retry, sink_name)
                 await asyncio.sleep(2)
