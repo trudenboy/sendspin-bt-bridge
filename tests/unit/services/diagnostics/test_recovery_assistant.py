@@ -316,6 +316,184 @@ def test_recovery_assistant_prefers_repair_for_unpaired_device():
     assert "3/5" in data["issues"][0]["summary"]
 
 
+def test_recovery_assistant_emits_auto_disabled_never_paired_with_normalized_device():
+    """Production regression: when devices arrive wrapped as NormalizedRecoveryDevice
+    (the shape used by the bridge-state path), the `enabled` field MUST be
+    readable so the auto_disabled_never_paired card surfaces. Earlier code
+    used `getattr(device, "enabled", True)` which always returned True against
+    a NormalizedRecoveryDevice lacking that field, silently masking the card
+    in production while SimpleNamespace tests passed (#263 regression)."""
+    from sendspin_bridge.services.diagnostics.recovery_assistant import (
+        NormalizedRecoveryDevice,
+        _build_device_issues,
+    )
+
+    device = NormalizedRecoveryDevice(
+        player_name="Kitchen",
+        state_model={
+            "enabled": False,
+            "bluetooth": {"connected": False, "paired": None, "never_paired": True, "standby": False},
+            "management": {"released": False},
+            "audio": {"has_sink": False},
+            "transport": {"daemon_connected": False},
+        },
+        health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+        recent_events=[],
+        enabled=False,
+    )
+
+    issues = _build_device_issues([device])
+    keys = [issue.key for issue in issues]
+    assert "auto_disabled_never_paired" in keys, (
+        f"expected auto_disabled_never_paired card from NormalizedRecoveryDevice, got: {keys}"
+    )
+
+
+def test_recovery_assistant_emits_auto_disabled_never_paired_card():
+    """A device that was auto-disabled because it never paired must surface
+    a 'Re-enable' recovery card (#263), distinct from the never_paired
+    'Start pairing' card (which targets still-enabled devices)."""
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                enabled=False,
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+                extra={
+                    "bluetooth_paired": None,
+                    "never_paired": True,
+                    "last_error": "Auto-disabled after 5 failed pairing attempts — this device has never been paired",
+                },
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    issue = data["issues"][0]
+    assert issue["key"] == "auto_disabled_never_paired"
+    assert issue["primary_action"]["key"] == "enable_device"
+    assert issue["primary_action"]["label"] == "Re-enable"
+
+
+def test_recovery_assistant_emits_never_paired_for_unknown_bluez_record():
+    """When BlueZ has no record of a configured device (never_paired flag set
+    by BluetoothManager after _PAIRED_UNKNOWN_THRESHOLD purges), the recovery
+    card must title 'has never been paired' with a Start pairing primary
+    action — distinct from 'needs re-pairing' (#260)."""
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+                extra={
+                    "bluetooth_paired": None,
+                    "never_paired": True,
+                    "never_paired_since": "2026-05-11T08:30:00+00:00",
+                    "last_error": (
+                        "Bluetooth speaker unreachable: BlueZ has no record of this device. "
+                        "Put device in pairing mode and reconnect."
+                    ),
+                    "reconnect_attempt": 4,
+                    "max_reconnect_fails": 5,
+                },
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    issue = data["issues"][0]
+    assert issue["key"] == "never_paired"
+    assert "has never been paired" in issue["title"]
+    assert "pairing mode" in issue["summary"].lower()
+    assert issue["primary_action"]["key"] == "pair_device"
+    # Must NOT carry toggle_bt_management (nothing to release — never managed)
+    secondary_keys = [a["key"] for a in issue["secondary_actions"]]
+    assert "toggle_bt_management" not in secondary_keys
+    # 4/5 attempt counter still surfaces for context
+    assert "4/5" in issue["summary"]
+
+
+def test_recovery_assistant_repair_required_unchanged_when_never_paired_false():
+    """Regression: a device that WAS paired but is now offline must still
+    produce the existing `repair_required` card (not `never_paired`)."""
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Office",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+                extra={
+                    "bluetooth_paired": False,
+                    "never_paired": False,
+                    "reconnect_attempt": 1,
+                    "max_reconnect_fails": 5,
+                },
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert data["issues"][0]["key"] == "repair_required"
+
+
+def test_recovery_assistant_disconnected_unchanged_when_paired_unknown_no_flag():
+    """Regression: when bluetooth_paired is None but never_paired is False
+    (BlueZ-hiccup before threshold), continue to emit `disconnected` rather
+    than over-triggering the never-paired surface."""
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Bath",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+                extra={
+                    "bluetooth_paired": None,
+                    "never_paired": False,
+                    "reconnect_attempt": 1,
+                    "max_reconnect_fails": 5,
+                },
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    assert data["issues"][0]["key"] == "disconnected"
+
+
 def test_recovery_assistant_only_flags_auto_released_devices():
     snapshot = build_recovery_assistant_snapshot(
         config={"BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}], "PULSE_LATENCY_MSEC": 250},

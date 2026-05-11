@@ -439,6 +439,38 @@ body {
             border: 1px solid var(--divider-color, rgba(0,0,0,.12));
         }
         .bugreport-hint-icon { flex-shrink: 0; width: 14px; height: 14px; margin-top: 1px; opacity: 0.6; }
+        /* v2.70.0-rc.2 (#262) — pre-submit likely-causes hint block */
+        .bugreport-likely-causes {
+            display: flex; flex-direction: column; gap: 10px;
+            padding: 12px 14px; border-radius: 8px;
+            background: rgba(245, 158, 11, 0.06);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            margin-bottom: 4px;
+        }
+        .bugreport-likely-causes-heading {
+            font-size: 13px; font-weight: 600; color: var(--primary-text-color, #222);
+        }
+        .bugreport-likely-causes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .bugreport-likely-cause {
+            display: flex; flex-direction: column; gap: 4px;
+            padding: 8px 10px; border-radius: 6px;
+            background: var(--primary-background-color, #fff);
+            border: 1px solid var(--divider-color, rgba(0,0,0,.08));
+        }
+        .bugreport-likely-cause-title { font-size: 13px; font-weight: 500; color: var(--primary-text-color, #222); }
+        .bugreport-likely-cause-hint { font-size: 12px; color: var(--secondary-text-color, #666); line-height: 1.5; }
+        .bugreport-likely-cause-action {
+            align-self: flex-start; margin-top: 4px;
+            font-size: 12px; font-weight: 500; color: #f59e0b;
+            text-decoration: none; padding: 4px 10px; border-radius: 6px;
+            border: 1px solid rgba(245, 158, 11, 0.4); background: transparent;
+        }
+        .bugreport-likely-cause-action:hover { background: rgba(245, 158, 11, 0.1); }
+        .bugreport-likely-causes-dismiss {
+            align-self: flex-end; font-size: 12px; color: var(--secondary-text-color, #666);
+            text-decoration: none; padding: 4px 6px;
+        }
+        .bugreport-likely-causes-dismiss:hover { color: var(--primary-text-color, #222); }
         .bugreport-footer {
             display: flex; gap: 8px; justify-content: flex-end; align-items: center;
             padding: 14px 20px;

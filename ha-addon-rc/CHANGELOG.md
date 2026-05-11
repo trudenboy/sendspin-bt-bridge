@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.70.0-rc.2] - 2026-05-11
+
+### Added
+- **Recovery banner distinguishes "never paired" from "paired but offline"** so the remediation hint is correct out of the box: a device that has never appeared in BlueZ now shows a dedicated card with a Start pairing primary action instead of the generic "needs re-pairing" / "is disconnected" text. ([#260](https://github.com/trudenboy/sendspin-bt-bridge/issues/260))
+- **Start pairing button on device cards for never-paired devices.** Visible only when the bridge has flagged the device as never-paired in this session; deep-links to the Bluetooth scan modal with the device MAC pre-highlighted in the paired list. The Reconnect button on the same card is disabled in this state because reconnect is futile until pairing succeeds. ([#261](https://github.com/trudenboy/sendspin-bt-bridge/issues/261))
+- **Pre-submit "likely causes" hint in the bug-report modal.** When diagnostics match a known pattern — never-paired device, audio sink missing, Music Assistant not connected, or no Bluetooth adapter detected — the bridge surfaces a hint block above the form with a one-click remediation link. A "Report anyway" dismiss keeps genuine bug paths unblocked. The classifier runs locally on the bridge, so it works offline before the bridge can reach GitHub. ([#262](https://github.com/trudenboy/sendspin-bt-bridge/issues/262))
+- **Never-paired devices are now auto-disabled** after the bridge exhausts `BT_MAX_RECONNECT_FAILS` attempts on a configured MAC that BlueZ has no record of. The flip persists to `config.json` (and to the HA addon `options.json`) so the reconnect storm doesn't resume across bridge restarts. The recovery banner surfaces a Re-enable action that clears the state and lets the operator retry pairing. ([#263](https://github.com/trudenboy/sendspin-bt-bridge/issues/263))
+
+### Changed
+- **`BT_MAX_RECONNECT_FAILS` default changed from 0 (unlimited) to 5.** Existing configs that still carry the legacy 0 are migrated to 5 automatically on first load so the new never-paired auto-disable feature engages without an explicit operator action. Operators who want unlimited reconnects can set the value back to 0 after the upgrade — the migration is one-shot. ([#263](https://github.com/trudenboy/sendspin-bt-bridge/issues/263))
+
 ## [2.70.0-rc.1] - 2026-05-11
 
 ### Changed

@@ -125,6 +125,21 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("server_connection_refused",),
     ),
+    "never_paired": GuidanceIssueDefinition(
+        # v2.70.0-rc.2 (#260) — distinct from `repair_required` which assumes
+        # the device WAS paired at some point. `never_paired` fires when
+        # BlueZ has no record of the configured MAC at all (purge path in
+        # BluetoothManager). The Start pairing remediation differs from
+        # Re-pair: the speaker has to be in pairing mode and the scan flow
+        # has to actually discover it before pairing can proceed. Surfacing
+        # this as `error` (vs. `warning` for repair) because the device
+        # has never functioned at all this session.
+        key="never_paired",
+        layer="sink_verification",
+        priority=54,
+        severity="error",
+        default_reason_codes=("never_paired",),
+    ),
     "repair_required": GuidanceIssueDefinition(
         key="repair_required",
         layer="sink_verification",
@@ -154,6 +169,19 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         priority=56,
         severity="warning",
         default_reason_codes=("bluetooth_disconnected",),
+    ),
+    "auto_disabled_never_paired": GuidanceIssueDefinition(
+        # v2.70.0-rc.2 (#263) — fires after BluetoothManager auto-disables a
+        # never-paired device that exhausted BT_MAX_RECONNECT_FAILS attempts.
+        # Distinct from `auto_released` because the remediation is
+        # `Re-enable` (flip `enabled=true`), not `Reconnect`. Priority 58
+        # places it between `disconnected` (56) and `auto_released` (60) —
+        # if both fire, the operator sees the more actionable card first.
+        key="auto_disabled_never_paired",
+        layer="bridge_control",
+        priority=58,
+        severity="warning",
+        default_reason_codes=("device_auto_disabled", "never_paired"),
     ),
     "auto_released": GuidanceIssueDefinition(
         key="auto_released",

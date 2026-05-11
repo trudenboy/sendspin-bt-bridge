@@ -392,6 +392,57 @@ def api_bt_standby():
     return jsonify({"success": True, "message": "Device entering standby"})
 
 
+def _clear_never_paired_state_on_reenable(player_name: str) -> None:
+    """v2.70.0-rc.2 (#263) — when an operator re-enables a previously
+    auto-disabled never-paired device, clear the in-session state so the
+    next reconnect cycle starts fresh:
+
+    - reset DeviceStatus.never_paired / never_paired_since to defaults
+    - reset DeviceStatus.reconnect_attempt to 0
+    - flip BluetoothManager._has_ever_paired_since_start back to False so
+      the auto-disable threshold resets for the next session
+    - reclaim BT management (``management_enabled``) which was flipped to
+      False by ``_auto_disable_never_paired`` to stop the polling loop;
+      without this restore the device would stay silent after re-enable
+      until a bridge restart (Copilot review on PR #290)
+
+    The bridge config persistence happens in the caller; this helper only
+    touches in-memory runtime state. If the SendspinClient was torn down
+    (e.g. the user restarted the bridge between auto-disable and
+    re-enable), this is a no-op and the next bridge start picks up the
+    new enabled=true value cleanly.
+    """
+    client, _ = get_client_or_error(player_name)
+    if client is None:
+        return
+    try:
+        client.update_status(
+            {
+                "never_paired": False,
+                "never_paired_since": None,
+                "reconnect_attempt": 0,
+                "last_error": None,
+                "last_error_at": None,
+            }
+        )
+    except Exception as exc:
+        logger.debug("Could not clear never_paired status for %s: %s", player_name, exc)
+    bt_mgr = getattr(client, "bt_manager", None)
+    if bt_mgr is not None:
+        try:
+            bt_mgr._has_ever_paired_since_start = False
+        except Exception as exc:
+            logger.debug("Could not reset _has_ever_paired_since_start for %s: %s", player_name, exc)
+        # Reclaim BT management — _auto_disable_never_paired flipped this off
+        # to stop the polling loop. Re-enabling must restore the loop so the
+        # next pair attempt actually runs.
+        if getattr(bt_mgr, "management_enabled", True) is False:
+            try:
+                client.set_bt_management_enabled(True)
+            except Exception as exc:
+                logger.debug("Could not reclaim BT management for %s: %s", player_name, exc)
+
+
 @bt_bp.route("/api/device/enabled", methods=["POST"])
 def api_device_enabled():
     """Toggle global device enabled state (requires bridge restart to take effect)."""
@@ -408,6 +459,12 @@ def api_device_enabled():
         client, _ = get_client_or_error(player_name)
         if client:
             threading.Thread(target=client.set_bt_management_enabled, args=(False,), daemon=True).start()
+    else:
+        # When re-enabling a previously auto-disabled never-paired device
+        # (#263), clear the in-session state so the next reconnect cycle
+        # starts clean — never_paired flag, reconnect counter, and the
+        # session-scoped _has_ever_paired_since_start gate.
+        _clear_never_paired_state_on_reenable(player_name)
     # Sync to HA Supervisor
     try:
         with config_lock, open(CONFIG_FILE) as _f:

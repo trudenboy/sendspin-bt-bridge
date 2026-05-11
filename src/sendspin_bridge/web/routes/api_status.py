@@ -36,6 +36,7 @@ from sendspin_bridge.config import (
 )
 from sendspin_bridge.services.audio.pulse import get_server_name, list_cards, list_sinks
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.diagnostics.bugreport_classifier import classify_likely_causes
 from sendspin_bridge.services.diagnostics.event_hooks import get_event_hook_registry
 from sendspin_bridge.services.diagnostics.log_analysis import summarize_issue_logs
 from sendspin_bridge.services.diagnostics.onboarding_assistant import build_onboarding_assistant_snapshot
@@ -1510,11 +1511,22 @@ def api_bugreport():
         text_full = _build_full_text_report(masked, title="BUG REPORT — FULL DIAGNOSTICS")
         suggested_description = _build_bugreport_suggested_description(masked)
 
+        # v2.70.0-rc.2 (#262) — pre-submit classifier. The UI renders these
+        # likely_causes above the form so operators self-serve before
+        # submitting a ticket. Empty list when no rule matches — the form
+        # is then shown unguarded.
+        likely_causes = classify_likely_causes(
+            recovery_snapshot=diag.get("recovery_assistant", {}),
+            log_summary=issue_summary,
+            diagnostics=diag,
+        )
+
         return jsonify(
             {
                 "markdown_short": markdown_short,
                 "text_full": text_full,
                 "suggested_description": suggested_description,
+                "likely_causes": likely_causes,
                 "report": masked,
             }
         )

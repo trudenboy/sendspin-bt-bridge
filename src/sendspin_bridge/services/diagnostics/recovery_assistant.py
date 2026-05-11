@@ -29,6 +29,11 @@ class NormalizedRecoveryDevice:
     health_summary: dict[str, Any]
     recent_events: list[dict[str, Any]]
     static_delay_ms: int | float | None = None
+    # v2.70.0-rc.2 (#263) — surfaced from NormalizedDeviceState.enabled so the
+    # `auto_disabled_never_paired` recovery card can detect devices that were
+    # disabled by the auto-disable path. Default True keeps prior callers
+    # (SimpleNamespace test fixtures, devices without bridge-state) working.
+    enabled: bool = True
 
 
 def _device_state_model(device: Any) -> dict[str, Any]:
@@ -242,6 +247,25 @@ def build_recovery_issue_actions(
             f"Reconnect {len(names)} devices" if len(names) > 1 else "Reconnect speaker",
             device_names=names,
         )
+    elif issue_key == "never_paired":
+        # v2.70.0-rc.2 (#260) — device exists only in the bridge config, not in
+        # BlueZ. The remedy is to scan/pair, not to re-pair or release. We
+        # deliberately omit the `toggle_bt_management` secondary because
+        # there is no live BT management to release yet.
+        primary_action = _recovery_action(
+            "open_devices_settings" if len(names) > 1 else "pair_device",
+            "Open device settings" if len(names) > 1 else "Start pairing",
+            device_names=names,
+        )
+    elif issue_key == "auto_disabled_never_paired":
+        # v2.70.0-rc.2 (#263) — device auto-disabled after N failed reconnects
+        # on a never-paired MAC. Re-enable flips `enabled=true` and resets
+        # the never_paired counter so a fresh pairing attempt can run.
+        primary_action = _recovery_action(
+            "enable_devices" if len(names) > 1 else "enable_device",
+            f"Re-enable {len(names)} devices" if len(names) > 1 else "Re-enable",
+            device_names=names,
+        )
     elif issue_key == "repair_required":
         primary_action = _recovery_action(
             "open_devices_settings" if len(names) > 1 else "pair_device",
@@ -321,6 +345,33 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         # Devices in standby are intentionally disconnected — not a recovery issue
         in_standby = bool(bluetooth.get("standby") if bluetooth else _device_extra(device).get("bt_standby"))
         if in_standby:
+            continue
+        # v2.70.0-rc.2 (#263) — auto-disabled never-paired devices show their
+        # own card with a Re-enable action. This branch runs BEFORE the
+        # released path because an auto-disabled device may also report
+        # released=true (BT management was implicitly dropped along with
+        # the disable), but the operator action is to flip `enabled` back
+        # on, not to reclaim BT management.
+        never_paired_flag = bool(
+            (bluetooth.get("never_paired") if bluetooth else None) or _device_extra(device).get("never_paired")
+        )
+        if never_paired_flag and getattr(device, "enabled", True) is False:
+            primary_action, secondary_actions = build_recovery_issue_actions("auto_disabled_never_paired", device_names)
+            issues.append(
+                RecoveryIssue(
+                    key="auto_disabled_never_paired",
+                    severity="warning",
+                    title=f"{name} was auto-disabled — never paired",
+                    summary=summary
+                    or (
+                        "This speaker was disabled after repeated pairing failures. "
+                        "Put it in pairing mode and click Re-enable to retry."
+                    ),
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
+                    device_name=name,
+                )
+            )
             continue
         if released:
             if release_reason != "auto":
@@ -417,22 +468,41 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         if not bluetooth_connected:
             attempt_summary = _reconnect_attempt_summary(device)
             bluetooth_paired = bluetooth.get("paired") if bluetooth else _device_extra(device).get("bluetooth_paired")
-            issue_key = "repair_required" if bluetooth_paired is False else "disconnected"
+            # v2.70.0-rc.2 (#260) — three-way branch: never_paired beats
+            # repair_required (device was never in BlueZ vs once paired,
+            # now offline). Both fall back to `disconnected` when the
+            # state is unknown but unflagged.
+            never_paired_flag = bool(
+                (bluetooth.get("never_paired") if bluetooth else None) or _device_extra(device).get("never_paired")
+            )
+            if never_paired_flag:
+                issue_key = "never_paired"
+                severity = "error"
+                title = f"{name} has never been paired"
+                default_summary = (
+                    "This speaker was added to the bridge but has never appeared in BlueZ. "
+                    "Put it in pairing mode and click Start pairing."
+                )
+            elif bluetooth_paired is False:
+                issue_key = "repair_required"
+                severity = "warning"
+                title = f"{name} needs re-pairing"
+                default_summary = (
+                    "The speaker is no longer paired, so reconnect attempts will keep failing. "
+                    "Put it in pairing mode and run re-pair."
+                )
+            else:
+                issue_key = "disconnected"
+                severity = "warning"
+                title = f"{name} is disconnected"
+                default_summary = "Power on the speaker or trigger a reconnect."
             primary_action, secondary_actions = build_recovery_issue_actions(issue_key, device_names)
             issues.append(
                 RecoveryIssue(
                     key=issue_key,
-                    severity="warning",
-                    title=f"{name} needs re-pairing" if bluetooth_paired is False else f"{name} is disconnected",
-                    summary=(
-                        summary
-                        or (
-                            "The speaker is no longer paired, so reconnect attempts will keep failing. Put it in pairing mode and run re-pair."
-                            if bluetooth_paired is False
-                            else "Power on the speaker or trigger a reconnect."
-                        )
-                    )
-                    + (f" {attempt_summary}" if attempt_summary else ""),
+                    severity=severity,
+                    title=title,
+                    summary=(summary or default_summary) + (f" {attempt_summary}" if attempt_summary else ""),
                     primary_action=primary_action,
                     secondary_actions=secondary_actions,
                     device_name=name,
@@ -824,6 +894,7 @@ def build_recovery_assistant_snapshot(
                 health_summary=state.health,
                 recent_events=state.recent_events,
                 static_delay_ms=delay_by_name.get(state.player_name),
+                enabled=state.enabled,
             )
             for state in bridge_state.devices
         ]

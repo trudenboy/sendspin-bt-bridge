@@ -108,7 +108,12 @@ DEFAULT_CONFIG = {
     "PULSE_LATENCY_MSEC": 600,
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
-    "BT_MAX_RECONNECT_FAILS": 0,
+    # v2.70.0-rc.2 (#263) — was 0 (unlimited) prior; new default is 5 so
+    # never-paired devices stop pinning the reconnect loop indefinitely.
+    # `config/migration.py` upgrades existing configs that still carry 0
+    # to 5 on first load. Operators who want unlimited can set this back
+    # to 0 explicitly after upgrade.
+    "BT_MAX_RECONNECT_FAILS": 5,
     "BT_CHURN_THRESHOLD": 0,
     "BT_CHURN_WINDOW": 300.0,
     "AUTH_ENABLED": False,

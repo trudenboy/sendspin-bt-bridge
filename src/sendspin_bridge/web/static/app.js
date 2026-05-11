@@ -3575,6 +3575,7 @@ function buildDeviceCard(i) {
         '<div class="card-actions-row">' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
+            '<button type="button" class="action-btn accent" id="dbtn-pair-' + i + '" data-action="bt-start-pairing" data-arg="' + i + '" style="display:none" title="Put speaker in pairing mode, then click here">' + _actionButtonInnerHtml('reconnect', 'Start pairing') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-claim-' + i + '" data-action="bt-claim-audio" data-arg="' + i + '" title="Claim audio source on multipoint speaker (push Playing via AVRCP)">' + _actionButtonInnerHtml('play', 'Claim') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" data-action="wake-device" data-arg="' + i + '" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
@@ -3947,6 +3948,40 @@ function populateDeviceCard(i, dev) {
                 reconnBtn.title = reconnectAvailable
                     ? 'Reconnect Bluetooth and refresh sink routing'
                     : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
+            }
+        }
+    }
+
+    // v2.70.0-rc.2 (#261) — toggle Start pairing button for never-paired
+    // devices. Driven solely by the structured `dev.never_paired` signal
+    // raised by BluetoothManager._purge_stale_bluez_entry; do NOT pattern
+    // match on `dev.last_error` strings — that creates a brittle UI
+    // dependency on log-message wording. The reconnect button is disabled
+    // when the pair button shows because reconnect is futile until
+    // pairing succeeds.
+    {
+        var pairBtn = document.getElementById('dbtn-pair-' + i);
+        if (pairBtn) {
+            var isNeverPaired = dev.never_paired === true;
+            if (isNeverPaired) {
+                pairBtn.style.display = '';
+                var reconnBtnEl = document.getElementById('dbtn-reconnect-' + i);
+                if (reconnBtnEl) {
+                    reconnBtnEl.disabled = true;
+                    reconnBtnEl.title = 'Speaker has never been paired — use Start pairing first';
+                }
+                // Copilot review on PR #290 — Claim is an AVRCP push that
+                // requires an established A2DP transport. On a never-paired
+                // device the BT link doesn't exist yet, so the click would
+                // fail with a generic "no MAC / not connected" error. Disable
+                // the button until pairing completes.
+                var claimBtnEl = document.getElementById('dbtn-claim-' + i);
+                if (claimBtnEl) {
+                    claimBtnEl.disabled = true;
+                    claimBtnEl.title = 'Speaker has never been paired — use Start pairing first';
+                }
+            } else {
+                pairBtn.style.display = 'none';
             }
         }
     }
@@ -4871,6 +4906,37 @@ async function btToggleStandby(i) {
 }
 
 // ---- Device enabled toggle (used by config checkbox and dashboard Disable button) ----
+
+async function _enableDeviceByIndex(i) {
+    // v2.70.0-rc.2 (#263) — _runGuidanceDeviceBatch runner contract: takes an
+    // index into lastDevices, returns {success: bool, message: str}. Wraps
+    // toggleDeviceEnabled so the auto_disabled_never_paired multi-device
+    // recovery card can re-enable a batch with the same UX as
+    // reconnect_devices.
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) {
+        return {success: false, message: 'Device not found in current bridge status'};
+    }
+    var playerName = dev.player_name || null;
+    if (!playerName) {
+        return {success: false, message: 'Device player name missing'};
+    }
+    try {
+        var resp = await fetch(API_BASE + '/api/device/enabled', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName, enabled: true}),
+        });
+        var d = await resp.json();
+        if (d && d.success) {
+            dev.enabled = true;
+            return {success: true, message: d.message || 'Re-enabled'};
+        }
+        return {success: false, message: (d && d.error) || 'Re-enable failed'};
+    } catch (e) {
+        return {success: false, message: e && e.message ? e.message : 'Re-enable error'};
+    }
+}
 
 async function toggleDeviceEnabled(deviceRef, enabled) {
     var dev = deviceRef && typeof deviceRef === 'object' ? deviceRef : null;
@@ -7983,6 +8049,23 @@ function _goToDevicesAndScan(options) {
     return _goToBluetoothAndScan(options);
 }
 
+function btStartPairing(i) {
+    // v2.70.0-rc.2 (#261) — entry point for the "Start pairing" button on
+    // never-paired device cards. Resolves the device's MAC from the cached
+    // lastDevices array, then deep-links to the Bluetooth panel and
+    // auto-starts a scan with the MAC pre-highlighted in the paired-devices
+    // list. If the user already arrived at this UI from a recovery flow
+    // and the speaker is in pairing mode, the scan will surface the
+    // device and the existing pair button on that row takes over.
+    if (typeof i !== 'number' || !Array.isArray(lastDevices) || !lastDevices[i]) {
+        _goToBluetoothAndScan();
+        return false;
+    }
+    var dev = lastDevices[i];
+    var mac = (dev && (dev.bluetooth_mac || dev.mac)) || '';
+    return _goToBluetoothAndScan({highlightMac: mac});
+}
+
 function _isOnboardingCardVisible(guidance) {
     var card = guidance && guidance.onboarding_card ? guidance.onboarding_card : null;
     return _shouldShowOnboardingAssistantBanner(card, {showByDefault: _onboardingShowByDefault(guidance)});
@@ -9958,6 +10041,34 @@ function _runOperatorGuidanceAction(action) {
             return _runOnboardingAssistantAction('open_devices_settings');
         }
         btToggleManagement(managementIndex);
+        return false;
+    }
+    // v2.70.0-rc.2 (#263) — surfaced by the auto_disabled_never_paired recovery
+    // card. The primary action key is "enable_device" (single) or
+    // "enable_devices" (multi); both flip `enabled=true` via the existing
+    // /api/device/enabled route, which also clears the never_paired state
+    // server-side (see `_clear_never_paired_state_on_reenable` in api_bt.py).
+    if (actionKey === 'enable_device') {
+        var enableIndex = _findDeviceIndexByName(deviceNames[0]);
+        if (enableIndex < 0) {
+            showToast('Device not found in current bridge status', 'error');
+            return _runOnboardingAssistantAction('open_devices_settings');
+        }
+        var enableDev = lastDevices && lastDevices[enableIndex];
+        toggleDeviceEnabled(enableDev || deviceNames[0], true);
+        return false;
+    }
+    if (actionKey === 'enable_devices') {
+        _runGuidanceDeviceBatch(
+            deviceNames,
+            _enableDeviceByIndex,
+            'Re-enabling affected devices…',
+            'Re-enable queued for ' + deviceNames.length + ' devices',
+            {
+                actionLabel: action && action.label ? action.label : 'Re-enable affected devices',
+                confirmSummary: 'Re-enable these devices now?',
+            }
+        );
         return false;
     }
     if (actionKey === 'toggle_bt_management_devices') {
@@ -12145,6 +12256,89 @@ var _BR_ICON_GITHUB = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 
 var _BR_ICON_COPY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 011.5-1.5H11"/></svg>';
 var _BR_ICON_INFO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><line x1="8" y1="7" x2="8" y2="11"/><line x1="8" y1="5" x2="8" y2="5" stroke-width="2"/></svg>';
 
+var _BUGREPORT_LIKELY_CAUSE_ACTIONS = {
+    // Maps classifier `action_key` strings to the right _openConfigPanel
+    // invocation. Adding a new classifier rule with a new action_key
+    // requires a matching entry here — without one, the "Try this first"
+    // button is hidden (degrades gracefully to "title + hint only").
+    open_bluetooth_devices: function() {
+        _openConfigPanel('bluetooth', 'config-bluetooth-paired-card', 'start');
+    },
+    open_bluetooth_adapters: function() {
+        _openConfigPanel('bluetooth', 'config-bluetooth-adapters-card', 'start');
+    },
+    open_ma_settings: function() {
+        _openConfigPanel('ma', 'config-panel-ma', 'start');
+    },
+};
+
+function _renderLikelyCauses(container, causes) {
+    // v2.70.0-rc.2 (#262) — render the pre-submit likely-causes list above
+    // the bug-report form when the backend classifier matched at least one
+    // pattern. Each row links to a remediation surface via a structured
+    // action_key (mapped to _openConfigPanel by the dispatcher above);
+    // a "Report anyway" link hides the block so genuine bug paths are
+    // never gated.
+    if (!container) return;
+    container.innerHTML = '';
+    if (!Array.isArray(causes) || causes.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    var heading = document.createElement('div');
+    heading.className = 'bugreport-likely-causes-heading';
+    heading.textContent = 'Before you submit — did one of these apply?';
+    container.appendChild(heading);
+    var list = document.createElement('ul');
+    list.className = 'bugreport-likely-causes-list';
+    causes.forEach(function(cause) {
+        if (!cause || !cause.code) return;
+        var item = document.createElement('li');
+        item.className = 'bugreport-likely-cause';
+        var title = document.createElement('div');
+        title.className = 'bugreport-likely-cause-title';
+        title.textContent = cause.title || cause.code;
+        item.appendChild(title);
+        if (cause.hint) {
+            var hint = document.createElement('div');
+            hint.className = 'bugreport-likely-cause-hint';
+            hint.textContent = cause.hint;
+            item.appendChild(hint);
+        }
+        var actionRunner = cause.action_key && _BUGREPORT_LIKELY_CAUSE_ACTIONS[cause.action_key];
+        if (typeof actionRunner === 'function') {
+            var actionBtn = document.createElement('button');
+            actionBtn.type = 'button';
+            actionBtn.className = 'bugreport-likely-cause-action';
+            actionBtn.textContent = 'Try this first';
+            actionBtn.onclick = function(ev) {
+                ev.preventDefault();
+                try {
+                    actionRunner();
+                } catch (err) {
+                    // Defensive: if a panel navigation fails (missing element,
+                    // tab not in DOM yet), keep the bug-report modal open so
+                    // the operator can still submit.
+                }
+            };
+            item.appendChild(actionBtn);
+        }
+        list.appendChild(item);
+    });
+    container.appendChild(list);
+    var dismiss = document.createElement('a');
+    dismiss.href = '#';
+    dismiss.className = 'bugreport-likely-causes-dismiss';
+    dismiss.textContent = 'Report anyway →';
+    dismiss.onclick = function(ev) {
+        ev.preventDefault();
+        container.style.display = 'none';
+    };
+    container.appendChild(dismiss);
+    container.style.display = '';
+}
+
+
 function _openBugReport(e, context) {
     e.preventDefault();
 
@@ -12181,6 +12375,14 @@ function _openBugReport(e, context) {
         '<span class="bugreport-hint-icon">' + _BR_ICON_INFO + '</span>' +
         '<span>Diagnostics are collected automatically. Choose a submission method below.</span>';
     body.appendChild(hint);
+
+    // v2.70.0-rc.2 (#262) — pre-submit "likely causes" hint. Populated
+    // from /api/bugreport.likely_causes after the diagnostics fetch
+    // resolves. Hidden while empty so the form renders unguarded.
+    var likelyCausesEl = document.createElement('div');
+    likelyCausesEl.className = 'bugreport-likely-causes';
+    likelyCausesEl.style.display = 'none';
+    body.appendChild(likelyCausesEl);
 
     // Title field
     var titleField = document.createElement('div');
@@ -12485,6 +12687,7 @@ function _openBugReport(e, context) {
                 descInput.value = suggestedDescription;
             }
             previewBox.textContent = reportFull || 'No data available';
+            _renderLikelyCauses(likelyCausesEl, data.likely_causes);
             dataReady = true;
             validateForm();
             _wireUpButtons();
@@ -14611,6 +14814,7 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'bt-start-pairing':         (_el, _ev, arg) => btStartPairing(Number(arg)),
     'bt-claim-audio':           (_el, _ev, arg) => btClaimAudio(Number(arg)),
     'bt-toggle-management':     (_el, _ev, arg) => btToggleManagement(Number(arg)),
     'bt-toggle-standby':        (_el, _ev, arg) => btToggleStandby(Number(arg)),

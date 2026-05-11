@@ -412,6 +412,49 @@ def test_operator_guidance_prefers_device_settings_for_multi_device_latency_with
     assert latency_group["secondary_actions"][0]["key"] == "apply_latency_recommended"
 
 
+def test_operator_guidance_emits_never_paired_group():
+    """A device with never_paired=True must surface as its own group with
+    Start pairing action — distinct from the existing 'repair_required'
+    group (#260)."""
+    snapshot = build_operator_guidance_snapshot(
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        onboarding_assistant={
+            "checklist": {"overall_status": "ok", "progress_percent": 100},
+            "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+        recovery_assistant={"summary": {"summary": "Pair this speaker."}},
+        startup_progress={"status": "complete"},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                extra={
+                    "bluetooth_paired": None,
+                    "never_paired": True,
+                    "never_paired_since": "2026-05-11T08:30:00+00:00",
+                    "reconnect_attempt": 2,
+                    "max_reconnect_fails": 5,
+                },
+            )
+        ],
+    )
+
+    data = snapshot.to_dict()
+    assert data["mode"] == "attention"
+    keys = [g["key"] for g in data["issue_groups"]]
+    assert "never_paired" in keys, f"expected never_paired group, got: {keys}"
+    # Must NOT also fire repair_required / disconnected for the same device
+    assert "repair_required" not in keys
+    assert "disconnected" not in keys
+    group = next(g for g in data["issue_groups"] if g["key"] == "never_paired")
+    assert "has never been paired" in group["title"].lower()
+    assert group["primary_action"]["key"] == "pair_device"
+    assert group["severity"] == "error"
+
+
 def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
     snapshot = build_operator_guidance_snapshot(
         config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},

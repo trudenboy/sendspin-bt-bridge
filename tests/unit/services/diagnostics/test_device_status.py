@@ -77,3 +77,15 @@ def test_field_names_cached():
     assert "stopping" in status._field_names
     assert "hostname" in status._field_names
     assert "_field_names" not in status._field_names
+
+
+def test_device_status_defaults_never_paired_false():
+    """The never_paired flag (#260, #263) defaults to False so existing
+    configs and snapshots are unaffected. Set to True by BluetoothManager
+    when BlueZ has no record of a configured device."""
+    status = DeviceStatus()
+    assert status.never_paired is False
+    assert status.never_paired_since is None
+    snapshot = status.copy()
+    assert snapshot.get("never_paired") is False
+    assert snapshot.get("never_paired_since") is None

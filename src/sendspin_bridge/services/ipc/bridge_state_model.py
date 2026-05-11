@@ -143,6 +143,10 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
             "pair_failure_kind": extra.get("pair_failure_kind"),
             "pair_failure_adapter_mac": extra.get("pair_failure_adapter_mac"),
             "pair_failure_at": extra.get("pair_failure_at"),
+            # v2.70.0-rc.2 (#260, #263) — never_paired drives the recovery
+            # banner branch + Start pairing device-card button + auto-disable.
+            "never_paired": bool(extra.get("never_paired", False)),
+            "never_paired_since": extra.get("never_paired_since"),
         },
         audio={
             "has_sink": bool(_obj_get(device, "has_sink", False)),
