@@ -1261,8 +1261,8 @@ class BluetoothManager:
             return True
         if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
             return False
-        # Last-ditch adapter recovery before auto-release. Gated by the
-        # experimental flag because USB unbind/rebind is disruptive.
+        # Last-ditch adapter recovery before either auto-disable or auto-release.
+        # Gated by the experimental flag because USB unbind/rebind is disruptive.
         # Needs both the resolved adapter MAC and an hci index to hand to
         # the bluetooth-auto-recovery library.
         if self._enable_adapter_auto_recovery and self._try_adapter_auto_recovery():
@@ -1272,6 +1272,17 @@ class BluetoothManager:
                 attempt,
             )
             return False
+        # v2.70.0-rc.2 (#263) — Never-paired auto-disable.
+        # After adapter recovery has had its shot, if BlueZ still has no
+        # record of this device AND we never observed a successful
+        # Connected=True transition in this bridge session, the device is
+        # most likely misconfigured or out of range from the start. Stop
+        # the reconnect storm by flipping enabled=False; the recovery banner
+        # then surfaces a "Re-enable" action so the operator can retry
+        # pairing on their schedule.
+        if self.paired is None and not self._has_ever_paired_since_start:
+            self._auto_disable_never_paired(attempt)
+            return True
         logger.warning(
             "[%s] %d consecutive failed reconnects (threshold=%d) — auto-releasing BT management",
             self.device_name,
@@ -1297,6 +1308,45 @@ class BluetoothManager:
         except Exception as _e:
             logger.debug("persist_device_released failed: %s", _e)
         return True
+
+    def _auto_disable_never_paired(self, attempt: int) -> None:
+        """Flip enabled=False on a never-paired device that has exhausted
+        BT_MAX_RECONNECT_FAILS attempts (#263).
+
+        The flip is persisted via ``persist_device_enabled`` so config.json
+        and the HA addon's options.json stay in sync — without this, an
+        addon restart would silently re-enable the device and the loop
+        would resume. We do NOT touch ``bt_management_enabled``: the
+        recovery banner offers a single Re-enable action that flips
+        ``enabled`` back to True and resets the never_paired counter.
+        """
+        logger.warning(
+            "[%s] %d consecutive failed reconnects on a never-paired device "
+            "(BlueZ has no record) — auto-disabling. Re-enable from the "
+            "recovery banner after putting the speaker in pairing mode.",
+            self.device_name,
+            attempt,
+        )
+        if self.host is not None:
+            try:
+                self.host.update_status(
+                    {
+                        "enabled": False,
+                        "reconnecting": False,
+                        "last_error": (
+                            f"Auto-disabled after {attempt} failed pairing attempts — this device has never been paired"
+                        ),
+                        "last_error_at": datetime.now(tz=UTC).isoformat(),
+                    }
+                )
+            except Exception as exc:
+                logger.debug("[%s] Failed to surface auto-disable status: %s", self.device_name, exc)
+        try:
+            from sendspin_bridge.services.bluetooth import persist_device_enabled
+
+            persist_device_enabled(self.device_name, False)
+        except Exception as exc:
+            logger.debug("[%s] persist_device_enabled failed: %s", self.device_name, exc)
 
     def _try_adapter_auto_recovery(self) -> bool:
         """Run the bluetooth-auto-recovery ladder on this device's

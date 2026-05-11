@@ -1106,10 +1106,16 @@ def test_reconnect_delay_capped_at_max(bt_manager):
 
 
 def test_handle_reconnect_failure_releases_after_threshold(bt_manager):
-    """Management is released after max_reconnect_fails consecutive failures."""
+    """Management is released after max_reconnect_fails consecutive failures.
+
+    Models a previously-paired device that has gone flaky (auto-release path).
+    Distinct from the v2.70.0-rc.2 never-paired auto-disable path, which
+    requires `paired is None` AND `_has_ever_paired_since_start is False`.
+    """
     bt_manager.max_reconnect_fails = 3
     bt_manager.host = MagicMock()
     bt_manager.host.bt_management_enabled = True
+    bt_manager._has_ever_paired_since_start = True  # avoid never-paired auto-disable (#263)
 
     with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
         released = bt_manager._handle_reconnect_failure(3)
@@ -1146,6 +1152,7 @@ def test_handle_reconnect_failure_skips_adapter_recovery_when_flag_off(bt_manage
     bt_manager._enable_adapter_auto_recovery = False
     bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"
     bt_manager.adapter_hci_name = "hci0"
+    bt_manager._has_ever_paired_since_start = True  # avoid never-paired auto-disable (#263)
 
     with (
         patch("sendspin_bridge.services.bluetooth.persist_device_released"),
@@ -1168,6 +1175,7 @@ def test_handle_reconnect_failure_runs_adapter_recovery_when_flag_on(bt_manager)
     bt_manager._enable_adapter_auto_recovery = True
     bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"
     bt_manager.adapter_hci_name = "hci1"
+    bt_manager._has_ever_paired_since_start = True  # avoid never-paired auto-disable (#263)
 
     with (
         patch("sendspin_bridge.services.bluetooth.persist_device_released"),
