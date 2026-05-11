@@ -231,6 +231,32 @@ def test_query_returns_none_when_open_raises_other(monkeypatch):
     assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
 
 
+def test_query_returns_none_when_open_raises_base_exception(monkeypatch):
+    """``btsocket.btmgmt_socket.BluetoothSocketError`` (raised by the
+    library as ``"Unable to open PF_BLUETOOTH socket"`` when the kernel
+    denies the raw-socket bind) inherits from ``BaseException``, not
+    ``Exception``.  A plain ``except Exception`` therefore does NOT
+    catch it: the error climbs from the wrapper through the refresh
+    tick into the long-lived refresh task and kills it on the very
+    first iteration — exactly the failure mode reported in #291 on
+    Proxmox LXC without ``CAP_NET_RAW``.
+
+    The seam must degrade silently for *every* failure mode of the
+    socket open call, including ``BaseException`` subclasses thrown
+    from C extensions.  Caught failures return ``None``; nothing
+    propagates."""
+
+    class _FakeBluetoothSocketError(BaseException):
+        """Mirrors btsocket.btmgmt_socket.BluetoothSocketError's base."""
+
+    def _raise():
+        raise _FakeBluetoothSocketError("Unable to open PF_BLUETOOTH socket")
+
+    monkeypatch.setattr(bt_rssi_mgmt, "_open_mgmt_socket", _raise)
+
+    assert bt_rssi_mgmt._query_rssi_byte(0, "AA:BB:CC:DD:EE:FF") is None
+
+
 def test_query_returns_none_on_malformed_mac(monkeypatch):
     """Defensive: a MAC string from a wonky config (extra colon, hex
     typo) must not crash the refresh loop with ValueError."""

@@ -141,7 +141,17 @@ def _query_rssi_byte(adapter_index: int, mac: str) -> int | None:
     except ImportError:
         logger.debug("btsocket unavailable — RSSI read skipped for %s", mac)
         return None
-    except Exception as exc:
+    except (KeyboardInterrupt, SystemExit, GeneratorExit):
+        raise
+    except BaseException as exc:
+        # btsocket.btmgmt_socket.BluetoothSocketError inherits from
+        # BaseException (not Exception), so a plain ``except Exception``
+        # would let "Unable to open PF_BLUETOOTH socket" — raised when
+        # the kernel denies the AF_BLUETOOTH raw-socket bind on
+        # capability-constrained sandboxes like Proxmox LXC without
+        # CAP_NET_RAW — climb up and kill the refresh task on its first
+        # tick (issue #291).  We still re-raise the cooperative-shutdown
+        # signals above so asyncio cancellation and Ctrl-C behave.
         logger.debug("mgmt socket open failed for %s: %s", mac, exc)
         return None
 
