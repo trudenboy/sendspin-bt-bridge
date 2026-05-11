@@ -4897,6 +4897,37 @@ async function btToggleStandby(i) {
 
 // ---- Device enabled toggle (used by config checkbox and dashboard Disable button) ----
 
+async function _enableDeviceByIndex(i) {
+    // v2.70.0-rc.2 (#263) — _runGuidanceDeviceBatch runner contract: takes an
+    // index into lastDevices, returns {success: bool, message: str}. Wraps
+    // toggleDeviceEnabled so the auto_disabled_never_paired multi-device
+    // recovery card can re-enable a batch with the same UX as
+    // reconnect_devices.
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) {
+        return {success: false, message: 'Device not found in current bridge status'};
+    }
+    var playerName = dev.player_name || null;
+    if (!playerName) {
+        return {success: false, message: 'Device player name missing'};
+    }
+    try {
+        var resp = await fetch(API_BASE + '/api/device/enabled', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName, enabled: true}),
+        });
+        var d = await resp.json();
+        if (d && d.success) {
+            dev.enabled = true;
+            return {success: true, message: d.message || 'Re-enabled'};
+        }
+        return {success: false, message: (d && d.error) || 'Re-enable failed'};
+    } catch (e) {
+        return {success: false, message: e && e.message ? e.message : 'Re-enable error'};
+    }
+}
+
 async function toggleDeviceEnabled(deviceRef, enabled) {
     var dev = deviceRef && typeof deviceRef === 'object' ? deviceRef : null;
     var playerName = dev ? (dev.player_name || null) : deviceRef;
@@ -10000,6 +10031,34 @@ function _runOperatorGuidanceAction(action) {
             return _runOnboardingAssistantAction('open_devices_settings');
         }
         btToggleManagement(managementIndex);
+        return false;
+    }
+    // v2.70.0-rc.2 (#263) — surfaced by the auto_disabled_never_paired recovery
+    // card. The primary action key is "enable_device" (single) or
+    // "enable_devices" (multi); both flip `enabled=true` via the existing
+    // /api/device/enabled route, which also clears the never_paired state
+    // server-side (see `_clear_never_paired_state_on_reenable` in api_bt.py).
+    if (actionKey === 'enable_device') {
+        var enableIndex = _findDeviceIndexByName(deviceNames[0]);
+        if (enableIndex < 0) {
+            showToast('Device not found in current bridge status', 'error');
+            return _runOnboardingAssistantAction('open_devices_settings');
+        }
+        var enableDev = lastDevices && lastDevices[enableIndex];
+        toggleDeviceEnabled(enableDev || deviceNames[0], true);
+        return false;
+    }
+    if (actionKey === 'enable_devices') {
+        _runGuidanceDeviceBatch(
+            deviceNames,
+            _enableDeviceByIndex,
+            'Re-enabling affected devices…',
+            'Re-enable queued for ' + deviceNames.length + ' devices',
+            {
+                actionLabel: action && action.label ? action.label : 'Re-enable affected devices',
+                confirmSummary: 'Re-enable these devices now?',
+            }
+        );
         return false;
     }
     if (actionKey === 'toggle_bt_management_devices') {

@@ -316,6 +316,39 @@ def test_recovery_assistant_prefers_repair_for_unpaired_device():
     assert "3/5" in data["issues"][0]["summary"]
 
 
+def test_recovery_assistant_emits_auto_disabled_never_paired_with_normalized_device():
+    """Production regression: when devices arrive wrapped as NormalizedRecoveryDevice
+    (the shape used by the bridge-state path), the `enabled` field MUST be
+    readable so the auto_disabled_never_paired card surfaces. Earlier code
+    used `getattr(device, "enabled", True)` which always returned True against
+    a NormalizedRecoveryDevice lacking that field, silently masking the card
+    in production while SimpleNamespace tests passed (#263 regression)."""
+    from sendspin_bridge.services.diagnostics.recovery_assistant import (
+        NormalizedRecoveryDevice,
+        _build_device_issues,
+    )
+
+    device = NormalizedRecoveryDevice(
+        player_name="Kitchen",
+        state_model={
+            "enabled": False,
+            "bluetooth": {"connected": False, "paired": None, "never_paired": True, "standby": False},
+            "management": {"released": False},
+            "audio": {"has_sink": False},
+            "transport": {"daemon_connected": False},
+        },
+        health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+        recent_events=[],
+        enabled=False,
+    )
+
+    issues = _build_device_issues([device])
+    keys = [issue.key for issue in issues]
+    assert "auto_disabled_never_paired" in keys, (
+        f"expected auto_disabled_never_paired card from NormalizedRecoveryDevice, got: {keys}"
+    )
+
+
 def test_recovery_assistant_emits_auto_disabled_never_paired_card():
     """A device that was auto-disabled because it never paired must surface
     a 'Re-enable' recovery card (#263), distinct from the never_paired

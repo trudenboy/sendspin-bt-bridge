@@ -98,6 +98,39 @@ def test_apply_connected_state_true_clears_never_paired(bt_manager_with_host):
     assert clearing_updates[-1].get("never_paired_since") is None
 
 
+def test_pair_success_clears_never_paired_even_without_connected_event(bt_manager_with_host):
+    """Regression: a successful pair_device() must clear the never_paired UI
+    signal even if the immediate connect-check loop times out (no
+    Connected=True transition is observed). Otherwise the recovery banner
+    stays on "has never been paired" until the next reconnect cycle
+    eventually wins the connect race — a 30+ second window of misleading
+    remediation guidance (#263)."""
+    mgr, posted = bt_manager_with_host
+    # Seed the post-purge state
+    mgr.host.update_status(
+        {
+            "never_paired": True,
+            "never_paired_since": "2026-05-11T08:30:00+00:00",
+            "last_error": "BlueZ has no record",
+        }
+    )
+    posted.clear()
+    assert mgr._has_ever_paired_since_start is False
+
+    # _clear_never_paired_evidence is the helper called from the pair-success
+    # branch in _connect_device_inner. Calling it directly here verifies
+    # the contract without spinning up the full subprocess+bluetoothctl
+    # pair flow.
+    mgr._clear_never_paired_evidence()
+
+    assert mgr._has_ever_paired_since_start is True
+    clearing_updates = [u for u in posted if "never_paired" in u]
+    assert clearing_updates, f"expected update_status clearing never_paired, got: {posted}"
+    last = clearing_updates[-1]
+    assert last["never_paired"] is False
+    assert last.get("never_paired_since") is None
+
+
 def test_apply_connected_state_idempotent_does_not_emit_clear(bt_manager_with_host):
     """No-op transitions must not flood the SSE stream with redundant
     never_paired=False updates. Regression guard."""

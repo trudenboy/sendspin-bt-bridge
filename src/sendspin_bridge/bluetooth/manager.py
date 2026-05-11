@@ -883,6 +883,12 @@ class BluetoothManager:
             logger.info("Device not paired, attempting to pair...")
             if not self.pair_device():
                 return False
+            # #263 — pair_device() succeeded, so BlueZ now has a record for this
+            # MAC even if the immediate connect-check below times out. Clear
+            # never_paired here so the recovery banner doesn't stay on
+            # "has never been paired" for the gap between pair-success and
+            # the next observed Connected=True transition.
+            self._clear_never_paired_evidence()
         elif self.paired is None:
             logger.info("Pairing state unknown, trying to reconnect before re-pairing")
         if self._abort_connect_if_cancelled():
@@ -1066,17 +1072,36 @@ class BluetoothManager:
         # flag and clear the never_paired status push so the recovery banner
         # returns to its normal state and the auto-disable gate stops firing.
         if value:
-            self._has_ever_paired_since_start = True
-            if self.host is not None:
-                try:
-                    self.host.update_status({"never_paired": False, "never_paired_since": None})
-                except Exception as exc:
-                    logger.debug(
-                        "[%s] Failed to clear never_paired status: %s",
-                        self.device_name,
-                        exc,
-                    )
+            self._clear_never_paired_evidence()
         self._fire_connection_transition(value)
+
+    def _clear_never_paired_evidence(self) -> None:
+        """Mark this session as having had a working BlueZ record and clear the
+        never_paired UI signal (#260, #263).
+
+        Called from two places:
+
+        - ``_apply_connected_state(True)`` on the canonical Connected=True
+          transition (most common path).
+        - The pair-success branch in ``_connect_device_inner`` for the edge
+          case where ``pair_device()`` writes a BlueZ record but the
+          immediate connect-check loop times out without observing
+          Connected=True. Without this clear, the never_paired recovery
+          banner would persist as stale UI until the next reconnect cycle
+          actually wins the connect check — a 30+ second window of
+          misleading remediation guidance.
+        """
+        self._has_ever_paired_since_start = True
+        if self.host is None:
+            return
+        try:
+            self.host.update_status({"never_paired": False, "never_paired_since": None})
+        except Exception as exc:
+            logger.debug(
+                "[%s] Failed to clear never_paired status: %s",
+                self.device_name,
+                exc,
+            )
 
     def _fire_connection_transition(self, now_connected: bool) -> None:
         """Invoke on_connected / on_disconnected exactly once per transition.

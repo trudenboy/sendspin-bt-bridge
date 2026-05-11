@@ -29,6 +29,11 @@ class NormalizedRecoveryDevice:
     health_summary: dict[str, Any]
     recent_events: list[dict[str, Any]]
     static_delay_ms: int | float | None = None
+    # v2.70.0-rc.2 (#263) — surfaced from NormalizedDeviceState.enabled so the
+    # `auto_disabled_never_paired` recovery card can detect devices that were
+    # disabled by the auto-disable path. Default True keeps prior callers
+    # (SimpleNamespace test fixtures, devices without bridge-state) working.
+    enabled: bool = True
 
 
 def _device_state_model(device: Any) -> dict[str, Any]:
@@ -889,6 +894,7 @@ def build_recovery_assistant_snapshot(
                 health_summary=state.health,
                 recent_events=state.recent_events,
                 static_delay_ms=delay_by_name.get(state.player_name),
+                enabled=state.enabled,
             )
             for state in bridge_state.devices
         ]
