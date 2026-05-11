@@ -66,3 +66,4 @@ sendspin-cli/
 # Legacy directories (ignored if regenerated locally)
 reddit/
 img/
+scan-scroll-test*.png
