@@ -5005,7 +5005,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.0-rc.1...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.0-rc.2...HEAD
+[2.70.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.0-rc.1...v2.70.0-rc.2
 [2.70.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.69.0...v2.70.0-rc.1
 [2.69.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.68.0...v2.69.0
 [2.68.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.2...v2.68.0
@@ -5078,6 +5079,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 [2.50.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.2...v2.50.3
 [2.50.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.1...v2.50.2
 [2.50.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.1
+[2.49.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.49.0...v2.49.1
 [2.49.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.2...v2.49.0
 [2.48.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1...v2.48.2
 [2.48.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0...v2.48.1
