@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.70.0-rc.1] - 2026-05-11
+
 ### Changed
 - Documentation: troubleshooting guide now covers audio stuttering from WiFi+Bluetooth co-existence on hosts with an integrated combo radio such as the Intel NUC N100, with an `rfkill block wifi` workaround for Ethernet-wired hosts. ([#287](https://github.com/trudenboy/sendspin-bt-bridge/pull/287))
 - Documentation: PipeWire installation guide now explains that WirePlumber's `with-logind` integration also causes Bluetooth to drop on SSH/desktop logout (in addition to the 10-second endpoint churn already documented), and routes both symptoms to the existing per-user override. ([#286](https://github.com/trudenboy/sendspin-bt-bridge/pull/286))
@@ -5515,7 +5517,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.69.0...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.0-rc.1...HEAD
+[2.70.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.69.0...v2.70.0-rc.1
 [2.69.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.68.0...v2.69.0
 [2.68.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.2...v2.68.0
 [2.67.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.1...v2.67.2
