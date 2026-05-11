@@ -592,12 +592,24 @@ def _build_issue_groups(
             primary_action=audio_backend_issue["primary_action"],
             secondary_actions=audio_backend_issue["secondary_actions"],
         )
+    # v2.70.0-rc.2 (#260) — never_paired devices form their own group with
+    # Start pairing remediation; exclude them from repair_needed/disconnected
+    # so they don't double-fire.
+    never_paired_devices = [
+        device
+        for device in devices
+        if getattr(device, "bt_management_enabled", True)
+        and not getattr(device, "bluetooth_connected", False)
+        and not _device_extra(device).get("bt_standby", False)
+        and _device_extra(device).get("never_paired") is True
+    ]
     repair_needed = [
         device
         for device in devices
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
         and not _device_extra(device).get("bt_standby", False)
+        and _device_extra(device).get("never_paired") is not True
         and _device_extra(device).get("bluetooth_paired") is False
     ]
     disconnected = [
@@ -606,6 +618,7 @@ def _build_issue_groups(
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
         and not _device_extra(device).get("bt_standby", False)
+        and _device_extra(device).get("never_paired") is not True
         and _device_extra(device).get("bluetooth_paired") is not False
     ]
     missing_sink = [
@@ -673,6 +686,34 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=transport_down,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+        )
+    if never_paired_devices:
+        never_paired_names = [str(getattr(device, "player_name", None) or "Unknown") for device in never_paired_devices]
+        title = (
+            f"{never_paired_names[0]} has never been paired"
+            if len(never_paired_names) == 1
+            else f"{len(never_paired_names)} devices have never been paired"
+        )
+        attempt_summary = _reconnect_attempt_summary(never_paired_devices[0]) if len(never_paired_devices) == 1 else ""
+        summary = (
+            "This speaker was added to the bridge but has never appeared in BlueZ. "
+            "Put it in pairing mode and click Start pairing."
+            if len(never_paired_names) == 1
+            else f"These speakers were added but have never appeared in BlueZ: {_format_device_label(never_paired_names)}. "
+            "Put them in pairing mode and run Start pairing."
+        )
+        if attempt_summary:
+            summary = f"{summary} {attempt_summary}"
+        primary_action, secondary_actions = _guidance_actions_from_recovery("never_paired", never_paired_names)
+        _append_group(
+            groups,
+            key="never_paired",
+            severity="error",
+            title=title,
+            summary=summary,
+            device_names=never_paired_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
         )
