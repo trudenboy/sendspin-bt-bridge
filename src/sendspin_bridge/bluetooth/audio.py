@@ -14,6 +14,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
+from sendspin_bridge.bluetooth.dbus import _dbus_get_media_transport_state
 from sendspin_bridge.config import CONFIG_FILE, save_device_sink
 from sendspin_bridge.config import config_lock as config_lock
 from sendspin_bridge.services.audio.pulse import (
@@ -156,6 +157,7 @@ def configure_bluetooth_audio(
     host: BluetoothManagerHost | None,
     wait_with_cancel: Callable[[float], bool],
     *,
+    device_path: str | None = None,
     logger: logging.Logger = logger,
 ) -> bool:
     """Configure PipeWire/PulseAudio to use a Bluetooth device as audio output.
@@ -163,7 +165,10 @@ def configure_bluetooth_audio(
     This is the standalone version of ``BluetoothManager.configure_bluetooth_audio``.
     The *wait_with_cancel* callback should sleep for the given duration while
     checking for reconnect cancellation; it returns ``True`` when the full
-    duration elapsed normally, ``False`` if cancelled.
+    duration elapsed normally, ``False`` if cancelled. *device_path* is the
+    BlueZ Device1 object path; when provided, it gates the LAST_SINKS
+    fast-path on ``MediaTransport1.State`` to avoid the issue #269
+    AVDTP collision window.
     """
     try:
         pa_mac = mac_address.replace(":", "_")
@@ -178,11 +183,35 @@ def configure_bluetooth_audio(
         except (OSError, json.JSONDecodeError, ValueError):
             pass
 
+        fast_path_taken = False
+        configured_sink: str | None = None
+        success = False
         if cached_sink and get_sink_volume(cached_sink) is not None:
-            logger.info("✓ Using cached sink: %s (skipped A2DP delay)", cached_sink)
-            configured_sink = cached_sink
-            success = True
-        else:
+            # Even when the PA/PipeWire sink object exists, BlueZ's AVDTP
+            # transport may still be settling after the reconnect. If the
+            # peer has *already* brought the transport to "active" (an
+            # inbound stream is being negotiated or running), taking the
+            # fast-path here races with the anti-pop mute and triggers
+            # AVDTP-Suspend from the peer → cancel_request collision in
+            # bluetoothd. See issue #269.
+            transport_state = _dbus_get_media_transport_state(device_path)
+            if transport_state == "active":
+                logger.info(
+                    "Cached sink %s present but MediaTransport1 is active — "
+                    "falling back to delayed discovery to avoid AVDTP collision",
+                    cached_sink,
+                )
+            else:
+                logger.info(
+                    "✓ Using cached sink: %s (skipped A2DP delay, transport=%s)",
+                    cached_sink,
+                    transport_state or "unknown",
+                )
+                configured_sink = cached_sink
+                success = True
+                fast_path_taken = True
+
+        if not fast_path_taken:
             if cached_sink:
                 logger.debug("Cached sink %s not available, falling back to discovery", cached_sink)
             # Wait for PipeWire/PulseAudio to register the device.

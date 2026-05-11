@@ -136,6 +136,41 @@ def _dbus_wait_services_resolved(
             return False
 
 
+def _dbus_get_media_transport_state(device_path: str | None) -> str | None:
+    """Return ``MediaTransport1.State`` for *device_path* or None.
+
+    Enumerates BlueZ ObjectManager and finds the first
+    ``org.bluez.MediaTransport1`` whose ``Device`` property matches
+    *device_path*. State values per BlueZ docs:
+    ``"idle" | "pending" | "active" | "suspending"``.
+
+    Returns ``None`` when dbus-python is unavailable, no transport
+    object exists for the device yet (peer has not negotiated a stream
+    endpoint — common right after Connect), or the lookup raised a
+    D-Bus error. Callers MUST treat ``None`` as "transport state
+    unknown — proceed without the gate".
+    """
+    if not device_path or dbus is None:
+        return None
+    try:
+        bus = dbus.SystemBus()
+        root = bus.get_object("org.bluez", "/")
+        om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
+        managed = om.GetManagedObjects()
+        for _path, ifaces in managed.items():
+            transport = ifaces.get("org.bluez.MediaTransport1")
+            if not transport:
+                continue
+            if str(transport.get("Device", "")) != device_path:
+                continue
+            state = transport.get("State")
+            return str(state) if state is not None else None
+        return None
+    except Exception as exc:
+        logger.debug("D-Bus MediaTransport1.State read failed: %s", exc)
+        return None
+
+
 def _dbus_connect_profile(device_path: str | None, uuid: str) -> tuple[bool, str]:
     """Call BlueZ Device1.ConnectProfile(uuid) explicitly.
 

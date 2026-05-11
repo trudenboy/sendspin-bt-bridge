@@ -827,6 +827,7 @@ class BluetoothManager:
             on_sink_found=self.on_sink_found,
             host=self.host,
             wait_with_cancel=self._wait_with_cancel,
+            device_path=self._dbus_device_path,
             logger=logger,
         )
 

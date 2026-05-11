@@ -299,6 +299,126 @@ def test_configure_bluetooth_audio_retries_five_times(bt_manager):
     assert call_count == bt_audio._SINK_RETRY_COUNT
 
 
+def test_fast_path_falls_back_when_transport_active(bt_manager, monkeypatch, tmp_path):
+    """When LAST_SINKS has the sink but MediaTransport1.State == 'active',
+    skip the fast-path and go through the delayed-discovery branch.
+
+    Reproduces the collision window from issue #269: on reconnect, the
+    PA sink object exists but BlueZ AVDTP is still settling; taking the
+    fast-path mutes too early and triggers AVDTP-Suspend from the peer.
+    """
+    import json
+
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    sink_name = f"bluez_output.{pa_mac}.1"
+
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"LAST_SINKS": {bt_manager.mac_address: sink_name}}))
+    monkeypatch.setattr(bt_audio, "CONFIG_FILE", cfg_file)
+
+    waits: list[float] = []
+
+    def _wait_with_cancel(sec):
+        waits.append(sec)
+        return True
+
+    fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
+    with (
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=fake_sinks),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
+        patch(
+            "sendspin_bridge.bluetooth.audio._dbus_get_media_transport_state",
+            return_value="active",
+        ),
+        patch.object(bt_manager, "_wait_with_cancel", side_effect=_wait_with_cancel),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+    assert any(abs(w - bt_audio._A2DP_PROFILE_DELAY) < 1e-6 for w in waits), (
+        f"Expected A2DP profile delay to be taken when transport is 'active', got waits={waits!r}"
+    )
+
+
+def test_fast_path_taken_when_transport_idle(bt_manager, monkeypatch, tmp_path):
+    """When transport state is 'idle', keep the existing fast-path:
+    cached sink + no delay. This protects boot-time restarts."""
+    import json
+
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    sink_name = f"bluez_output.{pa_mac}.1"
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"LAST_SINKS": {bt_manager.mac_address: sink_name}}))
+    monkeypatch.setattr(bt_audio, "CONFIG_FILE", cfg_file)
+
+    waits: list[float] = []
+
+    with (
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=[]),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
+        patch(
+            "sendspin_bridge.bluetooth.audio._dbus_get_media_transport_state",
+            return_value="idle",
+        ),
+        patch.object(
+            bt_manager,
+            "_wait_with_cancel",
+            side_effect=lambda s: waits.append(s) or True,
+        ),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+    assert waits == [], f"Fast-path should not have called wait_with_cancel when transport is idle, got waits={waits!r}"
+
+
+def test_fast_path_taken_when_transport_unknown(bt_manager, monkeypatch, tmp_path):
+    """Transport state == None (D-Bus unavailable or no transport object yet)
+    preserves the pre-#269 fast-path behavior: don't penalize stacks that
+    can't be introspected."""
+    import json
+
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    pa_mac = bt_manager.mac_address.replace(":", "_")
+    sink_name = f"bluez_output.{pa_mac}.1"
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"LAST_SINKS": {bt_manager.mac_address: sink_name}}))
+    monkeypatch.setattr(bt_audio, "CONFIG_FILE", cfg_file)
+
+    waits: list[float] = []
+
+    with (
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=[]),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
+        patch(
+            "sendspin_bridge.bluetooth.audio._dbus_get_media_transport_state",
+            return_value=None,
+        ),
+        patch.object(
+            bt_manager,
+            "_wait_with_cancel",
+            side_effect=lambda s: waits.append(s) or True,
+        ),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+    assert waits == [], f"Fast-path must not delay when transport state is unknown, got waits={waits!r}"
+
+
 def test_warn_pipewire_session_emits_on_pipewire_without_bt_sinks():
     """_warn_pipewire_session logs remediation when PipeWire has no BT sinks."""
     import sendspin_bridge.bluetooth.audio as bt_audio
