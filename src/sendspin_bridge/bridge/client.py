@@ -388,6 +388,17 @@ class DeviceStatus:
     pair_failure_adapter_mac: str | None = None
     pair_failure_at: str | None = None
 
+    # v2.70.0-rc.2 — "never paired since bridge start" signal driving the
+    # recovery banner branch (#260), the Start pairing button (#261), the
+    # bug-report classifier (#262), and the auto-disable threshold (#263).
+    # BluetoothManager flips this to True from `_purge_stale_bluez_entry`
+    # after _PAIRED_UNKNOWN_THRESHOLD consecutive observations of
+    # `paired is None`. A successful pair or first observed Connected=True
+    # clears it back to False. ``never_paired_since`` carries the ISO
+    # timestamp of the first flip for diagnostics.
+    never_paired: bool = False
+    never_paired_since: str | None = None
+
     # ── Dict-compatible interface ──────────────────────────────────────────
 
     def __getitem__(self, key: str):
