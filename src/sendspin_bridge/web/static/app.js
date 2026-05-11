@@ -3953,13 +3953,16 @@ function populateDeviceCard(i, dev) {
     }
 
     // v2.70.0-rc.2 (#261) — toggle Start pairing button for never-paired
-    // devices. The reconnect/claim buttons still render but are disabled
-    // because reconnect is futile until pairing succeeds.
+    // devices. Driven solely by the structured `dev.never_paired` signal
+    // raised by BluetoothManager._purge_stale_bluez_entry; do NOT pattern
+    // match on `dev.last_error` strings — that creates a brittle UI
+    // dependency on log-message wording. The reconnect button is disabled
+    // when the pair button shows because reconnect is futile until
+    // pairing succeeds.
     {
         var pairBtn = document.getElementById('dbtn-pair-' + i);
         if (pairBtn) {
-            var isNeverPaired = dev.never_paired === true
-                || (typeof dev.last_error === 'string' && /BlueZ has no record/i.test(dev.last_error));
+            var isNeverPaired = dev.never_paired === true;
             if (isNeverPaired) {
                 pairBtn.style.display = '';
                 var reconnBtnEl = document.getElementById('dbtn-reconnect-' + i);

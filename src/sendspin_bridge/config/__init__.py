@@ -84,7 +84,6 @@ __all__ = [
     "resolve_base_listen_port",
     "resolve_device_room_context",
     "resolve_web_port",
-    "save_device_enabled",
     "save_device_sink",
     "save_device_static_delay",
     "save_device_volume",
@@ -443,38 +442,6 @@ def save_device_static_delay(mac: str | None, delay_ms: int) -> None:
         update_config(_set_delay)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save static_delay_ms for %s: %s", mac, e)
-
-
-def save_device_enabled(mac: str | None, enabled: bool) -> None:
-    """Persist per-device ``enabled`` flag to ``BLUETOOTH_DEVICES[i].enabled``.
-
-    v2.70.0-rc.2 (#263) — backs the never-paired auto-disable path so the
-    flip survives a bridge restart. Parallels the sibling ``save_device_*``
-    helpers (volume / sink / static_delay): MAC lookup is case-insensitive,
-    a missing MAC is a no-op, and an unknown MAC logs a warning without
-    creating phantom device entries. The HA-addon side mirror lives in
-    ``services/bluetooth.persist_device_enabled`` — callers in the
-    auto-disable / re-enable paths invoke BOTH so config.json and
-    options.json stay in sync.
-    """
-    if not mac or not CONFIG_FILE.exists():
-        return
-
-    def _set_enabled(cfg: dict) -> None:
-        normalized_mac = mac.strip().upper()
-        for device in cfg.get("BLUETOOTH_DEVICES", []):
-            if not isinstance(device, dict):
-                continue
-            device_mac = device.get("mac", "")
-            if isinstance(device_mac, str) and device_mac.strip().upper() == normalized_mac:
-                device["enabled"] = bool(enabled)
-                return
-        logger.warning("Skipping enabled save for unknown Bluetooth device %s", normalized_mac)
-
-    try:
-        update_config(_set_enabled)
-    except (OSError, json.JSONDecodeError, ValueError) as e:
-        logger.warning("Could not save enabled for %s: %s", mac, e)
 
 
 def load_config() -> dict:

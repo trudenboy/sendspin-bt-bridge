@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONFIG_SCHEMA_VERSION = 2
+CONFIG_SCHEMA_VERSION = 3
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
 _VALID_IDLE_MODES = frozenset(("default", "power_save", "auto_disconnect", "keep_alive"))
@@ -378,19 +378,6 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         default=DEFAULT_UPDATE_CHANNEL,
     )
 
-    # v2.70.0-rc.2 (#263) — ``BT_MAX_RECONNECT_FAILS`` default flipped
-    # from 0 (unlimited) to 5 to power the never-paired auto-disable
-    # feature. Configs that still carry the old default are migrated to
-    # the new default so the feature engages without an explicit user
-    # action. Operators who genuinely want unlimited reconnects can
-    # re-set 0 after upgrade — the migration runs once per stale value.
-    if config.get("BT_MAX_RECONNECT_FAILS") == 0:
-        logger.warning(
-            "Migrated BT_MAX_RECONNECT_FAILS from 0 (legacy unlimited default) "
-            "to 5 (v2.70.0 default). Set back to 0 to opt out of auto-disable."
-        )
-        config["BT_MAX_RECONNECT_FAILS"] = 5
-
     # ``EXPERIMENTAL_RSSI_BADGE`` was promoted to ``RSSI_BADGE`` (default
     # True) in v2.64.0 once it stabilised.  Migrate any pre-existing
     # config silently — preserve the user's setting (whether True or
@@ -573,6 +560,26 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
                     message=f"Config schema v{schema_version} migrated to v{CONFIG_SCHEMA_VERSION}",
                 )
             )
+        # v2.70.0-rc.2 (#263) — one-shot upgrade from schema <3:
+        # BT_MAX_RECONNECT_FAILS default flipped from 0 (unlimited) to 5
+        # to power the never-paired auto-disable feature. Configs that
+        # still carry the legacy 0 are migrated to the new default so
+        # the feature engages without an explicit user action. After the
+        # migration result is persisted (needs_persist=True below), the
+        # schema bump prevents the migration from firing again — so
+        # operators who genuinely want unlimited reconnects can re-set 0
+        # after upgrade and that choice will stick.
+        if (schema_version is None or schema_version < 3) and normalized.get("BT_MAX_RECONNECT_FAILS") == 0:
+            warnings.append(
+                ConfigMigrationIssue(
+                    field="BT_MAX_RECONNECT_FAILS",
+                    message=(
+                        "Migrated BT_MAX_RECONNECT_FAILS from 0 (legacy unlimited default) "
+                        "to 5 (v2.70.0 default). Set back to 0 to opt out of auto-disable."
+                    ),
+                )
+            )
+            normalized["BT_MAX_RECONNECT_FAILS"] = 5
         normalized["CONFIG_SCHEMA_VERSION"] = CONFIG_SCHEMA_VERSION
         needs_persist = True
     elif schema_version > CONFIG_SCHEMA_VERSION:

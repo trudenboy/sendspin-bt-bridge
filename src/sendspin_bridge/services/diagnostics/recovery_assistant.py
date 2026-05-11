@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
@@ -472,7 +472,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
             )
             if never_paired_flag:
                 issue_key = "never_paired"
-                severity: Literal["info", "warning", "error"] = "error"
+                severity = "error"
                 title = f"{name} has never been paired"
                 default_summary = (
                     "This speaker was added to the bridge but has never appeared in BlueZ. "
