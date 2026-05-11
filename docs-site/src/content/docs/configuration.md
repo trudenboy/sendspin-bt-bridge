@@ -59,7 +59,7 @@ Each device row can store:
 | **MAC** | Speaker Bluetooth address |
 | **Adapter** | Specific adapter binding, if needed |
 | **Port** | Optional custom `listen_port`; otherwise the bridge uses `BASE_LISTEN_PORT + device index` |
-| **Delay** | `static_delay_ms` additional forward delay (0–5 000 ms, default 300 for new devices) |
+| **Delay** | `static_delay_ms` post-sink hardware latency compensation (0–5 000 ms, default 300 for new devices) |
 | **Live** | Runtime badge such as Playing, Connected, Released, or Not seen |
 | **Actions** | Remove the row or act on the saved configuration |
 
@@ -314,7 +314,7 @@ The following keys are written by the bridge at runtime and should not normally 
 | `mac` | Speaker Bluetooth MAC |
 | `player_name` | Display name in Music Assistant |
 | `adapter` | Adapter ID or MAC |
-| `static_delay_ms` | Additional forward delay in ms (0–5 000) on top of sendspin 7.0+ DAC-anchored sync. Default for new devices is `300`. See [Delay tuning and keepalive](/devices/#delay-tuning-and-keepalive) for when to raise it and [Measuring per-speaker latency with MassDroid](/devices/#measuring-per-speaker-latency-with-massdroid) for an objective way to tune multi-speaker groups. |
+| `static_delay_ms` | Declares the hardware latency this speaker adds beyond the audio sink, in milliseconds (0–5 000). The sendspin client subtracts this value from each chunk's play-time, so audio is emitted earlier by exactly this amount and lands on schedule once the hardware adds its real latency back. Default for new devices is `300`; raise it for speakers that consistently play *behind* the rest of a group, lower it for those that play ahead. See [Delay tuning and keepalive](/devices/#delay-tuning-and-keepalive) and [Measuring per-speaker latency with MassDroid](/devices/#measuring-per-speaker-latency-with-massdroid). |
 | `listen_host` | Advertised host override for this device listener |
 | `listen_port` | Custom sendspin listener port; if missing, runtime uses `BASE_LISTEN_PORT + device index` |
 | `preferred_format` | Preferred output format |

@@ -394,7 +394,7 @@ On BT reconnect: PulseAudio's `module-rescue-streams` may move streams to the de
 | OpenMove AfterShokz | 20:74:CF:61:FB:D8 | hci0 | 8933 | 0 ms | ❌ |
 | ENEBY Portable | 6C:5C:3D:35:17:99 | hci1 | 8933 | 0 ms | ❌ |
 
-Delay column reflects sendspin 7.0+ semantics: `static_delay_ms` is an additional forward delay (0–5 000 ms) on top of DAC-anchored sync. Negative values aren't accepted; legacy negative values are clamped to `0` at migration time.
+Delay column reflects sendspin 7.0+ semantics: `static_delay_ms` declares the hardware latency a speaker adds beyond the audio sink (0–5 000 ms). Per the Sendspin protocol the client subtracts this value from each chunk's play-time, so audio is emitted earlier by exactly this amount and lands on schedule once hardware adds its real latency. Raise it for speakers that play *behind* the group, lower it for those that play ahead. Negative values aren't accepted; legacy negative values are clamped to `0` at migration time.
 
 ### Production addon settings
 
