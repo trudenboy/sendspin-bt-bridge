@@ -3575,6 +3575,7 @@ function buildDeviceCard(i) {
         '<div class="card-actions-row">' +
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
+            '<button type="button" class="action-btn accent" id="dbtn-pair-' + i + '" data-action="bt-start-pairing" data-arg="' + i + '" style="display:none" title="Put speaker in pairing mode, then click here">' + _actionButtonInnerHtml('reconnect', 'Start pairing') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-claim-' + i + '" data-action="bt-claim-audio" data-arg="' + i + '" title="Claim audio source on multipoint speaker (push Playing via AVRCP)">' + _actionButtonInnerHtml('play', 'Claim') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" data-action="wake-device" data-arg="' + i + '" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
@@ -3947,6 +3948,27 @@ function populateDeviceCard(i, dev) {
                 reconnBtn.title = reconnectAvailable
                     ? 'Reconnect Bluetooth and refresh sink routing'
                     : _capabilityBlockedReason(reconnectCapability, 'Reconnect unavailable');
+            }
+        }
+    }
+
+    // v2.70.0-rc.2 (#261) — toggle Start pairing button for never-paired
+    // devices. The reconnect/claim buttons still render but are disabled
+    // because reconnect is futile until pairing succeeds.
+    {
+        var pairBtn = document.getElementById('dbtn-pair-' + i);
+        if (pairBtn) {
+            var isNeverPaired = dev.never_paired === true
+                || (typeof dev.last_error === 'string' && /BlueZ has no record/i.test(dev.last_error));
+            if (isNeverPaired) {
+                pairBtn.style.display = '';
+                var reconnBtnEl = document.getElementById('dbtn-reconnect-' + i);
+                if (reconnBtnEl) {
+                    reconnBtnEl.disabled = true;
+                    reconnBtnEl.title = 'Speaker has never been paired — use Start pairing first';
+                }
+            } else {
+                pairBtn.style.display = 'none';
             }
         }
     }
@@ -7981,6 +8003,23 @@ function _goToBluetoothAndScan(options) {
 
 function _goToDevicesAndScan(options) {
     return _goToBluetoothAndScan(options);
+}
+
+function btStartPairing(i) {
+    // v2.70.0-rc.2 (#261) — entry point for the "Start pairing" button on
+    // never-paired device cards. Resolves the device's MAC from the cached
+    // lastDevices array, then deep-links to the Bluetooth panel and
+    // auto-starts a scan with the MAC pre-highlighted in the paired-devices
+    // list. If the user already arrived at this UI from a recovery flow
+    // and the speaker is in pairing mode, the scan will surface the
+    // device and the existing pair button on that row takes over.
+    if (typeof i !== 'number' || !Array.isArray(lastDevices) || !lastDevices[i]) {
+        _goToBluetoothAndScan();
+        return false;
+    }
+    var dev = lastDevices[i];
+    var mac = (dev && (dev.bluetooth_mac || dev.mac)) || '';
+    return _goToBluetoothAndScan({highlightMac: mac});
 }
 
 function _isOnboardingCardVisible(guidance) {
@@ -14674,6 +14713,7 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'bt-start-pairing':         (_el, _ev, arg) => btStartPairing(Number(arg)),
     'bt-claim-audio':           (_el, _ev, arg) => btClaimAudio(Number(arg)),
     'bt-toggle-management':     (_el, _ev, arg) => btToggleManagement(Number(arg)),
     'bt-toggle-standby':        (_el, _ev, arg) => btToggleStandby(Number(arg)),
