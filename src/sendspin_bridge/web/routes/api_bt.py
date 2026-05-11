@@ -401,6 +401,10 @@ def _clear_never_paired_state_on_reenable(player_name: str) -> None:
     - reset DeviceStatus.reconnect_attempt to 0
     - flip BluetoothManager._has_ever_paired_since_start back to False so
       the auto-disable threshold resets for the next session
+    - reclaim BT management (``management_enabled``) which was flipped to
+      False by ``_auto_disable_never_paired`` to stop the polling loop;
+      without this restore the device would stay silent after re-enable
+      until a bridge restart (Copilot review on PR #290)
 
     The bridge config persistence happens in the caller; this helper only
     touches in-memory runtime state. If the SendspinClient was torn down
@@ -429,6 +433,14 @@ def _clear_never_paired_state_on_reenable(player_name: str) -> None:
             bt_mgr._has_ever_paired_since_start = False
         except Exception as exc:
             logger.debug("Could not reset _has_ever_paired_since_start for %s: %s", player_name, exc)
+        # Reclaim BT management — _auto_disable_never_paired flipped this off
+        # to stop the polling loop. Re-enabling must restore the loop so the
+        # next pair attempt actually runs.
+        if getattr(bt_mgr, "management_enabled", True) is False:
+            try:
+                client.set_bt_management_enabled(True)
+            except Exception as exc:
+                logger.debug("Could not reclaim BT management for %s: %s", player_name, exc)
 
 
 @bt_bp.route("/api/device/enabled", methods=["POST"])

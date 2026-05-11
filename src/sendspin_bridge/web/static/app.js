@@ -3970,6 +3970,16 @@ function populateDeviceCard(i, dev) {
                     reconnBtnEl.disabled = true;
                     reconnBtnEl.title = 'Speaker has never been paired — use Start pairing first';
                 }
+                // Copilot review on PR #290 — Claim is an AVRCP push that
+                // requires an established A2DP transport. On a never-paired
+                // device the BT link doesn't exist yet, so the click would
+                // fail with a generic "no MAC / not connected" error. Disable
+                // the button until pairing completes.
+                var claimBtnEl = document.getElementById('dbtn-claim-' + i);
+                if (claimBtnEl) {
+                    claimBtnEl.disabled = true;
+                    claimBtnEl.title = 'Speaker has never been paired — use Start pairing first';
+                }
             } else {
                 pairBtn.style.display = 'none';
             }
@@ -12246,11 +12256,29 @@ var _BR_ICON_GITHUB = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 
 var _BR_ICON_COPY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 011.5-1.5H11"/></svg>';
 var _BR_ICON_INFO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><line x1="8" y1="7" x2="8" y2="11"/><line x1="8" y1="5" x2="8" y2="5" stroke-width="2"/></svg>';
 
+var _BUGREPORT_LIKELY_CAUSE_ACTIONS = {
+    // Maps classifier `action_key` strings to the right _openConfigPanel
+    // invocation. Adding a new classifier rule with a new action_key
+    // requires a matching entry here — without one, the "Try this first"
+    // button is hidden (degrades gracefully to "title + hint only").
+    open_bluetooth_devices: function() {
+        _openConfigPanel('bluetooth', 'config-bluetooth-paired-card', 'start');
+    },
+    open_bluetooth_adapters: function() {
+        _openConfigPanel('bluetooth', 'config-bluetooth-adapters-card', 'start');
+    },
+    open_ma_settings: function() {
+        _openConfigPanel('ma', 'config-panel-ma', 'start');
+    },
+};
+
 function _renderLikelyCauses(container, causes) {
     // v2.70.0-rc.2 (#262) — render the pre-submit likely-causes list above
     // the bug-report form when the backend classifier matched at least one
-    // pattern. Each row links to a remediation surface; a "Report anyway"
-    // link hides the block so genuine bug paths are never gated.
+    // pattern. Each row links to a remediation surface via a structured
+    // action_key (mapped to _openConfigPanel by the dispatcher above);
+    // a "Report anyway" link hides the block so genuine bug paths are
+    // never gated.
     if (!container) return;
     container.innerHTML = '';
     if (!Array.isArray(causes) || causes.length === 0) {
@@ -12277,12 +12305,23 @@ function _renderLikelyCauses(container, causes) {
             hint.textContent = cause.hint;
             item.appendChild(hint);
         }
-        if (cause.action_url) {
-            var actionLink = document.createElement('a');
-            actionLink.className = 'bugreport-likely-cause-action';
-            actionLink.href = cause.action_url;
-            actionLink.textContent = 'Try this first';
-            item.appendChild(actionLink);
+        var actionRunner = cause.action_key && _BUGREPORT_LIKELY_CAUSE_ACTIONS[cause.action_key];
+        if (typeof actionRunner === 'function') {
+            var actionBtn = document.createElement('button');
+            actionBtn.type = 'button';
+            actionBtn.className = 'bugreport-likely-cause-action';
+            actionBtn.textContent = 'Try this first';
+            actionBtn.onclick = function(ev) {
+                ev.preventDefault();
+                try {
+                    actionRunner();
+                } catch (err) {
+                    // Defensive: if a panel navigation fails (missing element,
+                    // tab not in DOM yet), keep the bug-report modal open so
+                    // the operator can still submit.
+                }
+            };
+            item.appendChild(actionBtn);
         }
         list.appendChild(item);
     });

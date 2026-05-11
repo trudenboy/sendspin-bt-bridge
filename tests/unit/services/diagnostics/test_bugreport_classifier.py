@@ -20,6 +20,35 @@ def test_classify_never_paired_match():
     assert causes[0]["code"] == "never_paired_device"
     assert causes[0]["confidence"] == "high"
     assert "Start pairing" in causes[0]["hint"]
+    # Copilot review on PR #290 — must return a structured action_key, not a
+    # hash-fragment action_url that the frontend can't route to.
+    assert causes[0]["action_key"] == "open_bluetooth_devices"
+    assert "action_url" not in causes[0]
+
+
+def test_classify_uses_action_key_not_action_url():
+    """Every cause must use the new action_key contract — the deprecated
+    action_url field was a no-op in the frontend (no hash routing)."""
+    recovery = {
+        "issues": [
+            {"key": "never_paired"},
+            {"key": "missing_sink"},
+        ]
+    }
+    diagnostics = {
+        "ma_integration": {"configured": True, "connected": False},
+        "adapters": [],
+    }
+    causes = classify_likely_causes(recovery_snapshot=recovery, diagnostics=diagnostics)
+    assert causes, "expected matches across all four rules"
+    for cause in causes:
+        assert "action_key" in cause, f"cause missing action_key: {cause}"
+        assert "action_url" not in cause, f"cause still uses deprecated action_url: {cause}"
+        assert cause["action_key"] in {
+            "open_bluetooth_devices",
+            "open_bluetooth_adapters",
+            "open_ma_settings",
+        }, f"unknown action_key {cause['action_key']!r}; frontend dispatcher won't route it"
 
 
 def test_classify_auto_disabled_never_paired_also_matches_never_paired_rule():

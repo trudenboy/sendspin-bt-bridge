@@ -74,6 +74,11 @@ def test_auto_disable_triggers_when_never_paired_and_threshold_reached(
     assert last["enabled"] is False
     assert "never been paired" in (last.get("last_error") or "").lower()
     assert last.get("reconnecting") is False
+    # #263 Copilot follow-up: management_enabled must flip to False so the
+    # polling/D-Bus monitor loops actually stop ticking. Without this the
+    # auto-disable warning would re-fire every check_interval.
+    assert last.get("bt_management_enabled") is False
+    assert mgr.management_enabled is False
 
 
 def test_auto_disable_does_not_trigger_for_previously_paired_device(bt_manager_with_host):

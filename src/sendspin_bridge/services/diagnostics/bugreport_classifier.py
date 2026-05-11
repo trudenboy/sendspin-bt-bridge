@@ -14,9 +14,16 @@ Returned shape per cause:
         "code": "<stable_machine_id>",
         "title": "<short human title>",
         "hint": "<one-line remediation>",
-        "action_url": "<#fragment or absolute path>",
+        "action_key": "<stable action id consumed by app.js>",
         "confidence": "high|medium|low",
     }
+
+``action_key`` is a stable identifier; the frontend maps it to the
+appropriate ``_openConfigPanel(...)`` invocation. Earlier versions used
+``action_url`` with hash fragments like ``#bluetooth-devices``, but the
+project does not implement hash routing and the fragments did not match
+any real anchor IDs, so the "Try this first" links were silent no-ops
+(Copilot review on PR #290).
 
 Each rule is a small pure function so it can be unit-tested in isolation.
 The orchestrator (``classify_likely_causes``) runs them all and
@@ -48,7 +55,7 @@ def _rule_never_paired(recovery_snapshot: dict[str, Any]) -> dict[str, Any] | No
                     "device card. This usually resolves 'no audio' and 'reconnect loop' "
                     "reports without a ticket."
                 ),
-                "action_url": "#bluetooth-devices",
+                "action_key": "open_bluetooth_devices",
                 "confidence": "high",
             }
     return None
@@ -78,7 +85,7 @@ def _rule_ma_not_connected(diagnostics: dict[str, Any]) -> dict[str, Any] | None
                 "The bridge can't reach Music Assistant. Check that MA is running and "
                 "reachable from this host, then re-authenticate from the Music Assistant tab."
             ),
-            "action_url": "#music-assistant",
+            "action_key": "open_ma_settings",
             "confidence": "high",
         }
     return None
@@ -108,7 +115,7 @@ def _rule_no_bluetooth_adapter(diagnostics: dict[str, Any]) -> dict[str, Any] | 
                 "plugged in and powered (rfkill list), check that bluetoothd is running, "
                 "and re-scan from the Bluetooth tab. On HA addons, verify USB passthrough."
             ),
-            "action_url": "#bluetooth-adapters",
+            "action_key": "open_bluetooth_adapters",
             "confidence": "medium",
         }
     return None
@@ -134,7 +141,7 @@ def _rule_audio_sink_missing(recovery_snapshot: dict[str, Any]) -> dict[str, Any
                     "node appeared. Restart WirePlumber (or pipewire-pulse) on the host, "
                     "then trigger Reconnect on the device card."
                 ),
-                "action_url": "#bluetooth-devices",
+                "action_key": "open_bluetooth_devices",
                 "confidence": "high",
             }
     return None

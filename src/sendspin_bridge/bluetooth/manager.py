@@ -1011,6 +1011,12 @@ class BluetoothManager:
         if self.host:
             try:
                 now_iso = datetime.now(tz=UTC).isoformat()
+                # Copilot review on PR #290 — preserve the FIRST flip timestamp
+                # across repeated purge cycles. Without this, the value churns
+                # on every purge (~30 s cadence) and diagnostics can't tell
+                # how long the device has been in the never-paired state.
+                prior_since = self.host.get_status_value("never_paired_since")
+                first_seen = prior_since if isinstance(prior_since, str) and prior_since else now_iso
                 self.host.update_status(
                     {
                         "last_error": (
@@ -1025,7 +1031,7 @@ class BluetoothManager:
                         # Start pairing button, and _handle_reconnect_failure
                         # can gate auto-disable on it.
                         "never_paired": True,
-                        "never_paired_since": now_iso,
+                        "never_paired_since": first_seen,
                     }
                 )
             except Exception as exc:
@@ -1341,9 +1347,19 @@ class BluetoothManager:
         The flip is persisted via ``persist_device_enabled`` so config.json
         and the HA addon's options.json stay in sync — without this, an
         addon restart would silently re-enable the device and the loop
-        would resume. We do NOT touch ``bt_management_enabled``: the
-        recovery banner offers a single Re-enable action that flips
-        ``enabled`` back to True and resets the never_paired counter.
+        would resume.
+
+        We ALSO flip ``management_enabled`` to False and cancel the
+        reconnect cycle. The polling/D-Bus monitor loops gate on
+        ``mgr.management_enabled`` as the canonical "stop reconnecting"
+        signal; without that flip the loop would tick on every
+        ``check_interval`` and re-fire ``_handle_reconnect_failure``,
+        re-emitting the warning and rewriting the same config bytes
+        (Copilot review on PR #290). The recovery banner discriminates
+        between this state and the regular auto-released state by
+        checking ``enabled=False AND never_paired=True`` *before* the
+        management-released branch, so the operator sees the
+        Re-enable card rather than the Reclaim card.
         """
         logger.warning(
             "[%s] %d consecutive failed reconnects on a never-paired device "
@@ -1352,20 +1368,29 @@ class BluetoothManager:
             self.device_name,
             attempt,
         )
+        now_iso = datetime.now(tz=UTC).isoformat()
         if self.host is not None:
             try:
                 self.host.update_status(
                     {
                         "enabled": False,
+                        "bt_management_enabled": False,
                         "reconnecting": False,
                         "last_error": (
                             f"Auto-disabled after {attempt} failed pairing attempts — this device has never been paired"
                         ),
-                        "last_error_at": datetime.now(tz=UTC).isoformat(),
+                        "last_error_at": now_iso,
                     }
                 )
+                self.host.bt_management_enabled = False
             except Exception as exc:
                 logger.debug("[%s] Failed to surface auto-disable status: %s", self.device_name, exc)
+        # Stop the monitor loops from continuing to tick on this device.
+        self.management_enabled = False
+        try:
+            self.cancel_reconnect()
+        except Exception as exc:
+            logger.debug("[%s] cancel_reconnect failed on auto-disable: %s", self.device_name, exc)
         try:
             from sendspin_bridge.services.bluetooth import persist_device_enabled
 

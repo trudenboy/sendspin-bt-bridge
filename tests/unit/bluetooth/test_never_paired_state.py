@@ -29,12 +29,18 @@ def bt_manager_with_host():
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     posted_updates: list[dict] = []
+    status_state: dict = {}
 
     def _update_status(payload):
         posted_updates.append(dict(payload))
+        status_state.update(payload)
+
+    def _get_status_value(key, default=None):
+        return status_state.get(key, default)
 
     host = SimpleNamespace(
         update_status=_update_status,
+        get_status_value=_get_status_value,
         bluetooth_sink_name=None,
         bt_management_enabled=True,
     )
@@ -96,6 +102,32 @@ def test_apply_connected_state_true_clears_never_paired(bt_manager_with_host):
     assert clearing_updates, f"Expected update_status({{'never_paired': False}}), got: {posted}"
     assert clearing_updates[-1]["never_paired"] is False
     assert clearing_updates[-1].get("never_paired_since") is None
+
+
+def test_purge_preserves_first_never_paired_since_across_cycles(bt_manager_with_host):
+    """Copilot review on PR #290: `never_paired_since` must record the FIRST
+    purge timestamp, not the most recent one. Diagnostics need to know how
+    long the device has been in the never-paired state, which is lost if
+    the timestamp churns on every purge cycle (~30 s cadence)."""
+    mgr, posted = bt_manager_with_host
+    with patch("subprocess.run") as run_mock:
+        run_mock.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+        mgr._purge_stale_bluez_entry()
+    first_since = next(u["never_paired_since"] for u in posted if "never_paired_since" in u)
+    assert first_since, "first purge must set never_paired_since"
+
+    # Seed host status so the next purge can read it back
+    mgr.host.update_status({"never_paired_since": first_since})
+
+    # Second purge — `never_paired_since` should remain the first timestamp.
+    posted.clear()
+    with patch("subprocess.run") as run_mock:
+        run_mock.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+        mgr._purge_stale_bluez_entry()
+    second_since = next(u["never_paired_since"] for u in posted if "never_paired_since" in u)
+    assert second_since == first_since, (
+        f"second purge overwrote never_paired_since: first={first_since!r}, second={second_since!r}"
+    )
 
 
 def test_pair_success_clears_never_paired_even_without_connected_event(bt_manager_with_host):
