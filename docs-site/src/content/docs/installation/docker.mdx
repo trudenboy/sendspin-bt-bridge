@@ -221,11 +221,9 @@ On PipeWire systems (Ubuntu 22.04+, Fedora, Raspberry Pi OS Bookworm), Bluetooth
 
 **Symptom:** After a host reboot the bridge connects to the Bluetooth speaker (`bluetoothctl` shows `Connected: yes`), but `pactl list sinks short` shows no `bluez_output.*` or `bluez_sink.*` sink — only `sendspin_fallback`. Audio works again once you log in interactively.
 
-**Fix:**
+There are two independent fixes — pick whichever fits your distro.
 
-1. Enable system-wide (instead of per active user) persistent Bluetooth connections. In the file `/usr/share/wireplumber/bluetooth.lua.d/50-bluez-config.lua`, change `["with-logind"] = true` to `false`. 
-
-2. Enable *linger* for the audio user so PipeWire + WirePlumber start at boot:
+**Option A — enable *linger* for the audio user** so PipeWire + WirePlumber start at boot:
 
 ```bash
 # Replace 1000 with your AUDIO_UID if different
@@ -250,11 +248,16 @@ pactl list sinks short | grep -i bluez
   The bridge logs a specific warning when it detects PipeWire but no Bluetooth sinks are visible: *"WirePlumber (the Bluetooth policy manager) may not be running"*. This is the most common cause of "sink not found" on headless PipeWire installations.
 </Aside>
 
+**Option B — disable WirePlumber's `with-logind`** if connections also drop on logout, or churn every ~10 s even with linger enabled. See [WirePlumber `with-logind` endpoint churn](#wireplumber-with-logind-endpoint-churn) below for the per-user override.
+
 ### WirePlumber `with-logind` endpoint churn
 
-Even after enabling linger, you may see Bluetooth connections that succeed briefly then drop within seconds. Check `sudo journalctl -u bluetooth` — if you see continuous **endpoint registered / endpoint unregistered** cycles every ~10 seconds, WirePlumber's `with-logind` option is the cause.
+Even after enabling linger, WirePlumber's `with-logind` integration can cause two related Bluetooth symptoms on headless installations:
 
-On headless systems without a graphical seat, WirePlumber's logind integration continuously re-registers and unregisters A2DP media endpoints with BlueZ, preventing any stable Bluetooth audio connection.
+- **Endpoint churn:** `sudo journalctl -u bluetooth` shows continuous **endpoint registered / endpoint unregistered** cycles every ~10 seconds, and BT connections succeed briefly then drop.
+- **Logout-bound disconnects:** observed on Ubuntu Server 24.04 — BT stays connected while an interactive user is logged in (e.g. via SSH), and drops the moment that session ends.
+
+Both share the same root cause: on hosts without a graphical seat, WirePlumber's logind integration continuously re-registers and unregisters A2DP media endpoints with BlueZ as sessions come and go.
 
 **Fix:** Disable `with-logind` in WirePlumber:
 

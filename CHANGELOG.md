@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Documentation: troubleshooting guide now covers audio stuttering from WiFi+Bluetooth co-existence on hosts with an integrated combo radio such as the Intel NUC N100, with an `rfkill block wifi` workaround for Ethernet-wired hosts. ([#287](https://github.com/trudenboy/sendspin-bt-bridge/pull/287))
+- Documentation: PipeWire installation guide now explains that WirePlumber's `with-logind` integration also causes Bluetooth to drop on SSH/desktop logout (in addition to the 10-second endpoint churn already documented), and routes both symptoms to the existing per-user override. ([#286](https://github.com/trudenboy/sendspin-bt-bridge/pull/286))
+
 ## [2.69.0] - 2026-05-08
 
 ### Changed

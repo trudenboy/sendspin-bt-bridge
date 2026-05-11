@@ -96,20 +96,19 @@ After the switch, `Tx excessive retries` should stay at `0` during playback and 
 
 If you cannot move the host to 5 GHz, you may need to look into wiring the Pi over Ethernet, switching the BT dongle to a different physical setup, or accepting that single-speaker playback is the practical ceiling on a 2.4 GHz-only Pi.
 
-## Audio stuttering on hosts with integrated Bluetooth and WiFI
+## Audio stuttering on hosts with integrated Bluetooth and WiFi
 
-**Symptoms.** On a host with integrated USB Bluetooth dongle (e.g. Intel NUC N100), playback shows continuous stuttering/degradation.
+**Symptoms.** On a host with a built-in WiFi+Bluetooth combo radio (e.g. Intel NUC N100, mini-PCs with Intel AX200/AX210), playback shows continuous stuttering/degradation.
 
-**Likely cause.** Even if connected via Ethernet, the WiFi antenna transmits on the 2.4 GHz band, at close distance to the Bluetooth antenna, causing interference/drops.
+**Likely cause.** Even if the host is wired over Ethernet, the integrated WiFi radio still transmits on the 2.4 GHz band right next to the Bluetooth antenna, causing in-chip co-existence drops.
 
-**Partial fix (only if host is not connected via WiFi):** Soft block the integrated WiFi antenna
+**Partial fix (only if the host is not connected over WiFi):** soft-block the integrated WiFi radio.
 
 ```bash
 sudo rfkill block wifi
 ```
 
-After this, playback quality should greatly improve.
-
+After this, playback quality should greatly improve. To make it persistent across reboots, run the command from a `systemd` unit or a `cron @reboot` job; `rfkill` state itself doesn't survive a reboot on most distros.
 
 ## Samsung Q-series soundbar refuses to pair (`AuthenticationCanceled` / "No Resources")
 
