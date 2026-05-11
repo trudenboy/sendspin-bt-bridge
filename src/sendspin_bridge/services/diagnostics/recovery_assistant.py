@@ -341,6 +341,33 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
         in_standby = bool(bluetooth.get("standby") if bluetooth else _device_extra(device).get("bt_standby"))
         if in_standby:
             continue
+        # v2.70.0-rc.2 (#263) — auto-disabled never-paired devices show their
+        # own card with a Re-enable action. This branch runs BEFORE the
+        # released path because an auto-disabled device may also report
+        # released=true (BT management was implicitly dropped along with
+        # the disable), but the operator action is to flip `enabled` back
+        # on, not to reclaim BT management.
+        never_paired_flag = bool(
+            (bluetooth.get("never_paired") if bluetooth else None) or _device_extra(device).get("never_paired")
+        )
+        if never_paired_flag and getattr(device, "enabled", True) is False:
+            primary_action, secondary_actions = build_recovery_issue_actions("auto_disabled_never_paired", device_names)
+            issues.append(
+                RecoveryIssue(
+                    key="auto_disabled_never_paired",
+                    severity="warning",
+                    title=f"{name} was auto-disabled — never paired",
+                    summary=summary
+                    or (
+                        "This speaker was disabled after repeated pairing failures. "
+                        "Put it in pairing mode and click Re-enable to retry."
+                    ),
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
+                    device_name=name,
+                )
+            )
+            continue
         if released:
             if release_reason != "auto":
                 continue

@@ -316,6 +316,41 @@ def test_recovery_assistant_prefers_repair_for_unpaired_device():
     assert "3/5" in data["issues"][0]["summary"]
 
 
+def test_recovery_assistant_emits_auto_disabled_never_paired_card():
+    """A device that was auto-disabled because it never paired must surface
+    a 'Re-enable' recovery card (#263), distinct from the never_paired
+    'Start pairing' card (which targets still-enabled devices)."""
+    snapshot = build_recovery_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        devices=[
+            SimpleNamespace(
+                player_name="Kitchen",
+                enabled=False,
+                bt_management_enabled=True,
+                bluetooth_connected=False,
+                has_sink=False,
+                server_connected=False,
+                static_delay_ms=0.0,
+                recent_events=[],
+                health_summary={"state": "recovering", "severity": "warning", "summary": ""},
+                extra={
+                    "bluetooth_paired": None,
+                    "never_paired": True,
+                    "last_error": "Auto-disabled after 5 failed pairing attempts — this device has never been paired",
+                },
+            )
+        ],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    issue = data["issues"][0]
+    assert issue["key"] == "auto_disabled_never_paired"
+    assert issue["primary_action"]["key"] == "enable_device"
+    assert issue["primary_action"]["label"] == "Re-enable"
+
+
 def test_recovery_assistant_emits_never_paired_for_unknown_bluez_record():
     """When BlueZ has no record of a configured device (never_paired flag set
     by BluetoothManager after _PAIRED_UNKNOWN_THRESHOLD purges), the recovery
