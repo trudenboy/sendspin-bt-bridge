@@ -82,6 +82,21 @@ def test_no_extractor_reads_ma_owned_field(field_name):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("spec", [*M.DEVICE_ENTITIES, *M.BRIDGE_ENTITIES], ids=lambda s: s.object_id)
+def test_entity_category_matches_ha_enum(spec):
+    """HA Core 2026.5.x strictly validates ``entity_category`` against the
+    ``homeassistant.helpers.entity.EntityCategory`` enum. Custom values
+    (e.g. ``sendspin_bridge.config``) cause an MQTT discovery rejection
+    every publish cycle and silently break the affected entities in HA.
+
+    Reported via the HA community forum thread on 2026-05-10.
+    """
+    assert spec.entity_category in (None, "config", "diagnostic"), (
+        f"{spec.object_id}: entity_category={spec.entity_category!r} — must be "
+        f"None, 'config', or 'diagnostic' to satisfy HA's EntityCategory enum"
+    )
+
+
 @pytest.mark.parametrize("spec", M.DEVICE_ENTITIES, ids=lambda s: s.object_id)
 def test_device_spec_has_state_or_command(spec):
     """Every spec must either produce state (extractor) or accept a command,
