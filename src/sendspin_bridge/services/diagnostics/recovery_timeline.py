@@ -19,6 +19,38 @@ def _parse_timestamp_or_min(value: Any) -> datetime:
     return _parse_timestamp(value) or _EPOCH_MIN
 
 
+def _annotate_resolved_runtime_errors(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mark each ``runtime-error`` resolved by a later ``runtime-error-cleared`` event.
+
+    Resolved entries get their level downgraded to ``info`` and a ``(recovered)``
+    suffix appended to the message so they no longer ring as a current concern
+    in *Recent Errors* / recovery timeline excerpts — see issue #296.
+    """
+    cleared_at: datetime | None = None
+    for event in events:
+        if str(event.get("event_type") or "") == "runtime-error-cleared":
+            ts = _parse_timestamp(event.get("at"))
+            if ts is not None and (cleared_at is None or ts > cleared_at):
+                cleared_at = ts
+    if cleared_at is None:
+        return events
+    annotated: list[dict[str, Any]] = []
+    for event in events:
+        if str(event.get("event_type") or "") != "runtime-error":
+            annotated.append(event)
+            continue
+        ts = _parse_timestamp(event.get("at"))
+        if ts is None or ts > cleared_at:
+            annotated.append(event)
+            continue
+        resolved = dict(event)
+        resolved["level"] = "info"
+        message = str(event.get("message") or "").strip()
+        resolved["message"] = f"{message} (recovered)" if message else "(recovered)"
+        annotated.append(resolved)
+    return annotated
+
+
 def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]) -> dict[str, Any]:
     """Build a chronological recovery timeline from startup and device events."""
     entries: list[dict[str, Any]] = []
@@ -38,7 +70,7 @@ def build_recovery_timeline(devices: list[Any], startup_progress: dict[str, Any]
 
     for device in devices:
         name = str(getattr(device, "player_name", None) or "Device")
-        recent_events = list(getattr(device, "recent_events", []) or [])
+        recent_events = _annotate_resolved_runtime_errors(list(getattr(device, "recent_events", []) or []))
         if recent_events:
             for event in recent_events[:8]:
                 entries.append(

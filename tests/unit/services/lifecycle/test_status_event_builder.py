@@ -124,3 +124,52 @@ def test_build_no_sink_muted_event_when_app_also_muted():
     events = StatusEventBuilder.build(previous, current, updates)
 
     assert not any(e["event_type"] == "sink-muted" for e in events)
+
+
+def test_build_emits_runtime_error_cleared_when_last_error_resolves():
+    """When the per-device daemon clears last_error after a recovery (e.g. the
+    Sendspin WS connection finally succeeds after a startup race), emit a
+    follow-up ``runtime-error-cleared`` event so downstream consumers can mark
+    the earlier ``runtime-error`` as resolved instead of leaving it surfaced
+    in Recent Errors forever (issue #296).
+    """
+    previous = {
+        "last_error": "Cannot connect to Sendspin server at ws://10.0.0.5:8927/sendspin. "
+        "Check that SENDSPIN_PORT matches your Music Assistant Sendspin port.",
+        "server_connected": False,
+    }
+    current = {
+        "last_error": None,
+        "server_connected": True,
+        "last_error_at": "2026-05-12T14:25:00+00:00",
+    }
+    updates = {"last_error": None, "server_connected": True}
+
+    events = StatusEventBuilder.build(previous, current, updates)
+    event_types = [event["event_type"] for event in events]
+    assert "runtime-error-cleared" in event_types
+    cleared = next(event for event in events if event["event_type"] == "runtime-error-cleared")
+    assert cleared["level"] == "info"
+    assert "Cannot connect" in str(cleared["details"].get("cleared_error") or "")
+
+
+def test_build_no_runtime_error_cleared_when_no_prior_error():
+    """Empty → empty transitions on last_error must not generate spurious clears."""
+    previous = {"last_error": None}
+    current = {"last_error": None}
+    updates = {"last_error": None}
+
+    events = StatusEventBuilder.build(previous, current, updates)
+    assert not any(event["event_type"] == "runtime-error-cleared" for event in events)
+
+
+def test_build_emits_only_cleared_event_when_error_resolves_alone():
+    """Clearing an existing error must not also re-emit the original runtime-error."""
+    previous = {"last_error": "Cannot connect to Sendspin server at ws://foo/sendspin."}
+    current = {"last_error": ""}
+    updates = {"last_error": ""}
+
+    events = StatusEventBuilder.build(previous, current, updates)
+    event_types = [event["event_type"] for event in events]
+    assert "runtime-error" not in event_types
+    assert "runtime-error-cleared" in event_types

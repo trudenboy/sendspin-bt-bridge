@@ -130,6 +130,22 @@ class StatusEventBuilder:
                 message=current_error,
                 details={"last_error_at": current.get("last_error_at")},
             )
+        elif previous_error and not current_error:
+            # The underlying condition has cleared (typically: Sendspin daemon
+            # finally connected after a startup race). Emit a follow-up event
+            # so downstream consumers — recovery timeline, bug-report excerpts,
+            # *Recent Errors* — can mark the earlier ``runtime-error`` as
+            # resolved instead of leaving it surfaced as a current concern
+            # forever. See issue #296.
+            _add(
+                DeviceEventType.RUNTIME_ERROR_CLEARED.value,
+                level="info",
+                message="Runtime error cleared",
+                details={
+                    "cleared_error": previous_error,
+                    "cleared_at": current.get("last_error_at"),
+                },
+            )
 
         if "sink_muted" in updates and current.get("sink_muted") != previous.get("sink_muted"):
             if current.get("sink_muted") and not current.get("muted"):

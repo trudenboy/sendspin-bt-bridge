@@ -33,6 +33,7 @@ class DeviceEventType(str, Enum):
     RECONNECTING = "reconnecting"
     REANCHORING = "reanchoring"
     RUNTIME_ERROR = "runtime-error"
+    RUNTIME_ERROR_CLEARED = "runtime-error-cleared"
     BT_MANAGEMENT_DISABLED = "bt-management-disabled"
     MA_MONITOR_STALE = "ma-monitor-stale"
     BLUETOOTH_STANDBY_ENTERED = "bluetooth-standby-entered"
@@ -55,6 +56,7 @@ _DEFAULT_EVENT_LEVELS: dict[str, str] = {
     DeviceEventType.RECONNECTING.value: "warning",
     DeviceEventType.REANCHORING.value: "warning",
     DeviceEventType.RUNTIME_ERROR.value: "error",
+    DeviceEventType.RUNTIME_ERROR_CLEARED.value: "info",
     DeviceEventType.BT_MANAGEMENT_DISABLED.value: "warning",
     DeviceEventType.MA_MONITOR_STALE.value: "warning",
     DeviceEventType.BLUETOOTH_STANDBY_ENTERED.value: "info",
