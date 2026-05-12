@@ -174,7 +174,7 @@ uart-devices==0.1.1
     # via bluetooth-adapters
 unidecode==1.4.0 ; sys_platform == 'linux'
     # via mpris-api
-urllib3==2.6.3
+urllib3==2.7.0
     # via requests
 usb-devices==0.4.5
     # via
