@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.70.1] - 2026-05-12
+
 ### Changed
 - **Documentation: the `static_delay_ms` per-device setting now reads as the Sendspin protocol actually implements it.** The previous wording described it as "additional forward delay" added on top of the bridge's own latency compensation, with guidance to "raise the value for speakers that consistently play *ahead* of the rest of a group". The Sendspin client actually does the opposite — it *subtracts* `static_delay_ms` from each chunk's play-time, so audio is emitted to the kernel earlier by exactly that amount, and the speaker's hardware latency then adds it back. The right framing is "declares how much extra latency this speaker's hardware adds beyond the audio sink"; raise it for speakers that play *behind* the group (their real hardware latency exceeds what the current setting compensates), lower it for those that play ahead. Affects [Per-device fine-tuning](/devices/#per-device-fine-tuning), the MassDroid measurement workflow, and the configuration reference. ([#284](https://github.com/trudenboy/sendspin-bt-bridge/issues/284))
 
