@@ -250,22 +250,35 @@ echo ""
 echo '  {'
 echo '    "SENDSPIN_SERVER": "auto",'
 
-# BLUETOOTH_DEVICES
+# BLUETOOTH_DEVICES — emit valid JSON: no trailing comma on the last element,
+# no inline `#` hint inside the JSON document. The "add via web UI" tip is
+# printed after the JSON block so it can still be seen.
 if [ ${#PAIRED_MACS[@]} -gt 0 ]; then
   echo '    "BLUETOOTH_DEVICES": ['
+  TOTAL=${#PAIRED_MACS[@]}
+  IDX=0
   for mac in "${PAIRED_MACS[@]}"; do
-    echo "      {\"mac\": \"$mac\", \"adapter\": \"\", \"player_name\": \"\"},"
+    IDX=$((IDX + 1))
+    if [ "$IDX" -lt "$TOTAL" ]; then
+      echo "      {\"mac\": \"$mac\", \"adapter\": \"\", \"player_name\": \"\"},"
+    else
+      echo "      {\"mac\": \"$mac\", \"adapter\": \"\", \"player_name\": \"\"}"
+    fi
   done
   echo '    ],'
 else
   echo '    "BLUETOOTH_DEVICES": [],'
-  echo '    # Add speakers via web UI at http://localhost:8080'
 fi
 
-# TZ
-TZ_CURRENT=$(cat /etc/timezone 2>/dev/null || echo "UTC")
+# TZ — timedatectl is more reliable than /etc/timezone on minimal Debian images.
+TZ_CURRENT=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+[ -n "$TZ_CURRENT" ] || TZ_CURRENT=$(cat /etc/timezone 2>/dev/null || echo "UTC")
 echo "    \"TZ\": \"$TZ_CURRENT\""
 echo '  }'
+if [ ${#PAIRED_MACS[@]} -eq 0 ]; then
+  echo ""
+  echo "  Add speakers via web UI at http://localhost:8080 after the bridge starts."
+fi
 echo ""
 
 echo -e "${BOLD}Recommended .env file:${NC}"

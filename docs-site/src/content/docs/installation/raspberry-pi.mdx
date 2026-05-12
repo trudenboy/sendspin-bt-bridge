@@ -23,7 +23,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 The one-liner installer is the fastest path:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
+curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/raspberry-pi/install.sh | bash
 ```
 
 It checks the host, installs Docker if needed, writes a working Compose setup, and can help with Bluetooth pairing.
@@ -38,12 +38,20 @@ After installation, the web UI is available on `http://<raspberry-pi-ip>:8080` u
 
    - install a current Raspberry Pi OS
    - install Docker
+   - install the BlueZ stack and unblock the radio (fresh Raspberry Pi OS Lite, especially Trixie, may ship with Bluetooth soft-blocked or `bluetoothd` masked):
+
+     ```bash
+     sudo apt update && sudo apt install -y bluez bluez-tools rfkill
+     sudo rfkill unblock bluetooth
+     sudo systemctl enable --now bluetooth
+     ```
+
    - pair the Bluetooth speaker on the host with `bluetoothctl`
 
 2. **Run the pre-flight check**
 
    ```bash
-   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
+   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/raspberry-pi/check.sh | bash
    ```
 
 3. **Create a project directory**

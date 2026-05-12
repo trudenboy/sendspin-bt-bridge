@@ -23,7 +23,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 Самый быстрый путь — one-liner installer:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-install.sh | bash
+curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/raspberry-pi/install.sh | bash
 ```
 
 Он проверяет хост, при необходимости ставит Docker, записывает рабочий Compose-набор и может помочь с Bluetooth-парингом.
@@ -38,12 +38,20 @@ curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/sc
 
    - установите актуальную Raspberry Pi OS
    - установите Docker
+   - установите BlueZ-стек и разблокируйте радио (на свежих образах Raspberry Pi OS Lite, особенно Trixie, Bluetooth часто soft-blocked или `bluetoothd` отключён):
+
+     ```bash
+     sudo apt update && sudo apt install -y bluez bluez-tools rfkill
+     sudo rfkill unblock bluetooth
+     sudo systemctl enable --now bluetooth
+     ```
+
    - выполните pairing колонки на хосте через `bluetoothctl`
 
 2. **Запустите pre-flight check**
 
    ```bash
-   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/scripts/rpi-check.sh | bash
+   curl -sSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/raspberry-pi/check.sh | bash
    ```
 
 3. **Создайте директорию проекта**
