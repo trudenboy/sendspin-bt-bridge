@@ -248,6 +248,21 @@ Then restart the BlueZ daemon (`systemctl restart bluetooth` on a regular host).
 
 **Proper fix.** Update the host OS to a release that ships `bluez ≥ 5.87` or a patched `5.86-4.1`. On HAOS this happens automatically as part of a Supervisor/host update. Once the patched version is running, no bridge-side intervention is needed.
 
+## Reconnect loop on Sony WH-1000XM4 / other A2DP sinks (AVDTP collision on old BlueZ)
+
+**Symptom.** After a disconnect — power cycle, container restart, or simply walking out of range — the speaker enters a connect/disconnect storm: it pairs, the bridge announces `Using cached sink`, Music Assistant starts streaming, and ~1–2 seconds later the link drops. The cycle repeats until `BT_MAX_RECONNECT_FAILS` is exhausted. Manual reclaim from the bridge web UI always works on the first attempt — only automatic reconnect fails. The bluetoothd journal shows AVDTP-collision messages on every attempt: `cancel_request() Start: Operation canceled`, `SEP in bad state for suspend`, `Transaction label doesn't match`.
+
+**Root cause.** A race in the bridge's anti-pop sink mute, fixed in **v2.70.0**: when the cached sink name was still valid after a Bluetooth reconnect, the bridge took a fast-path that skipped the 3-second A2DP stabilization delay. With some peers — Sony WH-1000XM4 in particular — the anti-pop mute then raced with the peer's own AVDTP-Suspend, producing the collision cluster above. Tracked in [#269](https://github.com/trudenboy/sendspin-bt-bridge/issues/269).
+
+**BlueZ version requirement.** The v2.70.0 fix decides whether to skip the stabilization delay by reading `org.bluez.MediaTransport1.State`. This relies on BlueZ reporting the transport state correctly: `idle` only when the transport is genuinely safe to fast-path through, not while the transport is still being set up. **BlueZ 5.66 (Raspberry Pi OS Bookworm) reports `idle` prematurely during AVDTP setup**, so the bridge takes the fast-path anyway and the collision continues. **BlueZ ≥ 5.79** (Debian Trixie / Ubuntu 24.10+ / fresh Raspberry Pi OS 12+ / HAOS 17.1+) reports the state correctly and the fix engages as intended.
+
+**What to do.**
+
+- **Recommended:** update the host OS to one that ships BlueZ ≥ 5.79. On a Raspberry Pi this means moving from Bookworm to Trixie; on HAOS the supervisor / host updates handle it.
+- **Workaround on old BlueZ:** if you cannot upgrade the OS right now, clicking **Reclaim** in the bridge web UI after a manual disconnect is a reliable manual recovery path — it gives the AVDTP transport the seconds it needs to stabilize before the bridge starts streaming.
+
+Verified by [community testing](https://github.com/trudenboy/sendspin-bt-bridge/issues/269#issuecomment-4432922622): WH-1000XM4 on RPi 4 + Trixie (BlueZ 5.82, PipeWire 1.4.2) + bridge v2.70.1 reconnects reliably on first attempt; the same headphones on Bookworm (BlueZ 5.66) with v2.70.1 still hit the collision pattern.
+
 ## Scan sees BLE devices but no audio speakers (HA Bluetooth integration conflict)
 
 **Symptom.** On a single-adapter setup — typically a Raspberry Pi 4 / 5 running the addon against the built-in Bluetooth controller — **Scan nearby** picks up BLE devices like irrigation controllers, sensors, and beacons, but **classic A2DP speakers never appear**. The same speaker pairs fine from a phone or another OS on the same hardware.

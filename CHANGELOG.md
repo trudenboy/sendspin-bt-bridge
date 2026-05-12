@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Troubleshooting docs now document the BlueZ version requirement for the v2.70.0 AVDTP-collision fix.** The fix decides whether to skip the A2DP stabilization delay by reading `org.bluez.MediaTransport1.State` after a Bluetooth reconnect — that is only reliable on BlueZ ≥ 5.79. On Raspberry Pi OS Bookworm (BlueZ 5.66) the transport state returns `idle` prematurely during AVDTP setup, so the bridge takes the fast-path anyway and the Sony WH-1000XM4 reconnect storm continues. The new section in the English and Russian troubleshooting pages explains the symptom, the version split, and the recommended upgrade path (Debian Trixie / fresh Raspberry Pi OS 12 / HAOS 17.1+ all ship BlueZ ≥ 5.82). Community-verified by @arisonpl. ([#269](https://github.com/trudenboy/sendspin-bt-bridge/issues/269))
+
 ## [2.70.1] - 2026-05-12
 
 ### Changed
