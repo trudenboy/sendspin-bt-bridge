@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.4] - 2026-05-13
+
+### Fixed
+- **LXC installer: switch to `--ignore-installed` on the bulk pip install** instead of patching the per-package allow-list every time a new Debian-shipped Python package without a `RECORD` file shows up. `Pygments` was added to that list in 2.71.0-rc.3, but the next install run hit the same error on `rich`. The class of "Cannot uninstall X, RECORD not found" bug now resolves once and for all — pip installs bridge dependencies into `/usr/local/lib/.../site-packages/` over the Debian originals without touching them.
+
 ## [2.71.0-rc.3] - 2026-05-13
 
 ### Fixed
