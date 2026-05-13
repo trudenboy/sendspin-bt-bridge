@@ -120,7 +120,7 @@ msg "Installing Python dependencies..."
 # Force-upgrade system-managed packages that pip can't uninstall (no RECORD file).
 # requests is pulled in transitively by base apt packages on Debian 13 (Trixie) and
 # blocks the requirements.txt install with "Cannot uninstall requests, RECORD not found".
-for pkg in typing-extensions blinker requests; do
+for pkg in typing-extensions blinker requests pygments; do
   pip3 install --break-system-packages --ignore-installed -q "$pkg" 2>/dev/null || true
 done
 
