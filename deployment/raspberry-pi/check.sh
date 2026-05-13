@@ -173,6 +173,21 @@ elif [ "$AUDIO_SYSTEM" = "unknown" ]; then
   info "Install PipeWire: sudo apt install pipewire pipewire-pulse wireplumber"
 fi
 
+# When PipeWire is the audio system, the BT backend requires
+# libspa-0.2-bluetooth.  Without it `bluetoothctl` reports the speaker
+# as Connected but `pactl list sinks short` shows no `bluez_*` entries
+# — the bridge sits with `sendspin_fallback` and the speaker drops the
+# A2DP transport after ~10 s.  Check both apt + wpctl module presence.
+if [ "$AUDIO_SYSTEM" = "pipewire" ]; then
+  if dpkg -l libspa-0.2-bluetooth 2>/dev/null | grep -qE '^ii'; then
+    ok "PipeWire Bluetooth backend installed (libspa-0.2-bluetooth)"
+  else
+    bad "PipeWire detected but libspa-0.2-bluetooth is missing — no bluez_* sinks will appear"
+    info "Install:  sudo apt install libspa-0.2-bluetooth"
+    info "Verify:   pactl list sinks short  (after speaker reconnects, expect a bluez_* sink)"
+  fi
+fi
+
 # Check socket paths
 PULSE_SOCK="/run/user/${DETECTED_UID}/pulse/native"
 PW_SOCK="/run/user/${DETECTED_UID}/pipewire-0"

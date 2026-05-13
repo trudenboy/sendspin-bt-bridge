@@ -176,6 +176,25 @@ environment:
 
 ## Troubleshooting для user-scoped PipeWire / PulseAudio
 
+### Спикер коннектится, но `bluez_*` sinks не появляются
+
+На свежей установке Ubuntu / Raspberry Pi OS PipeWire **по умолчанию устанавливается без Bluetooth-бэкенда**. `bluetoothctl` показывает спикер как `Connected: yes`, но `pactl list sinks short` выдаёт только `sendspin_fallback` — никаких `bluez_*`. Через ~10 секунд BlueZ сам разрывает A2DP-соединение, бридж попадает в цикл переподключения.
+
+Проверка и фикс:
+
+```bash
+dpkg -l libspa-0.2-bluetooth 2>/dev/null | grep -qE '^ii' \
+  && echo "libspa-0.2-bluetooth установлен" \
+  || sudo apt install -y libspa-0.2-bluetooth
+
+# Перезапуск audio-стека после установки
+systemctl --user restart wireplumber pipewire pipewire-pulse
+```
+
+После переподключения BT-устройства `pactl list sinks short` должен показать `bluez_output.*` или `bluez_sink.*`.
+
+### Прочие проверки
+
 Если на хосте аудио работает нормально, но в контейнере всё ещё видно `Connection refused` или `pactl` не может подключиться, проверьте:
 
 ```bash

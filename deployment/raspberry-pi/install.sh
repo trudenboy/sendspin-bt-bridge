@@ -533,6 +533,24 @@ cd "$PROJECT_DIR"
 ${DOCKER_CMD_PREFIX}docker compose pull
 ${DOCKER_CMD_PREFIX}docker compose up -d
 
+# Headless PipeWire requires `linger` so the user systemd manager keeps
+# running after every login session closes — otherwise wireplumber and the
+# bluez_* sinks vanish at next reboot.  The post-start preflight probe
+# below already prints a reactive hint when it detects the symptom, but
+# enabling linger up-front avoids the user ever hitting it.  Only fires
+# when PipeWire is active and the target user has no linger yet.
+if systemctl --user is-active pipewire &>/dev/null 2>&1; then
+  LINGER_USER="$(id -un)"
+  LINGER_STATE="$(loginctl show-user "$LINGER_USER" -p Linger 2>/dev/null | cut -d= -f2)"
+  if [ "$LINGER_STATE" != "yes" ]; then
+    if sudo loginctl enable-linger "$LINGER_USER" &>/dev/null; then
+      info "Enabled systemd linger for $LINGER_USER — PipeWire user session will survive logout."
+    else
+      skip "Could not enable linger automatically — run: sudo loginctl enable-linger $LINGER_USER"
+    fi
+  fi
+fi
+
 # Extract WEB_PORT early — used by the preflight probe below and the final banner.
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "localhost")
 WEB_PORT=$(grep '^WEB_PORT=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "8080")
