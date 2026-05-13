@@ -255,7 +255,7 @@ graph TB
 
 :::note[Особенности OpenWrt]
 На хосте требуется пользователь `pulse` (uid 109) в `/etc/passwd` для аутентификации D-Bus EXTERNAL.
-Без него PulseAudio внутри контейнера не может загрузить `module-bluez5-discover`, и аудиопрофили BT падают с ошибкой `br-connection-profile-unavailable`. См. [OpenWrt LXC README](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md).
+Без него PulseAudio внутри контейнера не может загрузить `module-bluez5-discover`, и аудиопрофили BT падают с ошибкой `br-connection-profile-unavailable`. См. [OpenWrt LXC README](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/deployment/lxc/openwrt/README.md).
 :::
 
 ## Сводка по оборудованию

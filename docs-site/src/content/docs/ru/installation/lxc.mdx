@@ -21,7 +21,7 @@ LXC — нативный non-Docker вариант для appliance-хостов
 На хосте Proxmox:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/proxmox-create.sh)
 ```
 
 ### Ручной путь
@@ -32,7 +32,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 2. Запустите установщик внутри контейнера:
 
    ```bash
-   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
+   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/install.sh)
    ```
 
 3. Добавьте на хосте Proxmox необходимые правила D-Bus / устройств в `/etc/pve/lxc/<CTID>.conf`.
@@ -40,7 +40,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 
 </Steps>
 
-Подробный Proxmox-гайд по-прежнему находится в [`lxc/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/README.md).
+Подробный Proxmox-гайд по-прежнему находится в [`deployment/lxc/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/deployment/lxc/README.md).
 
 ## OpenWrt / TurrisOS
 
@@ -49,10 +49,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 На хосте OpenWrt:
 
 ```sh
-wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/openwrt/create.sh | sh
 ```
 
-Полный OpenWrt-специфичный гайд находится в [`lxc/openwrt/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md).
+Полный OpenWrt-специфичный гайд находится в [`deployment/lxc/openwrt/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/deployment/lxc/openwrt/README.md).
 
 ## Сопряжение колонки
 
@@ -111,7 +111,7 @@ journalctl -u sendspin-client -f
 ## Обновление
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/upgrade.sh)
 ```
 
 <Aside type="tip">

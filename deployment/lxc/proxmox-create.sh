@@ -231,7 +231,7 @@ timeout 60 pct exec "$CTID" -- systemctl is-system-running --wait 2>/dev/null ||
 
 msg "Downloading install.sh from GitHub..."
 
-INSTALL_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/lxc/install.sh"
+INSTALL_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/deployment/lxc/install.sh"
 
 pct exec "$CTID" -- bash -c "curl -fsSL '${INSTALL_URL}' -o /root/install.sh 2>/dev/null || wget -q '${INSTALL_URL}' -O /root/install.sh"
 pct exec "$CTID" -- chmod +x /root/install.sh
