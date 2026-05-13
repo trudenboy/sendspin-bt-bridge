@@ -232,7 +232,7 @@ msg "Installing system packages..."
 $SSH_CMD "sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
   sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq && \
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    bluetooth bluez pulseaudio-module-bluetooth \
+    bluetooth bluez pulseaudio-module-bluetooth libspa-0.2-bluetooth \
     linux-modules-extra-\$(uname -r) \
     ca-certificates curl gnupg lsb-release qemu-guest-agent" &>/dev/null &
 spinner $! "Installing bluetooth, audio, kernel modules, utilities..."

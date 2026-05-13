@@ -221,7 +221,21 @@ On PipeWire systems (Ubuntu 22.04+, Fedora, Raspberry Pi OS Bookworm), Bluetooth
 
 **Symptom:** After a host reboot the bridge connects to the Bluetooth speaker (`bluetoothctl` shows `Connected: yes`), but `pactl list sinks short` shows no `bluez_output.*` or `bluez_sink.*` sink — only `sendspin_fallback`. Audio works again once you log in interactively.
 
-There are two independent fixes — pick whichever fits your distro.
+There are two independent fixes — pick whichever fits your distro.  On a fresh Ubuntu / Raspberry Pi OS install, before either of them, **verify the PipeWire Bluetooth backend is installed**:
+
+```bash
+dpkg -l libspa-0.2-bluetooth 2>/dev/null | grep -qE '^ii' \
+  && echo "libspa-0.2-bluetooth installed" \
+  || sudo apt install -y libspa-0.2-bluetooth
+```
+
+Without this package PipeWire silently has no BT audio backend at all: `bluetoothctl` will happily show your speaker as `Connected: yes`, but `pactl list sinks short` shows no `bluez_*` entries — only `sendspin_fallback`.  Restart the audio stack after install:
+
+```bash
+systemctl --user restart wireplumber pipewire pipewire-pulse
+```
+
+Then continue with the rest of this section.
 
 **Option A — enable *linger* for the audio user** so PipeWire + WirePlumber start at boot:
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.5] - 2026-05-13
+
+### Added
+- **Raspberry Pi installer auto-enables `loginctl enable-linger`** for the audio user when PipeWire is detected, so the user systemd manager (which owns WirePlumber and the `bluez_*` sinks) survives logout and reboots without an interactive session. Previously the install completed cleanly but the bridge lost its audio sinks on next reboot until the user logged in once.
+- **Raspberry Pi preflight check now flags missing `libspa-0.2-bluetooth`** when PipeWire is the active audio system. The diagnostic surfaces a single-line install command instead of leaving the operator to deduce it from "speaker pairs but no audio sink appears" symptoms.
+
+### Changed
+- **Proxmox VM installer apt list now includes `libspa-0.2-bluetooth`** so PipeWire on the freshly-provisioned VM has a Bluetooth audio backend out of the box — Ubuntu 24.04 ships PipeWire as the default audio system but doesn't pull this plugin in by default.
+- **Headless-PipeWire docs now start with the `libspa-0.2-bluetooth` install step** before the linger / `with-logind` workarounds; whichever fix you needed before, the package install was a silent prerequisite. Mirrored in EN + RU Docker installation and troubleshooting pages.
+
 ## [2.71.0-rc.4] - 2026-05-13
 
 ### Fixed

@@ -108,6 +108,28 @@ nmcli connection up "<имя-вашей-wifi>"
 
 На медленных системах помогает увеличение **PulseAudio latency (ms)** и включение **Prefer SBC codec**.
 
+## Колонка спаривается, но `bluez_*` sinks вообще не появляются (нет Bluetooth-бэкенда PipeWire)
+
+**Симптом.** `bluetoothctl` показывает колонку как `Connected: yes`, но `pactl list sinks short` выдаёт **только** `sendspin_fallback` (и встроенную ALSA-карту) — никаких `bluez_output.*` / `bluez_sink.*` ни для одной запаренной колонки. Через ~10 секунд после BR/EDR-коннекта BlueZ разрывает линк с `a2dp-sink profile connect failed`. Воспроизводится на любой BT-колонке, на свежей установке.
+
+**Корневая причина.** На минимальном Ubuntu / Raspberry Pi OS пакет `libspa-0.2-bluetooth` **не подтягивается** по умолчанию. Без него PipeWire физически не умеет работать с Bluetooth-аудио, независимо от того как сконфигурированы WirePlumber и PulseAudio-шим. Bridge доходит до host-audio-сокета корректно, но `bluez_*` sinks, к которым он мог бы привязаться, в системе просто нет.
+
+**Фикс.** Установить бэкенд и перезапустить audio-стек:
+
+```bash
+sudo apt install libspa-0.2-bluetooth
+systemctl --user restart wireplumber pipewire pipewire-pulse
+```
+
+Перезапустить питание колонки чтобы она спарилась заново, затем проверить:
+
+```bash
+wpctl status                     # должна появиться секция Bluetooth
+pactl list sinks short | grep -i bluez  # должен появиться bluez_output.* или bluez_sink.*
+```
+
+Это независимо от регрессии BlueZ 5.86 ниже — если **никаких** `bluez_*` sinks нет ни для одной колонки, начните с этой проверки. Если sink не появляется только для одной конкретной колонки, а остальные работают — это сценарий BlueZ-регрессии.
+
 ## Колонка спаривается, но аудио-sink не появляется (регрессия BlueZ 5.86)
 
 **Симптом.** Колонка спаривается, `bluetoothctl` показывает `Connected: yes`, но в `pactl list cards short` нет `bluez_card.<MAC>` для неё, а в `pactl list sinks short` отсутствует `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. Через 30–40 секунд колонка сама разрывает связь, и последующие попытки reconnect не работают до выключения и включения питания колонки.

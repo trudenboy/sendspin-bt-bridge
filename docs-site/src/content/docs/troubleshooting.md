@@ -220,6 +220,28 @@ If the host-level record itself is broken, use the repair/reset tools from **Con
 
 On slower systems, raise **PulseAudio latency (ms)** and consider **Prefer SBC codec**.
 
+## Speaker pairs but no `bluez_*` sinks appear at all (missing PipeWire Bluetooth backend)
+
+**Symptom.** `bluetoothctl` shows the speaker as `Connected: yes`, but `pactl list sinks short` lists **only** `sendspin_fallback` (and any built-in ALSA card) — there are no `bluez_output.*` or `bluez_sink.*` entries for *any* paired speaker, not just one. About 10 seconds after the BR/EDR connect, BlueZ drops the link with `a2dp-sink profile connect failed`. This happens on every Bluetooth speaker, on a fresh install.
+
+**Root cause.** On a minimal Ubuntu / Raspberry Pi OS image the `libspa-0.2-bluetooth` package is **not** pulled in by default. Without it PipeWire literally has no Bluetooth audio backend, regardless of how the rest of WirePlumber + PulseAudio shim is configured. The bridge reaches the host audio socket fine, but there are no `bluez_*` sinks for it to bind to.
+
+**Fix.** Install the backend and restart the audio stack:
+
+```bash
+sudo apt install libspa-0.2-bluetooth
+systemctl --user restart wireplumber pipewire pipewire-pulse
+```
+
+Power-cycle the speaker so it re-pairs cleanly, then verify:
+
+```bash
+wpctl status                     # expect a Bluetooth section
+pactl list sinks short | grep -i bluez  # expect a bluez_output.* or bluez_sink.* entry
+```
+
+This is independent of the BlueZ 5.86 regression below — if you see no `bluez_*` sinks for **any** speaker, check this first. If a specific speaker pairs but its sink fails to register while others work, that's the BlueZ regression scenario.
+
 ## Speaker pairs but no audio sink appears (BlueZ 5.86 regression)
 
 **Symptom.** The speaker pairs and `bluetoothctl` reports `Connected: yes`, but `pactl list cards short` shows no `bluez_card.<MAC>` for it and `pactl list sinks short` has no `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. After about 30–40 seconds the speaker drops the link on its own, and subsequent reconnect attempts fail until the speaker is power-cycled.
