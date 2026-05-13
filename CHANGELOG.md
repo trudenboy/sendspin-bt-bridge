@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.1] - 2026-05-13
+
 ### Added
 - **Strict validation for the `SENDSPIN_SERVER` config field.** Values with a scheme prefix (`http://`), embedded port (`:8095`), path/slash, or whitespace are now rejected with a clear, field-specific error — both in the web-UI form (inline message + native `pattern` check) and via `POST /api/config`. A startup pre-flight gate in the bridge also refuses to spawn the daemon when a raw config edit slipped a malformed value past the form, populating the device's banner with the same actionable message instead of looping silently. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
 - **Daemon-exit events now surface exit code, signal, lifetime, and a tail of the daemon output** in the parent log and on the device card. The same data is recorded into a per-device spawn-history ring that the diagnostics report renders in the new **`--- SENDSPIN CONNECTION ---`** block, with resolved target URL, reachability probe result, and the last 5 spawn cycles annotated as expected/unexpected. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
@@ -5556,8 +5558,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.1...HEAD
-[2.70.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.0...v2.70.1
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.70.0...HEAD
 [2.70.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.69.0...v2.70.0
 [2.69.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.68.0...v2.69.0
 [2.68.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.67.2...v2.68.0
@@ -5630,6 +5631,7 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 [2.50.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.2...v2.50.3
 [2.50.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.50.1...v2.50.2
 [2.50.1]: https://github.com/trudenboy/sendspin-bt-bridge/releases/tag/v2.50.1
+[2.49.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.49.0...v2.49.1
 [2.49.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.2...v2.49.0
 [2.48.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.1...v2.48.2
 [2.48.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.48.0...v2.48.1
