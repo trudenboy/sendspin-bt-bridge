@@ -312,6 +312,29 @@ def build_recovery_issue_actions(
         )
     elif issue_key == "sendspin_port_unreachable":
         primary_action = _recovery_action("open_config", "Open config", device_names=names)
+    elif issue_key == "sendspin_url_malformed":
+        # User edited the config to something the URL builder can't parse.
+        # The actionable fix is always "open Settings, edit SENDSPIN_SERVER".
+        primary_action = _recovery_action("open_config", "Edit Music Assistant server", device_names=names)
+        secondary_actions.insert(
+            0,
+            _recovery_action("open_diagnostics", "Open diagnostics", device_names=names),
+        )
+    elif issue_key == "sendspin_daemon_loop_timeout":
+        # Daemon connects to a host that responds initially but drops/closes
+        # the WebSocket on a fixed schedule.  Most useful next action is the
+        # Test connection probe, which validates the URL+port reachability.
+        primary_action = _recovery_action(
+            "test_sendspin_connection", "Test Music Assistant connection", device_names=names
+        )
+        secondary_actions.insert(
+            0,
+            _recovery_action("open_config", "Open Music Assistant settings", device_names=names),
+        )
+        secondary_actions.insert(
+            1,
+            _recovery_action("open_diagnostics", "Open diagnostics", device_names=names),
+        )
     elif issue_key == "setup_step":
         primary_action = None
     else:

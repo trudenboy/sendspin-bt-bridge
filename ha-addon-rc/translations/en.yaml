@@ -3,14 +3,17 @@ configuration:
   sendspin_server:
     name: "Music Assistant server"
     description: >-
-      Hostname or IP of the Music Assistant server. Use "auto" to discover
-      it automatically via mDNS (recommended for most setups).
+      Hostname or IP of the Music Assistant server (no scheme prefix, no port,
+      no path — just `192.168.1.11` or `ma.local`). Use "auto" to discover the
+      server automatically via mDNS (recommended for most setups).
   sendspin_port:
     name: "Sendspin port"
     description: >-
-      WebSocket port exposed by the Music Assistant Sendspin provider.
-      The default (9000) matches the MA default; only change if you have
-      multiple instances or a custom port.
+      WebSocket port exposed by the Music Assistant Sendspin provider. The
+      default 8927 matches the upstream MA default; only change it if your
+      MA instance is bound to a non-standard port. Existing setups with the
+      legacy 9000 still work — the bridge auto-detects and shifts to the
+      actually open port at startup.
   base_listen_port:
     name: "Base player listen port"
     description: >-

@@ -886,6 +886,17 @@ def api_diagnostics():
             )
 
         try:
+            diag["sendspin_connection"] = _collect_sendspin_connection_info(config=load_config())
+            _record_success("sendspin_connection")
+        except Exception as exc:
+            diag["sendspin_connection"] = _record_failure(
+                "sendspin_connection",
+                exc,
+                fallback={"error": "Failed to collect Sendspin connection info"},
+                log_message="Failed to collect Sendspin connection info for diagnostics",
+            )
+
+        try:
             diag["event_hooks"] = get_event_hook_registry().snapshot()
             _record_success("event_hooks")
         except Exception as exc:
@@ -1124,6 +1135,65 @@ def _collect_subprocess_info() -> list[dict]:
         entry["process_rss_mb"] = _collect_process_rss_mb(entry["pid"])
         info.append(entry)
     return info
+
+
+def _collect_sendspin_connection_info(config: dict | None = None) -> dict:
+    """Gather everything needed to fill the diagnostics report's SENDSPIN CONNECTION block.
+
+    Added in the issue #291 follow-up so the daemon-exit-at-10s class of bug
+    surfaces in the diagnostics bundle directly — resolved target URL, last
+    reachability probe, recent spawn cycles with timing/code/unexpected
+    flags, and the recurring-interval fingerprint if it tripped.
+    """
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.services.diagnostics.operator_check_runner import run_safe_check
+    from sendspin_bridge.services.diagnostics.sendspin_port_probe import DEFAULT_PORT
+    from sendspin_bridge.services.infrastructure.config_validation import resolve_sendspin_url
+
+    cfg = config if config is not None else load_config()
+    server = str(cfg.get("SENDSPIN_SERVER") or "").strip()
+    try:
+        port = int(cfg.get("SENDSPIN_PORT") or DEFAULT_PORT)
+    except (TypeError, ValueError):
+        port = DEFAULT_PORT
+    auto_mode = (not server) or server.lower() in ("auto", "discover")
+
+    devices: list[dict] = []
+    for client in get_device_registry_snapshot().active_clients:
+        recent: list[dict] = []
+        try:
+            recent_fn = getattr(client, "recent_spawn_records", None)
+            if callable(recent_fn):
+                recent = recent_fn(5)
+        except Exception:
+            recent = []
+        status = getattr(client, "status", None)
+        recurring = status.get("daemon_recurring_lifetime_s") if status else None
+        devices.append(
+            {
+                "player_name": getattr(client, "player_name", "?"),
+                "server_connected": bool(status.get("server_connected")) if status else False,
+                "connected_server_url": (status.get("connected_server_url") if status else None) or None,
+                "daemon_recurring_lifetime_s": recurring,
+                "recent_spawns": recent,
+            }
+        )
+
+    # The reachability probe makes an outbound TCP connect — run it best-effort
+    # so a hung probe never breaks diagnostic bundle generation.
+    try:
+        reachability = run_safe_check("sendspin_connection", config=cfg)
+    except Exception as exc:
+        reachability = {"status": "error", "summary": f"Reachability probe failed: {exc}"}
+
+    return {
+        "server": server or None,
+        "port": port,
+        "auto_discovery": auto_mode,
+        "resolved_url": resolve_sendspin_url(server, port),
+        "reachability": reachability,
+        "devices": devices,
+    }
 
 
 def _collect_process_rss_mb(pid: int | None) -> float | None:
@@ -1625,6 +1695,65 @@ def _build_full_text_report(
             full.append(
                 f"  {sp.get('name', '?'):<24s} {pid:<8s} {alive:<8s} {running:<10s} {recon:<8s} {zombie:<8s} {err}"
             )
+        full.append("")
+
+    # Sendspin connection (issue #291 follow-up) — resolved target URL,
+    # reachability probe, recent daemon-spawn lifetimes per device.
+    sendspin_conn = diag.get("sendspin_connection") or {}
+    if sendspin_conn and "error" not in sendspin_conn:
+        full.append("--- SENDSPIN CONNECTION ---")
+        server_label = sendspin_conn.get("server") or "auto"
+        full.append(f"  {'SENDSPIN_SERVER:':<22s} {server_label}")
+        full.append(f"  {'SENDSPIN_PORT:':<22s} {sendspin_conn.get('port', '?')}")
+        if sendspin_conn.get("auto_discovery"):
+            full.append(f"  {'Auto-discovery:':<22s} yes (target resolved at spawn time via mDNS)")
+        if sendspin_conn.get("resolved_url"):
+            full.append(f"  {'Resolved URL:':<22s} {sendspin_conn['resolved_url']}")
+        reachability = sendspin_conn.get("reachability") or {}
+        if reachability:
+            full.append(
+                f"  {'Reachability:':<22s} "
+                f"{str(reachability.get('status', '?')).upper()} — {reachability.get('summary', '')}"
+            )
+        for dev in sendspin_conn.get("devices", []):
+            name = dev.get("player_name", "?")
+            full.append(f"  [{name}]")
+            full.append(f"    server_connected:  {'Yes' if dev.get('server_connected') else 'No'}")
+            if dev.get("connected_server_url"):
+                full.append(f"    connected_url:     {dev['connected_server_url']}")
+            recurring = dev.get("daemon_recurring_lifetime_s")
+            if isinstance(recurring, (int, float)):
+                full.append(
+                    f"    pattern:           daemon dies every ~{float(recurring):.1f}s "
+                    f"(connection timeout fingerprint)"
+                )
+            spawns = dev.get("recent_spawns") or []
+            if spawns:
+                full.append("    recent spawns (oldest first):")
+                for record in spawns:
+                    pid_s = record.get("pid", "?")
+                    spawn_at = (record.get("spawn_at") or "?").replace("T", " ").split("+")[0]
+                    exit_at_raw = record.get("exit_at")
+                    if exit_at_raw:
+                        exit_at = exit_at_raw.replace("T", " ").split("+")[0]
+                        lifetime = record.get("lifetime_s")
+                        lifetime_s = f"{float(lifetime):.1f}s" if isinstance(lifetime, (int, float)) else "?"
+                        code = record.get("exit_code")
+                        sig = record.get("signal")
+                        kind = "unexpected" if record.get("unexpected", True) else "expected"
+                        full.append(
+                            f"      PID {pid_s}: {spawn_at} → {exit_at}  "
+                            f"({lifetime_s}, code={code}, signal={sig}, {kind})"
+                        )
+                    else:
+                        full.append(f"      PID {pid_s}: {spawn_at} → alive")
+                # Stderr tail from the most recent record so operators see the
+                # daemon's last words even when no IPC error envelope arrived.
+                latest_tail = list((spawns[-1].get("stderr_tail") or [])[-5:])
+                if latest_tail:
+                    full.append("    recent stderr tail:")
+                    for line in latest_tail:
+                        full.append(f"      {line}")
         full.append("")
 
     # MA integration

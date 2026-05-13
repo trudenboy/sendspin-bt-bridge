@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import deque
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from sendspin_bridge.services.diagnostics.log_analysis import classify_subproces
 UTC = timezone.utc
 
 _PORT_NUMBER_RE = re.compile(r":(\d{1,5})\b")
+_TAIL_MAXLEN = 20
 
 
 class SubprocessStderrService:
@@ -36,6 +38,14 @@ class SubprocessStderrService:
         self._logger = logger_ or logging.getLogger(__name__)
         self._now_factory = now_factory or (lambda: datetime.now(tz=UTC))
         self._consecutive_connection_errors = 0
+        # Ring buffer of the most recent non-blank stderr lines.  Captured on
+        # daemon death so the diagnostics report can show why a daemon exited
+        # even when it didn't emit a structured error envelope (issue #291).
+        self._tail: deque[str] = deque(maxlen=_TAIL_MAXLEN)
+
+    def tail(self) -> list[str]:
+        """Return a snapshot of the last 20 non-blank stderr lines, oldest first."""
+        return list(self._tail)
 
     async def read_stream(self, stderr) -> None:
         """Read stderr lines until EOF and forward them through classification."""
@@ -52,6 +62,10 @@ class SubprocessStderrService:
         text = line.rstrip()
         if not text:
             return
+        # Capture every non-blank stderr line into the ring buffer so the
+        # death-detection path can attach context to "Daemon subprocess died"
+        # without needing the subprocess to emit a structured error envelope.
+        self._tail.append(text)
 
         # Port-collision (EADDRINUSE): must run before the generic classifier so the
         # hint with the actionable lsof command is not overwritten by a terse one.

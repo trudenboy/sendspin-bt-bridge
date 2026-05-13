@@ -17,6 +17,7 @@ import struct
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -41,8 +42,10 @@ from sendspin_bridge.config import (
 )
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
-from sendspin_bridge.services.diagnostics.sendspin_port_probe import DEFAULT_PORT as DEFAULT_SENDSPIN_PORT
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
+from sendspin_bridge.services.infrastructure.config_validation import (
+    validate_sendspin_server_format,
+)
 from sendspin_bridge.services.infrastructure.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
 from sendspin_bridge.services.ipc.ipc_protocol import (
     with_protocol_version,
@@ -228,9 +231,12 @@ _infrasound_cache: bytes | None = None
 
 
 async def _probe_port_if_default(host: str, default_port: int) -> int | None:
-    """Probe for the Sendspin port when using the default (9000).
+    """Probe the Sendspin port on *host*, falling back to candidate ports if it's closed.
 
-    Returns the first responding port, or None if nothing responds.
+    Returns the first responding port, or None if nothing responds.  The
+    function name reflects its original "only ran when port == default"
+    semantics; the always-probe migration in the #291 follow-up kept the
+    name to avoid noisy renames across call sites.
     """
     try:
         return await probe_sendspin_port(host, default_port)
@@ -283,6 +289,29 @@ def _generate_keepalive_buffer(method: str) -> bytes:
     if method == "none":
         return b""
     return _generate_infrasound_burst()
+
+
+@dataclass
+class SpawnRecord:
+    """One Sendspin daemon subprocess spawn — entry created on spawn, fields filled on exit.
+
+    Captured per device to expose *why* a daemon exited (exit code, signal,
+    lifetime, last stderr lines) so issue-#291-style debugging doesn't require
+    correlating windows of MA logs and bridge logs by hand.
+    """
+
+    pid: int
+    spawn_at: datetime
+    exit_at: datetime | None = None
+    exit_code: int | None = None
+    signal: int | None = None
+    lifetime_s: float | None = None
+    stderr_tail: list[str] = field(default_factory=list)
+    # ``unexpected`` distinguishes daemon deaths driven by ``stop_sendspin``
+    # (graceful release / shutdown — False) from deaths that surprise the
+    # parent (True).  Only unexpected deaths drive ``last_error`` updates and
+    # repeating-interval pattern detection.
+    unexpected: bool = True
 
 
 @dataclass
@@ -398,6 +427,14 @@ class DeviceStatus:
     # timestamp of the first flip for diagnostics.
     never_paired: bool = False
     never_paired_since: str | None = None
+
+    # Mean lifetime (seconds) when the last 3 unexpected daemon exits landed
+    # within ±1s of each other.  Populated by SendspinClient after each death.
+    # ``None`` clears the corresponding operator-guidance banner.  This is the
+    # primary signal for the issue #291 class of bug — daemon connects to a
+    # broken endpoint, library times out at a fixed interval, exits silently
+    # → consistent N-second loop visible here instead of being hidden in logs.
+    daemon_recurring_lifetime_s: float | None = None
 
     # ── Dict-compatible interface ──────────────────────────────────────────
 
@@ -582,6 +619,16 @@ class SendspinClient:
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
         self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
         self._restart_halted: bool = False  # once True, restart loop skips spawning
+        # Ring of recent daemon spawns/exits.  Populated on spawn (entry created)
+        # and on death (exit fields filled).  Used for the diagnostics report
+        # and for the repeating-interval pattern detector (#291 follow-up).
+        self._spawn_history: deque[SpawnRecord] = deque(maxlen=10)
+        self._current_spawn: SpawnRecord | None = None
+        # Set by ``stop_sendspin`` immediately before signalling the daemon so
+        # the death-handler can flag the corresponding SpawnRecord as
+        # ``unexpected=False`` and suppress the user-facing "daemon exited"
+        # banner.  Cleared after the death is processed.
+        self._explicit_stop_pending: bool = False
 
     @property
     def _playing_since(self) -> float | None:
@@ -1145,6 +1192,47 @@ class SendspinClient:
         """Check if daemon subprocess is alive (BluetoothManagerHost protocol)."""
         return self.is_running()
 
+    # ── Spawn history & pattern detection (issue #291 follow-up) ───────────
+
+    def _detect_repeating_lifetime(self, tolerance_s: float = 1.0) -> float | None:
+        """Return mean lifetime when the last 3 unexpected deaths landed within ±tolerance_s.
+
+        Returns ``None`` when fewer than 3 unexpected deaths are recorded or
+        when their lifetimes spread beyond *tolerance_s*.  A non-``None``
+        return value indicates the daemon is hitting a deterministic timeout
+        (e.g. WebSocket open_timeout, handshake deadline, unreachable-host
+        retry budget) — actionable for the operator.
+        """
+        completed = [r.lifetime_s for r in self._spawn_history if r.lifetime_s is not None and r.unexpected]
+        if len(completed) < 3:
+            return None
+        last3 = completed[-3:]
+        if all(abs(x - last3[0]) <= tolerance_s for x in last3):
+            return sum(last3) / 3
+        return None
+
+    def recent_spawn_records(self, n: int = 5) -> list[dict[str, Any]]:
+        """Return a JSON-serializable view of the last *n* spawn records.
+
+        Oldest first within the window.  Consumed by the diagnostics report
+        block so operators see daemon lifetime patterns directly in the
+        bundle they upload to GitHub issues.
+        """
+        records = list(self._spawn_history)[-n:]
+        return [
+            {
+                "pid": r.pid,
+                "spawn_at": r.spawn_at.isoformat(),
+                "exit_at": r.exit_at.isoformat() if r.exit_at else None,
+                "lifetime_s": r.lifetime_s,
+                "exit_code": r.exit_code,
+                "signal": r.signal,
+                "unexpected": r.unexpected,
+                "stderr_tail": list(r.stderr_tail),
+            }
+            for r in records
+        ]
+
     async def stop_subprocess(self) -> None:
         """Stop the daemon subprocess (BluetoothManagerHost protocol)."""
         await self.stop_sendspin()
@@ -1199,15 +1287,63 @@ class SendspinClient:
                 # Check daemon subprocess health
                 if self._daemon_proc is not None:
                     if self._daemon_proc.returncode is not None:
-                        # Subprocess exited
-                        self._update_status(
-                            {
-                                "server_connected": False,
-                                "connected": False,
-                                "group_name": None,
-                                "group_id": None,
-                            }
-                        )
+                        # Subprocess exited — capture exit context (#291).
+                        exit_code = self._daemon_proc.returncode
+                        sig = -exit_code if exit_code is not None and exit_code < 0 else None
+                        tail: list[str] = []
+                        try:
+                            tail = self._stderr_service.tail() if self._stderr_service else []
+                        except Exception:
+                            tail = []
+                        was_unexpected = not self._explicit_stop_pending
+                        if self._current_spawn is not None:
+                            now_ts = datetime.now(tz=UTC)
+                            self._current_spawn.exit_at = now_ts
+                            self._current_spawn.exit_code = exit_code
+                            self._current_spawn.signal = sig
+                            self._current_spawn.lifetime_s = (now_ts - self._current_spawn.spawn_at).total_seconds()
+                            self._current_spawn.stderr_tail = list(tail)
+                            self._current_spawn.unexpected = was_unexpected
+                            spawn_pid = self._current_spawn.pid
+                            lifetime = self._current_spawn.lifetime_s
+                        else:
+                            spawn_pid = 0
+                            lifetime = None
+                        self._current_spawn = None
+                        self._explicit_stop_pending = False
+
+                        status_updates: dict[str, Any] = {
+                            "server_connected": False,
+                            "connected": False,
+                            "group_name": None,
+                            "group_id": None,
+                        }
+                        # Surface exit context as last_error so the device card
+                        # and diagnostics report show *something* even when the
+                        # daemon exits cleanly (no stderr traceback, no IPC
+                        # error envelope) — the issue #291 silent-exit pattern.
+                        if was_unexpected and lifetime is not None:
+                            tail_snippet = " | ".join(tail[-3:]) if tail else "<no stderr>"
+                            status_updates["last_error"] = (
+                                f"Sendspin daemon exited after {lifetime:.1f}s "
+                                f"(code={exit_code}, signal={sig}); tail: {tail_snippet}"
+                            )
+                            status_updates["last_error_at"] = datetime.now(tz=UTC).isoformat()
+                        self._update_status(status_updates)
+
+                        recurring = self._detect_repeating_lifetime()
+                        if recurring is not None:
+                            logger.warning(
+                                "[%s] Daemon dies at consistent ~%.1fs intervals over the last 3 spawns "
+                                "— likely a connection-handshake timeout. Check SENDSPIN_SERVER / "
+                                "SENDSPIN_PORT and that Music Assistant's Sendspin provider is enabled.",
+                                self.player_name,
+                                recurring,
+                            )
+                            self._update_status({"daemon_recurring_lifetime_s": recurring})
+                        elif self.status.get("daemon_recurring_lifetime_s") is not None:
+                            self._update_status({"daemon_recurring_lifetime_s": None})
+
                         self._clear_ma_reconnecting()
                         self._daemon_proc = None
                         # Don't restart if BT is disconnected — monitor_and_reconnect
@@ -1216,7 +1352,13 @@ class SendspinClient:
                             await asyncio.sleep(self._restart_delay)
                         elif not self.bt_manager or self.bt_manager.connected:
                             logger.warning(
-                                "Daemon subprocess died unexpectedly, restarting in %.0fs...",
+                                "[%s] Daemon subprocess exited (PID %d): code=%s signal=%s "
+                                "lifetime=%s; restarting in %.0fs",
+                                self.player_name,
+                                spawn_pid,
+                                exit_code,
+                                sig,
+                                f"{lifetime:.1f}s" if lifetime is not None else "unknown",
                                 self._restart_delay,
                             )
                             await asyncio.sleep(self._restart_delay)
@@ -1298,6 +1440,30 @@ class SendspinClient:
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
         try:
+            # Pre-flight gate (#291): refuse to spawn when SENDSPIN_SERVER is
+            # malformed (scheme prefix, embedded port, slashes, whitespace).
+            # The web-UI form rejects these values up front and the migration
+            # check warns on stored ones, but a raw config.json edit or
+            # addon-options.json edit could still slip through.  Without this
+            # gate we'd build `ws://http://host:port:port/sendspin` and the
+            # daemon would silently exit at the websockets open_timeout (~10s)
+            # with no traceback — exactly the issue #291 scenario.
+            server_issue = validate_sendspin_server_format(self.server_host)
+            if server_issue is not None:
+                logger.error(
+                    "[%s] %s — refusing to spawn daemon until the value is fixed.",
+                    self.player_name,
+                    server_issue.message,
+                )
+                self._update_status(
+                    {
+                        "last_error": server_issue.message,
+                        "last_error_at": datetime.now(tz=UTC).isoformat(),
+                        "server_connected": False,
+                    }
+                )
+                return
+
             # Configure BT audio sink if not yet done (offloaded to executor
             # because configure_bluetooth_audio is a blocking call that sleeps
             # during sink discovery retries — up to ~18 s).
@@ -1355,17 +1521,23 @@ class SendspinClient:
             server_url: str | None = None
             if self.server_host and self.server_host.lower() not in ("auto", "discover", ""):
                 effective_port = self.server_port
-                if self.server_port == DEFAULT_SENDSPIN_PORT:
-                    probed = await _probe_port_if_default(self.server_host, self.server_port)
-                    if probed is not None and probed != self.server_port:
-                        logger.warning(
-                            "[%s] Sendspin port %d did not respond, but port %d did — using %d",
-                            self.player_name,
-                            self.server_port,
-                            probed,
-                            probed,
-                        )
-                        effective_port = probed
+                # Always probe (not just when port == DEFAULT). MA's actual
+                # Sendspin port is 8927 and the bridge's default flipped from
+                # 9000 to 8927 in the issue #291 follow-up.  Users still on
+                # an explicit `SENDSPIN_PORT: 9000` would otherwise dial a
+                # closed port forever.  The probe returns the configured port
+                # immediately if it responds (~10 ms cost in the happy path)
+                # and walks the candidate ladder only on failure.
+                probed = await _probe_port_if_default(self.server_host, self.server_port)
+                if probed is not None and probed != self.server_port:
+                    logger.warning(
+                        "[%s] Sendspin port %d did not respond, but port %d did — using %d",
+                        self.player_name,
+                        self.server_port,
+                        probed,
+                        probed,
+                    )
+                    effective_port = probed
                 server_url = f"ws://{self.server_host}:{effective_port}/sendspin"
                 logger.info(
                     "Starting Sendspin player '%s' connecting to %s (port %s)",
@@ -1501,6 +1673,12 @@ class SendspinClient:
             self._daemon_task.add_done_callback(_on_reader_done)
             self._stderr_task.add_done_callback(_on_reader_done)
             logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
+            # Open a spawn-history entry — the death handler fills the rest.
+            self._current_spawn = SpawnRecord(
+                pid=int(self._daemon_proc.pid),
+                spawn_at=datetime.now(tz=UTC),
+            )
+            self._spawn_history.append(self._current_spawn)
 
         except Exception as e:
             logger.error("Failed to start Sendspin daemon subprocess: %s", e)
@@ -1875,6 +2053,12 @@ class SendspinClient:
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
+        # Flag the upcoming death as expected so the death-handler does NOT
+        # populate ``last_error`` or emit the "exited unexpectedly" log.  Only
+        # set when there's actually a daemon to stop — otherwise a no-op call
+        # would shadow a genuine unexpected death from a later spawn.
+        if self._daemon_proc is not None and getattr(self._daemon_proc, "returncode", None) is None:
+            self._explicit_stop_pending = True
         cleared_tasks = await self._stop_service.stop_process(
             self._daemon_proc,
             send_stop=self._send_subprocess_command,

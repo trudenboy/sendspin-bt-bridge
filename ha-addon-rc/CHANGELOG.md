@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.1] - 2026-05-13
+
+### Added
+- **Strict validation for the `SENDSPIN_SERVER` config field.** Values with a scheme prefix (`http://`), embedded port (`:8095`), path/slash, or whitespace are now rejected with a clear, field-specific error — both in the web-UI form (inline message + native `pattern` check) and via `POST /api/config`. A startup pre-flight gate in the bridge also refuses to spawn the daemon when a raw config edit slipped a malformed value past the form, populating the device's banner with the same actionable message instead of looping silently. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+- **Daemon-exit events now surface exit code, signal, lifetime, and a tail of the daemon output** in the parent log and on the device card. The same data is recorded into a per-device spawn-history ring that the diagnostics report renders in the new **`--- SENDSPIN CONNECTION ---`** block, with resolved target URL, reachability probe result, and the last 5 spawn cycles annotated as expected/unexpected. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+- **Automatic detection of repeating-interval daemon exits.** When the last three unexpected daemon exits land within ±1 s of each other (the connection-handshake-timeout signature behind the silent-10s-loop class of bug), the bridge raises a specific guidance banner — "Sendspin daemon exits every ~Ns" — instead of cycling restart-loop warnings forever. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+- **Test connection button on the Music Assistant settings card.** Probes the configured host/port (or the value currently in the form) and reports OK, port-shift warning, malformed-config error, or unreachable — without persisting anything. Backed by `POST /api/sendspin/test`. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+- **Two new operator-guidance issues**: one fires when the SENDSPIN_SERVER value is malformed (config error, caught at validation or pre-flight); the other fires when the recurring-interval daemon-exit pattern is detected (runtime). Both carry targeted remediation actions to the matching settings card. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+
+### Changed
+- **Default Sendspin port is now `8927`** to match Music Assistant's actual upstream Sendspin provider. Configs that explicitly pin the legacy `9000` keep working — the port probe now runs on every daemon spawn, dials the configured port first, and auto-shifts to `8927` when the configured port is closed. The HA addon description has been corrected to stop claiming `9000` "matches the MA default". ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+- **Troubleshooting docs now document the BlueZ version requirement for the v2.70.0 AVDTP-collision fix.** The fix decides whether to skip the A2DP stabilization delay by reading `org.bluez.MediaTransport1.State` after a Bluetooth reconnect — that is only reliable on BlueZ ≥ 5.79. On Raspberry Pi OS Bookworm (BlueZ 5.66) the transport state returns `idle` prematurely during AVDTP setup, so the bridge takes the fast-path anyway and the Sony WH-1000XM4 reconnect storm continues. The new section in the English and Russian troubleshooting pages explains the symptom, the version split, and the recommended upgrade path (Debian Trixie / fresh Raspberry Pi OS 12 / HAOS 17.1+ all ship BlueZ ≥ 5.82). Community-verified by @arisonpl. ([#269](https://github.com/trudenboy/sendspin-bt-bridge/issues/269))
+
+### Fixed
+- **The bridge no longer silently constructs malformed WebSocket URLs** such as `ws://http://host:port:port/sendspin` when `SENDSPIN_SERVER` is set to a full URL by mistake. The Sendspin daemon used to exit at the websockets open_timeout (~10 s) with no Python traceback, no exit-code log, and no `last_error` on the device card, leaving operators no signal to act on — debug threads on this could take many round-trips. The bridge now fails fast with a clear, field-specific error before spawning the daemon. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)

@@ -94,7 +94,11 @@ __all__ = [
 DEFAULT_CONFIG = {
     "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
     "SENDSPIN_SERVER": "auto",
-    "SENDSPIN_PORT": 9000,
+    # 8927 matches Music Assistant's upstream Sendspin provider default
+    # (`ws://<ma-host>:8927/sendspin`).  The bridge shipped 9000 historically
+    # before MA settled on 8927; existing configs with `SENDSPIN_PORT: 9000`
+    # are preserved and the port-probe auto-shifts to 8927 at runtime.
+    "SENDSPIN_PORT": 8927,
     "WEB_PORT": None,
     "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",

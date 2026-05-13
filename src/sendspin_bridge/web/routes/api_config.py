@@ -477,7 +477,7 @@ def _sync_ha_options(config: dict) -> None:
         ]
         options = {
             "sendspin_server": config.get("SENDSPIN_SERVER", "auto"),
-            "sendspin_port": int(config.get("SENDSPIN_PORT") or 9000),
+            "sendspin_port": int(config.get("SENDSPIN_PORT") or 8927),
             "bridge_name": config.get("BRIDGE_NAME", ""),
             "ha_area_name_assist_enabled": bool(config.get("HA_AREA_NAME_ASSIST_ENABLED", True)),
             "tz": config.get("TZ", ""),
@@ -628,6 +628,38 @@ def api_config_upload():
     if warnings:
         payload["validation"] = {"warnings": warnings}
     return jsonify(payload)
+
+
+@config_bp.route("/api/sendspin/test", methods=["POST"])
+def api_sendspin_test():
+    """Probe the Sendspin endpoint for the supplied (or current) SENDSPIN_SERVER/PORT.
+
+    Powers the Test connection button on the Music Assistant settings card —
+    surfaces malformed values, unreachable hosts, and port mismatches before
+    the user persists the config and watches the daemon die silently
+    (the issue #291 follow-up).
+    """
+    from sendspin_bridge.services.diagnostics.operator_check_runner import run_safe_check
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return _error_response("Invalid JSON body")
+
+    server_raw = payload.get("SENDSPIN_SERVER")
+    port_raw = payload.get("SENDSPIN_PORT")
+    if server_raw is None and port_raw is None:
+        # No overrides — use the persisted config
+        cfg = load_config()
+        probe_cfg = {
+            "SENDSPIN_SERVER": cfg.get("SENDSPIN_SERVER"),
+            "SENDSPIN_PORT": cfg.get("SENDSPIN_PORT"),
+        }
+    else:
+        probe_cfg = {"SENDSPIN_SERVER": server_raw, "SENDSPIN_PORT": port_raw}
+
+    result = run_safe_check("sendspin_connection", config=probe_cfg)
+    status_code = 400 if result.get("reason_code") == "config_invalid" else 200
+    return jsonify(result), status_code
 
 
 @config_bp.route("/api/config/validate", methods=["POST"])

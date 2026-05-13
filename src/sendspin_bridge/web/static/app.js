@@ -8960,10 +8960,102 @@ function _buildConfigPayload(options) {
     return config;
 }
 
+// Issue #291 follow-up — client-side mirror of validate_sendspin_server_format()
+// from services/infrastructure/config_validation.py.  Reject scheme prefix,
+// embedded port, slashes, and whitespace; accept everything else (including
+// underscores and other valid hostname chars the backend permits).  Auto /
+// discover keywords are case-insensitive on both sides.
+var _SENDSPIN_SCHEME_RE = /^[a-z][a-z0-9+\-.]*:\/\//i;
+var _SENDSPIN_PORT_SUFFIX_RE = /:\d+$/;
+var _SENDSPIN_AUTO_RE = /^(auto|discover)$/i;
+
+function _validateSendspinServerInput(value) {
+    if (value === '' || value == null) return true;
+    var raw = String(value).trim();
+    if (raw === '' || _SENDSPIN_AUTO_RE.test(raw)) return true;
+    if (_SENDSPIN_SCHEME_RE.test(raw)) return false;
+    if (_SENDSPIN_PORT_SUFFIX_RE.test(raw)) return false;
+    if (raw.indexOf('/') !== -1) return false;
+    if (/\s/.test(raw)) return false;
+    return true;
+}
+
+function _showSendspinServerError(message) {
+    var errEl = document.querySelector('[data-for="SENDSPIN_SERVER"]');
+    if (!errEl) return;
+    if (message) {
+        errEl.textContent = message;
+        errEl.hidden = false;
+    } else {
+        errEl.textContent = '';
+        errEl.hidden = true;
+    }
+}
+
+async function _testSendspinConnection() {
+    var serverEl = document.querySelector('input[name="SENDSPIN_SERVER"]');
+    var portEl = document.querySelector('input[name="SENDSPIN_PORT"]');
+    var resultEl = document.getElementById('test-sendspin-result');
+    var server = serverEl ? serverEl.value.trim() : '';
+    var port = portEl ? portEl.value.trim() : '';
+    if (resultEl) {
+        resultEl.textContent = 'Testing…';
+        resultEl.style.color = '';
+    }
+    try {
+        var resp = await fetch(API_BASE + '/api/sendspin/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ SENDSPIN_SERVER: server, SENDSPIN_PORT: port || undefined }),
+        });
+        var body = await resp.json().catch(function () { return {}; });
+        if (!resultEl) return;
+        var ok = body && body.status === 'ok';
+        var warn = body && body.status === 'warning';
+        resultEl.textContent = (body && body.summary) || (ok ? 'OK' : 'Failed');
+        resultEl.style.color = ok ? 'var(--color-success, #2e7d32)'
+            : warn ? 'var(--color-warning, #ed6c02)'
+                   : 'var(--color-error, #c62828)';
+    } catch (e) {
+        if (resultEl) {
+            resultEl.textContent = 'Network error: ' + e.message;
+            resultEl.style.color = 'var(--color-error, #c62828)';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('btn-test-sendspin');
+    if (btn) btn.addEventListener('click', _testSendspinConnection);
+    var serverInput = document.querySelector('input[name="SENDSPIN_SERVER"]');
+    if (serverInput) {
+        serverInput.addEventListener('input', function (e) {
+            if (_validateSendspinServerInput(e.target.value)) {
+                _showSendspinServerError(null);
+            }
+        });
+    }
+});
+
 async function saveConfig() {
     syncManualAdapters();
     var config = _buildConfigPayload();
     var shouldReloadMaRuntime = _configShouldReloadMaRuntime(config);
+
+    // Client-side pre-flight on SENDSPIN_SERVER mirrors the backend's strict
+    // validator — gives a faster error than waiting for the POST roundtrip.
+    var sendspinServerValue = config.SENDSPIN_SERVER;
+    if (sendspinServerValue && !_validateSendspinServerInput(sendspinServerValue)) {
+        var msg = "Music Assistant server must be a bare hostname or IP — no http://, no port, no path.";
+        _showSendspinServerError(msg);
+        showToast(msg, 'error');
+        var inputEl = document.querySelector('input[name="SENDSPIN_SERVER"]');
+        if (inputEl) {
+            inputEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+            setTimeout(function () { inputEl.focus(); }, 250);
+        }
+        return {ok: false, error: msg};
+    }
 
     if (config.AUTH_ENABLED && !window._passwordSet) {
         showToast('Set a password before enabling authentication', 'error');

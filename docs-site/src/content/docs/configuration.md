@@ -167,8 +167,8 @@ Core addon options include:
 
 | Option | Purpose |
 |---|---|
-| **sendspin_server** | Hostname/IP of the Music Assistant server, or `auto` for mDNS |
-| **sendspin_port** | Sendspin WebSocket port, usually `9000` |
+| **sendspin_server** | Hostname/IP of the Music Assistant server (no scheme prefix, no port, no path — just `192.168.1.11` or `ma.local`), or `auto` for mDNS |
+| **sendspin_port** | Sendspin WebSocket port — default `8927` matches Music Assistant's Sendspin provider. Legacy `9000` configs keep working; the bridge probes and auto-shifts if the configured port is closed |
 | **web_port** | Read but **not applied** in addon mode; Supervisor assigns the ingress port dynamically. Kept in the schema for legacy parity — you can leave it blank. |
 | **base_listen_port** | Starting port for auto-assigned device listeners |
 | **bridge_name** | Optional instance label appended to players |

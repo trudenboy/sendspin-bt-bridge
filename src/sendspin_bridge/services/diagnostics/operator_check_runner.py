@@ -245,6 +245,121 @@ def _run_ma_validation(config: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _run_sendspin_connection(config: dict[str, Any]) -> dict[str, Any]:
+    """Validate SENDSPIN_SERVER format + TCP-probe the Sendspin endpoint.
+
+    Added in the issue #291 follow-up so operators can verify the connection
+    target *before* the daemon dies silently 10 seconds later.  The probe
+    walks the port-candidate ladder (8927 → 9000 → 8095) so existing
+    legacy-9000 configs still report ok when MA is actually on 8927.
+    """
+    from sendspin_bridge.services.diagnostics.sendspin_port_probe import DEFAULT_PORT, probe_sendspin_port
+    from sendspin_bridge.services.infrastructure.config_validation import (
+        validate_sendspin_server_format,
+    )
+
+    server = str(config.get("SENDSPIN_SERVER") or "").strip()
+    try:
+        port = int(config.get("SENDSPIN_PORT") or DEFAULT_PORT)
+    except (TypeError, ValueError):
+        port = DEFAULT_PORT
+
+    issue = validate_sendspin_server_format(server)
+    if issue is not None:
+        return _result(
+            "error",
+            "sendspin_connection",
+            issue.message,
+            resolved_host=server,
+            resolved_port=port,
+            reason_code="config_invalid",
+        )
+
+    if not server or server.lower() in ("auto", "discover"):
+        return _result(
+            "ok",
+            "sendspin_connection",
+            "Auto-discovery mode — the daemon resolves the Sendspin server via mDNS at spawn time.",
+            resolved_host=None,
+            resolved_port=None,
+            auto_discovery=True,
+        )
+
+    async def _bounded_probe() -> int | None:
+        # asyncio.wait_for guarantees the probe is cancelled inside the
+        # coroutine if it overruns.  Without this, the outer
+        # future.result(timeout=...) hands a deadline to the thread but the
+        # underlying TCP connect can still block — and the surrounding
+        # ThreadPoolExecutor context manager's `shutdown(wait=True)` on exit
+        # would then keep `/api/sendspin/test` hanging well past the budget.
+        try:
+            return await asyncio.wait_for(
+                probe_sendspin_port(server, default_port=port),
+                timeout=8.0,
+            )
+        except TimeoutError:
+            return None
+
+    try:
+        # cancel_futures=True ensures shutdown() on context exit doesn't wait
+        # for a still-running thread — the bounded_probe wait_for above
+        # already returns None on timeout so this is belt-and-suspenders.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, _bounded_probe())
+            try:
+                probed_port = future.result(timeout=10)
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                pool.shutdown(wait=False, cancel_futures=True)
+                return _result(
+                    "error",
+                    "sendspin_connection",
+                    f"Sendspin reachability probe to {server}:{port} timed out after 10s.",
+                    resolved_host=server,
+                    resolved_port=port,
+                    reachable=False,
+                )
+    except Exception as exc:
+        return _result(
+            "error",
+            "sendspin_connection",
+            f"Sendspin reachability probe crashed: {exc}",
+            resolved_host=server,
+            resolved_port=port,
+        )
+
+    if probed_port is None:
+        return _result(
+            "error",
+            "sendspin_connection",
+            f"Sendspin server unreachable at {server}:{port}; "
+            f"also tried the candidate ports (8927, 9000, 8095) — none responded.",
+            resolved_host=server,
+            resolved_port=port,
+            reachable=False,
+        )
+
+    if probed_port != port:
+        return _result(
+            "warning",
+            "sendspin_connection",
+            f"Sendspin server reachable on {probed_port} (the configured port {port} did not respond).",
+            resolved_host=server,
+            resolved_port=probed_port,
+            configured_port=port,
+            reachable=True,
+        )
+
+    return _result(
+        "ok",
+        "sendspin_connection",
+        f"Sendspin server reachable at {server}:{probed_port}.",
+        resolved_host=server,
+        resolved_port=probed_port,
+        reachable=True,
+    )
+
+
 def run_safe_check(
     check_key: str, *, device_names: list[str] | None = None, config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -257,4 +372,6 @@ def run_safe_check(
         return _run_sink_verification(device_names=device_names)
     if normalized_key == "ma_auth":
         return _run_ma_validation(config)
+    if normalized_key == "sendspin_connection":
+        return _run_sendspin_connection(config)
     return _result("error", normalized_key or "unknown", "Unknown safe check requested.")
