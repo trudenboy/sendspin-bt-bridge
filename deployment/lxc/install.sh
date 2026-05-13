@@ -117,12 +117,14 @@ ok "Application files downloaded"
 # ─── 3. Python dependencies ───────────────────────────────────────────────────
 msg "Installing Python dependencies..."
 
-# Force-upgrade system-managed packages that pip can't uninstall (no RECORD file).
-# requests is pulled in transitively by base apt packages on Debian 13 (Trixie) and
-# blocks the requirements.txt install with "Cannot uninstall requests, RECORD not found".
-for pkg in typing-extensions blinker requests pygments; do
-  pip3 install --break-system-packages --ignore-installed -q "$pkg" 2>/dev/null || true
-done
+# `--ignore-installed` tells pip to install our requested versions *over* any
+# Debian-shipped duplicates in /usr/lib/python3/dist-packages/ instead of
+# trying to uninstall them first.  Ubuntu's apt-managed Python packages have
+# no `RECORD` file, so without this flag pip aborts with "Cannot uninstall <X>,
+# RECORD not found".  Affected packages observed during fresh-install testing:
+# typing-extensions, blinker, requests, pygments, rich.  The flag makes the
+# whole class of bug disappear — pip writes to /usr/local/lib/.../site-packages/
+# which sits ahead of /usr/lib/python3/dist-packages/ on sys.path.
 
 ARCH=$(uname -m)
 if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
@@ -131,21 +133,21 @@ if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
   # is absent in Ubuntu 24.04's ffmpeg 6.1. av==12.3.0 is the latest compatible version.
   # The FLAC decoder API difference (nb_channels missing in av<13) is handled by
   # a monkey-patch in services/daemon_process.py at startup.
-  pip3 install --break-system-packages -q av==12.3.0
+  pip3 install --break-system-packages --ignore-installed -q av==12.3.0
 
   # Install sendspin without its av>=14 dependency
-  pip3 install --break-system-packages -q --no-deps 'sendspin>=5.3.0,<6'
+  pip3 install --break-system-packages --ignore-installed -q --no-deps 'sendspin>=5.3.0,<6'
 
   # Install sendspin's other transitive dependencies
-  pip3 install --break-system-packages -q \
+  pip3 install --break-system-packages --ignore-installed -q \
     aiosendspin pychromecast qrcode readchar sounddevice \
     numpy pillow zeroconf casttube protobuf ifaddr
 
   # Install remaining requirements.txt deps (exclude sendspin line)
   grep -v '^sendspin' /opt/sendspin-client/requirements.txt | \
-    pip3 install --break-system-packages -q -r /dev/stdin
+    pip3 install --break-system-packages --ignore-installed -q -r /dev/stdin
 else
-  pip3 install --break-system-packages -q -r /opt/sendspin-client/requirements.txt
+  pip3 install --break-system-packages --ignore-installed -q -r /opt/sendspin-client/requirements.txt
 fi
 # Install the bridge package itself so `python3 -m sendspin_bridge` resolves.
 pip3 install --break-system-packages -q --no-deps -e /opt/sendspin-client
