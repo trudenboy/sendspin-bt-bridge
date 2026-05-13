@@ -316,7 +316,7 @@ class BridgeOrchestrator:
 
         config = load_config()
         server_host = config.get("SENDSPIN_SERVER", "auto")
-        server_port = int(config.get("SENDSPIN_PORT") or 9000)
+        server_port = int(config.get("SENDSPIN_PORT") or 8927)
         effective_bridge = ensure_bridge_name(config)
         prefer_sbc = bool(config.get("PREFER_SBC_CODEC", False))
         if prefer_sbc:

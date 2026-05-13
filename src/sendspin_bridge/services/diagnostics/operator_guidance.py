@@ -161,6 +161,19 @@ class OperatorGuidanceSnapshot:
         return payload
 
 
+def _is_sendspin_url_malformed_error(value: object) -> bool:
+    """Heuristic match against the last_error message set by the URL pre-flight gate.
+
+    The gate (``bridge/client.py:start_sendspin``) populates a message that
+    starts with ``"SENDSPIN_SERVER must"``.  Using the prefix keeps coupling
+    loose — any future change to the wording can introduce a new keyword
+    without breaking other consumers.
+    """
+    if not isinstance(value, str):
+        return False
+    return value.startswith("SENDSPIN_SERVER must")
+
+
 def _count_config_entries(config: dict[str, Any], key: str) -> int:
     value = config.get(key, [])
     return len(value) if isinstance(value, list) else 0
@@ -686,6 +699,76 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=transport_down,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+        )
+
+    # Issue #291 follow-up — surface the two new specific failure modes
+    # alongside the generic transport_down card.  The registry priorities (46
+    # / 47 vs transport_down=50) drive ordering downstream.
+    url_malformed_names = [
+        str(getattr(device, "player_name", None) or "Unknown")
+        for device in devices
+        if getattr(device, "bt_management_enabled", True)
+        and _is_sendspin_url_malformed_error(_device_extra(device).get("last_error"))
+    ]
+    if url_malformed_names:
+        title = (
+            f"{url_malformed_names[0]}: Music Assistant server is invalid"
+            if len(url_malformed_names) == 1
+            else "Music Assistant server is invalid"
+        )
+        summary = (
+            "Edit the Music Assistant server in Settings — it must be a bare "
+            "hostname or IP (no http://, no port, no path)."
+        )
+        primary_action, secondary_actions = _guidance_actions_from_recovery(
+            "sendspin_url_malformed", url_malformed_names
+        )
+        _append_group(
+            groups,
+            key="sendspin_url_malformed",
+            severity="error",
+            title=title,
+            summary=summary,
+            device_names=url_malformed_names,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+        )
+
+    loop_timeout = [
+        (
+            str(getattr(device, "player_name", None) or "Unknown"),
+            _device_extra(device).get("daemon_recurring_lifetime_s"),
+        )
+        for device in devices
+        if getattr(device, "bt_management_enabled", True)
+        and isinstance(_device_extra(device).get("daemon_recurring_lifetime_s"), (int, float))
+    ]
+    if loop_timeout:
+        loop_timeout_names = [name for (name, _interval) in loop_timeout]
+        first_name, first_interval = loop_timeout[0]
+        interval_str = f"{float(first_interval):.1f}s"
+        title = (
+            f"{first_name}: Sendspin daemon exits every ~{interval_str}"
+            if len(loop_timeout_names) == 1
+            else f"{len(loop_timeout_names)} devices: Sendspin daemon exits at a fixed interval"
+        )
+        summary = (
+            "The daemon connects but is dropped (or drops itself) on a consistent timer "
+            f"({interval_str}). Verify the Music Assistant server and port, then run "
+            "Test connection."
+        )
+        primary_action, secondary_actions = _guidance_actions_from_recovery(
+            "sendspin_daemon_loop_timeout", loop_timeout_names
+        )
+        _append_group(
+            groups,
+            key="sendspin_daemon_loop_timeout",
+            severity="error",
+            title=title,
+            summary=summary,
+            device_names=loop_timeout_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
         )

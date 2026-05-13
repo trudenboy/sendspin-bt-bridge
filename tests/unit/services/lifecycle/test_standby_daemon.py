@@ -18,6 +18,10 @@ def _make_client(idle_disconnect_minutes: int = 30, *, daemon_alive: bool = Fals
     client = SendspinClient.__new__(SendspinClient)
     client.player_name = "TestSpeaker"
     client.player_id = "test-player-id"
+    # auto-discovery — bypasses the URL-construction pre-flight gate added in
+    # the issue #291 follow-up
+    client.server_host = "auto"
+    client.server_port = 8927
     client.idle_disconnect_minutes = idle_disconnect_minutes
     client.idle_mode = "auto_disconnect" if idle_disconnect_minutes > 0 else "default"
     client.power_save_delay_minutes = 1

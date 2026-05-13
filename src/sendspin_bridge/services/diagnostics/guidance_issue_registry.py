@@ -125,6 +125,27 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("server_connection_refused",),
     ),
+    # Added in the issue #291 follow-up — the config-level mistake (full URL
+    # pasted into SENDSPIN_SERVER) is the most actionable failure mode, so it
+    # takes priority over the generic port_unreachable card.
+    "sendspin_url_malformed": GuidanceIssueDefinition(
+        key="sendspin_url_malformed",
+        layer="transport",
+        priority=47,
+        severity="error",
+        default_reason_codes=("config_invalid",),
+    ),
+    # Emitted by the parent process after detecting that the daemon dies at
+    # a consistent N-second interval (handshake / connect timeout signature).
+    # Higher specificity than url_malformed because at this point we know the
+    # config is plausible — pattern detection is the only way to surface this.
+    "sendspin_daemon_loop_timeout": GuidanceIssueDefinition(
+        key="sendspin_daemon_loop_timeout",
+        layer="transport",
+        priority=46,
+        severity="error",
+        default_reason_codes=("daemon_timeout_loop",),
+    ),
     "never_paired": GuidanceIssueDefinition(
         # v2.70.0-rc.2 (#260) — distinct from `repair_required` which assumes
         # the device WAS paired at some point. `never_paired` fires when

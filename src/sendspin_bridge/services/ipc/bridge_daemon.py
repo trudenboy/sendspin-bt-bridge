@@ -218,8 +218,8 @@ class BridgeDaemon(SendspinDaemon):
             req = getattr(ws, "_req", None)
             if req is not None:
                 peer = req.remote  # e.g. '192.168.10.10'
-                # Rebuild URL using server_port from status (or default 9000)
-                port = self._bridge_status.get("server_port", 9000)
+                # Rebuild URL using server_port from status (or default 8927)
+                port = self._bridge_status.get("server_port", 8927)
                 self._bridge_status["connected_server_url"] = f"{peer}:{port}"
         except Exception as _exc:
             logger.debug("Could not extract peer address: %s", _exc)

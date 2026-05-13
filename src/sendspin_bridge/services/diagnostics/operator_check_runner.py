@@ -245,6 +245,91 @@ def _run_ma_validation(config: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _run_sendspin_connection(config: dict[str, Any]) -> dict[str, Any]:
+    """Validate SENDSPIN_SERVER format + TCP-probe the Sendspin endpoint.
+
+    Added in the issue #291 follow-up so operators can verify the connection
+    target *before* the daemon dies silently 10 seconds later.  The probe
+    walks the port-candidate ladder (8927 → 9000 → 8095) so existing
+    legacy-9000 configs still report ok when MA is actually on 8927.
+    """
+    from sendspin_bridge.services.diagnostics.sendspin_port_probe import DEFAULT_PORT, probe_sendspin_port
+    from sendspin_bridge.services.infrastructure.config_validation import (
+        validate_sendspin_server_format,
+    )
+
+    server = str(config.get("SENDSPIN_SERVER") or "").strip()
+    try:
+        port = int(config.get("SENDSPIN_PORT") or DEFAULT_PORT)
+    except (TypeError, ValueError):
+        port = DEFAULT_PORT
+
+    issue = validate_sendspin_server_format(server)
+    if issue is not None:
+        return _result(
+            "error",
+            "sendspin_connection",
+            issue.message,
+            resolved_host=server,
+            resolved_port=port,
+            reason_code="config_invalid",
+        )
+
+    if not server or server.lower() in ("auto", "discover"):
+        return _result(
+            "ok",
+            "sendspin_connection",
+            "Auto-discovery mode — the daemon resolves the Sendspin server via mDNS at spawn time.",
+            resolved_host=None,
+            resolved_port=None,
+            auto_discovery=True,
+        )
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, probe_sendspin_port(server, default_port=port))
+            probed_port = future.result(timeout=10)
+    except Exception as exc:
+        return _result(
+            "error",
+            "sendspin_connection",
+            f"Sendspin reachability probe crashed: {exc}",
+            resolved_host=server,
+            resolved_port=port,
+        )
+
+    if probed_port is None:
+        return _result(
+            "error",
+            "sendspin_connection",
+            f"Sendspin server unreachable at {server}:{port}; "
+            f"also tried the candidate ports (8927, 9000, 8095) — none responded.",
+            resolved_host=server,
+            resolved_port=port,
+            reachable=False,
+        )
+
+    if probed_port != port:
+        return _result(
+            "warning",
+            "sendspin_connection",
+            f"Sendspin server reachable on {probed_port} (the configured port {port} did not respond).",
+            resolved_host=server,
+            resolved_port=probed_port,
+            configured_port=port,
+            reachable=True,
+        )
+
+    return _result(
+        "ok",
+        "sendspin_connection",
+        f"Sendspin server reachable at {server}:{probed_port}.",
+        resolved_host=server,
+        resolved_port=probed_port,
+        reachable=True,
+    )
+
+
 def run_safe_check(
     check_key: str, *, device_names: list[str] | None = None, config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -257,4 +342,6 @@ def run_safe_check(
         return _run_sink_verification(device_names=device_names)
     if normalized_key == "ma_auth":
         return _run_ma_validation(config)
+    if normalized_key == "sendspin_connection":
+        return _run_sendspin_connection(config)
     return _result("error", normalized_key or "unknown", "Unknown safe check requested.")

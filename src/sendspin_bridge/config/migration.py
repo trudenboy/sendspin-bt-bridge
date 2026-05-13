@@ -638,4 +638,26 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
         )
         needs_persist = True
 
+    # Detection-only check for malformed SENDSPIN_SERVER values written before
+    # the strict validator landed (issue #291). We do NOT auto-strip — Strict
+    # mode keeps the broken value visible so the operator notices the banner
+    # and fixes it in Settings.  The pre-flight gate in bridge/client.py
+    # refuses to spawn the daemon while this value remains malformed, so the
+    # bridge boots, the UI shows the error, and other devices keep working.
+    server_raw = normalized.get("SENDSPIN_SERVER")
+    if server_raw is not None and server_raw != "":
+        # Import locally to avoid circular: services.infrastructure imports config.
+        from sendspin_bridge.services.infrastructure.config_validation import (
+            validate_sendspin_server_format,
+        )
+
+        server_issue = validate_sendspin_server_format(server_raw)
+        if server_issue is not None:
+            warnings.append(
+                ConfigMigrationIssue(
+                    field="SENDSPIN_SERVER",
+                    message=server_issue.message,
+                )
+            )
+
     return ConfigMigrationResult(normalized_config=normalized, warnings=warnings, needs_persist=needs_persist)

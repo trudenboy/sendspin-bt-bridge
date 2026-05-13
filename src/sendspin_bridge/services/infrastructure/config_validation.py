@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,6 +21,80 @@ from sendspin_bridge.services.bluetooth import _MAC_RE
 class ConfigValidationIssue:
     field: str
     message: str
+
+
+# ---------------------------------------------------------------------------
+# SENDSPIN_SERVER format validation
+# ---------------------------------------------------------------------------
+
+# Root-cause guard for the issue #291 class of bug — users pasting the full MA
+# WebSocket URL (`http://192.168.1.11:8095`) into `SENDSPIN_SERVER`, which the
+# bridge then mashed into `ws://http://192.168.1.11:8095:8927/sendspin`.
+
+_SCHEME_RE = re.compile(r"^[a-z][a-z0-9+\-.]*://", re.IGNORECASE)
+_PORT_SUFFIX_RE = re.compile(r":\d+$")
+_SLASH_RE = re.compile(r"/")
+_WHITESPACE_RE = re.compile(r"\s")
+_AUTO_VALUES: frozenset[str] = frozenset({"auto", "discover"})
+
+
+def validate_sendspin_server_format(value: object) -> ConfigValidationIssue | None:
+    """Return a ConfigValidationIssue if value is not a bare hostname/IP, else None.
+
+    Empty / ``auto`` / ``discover`` are accepted. The bridge auto-discovers via
+    mDNS in those modes.
+    """
+    if value is None or value == "":
+        return None
+    raw = str(value).strip()
+    if not raw or raw.lower() in _AUTO_VALUES:
+        return None
+    if _SCHEME_RE.search(raw):
+        return ConfigValidationIssue(
+            field="SENDSPIN_SERVER",
+            message=(
+                f"SENDSPIN_SERVER must be a bare hostname or IP — remove the scheme prefix "
+                f"from {raw!r} (e.g. use '192.168.1.11', not 'http://192.168.1.11')."
+            ),
+        )
+    if _PORT_SUFFIX_RE.search(raw):
+        return ConfigValidationIssue(
+            field="SENDSPIN_SERVER",
+            message=(
+                f"SENDSPIN_SERVER must not include a port — remove the ':<port>' suffix from "
+                f"{raw!r} and set SENDSPIN_PORT separately."
+            ),
+        )
+    if _SLASH_RE.search(raw):
+        return ConfigValidationIssue(
+            field="SENDSPIN_SERVER",
+            message=(f"SENDSPIN_SERVER must not contain a path/slash — got {raw!r}; enter just the hostname or IP."),
+        )
+    if _WHITESPACE_RE.search(raw):
+        return ConfigValidationIssue(
+            field="SENDSPIN_SERVER",
+            message=f"SENDSPIN_SERVER must not contain whitespace (got {raw!r}).",
+        )
+    return None
+
+
+def is_valid_sendspin_host(value: object) -> bool:
+    """Pure-bool wrapper around :func:`validate_sendspin_server_format` for runtime gates."""
+    return validate_sendspin_server_format(value) is None
+
+
+def resolve_sendspin_url(host: object, port: int) -> str | None:
+    """Build the canonical ``ws://host:port/sendspin`` URL the daemon dials.
+
+    Returns ``None`` when *host* is empty / ``auto`` / ``discover`` — those modes
+    delegate target resolution to the sendspin library's own mDNS discovery.
+    """
+    if host is None:
+        return None
+    raw = str(host).strip()
+    if not raw or raw.lower() in _AUTO_VALUES:
+        return None
+    return f"ws://{raw}:{int(port)}/sendspin"
 
 
 @dataclass
@@ -294,6 +369,10 @@ def validate_uploaded_config(
                             message=f"Invalid adapter MAC address: {adapter_mac}",
                         )
                     )
+
+    server_issue = validate_sendspin_server_format(normalized.get("SENDSPIN_SERVER"))
+    if server_issue is not None:
+        result.errors.append(server_issue)
 
     sp: object = normalized.get("SENDSPIN_PORT")
     if sp not in (None, ""):

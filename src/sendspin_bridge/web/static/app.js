@@ -8960,10 +8960,92 @@ function _buildConfigPayload(options) {
     return config;
 }
 
+// Issue #291 follow-up — strict client-side regex on SENDSPIN_SERVER.
+// Mirrors validate_sendspin_server_format() on the backend; the form's
+// `pattern` attribute also fires native browser validation on submit.
+var _SENDSPIN_SERVER_RE = /^(auto|discover|[A-Za-z0-9.\-]+)$/;
+
+function _validateSendspinServerInput(value) {
+    if (value === '' || value == null) return true;
+    return _SENDSPIN_SERVER_RE.test(String(value).trim());
+}
+
+function _showSendspinServerError(message) {
+    var errEl = document.querySelector('[data-for="SENDSPIN_SERVER"]');
+    if (!errEl) return;
+    if (message) {
+        errEl.textContent = message;
+        errEl.hidden = false;
+    } else {
+        errEl.textContent = '';
+        errEl.hidden = true;
+    }
+}
+
+async function _testSendspinConnection() {
+    var serverEl = document.querySelector('input[name="SENDSPIN_SERVER"]');
+    var portEl = document.querySelector('input[name="SENDSPIN_PORT"]');
+    var resultEl = document.getElementById('test-sendspin-result');
+    var server = serverEl ? serverEl.value.trim() : '';
+    var port = portEl ? portEl.value.trim() : '';
+    if (resultEl) {
+        resultEl.textContent = 'Testing…';
+        resultEl.style.color = '';
+    }
+    try {
+        var resp = await fetch(API_BASE + '/api/sendspin/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ SENDSPIN_SERVER: server, SENDSPIN_PORT: port || undefined }),
+        });
+        var body = await resp.json().catch(function () { return {}; });
+        if (!resultEl) return;
+        var ok = body && body.status === 'ok';
+        var warn = body && body.status === 'warning';
+        resultEl.textContent = (body && body.summary) || (ok ? 'OK' : 'Failed');
+        resultEl.style.color = ok ? 'var(--color-success, #2e7d32)'
+            : warn ? 'var(--color-warning, #ed6c02)'
+                   : 'var(--color-error, #c62828)';
+    } catch (e) {
+        if (resultEl) {
+            resultEl.textContent = 'Network error: ' + e.message;
+            resultEl.style.color = 'var(--color-error, #c62828)';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('btn-test-sendspin');
+    if (btn) btn.addEventListener('click', _testSendspinConnection);
+    var serverInput = document.querySelector('input[name="SENDSPIN_SERVER"]');
+    if (serverInput) {
+        serverInput.addEventListener('input', function (e) {
+            if (_validateSendspinServerInput(e.target.value)) {
+                _showSendspinServerError(null);
+            }
+        });
+    }
+});
+
 async function saveConfig() {
     syncManualAdapters();
     var config = _buildConfigPayload();
     var shouldReloadMaRuntime = _configShouldReloadMaRuntime(config);
+
+    // Client-side pre-flight on SENDSPIN_SERVER mirrors the backend's strict
+    // validator — gives a faster error than waiting for the POST roundtrip.
+    var sendspinServerValue = config.SENDSPIN_SERVER;
+    if (sendspinServerValue && !_validateSendspinServerInput(sendspinServerValue)) {
+        var msg = "Music Assistant server must be a bare hostname or IP — no http://, no port, no path.";
+        _showSendspinServerError(msg);
+        showToast(msg, 'error');
+        var inputEl = document.querySelector('input[name="SENDSPIN_SERVER"]');
+        if (inputEl) {
+            inputEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+            setTimeout(function () { inputEl.focus(); }, 250);
+        }
+        return {ok: false, error: msg};
+    }
 
     if (config.AUTH_ENABLED && !window._passwordSet) {
         showToast('Set a password before enabling authentication', 'error');

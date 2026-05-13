@@ -900,17 +900,27 @@
                             <div class="config-form-grid">
                                 <div class="form-group">
                                     <label>MA server
-                                        <span class="form-hint">IP/hostname, or <code>auto</code> for mDNS discovery</span>
+                                        <span class="form-hint">IP/hostname (no <code>http://</code>, no port, no path), or <code>auto</code> for mDNS discovery</span>
                                     </label>
-                                    <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required>
+                                    <input type="text" name="SENDSPIN_SERVER" placeholder="auto" required
+                                           pattern="^(auto|discover|[A-Za-z0-9.\-]+)$"
+                                           title="Bare hostname or IP (e.g. 192.168.1.11), or 'auto'. No scheme, no port, no path.">
+                                    <span class="form-error" data-for="SENDSPIN_SERVER" hidden></span>
                                 </div>
 
                                 <div class="form-group">
                                     <label>MA WebSocket port
-                                        <span class="form-hint">Default is <code>9000</code>. Change only if your Music Assistant endpoint uses a different port.</span>
+                                        <span class="form-hint">Default is <code>8927</code> (matches Music Assistant's Sendspin provider). Change only if your MA endpoint is bound elsewhere.</span>
                                     </label>
-                                    <input type="number" name="SENDSPIN_PORT" placeholder="9000" min="1024" max="65535">
+                                    <input type="number" name="SENDSPIN_PORT" placeholder="8927" min="1024" max="65535">
                                 </div>
+                            </div>
+
+                            <div class="form-group" style="margin-top: 12px;">
+                                <button type="button" class="btn btn-secondary" id="btn-test-sendspin">
+                                    Test Music Assistant connection
+                                </button>
+                                <span id="test-sendspin-result" class="form-hint" style="margin-left: 12px;"></span>
                             </div>
 
                             <label class="config-setting-row">

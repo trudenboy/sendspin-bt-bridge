@@ -1,7 +1,11 @@
 """Probe for the correct Sendspin WebSocket port on a given host.
 
-When SENDSPIN_PORT is the default (9000) and connection fails, this module
-attempts to find the correct port by testing common alternatives.
+When the configured Sendspin port doesn't accept connections, this module
+attempts to find an alternative port by testing common candidates.
+
+The default port was 9000 historically (legacy bridge default); upstream
+Music Assistant now serves the Sendspin WebSocket on 8927.  The probe walks
+both so existing configs keep working without manual migration.
 """
 
 from __future__ import annotations
@@ -11,8 +15,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORT = 9000
-_PROBE_CANDIDATES = (9000, 8927, 8095)
+DEFAULT_PORT = 8927
+# 8927 first (current MA default), then 9000 (legacy bridge default for older
+# installs), then 8095 (MA WebSocket API — almost never the right answer but
+# kept as a last-resort smell test in case the user mixed the two ports up).
+_PROBE_CANDIDATES = (8927, 9000, 8095)
 _PROBE_TIMEOUT = 3.0
 
 
