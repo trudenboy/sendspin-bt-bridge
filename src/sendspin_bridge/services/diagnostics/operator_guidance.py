@@ -748,7 +748,10 @@ def _build_issue_groups(
     if loop_timeout:
         loop_timeout_names = [name for (name, _interval) in loop_timeout]
         first_name, first_interval = loop_timeout[0]
-        interval_str = f"{float(first_interval):.1f}s"
+        # isinstance guard in the comprehension above narrows the type at
+        # runtime, but mypy doesn't propagate that across the tuple, so the
+        # `or 0.0` keeps the type-checker happy without affecting behaviour.
+        interval_str = f"{float(first_interval or 0.0):.1f}s"
         title = (
             f"{first_name}: Sendspin daemon exits every ~{interval_str}"
             if len(loop_timeout_names) == 1
