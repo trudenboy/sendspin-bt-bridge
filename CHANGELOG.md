@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.3] - 2026-05-13
+
+### Fixed
+- **LXC installer: one more Debian-shipped Python package without a `RECORD` file.** `Pygments` ships with the Ubuntu 24.04 base image via apt and pip refuses to upgrade it (`Cannot uninstall Pygments, RECORD file not found`). Added to the same `pre-upgrade` list already used for `typing-extensions`, `blinker`, and `requests` so the bridge's pip requirements install can proceed.
+
 ## [2.71.0-rc.2] - 2026-05-13
 
 ### Fixed
