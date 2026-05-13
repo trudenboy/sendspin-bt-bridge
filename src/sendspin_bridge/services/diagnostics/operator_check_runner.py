@@ -285,10 +285,40 @@ def _run_sendspin_connection(config: dict[str, Any]) -> dict[str, Any]:
             auto_discovery=True,
         )
 
+    async def _bounded_probe() -> int | None:
+        # asyncio.wait_for guarantees the probe is cancelled inside the
+        # coroutine if it overruns.  Without this, the outer
+        # future.result(timeout=...) hands a deadline to the thread but the
+        # underlying TCP connect can still block — and the surrounding
+        # ThreadPoolExecutor context manager's `shutdown(wait=True)` on exit
+        # would then keep `/api/sendspin/test` hanging well past the budget.
+        try:
+            return await asyncio.wait_for(
+                probe_sendspin_port(server, default_port=port),
+                timeout=8.0,
+            )
+        except TimeoutError:
+            return None
+
     try:
+        # cancel_futures=True ensures shutdown() on context exit doesn't wait
+        # for a still-running thread — the bounded_probe wait_for above
+        # already returns None on timeout so this is belt-and-suspenders.
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, probe_sendspin_port(server, default_port=port))
-            probed_port = future.result(timeout=10)
+            future = pool.submit(asyncio.run, _bounded_probe())
+            try:
+                probed_port = future.result(timeout=10)
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                pool.shutdown(wait=False, cancel_futures=True)
+                return _result(
+                    "error",
+                    "sendspin_connection",
+                    f"Sendspin reachability probe to {server}:{port} timed out after 10s.",
+                    resolved_host=server,
+                    resolved_port=port,
+                    reachable=False,
+                )
     except Exception as exc:
         return _result(
             "error",

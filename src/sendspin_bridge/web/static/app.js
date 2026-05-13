@@ -8960,14 +8960,24 @@ function _buildConfigPayload(options) {
     return config;
 }
 
-// Issue #291 follow-up — strict client-side regex on SENDSPIN_SERVER.
-// Mirrors validate_sendspin_server_format() on the backend; the form's
-// `pattern` attribute also fires native browser validation on submit.
-var _SENDSPIN_SERVER_RE = /^(auto|discover|[A-Za-z0-9.\-]+)$/;
+// Issue #291 follow-up — client-side mirror of validate_sendspin_server_format()
+// from services/infrastructure/config_validation.py.  Reject scheme prefix,
+// embedded port, slashes, and whitespace; accept everything else (including
+// underscores and other valid hostname chars the backend permits).  Auto /
+// discover keywords are case-insensitive on both sides.
+var _SENDSPIN_SCHEME_RE = /^[a-z][a-z0-9+\-.]*:\/\//i;
+var _SENDSPIN_PORT_SUFFIX_RE = /:\d+$/;
+var _SENDSPIN_AUTO_RE = /^(auto|discover)$/i;
 
 function _validateSendspinServerInput(value) {
     if (value === '' || value == null) return true;
-    return _SENDSPIN_SERVER_RE.test(String(value).trim());
+    var raw = String(value).trim();
+    if (raw === '' || _SENDSPIN_AUTO_RE.test(raw)) return true;
+    if (_SENDSPIN_SCHEME_RE.test(raw)) return false;
+    if (_SENDSPIN_PORT_SUFFIX_RE.test(raw)) return false;
+    if (raw.indexOf('/') !== -1) return false;
+    if (/\s/.test(raw)) return false;
+    return true;
 }
 
 function _showSendspinServerError(message) {
