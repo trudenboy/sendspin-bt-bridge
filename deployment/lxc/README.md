@@ -55,13 +55,13 @@ The LXC container **cannot** run its own `bluetoothd` due to `AF_BLUETOOTH` kern
 ### Option 1: One-line (on Proxmox host as root)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/proxmox-create.sh)
 ```
 
 ### Option 2: Download and review first (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh -o proxmox-create.sh
+curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/proxmox-create.sh -o proxmox-create.sh
 # Review the script before running:
 less proxmox-create.sh
 bash proxmox-create.sh
@@ -190,7 +190,7 @@ For OpenWrt-based devices (Turris Omnia, x86 boxes, ARM SBCs with OpenWrt), see 
 Quick install on the OpenWrt host:
 
 ```sh
-wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/openwrt/create.sh | sh
 ```
 
 ## Upgrading
@@ -199,10 +199,10 @@ To update the application inside an existing LXC container (works on both Proxmo
 
 ```bash
 # From the host:
-pct exec <CTID> -- bash -c "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh | bash"
+pct exec <CTID> -- bash -c "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/upgrade.sh | bash"
 
 # Or on OpenWrt:
-lxc-attach -n sendspin -- bash -c "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh | bash"
+lxc-attach -n sendspin -- bash -c "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/upgrade.sh | bash"
 ```
 
 This preserves `/config/config.json` and only updates application files and dependencies.

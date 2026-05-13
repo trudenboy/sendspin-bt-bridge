@@ -43,13 +43,13 @@ The LXC container **cannot** run its own `bluetoothd` (AF_BLUETOOTH is not avail
 ### One-liner (on OpenWrt host as root)
 
 ```sh
-wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/openwrt/create.sh | sh
 ```
 
 ### Download and review first (recommended)
 
 ```sh
-wget https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh
+wget https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/openwrt/create.sh
 less create.sh
 sh create.sh
 ```
@@ -100,7 +100,7 @@ echo btusb > /etc/modules.d/99-btusb
 ### 4. Install D-Bus policy
 
 ```sh
-wget -q https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/dbus-pulseaudio.conf \
+wget -q https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/openwrt/dbus-pulseaudio.conf \
      -O /etc/dbus-1/system.d/pulseaudio-lxc.conf
 /etc/init.d/dbus reload
 ```
@@ -159,7 +159,7 @@ lxc.start.delay = 5
 lxc-start -n sendspin
 lxc-attach -n sendspin -- bash -c \
     "apt-get update && apt-get install -y wget && \
-     wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh | bash"
+     wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/install.sh | bash"
 ```
 
 ## Bluetooth Speaker Pairing
@@ -187,7 +187,7 @@ lxc-attach -n sendspin -- systemctl restart sendspin-client
 
 ```sh
 lxc-attach -n sendspin -- bash -c \
-    "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh | bash"
+    "wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/upgrade.sh | bash"
 ```
 
 ## Monitoring

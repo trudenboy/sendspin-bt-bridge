@@ -255,7 +255,7 @@ Runs as a systemd service inside an LXC container on Turris Omnia router (OpenWr
 
 :::note[OpenWrt specifics]
 The host requires a `pulse` user (uid 109) in `/etc/passwd` for D-Bus EXTERNAL authentication.
-Without it, PulseAudio inside the container cannot load `module-bluez5-discover` and BT audio profiles fail with `br-connection-profile-unavailable`. See [OpenWrt LXC README](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md) for details.
+Without it, PulseAudio inside the container cannot load `module-bluez5-discover` and BT audio profiles fail with `br-connection-profile-unavailable`. See [OpenWrt LXC README](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/deployment/lxc/openwrt/README.md) for details.
 :::
 
 ## Hardware summary

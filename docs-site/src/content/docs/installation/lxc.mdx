@@ -21,7 +21,7 @@ LXC is the native non-Docker option for appliance-style hosts such as Proxmox VE
 On the Proxmox host:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/proxmox-create.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/proxmox-create.sh)
 ```
 
 ### Manual path
@@ -32,7 +32,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 2. Run the in-container installer:
 
    ```bash
-   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/install.sh)
+   bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/install.sh)
    ```
 
 3. Append the required D-Bus / device rules to `/etc/pve/lxc/<CTID>.conf` on the Proxmox host.
@@ -40,7 +40,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge
 
 </Steps>
 
-The detailed Proxmox walkthrough remains in [`lxc/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/README.md).
+The detailed Proxmox walkthrough remains in [`deployment/lxc/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/deployment/lxc/README.md).
 
 ## OpenWrt / TurrisOS
 
@@ -49,10 +49,10 @@ The detailed Proxmox walkthrough remains in [`lxc/README.md`](https://github.com
 On the OpenWrt host:
 
 ```sh
-wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/openwrt/create.sh | sh
+wget -qO- https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/openwrt/create.sh | sh
 ```
 
-The full OpenWrt-specific guide remains in [`lxc/openwrt/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/lxc/openwrt/README.md).
+The full OpenWrt-specific guide remains in [`deployment/lxc/openwrt/README.md`](https://github.com/trudenboy/sendspin-bt-bridge/blob/main/deployment/lxc/openwrt/README.md).
 
 ## Pairing a speaker
 
@@ -111,7 +111,7 @@ journalctl -u sendspin-client -f
 ## Updating
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/lxc/upgrade.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/trudenboy/sendspin-bt-bridge/main/deployment/lxc/upgrade.sh)
 ```
 
 <Aside type="tip">

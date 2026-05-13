@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.2] - 2026-05-13
+
+### Fixed
+- **Proxmox LXC fresh-install one-liner now works again.** The April 29 reorganization moved deployment scripts from `lxc/` into `deployment/lxc/` but missed updating the internal download URL inside the Proxmox helper script and the file-copy paths inside the LXC installer itself; the four supporting files (PulseAudio configs and the two systemd units) were silently `cp`-failed and the installer aborted before reaching the first runnable bridge. The installer scripts, the Proxmox helper, the LXC quick-install docs (en + ru) and the deployment README all now point at the canonical `deployment/lxc/` path, so `bash <(curl -fsSL .../proxmox-create.sh)` completes end-to-end.
+- **LXC installer missing build dependencies for `dbus-python`.** `dbus-python` has no binary wheel on PyPI and pip therefore builds it from source; the build needs `pkg-config`, `libdbus-1-dev` and `libglib2.0-dev` which the installer's `apt-get install` list didn't include, so the install failed at the `pip install -r requirements.txt` step with a `meson` "Did not find pkg-config" error. The three packages have been added to the installer's system-package list.
+
 ## [2.71.0-rc.1] - 2026-05-13
 
 ### Added

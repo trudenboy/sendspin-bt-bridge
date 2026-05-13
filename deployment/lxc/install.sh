@@ -103,7 +103,8 @@ apt-get install -y -qq \
   alsa-utils dbus libportaudio2 \
   avahi-daemon avahi-utils libnss-mdns \
   curl wget ca-certificates git jq tzdata procps \
-  gcc python3-dev
+  gcc python3-dev \
+  pkg-config libdbus-1-dev libglib2.0-dev
 ok "System packages installed"
 
 # ─── 2. App directory and files from GitHub ───────────────────────────────────
@@ -202,11 +203,11 @@ msg "Writing PulseAudio system configuration..."
 mkdir -p /etc/pulse/client.conf.d
 
 # CPU-optimal daemon.conf — trivial resampler, s16le, 48kHz to match MA output
-cp "${SNAPSHOT_ROOT}/lxc/pulse-daemon.conf" /etc/pulse/daemon.conf
+cp "${SNAPSHOT_ROOT}/deployment/lxc/pulse-daemon.conf" /etc/pulse/daemon.conf
 ok "PulseAudio daemon.conf written (trivial resampler + 48kHz + s16le)"
 
 # System-mode PA config with Bluetooth modules
-cp "${SNAPSHOT_ROOT}/lxc/pulse-system.pa" /etc/pulse/system.pa
+cp "${SNAPSHOT_ROOT}/deployment/lxc/pulse-system.pa" /etc/pulse/system.pa
 ok "PulseAudio system.pa written (bluetooth-discover + null fallback)"
 
 cat > /etc/pulse/client.conf.d/00-no-autospawn.conf <<'EOF'
@@ -257,8 +258,8 @@ ok "Environment variables set"
 # ─── 10. Systemd units ────────────────────────────────────────────────────────
 msg "Installing systemd service units..."
 
-cp "${SNAPSHOT_ROOT}/lxc/pulseaudio-system.service" /etc/systemd/system/pulseaudio-system.service
-cp "${SNAPSHOT_ROOT}/lxc/sendspin-client.service" /etc/systemd/system/sendspin-client.service
+cp "${SNAPSHOT_ROOT}/deployment/lxc/pulseaudio-system.service" /etc/systemd/system/pulseaudio-system.service
+cp "${SNAPSHOT_ROOT}/deployment/lxc/sendspin-client.service" /etc/systemd/system/sendspin-client.service
 
 ok "Systemd units installed"
 
