@@ -155,7 +155,7 @@ qrcode==8.2
     # via sendspin
 readchar==4.2.2
     # via sendspin
-requests==2.33.1
+requests==2.34.1
     # via sendspin-bt-bridge
 rich==15.0.0
     # via sendspin
