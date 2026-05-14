@@ -117,7 +117,7 @@ pillow==12.2.0
     # via
     #   aiosendspin
     #   sendspin-bt-bridge
-propcache==0.4.1
+propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
