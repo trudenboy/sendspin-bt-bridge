@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.0-rc.6] - 2026-05-14
+
+### Changed
+- **`sendspin` upstream bumped 7.1.0 → 7.3.1.** Pulls in upstream fixes that affect this bridge directly: the server-command listener is no longer lost after a daemon reconnect, `sendspin serve` no longer crashes on Python 3.12, the audio-sync delta is now correct after a server-driven delay change, mid-stream joins no longer trigger an unwanted catch-up burst, and the ALSA backend now closes its device cleanly. Also includes PulseAudio/PipeWire integration improvements and brings `stream/clear` / `stream/end` back into spec compliance with the role-version fields removed.
+- **Other dependency bumps**: `cryptography` 47.0.0 → 48.0.0, `requests` 2.33.1 → 2.34.1, `idna` 3.13 → 3.15, `propcache` 0.4.1 → 0.5.2, and the `astral-sh/uv` Docker base image 0.11.11 → 0.11.14.
+
 ## [2.71.0-rc.5] - 2026-05-13
 
 ### Added
