@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.1-rc.1] - 2026-05-15
+
 ### Added
 - **New documentation page: Bluetooth Speakers** — consolidates field datapoints on the speakers and headphones that have been driven through the bridge. Three tiers (confirmed working / working with caveats / documented quirks), every row linked back to the originating issue or to the production-fleet inventory. Initial roster covers IKEA ENEBY / VAPPEBY / Kallsup, Yandex Mini 2, Lenco LS-500, Sony WH-1000XM4 (BlueZ ≥ 5.82 caveat), Samsung Q910B (CoD `0x00010c` workaround), Synergy S65 (BlueZ 5.85 floor), JBL PartyBox Encore 2 (solo-only), HMDX Jam, EDIFIER B3, Anker Soundcore 2/3, Xiaomi Mi, Sony STR-DN1080, HK Onyx Studio 3 quirk. Mirrored in EN + RU and added to the sidebar. ([#166](https://github.com/trudenboy/sendspin-bt-bridge/issues/166), [#172](https://github.com/trudenboy/sendspin-bt-bridge/issues/172), [#191](https://github.com/trudenboy/sendspin-bt-bridge/issues/191), [#210](https://github.com/trudenboy/sendspin-bt-bridge/issues/210), [#213](https://github.com/trudenboy/sendspin-bt-bridge/issues/213), [#269](https://github.com/trudenboy/sendspin-bt-bridge/issues/269), [#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
 
