@@ -1039,6 +1039,41 @@ def test_connect_device_fails_after_all_retries(bt_manager):
     assert result is False
 
 
+def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, caplog):
+    """When status checks fail, the warning must include the bluetoothctl
+    connect stdout so the actual BlueZ error reaches the operator.
+
+    Regression for #302: a Paired/Bonded/Trusted device that won't connect
+    used to log only "not connected after 5 status checks", discarding the
+    BlueZ-side reason (page-timeout / already-active / profile-unavailable
+    / link-key-mismatch / ...). Without it, neither the operator nor the
+    maintainer can distinguish the candidate causes.
+    """
+    connect_output = (
+        "Attempting to connect to D0:C9:07:11:C9:DF\n"
+        "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+    )
+
+    def _fake_bctl(cmds):
+        if cmds and cmds[0].startswith("connect "):
+            return False, connect_output
+        return True, ""
+
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        caplog.at_level("WARNING", logger="sendspin_bridge.bluetooth.manager"),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(side_effect=_fake_bctl)
+        result = bt_manager.connect_device()
+
+    assert result is False
+    assert any("br-connection-page-timeout" in msg for msg in caplog.messages), (
+        f"connect stdout missing from warning log; got: {caplog.messages!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # is_device_connected — various bluetoothctl output formats
 # ---------------------------------------------------------------------------

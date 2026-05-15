@@ -77,6 +77,12 @@ _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
 _PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
 _MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
 _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
+# Strips ANSI colour codes from bluetoothctl stdout before excerpting it
+# into the connect-failure warning line.
+_BCTL_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# Caps the connect-output excerpt so a chatty `bluetoothctl` transcript
+# can't flood a single log line.
+_BCTL_EXCERPT_MAX_LEN = 200
 # Cadence for live-RSSI refresh via kernel mgmt opcode 0x0031.
 # 5 s feels live to the UI (chip updates while you walk past a
 # speaker) without exceeding the controller's internal averaging
@@ -91,6 +97,34 @@ _RSSI_REFRESH_INTERVAL_S = 5.0
 # device object, force-remove the stale BlueZ entry so the next reconnect cycle
 # can escalate to pair_device (KALLSUP-class loop, #162).
 _PAIRED_UNKNOWN_THRESHOLD = 3
+
+
+def _summarize_bluetoothctl_connect_output(output: str) -> str:
+    """Reduce multi-line bluetoothctl connect stdout to one diagnostic line.
+
+    Prefers a line containing the BlueZ error fingerprint (``Failed to
+    connect: …``); otherwise falls back to the last non-empty content
+    line. Strips ANSI colour codes and the ``[bluetooth]#`` prompt echo
+    so the result is safe to embed in a single log message. Returns an
+    empty string when ``output`` carries no usable signal — the caller
+    then falls back to the bare warning.
+    """
+    if not output:
+        return ""
+    cleaned: list[str] = []
+    for raw in output.splitlines():
+        line = _BCTL_ANSI_RE.sub("", raw).strip()
+        if not line:
+            continue
+        if line.endswith("]#") or line.startswith("[bluetooth]"):
+            continue
+        cleaned.append(line)
+    if not cleaned:
+        return ""
+    for line in cleaned:
+        if "failed to connect" in line.lower():
+            return line[:_BCTL_EXCERPT_MAX_LEN]
+    return cleaned[-1][:_BCTL_EXCERPT_MAX_LEN]
 
 
 class BluetoothManager:
@@ -900,7 +934,7 @@ class BluetoothManager:
             return False
 
         # Try to connect
-        _success, _output = self._run_bluetoothctl([f"connect {self.mac_address}"])
+        _success, _connect_output = self._run_bluetoothctl([f"connect {self.mac_address}"])
         if self._abort_connect_if_cancelled():
             return False
 
@@ -970,7 +1004,26 @@ class BluetoothManager:
                     sink_ok = self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
-        logger.warning("Failed to connect (not connected after 5 status checks)")
+        excerpt = _summarize_bluetoothctl_connect_output(_connect_output)
+        if excerpt:
+            # #302 — surface the underlying BlueZ error (page-timeout,
+            # br-connection-already-active, profile-unavailable, …) so the
+            # operator can distinguish "speaker is off" from "speaker is
+            # already paired with another host" without a follow-up bug
+            # report.  Kept on a single line; the `is_actionable_warning…`
+            # gate in services/diagnostics/log_analysis.py still treats
+            # the canonical prefix as non-issue, so this doesn't change
+            # how the line is bucketed in diagnostics.
+            logger.warning(
+                "Failed to connect (not connected after %d status checks): %s",
+                _CONNECT_CHECK_RETRIES,
+                excerpt,
+            )
+        else:
+            logger.warning(
+                "Failed to connect (not connected after %d status checks)",
+                _CONNECT_CHECK_RETRIES,
+            )
         if self.paired is None:
             self._paired_unknown_count += 1
             if self._paired_unknown_count >= _PAIRED_UNKNOWN_THRESHOLD:
