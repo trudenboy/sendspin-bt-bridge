@@ -455,7 +455,7 @@ def test_lxc_upgrade_script_self_update_url_uses_deployment_path():
 
     assert "/deployment/lxc/upgrade.sh" in text
     # No bare /lxc/upgrade.sh in the raw URL — that's the bug from #309.
-    assert '/${GITHUB_BRANCH}/lxc/upgrade.sh' not in text
+    assert "/${GITHUB_BRANCH}/lxc/upgrade.sh" not in text
 
 
 def test_lxc_upgrade_script_install_systemd_units_uses_deployment_path():
@@ -465,7 +465,7 @@ def test_lxc_upgrade_script_install_systemd_units_uses_deployment_path():
     repo_root = Path(__file__).resolve().parents[4]
     text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
 
-    assert '${app_root}/deployment/lxc/pulseaudio-system.service' in text
-    assert '${app_root}/deployment/lxc/sendspin-client.service' in text
-    assert '${app_root}/lxc/pulseaudio-system.service' not in text
-    assert '${app_root}/lxc/sendspin-client.service' not in text
+    assert "${app_root}/deployment/lxc/pulseaudio-system.service" in text
+    assert "${app_root}/deployment/lxc/sendspin-client.service" in text
+    assert "${app_root}/lxc/pulseaudio-system.service" not in text
+    assert "${app_root}/lxc/sendspin-client.service" not in text
