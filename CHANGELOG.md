@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.2-rc.1] - 2026-05-15
+
 ### Changed
 - **Connect-failure log lines now carry the underlying BlueZ error.** When a configured speaker is paired/bonded/trusted but won't connect, the bridge used to log only `Failed to connect (not connected after 5 status checks)` and discard `bluetoothctl`'s stdout — hiding the actual reason (`br-connection-page-timeout`, `br-connection-already-active`, `Profile unavailable`, link-key mismatch, …) behind a generic warning. The failure warning now includes a single-line excerpt of the connect output, so the operator can distinguish "speaker is off / out of range" from "speaker is already paired with another host" without a follow-up bug report. ([#302](https://github.com/trudenboy/sendspin-bt-bridge/issues/302))
 
