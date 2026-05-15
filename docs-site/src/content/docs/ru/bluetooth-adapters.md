@@ -152,12 +152,32 @@ Bridge содержит несколько **экспериментальных 
 
 | Адаптер / чипсет | Проблема |
 |---|---|
+| **ZEXMTE BT 5.3 Long Range** (антенна 180 м, ASIN `B0CP5WQ7L8`) | Детектится, пэйрится, играет — но A2DP music streaming нестабилен (community report, [#295](https://github.com/trudenboy/sendspin-bt-bridge/issues/295#issuecomment-4441986718)) |
+| **TP-Link UB500 Plus** (BT 5.3 с регулируемой внешней антенной, ASIN `B0DHJHMHFS`) | То же — детектится и пэйрится, A2DP нестабилен. Берите обычный UB500 Nano вместо этого. Community report, [#295](https://github.com/trudenboy/sendspin-bt-bridge/issues/295#issuecomment-4441986718) |
 | **CSR8510 A10** | BT 4.0, ограниченная дальность (~10 м), устаревший чип |
 | **Broadcom BCM20702** | BT 4.0, проблемы с загрузкой firmware на immutable-системах |
 | **Qualcomm QCA61x4** | Требует проприетарный firmware, нестабилен с bluez |
 | **TP-Link UB500 v3** | BT 5.4 с другим чипсетом — совместимость с HAOS не подтверждена |
 | **WiFi + BT combo** | Конфликт с существующим WiFi, сложный USB-проброс |
 | **BT 5.2+ LE Audio донглы** | Кодек LC3 пока не поддерживается PulseAudio 17 |
+| **aptX / Snapdragon Sound transmitters** (например Creative BT-W6, `B0DG34HRNC`) | Проприетарный стек; мост стримит строго через A2DP/SBC |
+
+:::tip[Паттерн из community-отчётов]
+**Long-range / high-gain-antenna варианты BT 5.3+ донглов на бумаге выглядят соблазнительно, но на практике стабильно проигрывают по A2DP-стримингу.** Связка новый Realtek + большая антенна + BlueZ ≥ 5.78 firmware-quirk-и сейчас хрупче, чем скучный `RTL8761B` BT 5.0 nano. Если нужен больший радиус — берите **активный USB-удлинитель** (5–10 м с repeater'ом) вместо long-range донгла.
+:::
+
+## Community-tested адаптеры (Amazon ASIN)
+
+Community-датапоинты из [#295](https://github.com/trudenboy/sendspin-bt-bridge/issues/295#issuecomment-4441986718) (sirs2k, протестировано на HAOS, hci0). Все четыре детектятся и пэйрятся; различает их поведение A2DP music streaming:
+
+| Вердикт | Продукт | ASIN | BT | Заметка |
+|---|---|---|---|---|
+| ⭐⭐⭐⭐⭐ Best | UGREEN 80889 USB Bluetooth 5.0 Adapter | [`B08R8992YC`](https://www.amazon.com.au/dp/B08R8992YC) | 5.0 | Realtek RTL8761B nano, модель 80889 |
+| ⭐⭐⭐⭐ Good | TP-Link UB500 Nano (UK Version) | [`B09C25VRXD`](https://www.amazon.com.au/dp/B09C25VRXD) | 5.0 | Та же v1/v2 железка, что и глобальный TP-Link UB500 |
+| ❌ Avoid | TP-Link UB500 **Plus** (BT 5.3 + внешняя антенна) | [`B0DHJHMHFS`](https://www.amazon.com.au/dp/B0DHJHMHFS) | 5.3 | Пэйрится и играет, A2DP music нестабилен |
+| ❌ Avoid | ZEXMTE BT 5.3 Long Range (антенна 180 м) | [`B0CP5WQ7L8`](https://www.amazon.com.au/dp/B0CP5WQ7L8) | 5.3 | Пэйрится и играет, A2DP music нестабилен |
+
+Есть свой датапоинт — модель, ASIN, версия BlueZ, держит ли A2DP под нагрузкой? Пожалуйста, [откройте issue](https://github.com/trudenboy/sendspin-bt-bridge/issues/new) — будущие читатели поблагодарят.
 
 ## Миграция с CSR8510 на RTL8761B
 
