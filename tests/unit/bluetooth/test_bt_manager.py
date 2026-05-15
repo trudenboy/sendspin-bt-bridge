@@ -1039,6 +1039,86 @@ def test_connect_device_fails_after_all_retries(bt_manager):
     assert result is False
 
 
+def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, caplog):
+    """When status checks fail, the warning must include the bluetoothctl
+    connect stdout so the actual BlueZ error reaches the operator.
+
+    Regression for #302: a Paired/Bonded/Trusted device that won't connect
+    used to log only "not connected after 5 status checks", discarding the
+    BlueZ-side reason (page-timeout / already-active / profile-unavailable
+    / link-key-mismatch / ...). Without it, neither the operator nor the
+    maintainer can distinguish the candidate causes.
+    """
+    connect_output = (
+        "Attempting to connect to D0:C9:07:11:C9:DF\n"
+        "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+    )
+
+    def _fake_bctl(cmds):
+        if cmds and cmds[0].startswith("connect "):
+            return False, connect_output
+        return True, ""
+
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        caplog.at_level("WARNING", logger="sendspin_bridge.bluetooth.manager"),
+    ):
+        bt_manager._run_bluetoothctl = MagicMock(side_effect=_fake_bctl)
+        result = bt_manager.connect_device()
+
+    assert result is False
+    assert any("br-connection-page-timeout" in msg for msg in caplog.messages), (
+        f"connect stdout missing from warning log; got: {caplog.messages!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# _summarize_bluetoothctl_connect_output — prompt + async-notification noise
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_connect_output_strips_ansi_prompt_and_chg_noise():
+    """Realistic bluetoothctl transcript: ANSI-coloured `[bluetoothctl]>`
+    prompt, `[CHG]` async discovery notifications, and a final
+    `Failed to connect:` line. The excerpt must be the BlueZ error,
+    not the prompt or any of the CHG lines.
+    """
+    from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
+
+    stdout = (
+        "[\x1b[0;94mbluetoothctl]> \x1b[0mconnect D0:C9:07:11:C9:DF\n"
+        "Attempting to connect to D0:C9:07:11:C9:DF\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device D0:C9:07:11:C9:DF Connected: no\n"
+        "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+        "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
+    )
+    excerpt = _summarize_bluetoothctl_connect_output(stdout)
+    assert "br-connection-page-timeout" in excerpt
+    assert "bluetoothctl]" not in excerpt
+    assert "[CHG]" not in excerpt
+
+
+def test_summarize_connect_output_no_signal_returns_empty():
+    """When the transcript contains only prompt + async-notification
+    noise (no command echo, no BlueZ error), the helper must return an
+    empty string so the caller falls back to the bare warning instead
+    of logging `[bluetoothctl]>` as "the BlueZ error".
+    """
+    from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
+
+    stdout = (
+        "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
+        "[NEW] Device AA:BB:CC:DD:EE:FF Some Speaker\n"
+        "[DEL] Device 11:22:33:44:55:66 Old Speaker\n"
+        "[bluetooth]#\n"
+    )
+    assert _summarize_bluetoothctl_connect_output(stdout) == ""
+
+
 # ---------------------------------------------------------------------------
 # is_device_connected — various bluetoothctl output formats
 # ---------------------------------------------------------------------------
