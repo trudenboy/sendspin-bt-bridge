@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.1-rc.2] - 2026-05-15
+
+### Fixed
+- **Proxmox LXC `upgrade.sh` no longer leaves the service in a `No module named sendspin_bridge` restart loop** when the swap completes successfully. The editable bridge package (`pip install -e`) was being registered against the temporary `mktemp -d` staging directory **before** the staged tree was moved to `/opt/sendspin-client`; once the script exited, the `trap cleanup EXIT` deleted the staging directory, leaving the `.pth` in `site-packages` pointing at a path that no longer existed. Rollback couldn't recover either, because it didn't re-register the editable install for the restored old tree (the `.pth` had already been clobbered during the upgrade attempt). The editable install now runs **after** the `mv` swap, against the final `/opt/sendspin-client` path, and the rollback path does the same against the restored backup. Reported by @Pauld-1 in #309.
+
 ## [2.71.1-rc.1] - 2026-05-15
 
 ### Added

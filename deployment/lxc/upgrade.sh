@@ -141,7 +141,6 @@ record_release_ref() {
 
 update_python_dependencies() {
   local requirements_file="$1"
-  local app_root="$2"
   local arch
 
   arch=$(uname -m)
@@ -156,7 +155,15 @@ update_python_dependencies() {
   else
     pip3 install --break-system-packages -q -r "${requirements_file}" 2>/dev/null || true
   fi
-  # Reinstall the bridge package against the new src tree.
+}
+
+register_editable_install() {
+  # Re-register the editable bridge package against its on-disk path.
+  # MUST run after the staged tree has been moved to its final location —
+  # otherwise the .pth in site-packages points at a `mktemp -d` path that
+  # the EXIT trap will delete, leaving `python3 -m sendspin_bridge` with
+  # `No module named sendspin_bridge` until manually fixed.
+  local app_root="$1"
   if [[ -n "${app_root}" && -f "${app_root}/pyproject.toml" ]]; then
     pip3 install --break-system-packages -q --no-deps -e "${app_root}" 2>/dev/null || true
   fi
@@ -231,6 +238,7 @@ rollback_update() {
   systemctl stop sendspin-client 2>/dev/null || true
   rm -rf "${APP_DIR}"
   mv "${BACKUP_APP}" "${APP_DIR}"
+  register_editable_install "${APP_DIR}"
   restore_systemd_units
   systemctl daemon-reload
 
@@ -272,7 +280,7 @@ NEW_VERSION=$(cat "${STAGE_APP}/VERSION" 2>/dev/null || echo "unknown")
 
 # ─── 2. Update Python dependencies ───────────────────────────────────────────
 msg "Updating Python dependencies..."
-update_python_dependencies "${STAGE_APP}/requirements.txt" "${STAGE_APP}"
+update_python_dependencies "${STAGE_APP}/requirements.txt"
 ok "Python dependencies updated"
 
 # ─── 3. Validate staged tree ──────────────────────────────────────────────────
@@ -300,6 +308,7 @@ fi
 msg "Restarting sendspin-client..."
 mv "${APP_DIR}" "${BACKUP_APP}"
 mv "${STAGE_APP}" "${APP_DIR}"
+register_editable_install "${APP_DIR}"
 
 if systemctl restart sendspin-client && smoke_check_service; then
   ok "sendspin-client is running"

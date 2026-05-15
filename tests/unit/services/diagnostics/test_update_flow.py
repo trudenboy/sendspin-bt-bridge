@@ -469,3 +469,39 @@ def test_lxc_upgrade_script_install_systemd_units_uses_deployment_path():
     assert "${app_root}/deployment/lxc/sendspin-client.service" in text
     assert "${app_root}/lxc/pulseaudio-system.service" not in text
     assert "${app_root}/lxc/sendspin-client.service" not in text
+
+
+def test_lxc_upgrade_script_registers_editable_install_after_swap():
+    """The editable `pip install -e` for the bridge package must run AFTER the
+    staged tree is moved to its final location. If it runs against the temp
+    `mktemp -d` STAGE_APP path, the EXIT trap deletes that directory and the
+    .pth in site-packages becomes a stale pointer — leaving the service in a
+    `No module named sendspin_bridge` restart loop. Rollback must do the same.
+    """
+    repo_root = Path(__file__).resolve().parents[4]
+    text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+
+    # Helper exists and is invoked against the final on-disk path.
+    assert "register_editable_install()" in text
+    assert 'register_editable_install "${APP_DIR}"' in text
+
+    # update_python_dependencies must no longer call pip install -e for the
+    # bridge package — that responsibility moved into register_editable_install
+    # so we can defer it until after the mv. The function should now take a
+    # single positional arg (requirements file).
+    assert 'update_python_dependencies "${STAGE_APP}/requirements.txt"\n' in text
+
+    # Both call sites — the upgrade success path and rollback — must
+    # re-register the editable install after their respective `mv`. The
+    # rollback path appears earlier in the file (it's a function defined
+    # before the main flow), so its register call is the FIRST occurrence
+    # and the success-path register call is the LAST occurrence.
+    swap_marker = 'mv "${STAGE_APP}" "${APP_DIR}"'
+    rollback_marker = 'mv "${BACKUP_APP}" "${APP_DIR}"'
+    register_marker = 'register_editable_install "${APP_DIR}"'
+    assert text.index(rollback_marker) < text.index(register_marker), (
+        "rollback must register editable install after restoring backup"
+    )
+    assert text.index(swap_marker) < text.rindex(register_marker), (
+        "success path must register editable install after the swap"
+    )
