@@ -23,6 +23,10 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 - Bluetooth adapter accessible to the HA host
 - Music Assistant running on your network
 
+<Aside type="caution">
+  **CPU baseline (HAOS on x86):** HAOS / Supervised on AMD64 hardware needs a CPU at the `x86-64-v2` baseline (SSE4.2 + POPCNT). Old Intel Atom / AMD Bobcat / Jaguar boards will hit a `signal=4` (SIGILL) crash on every daemon spawn. See [Docker › CPU baseline](/installation/docker/#cpu-baseline-x86_64) for the diagnostic. ARM HAOS images (Raspberry Pi 4+, Odroid N2+) are not affected.
+</Aside>
+
 ## Installation
 
 <Steps>

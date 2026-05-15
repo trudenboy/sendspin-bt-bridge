@@ -14,6 +14,10 @@ LXC is the native non-Docker option for appliance-style hosts such as Proxmox VE
 | **Proxmox VE** | Host `bluetoothd` via D-Bus bridge | PulseAudio inside the container | `proxmox-create.sh` |
 | **OpenWrt / TurrisOS** | Host `bluetoothd` via D-Bus bridge | PulseAudio inside the container | `openwrt/create.sh` |
 
+<Aside type="caution">
+  **CPU baseline:** the bridge's audio path requires an `x86-64-v2` CPU (SSE4.2 + POPCNT) on AMD64 hosts. Older CPUs (AMD Bobcat / Jaguar, pre-Sandy-Bridge Intel) hit a `signal=4` (SIGILL) crash on every daemon spawn. See [Docker › CPU baseline](/installation/docker/#cpu-baseline-x86_64) for the one-line `grep /proc/cpuinfo` check and the list of confirmed-working baselines.
+</Aside>
+
 ## Proxmox VE
 
 ### Quick install

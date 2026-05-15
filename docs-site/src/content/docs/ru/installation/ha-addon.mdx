@@ -23,6 +23,10 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 - Bluetooth-адаптер, доступный хосту HA
 - Запущенный Music Assistant в вашей сети
 
+<Aside type="caution">
+  **Базовый уровень CPU (HAOS на x86):** HAOS / Supervised на AMD64-железе требует CPU уровня `x86-64-v2` (SSE4.2 + POPCNT). Старые Intel Atom / AMD Bobcat / Jaguar материнки будут ловить `signal=4` (SIGILL) на каждом запуске демона. Диагностика — в разделе [Docker › Базовый уровень CPU](/ru/installation/docker/#базовый-уровень-cpu-x86_64). На ARM-образах HAOS (Raspberry Pi 4+, Odroid N2+) этой проблемы нет.
+</Aside>
+
 ## Установка
 
 <Steps>

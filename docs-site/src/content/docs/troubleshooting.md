@@ -419,3 +419,32 @@ If you see the Home Assistant Supervisor reporting no internet while the host ot
 ## No sound on armv7l
 
 If Bluetooth connects and the UI shows playback but there is still silence on armv7l, update to a release that includes the PyAV compatibility patch. Older PyAV builds on armv7l are missing the layout attribute expected by the FLAC decoder.
+
+## CPU-baseline crash (SIGILL / signal=4)
+
+**Symptom.** The device card shows the daemon repeatedly exiting with `code=-4, signal=4` and lifetime in the 8–14 s range. The diagnostics report's `--- SENDSPIN CONNECTION ---` block confirms the same pattern across several spawn cycles, and there is no Python traceback anywhere in the logs. On bridge versions older than v2.71.0 the same problem looked like a silent ~10 s restart loop with no signal — v2.71.0's daemon-exit observability is what makes this class of bug visible at all.
+
+**Cause.** The daemon's audio path (PyAV / ffmpeg / NumPy) ships pre-built wheels compiled for the `x86-64-v2` micro-architecture — at least **SSE4.2** and **POPCNT**. CPUs that predate this baseline (AMD Bobcat / Jaguar netbook line, pre-Sandy-Bridge Intel, the default `qemu64` CPU model) cannot execute one of the SIMD instructions in those wheels. The kernel delivers `SIGILL` to the daemon subprocess, which terminates before any Python `try` / `except` can run.
+
+**Diagnose.** On the host (not inside the container):
+
+```bash
+grep -m1 -E 'sse4_2|popcnt' /proc/cpuinfo
+```
+
+An empty result means your CPU is below the baseline. Also useful — confirm the exact CPU and reported feature flags:
+
+```bash
+grep -m1 'model name' /proc/cpuinfo
+grep -m1 flags /proc/cpuinfo | tr ' ' '\n' | grep -E '^(sse|sse2|sse3|ssse3|sse4|sse4_1|sse4_2|popcnt|avx|avx2)$' | sort -u
+```
+
+**Resolution paths.**
+
+| Situation | Fix |
+|---|---|
+| Bare-metal x86 below the baseline (AMD Bobcat / Jaguar, pre-Sandy-Bridge Intel) | Move the bridge to newer hardware — Sandy Bridge (2011) / AMD Bulldozer / Atom Silvermont / Raspberry Pi 4 onward all work as-is. |
+| QEMU / KVM guest | Set the guest CPU model to `host` (passes host features through) or `qemu64,+sse4.2,+popcnt`. The default `qemu64` is below baseline. |
+| Docker `--platform=linux/amd64` on non-x86 host via qemu-user | Drop the `--platform` flag and let Docker pick the native architecture (`linux/arm64` / `linux/arm/v7`). qemu-user does not implement every SIMD instruction the wheels assume. |
+
+A custom from-source rebuild of PyAV + NumPy targeting a wider compatibility floor is technically possible but is **not** published as an image and is not maintained as a supported path. The project recommends the hardware / VM CPU-model fix instead.

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Documentation: x86_64 CPU baseline (`x86-64-v2` / SSE4.2 + POPCNT) is now spelled out** on the Docker, LXC and HA addon installation pages, and there is a dedicated **CPU-baseline crash (SIGILL / signal=4)** section in the troubleshooting guide with a one-line `grep /proc/cpuinfo` check and resolution paths for bare-metal, QEMU/KVM, and Docker `--platform` cases. The bundled audio path (PyAV / ffmpeg / NumPy) has been on this baseline since the v2.50.x NumPy 2.x bump, but the requirement was only mentioned in journey-log entries until now; v2.71.0's daemon-exit observability finally surfaces the underlying `SIGILL` instead of presenting it as a silent ~10 s restart loop. Mirrored in EN + RU. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
+
 ## [2.71.0] - 2026-05-15
 
 ### Added

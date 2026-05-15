@@ -11,12 +11,34 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 - Bluetooth adapter on the host
 - PulseAudio or PipeWire on the host
 - Music Assistant on your network
+- On AMD64 hosts: a CPU at the [`x86-64-v2` baseline](#cpu-baseline-x86_64) (SSE4.2 + POPCNT)
 
 The published image supports `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 
 <Aside type="tip">
   Installing on a Raspberry Pi? Use the dedicated [Raspberry Pi guide](/installation/raspberry-pi/) for model-specific advice and the one-liner installer.
 </Aside>
+
+### CPU baseline (x86_64)
+
+The bundled audio path (PyAV / ffmpeg / NumPy) ships pre-built wheels compiled for the **`x86-64-v2`** micro-architecture, which requires **SSE4.2** and **POPCNT**. On CPUs that predate this baseline the daemon subprocess spawns and immediately dies with `signal=4` (SIGILL — "Illegal Instruction"). Since v2.71.0 the device card and the diagnostics report's `--- SENDSPIN CONNECTION ---` block surface the exit code and signal directly; before that, the failure looked like a silent ~10 s restart loop with no traceback.
+
+Confirmed-working baselines:
+
+| Family | Minimum |
+|---|---|
+| Intel x86 | Sandy Bridge / 2nd-gen Core (2011), Atom Silvermont, all modern Celeron / Pentium |
+| AMD x86 | Bulldozer / FX (2011), Jaguar, Ryzen — any 2011+ part **except the Bobcat netbook line** |
+| ARM | All `aarch64` and `arm/v7` Raspberry Pi 4+ images (no SSE constraint) |
+| QEMU / KVM | Guest CPU model `host` (recommended) or `qemu64,+sse4.2,+popcnt` — the default `qemu64` is below baseline |
+
+Check your host with:
+
+```bash
+grep -m1 -E 'sse4_2|popcnt' /proc/cpuinfo
+```
+
+A non-empty match means the bridge will run. An empty match means the daemon will crash on every spawn; see [Troubleshooting › CPU-baseline crash](/troubleshooting/#cpu-baseline-crash-sigill--signal4) for the diagnostic and resolution paths.
 
 ## Quick start
 

@@ -14,6 +14,10 @@ LXC — нативный non-Docker вариант для appliance-хостов
 | **Proxmox VE** | `bluetoothd` хоста через D-Bus bridge | PulseAudio внутри контейнера | `proxmox-create.sh` |
 | **OpenWrt / TurrisOS** | `bluetoothd` хоста через D-Bus bridge | PulseAudio внутри контейнера | `openwrt/create.sh` |
 
+<Aside type="caution">
+  **Базовый уровень CPU:** аудио-стек требует CPU уровня `x86-64-v2` (SSE4.2 + POPCNT) на AMD64-хостах. На более старых CPU (AMD Bobcat / Jaguar, Intel до Sandy Bridge) демон будет падать с `signal=4` (SIGILL) при каждом запуске. Проверка одной командой через `grep /proc/cpuinfo` и список подтверждённых baseline'ов — в разделе [Docker › Базовый уровень CPU](/ru/installation/docker/#базовый-уровень-cpu-x86_64).
+</Aside>
+
 ## Proxmox VE
 
 ### Быстрая установка
