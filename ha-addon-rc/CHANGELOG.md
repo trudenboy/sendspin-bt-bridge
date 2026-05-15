@@ -7,54 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.71.0-rc.6] - 2026-05-14
-
-### Changed
-- **`sendspin` upstream bumped 7.1.0 → 7.3.1.** Pulls in upstream fixes that affect this bridge directly: the server-command listener is no longer lost after a daemon reconnect, `sendspin serve` no longer crashes on Python 3.12, the audio-sync delta is now correct after a server-driven delay change, mid-stream joins no longer trigger an unwanted catch-up burst, and the ALSA backend now closes its device cleanly. Also includes PulseAudio/PipeWire integration improvements and brings `stream/clear` / `stream/end` back into spec compliance with the role-version fields removed.
-- **Other dependency bumps**: `cryptography` 47.0.0 → 48.0.0, `requests` 2.33.1 → 2.34.1, `idna` 3.13 → 3.15, `propcache` 0.4.1 → 0.5.2, and the `astral-sh/uv` Docker base image 0.11.11 → 0.11.14.
-
-## [2.71.0-rc.5] - 2026-05-13
-
-### Added
-- **Raspberry Pi installer auto-enables `loginctl enable-linger`** for the audio user when PipeWire is detected, so the user systemd manager (which owns WirePlumber and the `bluez_*` sinks) survives logout and reboots without an interactive session. Previously the install completed cleanly but the bridge lost its audio sinks on next reboot until the user logged in once.
-- **Raspberry Pi preflight check now flags missing `libspa-0.2-bluetooth`** when PipeWire is the active audio system. The diagnostic surfaces a single-line install command instead of leaving the operator to deduce it from "speaker pairs but no audio sink appears" symptoms.
-
-### Changed
-- **Proxmox VM installer apt list now includes `libspa-0.2-bluetooth`** so PipeWire on the freshly-provisioned VM has a Bluetooth audio backend out of the box — Ubuntu 24.04 ships PipeWire as the default audio system but doesn't pull this plugin in by default.
-- **Headless-PipeWire docs now start with the `libspa-0.2-bluetooth` install step** before the linger / `with-logind` workarounds; whichever fix you needed before, the package install was a silent prerequisite. Mirrored in EN + RU Docker installation and troubleshooting pages.
-
-## [2.71.0-rc.4] - 2026-05-13
-
-### Fixed
-- **LXC installer: switch to `--ignore-installed` on the bulk pip install** instead of patching the per-package allow-list every time a new Debian-shipped Python package without a `RECORD` file shows up. `Pygments` was added to that list in 2.71.0-rc.3, but the next install run hit the same error on `rich`. The class of "Cannot uninstall X, RECORD not found" bug now resolves once and for all — pip installs bridge dependencies into `/usr/local/lib/.../site-packages/` over the Debian originals without touching them.
-
-## [2.71.0-rc.3] - 2026-05-13
-
-### Fixed
-- **LXC installer: one more Debian-shipped Python package without a `RECORD` file.** `Pygments` ships with the Ubuntu 24.04 base image via apt and pip refuses to upgrade it (`Cannot uninstall Pygments, RECORD file not found`). Added to the same `pre-upgrade` list already used for `typing-extensions`, `blinker`, and `requests` so the bridge's pip requirements install can proceed.
-
-## [2.71.0-rc.2] - 2026-05-13
-
-### Fixed
-- **Proxmox LXC fresh-install one-liner now works again.** The April 29 reorganization moved deployment scripts from `lxc/` into `deployment/lxc/` but missed updating the internal download URL inside the Proxmox helper script and the file-copy paths inside the LXC installer itself; the four supporting files (PulseAudio configs and the two systemd units) were silently `cp`-failed and the installer aborted before reaching the first runnable bridge. The installer scripts, the Proxmox helper, the LXC quick-install docs (en + ru) and the deployment README all now point at the canonical `deployment/lxc/` path, so `bash <(curl -fsSL .../proxmox-create.sh)` completes end-to-end.
-- **LXC installer missing build dependencies for `dbus-python`.** `dbus-python` has no binary wheel on PyPI and pip therefore builds it from source; the build needs `pkg-config`, `libdbus-1-dev` and `libglib2.0-dev` which the installer's `apt-get install` list didn't include, so the install failed at the `pip install -r requirements.txt` step with a `meson` "Did not find pkg-config" error. The three packages have been added to the installer's system-package list.
-
-## [2.71.0-rc.1] - 2026-05-13
-
-### Added
-- **Strict validation for the `SENDSPIN_SERVER` config field.** Values with a scheme prefix (`http://`), embedded port (`:8095`), path/slash, or whitespace are now rejected with a clear, field-specific error — both in the web-UI form (inline message + native `pattern` check) and via `POST /api/config`. A startup pre-flight gate in the bridge also refuses to spawn the daemon when a raw config edit slipped a malformed value past the form, populating the device's banner with the same actionable message instead of looping silently. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-- **Daemon-exit events now surface exit code, signal, lifetime, and a tail of the daemon output** in the parent log and on the device card. The same data is recorded into a per-device spawn-history ring that the diagnostics report renders in the new **`--- SENDSPIN CONNECTION ---`** block, with resolved target URL, reachability probe result, and the last 5 spawn cycles annotated as expected/unexpected. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-- **Automatic detection of repeating-interval daemon exits.** When the last three unexpected daemon exits land within ±1 s of each other (the connection-handshake-timeout signature behind the silent-10s-loop class of bug), the bridge raises a specific guidance banner — "Sendspin daemon exits every ~Ns" — instead of cycling restart-loop warnings forever. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-- **Test connection button on the Music Assistant settings card.** Probes the configured host/port (or the value currently in the form) and reports OK, port-shift warning, malformed-config error, or unreachable — without persisting anything. Backed by `POST /api/sendspin/test`. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-- **Two new operator-guidance issues**: one fires when the SENDSPIN_SERVER value is malformed (config error, caught at validation or pre-flight); the other fires when the recurring-interval daemon-exit pattern is detected (runtime). Both carry targeted remediation actions to the matching settings card. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-
-### Changed
-- **Default Sendspin port is now `8927`** to match Music Assistant's actual upstream Sendspin provider. Configs that explicitly pin the legacy `9000` keep working — the port probe now runs on every daemon spawn, dials the configured port first, and auto-shifts to `8927` when the configured port is closed. The HA addon description has been corrected to stop claiming `9000` "matches the MA default". ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-- **Troubleshooting docs now document the BlueZ version requirement for the v2.70.0 AVDTP-collision fix.** The fix decides whether to skip the A2DP stabilization delay by reading `org.bluez.MediaTransport1.State` after a Bluetooth reconnect — that is only reliable on BlueZ ≥ 5.79. On Raspberry Pi OS Bookworm (BlueZ 5.66) the transport state returns `idle` prematurely during AVDTP setup, so the bridge takes the fast-path anyway and the Sony WH-1000XM4 reconnect storm continues. The new section in the English and Russian troubleshooting pages explains the symptom, the version split, and the recommended upgrade path (Debian Trixie / fresh Raspberry Pi OS 12 / HAOS 17.1+ all ship BlueZ ≥ 5.82). Community-verified by @arisonpl. ([#269](https://github.com/trudenboy/sendspin-bt-bridge/issues/269))
-
-### Fixed
-- **The bridge no longer silently constructs malformed WebSocket URLs** such as `ws://http://host:port:port/sendspin` when `SENDSPIN_SERVER` is set to a full URL by mistake. The Sendspin daemon used to exit at the websockets open_timeout (~10 s) with no Python traceback, no exit-code log, and no `last_error` on the device card, leaving operators no signal to act on — debug threads on this could take many round-trips. The bridge now fails fast with a clear, field-specific error before spawning the daemon. ([#291](https://github.com/trudenboy/sendspin-bt-bridge/issues/291))
-
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)
