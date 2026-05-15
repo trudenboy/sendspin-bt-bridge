@@ -25,6 +25,8 @@ If your model isn't listed, please [open an issue](https://github.com/trudenboy/
 | **Yandex Mini 2** | Author's daily deployment | Standby quirks documented in [Troubleshooting](/troubleshooting/) |
 | **Lenco LS-500** | Author's daily deployment | A2DP, multiroom |
 | **AfterShokz OpenMove** | Author's daily deployment | Bone-conduction headphones; A2DP playback works cleanly while in BT range |
+| **HUAWEI FreeClip** (open-ear clip earbuds) | Author's daily deployment | A2DP plays cleanly; treat as a portable headphone — out-of-range drops are normal |
+| **Anker Soundcore Sport X10** (sport earbuds) | Author's daily deployment | A2DP plays cleanly; same out-of-range note as other portable earbuds |
 | **Jam Heavy Metal** | [#213](https://github.com/trudenboy/sendspin-bt-bridge/issues/213) | A2DP in multiroom on BlueZ 5.85 |
 | **HMDX Jam** | [#166](https://github.com/trudenboy/sendspin-bt-bridge/issues/166) — fixed in v2.60.2 | Needed explicit `Device1.ConnectProfile(A2DP_SINK_UUID)` because the speaker also advertises A2DP source / HFP. Auto since v2.60.2 |
 | **IKEA Kallsup** | [#166](https://github.com/trudenboy/sendspin-bt-bridge/issues/166), [#162](https://github.com/trudenboy/sendspin-bt-bridge/issues/162) — fixed in v2.60.2 | Same A2DP-Sink ConnectProfile fallback as HMDX Jam |
