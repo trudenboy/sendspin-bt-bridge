@@ -412,3 +412,60 @@ def test_lxc_scripts_sync_repo_snapshot_recursively():
         assert 'cp -a "${src_root}/pyproject.toml"' in text
         assert "record_release_ref()" in text
         assert ".release-ref" in text
+
+
+def test_resolve_upgrade_script_prefers_deployment_lxc_path(monkeypatch):
+    """Post-2.66 layout installs upgrade.sh under deployment/lxc/. The resolver
+    must look there first; the legacy /opt/sendspin-client/lxc/ path is kept as
+    a fallback for installs that predate the reorg."""
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
+
+    expected = "/opt/sendspin-client/deployment/lxc/upgrade.sh"
+    monkeypatch.setattr(update_checker.os.path, "isfile", lambda p: p == expected)
+
+    assert update_checker._resolve_upgrade_script() == expected
+
+
+def test_resolve_upgrade_script_falls_back_to_legacy_lxc_path(monkeypatch):
+    """Operators who installed the bridge before the deployment/ reorg still
+    have upgrade.sh under /opt/sendspin-client/lxc/ — the resolver must keep
+    finding it so they aren't stranded on the broken update flow."""
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
+
+    legacy = "/opt/sendspin-client/lxc/upgrade.sh"
+    monkeypatch.setattr(update_checker.os.path, "isfile", lambda p: p == legacy)
+
+    assert update_checker._resolve_upgrade_script() == legacy
+
+
+def test_resolve_upgrade_script_returns_none_when_no_candidates_exist(monkeypatch):
+    import sendspin_bridge.services.diagnostics.update_checker as update_checker
+
+    monkeypatch.setattr(update_checker.os.path, "isfile", lambda p: False)
+
+    assert update_checker._resolve_upgrade_script() is None
+
+
+def test_lxc_upgrade_script_self_update_url_uses_deployment_path():
+    """The in-script self-update fetch must point at deployment/lxc/upgrade.sh
+    on raw.githubusercontent.com — otherwise the self-heal fetch 404s and the
+    operator can't roll out a fix to upgrade.sh itself without manual edits."""
+    repo_root = Path(__file__).resolve().parents[4]
+    text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+
+    assert "/deployment/lxc/upgrade.sh" in text
+    # No bare /lxc/upgrade.sh in the raw URL — that's the bug from #309.
+    assert '/${GITHUB_BRANCH}/lxc/upgrade.sh' not in text
+
+
+def test_lxc_upgrade_script_install_systemd_units_uses_deployment_path():
+    """install_systemd_units() copies pulseaudio-system.service and
+    sendspin-client.service from the staged tree. Post-reorg those live under
+    deployment/lxc/, not lxc/."""
+    repo_root = Path(__file__).resolve().parents[4]
+    text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+
+    assert '${app_root}/deployment/lxc/pulseaudio-system.service' in text
+    assert '${app_root}/deployment/lxc/sendspin-client.service' in text
+    assert '${app_root}/lxc/pulseaudio-system.service' not in text
+    assert '${app_root}/lxc/sendspin-client.service' not in text

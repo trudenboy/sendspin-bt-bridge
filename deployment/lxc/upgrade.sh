@@ -43,7 +43,7 @@ _self_update() {
   if [[ -n "${_SELF_UPDATED}" ]]; then
     return  # already updated once — avoid infinite loop
   fi
-  local raw_url="https://raw.githubusercontent.com/${GITHUB_REPO}/refs/${REF_KIND}/${GITHUB_BRANCH}/lxc/upgrade.sh"
+  local raw_url="https://raw.githubusercontent.com/${GITHUB_REPO}/refs/${REF_KIND}/${GITHUB_BRANCH}/deployment/lxc/upgrade.sh"
   local new_script
   new_script="$(mktemp)"
   if wget -q -O "${new_script}" "${raw_url}" 2>/dev/null && [[ -s "${new_script}" ]]; then
@@ -194,8 +194,8 @@ backup_systemd_units() {
 
 install_systemd_units() {
   local app_root="$1"
-  cp "${app_root}/lxc/pulseaudio-system.service" /etc/systemd/system/pulseaudio-system.service
-  cp "${app_root}/lxc/sendspin-client.service" /etc/systemd/system/sendspin-client.service
+  cp "${app_root}/deployment/lxc/pulseaudio-system.service" /etc/systemd/system/pulseaudio-system.service
+  cp "${app_root}/deployment/lxc/sendspin-client.service" /etc/systemd/system/sendspin-client.service
 }
 
 restore_systemd_units() {

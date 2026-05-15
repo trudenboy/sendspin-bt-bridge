@@ -8,6 +8,7 @@ import os
 import re
 import ssl
 import subprocess
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -356,14 +357,22 @@ def channel_image_tag(channel: str | None) -> str:
 
 
 def _resolve_upgrade_script() -> str | None:
-    """Resolve upgrade.sh location for installed and dev environments."""
-    upgrade_script = "/opt/sendspin-client/lxc/upgrade.sh"
-    if os.path.isfile(upgrade_script):
-        return upgrade_script
-    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    candidate = os.path.join(base, "lxc", "upgrade.sh")
-    if os.path.isfile(candidate):
-        return candidate
+    """Resolve upgrade.sh location for installed and dev environments.
+
+    The April 2026 deployment reorg moved scripts from `lxc/` to
+    `deployment/lxc/`; the legacy locations stay in the candidate list so
+    operators on a pre-reorg `/opt/sendspin-client/` layout still resolve.
+    """
+    repo_root = Path(__file__).resolve().parents[4]
+    candidates = [
+        "/opt/sendspin-client/deployment/lxc/upgrade.sh",
+        "/opt/sendspin-client/lxc/upgrade.sh",
+        str(repo_root / "deployment" / "lxc" / "upgrade.sh"),
+        str(repo_root / "lxc" / "upgrade.sh"),
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
     return None
 
 
