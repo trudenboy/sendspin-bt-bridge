@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.1-rc.3] - 2026-05-15
+
+### Fixed
+- **Proxmox LXC `upgrade.sh` self-update no longer corrupts process-substitution invocations.** When the script was launched as `bash <(curl -fsSL …/deployment/lxc/upgrade.sh)` — exactly the form the README and the in-bridge update guidance recommend — `${BASH_SOURCE[0]}` is `/dev/fd/N` (a pipe), so the self-update step's `cp ${new} ${BASH_SOURCE[0]}` silently failed against the read-only pipe and the follow-up `exec bash ${BASH_SOURCE[0]}` re-read the partially-consumed pipe, producing a `syntax error near unexpected token '('` somewhere in the middle of the script rather than running the upgrade. The self-update step now early-returns when `${BASH_SOURCE[0]}` is not a regular file — the curl invocation that fed bash already fetched the latest copy, so the in-script self-update is redundant in that case anyway. Reported by @Pauld-1 in #309.
+
 ## [2.71.1-rc.2] - 2026-05-15
 
 ### Fixed

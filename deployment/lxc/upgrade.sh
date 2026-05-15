@@ -43,6 +43,16 @@ _self_update() {
   if [[ -n "${_SELF_UPDATED}" ]]; then
     return  # already updated once — avoid infinite loop
   fi
+  # Skip self-update when the script source isn't a regular file on disk.
+  # Invocations like `bash <(curl …)` or `curl … | bash` set BASH_SOURCE[0]
+  # to /dev/fd/N or "main" — cp/chmod/exec against those produce undefined
+  # behavior (cp to a read-only pipe fails; exec re-reads a partially
+  # consumed pipe and parses garbage mid-script). The curl that fed bash
+  # already fetched the latest upgrade.sh, so the self-update step here is
+  # redundant in that case anyway.
+  if [[ ! -f "${BASH_SOURCE[0]}" ]]; then
+    return
+  fi
   local raw_url="https://raw.githubusercontent.com/${GITHUB_REPO}/refs/${REF_KIND}/${GITHUB_BRANCH}/deployment/lxc/upgrade.sh"
   local new_script
   new_script="$(mktemp)"

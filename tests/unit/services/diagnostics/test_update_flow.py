@@ -471,6 +471,24 @@ def test_lxc_upgrade_script_install_systemd_units_uses_deployment_path():
     assert "${app_root}/lxc/sendspin-client.service" not in text
 
 
+def test_lxc_upgrade_script_self_update_skips_non_file_sources():
+    """When upgrade.sh is invoked via `bash <(curl …)` or `curl … | bash`,
+    BASH_SOURCE[0] is /dev/fd/N (a pipe) or "main" (no such file). cp/exec
+    against those produce undefined behavior — the rc.2 release shipped
+    without this guard and Pauld hit `syntax error near unexpected token '('`
+    because exec re-read a partially-consumed pipe and parsed garbage from
+    the middle of the script. Guard with `[[ -f ${BASH_SOURCE[0]} ]]`."""
+    repo_root = Path(__file__).resolve().parents[4]
+    text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+
+    self_update_start = text.index("_self_update() {")
+    raw_url_line = text.index("raw_url=", self_update_start)
+    guard = text[self_update_start:raw_url_line]
+
+    # The -f guard must appear BEFORE the wget/cp/exec dance.
+    assert '[[ ! -f "${BASH_SOURCE[0]}" ]]' in guard
+
+
 def test_lxc_upgrade_script_registers_editable_install_after_swap():
     """The editable `pip install -e` for the bridge package must run AFTER the
     staged tree is moved to its final location. If it runs against the temp
