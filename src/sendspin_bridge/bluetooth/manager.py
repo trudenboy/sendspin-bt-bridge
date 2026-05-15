@@ -104,10 +104,12 @@ def _summarize_bluetoothctl_connect_output(output: str) -> str:
 
     Prefers a line containing the BlueZ error fingerprint (``Failed to
     connect: …``); otherwise falls back to the last non-empty content
-    line. Strips ANSI colour codes and the ``[bluetooth]#`` prompt echo
-    so the result is safe to embed in a single log message. Returns an
-    empty string when ``output`` carries no usable signal — the caller
-    then falls back to the bare warning.
+    line. Strips ANSI colour codes and discards bluetoothctl's prompt
+    variants (``[bluetooth]#``, ``[bluetoothctl]>``) and its
+    asynchronous discovery notifications (``[CHG]``/``[NEW]``/``[DEL]``)
+    so they can't masquerade as a diagnostic. Returns an empty string
+    when ``output`` carries no usable signal — the caller then falls
+    back to the bare warning.
     """
     if not output:
         return ""
@@ -116,7 +118,20 @@ def _summarize_bluetoothctl_connect_output(output: str) -> str:
         line = _BCTL_ANSI_RE.sub("", raw).strip()
         if not line:
             continue
-        if line.endswith("]#") or line.startswith("[bluetooth]"):
+        # Drop interactive prompt variants:
+        #   [bluetooth]#       — default prompt
+        #   [bluetooth]# foo   — prompt-echoed command (when bluetoothctl
+        #                        is run with stdin piped + a TTY-ish term)
+        #   [bluetoothctl]>    — prompt seen in some BlueZ versions, often
+        #                        with ANSI colour codes already stripped above
+        # And async discovery notifications (``[CHG] Device <mac> …``,
+        # ``[NEW] Device …``, ``[DEL] Device …``) that share the stdout
+        # stream and would otherwise become the last-line fallback.
+        if line.endswith(("]#", "]>")):
+            continue
+        if line.startswith(("[bluetooth]", "[bluetoothctl]")):
+            continue
+        if line.startswith(("[CHG]", "[NEW]", "[DEL]")):
             continue
         cleaned.append(line)
     if not cleaned:

@@ -1075,6 +1075,51 @@ def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, cap
 
 
 # ---------------------------------------------------------------------------
+# _summarize_bluetoothctl_connect_output — prompt + async-notification noise
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_connect_output_strips_ansi_prompt_and_chg_noise():
+    """Realistic bluetoothctl transcript: ANSI-coloured `[bluetoothctl]>`
+    prompt, `[CHG]` async discovery notifications, and a final
+    `Failed to connect:` line. The excerpt must be the BlueZ error,
+    not the prompt or any of the CHG lines.
+    """
+    from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
+
+    stdout = (
+        "[\x1b[0;94mbluetoothctl]> \x1b[0mconnect D0:C9:07:11:C9:DF\n"
+        "Attempting to connect to D0:C9:07:11:C9:DF\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device D0:C9:07:11:C9:DF Connected: no\n"
+        "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+        "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
+    )
+    excerpt = _summarize_bluetoothctl_connect_output(stdout)
+    assert "br-connection-page-timeout" in excerpt
+    assert "bluetoothctl]" not in excerpt
+    assert "[CHG]" not in excerpt
+
+
+def test_summarize_connect_output_no_signal_returns_empty():
+    """When the transcript contains only prompt + async-notification
+    noise (no command echo, no BlueZ error), the helper must return an
+    empty string so the caller falls back to the bare warning instead
+    of logging `[bluetoothctl]>` as "the BlueZ error".
+    """
+    from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
+
+    stdout = (
+        "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
+        "[NEW] Device AA:BB:CC:DD:EE:FF Some Speaker\n"
+        "[DEL] Device 11:22:33:44:55:66 Old Speaker\n"
+        "[bluetooth]#\n"
+    )
+    assert _summarize_bluetoothctl_connect_output(stdout) == ""
+
+
+# ---------------------------------------------------------------------------
 # is_device_connected — various bluetoothctl output formats
 # ---------------------------------------------------------------------------
 
