@@ -39,10 +39,29 @@ _A2DP_PROFILE_DELAY = 3.0
 _SINK_RETRY_DELAY = 3.0
 _SINK_RETRY_COUNT = int(os.environ.get("SINK_RETRY_COUNT", "5"))
 
+# BlueZ 5.82 + PipeWire publishes the A2DP sink profile as ``a2dp-sink``
+# (with a dash); classic PulseAudio uses ``a2dp_sink`` (underscore). Both
+# are accepted upstream by ``pactl set-card-profile``, so we treat them
+# as equivalent here and pass through whichever the card actually
+# advertises. Issue #314.
+_A2DP_SINK_PROFILE_ALIASES = ("a2dp_sink", "a2dp-sink")
+
+
+def _pick_a2dp_sink_profile(profiles: list[str]) -> str | None:
+    """Return the actual profile string the card advertises for A2DP
+    sink, accepting either underscore (PulseAudio / legacy) or dash
+    (PipeWire / BlueZ 5.82+) naming. ``None`` if neither is present.
+    """
+    for alias in _A2DP_SINK_PROFILE_ALIASES:
+        if alias in profiles:
+            return alias
+    return None
+
 
 def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
-    """If a bluez_card for *pa_mac* exists with a non-a2dp active profile and
-    a2dp_sink among its available profiles, switch it to a2dp_sink.
+    """If a bluez_card for *pa_mac* exists with a non-A2DP-sink active
+    profile and an A2DP-sink profile available, switch it. Accepts both
+    ``a2dp_sink`` and ``a2dp-sink`` spellings (PulseAudio vs PipeWire).
 
     Returns ``True`` when a switch was performed (caller should retry sink
     discovery), ``False`` otherwise. Silently ignores all subprocess errors.
@@ -60,26 +79,28 @@ def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
             continue
         active = card.get("active_profile") or ""
         profiles = card.get("profiles") or []
-        if active == "a2dp_sink":
+        if active in _A2DP_SINK_PROFILE_ALIASES:
             return False
-        if "a2dp_sink" not in profiles:
+        target = _pick_a2dp_sink_profile(profiles)
+        if target is None:
             logger.warning(
-                "BlueZ card %s has no a2dp_sink profile available (active=%s, profiles=%s)",
+                "BlueZ card %s has no A2DP sink profile available (active=%s, profiles=%s)",
                 name,
                 active or "—",
                 ",".join(profiles) or "—",
             )
             return False
         logger.warning(
-            "BlueZ card %s is in profile %s — switching to a2dp_sink to expose audio sink",
+            "BlueZ card %s is in profile %s — switching to %s to expose audio sink",
             name,
             active or "—",
+            target,
         )
         try:
-            if set_card_profile(name, "a2dp_sink"):
-                logger.info("✓ Switched %s to a2dp_sink profile", name)
+            if set_card_profile(name, target):
+                logger.info("✓ Switched %s to %s profile", name, target)
                 return True
-            logger.warning("Failed to switch %s to a2dp_sink profile", name)
+            logger.warning("Failed to switch %s to %s profile", name, target)
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("Profile switch for %s errored: %s", name, exc)
         return False
@@ -87,13 +108,15 @@ def _switch_card_profile_to_a2dp(pa_mac: str) -> bool:
 
 
 def _cycle_card_profile_for_mac(pa_mac: str) -> bool:
-    """Cycle the ``bluez_card.{pa_mac}`` profile off → a2dp_sink as a fallback.
+    """Cycle the ``bluez_card.{pa_mac}`` profile off → A2DP-sink as a
+    fallback. Accepts both ``a2dp_sink`` and ``a2dp-sink`` profile
+    names.
 
-    Used when the direct ``set_card_profile`` succeeded but PA still did not
-    publish a ``bluez_sink.*`` for the device (state-confusion after
-    ``module-rescue-streams`` / rapid reconnect). Returns ``True`` only when
-    the off → ``a2dp_sink`` cycle completes successfully, including the final
-    switch back to the target profile.
+    Used when the direct ``set_card_profile`` succeeded but PA still did
+    not publish a ``bluez_sink.*`` for the device (state-confusion after
+    ``module-rescue-streams`` / rapid reconnect). Returns ``True`` only
+    when the off → A2DP-sink cycle completes successfully, including
+    the final switch back to the target profile.
     """
     expected = f"bluez_card.{pa_mac}"
     try:
@@ -105,11 +128,12 @@ def _cycle_card_profile_for_mac(pa_mac: str) -> bool:
     if card is None:
         return False
     profiles = card.get("profiles") or []
-    if "a2dp_sink" not in profiles:
+    target = _pick_a2dp_sink_profile(profiles)
+    if target is None:
         return False
-    logger.info("Cycling %s profile off→a2dp_sink to force sink re-publish", expected)
+    logger.info("Cycling %s profile off→%s to force sink re-publish", expected, target)
     try:
-        return bool(cycle_card_profile(expected, "a2dp_sink"))
+        return bool(cycle_card_profile(expected, target))
     except Exception as exc:  # pragma: no cover — defensive
         logger.debug("cycle_card_profile(%s) errored: %s", expected, exc)
         return False
@@ -226,11 +250,16 @@ def configure_bluetooth_audio(
             # CRITICAL: Audio routing — sink discovery with bounded retries (_SINK_RETRY_COUNT).
             # If no sink found after retries, BT speaker will connect but play no audio.
             # Sink naming differs between PipeWire and PulseAudio — order matters.
+            # The raw-colon `bluez_output.{mac_address}` variant is what
+            # WirePlumber publishes on Ubuntu 26.04+; kept last so the
+            # more specific PipeWire/PulseAudio patterns win when both
+            # exist. Issue #314.
             sink_names = [
                 f"bluez_output.{pa_mac}.1",  # PipeWire format
                 f"bluez_output.{pa_mac}.a2dp-sink",
                 f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
                 f"bluez_sink.{pa_mac}",
+                f"bluez_output.{mac_address}",  # PipeWire / WirePlumber (Ubuntu 26.04, raw MAC)
             ]
             known_names = {s["name"] for s in sinks}
 
