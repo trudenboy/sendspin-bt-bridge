@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Proxmox LXC: fail-loud at startup if an incompatible `sendspin` package is installed.** When `deployment/lxc/upgrade.sh` couldn't replace an older `sendspin` — for example 7.0.0 left over from a 2.57.x→2.66.x install — the bridge would start with a stale dependency whose daemon entry-point still takes an extra argument that the bridge dropped in v2.69.0. The daemon then crashed every 5 s in a tight restart loop with an obscure `TypeError`, with no hint that the actual problem was a pip-install that silently failed during the previous upgrade. The bridge now resolves the installed `sendspin` version at startup and refuses to start, with a single-line remediation command pointing at `pip3 install --break-system-packages -U "sendspin>=7.3.0,<8.0.0"`, when it falls outside the supported range. ([#324](https://github.com/trudenboy/sendspin-bt-bridge/issues/324))
+- **Proxmox LXC `upgrade.sh` no longer silently swallows `pip install` failures.** The four `pip3 install` calls in the dependency-update and editable-install steps previously chained `2>/dev/null || true`, so a transient PyPI hiccup or a constraint conflict against `--break-system-packages` would leave stale dependencies on disk and the script would report success. Each call now surfaces its exit code via `die`, with a message that names which step failed — root cause of the silent path that led to [#324](https://github.com/trudenboy/sendspin-bt-bridge/issues/324).
+
 ## [2.71.2-rc.1] - 2026-05-15
 
 ### Changed

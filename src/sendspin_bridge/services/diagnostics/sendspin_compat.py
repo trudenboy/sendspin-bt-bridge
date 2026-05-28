@@ -23,6 +23,13 @@ _RUNTIME_DEPENDENCIES = (
 
 _AUDIO_API_MODULE_CANDIDATES = ("sendspin.audio_devices", "sendspin.audio")
 
+# Minimum sendspin version with the post-7.3.0 SendspinDaemon API
+# (zero-arg ``_run_server_initiated``). Older versions call the override
+# with ``static_delay_ms`` and the bridge crashes immediately on first
+# server-initiated reconnect — see #324.
+SENDSPIN_MIN_VERSION = "7.3.0"
+SENDSPIN_MAX_VERSION = "8.0.0"  # exclusive — next major would be a surprise
+
 
 @dataclass(frozen=True)
 class SendspinAudioApi:
@@ -111,6 +118,81 @@ def get_runtime_dependency_versions(names: tuple[str, ...] = _RUNTIME_DEPENDENCI
 def format_dependency_versions(versions_by_name: dict[str, str]) -> str:
     """Format dependency versions for concise logging."""
     return ", ".join(f"{name}={value}" for name, value in versions_by_name.items())
+
+
+def _parse_version_tuple(version_str: str) -> tuple[int, ...] | None:
+    """Parse a dotted version like ``7.3.1`` or ``7.3.0-rc.2`` into a
+    leading-numeric tuple ``(7, 3, 1)``. Returns ``None`` for strings the
+    bridge does not recognise (``"not installed"``, ``"unknown"``, empty).
+    Pre-release / build suffixes are dropped — for the bridge's range
+    check we only care about the numeric prefix.
+    """
+    if not version_str or version_str in {"not installed", "unknown"}:
+        return None
+    parts: list[int] = []
+    for chunk in version_str.split("."):
+        digits = ""
+        for ch in chunk:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
+
+
+def check_sendspin_version_compatibility(
+    installed_version: str | None = None,
+) -> tuple[bool, str | None]:
+    """Verify the installed ``sendspin`` package falls within the range
+    the bridge supports. Used at startup to fail-loud when a stale pip
+    install survived an upgrade — see #324.
+
+    Returns ``(True, None)`` when compatible. Returns ``(False, message)``
+    with an actionable upgrade command otherwise. *installed_version* is
+    only set by tests; production callers let it default to whatever
+    ``importlib.metadata`` reports.
+    """
+    if installed_version is None:
+        try:
+            installed_version = version("sendspin")
+        except PackageNotFoundError:
+            installed_version = "not installed"
+        except Exception as exc:
+            logger.debug("Failed to resolve sendspin version: %s", exc)
+            installed_version = "unknown"
+
+    parsed = _parse_version_tuple(installed_version)
+    min_parsed = _parse_version_tuple(SENDSPIN_MIN_VERSION)
+    max_parsed = _parse_version_tuple(SENDSPIN_MAX_VERSION)
+
+    if parsed is None or min_parsed is None or max_parsed is None:
+        return False, (
+            f"Could not resolve a usable sendspin version (got {installed_version!r}). "
+            f"The bridge requires sendspin >={SENDSPIN_MIN_VERSION},<{SENDSPIN_MAX_VERSION}. "
+            f'Run: pip3 install --break-system-packages -U "sendspin>={SENDSPIN_MIN_VERSION},<{SENDSPIN_MAX_VERSION}"'
+        )
+
+    if parsed < min_parsed:
+        return False, (
+            f"Incompatible sendspin version installed: {installed_version} "
+            f"(bridge requires >={SENDSPIN_MIN_VERSION}). "
+            f"Older versions call SendspinDaemon._run_server_initiated() with "
+            f"an extra argument and the bridge daemon crashes in a loop. "
+            f'Run: pip3 install --break-system-packages -U "sendspin>={SENDSPIN_MIN_VERSION},<{SENDSPIN_MAX_VERSION}" '
+            f"(see issue #324)."
+        )
+
+    if parsed >= max_parsed:
+        return False, (
+            f"Unsupported sendspin major version installed: {installed_version} "
+            f"(bridge supports >={SENDSPIN_MIN_VERSION},<{SENDSPIN_MAX_VERSION}). "
+            f"Upgrade the bridge or pin sendspin to a supported range."
+        )
+
+    return True, None
 
 
 def load_sendspin_audio_api() -> SendspinAudioApi:

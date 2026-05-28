@@ -150,6 +150,10 @@ record_release_ref() {
 }
 
 update_python_dependencies() {
+  # CRITICAL: pip failures here are the root cause of #324 — silently
+  # swallowing them leaves a stale ``sendspin`` package on disk while
+  # the bridge code expects the newer API. Always surface non-zero
+  # exit codes via die().
   local requirements_file="$1"
   local arch
 
@@ -159,11 +163,15 @@ update_python_dependencies() {
     # Keep av==12.3.0 and install sendspin with --no-deps.
     # The FLAC decoder API difference (nb_channels missing in av<13) is handled by
     # a monkey-patch in src/sendspin_bridge/services/ipc/daemon_process.py at startup.
-    pip3 install --break-system-packages -q --no-deps -U 'sendspin>=5.3.0,<6' 2>/dev/null || true
+    # The 5.x ceiling is intentional — av<13 + sendspin 7.x is unsupported.
+    pip3 install --break-system-packages -q --no-deps -U 'sendspin>=5.3.0,<6' \
+      || die "pip3 install of sendspin (armv7 --no-deps branch) failed; aborting upgrade"
     grep -v '^sendspin' "${requirements_file}" | \
-      pip3 install --break-system-packages -q -r /dev/stdin 2>/dev/null || true
+      pip3 install --break-system-packages -q -r /dev/stdin \
+        || die "pip3 install of remaining requirements (armv7 branch) failed; aborting upgrade"
   else
-    pip3 install --break-system-packages -q -r "${requirements_file}" 2>/dev/null || true
+    pip3 install --break-system-packages -q -r "${requirements_file}" \
+      || die "pip3 install -r requirements.txt failed; aborting upgrade. Check that the host has network access and that pip can resolve the pinned package set."
   fi
 }
 
@@ -175,7 +183,8 @@ register_editable_install() {
   # `No module named sendspin_bridge` until manually fixed.
   local app_root="$1"
   if [[ -n "${app_root}" && -f "${app_root}/pyproject.toml" ]]; then
-    pip3 install --break-system-packages -q --no-deps -e "${app_root}" 2>/dev/null || true
+    pip3 install --break-system-packages -q --no-deps -e "${app_root}" \
+      || die "pip3 install -e ${app_root} failed; the bridge package is not registered against its final on-disk path"
   fi
 }
 
