@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Battery-powered Bluetooth speakers: audio configuration is now triggered immediately when the speaker auto-reconnects.** Previously, when a configured speaker had been off long enough for the reconnect backoff to saturate at five minutes, the bridge would still wait out the entire remaining backoff before noticing the speaker had come back via `PropertiesChanged: Connected`, then take another `bt_check_interval` seconds to schedule the next attempt. The visible symptom was "I turn the speaker on, but it's three to five minutes before I can play anything." The failed-reconnect backoff sleep is now interrupted by an external connect event, so audio routing is configured within a couple of seconds of the speaker rejoining the bus. ([#312](https://github.com/trudenboy/sendspin-bt-bridge/issues/312))
+
 ## [2.71.2-rc.1] - 2026-05-15
 
 ### Changed
