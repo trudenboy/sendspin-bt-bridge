@@ -11,7 +11,7 @@ aiomqtt==2.5.1
     # via sendspin-bt-bridge
 aiooui==0.1.9
     # via bluetooth-adapters
-aiosendspin==5.2.0
+aiosendspin==5.3.0
     # via
     #   aiosendspin-mpris
     #   sendspin
@@ -38,7 +38,7 @@ btsocket==0.3.0
     # via
     #   bluetooth-auto-recovery
     #   sendspin-bt-bridge
-certifi==2026.4.22
+certifi==2026.5.20
     # via requests
 cffi==2.0.0
     # via
@@ -54,7 +54,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   qrcode
 cryptography==48.0.0
     # via sendspin-bt-bridge
-dbus-fast==4.0.4
+dbus-fast==5.0.3
     # via
     #   bleak
     #   bluetooth-adapters
@@ -215,7 +215,7 @@ winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
     # via bleak
 yarl==1.22.0
     # via aiohttp
-zeroconf==0.148.0
+zeroconf==0.149.16
     # via
     #   aiosendspin
     #   sendspin-bt-bridge
