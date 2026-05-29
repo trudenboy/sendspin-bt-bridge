@@ -163,6 +163,28 @@ def test_configure_bluetooth_audio_pulseaudio_pattern(bt_manager):
     assert result is True
 
 
+def test_configure_bluetooth_audio_pipewire_raw_mac_pattern(bt_manager):
+    """Finds a WirePlumber-style sink published as ``bluez_output.{MAC_with_colons}``.
+
+    Ubuntu 26.04 / PipeWire publishes BT sinks with the raw MAC (with
+    colons) and no ``.1`` / ``.a2dp-sink`` suffix. Regression test for
+    issue #314.
+    """
+    sink_name = f"bluez_output.{bt_manager.mac_address}"
+
+    fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
+    with (
+        patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=fake_sinks),
+        patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
+        patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+    ):
+        result = bt_manager.configure_bluetooth_audio()
+
+    assert result is True
+
+
 def test_configure_bluetooth_audio_no_sink(bt_manager):
     """Returns False when no matching sink is found."""
     with (
@@ -176,10 +198,14 @@ def test_configure_bluetooth_audio_no_sink(bt_manager):
     assert result is False
 
 
-def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
-    """When no sink found but bluez_card exists with non-a2dp profile, switch
-    to a2dp_sink and retry once. Covers AKG Y500 / BlueZ 5.82 regression where
-    the card connects in headset_head_unit profile and no sink is exposed."""
+@pytest.mark.parametrize("a2dp_profile_name", ["a2dp_sink", "a2dp-sink"])
+def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager, a2dp_profile_name):
+    """When no sink found but bluez_card exists with non-a2dp profile,
+    switch to the A2DP-sink profile and retry once. Covers AKG Y500 /
+    BlueZ 5.82 regression where the card connects in
+    ``headset_head_unit``. Parametrized over both spellings of the
+    profile name (PulseAudio underscore vs PipeWire dash). Issue #314.
+    """
     pa_mac = bt_manager.mac_address.replace(":", "_")
     card_name = f"bluez_card.{pa_mac}"
     sink_name = f"bluez_sink.{pa_mac}.a2dp_sink"
@@ -204,7 +230,7 @@ def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
             "name": card_name,
             "driver": "module-bluez5-device.c",
             "active_profile": "headset_head_unit",
-            "profiles": ["off", "a2dp_sink", "headset_head_unit"],
+            "profiles": ["off", a2dp_profile_name, "headset_head_unit"],
         }
     ]
 
@@ -227,7 +253,8 @@ def test_configure_bluetooth_audio_autoswitches_bluez_card_profile(bt_manager):
         result = bt_manager.configure_bluetooth_audio()
 
     assert result is True
-    assert set_profile_calls == [(card_name, "a2dp_sink")]
+    # Whichever spelling the card advertises is the one passed to pactl.
+    assert set_profile_calls == [(card_name, a2dp_profile_name)]
 
 
 def bt_audio_retry_threshold():
@@ -238,8 +265,10 @@ def bt_audio_retry_threshold():
     return bt_audio._SINK_RETRY_COUNT + 1
 
 
-def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_manager):
-    """If active_profile is already a2dp_sink, do not call set_card_profile."""
+@pytest.mark.parametrize("a2dp_profile_name", ["a2dp_sink", "a2dp-sink"])
+def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_manager, a2dp_profile_name):
+    """If active_profile is already an A2DP-sink variant (either
+    spelling), do not call set_card_profile. Issue #314."""
     pa_mac = bt_manager.mac_address.replace(":", "_")
     card_name = f"bluez_card.{pa_mac}"
 
@@ -247,8 +276,8 @@ def test_configure_bluetooth_audio_skips_profile_switch_when_already_a2dp(bt_man
         {
             "name": card_name,
             "driver": "module-bluez5-device.c",
-            "active_profile": "a2dp_sink",
-            "profiles": ["off", "a2dp_sink", "headset_head_unit"],
+            "active_profile": a2dp_profile_name,
+            "profiles": ["off", a2dp_profile_name, "headset_head_unit"],
         }
     ]
 
