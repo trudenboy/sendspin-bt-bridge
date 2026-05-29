@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Ubuntu 26.04 / WirePlumber: Bluetooth audio sinks published with a raw colon-separated MAC are now discovered.** WirePlumber's newer naming convention publishes BT outputs as `bluez_output.XX:XX:XX:XX:XX:XX` (raw MAC, no `.1` / `.a2dp-sink` suffix). The bridge previously tried four PipeWire/PulseAudio patterns based on the underscore-substituted MAC and missed this variant, falling back to the default audio device with no audible cue. The pattern is now included in the discovery list, last so the more specific PipeWire/PulseAudio shapes still win when both forms exist. ([#314](https://github.com/trudenboy/sendspin-bt-bridge/issues/314))
+- **BlueZ 5.82 + PipeWire: card-profile auto-switch and cycle helpers no longer false-warn on already-correct cards.** PipeWire publishes the A2DP sink profile as `a2dp-sink` (with a dash) while classic PulseAudio uses `a2dp_sink` (underscore); both are accepted by `pactl set-card-profile`. The bridge's profile auto-switch was hard-coded to the underscore form, so on PipeWire hosts it logged `BlueZ card … has no a2dp_sink profile available` even when the card already exposed `a2dp-sink` and was active on it. Both spellings are now treated as equivalent, and whichever variant the card advertises is the one passed through to pactl. ([#314](https://github.com/trudenboy/sendspin-bt-bridge/issues/314))
+
 ## [2.71.2-rc.1] - 2026-05-15
 
 ### Changed

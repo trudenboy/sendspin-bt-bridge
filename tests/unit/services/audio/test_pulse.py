@@ -4,6 +4,8 @@ import asyncio
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # Stub pulsectl libraries before importing the module under test.
 sys.modules.setdefault("pulsectl", MagicMock())
 sys.modules.setdefault("pulsectl_asyncio", MagicMock())
@@ -183,19 +185,22 @@ def test_fallback_list_cards_handles_subprocess_exception():
 # ---------------------------------------------------------------------------
 
 
-def test_fallback_set_card_profile_success():
-    """pactl returncode 0 → True."""
+@pytest.mark.parametrize("profile_name", ["a2dp_sink", "a2dp-sink"])
+def test_fallback_set_card_profile_success(profile_name):
+    """pactl returncode 0 → True. Profile string is passed through
+    verbatim — pactl accepts both ``a2dp_sink`` (PulseAudio) and
+    ``a2dp-sink`` (PipeWire) variants. Issue #314."""
     from sendspin_bridge.services.audio.pulse import _fallback_set_card_profile
 
     with patch.object(_pulse_mod, "subprocess") as mock_sub:
         mock_sub.run.return_value = MagicMock(returncode=0)
-        assert _fallback_set_card_profile("bluez_card.FC_58_FA_EB_08_6C", "a2dp_sink") is True
+        assert _fallback_set_card_profile("bluez_card.FC_58_FA_EB_08_6C", profile_name) is True
         cmd = mock_sub.run.call_args[0][0]
         assert cmd == [
             "pactl",
             "set-card-profile",
             "bluez_card.FC_58_FA_EB_08_6C",
-            "a2dp_sink",
+            profile_name,
         ]
 
 
@@ -213,8 +218,11 @@ def test_fallback_set_card_profile_failure():
 # ---------------------------------------------------------------------------
 
 
-def test_fallback_cycle_card_profile_sets_off_then_target():
-    """Cycle runs `pactl set-card-profile <card> off`, sleeps, then sets target."""
+@pytest.mark.parametrize("profile_name", ["a2dp_sink", "a2dp-sink"])
+def test_fallback_cycle_card_profile_sets_off_then_target(profile_name):
+    """Cycle runs `pactl set-card-profile <card> off`, sleeps, then sets
+    target. Profile string is passed through verbatim — pactl accepts
+    both ``a2dp_sink`` and ``a2dp-sink`` spellings. Issue #314."""
     from sendspin_bridge.services.audio.pulse import _fallback_cycle_card_profile
 
     with (
@@ -223,12 +231,12 @@ def test_fallback_cycle_card_profile_sets_off_then_target():
     ):
         mock_sub.run.return_value = MagicMock(returncode=0)
         mock_time.sleep = MagicMock()
-        result = _fallback_cycle_card_profile("bluez_card.xx", "a2dp_sink", off_wait=0.0)
+        result = _fallback_cycle_card_profile("bluez_card.xx", profile_name, off_wait=0.0)
 
     assert result is True
     cmds = [call.args[0] for call in mock_sub.run.call_args_list]
     assert ["pactl", "set-card-profile", "bluez_card.xx", "off"] in cmds
-    assert ["pactl", "set-card-profile", "bluez_card.xx", "a2dp_sink"] in cmds
+    assert ["pactl", "set-card-profile", "bluez_card.xx", profile_name] in cmds
 
 
 def test_fallback_cycle_card_profile_continues_when_off_set_fails():
