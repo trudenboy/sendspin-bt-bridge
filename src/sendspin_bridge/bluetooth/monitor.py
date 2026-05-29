@@ -283,8 +283,15 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
             disconnect_event = asyncio.Event()
             if not mgr.connected:
                 disconnect_event.set()
+            # Mirrors disconnect_event for the connect direction so a
+            # PropertiesChanged: Connected arriving during the
+            # failed-reconnect backoff sleep wakes the loop immediately
+            # (#312 — battery-powered speakers that auto-reconnect would
+            # otherwise wait out the remainder of the saturated 5-minute
+            # backoff before the bridge configured audio).
+            connect_event = asyncio.Event()
 
-            def _make_props_handler(evt):
+            def _make_props_handler(disc_evt, conn_evt):
                 def on_props_changed(iface_name, changed, _invalidated):
                     if iface_name != "org.bluez.Device1" or "Connected" not in changed:
                         return
@@ -305,10 +312,11 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
                             }
                         )
                     if not new_connected:
-                        loop.call_soon_threadsafe(evt.set)
+                        loop.call_soon_threadsafe(disc_evt.set)
                         logger.warning("[%s] PropertiesChanged: Disconnected!", mgr.device_name)
                     else:
                         logger.info("[%s] PropertiesChanged: Connected!", mgr.device_name)
+                        loop.call_soon_threadsafe(conn_evt.set)
                         # Correct sink routing for other devices that may have been
                         # disrupted by module-rescue-streams when this sink appeared.
                         loop.call_soon_threadsafe(
@@ -318,10 +326,10 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
 
                 return on_props_changed
 
-            props_iface.on_properties_changed(_make_props_handler(disconnect_event))
+            props_iface.on_properties_changed(_make_props_handler(disconnect_event, connect_event))
             logger.info("[%s] D-Bus monitoring active (connected=%s)", mgr.device_name, mgr.connected)
 
-            await _inner_dbus_monitor(mgr, device_iface, disconnect_event, loop)
+            await _inner_dbus_monitor(mgr, device_iface, disconnect_event, connect_event, loop)
 
         except RuntimeError:
             raise  # propagate to monitor_and_reconnect for polling fallback
@@ -341,8 +349,21 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
         await asyncio.sleep(10)
 
 
-async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_event, loop) -> None:
-    """Inner D-Bus monitor loop; returns when D-Bus re-subscription is needed."""
+async def _inner_dbus_monitor(
+    mgr: BluetoothManager,
+    device_iface,
+    disconnect_event,
+    connect_event,
+    loop,
+) -> None:
+    """Inner D-Bus monitor loop; returns when D-Bus re-subscription is needed.
+
+    ``connect_event`` is set by the PropertiesChanged handler on the
+    outer scope when BlueZ reports the device connected externally
+    (e.g. battery-powered speaker waking up). It interrupts the
+    failed-reconnect backoff sleep so audio is configured as soon as
+    the link is back. Issue #312.
+    """
     from sendspin_bridge.bluetooth.manager import _bt_executor
 
     reconnect_attempt = 0
@@ -456,10 +477,21 @@ async def _inner_dbus_monitor(mgr: BluetoothManager, device_iface, disconnect_ev
                 asyncio.ensure_future(_correct_other_devices_routing(mgr))
                 return
             else:
-                # Failed — back off proportional to failure count
+                # Failed — back off proportional to failure count.  An
+                # external PropertiesChanged: Connected interrupts the
+                # sleep so we don't waste the remainder of a saturated
+                # backoff window on a speaker that's already back (#312).
                 delay = mgr._reconnect_delay(reconnect_attempt)
                 logger.debug("[%s] Backoff: next attempt in %.0fs", mgr.device_name, delay)
-                await asyncio.sleep(delay)
+                try:
+                    await asyncio.wait_for(connect_event.wait(), timeout=delay)
+                    logger.info(
+                        "[%s] External connect detected during backoff — waking early",
+                        mgr.device_name,
+                    )
+                except TimeoutError:
+                    pass
+                connect_event.clear()
                 # Re-read state in case external reconnect happened
                 try:
                     mgr._apply_connected_state(bool(await device_iface.get_connected()))

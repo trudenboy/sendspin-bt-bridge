@@ -347,7 +347,7 @@ async def test_inner_dbus_monitor_reconnect_cancelled_resets_attempt(bt_manager)
                 return result
 
             with patch.object(bt_manager, "_reconnect_cancelled", side_effect=_cancel_and_stop):
-                await _inner_dbus_monitor(bt_manager, MagicMock(), disconnect_event, loop)
+                await _inner_dbus_monitor(bt_manager, MagicMock(), disconnect_event, asyncio.Event(), loop)
 
 
 @pytest.mark.asyncio
@@ -400,7 +400,7 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
         bt_manager.host.send_subprocess_command = AsyncMock()
         bt_manager.host.stop_subprocess = AsyncMock()
 
-        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, loop)
+        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, asyncio.Event(), loop)
 
     assert bt_manager.connected is False
     assert disconnect_detected is True
@@ -439,7 +439,7 @@ async def test_inner_dbus_monitor_successful_reconnect_starts_subprocess(bt_mana
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
     ):
-        await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, loop)
+        await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), loop)
 
     assert bt_manager.connected is True
     bt_manager.host.start_subprocess.assert_awaited_once()
@@ -471,7 +471,148 @@ async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         # Should return without attempting connect
-        await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, loop)
+        await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), loop)
+
+
+# ---------------------------------------------------------------------------
+# Issue #312: external connect interrupts the failed-reconnect backoff sleep
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_inner_dbus_monitor_connect_event_wakes_backoff(bt_manager):
+    """A `PropertiesChanged: Connected` arriving during the backoff sleep
+    must wake the loop immediately so audio is configured at once,
+    rather than waiting out the full (potentially 5-minute) delay
+    (issue #312).
+    """
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = False
+    bt_manager.management_enabled = True
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+    bt_manager.host.start_subprocess = AsyncMock()
+
+    disconnect_event = asyncio.Event()
+    disconnect_event.set()
+    connect_event = asyncio.Event()
+    # Pre-set: the wait_for() inside the backoff path resolves immediately.
+    connect_event.set()
+
+    device_iface = AsyncMock()
+    # After the early wake, the re-read finds the device connected.
+    device_iface.get_connected = AsyncMock(return_value=True)
+
+    loop = asyncio.get_running_loop()
+
+    # is_device_paired → True, connect_device → False (forces the
+    # failed-reconnect branch where the backoff sleep lives).
+    executor_results = iter([True, False])
+
+    async def _mock_run_in_executor(executor, fn, *args):
+        try:
+            return next(executor_results)
+        except StopIteration:
+            return None
+
+    sleep_calls: list[float] = []
+
+    async def _track_sleep(delay):
+        sleep_calls.append(delay)
+
+    with (
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
+        patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
+        patch.object(bt_manager, "_handle_reconnect_failure", return_value=False),
+        patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
+        patch.object(bt_manager, "_record_reconnect"),
+        patch.object(bt_manager, "_reconnect_delay", return_value=300.0),
+        patch("sendspin_bridge.bluetooth.monitor._correct_other_devices_routing", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_track_sleep),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
+    ):
+        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, connect_event, loop)
+
+    # The function must have configured audio and started the subprocess
+    # (the "External reconnect detected" path), which only happens when
+    # the backoff was woken early via connect_event.
+    bt_manager.host.start_subprocess.assert_awaited_once()
+    # The event is cleared after consumption so subsequent backoffs aren't
+    # spuriously interrupted by a stale wake.
+    assert connect_event.is_set() is False
+
+
+@pytest.mark.asyncio
+async def test_inner_dbus_monitor_backoff_falls_through_on_timeout(bt_manager):
+    """Without an external connect, the backoff branch must still
+    fall through into the post-sleep state re-check (i.e. wait_for
+    raising TimeoutError is swallowed). Issue #312."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = False
+    bt_manager.management_enabled = True
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+    bt_manager.host.start_subprocess = AsyncMock()
+
+    disconnect_event = asyncio.Event()
+    disconnect_event.set()
+    connect_event = asyncio.Event()  # never set — wait_for will time out
+
+    device_iface = AsyncMock()
+    # After the timeout, the re-read still reports disconnected.
+    device_iface.get_connected = AsyncMock(return_value=False)
+
+    loop = asyncio.get_running_loop()
+
+    # First iteration: is_device_paired → True, connect_device → False
+    # → backoff path → timeout. Bail on the second iteration to keep
+    # the test deterministic.
+    bt_manager_running = {"v": True}
+
+    def _is_paired_and_maybe_stop():
+        # Stop the outer while loop on the second invocation.
+        if not bt_manager_running["v"]:
+            bt_manager._running = False
+        bt_manager_running["v"] = False
+        return True
+
+    executor_results = iter([_is_paired_and_maybe_stop, lambda: False])
+
+    async def _mock_run_in_executor(executor, fn, *args):
+        try:
+            return next(executor_results)()
+        except StopIteration:
+            return None
+
+    async def _instant_sleep(_delay):
+        return None
+
+    async def _instant_wait_for(_coro, *, timeout=None):
+        _coro.close()
+        raise TimeoutError
+
+    with (
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
+        patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
+        patch.object(bt_manager, "_handle_reconnect_failure", return_value=False),
+        patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
+        patch.object(bt_manager, "_record_reconnect"),
+        patch.object(bt_manager, "_reconnect_delay", return_value=0.001),
+        patch("sendspin_bridge.bluetooth.monitor._correct_other_devices_routing", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_instant_sleep),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_instant_wait_for),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
+    ):
+        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, connect_event, loop)
+
+    # No external connect arrived → audio configuration must NOT have
+    # been called via the backoff-wake path (the loop exits via
+    # _running=False on the second iteration).
+    bt_manager.host.start_subprocess.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
