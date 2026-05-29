@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.71.2-rc.2] - 2026-05-29
+## [2.71.2] - 2026-05-29
 
 ### Changed
 
+- **Connect-failure log lines now carry the underlying BlueZ error.** When a configured speaker is paired/bonded/trusted but won't connect, the bridge used to log only `Failed to connect (not connected after 5 status checks)` and discard `bluetoothctl`'s stdout — hiding the actual reason (`br-connection-page-timeout`, `br-connection-already-active`, `Profile unavailable`, link-key mismatch, …) behind a generic warning. The failure warning now includes a single-line excerpt of the connect output, so the operator can distinguish "speaker is off / out of range" from "speaker is already paired with another host" without a follow-up bug report. ([#302](https://github.com/trudenboy/sendspin-bt-bridge/issues/302))
 - **Dependency bumps**: `aiosendspin` 5.2.0 → 5.3.0, `dbus-fast` 4.0.4 → 5.0.3, `zeroconf` 0.148.0 → 0.149.16, `certifi` 2026.4.22 → 2026.5.20, and the `ruff` dev pin 0.15.12 → 0.15.13. The `dbus-fast` 5.x series adds denial-of-service hardening to its D-Bus message parser (container nesting and message-size bounds); its only behavioural change defers the socket connect from construction to `connect()`, which the bridge already calls, so no code changes were required.
 
 ### Fixed
@@ -19,11 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Proxmox LXC `upgrade.sh` no longer silently swallows `pip install` failures.** The four `pip3 install` calls in the dependency-update and editable-install steps previously chained `2>/dev/null || true`, so a transient PyPI hiccup or a constraint conflict against `--break-system-packages` would leave stale dependencies on disk and the script would report success. Each call now surfaces its exit code via `die`, with a message that names which step failed — root cause of the silent path that led to [#324](https://github.com/trudenboy/sendspin-bt-bridge/issues/324).
 - **Ubuntu 26.04 / WirePlumber: Bluetooth audio sinks published with a raw colon-separated MAC are now discovered.** WirePlumber's newer naming convention publishes BT outputs as `bluez_output.XX:XX:XX:XX:XX:XX` (raw MAC, no `.1` / `.a2dp-sink` suffix). The bridge previously tried four PipeWire/PulseAudio patterns based on the underscore-substituted MAC and missed this variant, falling back to the default audio device with no audible cue. The pattern is now included in the discovery list, last so the more specific PipeWire/PulseAudio shapes still win when both forms exist. ([#314](https://github.com/trudenboy/sendspin-bt-bridge/issues/314))
 - **BlueZ 5.82 + PipeWire: card-profile auto-switch and cycle helpers no longer false-warn on already-correct cards.** PipeWire publishes the A2DP sink profile as `a2dp-sink` (with a dash) while classic PulseAudio uses `a2dp_sink` (underscore); both are accepted by `pactl set-card-profile`. The bridge's profile auto-switch was hard-coded to the underscore form, so on PipeWire hosts it logged `BlueZ card … has no a2dp_sink profile available` even when the card already exposed `a2dp-sink` and was active on it. Both spellings are now treated as equivalent, and whichever variant the card advertises is the one passed through to pactl. ([#314](https://github.com/trudenboy/sendspin-bt-bridge/issues/314))
-
-## [2.71.2-rc.1] - 2026-05-15
-
-### Changed
-- **Connect-failure log lines now carry the underlying BlueZ error.** When a configured speaker is paired/bonded/trusted but won't connect, the bridge used to log only `Failed to connect (not connected after 5 status checks)` and discard `bluetoothctl`'s stdout — hiding the actual reason (`br-connection-page-timeout`, `br-connection-already-active`, `Profile unavailable`, link-key mismatch, …) behind a generic warning. The failure warning now includes a single-line excerpt of the connect output, so the operator can distinguish "speaker is off / out of range" from "speaker is already paired with another host" without a follow-up bug report. ([#302](https://github.com/trudenboy/sendspin-bt-bridge/issues/302))
 
 ## [2.71.1] - 2026-05-15
 
