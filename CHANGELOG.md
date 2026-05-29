@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.2-rc.2] - 2026-05-29
+
 ### Changed
 
 - **Dependency bumps**: `aiosendspin` 5.2.0 → 5.3.0, `dbus-fast` 4.0.4 → 5.0.3, `zeroconf` 0.148.0 → 0.149.16, `certifi` 2026.4.22 → 2026.5.20, and the `ruff` dev pin 0.15.12 → 0.15.13. The `dbus-fast` 5.x series adds denial-of-service hardening to its D-Bus message parser (container nesting and message-size bounds); its only behavioural change defers the socket connect from construction to `connect()`, which the bridge already calls, so no code changes were required.
