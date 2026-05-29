@@ -571,22 +571,23 @@ async def test_inner_dbus_monitor_backoff_falls_through_on_timeout(bt_manager):
     # First iteration: is_device_paired → True, connect_device → False
     # → backoff path → timeout. Bail on the second iteration to keep
     # the test deterministic.
-    bt_manager_running = {"v": True}
+    call_count = {"n": 0}
 
     def _is_paired_and_maybe_stop():
-        # Stop the outer while loop on the second invocation.
-        if not bt_manager_running["v"]:
+        # Stop the outer while loop on the second iteration's paired check
+        # so the test terminates after one full backoff fall-through.
+        if call_count["n"] > 2:
             bt_manager._running = False
-        bt_manager_running["v"] = False
         return True
 
-    executor_results = iter([_is_paired_and_maybe_stop, lambda: False])
-
     async def _mock_run_in_executor(executor, fn, *args):
-        try:
-            return next(executor_results)()
-        except StopIteration:
-            return None
+        # Each disconnected-branch iteration calls is_device_paired (odd
+        # call) then connect_device (even call). Paired → True; connect →
+        # False so the backoff path is exercised every iteration.
+        call_count["n"] += 1
+        if call_count["n"] % 2 == 1:
+            return _is_paired_and_maybe_stop()
+        return False
 
     async def _instant_sleep(_delay):
         return None
