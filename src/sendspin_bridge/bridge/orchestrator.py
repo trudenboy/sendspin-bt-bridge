@@ -8,6 +8,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -30,6 +31,7 @@ from sendspin_bridge.config.logging_setup import apply_log_level
 from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext, activate_device
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
+    check_sendspin_version_compatibility,
     format_dependency_versions,
     get_runtime_dependency_versions,
 )
@@ -369,6 +371,15 @@ class BridgeOrchestrator:
         log_level = apply_log_level(config.get("LOG_LEVEL"))
         logger.info("Log level: %s", log_level)
         logger.info("Runtime deps: %s", format_dependency_versions(get_runtime_dependency_versions()))
+
+        # Fail-loud if the installed sendspin package is outside the
+        # supported range — older versions (≤7.2.x) carry an extra
+        # ``static_delay_ms`` arg on ``_run_server_initiated`` and cause
+        # immediate daemon crashes in a tight loop (issue #324).
+        ok, version_err = check_sendspin_version_compatibility()
+        if not ok:
+            logger.error(version_err)
+            sys.exit(1)
 
         # PulseAudio runtime hardening — before any subprocess is spawned
         _harden_pulseaudio(disable_rescue_streams=bool(config.get("DISABLE_PA_RESCUE_STREAMS", False)))

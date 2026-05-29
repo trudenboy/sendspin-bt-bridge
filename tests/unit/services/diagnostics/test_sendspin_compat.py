@@ -3,9 +3,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
+    SENDSPIN_MAX_VERSION,
+    SENDSPIN_MIN_VERSION,
     SendspinAudioApi,
     analyze_audio_api_compatibility,
     analyze_daemon_args_compatibility,
+    check_sendspin_version_compatibility,
     detect_supported_audio_formats_for_device,
     filter_supported_call_kwargs,
     load_sendspin_audio_api,
@@ -224,3 +227,48 @@ def test_analyze_audio_api_compatibility_warns_when_preferred_format_cannot_be_p
     assert result["compatible"] is False
     assert any("missing detect_supported_audio_formats" in warning for warning in result["warnings"])
     assert any("preferred_format will be ignored" in warning for warning in result["warnings"])
+
+
+def test_check_sendspin_version_compatibility_accepts_pinned_version():
+    """The version installed by the bridge's own requirements pin
+    (currently 7.3.1) must satisfy the runtime check — otherwise CI is
+    a permanent red light. Uses the real importlib.metadata lookup, no
+    mocking."""
+    ok, err = check_sendspin_version_compatibility()
+    assert ok, f"installed sendspin failed compat check: {err}"
+    assert err is None
+
+
+def test_check_sendspin_version_compatibility_rejects_old_version():
+    """sendspin 7.0.0..7.2.x carry the old _run_server_initiated signature
+    and crash-loop on first reconnect — caller must surface a clear
+    upgrade instruction (issue #324)."""
+    ok, err = check_sendspin_version_compatibility(installed_version="7.0.0")
+    assert ok is False
+    assert err is not None
+    assert "7.0.0" in err
+    assert SENDSPIN_MIN_VERSION in err
+    assert "#324" in err
+
+
+def test_check_sendspin_version_compatibility_rejects_future_major():
+    ok, err = check_sendspin_version_compatibility(installed_version="8.0.0")
+    assert ok is False
+    assert err is not None
+    assert "8.0.0" in err
+
+
+def test_check_sendspin_version_compatibility_rejects_unresolved():
+    """``importlib.metadata`` can return literal placeholders the bridge
+    must not interpret as valid versions."""
+    for placeholder in ("not installed", "unknown", ""):
+        ok, err = check_sendspin_version_compatibility(installed_version=placeholder)
+        assert ok is False, f"placeholder {placeholder!r} unexpectedly passed"
+        assert err is not None
+        assert SENDSPIN_MIN_VERSION in err
+        assert SENDSPIN_MAX_VERSION in err
+
+
+def test_check_sendspin_version_compatibility_accepts_min_boundary():
+    ok, err = check_sendspin_version_compatibility(installed_version=SENDSPIN_MIN_VERSION)
+    assert ok, f"min-boundary version rejected: {err}"
