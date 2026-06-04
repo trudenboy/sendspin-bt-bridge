@@ -133,7 +133,7 @@ pygments==2.20.0
     # via
     #   rich
     #   sendspin-bt-bridge
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via sendspin-bt-bridge
 pyobjc-core==12.1 ; sys_platform == 'darwin'
     # via
