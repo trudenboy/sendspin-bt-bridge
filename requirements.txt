@@ -176,7 +176,7 @@ unidecode==1.4.0 ; sys_platform == 'linux'
     # via mpris-api
 urllib3==2.7.0
     # via requests
-usb-devices==0.4.5
+usb-devices==0.5.1
     # via
     #   bluetooth-adapters
     #   bluetooth-auto-recovery
