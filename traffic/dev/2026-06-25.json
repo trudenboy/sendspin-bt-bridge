@@ -1,0 +1,111 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -25,
+      "total": 1,
+      "owner": 0
+    },
+    {
+      "week_offset": -24,
+      "total": 13,
+      "owner": 0
+    },
+    {
+      "week_offset": -16,
+      "total": 292,
+      "owner": 283
+    },
+    {
+      "week_offset": -15,
+      "total": 492,
+      "owner": 395
+    },
+    {
+      "week_offset": -14,
+      "total": 243,
+      "owner": 213
+    },
+    {
+      "week_offset": -13,
+      "total": 317,
+      "owner": 249
+    },
+    {
+      "week_offset": -12,
+      "total": 322,
+      "owner": 94
+    },
+    {
+      "week_offset": -11,
+      "total": 161,
+      "owner": 8
+    },
+    {
+      "week_offset": -10,
+      "total": 36,
+      "owner": 0
+    },
+    {
+      "week_offset": -9,
+      "total": 97,
+      "owner": 23
+    },
+    {
+      "week_offset": -8,
+      "total": 254,
+      "owner": 34
+    },
+    {
+      "week_offset": -7,
+      "total": 99,
+      "owner": 28
+    },
+    {
+      "week_offset": -6,
+      "total": 67,
+      "owner": 32
+    },
+    {
+      "week_offset": -5,
+      "total": 35,
+      "owner": 4
+    },
+    {
+      "week_offset": -3,
+      "total": 11,
+      "owner": 4
+    }
+  ],
+  "code_frequency": [],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 44,
+    "ai_ratio": 0.22,
+    "agents": [
+      {
+        "name": "Claude Opus 4.7 (1M context)",
+        "commits": 34
+      },
+      {
+        "name": "dependabot[bot]",
+        "commits": 13
+      },
+      {
+        "name": "Administrator",
+        "commits": 6
+      },
+      {
+        "name": "Mikhail Nevskiy",
+        "commits": 4
+      },
+      {
+        "name": "Renso",
+        "commits": 3
+      },
+      {
+        "name": "Claude Opus 4.8 (1M context)",
+        "commits": 1
+      }
+    ]
+  }
+}
