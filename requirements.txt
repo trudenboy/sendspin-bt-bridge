@@ -135,7 +135,7 @@ pygments==2.20.0
     #   sendspin-bt-bridge
 pyjwt==2.13.0
     # via sendspin-bt-bridge
-pyobjc-core==12.1 ; sys_platform == 'darwin'
+pyobjc-core==12.2.1 ; sys_platform == 'darwin'
     # via
     #   bleak
     #   pyobjc-framework-cocoa
