@@ -30,7 +30,7 @@ bleak==3.0.2
     # via bluetooth-adapters
 blinker==1.9.0
     # via flask
-bluetooth-adapters==2.1.1
+bluetooth-adapters==2.4.0
     # via bluetooth-auto-recovery
 bluetooth-auto-recovery==1.5.3
     # via sendspin-bt-bridge
