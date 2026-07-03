@@ -17,7 +17,7 @@ jobs:
       TRAFFIC_METRICS_TOKEN: ${{ secrets.TRAFFIC_METRICS_TOKEN }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
