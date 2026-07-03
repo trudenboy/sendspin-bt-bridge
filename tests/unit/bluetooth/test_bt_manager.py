@@ -589,6 +589,99 @@ def test_warn_wireplumber_logind_silent_when_unknown():
     mock_warn.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# WirePlumber 0.5 seat-monitoring (issue #347) — the 0.5 series replaced
+# the bluetooth.lua.d "with-logind" knob with the SPA-JSON
+# "monitor.bluez.seat-monitoring" setting; on headless systems it causes
+# the same A2DP endpoint churn, so the same class of warning applies.
+# ---------------------------------------------------------------------------
+
+
+def test_is_wireplumber_seat_monitoring_returns_false_when_override_disables(tmp_path):
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    override_dir = tmp_path / "wireplumber.conf.d"
+    override_dir.mkdir()
+    (override_dir / "51-disable-seat-monitoring.conf").write_text(
+        "wireplumber.profiles = {\n  main = {\n    monitor.bluez.seat-monitoring = disabled\n  }\n}\n"
+    )
+
+    result = bt_audio._is_wireplumber_seat_monitoring_active(
+        _override_dirs=[override_dir],
+        _default_cfg_path=tmp_path / "wireplumber.conf",
+    )
+    assert result is False
+
+
+def test_is_wireplumber_seat_monitoring_returns_true_on_05_layout_without_override(tmp_path):
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    empty_override = tmp_path / "wireplumber.conf.d"
+    empty_override.mkdir()
+    # WirePlumber 0.5 default config exists and does not mention the
+    # knob — seat-monitoring defaults to enabled in that series.
+    default_cfg = tmp_path / "wireplumber.conf"
+    default_cfg.write_text("context.properties = {}\n")
+
+    result = bt_audio._is_wireplumber_seat_monitoring_active(
+        _override_dirs=[empty_override],
+        _default_cfg_path=default_cfg,
+    )
+    assert result is True
+
+
+def test_is_wireplumber_seat_monitoring_returns_none_without_05_layout(tmp_path):
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    result = bt_audio._is_wireplumber_seat_monitoring_active(
+        _override_dirs=[tmp_path / "nonexistent"],
+        _default_cfg_path=tmp_path / "nonexistent.conf",
+    )
+    assert result is None
+
+
+def test_warn_wireplumber_seat_monitoring_emits_fix_when_active():
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    with (
+        patch.object(bt_audio, "_is_wireplumber_seat_monitoring_active", return_value=True),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_wireplumber_seat_monitoring()
+
+    messages = [call.args[0] for call in mock_warn.call_args_list]
+    assert any("seat-monitoring" in m for m in messages)
+    assert any("51-disable-seat-monitoring.conf" in m for m in messages)
+
+
+def test_warn_wireplumber_seat_monitoring_silent_when_disabled_or_unknown():
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    for detection in (False, None):
+        with (
+            patch.object(bt_audio, "_is_wireplumber_seat_monitoring_active", return_value=detection),
+            patch.object(bt_audio.logger, "warning") as mock_warn,
+        ):
+            bt_audio._warn_wireplumber_seat_monitoring()
+        mock_warn.assert_not_called()
+
+
+def test_warn_pipewire_session_also_checks_seat_monitoring():
+    """The PipeWire no-sinks warning path must run the 0.5 check too."""
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    with (
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.4.2)"),
+        patch.object(bt_audio, "_warn_wireplumber_logind") as warn_logind,
+        patch.object(bt_audio, "_warn_wireplumber_seat_monitoring") as warn_seat,
+        patch.object(bt_audio.logger, "warning"),
+    ):
+        bt_audio._warn_pipewire_session(set())
+
+    warn_logind.assert_called_once()
+    warn_seat.assert_called_once()
+
+
 def test_device_name_fallback():
     """When no device_name is given, it falls back to the MAC address."""
     from sendspin_bridge.bluetooth.manager import BluetoothManager

@@ -406,6 +406,7 @@ def _warn_pipewire_session(known_sink_names: set[str]) -> None:
         "See https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/"
     )
     _warn_wireplumber_logind()
+    _warn_wireplumber_seat_monitoring()
 
 
 def _warn_wireplumber_logind() -> None:
@@ -438,6 +439,80 @@ def _warn_wireplumber_logind() -> None:
         "then restart WirePlumber. "
         "See https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/"
     )
+
+
+def _warn_wireplumber_seat_monitoring() -> None:
+    """Warn about WirePlumber 0.5 ``seat-monitoring`` blocking BT sinks.
+
+    The 0.5 series replaced the ``bluetooth.lua.d`` / ``with-logind``
+    knob with the SPA-JSON ``monitor.bluez.seat-monitoring`` setting
+    (enabled by default).  On headless systems with no active graphical
+    seat it prevents WirePlumber from creating Bluetooth sink nodes at
+    all — the speaker connects at the BlueZ level but no ``bluez_*``
+    sink ever appears (issue #347, Raspberry Pi OS Trixie).
+    """
+    if not _is_wireplumber_seat_monitoring_active():
+        return
+
+    logger.warning(
+        "WirePlumber 0.5 'monitor.bluez.seat-monitoring' appears enabled — on "
+        "headless systems this prevents Bluetooth sink creation entirely."
+    )
+    logger.warning(
+        "Fix: create ~/.config/wireplumber/wireplumber.conf.d/51-disable-seat-monitoring.conf "
+        "containing:  wireplumber.profiles = { main = { monitor.bluez.seat-monitoring = disabled } }  — "
+        "then restart WirePlumber (systemctl --user restart wireplumber). "
+        "See https://trudenboy.github.io/sendspin-bt-bridge/installation/raspberry-pi/"
+    )
+
+
+def _is_wireplumber_seat_monitoring_active(
+    *,
+    _override_dirs: list | None = None,
+    _default_cfg_path: str | os.PathLike[str] | None = None,
+) -> bool | None:
+    """Check whether WirePlumber 0.5's ``seat-monitoring`` is active.
+
+    Returns ``False`` when a ``wireplumber.conf.d`` override disables it,
+    ``True`` when the 0.5 config layout is present without such an
+    override (the setting defaults to enabled and typically does not
+    appear in the default config at all), and ``None`` when the 0.5
+    layout cannot be detected (older WirePlumber, or config not visible
+    from this process — the typical Docker case).
+    """
+    import pathlib
+
+    # User override takes precedence (WirePlumber merges conf.d in order)
+    if _override_dirs is None:
+        _override_dirs = [
+            pathlib.Path.home() / ".config" / "wireplumber" / "wireplumber.conf.d",
+            pathlib.Path("/etc/wireplumber/wireplumber.conf.d"),
+        ]
+    for d in _override_dirs:
+        try:
+            for f in sorted(pathlib.Path(d).glob("*.conf")):
+                try:
+                    content = f.read_text()
+                except OSError:
+                    continue
+                if "seat-monitoring" in content and "disabled" in content:
+                    return False
+        except OSError:
+            continue
+
+    # 0.5 layout marker: the monolithic SPA-JSON default config.
+    if _default_cfg_path is None:
+        _default_cfg_path = pathlib.Path("/usr/share/wireplumber/wireplumber.conf")
+    try:
+        content = pathlib.Path(_default_cfg_path).read_text()
+    except OSError:
+        return None
+
+    # The default config rarely mentions the knob (enabled by default);
+    # respect an explicit disable if a distro ships one.
+    if "seat-monitoring" in content and "disabled" in content:
+        return False
+    return True
 
 
 def _is_wireplumber_logind_active(

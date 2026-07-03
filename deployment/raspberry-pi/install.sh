@@ -549,6 +549,35 @@ if systemctl --user is-active pipewire &>/dev/null 2>&1; then
       skip "Could not enable linger automatically — run: sudo loginctl enable-linger $LINGER_USER"
     fi
   fi
+
+  # WirePlumber 0.5 (Raspberry Pi OS Trixie and newer) gates Bluetooth
+  # node creation on an active logind seat by default
+  # ("monitor.bluez.seat-monitoring"). Headless systems have no seat, so
+  # a speaker connects at the BlueZ level but no bluez_* sink ever
+  # appears (issue #347). Ship the disable drop-in up-front — it is a
+  # no-op on WirePlumber 0.4 (which reads bluetooth.lua.d instead).
+  if systemctl --user is-active wireplumber &>/dev/null 2>&1; then
+    WP_CONF_DIR="$HOME/.config/wireplumber/wireplumber.conf.d"
+    WP_CONF_FILE="$WP_CONF_DIR/51-disable-seat-monitoring.conf"
+    if [ ! -f "$WP_CONF_FILE" ]; then
+      mkdir -p "$WP_CONF_DIR"
+      cat > "$WP_CONF_FILE" << 'WPEOF'
+# Installed by sendspin-bt-bridge (issue #347).
+# Headless systems have no active logind seat; without this override
+# WirePlumber 0.5 never creates Bluetooth sink nodes.
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+WPEOF
+      if systemctl --user restart wireplumber &>/dev/null 2>&1; then
+        info "Disabled WirePlumber seat-monitoring for headless Bluetooth (51-disable-seat-monitoring.conf)."
+      else
+        skip "Wrote $WP_CONF_FILE — restart WirePlumber manually: systemctl --user restart wireplumber"
+      fi
+    fi
+  fi
 fi
 
 # Extract WEB_PORT early — used by the preflight probe below and the final banner.

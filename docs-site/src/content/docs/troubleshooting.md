@@ -242,6 +242,28 @@ pactl list sinks short | grep -i bluez  # expect a bluez_output.* or bluez_sink.
 
 This is independent of the BlueZ 5.86 regression below — if you see no `bluez_*` sinks for **any** speaker, check this first. If a specific speaker pairs but its sink fails to register while others work, that's the BlueZ regression scenario.
 
+## Speaker connects but no sink appears on WirePlumber 0.5 (headless seat monitoring)
+
+**Symptom.** Same "connected but no `bluez_*` sink" shape as above, but `libspa-0.2-bluetooth` **is** installed and `wpctl status` shows a Bluetooth section. Typical on Raspberry Pi OS **Trixie** and other distros shipping **WirePlumber 0.5+** on a headless (no monitor, SSH-only) system.
+
+**Root cause.** WirePlumber 0.5's `monitor.bluez.seat-monitoring` setting (enabled by default) gates Bluetooth node creation on an active logind *seat*. A headless box never has one, so WirePlumber refuses to create the sink node even though BlueZ connected the speaker fine. The 0.4-era `with-logind` Lua override no longer applies — 0.5 reads SPA-JSON `.conf` drop-ins.
+
+**Fix.** For the user running PipeWire:
+
+```bash
+mkdir -p ~/.config/wireplumber/wireplumber.conf.d
+cat > ~/.config/wireplumber/wireplumber.conf.d/51-disable-seat-monitoring.conf << 'EOF'
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+EOF
+systemctl --user restart wireplumber
+```
+
+Reconnect the speaker from the web UI afterwards. The Raspberry Pi install script applies this drop-in automatically when it detects a running WirePlumber; the bridge also logs this exact remedy when it detects the condition (context: issue [#347](https://github.com/trudenboy/sendspin-bt-bridge/issues/347)).
+
 ## Speaker pairs but no audio sink appears (BlueZ 5.86 regression)
 
 **Symptom.** The speaker pairs and `bluetoothctl` reports `Connected: yes`, but `pactl list cards short` shows no `bluez_card.<MAC>` for it and `pactl list sinks short` has no `bluez_sink.<MAC>.a2dp_sink` / `bluez_output.<MAC>.*`. After about 30–40 seconds the speaker drops the link on its own, and subsequent reconnect attempts fail until the speaker is power-cycled.
