@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.ipc.ipc_protocol import (
@@ -22,6 +23,43 @@ if TYPE_CHECKING:
 
 _IPC_MAX_LINE_BYTES = 1_048_576  # 1 MB
 
+# Forwarded-log token bucket (issue #345).  A daemon in a pathological
+# state (fd exhaustion → asyncio selector spin) can emit tens of
+# thousands of log lines per second; re-emitting each one maxes out a
+# parent CPU core and floods the log ring.  50 lines/s sustained with a
+# 200-line burst passes every legitimate startup/reconnect flurry
+# untouched — the storm shape observed in #345 was ~22 000 lines/s.
+_LOG_RATE_PER_S = 50.0
+_LOG_BURST = 200.0
+
+
+class _LogRateGate:
+    """Token bucket for forwarded daemon log lines (issue #345)."""
+
+    def __init__(self, rate: float, burst: float, now: Callable[[], float]):
+        self._rate = rate
+        self._burst = burst
+        self._now = now
+        self._tokens = burst
+        self._last = now()
+        self._suppressed = 0
+
+    def allow(self) -> bool:
+        now = self._now()
+        self._tokens = min(self._burst, self._tokens + (now - self._last) * self._rate)
+        self._last = now
+        if self._tokens >= 1.0:
+            self._tokens -= 1.0
+            return True
+        self._suppressed += 1
+        return False
+
+    def take_suppressed_report(self) -> int:
+        """Return and reset the count of lines dropped since the last pass."""
+        count = self._suppressed
+        self._suppressed = 0
+        return count
+
 
 class SubprocessIpcService:
     """Own daemon stdout parsing, protocol warnings, and message dispatch."""
@@ -35,6 +73,9 @@ class SubprocessIpcService:
         log_methods: dict[str, Callable[..., None]] | None = None,
         logger_: logging.Logger | None = None,
         allowed_keys: frozenset[str] | None = None,
+        log_rate_per_s: float = _LOG_RATE_PER_S,
+        log_burst: float = _LOG_BURST,
+        log_clock: Callable[[], float] = time.monotonic,
     ):
         self.player_name = player_name
         self._protocol_warning_cache = protocol_warning_cache
@@ -47,6 +88,7 @@ class SubprocessIpcService:
             "critical": self._logger.critical,
         }
         self._allowed_keys = allowed_keys or frozenset()
+        self._log_gate = _LogRateGate(log_rate_per_s, log_burst, log_clock)
 
     async def read_stream(self, stdout) -> None:
         """Parse daemon stdout JSON-line messages until EOF."""
@@ -96,6 +138,18 @@ class SubprocessIpcService:
 
         log_envelope = parse_log_envelope(msg)
         if log_envelope is not None:
+            # Status/error envelopes above are never dropped — only the
+            # log firehose is gated (issue #345).
+            if not self._log_gate.allow():
+                return None
+            suppressed = self._log_gate.take_suppressed_report()
+            if suppressed:
+                self._logger.warning(
+                    "[%s] Suppressed %d daemon log line(s) — subprocess exceeded %.0f lines/s",
+                    self.player_name,
+                    suppressed,
+                    _LOG_RATE_PER_S,
+                )
             log_fn = self._log_methods.get(log_envelope.level, self._logger.info)
             log_fn("[%s/proc] %s", self.player_name, log_envelope.msg)
         return None
