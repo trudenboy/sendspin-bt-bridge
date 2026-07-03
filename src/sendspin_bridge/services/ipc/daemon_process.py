@@ -294,8 +294,15 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
                         logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
-# Seconds after audio_streaming=True before unmuting the sink
-_STARTUP_UNMUTE_DELAY_S = 1.5
+# Seconds after audio_streaming=True before unmuting the sink.
+# Must cover sendspin's sync-settle window: on every fresh stream start
+# AudioPlayer re-anchors and its proportional drop/insert corrector
+# converges within _CORRECTION_TARGET_SECONDS (2.0 s in sendspin 7.3).
+# The repeated frame drops/duplications during that window are audible
+# as crackling, so unmuting earlier leaks the tail of the burst to the
+# speaker (issue #341).  0.5 s headroom because convergence is
+# asymptotic — guarded by test_startup_unmute_covers_sync_settle.
+_STARTUP_UNMUTE_DELAY_S = 2.5
 
 # Issue #269: maximum time to wait for BlueZ MediaTransport1 to leave the
 # 'idle' state before muting anyway. Most BlueZ stacks move to 'pending'

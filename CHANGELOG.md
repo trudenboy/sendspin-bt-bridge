@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Bluetooth scan now runs on — and labels results with — the adapter actually selected in the UI.** On hosts with several adapters where the kernel's hci numbering differs from BlueZ's registration order (typically after USB hotplug), selecting an adapter for a scan could silently scan a different physical adapter and show discovered devices under the wrong adapter name. Adapter selection now resolves through the same kernel mapping the adapter list uses, and per-adapter device attribution runs in dedicated sessions so discovery notifications can no longer corrupt it. ([#340](https://github.com/trudenboy/sendspin-bt-bridge/issues/340))
+- **Crackling / "sandy" noise in the first seconds after starting playback is no longer audible.** Every fresh stream start triggers the sendspin sync corrector, which drops or duplicates frames for up to two seconds while converging on the DAC anchor — audible as a brief burst of crackle. The startup mute window now covers that entire settle window (raised from 1.5 s to 2.5 s), so the correction burst stays inaudible. Gapless track-to-track transitions were never affected. ([#341](https://github.com/trudenboy/sendspin-bt-bridge/issues/341))
 
 ### Security
 
