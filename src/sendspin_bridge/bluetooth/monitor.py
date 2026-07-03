@@ -74,6 +74,56 @@ async def _correct_other_devices_routing(triggering_mgr: BluetoothManager) -> No
             logger.debug("[%s] Sink routing correction failed: %s", client.player_name, exc)
 
 
+async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool | None = None) -> bool:
+    """Reclaim after auto-release and bring the player back up (#349/#350).
+
+    ``BluetoothManager.maybe_auto_reclaim`` performs the state flip
+    (gated on ``bt_released_by == "auto"``, an established link and the
+    quiet period); this helper then mirrors the external-reconnect path:
+    configure audio, restart the player subprocess and correct sink
+    routing for the other devices.
+    """
+    if not mgr.maybe_auto_reclaim(connected=connected):
+        return False
+    from sendspin_bridge.bluetooth.manager import _bt_executor
+
+    await loop.run_in_executor(_bt_executor, mgr.configure_bluetooth_audio)
+    mgr._record_reconnect()
+    if mgr.host:
+        mgr.host.update_status(
+            {
+                "bluetooth_connected": True,
+                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
+            }
+        )
+        logger.info("BT management reclaimed for %s, starting sendspin...", mgr.device_name)
+        await mgr.host.start_subprocess()
+    asyncio.ensure_future(_correct_other_devices_routing(mgr))
+    return True
+
+
+async def _poll_auto_reclaim(mgr: BluetoothManager, loop) -> bool:
+    """Polling-monitor variant of the auto-reclaim check.
+
+    The polling path has no PropertiesChanged handler keeping
+    ``mgr.connected`` fresh while management is released, so poll the
+    live state — rate-limited to the regular ``check_interval`` cadence
+    via ``mgr.last_check`` (idle while released, so it's free to reuse).
+    """
+    if mgr.host is None or mgr.host.get_status_value("bt_released_by") != "auto":
+        return False
+    now = time.time()
+    if now - mgr.last_check < mgr.check_interval:
+        return False
+    mgr.last_check = now
+    from sendspin_bridge.bluetooth.manager import _bt_executor
+
+    connected = await loop.run_in_executor(_bt_executor, mgr.is_device_connected)
+    if not connected:
+        return False
+    return await _finish_auto_reclaim(mgr, loop, connected=True)
+
+
 async def monitor_and_reconnect(mgr: BluetoothManager) -> None:
     """Continuously monitor BT connection and reconnect if needed.
 
@@ -105,6 +155,8 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
         iteration += 1
         try:
             if not mgr.management_enabled:
+                if await _poll_auto_reclaim(mgr, loop):
+                    continue
                 await asyncio.sleep(5)
                 continue
 
@@ -369,6 +421,12 @@ async def _inner_dbus_monitor(
     reconnect_attempt = 0
     while mgr._running:
         if not mgr.management_enabled:
+            # ``mgr.connected`` stays fresh here even while released —
+            # the PropertiesChanged handler keeps applying state — so an
+            # auto-released speaker that reconnects on its own can be
+            # reclaimed without polling (#349/#350).
+            if await _finish_auto_reclaim(mgr, loop):
+                continue
             await asyncio.sleep(5)
             continue
 

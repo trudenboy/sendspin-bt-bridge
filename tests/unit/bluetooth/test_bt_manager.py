@@ -650,7 +650,8 @@ def test_check_reconnect_churn_disables_management(bt_manager):
     assert bt_manager.management_enabled is False
     assert bt_manager.host.bt_management_enabled is False
     bt_manager.host.update_status.assert_called_once()
-    persist_released.assert_called_once_with("TestSpeaker", True)
+    # released_by="auto" marks the release as auto-reclaim-eligible (#349/#350)
+    persist_released.assert_called_once_with("TestSpeaker", True, released_by="auto")
 
 
 def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):

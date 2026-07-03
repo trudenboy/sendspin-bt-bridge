@@ -250,7 +250,9 @@ def api_bt_management():
         return jsonify({"success": False, "error": "No client found"}), 503
     enabled = bool(enabled)
     threading.Thread(target=client.set_bt_management_enabled, args=(enabled,), daemon=True).start()
-    _persist_device_released(str(player_name), not enabled)
+    # An operator's release must never be auto-reclaimed (#349/#350) —
+    # record who released so the distinction survives a bridge restart.
+    _persist_device_released(str(player_name), not enabled, released_by=None if enabled else "user")
     # Sync enabled state to HA Supervisor so the Configuration page reflects it
     try:
         with config_lock, open(CONFIG_FILE) as _f:

@@ -77,6 +77,12 @@ _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
 _PAIRING_WAIT_DURATION = 10  # seconds to wait for pairing to complete
 _MAX_RECONNECT_DELAY_S = 300.0  # max backoff for reconnect attempts (5 min)
 _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
+# Minimum time a device must stay auto-released before an external
+# connect may reclaim management (issues #349/#350).  Keeps a
+# churn-released speaker from flapping management on/off while it is
+# still bouncing: each reclaim needs the speaker to hold a link past
+# this window.
+_AUTO_RECLAIM_QUIET_S = 60.0
 # Strips ANSI colour codes from bluetoothctl stdout before excerpting it
 # into the connect-failure warning line.
 _BCTL_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -208,6 +214,11 @@ class BluetoothManager:
         self.last_check: float = 0
         self.check_interval = check_interval
         self.max_reconnect_fails = max_reconnect_fails
+        # Monotonic timestamp of the last auto-release; gates the
+        # auto-reclaim quiet period (issues #349/#350).  None = never
+        # auto-released this run (a release persisted from a previous
+        # run may reclaim immediately once the speaker connects).
+        self._auto_released_at: float | None = None
         # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
@@ -1329,6 +1340,7 @@ class BluetoothManager:
             self._CHURN_WINDOW,
         )
         self.management_enabled = False
+        self._auto_released_at = time.monotonic()
         if self.host:
             self.host.bt_management_enabled = False
             self.host.update_status(
@@ -1343,7 +1355,7 @@ class BluetoothManager:
         try:
             from sendspin_bridge.services.bluetooth import persist_device_released
 
-            persist_device_released(self.device_name, True)
+            persist_device_released(self.device_name, True, released_by="auto")
         except Exception as _e:
             logger.debug("persist_device_released failed: %s", _e)
         return True
@@ -1389,6 +1401,7 @@ class BluetoothManager:
             self.max_reconnect_fails,
         )
         self.management_enabled = False
+        self._auto_released_at = time.monotonic()
         if self.host:
             self.host.bt_management_enabled = False
             self.host.update_status(
@@ -1403,7 +1416,70 @@ class BluetoothManager:
         try:
             from sendspin_bridge.services.bluetooth import persist_device_released
 
-            persist_device_released(self.device_name, True)
+            persist_device_released(self.device_name, True, released_by="auto")
+        except Exception as _e:
+            logger.debug("persist_device_released failed: %s", _e)
+        return True
+
+    def maybe_auto_reclaim(self, connected: bool | None = None) -> bool:
+        """Reclaim BT management after an auto-release once the speaker
+        re-establishes the link on its own (issues #349/#350).
+
+        The speaker initiating a connection is the churn-safe signal: a
+        device stuck in a reconnect loop never presents a stable
+        ``Connected=yes`` link.  Manual (operator) releases are never
+        reclaimed automatically — only ``bt_released_by == "auto"``.
+        ``_AUTO_RECLAIM_QUIET_S`` damps flapping after a churn release.
+
+        ``connected`` overrides ``self.connected`` for the polling
+        monitor, which passes its live poll result (the cached attribute
+        is only maintained by the D-Bus PropertiesChanged path).
+
+        Returns True when management was reclaimed; the caller is
+        responsible for configuring audio and starting the player.
+        """
+        if self.management_enabled or not self._running:
+            return False
+        host = self.host
+        if host is None or host.get_status_value("bt_released_by") != "auto":
+            return False
+        if connected is None:
+            connected = self.connected
+        if not connected:
+            return False
+        released_at = self._auto_released_at
+        if released_at is not None and time.monotonic() - released_at < _AUTO_RECLAIM_QUIET_S:
+            return False
+        logger.info(
+            "[%s] Speaker reconnected on its own after auto-release — reclaiming BT management",
+            self.device_name,
+        )
+        with self._reconnect_lock:
+            # Fresh churn window: the reconnects that led to the release
+            # must not count against the reclaimed session.
+            self._reconnect_timestamps = []
+        self._auto_released_at = None
+        self.allow_reconnect()
+        host.bt_management_enabled = True
+        host.update_status(
+            {
+                "bt_management_enabled": True,
+                "bt_released_by": None,
+                "reconnecting": False,
+                "reconnect_attempt": 0,
+                "last_error": None,
+            }
+        )
+        from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
+
+        self._publish_client_event(
+            DeviceEventType.BT_MANAGEMENT_RECLAIMED,
+            message="Speaker reconnected on its own — BT management reclaimed",
+        )
+        try:
+            from sendspin_bridge.services.bluetooth import persist_device_released
+
+            persist_device_released(self.device_name, False)
         except Exception as _e:
             logger.debug("persist_device_released failed: %s", _e)
         return True
