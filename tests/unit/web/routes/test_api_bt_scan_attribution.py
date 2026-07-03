@@ -79,7 +79,7 @@ def test_enumeration_runs_in_dedicated_sessions_and_attributes_devices(monkeypat
     assert f"select {ADAPTER_A}" in run_calls[0]
     assert f"select {ADAPTER_B}" in run_calls[1]
 
-    seen, names, device_adapter, _active, _rssi = _parse_scan_output(stdout)
+    seen, _names, device_adapter, _active, _rssi = _parse_scan_output(stdout)
     assert {SPEAKER_A, SPEAKER_B} <= seen
     assert device_adapter[SPEAKER_A] == ADAPTER_A
     assert device_adapter[SPEAKER_B] == ADAPTER_B
