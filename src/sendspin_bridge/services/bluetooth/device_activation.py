@@ -648,7 +648,13 @@ def activate_device(
 
     if device.get("released", False):
         client.set_bt_management_enabled(False)
-        logger.info("  Player '%s': restored released state", player_name)
+        # set_bt_management_enabled stamps bt_released_by="user"; restore
+        # the persisted originator so an auto-released device stays
+        # eligible for auto-reclaim across restarts (#349/#350).
+        released_by = device.get("released_by")
+        if released_by == "auto":
+            client._update_status({"bt_released_by": "auto"})
+        logger.info("  Player '%s': restored released state (released_by=%s)", player_name, released_by or "user")
 
     return ActivationResult(
         client=client,

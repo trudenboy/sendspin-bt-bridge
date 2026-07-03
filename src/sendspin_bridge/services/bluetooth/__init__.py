@@ -490,8 +490,14 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
             logger.debug("Could not sync enabled flag to options.json: %s", e)
 
 
-def persist_device_released(player_name: str, released: bool) -> None:
-    """Persist the released (bt_management_enabled=False) flag to config.json."""
+def persist_device_released(player_name: str, released: bool, *, released_by: str | None = None) -> None:
+    """Persist the released (bt_management_enabled=False) flag to config.json.
+
+    ``released_by`` records who initiated the release ("auto" / "user") so
+    the auto-reclaim gate (issues #349/#350) can distinguish an operator's
+    deliberate release from an automatic one across a bridge restart.
+    Cleared whenever the device is un-released.
+    """
     if not _CONFIG_FILE.exists():
         return
 
@@ -499,6 +505,10 @@ def persist_device_released(player_name: str, released: bool) -> None:
         for dev in cfg.get("BLUETOOTH_DEVICES", []):
             if _match_player_name(dev.get("player_name", ""), player_name):
                 dev["released"] = released
+                if released and released_by:
+                    dev["released_by"] = released_by
+                else:
+                    dev.pop("released_by", None)
                 break
 
     try:
@@ -514,6 +524,10 @@ def persist_device_released(player_name: str, released: bool) -> None:
                 for dev in opts.get("bluetooth_devices", []):
                     if _match_player_name(dev.get("player_name", ""), player_name):
                         dev["released"] = released
+                        if released and released_by:
+                            dev["released_by"] = released_by
+                        else:
+                            dev.pop("released_by", None)
                         break
                 tmp = str(_OPTIONS_FILE) + ".tmp"
                 with open(tmp, "w") as f:

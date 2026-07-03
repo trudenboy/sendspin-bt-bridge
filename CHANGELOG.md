@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-released speakers now reclaim themselves when they reconnect on their own.** Previously, once a device hit the auto-release threshold ("N consecutive failed reconnects") or the churn guard, it stayed released until someone pressed Reclaim in the web UI — so a speaker that was simply switched off overnight needed a manual click every morning. The bridge now watches released devices: when the speaker itself re-establishes the Bluetooth link, management is reclaimed automatically, audio is configured and the player restarts. Only automatic releases are eligible — a release made by the operator stays released, including across restarts. A one-minute quiet period after each auto-release prevents management flapping on speakers that are still bouncing. ([#349](https://github.com/trudenboy/sendspin-bt-bridge/issues/349), [#350](https://github.com/trudenboy/sendspin-bt-bridge/issues/350))
+
 ### Changed
 
 - **Routine Bluetooth dependency bumps refreshed in the frozen lockfile.** `bluetooth-adapters` 2.1.1 → 2.4.0 and `usb-devices` 0.4.5 → 0.5.1 (both on the Linux Bluetooth-recovery path), plus `pyobjc-core` 12.1 → 12.2.1 (macOS-only, no effect on Raspberry Pi / Home Assistant / LXC deployments). ([#334](https://github.com/trudenboy/sendspin-bt-bridge/pull/334), [#335](https://github.com/trudenboy/sendspin-bt-bridge/pull/335), [#337](https://github.com/trudenboy/sendspin-bt-bridge/pull/337))
