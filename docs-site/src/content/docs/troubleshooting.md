@@ -207,6 +207,35 @@ If the bridge repeatedly fails to reconnect the same speaker, the configured **A
 
 If the host-level record itself is broken, use the repair/reset tools from **Configuration → Bluetooth → Paired devices** and then import or pair the speaker again.
 
+## Pairing fails with `br-connection-profile-unavailable` (HFP-default speakers)
+
+**Symptom.** Pairing a speaker that also has a microphone (speakerphone-capable, e.g. Tribit StormBox 2) fails with:
+
+```
+Failed to connect: org.bluez.Error.Failed br-connection-profile-unavailable
+```
+
+— and the same failure happens even when pairing manually with `bluetoothctl` on the host, so it is not bridge-specific.
+
+**Root cause.** The error means BlueZ could not bring up **any** profile on the new link. Speakers with a mic often insist on connecting the HFP (hands-free) profile first. Connecting HFP requires a host-side HFP backend (oFono or hsphfpd) — which server installs, and **Proxmox/OpenWrt LXC containers in particular, do not have**. When the peer refuses to proceed to A2DP until HFP is up, no profile connects at all and BlueZ reports `br-connection-profile-unavailable`.
+
+Note that the bridge's `ALLOW_HFP_PROFILE` option does **not** help here: it only controls whether the bridge's pairing agent *authorizes* the HFP service during pairing — it cannot provide the missing HFP backend.
+
+**Recipe.**
+
+1. Tell the host's BlueZ to not advertise HFP/HSP at all, so the peer settles for A2DP. In `/etc/bluetooth/main.conf` (on the **host** that owns the adapter — for LXC that's the Proxmox node):
+
+   ```ini
+   [General]
+   Disable=Headset
+   ```
+
+   then `sudo systemctl restart bluetooth` and re-pair.
+2. If the speaker still refuses, remove the pairing on both sides (hold the speaker's pairing button until it forgets the host), then pair again from the bridge UI — the bridge explicitly connects the A2DP profile after bonding.
+3. If you genuinely need the microphone path (rare for a playback bridge), you'd have to install and configure an HFP backend on the host — out of scope for the bridge.
+
+(Context: issue [#355](https://github.com/trudenboy/sendspin-bt-bridge/issues/355).)
+
 ## "No sink" or silent playback
 
 **No sink** means Bluetooth is connected but the audio sink was not attached yet.
