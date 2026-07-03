@@ -149,6 +149,12 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
             "sendspin_bridge.web.routes.api_bt.list_bt_adapters",
             return_value=["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"],
         ),
+        # hciN labels resolve through the sysfs map since issue #340 —
+        # pin it so the test doesn't read the host's real adapters.
+        patch(
+            "sendspin_bridge.web.routes.api_bt.build_hci_map",
+            return_value={"AABBCCDDEE01": "hci0", "AABBCCDDEE02": "hci1"},
+        ),
         patch("sendspin_bridge.web.routes.api_bt._run_bt_scan") as run_bt_scan,
         patch("sendspin_bridge.web.routes.api_bt._release_bt_operation") as release_bt_operation,
         patch("sendspin_bridge.web.routes.api_bt.threading.Thread") as mock_thread,
