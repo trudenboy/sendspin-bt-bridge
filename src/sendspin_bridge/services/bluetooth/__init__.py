@@ -284,6 +284,22 @@ def is_pin_rejection(output: str) -> bool:
     return any(marker in lowered for marker in _AUTH_FAIL_MARKERS)
 
 
+# BlueZ fingerprint of "no audio profile could be brought up at all" —
+# typical for HFP-default speakers (Tribit StormBox 2, issue #355): the
+# peer insists on the headset profile first, and hosts without an HFP
+# backend (oFono/hsphfpd — absent in LXC and most server installs) can
+# not connect it, while A2DP never starts either.
+_PROFILE_UNAVAILABLE_MARKER = "br-connection-profile-unavailable"
+
+_PROFILE_UNAVAILABLE_HINT = (
+    "BlueZ could not bring up any audio profile. This is typical for "
+    "speakers that insist on the HFP (headset) profile first: the bridge "
+    "is A2DP-only and most hosts (LXC especially) have no HFP backend. "
+    "See the HFP-default speakers section of the troubleshooting guide: "
+    "https://trudenboy.github.io/sendspin-bt-bridge/troubleshooting/"
+)
+
+
 def describe_pair_failure(output: str, *, pin_attempted: bool = False, pin_used: str = "") -> str:
     """Return a human-readable pairing failure reason with a PIN hint.
 
@@ -291,8 +307,15 @@ def describe_pair_failure(output: str, *, pin_attempted: bool = False, pin_used:
     authentication-failure marker, appends an explicit note that the
     device rejected the PIN. That way operators see the root cause in
     the log without grepping for ``AuthenticationFailed``.
+
+    ``br-connection-profile-unavailable`` failures additionally carry
+    the HFP-default-speaker recipe pointer (issue #355).
     """
     base = extract_pair_failure_reason(output)
+    if base and _PROFILE_UNAVAILABLE_MARKER in str(output or ""):
+        if _PROFILE_UNAVAILABLE_MARKER not in base:
+            base = f"{base} ({_PROFILE_UNAVAILABLE_MARKER})"
+        return f"{base} — {_PROFILE_UNAVAILABLE_HINT}"
     if not pin_attempted or not base:
         return base
     if not is_pin_rejection(base):

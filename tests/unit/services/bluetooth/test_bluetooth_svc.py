@@ -271,6 +271,30 @@ def test_describe_pair_failure_does_not_annotate_non_auth_failure_even_with_pin(
     assert "PIN" not in reason
 
 
+def test_describe_pair_failure_hints_on_profile_unavailable():
+    """`br-connection-profile-unavailable` means BlueZ brought up no audio
+    profile at all — the fingerprint of HFP-default speakers (issue #355).
+    The operator-facing reason must carry the pointer to the recipe
+    instead of leaving a bare BlueZ error code.
+    """
+    output = """
+    [CHG] Device AA:BB:CC:DD:EE:FF Connected: no
+    Failed to connect: org.bluez.Error.Failed br-connection-profile-unavailable
+    """
+    reason = describe_pair_failure(output)
+    assert "br-connection-profile-unavailable" in reason
+    assert "HFP" in reason
+    assert "troubleshooting" in reason.lower()
+
+
+def test_describe_pair_failure_no_hfp_hint_on_other_errors():
+    output = """
+    Failed to pair: org.bluez.Error.ConnectionAttemptFailed
+    """
+    reason = describe_pair_failure(output)
+    assert "HFP" not in reason
+
+
 def test_describe_pair_failure_empty_output_returns_fallback():
     """Empty bluetoothctl output shouldn't crash — return an empty-ish
     string the caller can still log as 'no explicit reason'."""

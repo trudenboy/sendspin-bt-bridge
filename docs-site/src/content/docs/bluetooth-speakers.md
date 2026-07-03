@@ -50,6 +50,7 @@ If your model isn't listed, please [open an issue](https://github.com/trudenboy/
 | Speaker / headphone | Source | Symptom |
 |---|---|---|
 | **HK Onyx Studio 3** | [#191](https://github.com/trudenboy/sendspin-bt-bridge/issues/191) | `ServicesResolved did not reach True within 10s` + `A2DP Sink ConnectProfile: UnknownObject`, speaker drops ~3 s after connect. Matches the [bluez/bluez#1098](https://github.com/bluez/bluez/issues/1098) / [#1922](https://github.com/bluez/bluez/issues/1922) regression class. **Reset & Reconnect** from the device card sometimes recovers; no permanent fix landed in the thread |
+| **Tribit StormBox 2** | [#355](https://github.com/trudenboy/sendspin-bt-bridge/issues/355) | Pairing fails with `br-connection-profile-unavailable` even from `bluetoothctl` on the host (Proxmox LXC). The speaker has a mic and insists on the HFP (headset) profile first; hosts without an HFP backend can't bring any profile up. See [Troubleshooting › HFP-default speakers](/troubleshooting/#pairing-fails-with-br-connection-profile-unavailable-hfp-default-speakers) |
 
 ## How to interpret these tiers
 
