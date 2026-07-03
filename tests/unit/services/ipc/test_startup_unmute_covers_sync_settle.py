@@ -47,9 +47,10 @@ def _read_sendspin_correction_target_seconds() -> float:
 
 def test_startup_unmute_delay_covers_sendspin_correction_window():
     correction_target = _read_sendspin_correction_target_seconds()
-    assert daemon_process._STARTUP_UNMUTE_DELAY_S >= correction_target + _SETTLE_HEADROOM_S, (
+    unmute_delay = daemon_process._STARTUP_UNMUTE_DELAY_S
+    assert unmute_delay >= correction_target + _SETTLE_HEADROOM_S, (
         "Startup unmute fires before sendspin's sync corrector settles: "
-        f"unmute at {daemon_process._STARTUP_UNMUTE_DELAY_S}s, corrector "
+        f"unmute at {unmute_delay}s, corrector "
         f"converges within {correction_target}s "
         "(issue #341 — crackling in the first seconds of playback)"
     )
