@@ -30,7 +30,7 @@ bleak==3.0.2
     # via bluetooth-adapters
 blinker==1.9.0
     # via flask
-bluetooth-adapters==2.1.1
+bluetooth-adapters==2.4.0
     # via bluetooth-auto-recovery
 bluetooth-auto-recovery==1.5.3
     # via sendspin-bt-bridge
@@ -135,7 +135,7 @@ pygments==2.20.0
     #   sendspin-bt-bridge
 pyjwt==2.13.0
     # via sendspin-bt-bridge
-pyobjc-core==12.1 ; sys_platform == 'darwin'
+pyobjc-core==12.2.1 ; sys_platform == 'darwin'
     # via
     #   bleak
     #   pyobjc-framework-cocoa
@@ -177,7 +177,7 @@ unidecode==1.4.0 ; sys_platform == 'linux'
     # via mpris-api
 urllib3==2.7.0
     # via requests
-usb-devices==0.4.5
+usb-devices==0.5.1
     # via
     #   bluetooth-adapters
     #   bluetooth-auto-recovery

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Routine Bluetooth dependency bumps refreshed in the frozen lockfile.** `bluetooth-adapters` 2.1.1 → 2.4.0 and `usb-devices` 0.4.5 → 0.5.1 (both on the Linux Bluetooth-recovery path), plus `pyobjc-core` 12.1 → 12.2.1 (macOS-only, no effect on Raspberry Pi / Home Assistant / LXC deployments). ([#334](https://github.com/trudenboy/sendspin-bt-bridge/pull/334), [#335](https://github.com/trudenboy/sendspin-bt-bridge/pull/335), [#337](https://github.com/trudenboy/sendspin-bt-bridge/pull/337))
+
 ### Security
 
 - **Security dependency bumps closing every CVE flagged by the dependency audit.** `aiohttp` 3.13.5 → 3.14.1 (eleven advisories spanning request-smuggling, header-parsing and resource-exhaustion fixes), `cryptography` 48.0.0 → 49.0.0 (GHSA-537c-gmf6-5ccf), and `PyJWT` 2.12.1 → 2.13.0 (five PYSEC-2026 advisories in the token-verification path). The CVE audit now reports a clean tree. `dbus-fast` is also bumped 5.0.3 → 5.0.17, carrying further patch-level hardening on top of the 5.x D-Bus message-parser denial-of-service bounds introduced in 2.71.2. ([#333](https://github.com/trudenboy/sendspin-bt-bridge/pull/333), [#336](https://github.com/trudenboy/sendspin-bt-bridge/pull/336))
