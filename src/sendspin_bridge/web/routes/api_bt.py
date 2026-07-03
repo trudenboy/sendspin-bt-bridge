@@ -1158,10 +1158,24 @@ def _resolve_scan_adapter_macs(adapter: str) -> "list[str]":
     if normalized.lower() == "all":
         return adapter_macs
     if normalized.lower().startswith("hci"):
+        kernel_hci = normalized.lower()
         try:
-            idx = int(normalized[3:])
+            idx = int(kernel_hci[3:])
         except ValueError as exc:
             raise ValueError("Invalid adapter identifier") from exc
+        # The UI's adapter ids are kernel hciN labels resolved via sysfs
+        # (/api/bt/adapters, issue #193).  Resolve them back through the
+        # same map — ``bluetoothctl list`` order is BlueZ registration
+        # order, not kernel numbering, so indexing the list positionally
+        # scanned the wrong physical adapter (issue #340).
+        hci_map = build_hci_map()
+        if hci_map:
+            for mac in adapter_macs:
+                if hci_map.get(mac.upper().replace(":", "")) == kernel_hci:
+                    return [mac.upper()]
+            raise ValueError("Selected adapter is not available")
+        # No sysfs/hciconfig visibility: the adapters endpoint fell back
+        # to synthetic ``hci{i}`` labels in list order, so mirror that.
         if idx < 0 or idx >= len(adapter_macs):
             raise ValueError("Selected adapter is not available")
         return [adapter_macs[idx].upper()]
@@ -1210,9 +1224,6 @@ def _classify_audio_capability(out: str) -> "tuple[bool, str]":
 
 def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
     """Run a bluetoothctl scan session and return combined stdout."""
-    post_scan_cmds: list[str] = []
-    for m in adapter_macs:
-        post_scan_cmds.extend([f"select {m}", "show", "devices"])
     bt_timeout = 12 + len(adapter_macs) * 2
 
     proc = subprocess.Popen(
@@ -1234,7 +1245,7 @@ def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
         proc.stdin.write("\n".join(init_cmds) + "\n")
         proc.stdin.flush()
         time.sleep(15)
-        proc.stdin.write("scan off\n" + "\n".join(post_scan_cmds) + "\n")
+        proc.stdin.write("scan off\n")
         proc.stdin.flush()
         time.sleep(1)
         result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
@@ -1242,6 +1253,25 @@ def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
         proc.kill()
         proc.wait()
         raise
+
+    # Per-adapter device enumeration runs in dedicated short sessions.
+    # Inside the long-lived scan session the ``select <MAC>; show``
+    # marker lines interleave with async discovery notifications on
+    # piped stdin — the same unreliability that produced the alias swap
+    # in #193 — so devices could be attributed to whichever controller
+    # happened to be selected when the output flushed (issue #340).
+    for m in adapter_macs:
+        try:
+            enum = subprocess.run(
+                ["bluetoothctl"],
+                input=f"select {m}\nshow\ndevices\n",
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            result_stdout += "\n" + enum.stdout
+        except Exception:
+            logger.debug("Post-scan device enumeration failed for %s", m, exc_info=True)
     return result_stdout
 
 
