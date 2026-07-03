@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Routine Bluetooth dependency bumps refreshed in the frozen lockfile.** `bluetooth-adapters` 2.1.1 → 2.4.0 and `usb-devices` 0.4.5 → 0.5.1 (both on the Linux Bluetooth-recovery path), plus `pyobjc-core` 12.1 → 12.2.1 (macOS-only, no effect on Raspberry Pi / Home Assistant / LXC deployments). ([#334](https://github.com/trudenboy/sendspin-bt-bridge/pull/334), [#335](https://github.com/trudenboy/sendspin-bt-bridge/pull/335), [#337](https://github.com/trudenboy/sendspin-bt-bridge/pull/337))
+- **PulseAudio client library updated to `pulsectl-asyncio` 1.3.2.** Brings official Python 3.13 support, a fix for leaked asyncio file-descriptor registrations on unclean loop shutdown, and a fix for a spurious assertion crash at teardown while event subscriptions are active — both directly relevant to the bridge's sink-state monitoring. Also bumps transitive `idna` 3.15 → 3.18. ([#358](https://github.com/trudenboy/sendspin-bt-bridge/pull/358), [#359](https://github.com/trudenboy/sendspin-bt-bridge/pull/359))
 
 ### Security
 
