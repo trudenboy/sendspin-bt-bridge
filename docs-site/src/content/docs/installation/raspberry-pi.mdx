@@ -184,6 +184,28 @@ sudo systemctl restart bluetooth
   Bluetooth A2DP sinks (`bluez_output.*` / `bluez_sink.*`) are created at the moment a speaker actually connects, not at boot. A fresh bridge install with no paired speakers yet is expected to show "no sinks found" until you add one through the UI.
 </Aside>
 
+## Speaker connects but no sink appears (WirePlumber 0.5 / Trixie)
+
+On Raspberry Pi OS **Trixie** (and any distro shipping **WirePlumber 0.5+**, the PipeWire session manager), a speaker can pair and connect at the BlueZ level while PipeWire never creates the `bluez_output.*` sink — the web UI reports the device as *"missing a sink"* no matter how often you reconnect.
+
+The cause is WirePlumber 0.5's `monitor.bluez.seat-monitoring` setting (enabled by default): it gates Bluetooth node creation on an active logind *seat*, which a headless system never has. The older 0.4-era fix (`with-logind` in `bluetooth.lua.d`) no longer applies — 0.5 uses SPA-JSON `.conf` drop-ins instead.
+
+Disable seat monitoring for the user running PipeWire:
+
+```bash
+mkdir -p ~/.config/wireplumber/wireplumber.conf.d
+cat > ~/.config/wireplumber/wireplumber.conf.d/51-disable-seat-monitoring.conf << 'EOF'
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+EOF
+systemctl --user restart wireplumber
+```
+
+Then reconnect the speaker from the web UI. The install script applies this drop-in automatically on new installs when it detects a running WirePlumber (context: issue [#347](https://github.com/trudenboy/sendspin-bt-bridge/issues/347)).
+
 ## Preflight blocks on step 2: "No Bluetooth controller detected"
 
 You get through install, the speaker pairs and connects fine on the host (`bluetoothctl show` works, your speaker shows `Paired: yes, Connected: yes`), but the web UI onboarding stalls at **step 2 — Check Bluetooth access** with *"No Bluetooth controller detected by preflight checks."* Updating to the latest release and power-cycling the adapter doesn't change anything.
