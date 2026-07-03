@@ -277,7 +277,7 @@ wheels = [
 
 [[package]]
 name = "bluetooth-adapters"
-version = "2.1.1"
+version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiooui" },
@@ -286,9 +286,9 @@ dependencies = [
     { name = "uart-devices" },
     { name = "usb-devices" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/06/8a/b37a52f5243cf8bd30cc7e25c1128750d129db15a7b2c7ef107ddb7429f9/bluetooth_adapters-2.1.1.tar.gz", hash = "sha256:f289e0f08814f74252a28862f488283680584744430d7eac45820f9c20ba041a", size = 17234, upload-time = "2025-09-12T17:18:48.906Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/e0/6f7d10ffd8e5b62fc0998c285991925aaa9b727521bede0e29a0b0084a94/bluetooth_adapters-2.4.0.tar.gz", hash = "sha256:e8a61935a867deb8af981e986bdf504c4398895ff254eac626790184a4fdd1e3", size = 17501, upload-time = "2026-05-26T14:28:58.347Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/11/8f344d5379df2d31eea73052128136702630f28b5fb55a8d30250c8112e2/bluetooth_adapters-2.1.1-py3-none-any.whl", hash = "sha256:1f93026e530dcb2f4515a92955fa6f85934f928b009a181ee57edc8b4affd25c", size = 20276, upload-time = "2025-09-12T17:18:47.763Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/ba/f11151a72f782bf24908c2b57163a2ff854024594c4ff3d04f1c47f40ed0/bluetooth_adapters-2.4.0-py3-none-any.whl", hash = "sha256:f2841c49e8750658ecb8c1d46d2c05a9de4740362eb83e3e7e501d3092c0377e", size = 20604, upload-time = "2026-05-26T14:28:57.107Z" },
 ]
 
 [[package]]
@@ -1532,15 +1532,17 @@ wheels = [
 
 [[package]]
 name = "pyobjc-core"
-version = "12.1"
+version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b8/b6/d5612eb40be4fd5ef88c259339e6313f46ba67577a95d86c3470b951fce0/pyobjc_core-12.1.tar.gz", hash = "sha256:2bb3903f5387f72422145e1466b3ac3f7f0ef2e9960afa9bcd8961c5cbf8bd21", size = 1000532, upload-time = "2025-11-14T10:08:28.292Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/b1/729f7458a63758bd21716648a8abcd9a0c8f2d2e9897763c8a1a1c7fd31b/pyobjc_core-12.2.1.tar.gz", hash = "sha256:7a7b9b018402342cf32bf1956366896350fbe5c0478cb3ef59778f77abed7f07", size = 1063383, upload-time = "2026-06-19T16:19:39.357Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/5a/6b15e499de73050f4a2c88fff664ae154307d25dc04da8fb38998a428358/pyobjc_core-12.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:818bcc6723561f207e5b5453efe9703f34bc8781d11ce9b8be286bb415eb4962", size = 678335, upload-time = "2025-11-14T09:32:20.107Z" },
-    { url = "https://files.pythonhosted.org/packages/f4/d2/29e5e536adc07bc3d33dd09f3f7cf844bf7b4981820dc2a91dd810f3c782/pyobjc_core-12.1-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:01c0cf500596f03e21c23aef9b5f326b9fb1f8f118cf0d8b66749b6cf4cbb37a", size = 677370, upload-time = "2025-11-14T09:33:05.273Z" },
-    { url = "https://files.pythonhosted.org/packages/1b/f0/4b4ed8924cd04e425f2a07269943018d43949afad1c348c3ed4d9d032787/pyobjc_core-12.1-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:177aaca84bb369a483e4961186704f64b2697708046745f8167e818d968c88fc", size = 719586, upload-time = "2025-11-14T09:33:53.302Z" },
-    { url = "https://files.pythonhosted.org/packages/25/98/9f4ed07162de69603144ff480be35cd021808faa7f730d082b92f7ebf2b5/pyobjc_core-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:844515f5d86395b979d02152576e7dee9cc679acc0b32dc626ef5bda315eaa43", size = 670164, upload-time = "2025-11-14T09:34:37.458Z" },
-    { url = "https://files.pythonhosted.org/packages/62/50/dc076965c96c7f0de25c0a32b7f8aa98133ed244deaeeacfc758783f1f30/pyobjc_core-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:453b191df1a4b80e756445b935491b974714456ae2cbae816840bd96f86db882", size = 712204, upload-time = "2025-11-14T09:35:24.148Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/88/300ad283bed0c971c52dcac6f70113e138169d4ce6d856ddd03d16081e51/pyobjc_core-12.2.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:a64232bb27ed101d4adc7d42b0e64a6d3331aac7bee7861c037a6777a163f10b", size = 6433347, upload-time = "2026-06-19T16:04:49.341Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/1e/b9b0ddffae66996b8779f1f7958adc9f21c13a0448cd3be8d7fe589b5b0f/pyobjc_core-12.2.1-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:af101222762665a4125157906cb4b23f5d5a63d3851d5e0504f72a1eaaa2cfd2", size = 6436004, upload-time = "2026-06-19T16:04:53.257Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/26/bd309ede07784c6e5fac4b440c90a5f72a66da7859ed303a9392fe8a5f3f/pyobjc_core-12.2.1-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:efe465e3ecc6fc73f7c7622620345d134a8d34564ab1c29d8247e45f4ed55071", size = 6687044, upload-time = "2026-06-19T16:04:57.42Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/8a/cfa4f56939d554dbb342ec6e5226a441e2f552bc2002a0ddf7705bb11bef/pyobjc_core-12.2.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:2b8fc0531c27277325e113ac00b8a72a82e6145f0a88175b9425d8de814ff69a", size = 6429289, upload-time = "2026-06-19T16:05:02.191Z" },
+    { url = "https://files.pythonhosted.org/packages/42/74/446c89bc18103aaa4a00d1fb85ff8acace9a0dc3f362d9678ebf7571e275/pyobjc_core-12.2.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:9bef500f979e22d54f9da3aaebf6a48f873234b324858bd69256055a318955c7", size = 6690181, upload-time = "2026-06-19T16:05:06.201Z" },
+    { url = "https://files.pythonhosted.org/packages/99/c7/0121ee4c616af07ad2de8cd1a286f6978dc9a227eb58b7c2e875cb68a1df/pyobjc_core-12.2.1-cp315-cp315-macosx_10_15_universal2.whl", hash = "sha256:047c226eeb58a2993ace5e8904e71cc9426ee20d064c617f8fbf32717d37093e", size = 6487078, upload-time = "2026-06-19T16:05:10.093Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/a8/cb9fcc150f97d0bf22a2028f88b24cc35949beb1bcc7b8bc5c17d4401677/pyobjc_core-12.2.1-cp315-cp315t-macosx_10_15_universal2.whl", hash = "sha256:1188613805336270279570467e4455b74cb6c0f60913ac74c917ee1c37cfaecb", size = 6733064, upload-time = "2026-06-19T16:05:14.313Z" },
 ]
 
 [[package]]
@@ -1883,11 +1885,11 @@ wheels = [
 
 [[package]]
 name = "usb-devices"
-version = "0.4.5"
+version = "0.5.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/25/48/dbe6c4c559950ebebd413e8c40a8a60bfd47ddd79cb61b598a5987e03aad/usb_devices-0.4.5.tar.gz", hash = "sha256:9b5c7606df2bc791c6c45b7f76244a0cbed83cb6fa4c68791a143c03345e195d", size = 5421, upload-time = "2023-12-16T19:59:53.295Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/93/76be49b956574f75c9b907193732ff2b6b8f7075692adde93a7f151b30e5/usb_devices-0.5.1.tar.gz", hash = "sha256:8ef45c401490391a3651b3ba748eb213a654ac165be10a0786ab963668c49cc3", size = 5365, upload-time = "2026-05-27T18:01:56.115Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/c9/26171ae5b78d72dd006bbc51ca9baa2cbb889ae8e91608910207482108fd/usb_devices-0.4.5-py3-none-any.whl", hash = "sha256:8a415219ef1395e25aa0bddcad484c88edf9673acdeae8a07223ca7222a01dcf", size = 5349, upload-time = "2023-12-16T19:59:51.604Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/12/f8dd0bd25e9e2ab747b47ae4efed08de75f595f6136a71bafaf3db0c47ed/usb_devices-0.5.1-py3-none-any.whl", hash = "sha256:e77e7972b5ac6a883b3778b0273d9582c5b8ae847ac78fba3d080dd4a4cc69ad", size = 5423, upload-time = "2026-05-27T18:01:55.012Z" },
 ]
 
 [[package]]
