@@ -40,7 +40,7 @@ btsocket==0.3.0
     #   sendspin-bt-bridge
 certifi==2026.5.20
     # via requests
-cffi==2.0.0
+cffi==2.1.0
     # via
     #   cryptography
     #   sounddevice
