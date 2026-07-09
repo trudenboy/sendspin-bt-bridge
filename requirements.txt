@@ -46,7 +46,7 @@ cffi==2.0.0
     #   sounddevice
 charset-normalizer==3.4.7
     # via requests
-click==8.3.3
+click==8.4.2
     # via flask
 colorama==0.4.6 ; sys_platform == 'win32'
     # via
