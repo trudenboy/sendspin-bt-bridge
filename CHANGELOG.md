@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Routine dependency refresh in the frozen lockfile.** `requests` 2.34.1 → 2.34.2, `cffi` 2.0.0 → 2.1.0, `charset-normalizer` 3.4.7 → 3.4.9, `click` 8.3.3 → 8.4.2 (all transitive patch/minor updates), plus `pyobjc-framework-libdispatch` 12.1 → 12.2.1 (macOS-only). The dependency audit stays clean. ([#371](https://github.com/trudenboy/sendspin-bt-bridge/pull/371), [#372](https://github.com/trudenboy/sendspin-bt-bridge/pull/372), [#373](https://github.com/trudenboy/sendspin-bt-bridge/pull/373), [#374](https://github.com/trudenboy/sendspin-bt-bridge/pull/374), [#375](https://github.com/trudenboy/sendspin-bt-bridge/pull/375))
+
 ## [2.72.0-rc.1] - 2026-07-05
 
 ### Added
