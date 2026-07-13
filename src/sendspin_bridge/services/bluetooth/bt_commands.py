@@ -247,6 +247,15 @@ def command_set_bt_management(client, enabled: bool) -> CommandResult:
     return _ok("Reclaimed" if enabled else "Released")
 
 
+def command_reclaim(client) -> CommandResult:
+    """Reclaim a device released by auto-release / auto-disable (#357).
+
+    One-press equivalent of the web-UI Reclaim button — re-enables BT
+    management so the reconnect monitor takes the device back over.
+    """
+    return command_set_bt_management(client, True)
+
+
 def command_claim_audio(client) -> CommandResult:
     """Assert the bridge as the active AVRCP source on a multipoint speaker.
 

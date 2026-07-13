@@ -803,3 +803,24 @@ def test_reconnect_cancelled_false_when_active(bt_manager):
     bt_manager.management_enabled = True
 
     assert bt_manager._reconnect_cancelled() is False
+
+
+# ---------------------------------------------------------------------------
+# #322: repeated reconnect attempts must not flood the log at WARNING
+# ---------------------------------------------------------------------------
+
+
+def test_reconnect_attempt_logging_downgrades_after_first(caplog):
+    import logging
+
+    from sendspin_bridge.bluetooth.monitor import _log_reconnect_attempt
+
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.bluetooth.monitor"):
+        _log_reconnect_attempt("Speaker", 1)
+        _log_reconnect_attempt("Speaker", 2)
+        _log_reconnect_attempt("Speaker", 17)
+
+    levels = [r.levelno for r in caplog.records if "reconnecting" in r.message]
+    assert levels[0] == logging.WARNING  # first attempt is visible
+    assert levels[1] == logging.DEBUG  # subsequent attempts are quiet
+    assert levels[2] == logging.DEBUG

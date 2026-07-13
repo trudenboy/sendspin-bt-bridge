@@ -51,6 +51,7 @@ def dispatcher_with_calls(monkeypatch, fake_client):
         "command_standby",
         "command_power_save_toggle",
         "command_set_bt_management",
+        "command_reclaim",
         "command_claim_audio",
         "command_reset_reconnect",
         "apply_device_config_change",
@@ -128,6 +129,7 @@ def test_missing_command_rejected(dispatcher_with_calls):
     [
         ("reconnect", "command_reconnect"),
         ("disconnect", "command_disconnect"),
+        ("reclaim", "command_reclaim"),
         ("claim_audio", "command_claim_audio"),
     ],
 )

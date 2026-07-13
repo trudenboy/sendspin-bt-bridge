@@ -47,6 +47,17 @@ def _spawn_background(coro) -> None:
     task.add_done_callback(_on_done)
 
 
+def _log_reconnect_attempt(device_name: str, attempt: int) -> None:
+    """Log a reconnect attempt at WARNING on the first try, DEBUG thereafter.
+
+    A speaker left off for a long time keeps retrying with a saturated
+    back-off; logging every attempt at WARNING floods the log (#322).  The
+    first attempt still surfaces as a warning so the disconnect is visible.
+    """
+    level = logging.WARNING if attempt <= 1 else logging.DEBUG
+    logger.log(level, "[%s] Disconnected, reconnecting... (attempt %s)", device_name, attempt)
+
+
 async def _standby_sleep(mgr: BluetoothManager, seconds: float = 5) -> None:
     """Sleep interruptibly — returns early when ``signal_standby_wake()`` fires."""
     evt = mgr._standby_wake_event
@@ -228,11 +239,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             await asyncio.sleep(0.2)
                         await mgr.host.stop_subprocess()
 
-                    logger.warning(
-                        "Bluetooth device %s disconnected, reconnecting... (attempt %s)",
-                        mgr.device_name,
-                        reconnect_attempt,
-                    )
+                    _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
                     success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
                     if mgr._reconnect_cancelled():
                         reconnect_attempt = 0
@@ -548,7 +555,7 @@ async def _inner_dbus_monitor(
                     await asyncio.sleep(0.2)
                 await mgr.host.stop_subprocess()
 
-            logger.warning("[%s] Disconnected, reconnecting... (attempt %s)", mgr.device_name, reconnect_attempt)
+            _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
             success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
             if mgr._reconnect_cancelled():
                 reconnect_attempt = 0

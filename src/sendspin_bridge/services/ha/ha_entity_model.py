@@ -505,6 +505,18 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         command="disconnect",
         availability_class="config",
     ),
+    # One-press reclaim of a device released by auto-release / auto-disable
+    # (#357) — mirrors the web-UI "Reclaim" button.  The ``bt_management_enabled``
+    # switch also reclaims, but a stateless button is the natural HA-automation
+    # trigger ("reclaim when the speaker comes back").
+    EntitySpec(
+        object_id="reclaim",
+        kind=EntityKind.BUTTON,
+        name="Reclaim",
+        icon="mdi:bluetooth-transfer",
+        command="reclaim",
+        availability_class="config",
+    ),
     # Pairing and reset_reconnect intentionally NOT exposed:
     #   - pair: one-shot interactive workflow needing the speaker in pairing
     #     mode (no safe HA-automation surface).
