@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.72.0-rc.2] - 2026-07-13
+
+### Changed
+
+- **Routine dependency refresh in the frozen lockfile.** `requests` 2.34.1 → 2.34.2, `cffi` 2.0.0 → 2.1.0, `charset-normalizer` 3.4.7 → 3.4.9, `click` 8.3.3 → 8.4.2 (all transitive patch/minor updates), plus `pyobjc-framework-libdispatch` 12.1 → 12.2.1 (macOS-only). The dependency audit stays clean. ([#371](https://github.com/trudenboy/sendspin-bt-bridge/pull/371), [#372](https://github.com/trudenboy/sendspin-bt-bridge/pull/372), [#373](https://github.com/trudenboy/sendspin-bt-bridge/pull/373), [#374](https://github.com/trudenboy/sendspin-bt-bridge/pull/374), [#375](https://github.com/trudenboy/sendspin-bt-bridge/pull/375))
+- **The Home Assistant integration re-pairs once after this upgrade.** API access tokens for the Home Assistant custom component now use a faster verification scheme that also removes a per-request processing cost on every authenticated call. Existing tokens are retired as part of the upgrade, so the integration prompts you to re-pair a single time — a click in the add-on's Home Assistant panel, after which everything reconnects normally.
+
+### Fixed
+
+- **A Home Assistant MQTT command no longer briefly freezes the whole bridge.** Pressing a button or moving a slider exposed through the MQTT integration could stall every speaker's audio sync and status updates for several seconds — and in the worst case dead-lock the bridge — while the command was handled. Commands now run off the main processing loop, so playback and status stay responsive.
+- **Music Assistant volume ramps no longer trigger a burst of disk writes that can stutter audio.** Rapid volume and delay changes coming from the daemon are now coalesced into a single debounced save that runs off the audio path, instead of rewriting the config file on every step.
+- **One speaker's slow Bluetooth stack no longer hitches the others.** Blocking system operations — adapter recovery, battery-level reads, device-name lookups, standby-sink creation, network name resolution and MQTT/config file access — were moved off the main loop, so they can't momentarily stall playback or status updates for unrelated speakers.
+- **Background audio-routing corrections and monitor-loop errors are now logged with full detail** instead of failing silently, making intermittent Bluetooth issues easier to diagnose from the logs.
+- **A malformed value in an uploaded or hand-edited configuration file no longer stops the bridge from starting.** Non-numeric values in legacy numeric fields fall back to a safe default with a warning instead of crashing the load in a boot loop.
+- **The status and diagnostics views now correctly report whether Music Assistant is configured and which update channel is selected**, instead of always showing "not configured" and the stable channel.
+- **Changing the Music Assistant server address or token now correctly asks for a restart to take effect**, rather than reporting the change as applied while the bridge kept using the old connection.
+- **A speaker process that can't be stopped gracefully is now reliably force-stopped and reaped**, so its audio port is freed for the next start (fixes occasional "address already in use" after a restart).
+- **Hardened the status channel between the bridge and each speaker process** so heavy log/status traffic can't interleave and corrupt a message, and a status update mid-change can no longer crash the reporter.
+- **Bluetooth reconnect handling no longer accumulates duplicate signal handlers across reconnects** (which caused repeated reconnect and Home Assistant re-registration work), and audio is now configured immediately after a reconnect instead of after a fixed delay.
+- **A forced reconnect or reset now waits behind an in-progress scan or pairing** instead of driving the Bluetooth adapter at the same time, and returns a clear "operation already in progress" response.
+- **Saved per-speaker volumes are no longer lost when the stored address differs only in letter case** from the configured device.
+- **Unrecognised on/off payloads sent to a switch entity are now rejected instead of defaulting to "on".**
+- **Corrected Home Assistant entity categories and internal status labels** that an earlier refactor had mangled, so the custom component's configuration entities are categorised correctly again.
+- **The Home Assistant integration now recovers on its own after the bridge restarts** — it pulls a fresh snapshot as soon as the event stream reconnects and polls on a slow safety-net interval, instead of showing stale entity states until the next event.
+- **Rotating or invalidating the bridge's API token now prompts Home Assistant to re-authenticate** instead of the integration silently freezing until a restart.
+- **Adding the integration is more robust to a slow or unreachable bridge** — connection timeouts and non-JSON responses during setup now surface a clean error instead of an unhandled failure.
+- **A malformed or partially-written addon configuration can no longer prevent startup**: the option translator preserves prior settings on a best-effort basis and writes the generated configuration atomically, so an interrupted run can't leave a truncated file.
+- **A Bluetooth adapter's saved name is no longer lost (or duplicated) when its address is stored in a different letter case** than the detected hardware.
+
+### Security
+
+- **The web-UI password can no longer be bypassed on standalone (non-Home-Assistant) installs.** The automatic sign-in used for Home Assistant's ingress is now honored only when the bridge actually runs as a Home Assistant add-on. On plain Docker / LXC deployments a local process on the host can no longer present an ingress marker to skip the login prompt.
+- **A local process on a standalone host can no longer mint a full-access API token.** The one-shot Home Assistant pairing endpoint now operates only when running as a Home Assistant add-on, matching where legitimate pairing actually happens.
+- **Revoking an API token now requires the same anti-forgery token as creating one**, so a malicious web page can no longer silently delete your tokens.
+- **The MQTT "Test connection" button no longer sends your saved broker password to a different broker.** When the password field keeps its masked placeholder, the saved password is now reused only if the host and port match the saved broker; testing against any other broker requires entering the password explicitly.
+- **Outgoing event webhooks are re-checked at delivery time, not just when they are added.** Delivery now verifies the address actually connected to, blocking a webhook host that later resolves to a loopback, private-network, or cloud-metadata address (DNS-rebinding).
+- **Server-side link checks now correctly handle IPv4-mapped IPv6 addresses**, closing a path that could have reached loopback or cloud-metadata endpoints through a crafted address.
+- **The bug-report submission rate limit can no longer be bypassed by spoofing a forwarding header** — the client address is trusted from a forwarding header only when the request arrives through a trusted proxy.
+- **Authentication and token exchange responses are no longer written to debug logs**, so a long-lived token or authorization code can't leak into captured log output.
+- **Image library `pillow` updated 12.2.0 → 12.3.0**, clearing five advisories flagged by the dependency audit. The CVE audit reports a clean tree again.
+
 ## [2.72.0-rc.1] - 2026-07-05
 
 ### Added
