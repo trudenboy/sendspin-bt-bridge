@@ -42,6 +42,15 @@ def client(tmp_path, monkeypatch):
     yield app.test_client()
 
 
+@pytest.fixture
+def ha_addon_env(monkeypatch):
+    """Model the HAOS addon runtime: the bridge itself runs as an addon, so
+    ``SUPERVISOR_TOKEN`` is present.  ``ha-pair`` only mints tokens in this
+    mode; the success-path tests below all describe the HAOS deployment.
+    """
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "test-supervisor-token")
+
+
 def _login(client) -> None:
     """Set the session as authenticated without going through password flow."""
     with client.session_transaction() as session:
@@ -111,8 +120,27 @@ def test_create_token_returns_plaintext_once(client):
 
 def test_delete_token_unknown_returns_404(client):
     _login(client)
-    resp = client.delete("/api/auth/tokens/nonexistent")
+    resp = client.delete("/api/auth/tokens/nonexistent", headers={"X-CSRF-Token": "test-csrf"})
     assert resp.status_code == 404
+
+
+def test_delete_token_requires_csrf(client):
+    """Revocation is state-changing; without the CSRF token it must 403 so a
+    cross-site request can't silently revoke a user's tokens."""
+    _login(client)
+    create_resp = client.post(
+        "/api/auth/tokens",
+        json={"label": "x"},
+        headers={"X-CSRF-Token": "test-csrf"},
+    )
+    record_id = create_resp.get_json()["record"]["id"]
+
+    resp = client.delete(f"/api/auth/tokens/{record_id}")  # no CSRF token
+    assert resp.status_code == 403
+
+    # The token must survive the rejected revocation.
+    list_resp = client.get("/api/auth/tokens")
+    assert len(list_resp.get_json()["tokens"]) == 1
 
 
 def test_delete_token_revokes_existing(client):
@@ -125,7 +153,7 @@ def test_delete_token_revokes_existing(client):
     body = create_resp.get_json()
     record_id = body["record"]["id"]
 
-    resp = client.delete(f"/api/auth/tokens/{record_id}")
+    resp = client.delete(f"/api/auth/tokens/{record_id}", headers={"X-CSRF-Token": "test-csrf"})
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["success"] is True
@@ -140,7 +168,7 @@ def test_delete_token_revokes_existing(client):
 # ---------------------------------------------------------------------------
 
 
-def test_ha_pair_rejects_lan_caller(client):
+def test_ha_pair_rejects_lan_caller(client, ha_addon_env):
     """A direct call from a LAN IP must NOT yield a token, even with the
     ingress header set — the IP check fails."""
     resp = client.post(
@@ -151,7 +179,7 @@ def test_ha_pair_rejects_lan_caller(client):
     assert resp.status_code == 403
 
 
-def test_ha_pair_rejects_supervisor_ip_without_ingress_header(client):
+def test_ha_pair_rejects_supervisor_ip_without_ingress_header(client, ha_addon_env):
     """The Supervisor proxy injects ``X-Ingress-Path`` — without it we
     must refuse even from the trusted IP."""
     resp = client.post(
@@ -209,7 +237,7 @@ def test_token_endpoints_open_when_global_auth_disabled(tmp_path, monkeypatch):
     assert body["token"]
 
 
-def test_ha_pair_mints_token_when_supervisor_indicators_present(client):
+def test_ha_pair_mints_token_when_supervisor_indicators_present(client, ha_addon_env):
     resp = client.post(
         "/api/auth/ha-pair",
         environ_base={"REMOTE_ADDR": "172.30.32.2"},
@@ -222,7 +250,7 @@ def test_ha_pair_mints_token_when_supervisor_indicators_present(client):
     assert body["record"]["label"] == "ha-custom-component"
 
 
-def test_ha_pair_mints_token_when_called_from_ha_core_container(client):
+def test_ha_pair_mints_token_when_called_from_ha_core_container(client, ha_addon_env):
     """Regression: the HACS custom_component's auto-pair flow runs in the
     HA Core container (172.30.32.1 on the Supervisor hassio network),
     NOT in Supervisor.  Pre-v2.66.11 the bridge only trusted
@@ -242,7 +270,7 @@ def test_ha_pair_mints_token_when_called_from_ha_core_container(client):
     assert body["record"]["label"] == "ha-custom-component"
 
 
-def test_ha_pair_mints_token_when_called_via_addon_in_upper_half_of_hassio_network(client):
+def test_ha_pair_mints_token_when_called_via_addon_in_upper_half_of_hassio_network(client, ha_addon_env):
     """The hassio Docker network is /23, with addon containers in the
     upper half (172.30.33.x).  When HA Core proxies through Supervisor's
     ingress, the bridge sees ``request.remote_addr`` as that addon-side
@@ -264,7 +292,7 @@ def test_ha_pair_mints_token_when_called_via_addon_in_upper_half_of_hassio_netwo
         assert body["token"]
 
 
-def test_ha_pair_still_rejects_outside_hassio_network(client):
+def test_ha_pair_still_rejects_outside_hassio_network(client, ha_addon_env):
     """A LAN-side caller — even with the magic header — must still be
     rejected.  ``172.30.32.0/23`` boundaries: ``172.30.34.1`` is one
     octet past the end of the trusted CIDR.
@@ -276,6 +304,25 @@ def test_ha_pair_still_rejects_outside_hassio_network(client):
             headers={"X-Ingress-Path": "/api/auth/ha-pair"},
         )
         assert resp.status_code == 403, f"peer {peer!r} unexpectedly accepted"
+
+
+def test_ha_pair_rejects_when_not_running_as_ha_addon(client, monkeypatch):
+    """Standalone Docker/LXC (no SUPERVISOR_TOKEN) has no Supervisor and no
+    legitimate custom_component pairing over ingress.  A local process on
+    the host — or an SSRF/proxy pivot — can loop back from a trusted peer
+    (127.0.0.1 is in the default trust set) and forge the ``X-Ingress-Path``
+    header itself.  Minting a full-access bearer token in that case bypasses
+    the operator password, so ``ha-pair`` must refuse unless the bridge is
+    actually an HA addon.
+    """
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    for peer in ("127.0.0.1", "::1", "172.30.32.1", "172.30.33.2"):
+        resp = client.post(
+            "/api/auth/ha-pair",
+            environ_base={"REMOTE_ADDR": peer},
+            headers={"X-Ingress-Path": "/api/auth/ha-pair"},
+        )
+        assert resp.status_code == 403, f"peer {peer!r} minted a token in standalone mode"
 
 
 # ---------------------------------------------------------------------------

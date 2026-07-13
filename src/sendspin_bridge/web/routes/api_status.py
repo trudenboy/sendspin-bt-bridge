@@ -2119,8 +2119,21 @@ def api_bugreport_submit():
     if not email or "@" not in email:
         return jsonify({"success": False, "error": "A valid email address is required"}), 400
 
-    # Rate limit
-    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    # Rate limit — resolve the client IP trusting ``X-Forwarded-For`` only
+    # when the immediate peer is a trusted proxy, otherwise the header is
+    # client-spoofable and the per-IP limit is trivially bypassed.
+    from sendspin_bridge.web.trusted_proxies import TRUSTED_PROXY_DEFAULTS, resolve_client_ip
+
+    trust_set = set(TRUSTED_PROXY_DEFAULTS)
+    extra_proxies = load_config().get("TRUSTED_PROXIES") or []
+    if isinstance(extra_proxies, list):
+        trust_set.update(v.strip() for v in extra_proxies if isinstance(v, str) and v.strip())
+    client_ip = resolve_client_ip(
+        request.remote_addr or "",
+        request.headers.get("X-Forwarded-For", ""),
+        request.headers.get("X-Real-IP", ""),
+        trust_set,
+    )
     rate_error = proxy.check_rate_limit(client_ip)
     if rate_error:
         return jsonify({"success": False, "error": rate_error}), 429

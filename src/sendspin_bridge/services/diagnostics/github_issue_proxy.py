@@ -113,8 +113,8 @@ class GitHubIssueProxy:
             req.add_header("Accept", "application/vnd.github+json")
             req.add_header("User-Agent", "sendspin-bug-reporter")
 
-            resp = urlopen(req, timeout=15, context=_compat_ssl_ctx())
-            data = json.loads(resp.read())
+            with urlopen(req, timeout=15, context=_compat_ssl_ctx()) as resp:
+                data = json.loads(resp.read())
             self._token = data["token"]
             # Installation tokens expire in 1 hour
             self._token_expires = time.time() + 3500
@@ -143,8 +143,8 @@ class GitHubIssueProxy:
         req.add_header("User-Agent", "sendspin-bug-reporter")
         req.add_header("Content-Type", "application/json")
 
-        resp = urlopen(req, timeout=20, context=_compat_ssl_ctx())
-        issue = json.loads(resp.read())
+        with urlopen(req, timeout=20, context=_compat_ssl_ctx()) as resp:
+            issue = json.loads(resp.read())
         logger.info("Created GitHub issue #%s: %s", issue["number"], issue["html_url"])
         return {
             "number": issue["number"],

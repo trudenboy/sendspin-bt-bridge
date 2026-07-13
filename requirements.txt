@@ -113,7 +113,7 @@ orjson==3.11.9
     #   music-assistant-models
 paho-mqtt==2.1.0
     # via aiomqtt
-pillow==12.2.0
+pillow==12.3.0
     # via
     #   aiosendspin
     #   sendspin-bt-bridge

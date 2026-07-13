@@ -25,7 +25,7 @@ import asyncio
 import json
 import logging
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.ha.ha_entity_model import (
@@ -77,7 +77,9 @@ class MqttPublisherConfig:
     host: str
     port: int
     username: str
-    password: str
+    # Keep the broker password out of the auto-generated ``repr`` so it can't
+    # leak into logs / tracebacks that render the config object.
+    password: str = field(repr=False)
     discovery_prefix: str
     tls: bool
     client_id: str

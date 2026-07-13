@@ -48,11 +48,89 @@ def test_mint_token_id_is_short_handle():
 
 
 def test_hash_and_verify_roundtrip():
+    # v2 format: tokens are 256-bit random, so a single SHA-256 is used
+    # instead of PBKDF2 (which made bearer auth an O(n) KDF scan per request).
     plain = "test-token-abc"
     stored = M.hash_token(plain)
-    assert stored.startswith("v1:")
+    assert stored.startswith("v2:")
     assert M.verify_token(plain, stored) is True
     assert M.verify_token("wrong", stored) is False
+
+
+def test_verify_rejects_legacy_v1_hash():
+    # Existing v1 (PBKDF2) tokens are invalidated on upgrade: they must never
+    # verify, forcing the HA custom_component to re-pair once.
+    legacy = "v1:600000:" + ("aa" * 16) + ":" + ("bb" * 32)
+    assert M.verify_token("anything", legacy) is False
+
+
+def test_mint_token_embeds_id_for_o1_lookup():
+    plain, token_id = M.mint_token()
+    # The plaintext carries its own id so lookup is O(1), not a full scan.
+    assert plain.split(".", 1)[0] == token_id
+
+
+def test_find_matching_token_is_o1_by_id(isolated_config, monkeypatch):
+    plain, record = M.issue_token("ha-cc")
+    # Poison verify_token to raise if called more than once — a full scan
+    # over N tokens would call it repeatedly; O(1) lookup calls it once.
+    calls = {"n": 0}
+    real_verify = M.verify_token
+
+    def counting_verify(p, s):
+        calls["n"] += 1
+        return real_verify(p, s)
+
+    monkeypatch.setattr(M, "verify_token", counting_verify)
+    # Add unrelated tokens so a scan would be visible.
+    M.issue_token("other-1")
+    M.issue_token("other-2")
+    found = M.find_matching_token(plain)
+    assert found is not None and found.id == record.id
+    assert calls["n"] == 1
+
+
+def test_legacy_v1_token_does_not_authenticate(isolated_config):
+    # Seed a v1 (PBKDF2) record directly, as an upgrade would find it.
+    import hashlib as _hashlib
+    import json as _json
+
+    plain = "deadbeefdeadbeef.secret"
+    salt = bytes(range(16))
+    h = _hashlib.pbkdf2_hmac("sha256", plain.encode(), salt, 600_000)
+    legacy = {
+        "id": "deadbeefdeadbeef",
+        "label": "old",
+        "created": "2026-01-01T00:00:00+00:00",
+        "last_used": None,
+        "token_hash": f"v1:600000:{salt.hex()}:{h.hex()}",
+    }
+    data = _json.loads(isolated_config.read_text())
+    data["AUTH_TOKENS"] = [legacy]
+    isolated_config.write_text(_json.dumps(data))
+    assert M.find_matching_token(plain) is None
+
+
+def test_last_used_write_is_throttled(isolated_config, monkeypatch):
+    import json as _json
+
+    plain, _record = M.issue_token("ha-cc")
+    writes = {"n": 0}
+    real_save = M._save_tokens
+
+    def counting_save(tokens):
+        writes["n"] += 1
+        return real_save(tokens)
+
+    monkeypatch.setattr(M, "_save_tokens", counting_save)
+    # First lookup sets last_used and writes once.
+    M.find_matching_token(plain)
+    assert writes["n"] == 1
+    # A second lookup within the throttle window must NOT rewrite config.json.
+    M.find_matching_token(plain)
+    assert writes["n"] == 1
+    saved = _json.loads(isolated_config.read_text())
+    assert saved["AUTH_TOKENS"][0]["last_used"] is not None
 
 
 def test_verify_rejects_malformed_hash():

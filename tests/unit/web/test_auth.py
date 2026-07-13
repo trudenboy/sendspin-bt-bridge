@@ -16,6 +16,7 @@ from sendspin_bridge.web.routes.auth import (
     _get_rate_limit_client_id,
     _ma_validate_credentials,
     _record_failure,
+    _redact_flow_result,
     _safe_next_url,
 )
 
@@ -465,3 +466,38 @@ def test_ha_direct_mfa_step_preserves_csrf_and_completes_login(csrf_client):
         with csrf_client.session_transaction() as sess:
             assert sess.get("authenticated") is True
             assert sess.get("ha_user") == "user@example.com"
+
+
+# ── Secret-safe logging of HA login_flow results ─────────────────────────
+
+
+def test_redact_flow_result_drops_auth_code():
+    """The ``result`` field of a ``create_entry`` step is the authorization
+    code exchanged for tokens — it must never appear in the redacted summary."""
+    raw = {
+        "type": "create_entry",
+        "flow_id": "abcd1234",
+        "result": "SUPER_SECRET_AUTH_CODE",
+        "title": "Home Assistant",
+    }
+    summary = _redact_flow_result(raw)
+    assert summary["type"] == "create_entry"
+    assert summary["flow_id"] == "abcd1234"
+    assert summary["has_result"] is True
+    # The secret itself must be gone from every value in the summary.
+    assert "SUPER_SECRET_AUTH_CODE" not in repr(summary)
+    assert "result" not in summary  # only ``has_result`` (a bool) survives
+
+
+def test_redact_flow_result_keeps_error_keys_only():
+    raw = {"type": "form", "flow_id": "f1", "step_id": "mfa", "errors": {"base": "invalid_code"}}
+    summary = _redact_flow_result(raw)
+    assert summary["step_id"] == "mfa"
+    assert summary["errors"] == ["base"]
+    # Error *messages* may hint at internals; keep only the field keys.
+    assert "invalid_code" not in repr(summary)
+
+
+def test_redact_flow_result_handles_non_dict():
+    assert _redact_flow_result("a-bare-token-string")["type"] == "str"
+    assert "a-bare-token-string" not in repr(_redact_flow_result("a-bare-token-string"))

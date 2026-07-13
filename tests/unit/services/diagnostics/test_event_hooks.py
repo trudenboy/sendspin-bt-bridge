@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import socket
+
 from sendspin_bridge.services.diagnostics.event_hooks import EventHookRegistry
 from sendspin_bridge.services.diagnostics.internal_events import InternalEvent
 
@@ -26,18 +28,19 @@ def test_event_hook_registry_delivers_matching_events(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def _fake_urlopen(request, timeout=0):
+    def _fake_urlopen(request, timeout=0, strict=None):
         requests.append(
             {
                 "url": request.full_url,
                 "body": request.data.decode("utf-8"),
                 "headers": dict(request.header_items()),
                 "timeout": timeout,
+                "strict": strict,
             }
         )
         return _Response()
 
-    monkeypatch.setattr("sendspin_bridge.services.diagnostics.event_hooks.urllib.request.urlopen", _fake_urlopen)
+    monkeypatch.setattr("sendspin_bridge.services.diagnostics.event_hooks.safe_urlopen", _fake_urlopen)
     hook = registry.register(url="https://example.com/hook", categories=["bridge_event"])
 
     count = registry.dispatch(
@@ -53,6 +56,9 @@ def test_event_hook_registry_delivers_matching_events(monkeypatch):
     assert count == 1
     assert requests[0]["url"] == "https://example.com/hook"
     assert '"event_type": "bridge.startup.completed"' in requests[0]["body"]
+    # Delivery must use the strict SSRF policy (block loopback / RFC1918 at
+    # connect time), not the LAN-permissive default.
+    assert requests[0]["strict"] is True
     snapshot = registry.snapshot()
     assert snapshot["hooks"][0]["id"] == hook["id"]
     assert snapshot["hooks"][0]["success_count"] == 1
@@ -63,10 +69,10 @@ def test_event_hook_registry_records_delivery_failures(monkeypatch):
     _allow_public_example(monkeypatch)
     registry = EventHookRegistry()
 
-    def _fake_urlopen(_request, timeout=0):
+    def _fake_urlopen(_request, timeout=0, strict=None):
         raise OSError(f"timeout after {timeout}s")
 
-    monkeypatch.setattr("sendspin_bridge.services.diagnostics.event_hooks.urllib.request.urlopen", _fake_urlopen)
+    monkeypatch.setattr("sendspin_bridge.services.diagnostics.event_hooks.safe_urlopen", _fake_urlopen)
     registry.register(url="https://example.com/hook", event_types=["device.event.recorded"], timeout_sec=1.5)
 
     count = registry.dispatch(
@@ -111,6 +117,54 @@ def test_event_hook_registry_rejects_private_network_targets(monkeypatch):
         assert str(exc) == "url must not target loopback, local, or private network hosts"
     else:
         raise AssertionError("Expected ValueError for private target")
+
+
+def test_event_hook_delivery_blocks_dns_rebinding_to_loopback(monkeypatch):
+    """A hook whose host passed register-time validation (resolved public)
+    must still be blocked at *delivery* time if the host now resolves to a
+    disallowed peer — the DNS-rebinding TOCTOU.  Delivery must go through the
+    SSRF-safe opener, not raw ``urllib.request.urlopen``."""
+    import sendspin_bridge.services.infrastructure.url_safety as url_safety
+
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
+    # Register time: host resolves to a public address, so registration passes.
+    _allow_public_example(monkeypatch)
+    registry = EventHookRegistry()
+    registry.register(url="https://example.com/hook", categories=["bridge_event"], timeout_sec=2)
+
+    # Delivery time: the host now resolves to loopback (rebinding).
+    def _rebind_resolver(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 0))]
+
+    monkeypatch.setattr(url_safety.socket, "getaddrinfo", _rebind_resolver)
+
+    # If the old code path is used, this raw urlopen would be hit and the
+    # delivery would wrongly succeed — fail loudly so the test is a genuine
+    # regression guard, not just an assertion on the new path.
+    def _forbidden_raw_urlopen(*_a, **_k):
+        raise AssertionError("delivery bypassed the SSRF-safe opener")
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.diagnostics.event_hooks.urllib.request.urlopen",
+        _forbidden_raw_urlopen,
+    )
+
+    count = registry.dispatch(
+        InternalEvent(
+            event_type="bridge.startup.completed",
+            category="bridge_event",
+            subject_id="bridge",
+            payload={},
+        ),
+        background=False,
+    )
+
+    assert count == 1
+    snapshot = registry.snapshot()
+    assert snapshot["hooks"][0]["failure_count"] == 1
+    assert snapshot["hooks"][0]["success_count"] == 0
+    assert snapshot["recent_deliveries"][0]["status"] == "failed"
 
 
 def test_event_hook_registry_unregister_removes_hook(monkeypatch):
