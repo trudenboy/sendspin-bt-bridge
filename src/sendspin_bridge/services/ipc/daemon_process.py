@@ -322,151 +322,32 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
                         logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
-# Seconds after audio_streaming=True before unmuting the sink.
-# Must cover sendspin's sync-settle window: on every fresh stream start
-# AudioPlayer re-anchors and its proportional drop/insert corrector
-# converges within _CORRECTION_TARGET_SECONDS (2.0 s in sendspin 7.3).
-# The repeated frame drops/duplications during that window are audible
-# as crackling, so unmuting earlier leaks the tail of the burst to the
-# speaker (issue #341).  0.5 s headroom because convergence is
-# asymptotic — guarded by test_startup_unmute_covers_sync_settle.
-_STARTUP_UNMUTE_DELAY_S = 2.5
-
-# Issue #269: maximum time to wait for BlueZ MediaTransport1 to leave the
-# 'idle' state before muting anyway. Most BlueZ stacks move to 'pending'
-# within ~200 ms after Connect when the peer is opening a stream endpoint;
-# 1.5 s is a comfortable upper bound that still beats the audio-streaming
-# path of MA (which on the issue-269 stack arrives ~12 s after Connect).
-_STARTUP_MUTE_TRANSPORT_TIMEOUT_S = 1.5
-
-
-def _dbus_get_media_transport_state(device_path: str | None) -> str | None:
-    """Thin re-export so the daemon can stay independent of bluetooth/dbus
-    module import paths and tests can monkeypatch us locally."""
-    from sendspin_bridge.bluetooth.dbus import (
-        _dbus_get_media_transport_state as _impl,
-    )
-
-    return _impl(device_path)
-
-
-async def _mute_when_transport_ready(
-    *,
-    sink_name: str,
-    device_path: str | None,
-    do_mute,
-    poll_interval: float = 0.2,
-    timeout: float = _STARTUP_MUTE_TRANSPORT_TIMEOUT_S,
-) -> bool:
-    """Mute *sink_name* only once BlueZ AVDTP transport is non-idle.
-
-    Issue #269: when the daemon mutes immediately on startup, certain
-    A2DP sinks (Sony WH-1000XM4 confirmed) interpret the silence as
-    "no inbound stream" and proactively send AVDTP-Suspend. If MA then
-    starts streaming, PipeWire's AVDTP-Start races with the Suspend and
-    bluetoothd reports ``cancel_request() Start: Operation canceled``.
-
-    We delay the mute until ``MediaTransport1.State`` is
-    ``"pending"`` / ``"active"`` (the peer has opened or is opening the
-    stream endpoint), or until ``timeout`` elapses — whichever is first.
-    When ``device_path`` is None (no D-Bus introspection available),
-    mute immediately to preserve pre-#269 behavior.
-    """
-    if not device_path:
-        return await do_mute(sink_name, True)
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + max(0.0, timeout)
-    while True:
-        # Synchronous D-Bus read — run it off the loop each poll tick.
-        state = await loop.run_in_executor(None, _dbus_get_media_transport_state, device_path)
-        if state in ("pending", "active"):
-            return await do_mute(sink_name, True)
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-            return await do_mute(sink_name, True)
-        await asyncio.sleep(min(poll_interval, remaining))
-
-
-async def _startup_unmute_watcher(
-    status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str, on_status_change=None
+async def _startup_sink_routing_watcher(
+    status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str
 ) -> None:
-    """Wait for audio to stabilize after startup, then unmute the PA sink.
+    """Once audio starts, correct PA sink routing for this daemon's PID.
 
-    The sink is muted before BridgeDaemon starts to hide re-anchor clicks,
-    format probing noise, and routing glitches. This watcher polls for
-    audio_streaming=True, waits an additional stabilization delay, then unmutes.
-    Times out after 60s — on timeout unmutes only if audio was streaming
-    (avoids unmuting idle players that would immediately get muted again).
-
-    Also corrects sink routing: PA may ignore PULSE_SINK and route the
-    sink-input to the default sink instead (module-stream-restore or
-    default-sink override). After audio starts we move our PID's
-    sink-inputs to the correct sink.
+    PulseAudio may ignore ``PULSE_SINK`` and route our sink-input to the
+    default sink instead (module-stream-restore / default-sink override).
+    When ``audio_streaming`` becomes True we move our PID's sink-inputs back
+    to the intended sink.  Gives up after a bounded window if audio never
+    starts.  (The former anti-crackle startup mute/unmute was removed; this
+    keeps only the independent sink-routing correction.)
     """
     _logger = logging.getLogger(__name__)
-    from sendspin_bridge.services.audio.pulse import alist_sinks, amove_pid_sink_inputs, aset_sink_mute
+    from sendspin_bridge.services.audio.pulse import amove_pid_sink_inputs
 
-    streamed = False
     deadline = time.monotonic() + 15.0
     while not stop_event.is_set() and time.monotonic() < deadline:
         await asyncio.sleep(0.5)
         if status.get("audio_streaming"):
-            streamed = True
-            # Correct sink routing before unmuting — PA may have routed
-            # our sink-input to the default sink instead of PULSE_SINK.
             try:
                 moved = await amove_pid_sink_inputs(os.getpid(), sink_name)
                 if moved:
                     _logger.info("[%s] Corrected %d sink-input(s) → %s", player_name, moved, sink_name)
             except Exception as exc:
                 _logger.debug("[%s] Sink routing correction failed: %s", player_name, exc)
-            _logger.info("[%s] Audio streaming, waiting %.1fs for stabilization", player_name, _STARTUP_UNMUTE_DELAY_S)
-            await asyncio.sleep(_STARTUP_UNMUTE_DELAY_S)
-            break
-
-    if stop_event.is_set():
-        return  # daemon shutting down, don't unmute
-
-    if not streamed:
-        _logger.info("[%s] Startup unmute timeout — no audio streamed, unmuting anyway", player_name)
-
-    try:
-        ok = await aset_sink_mute(sink_name, False)
-        if not ok:
-            # Issue #269: when the BT sink object has been torn down by
-            # BlueZ (e.g. AVDTP collision aborted the connect cycle),
-            # retries are guaranteed to fail. Probe sink presence once
-            # and short-circuit the 3x2s retry storm if the sink is
-            # already gone.
-            try:
-                sinks = await alist_sinks()
-                sink_present = any(s.get("name") == sink_name for s in sinks)
-            except Exception as exc:
-                _logger.debug("[%s] alist_sinks failed during unmute bail-check: %s", player_name, exc)
-                sink_present = True  # err on the safe side, allow retries
-            if not sink_present:
-                _logger.info(
-                    "[%s] Sink %s no longer present, skipping unmute retries",
-                    player_name,
-                    sink_name,
-                )
-                return
-            for retry in range(1, 4):
-                _logger.info("[%s] Unmute retry %d/3 for %s", player_name, retry, sink_name)
-                await asyncio.sleep(2)
-                ok = await aset_sink_mute(sink_name, False)
-                if ok:
-                    break
-        if ok:
-            _logger.info("[%s] Unmuted sink %s (startup complete)", player_name, sink_name)
-            with _status_lock:
-                status["sink_muted"] = False
-            if on_status_change:
-                on_status_change()
-        else:
-            _logger.warning("[%s] Failed to unmute sink %s after retries", player_name, sink_name)
-    except Exception as exc:
-        _logger.warning("[%s] Error unmuting sink: %s", player_name, exc)
+            return
 
 
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink_name: str | None = None) -> None:
@@ -661,7 +542,6 @@ async def _run(params: dict) -> None:
     server_url: str | None = params.get("url")
     static_delay_ms: float = params.get("static_delay_ms", 0.0)
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
-    bluetooth_device_path: str | None = params.get("bluetooth_device_path")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))
     # Per-device identity surfaced to MA in client/hello.device_info. Empty
@@ -840,45 +720,20 @@ async def _run(params: dict) -> None:
 
         pa_volume_controller.set_external_change_tap(_mirror_external_volume_to_bridge)
 
-    # Mute the PA sink before audio starts to hide re-anchor clicks and routing glitches.
-    # The _startup_unmute_watcher will unmute after audio_streaming becomes True + stabilization delay.
-    # Issue #269: defer the mute until BlueZ's AVDTP transport leaves the
-    # 'idle' state — some A2DP sinks (Sony WH-1000XM4 confirmed) interpret
-    # silence on a half-formed transport as "no inbound stream" and send
-    # AVDTP-Suspend, which then collides with PipeWire's later AVDTP-Start.
-    _startup_muted = False
-    if bluetooth_sink_name:
-        try:
-            from sendspin_bridge.services.audio.pulse import aset_sink_mute
-
-            ok = await _mute_when_transport_ready(
-                sink_name=bluetooth_sink_name,
-                device_path=bluetooth_device_path,
-                do_mute=aset_sink_mute,
-            )
-            if ok:
-                _startup_muted = True
-                status["sink_muted"] = True
-                logger.info("[%s] Muted sink %s during startup", player_name, bluetooth_sink_name)
-                _on_status_change()
-        except Exception as exc:
-            logger.debug("[%s] Could not mute sink on startup: %s", player_name, exc)
-
     cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event, bt_sink_name=bluetooth_sink_name))
     daemon_task = asyncio.create_task(daemon.run())
     watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
     # Connection watchdog: surfaces a clear error when daemon cannot reach the server
     conn_watchdog_task = asyncio.create_task(daemon._connection_watchdog())
-    unmute_task = None
-    if _startup_muted and bluetooth_sink_name:
-        unmute_task = asyncio.create_task(
-            _startup_unmute_watcher(
-                status, bluetooth_sink_name, stop_event, player_name, on_status_change=_on_status_change
-            )
+    # Correct PA sink routing once audio starts (PA may ignore PULSE_SINK).
+    routing_task = None
+    if bluetooth_sink_name:
+        routing_task = asyncio.create_task(
+            _startup_sink_routing_watcher(status, bluetooth_sink_name, stop_event, player_name)
         )
 
     # Wait until stop command or daemon exits.
-    # unmute_task and conn_watchdog_task are fire-and-forget so their completion
+    # routing_task and conn_watchdog_task are fire-and-forget so their completion
     # doesn't trigger FIRST_COMPLETED and kill the daemon.
     all_tasks = [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())]
     _done, pending = await asyncio.wait(
@@ -890,8 +745,8 @@ async def _run(params: dict) -> None:
     cmd_task.cancel()
     watcher_task.cancel()
     conn_watchdog_task.cancel()
-    if unmute_task:
-        unmute_task.cancel()
+    if routing_task:
+        routing_task.cancel()
     for t in pending:
         t.cancel()
 

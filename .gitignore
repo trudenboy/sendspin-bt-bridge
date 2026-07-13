@@ -67,3 +67,4 @@ sendspin-cli/
 reddit/
 img/
 scan-scroll-test*.png
+.local-run/

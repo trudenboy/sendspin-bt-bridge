@@ -8,20 +8,20 @@ description = "Bridge Music Assistant Sendspin protocol to Bluetooth speakers"
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
-    "sendspin==7.3.1",
-    "aiosendspin[server]==5.3.0",
+    "sendspin==7.5.0",
+    "aiosendspin[server]==6.1.1",
     "flask==3.1.3",
     "waitress==3.0.2",
     "dbus-python==1.4.0",
-    "dbus-fast==5.0.17",
+    "dbus-fast==5.0.22",
     "pulsectl-asyncio==1.3.2",
-    "music-assistant-client==1.3.5",
-    "websockets==16.0",
-    "zeroconf==0.149.16",
+    "music-assistant-client==1.4.3",
+    "websockets==16.1",
+    "zeroconf==0.150.0",
     "PyJWT>=2.13.0",
     "cryptography>=48.0.1",
     # services.adapter_recovery — optional BT adapter recovery ladder (Linux-only).
-    "bluetooth-auto-recovery==1.5.3",
+    "bluetooth-auto-recovery==1.6.4",
     # services.bt_rssi_mgmt — live RSSI via BlueZ mgmt socket (Linux-only).
     "btsocket==0.3.0",
     # services.ha_mqtt_publisher — async MQTT discovery for HA.
@@ -38,6 +38,16 @@ dependencies = [
 # Pin uv version range so all contributors / CI / Dockerfile use a compatible
 # resolver and lockfile schema. Bump deliberately alongside the Dockerfile pin.
 required-version = ">=0.9.27,<0.10"
+
+# ``sendspin`` 7.5.0 caps its own ``aiosendspin`` dependency at ``~=6.0.1``
+# (``>=6.0.1,<6.1``), but ``seek_relative`` (advertised by current Music
+# Assistant servers in ``server/state``) only landed in aiosendspin 6.1.0 — so
+# 6.0.x drops every controller-state update.  Override the cap to 6.1.1 (a
+# minor bump over 6.0.x); validated by the test suite + a live server/state
+# parse check.
+override-dependencies = [
+    "aiosendspin[server]==6.1.1",
+]
 
 # Cap PyAV below 17.x so the armv7 release build can install from piwheels
 # under `--only-binary :all:`. piwheels publishes abi3 wheels for armv7 up to
@@ -72,7 +82,7 @@ dev = [
     # CI's _test.yml runs pytest with --cov; keep coverage opt-in via the
     # dev extra so contributors can `uv run pytest --cov=...` locally too.
     "pytest-cov>=5.0,<8.0",
-    "ruff==0.15.13",
+    "ruff==0.15.21",
     "mypy>=1.20.2,<3.0",
 ]
 

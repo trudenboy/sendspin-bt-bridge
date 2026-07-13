@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.72.0-rc.3] - 2026-07-13
+
+### Changed
+
+- **Dependency modernization.** `sendspin` 7.3.1 → 7.5.0 and its Sendspin protocol client `aiosendspin` 5.3.0 → 6.1.1, `music-assistant-client` 1.3.5 → 1.4.3, plus refreshed `dbus-fast`, `websockets`, `zeroconf`, `bluetooth-auto-recovery` and the developer toolchain. The dependency audit stays clean.
+
+### Removed
+
+- **The brief startup mute at the start of playback has been removed.** The bridge used to mute the speaker for the first couple of seconds of a fresh stream to hide the audio engine's sync-correction artefacts; that mute (and its associated transport-state gating) is gone, so playback is audible immediately. Sink-routing correction is unchanged.
+
+### Fixed
+
+- **Music Assistant volume, mute and transport state sync reliably again.** Current Music Assistant servers advertise a `seek_relative` transport command that the previously bundled protocol client did not recognise, which made it drop *every* controller-state update (volume / mute / play state) and flood the log with parse errors. The updated client understands the command, so state stays in sync.
+
 ## [2.72.0-rc.2] - 2026-07-13
 
 ### Changed
