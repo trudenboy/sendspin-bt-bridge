@@ -815,7 +815,9 @@ class MaMonitor:
         async with _ws_connect(self._ws_url, **_ws_kw) as ws:
             # Server info
             server_info = await _recv(ws, timeout=10.0)
-            self._detect_ha_addon(server_info)
+            # ``_detect_ha_addon`` may read + rewrite config.json — run its
+            # blocking file I/O off the loop during the handshake.
+            await asyncio.get_running_loop().run_in_executor(None, self._detect_ha_addon, server_info)
             # Cache MA server version + banner-line it into the runtime
             # log so operators can grep one line for "what MA build
             # are we talking to".  Mirrors the entrypoint banner's

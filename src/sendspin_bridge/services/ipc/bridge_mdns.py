@@ -8,7 +8,7 @@ TXT records expose enough metadata for HA's config_flow to validate the
 bridge identity without a round-trip:
 
   * ``version``   — bridge software version
-  * ``host_id``   — stable bridge identifier (HMAC of bridge_name)
+  * ``host_id``   — stable bridge identifier (truncated SHA-1 of bridge_name)
   * ``web_port``  — port the bridge web UI listens on
   * ``auth``      — accepted auth scheme(s) (``bearer``)
   * ``ingress``   — ``1`` when running behind HA Supervisor ingress
@@ -19,6 +19,7 @@ at INFO and skip — the bridge does not crash if it can't advertise.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import socket
@@ -149,7 +150,9 @@ class BridgeMdnsAdvertiser:
 
         host_id = _derive_host_id(self._bridge_name)
         instance_name = f"sendspin-bridge-{host_id}._sendspin-bridge._tcp.local."
-        host = self._host_override or _resolve_host_address()
+        # ``_resolve_host_address`` calls ``socket.gethostbyname`` (blocking DNS)
+        # — resolve it off the loop.
+        host = self._host_override or await asyncio.get_running_loop().run_in_executor(None, _resolve_host_address)
         advertised_port = self._port_override if self._port_override > 0 else self._web_port
 
         txt: dict[str, str] = {

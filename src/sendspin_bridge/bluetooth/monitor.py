@@ -27,6 +27,25 @@ logger = logging.getLogger(__name__)
 # Gives PulseAudio time to create the new sink and module-rescue-streams to act.
 _SINK_CORRECTION_DELAY = 3
 
+# Strong references to fire-and-forget background tasks.  A bare
+# ``asyncio.ensure_future`` keeps no reference, so the event loop may garbage
+# collect the task mid-flight and any exception it raises is silently dropped.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro) -> None:
+    """Schedule *coro* fire-and-forget while retaining a reference and logging
+    any exception it raises (with traceback) when it finishes."""
+    task = asyncio.ensure_future(coro)
+    _background_tasks.add(task)
+
+    def _on_done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            logger.error("Background sink-routing task failed: %s", t.exception(), exc_info=t.exception())
+
+    task.add_done_callback(_on_done)
+
 
 async def _standby_sleep(mgr: BluetoothManager, seconds: float = 5) -> None:
     """Sleep interruptibly — returns early when ``signal_standby_wake()`` fires."""
@@ -98,7 +117,7 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
         )
         logger.info("BT management reclaimed for %s, starting sendspin...", mgr.device_name)
         await mgr.host.start_subprocess()
-    asyncio.ensure_future(_correct_other_devices_routing(mgr))
+    _spawn_background(_correct_other_devices_routing(mgr))
     return True
 
 
@@ -194,7 +213,10 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             }
                         )
 
-                    if mgr._handle_reconnect_failure(reconnect_attempt):
+                    # Offload: this may run the adapter-recovery ladder
+                    # (USB unbind/rebind) and a config write — never inline
+                    # on the loop.
+                    if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
                         reconnect_attempt = 0
                         continue
 
@@ -227,7 +249,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         )
                         logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                         await mgr.host.start_subprocess()
-                        asyncio.ensure_future(_correct_other_devices_routing(mgr))
+                        _spawn_background(_correct_other_devices_routing(mgr))
                     else:
                         delay = mgr._reconnect_delay(reconnect_attempt)
                         mgr._publish_client_event(
@@ -254,14 +276,15 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         if mgr.host.bluetooth_sink_name:
                             logger.info("[%s] Auto-reconnect: starting player", mgr.device_name)
                             await mgr.host.start_subprocess()
-                            asyncio.ensure_future(_correct_other_devices_routing(mgr))
+                            _spawn_background(_correct_other_devices_routing(mgr))
 
-                    # Read battery level (None if device doesn't support it)
-                    mgr.battery_level = _dbus_get_battery_level(mgr._dbus_device_path)
+                    # Read battery level (None if device doesn't support it).
+                    # Synchronous D-Bus round-trip → run off the loop.
+                    mgr.battery_level = await loop.run_in_executor(None, _dbus_get_battery_level, mgr._dbus_device_path)
 
             await asyncio.sleep(5)
-        except Exception as e:
-            logger.error("Error in Bluetooth poll monitor: %s", e)
+        except Exception:
+            logger.exception("Error in Bluetooth poll monitor")
             await asyncio.sleep(10)
 
 
@@ -387,8 +410,8 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
             raise  # propagate to monitor_and_reconnect for polling fallback
         except Exception as e:
             connect_failures += 1
-            logger.error(
-                "[%s] D-Bus monitor error (%s/%s): %s", mgr.device_name, connect_failures, _MAX_CONNECT_FAILURES, e
+            logger.exception(
+                "[%s] D-Bus monitor error (%s/%s)", mgr.device_name, connect_failures, _MAX_CONNECT_FAILURES
             )
             if connect_failures >= _MAX_CONNECT_FAILURES:
                 if bus:
@@ -397,7 +420,7 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
                     except Exception as exc:
                         logger.debug("D-Bus cleanup on failure failed: %s", exc)
                     bus = None
-                raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}")
+                raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}") from e
         await asyncio.sleep(10)
 
 
@@ -493,8 +516,9 @@ async def _inner_dbus_monitor(
                     }
                 )
 
-            # Auto-disable after too many failures
-            if mgr._handle_reconnect_failure(reconnect_attempt):
+            # Auto-disable after too many failures.  Offload: may run the
+            # adapter-recovery ladder + a config write — never on the loop.
+            if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
                 return
 
             # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
@@ -532,7 +556,7 @@ async def _inner_dbus_monitor(
                 if mgr.host:
                     logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                     await mgr.host.start_subprocess()
-                asyncio.ensure_future(_correct_other_devices_routing(mgr))
+                _spawn_background(_correct_other_devices_routing(mgr))
                 return
             else:
                 # Failed — back off proportional to failure count.  An
@@ -571,5 +595,5 @@ async def _inner_dbus_monitor(
                         )
                         logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
                         await mgr.host.start_subprocess()
-                    asyncio.ensure_future(_correct_other_devices_routing(mgr))
+                    _spawn_background(_correct_other_devices_routing(mgr))
                     return

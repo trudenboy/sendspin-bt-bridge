@@ -681,3 +681,70 @@ def test_serve_propagates_worker_exception_so_run_can_reconnect(cfg, projection,
 
     with pytest.raises(RuntimeError, match="Disconnected during message iteration"):
         asyncio.run(publisher._serve(cfg))
+
+
+# ---------------------------------------------------------------------------
+# Regression: MQTT command dispatch must not deadlock the event loop.
+#
+# The command dispatcher (bt_commands._schedule_coroutine) schedules a
+# coroutine on the bridge's main loop and blocks on ``fut.result()``.  That
+# is safe from a worker thread, but ``_command_loop`` runs ON the loop — so
+# if it calls the handler inline, the blocking wait freezes the very loop
+# that must run the coroutine, stalling every device's IPC/SSE for the whole
+# timeout.  The handler must run off the loop thread.
+# ---------------------------------------------------------------------------
+
+
+class _AsyncMsgClient:
+    """Minimal aiomqtt-like client whose ``messages`` yields fixed messages."""
+
+    def __init__(self, msgs):
+        self._msgs = msgs
+
+    @property
+    def messages(self):
+        async def _gen():
+            for m in self._msgs:
+                yield m
+
+        return _gen()
+
+
+@pytest.mark.asyncio
+async def test_command_loop_does_not_deadlock_when_handler_needs_the_loop(cfg, projection):
+    loop = asyncio.get_running_loop()
+    ran: list[tuple] = []
+
+    class _LoopBoundDispatcher:
+        """Mimics ``bt_commands._schedule_coroutine``: schedule a coroutine on
+        the loop and block on its result.  Completes only if the handler runs
+        off the loop thread (otherwise the loop is frozen and it times out)."""
+
+        def dispatch_device(self, player_id, command, value):
+            async def _inner():
+                ran.append((player_id, command, value))
+                return "ok"
+
+            fut = asyncio.run_coroutine_threadsafe(_inner(), loop)
+            return fut.result(timeout=3)
+
+        def dispatch_bridge(self, command, value):  # pragma: no cover - unused here
+            async def _inner():
+                ran.append(("bridge", command, value))
+                return "ok"
+
+            fut = asyncio.run_coroutine_threadsafe(_inner(), loop)
+            return fut.result(timeout=3)
+
+    publisher = HaMqttPublisher(
+        config_provider=lambda: cfg,
+        projection_provider=lambda: projection,
+        dispatcher=_LoopBoundDispatcher(),
+        event_subscribe=lambda cb: lambda: None,
+    )
+
+    msg = SimpleNamespace(topic="sendspin/player-aaa/cmd/set_idle_mode", payload=b'"power_save"')
+    await asyncio.wait_for(publisher._command_loop(_AsyncMsgClient([msg]), cfg), timeout=8)
+
+    # The scheduled coroutine actually ran → the loop was free → no deadlock.
+    assert ran == [("player-aaa", "set_idle_mode", "power_save")]

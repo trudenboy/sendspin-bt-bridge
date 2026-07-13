@@ -613,6 +613,13 @@ class SendspinClient:
             logger_=logger,
         )
         self._stop_service = SubprocessStopService(logger_=logger)
+        # Debounced, off-loop persistence of daemon-driven volume / static-delay
+        # changes.  ``_read_subprocess_output`` runs on the main asyncio loop;
+        # writing config.json (fsync under a lock) inline there would block every
+        # device's IPC on an MA volume ramp.  Keyed by field name so volume and
+        # delay debounce independently.
+        self._persist_timers: dict[str, threading.Timer] = {}
+        self._persist_timers_lock = threading.Lock()
         self._idle_timer_lock = threading.Lock()
         self._idle_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
@@ -1605,13 +1612,17 @@ class SendspinClient:
             bt_manufacturer = ""
             bt_dbus_path = getattr(self.bt_manager, "_dbus_device_path", None) if self.bt_manager else None
             if bt_dbus_path:
-                # Alias is user-renamable in HAOS BT UI / bluetoothctl; prefer it.
-                bt_product_name = (
-                    _dbus_get_device_property(bt_dbus_path, "Alias")
-                    or _dbus_get_device_property(bt_dbus_path, "Name")
-                    or ""
-                )
-                bt_manufacturer = vendor_from_modalias(_dbus_get_device_property(bt_dbus_path, "Modalias"))
+                # These are synchronous D-Bus round-trips (dbus-python); run all
+                # three off the event loop in a single executor hop so a slow BlueZ
+                # can't stall every other device's IPC during a spawn.
+                def _read_bt_identity(path: str) -> tuple[str, str]:
+                    # Alias is user-renamable in HAOS BT UI / bluetoothctl; prefer it.
+                    name = _dbus_get_device_property(path, "Alias") or _dbus_get_device_property(path, "Name") or ""
+                    manufacturer = vendor_from_modalias(_dbus_get_device_property(path, "Modalias"))
+                    return name, manufacturer
+
+                loop = asyncio.get_running_loop()
+                bt_product_name, bt_manufacturer = await loop.run_in_executor(None, _read_bt_identity, bt_dbus_path)
 
             params = json.dumps(
                 with_protocol_version(
@@ -1685,6 +1696,41 @@ class SendspinClient:
             self._update_status({"last_error": str(e), "server_connected": False})
 
     _STDOUT_IDLE_TIMEOUT_SECS: float = 120.0
+    _PERSIST_DEBOUNCE_SECS: float = 1.0
+
+    def _schedule_persist(self, key: str, fn, mac: str, value: int) -> None:
+        """Debounce a daemon-driven config write and run it off the loop.
+
+        Mirrors ``routes/api._schedule_volume_persist``: a ``threading.Timer``
+        (its own thread, not the asyncio loop) fires ``fn(mac, value)`` after a
+        quiet window, and a newer value cancels the pending one.  This keeps the
+        synchronous ``config.json`` fsync off the event-loop thread and coalesces
+        an MA volume ramp into a single write.
+        """
+        with self._persist_timers_lock:
+            old = self._persist_timers.pop(key, None)
+            if old is not None:
+                old.cancel()
+            timer = threading.Timer(self._PERSIST_DEBOUNCE_SECS, self._run_persist, args=(key, fn, mac, value))
+            timer.daemon = True
+            self._persist_timers[key] = timer
+            timer.start()
+
+    def _run_persist(self, key: str, fn, mac: str, value: int) -> None:
+        # Runs on the Timer's own thread — the fsync never touches the loop.
+        # Stale entries are replaced by the next ``_schedule_persist`` and
+        # cleared by ``_cancel_persist_timers``, so no cleanup is needed here.
+        try:
+            fn(mac, value)
+        except Exception:  # pragma: no cover - best-effort persistence
+            logger.exception("[%s] failed to persist %s=%s", self.player_name, key, value)
+
+    def _cancel_persist_timers(self) -> None:
+        """Cancel any pending debounced writes (called on stop/teardown)."""
+        with self._persist_timers_lock:
+            for timer in self._persist_timers.values():
+                timer.cancel()
+            self._persist_timers.clear()
 
     async def _read_subprocess_output(self) -> None:
         """Read JSON lines from daemon subprocess stdout and merge into self.status.
@@ -1728,14 +1774,14 @@ class SendspinClient:
                     new_volume = updates.get("volume")
                     _mac = self.bt_manager.mac_address if self.bt_manager else None
                     if isinstance(new_volume, int) and _mac:
-                        save_device_volume(_mac, new_volume)
+                        self._schedule_persist("volume", save_device_volume, _mac, new_volume)
                     # MA-driven static_delay_ms changes flow through the daemon's
                     # status mirror (BridgeDaemon._handle_server_command). Persist
                     # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
                     # survives restart and the bridge UI repaints from config.
                     new_delay = updates.get("static_delay_ms")
                     if isinstance(new_delay, int) and _mac:
-                        save_device_static_delay(_mac, new_delay)
+                        self._schedule_persist("static_delay", save_device_static_delay, _mac, new_delay)
                         # Keep the parent-side cache in sync so a subsequent
                         # warm_restart doesn't re-spawn the subprocess with a
                         # stale ctor value.
@@ -2053,6 +2099,7 @@ class SendspinClient:
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
+        self._cancel_persist_timers()
         # Flag the upcoming death as expected so the death-handler does NOT
         # populate ``last_error`` or emit the "exited unexpectedly" log.  Only
         # set when there's actually a daemon to stop — otherwise a no-op call

@@ -553,3 +553,26 @@ def test_aread_sink_state_returns_none_when_sink_absent():
 
     assert vol is None
     assert muted is None
+
+
+@pytest.mark.asyncio
+async def test_aensure_null_sink_offloads_blocking_fallback(monkeypatch):
+    """The blocking ``pactl`` null-sink creation must run via run_in_executor,
+    never inline on the loop — even when pulsectl is unavailable."""
+    import sendspin_bridge.services.audio.pulse as P
+
+    monkeypatch.setattr(P, "_PULSECTL_AVAILABLE", False)
+    monkeypatch.setattr(P, "_fallback_load_null_sink", lambda: True)
+
+    loop = asyncio.get_running_loop()
+    dispatched_fallback = []
+
+    async def _recording_executor(executor, fn, *args):
+        dispatched_fallback.append(fn is P._fallback_load_null_sink)
+        return fn(*args)
+
+    with patch.object(loop, "run_in_executor", side_effect=_recording_executor):
+        result = await P.aensure_null_sink()
+
+    assert result is True
+    assert any(dispatched_fallback), "null-sink fallback was not offloaded to the executor"

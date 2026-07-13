@@ -435,7 +435,15 @@ class TestReadSubprocessOutput:
 
     @pytest.mark.asyncio
     async def test_volume_change_triggers_save(self, client):
-        """Volume updates from subprocess should call save_device_volume."""
+        """Volume updates from subprocess should persist via save_device_volume.
+
+        The write is now debounced onto a Timer thread (kept off the asyncio
+        loop), so we shrink the debounce and await the flush rather than
+        expecting a synchronous call.
+        """
+        import asyncio
+
+        client._PERSIST_DEBOUNCE_SECS = 0.01
         status_line = json.dumps({"type": "status", "volume": 60}).encode() + b"\n"
 
         proc = MagicMock()
@@ -445,6 +453,9 @@ class TestReadSubprocessOutput:
 
         with patch("sendspin_bridge.bridge.client.save_device_volume") as mock_save:
             await client._read_subprocess_output()
+            # Not called inline on the loop — only after the debounce fires.
+            mock_save.assert_not_called()
+            await asyncio.sleep(0.1)
             mock_save.assert_called_once_with("AA:BB:CC:DD:EE:FF", 60)
 
     @pytest.mark.asyncio
@@ -641,3 +652,60 @@ class TestClientInit:
 
     def test_initial_status_reflects_bt_availability(self, client):
         assert client.status.bluetooth_available is True
+
+
+# ===================================================================
+# Debounced, off-loop persistence of daemon-driven volume / delay
+# ===================================================================
+
+
+class TestSchedulePersist:
+    """``_schedule_persist`` must not fsync on the loop and must coalesce."""
+
+    def test_does_not_persist_synchronously(self, client):
+        client._PERSIST_DEBOUNCE_SECS = 0.05
+        calls = []
+        # The scheduling call itself must return without invoking the writer —
+        # otherwise the config.json fsync would run inline on the loop thread.
+        client._schedule_persist("volume", lambda m, v: calls.append((m, v)), "AA:BB", 40)
+        assert calls == []
+
+    def test_persists_after_debounce(self, client):
+        import time
+
+        client._PERSIST_DEBOUNCE_SECS = 0.05
+        calls = []
+        client._schedule_persist("volume", lambda m, v: calls.append((m, v)), "AA:BB", 40)
+        time.sleep(0.2)
+        assert calls == [("AA:BB", 40)]
+
+    def test_coalesces_rapid_changes_to_last_value(self, client):
+        import time
+
+        client._PERSIST_DEBOUNCE_SECS = 0.1
+        calls = []
+        fn = lambda m, v: calls.append((m, v))  # noqa: E731
+        for vol in (10, 20, 30, 40, 55):
+            client._schedule_persist("volume", fn, "AA:BB", vol)
+        time.sleep(0.3)
+        assert calls == [("AA:BB", 55)]
+
+    def test_volume_and_delay_debounce_independently(self, client):
+        import time
+
+        client._PERSIST_DEBOUNCE_SECS = 0.05
+        calls = []
+        client._schedule_persist("volume", lambda m, v: calls.append(("vol", v)), "AA:BB", 40)
+        client._schedule_persist("static_delay", lambda m, v: calls.append(("delay", v)), "AA:BB", 250)
+        time.sleep(0.2)
+        assert sorted(calls) == [("delay", 250), ("vol", 40)]
+
+    def test_cancel_persist_timers_prevents_write(self, client):
+        import time
+
+        client._PERSIST_DEBOUNCE_SECS = 0.1
+        calls = []
+        client._schedule_persist("volume", lambda m, v: calls.append((m, v)), "AA:BB", 40)
+        client._cancel_persist_timers()
+        time.sleep(0.25)
+        assert calls == []

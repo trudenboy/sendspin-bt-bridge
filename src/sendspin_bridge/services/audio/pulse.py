@@ -360,7 +360,7 @@ async def aset_card_profile(card_name: str, profile: str) -> bool:
     suitable for A2DP playback.
     """
     if not _PULSECTL_AVAILABLE:
-        return _fallback_set_card_profile(card_name, profile)
+        return await _run_blocking(_fallback_set_card_profile, card_name, profile)
     try:
         async with asyncio.timeout(_TIMEOUT):
             async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
@@ -373,7 +373,7 @@ async def aset_card_profile(card_name: str, profile: str) -> bool:
                 return True
     except Exception as exc:
         logger.debug("aset_card_profile(%s, %s) error: %s — falling back", card_name, profile, exc)
-        return _fallback_set_card_profile(card_name, profile)
+        return await _run_blocking(_fallback_set_card_profile, card_name, profile)
 
 
 async def acycle_card_profile(card_name: str, target: str, off_wait: float = 1.0) -> bool:
@@ -384,7 +384,7 @@ async def acycle_card_profile(card_name: str, target: str, off_wait: float = 1.0
     the sink missing. Returns True if the final target switch succeeded.
     """
     if not _PULSECTL_AVAILABLE:
-        return _fallback_cycle_card_profile(card_name, target, off_wait)
+        return await _run_blocking(_fallback_cycle_card_profile, card_name, target, off_wait)
     try:
         async with asyncio.timeout(_TIMEOUT):
             async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
@@ -409,7 +409,7 @@ async def acycle_card_profile(card_name: str, target: str, off_wait: float = 1.0
                 return True
     except Exception as exc:
         logger.debug("acycle_card_profile(%s, %s) error: %s — falling back", card_name, target, exc)
-        return _fallback_cycle_card_profile(card_name, target, off_wait)
+        return await _run_blocking(_fallback_cycle_card_profile, card_name, target, off_wait)
 
 
 # Global throttle for module-bluez5-discover reload — it nukes all BT sinks.
@@ -542,6 +542,17 @@ async def aget_server_name() -> str:
 _null_sink_module_id: int | None = None
 
 
+async def _run_blocking(fn, *args):
+    """Run a blocking ``pactl`` fallback off the event loop.
+
+    The ``_fallback_*`` helpers shell out to ``pactl`` (and some ``time.sleep``);
+    calling them directly from an ``async`` function would block the loop that
+    serves every device's IPC.  Reached only when ``pulsectl_asyncio`` is
+    unavailable or its native call failed.
+    """
+    return await asyncio.get_running_loop().run_in_executor(None, fn, *args)
+
+
 async def aensure_null_sink() -> bool:
     """Create the shared standby null sink if it doesn't already exist.
 
@@ -560,8 +571,9 @@ async def aensure_null_sink() -> bool:
                         return True
         except Exception as exc:
             logger.debug("aensure_null_sink check error: %s", exc)
-    # Create via pactl (works with both pulsectl and fallback)
-    return _fallback_load_null_sink()
+    # Create via pactl (blocking subprocess) — always run it off the loop so a
+    # missing sink doesn't stall device IPC even when pulsectl is healthy.
+    return await _run_blocking(_fallback_load_null_sink)
 
 
 def ensure_null_sink() -> bool:

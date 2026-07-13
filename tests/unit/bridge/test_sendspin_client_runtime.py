@@ -902,6 +902,9 @@ async def test_read_subprocess_output_persists_static_delay_from_ma(monkeypatch)
     """
     client = SendspinClient("Test Player", "localhost", 9000)
     client.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF")
+    # The persist write is debounced onto a Timer thread (off the loop);
+    # shrink the window so the test can await the flush.
+    client._PERSIST_DEBOUNCE_SECS = 0.01
     client._daemon_proc = SimpleNamespace(
         returncode=None,
         stdout=_FakeStdoutLines(
@@ -925,8 +928,11 @@ async def test_read_subprocess_output_persists_static_delay_from_ma(monkeypatch)
     monkeypatch.setattr("sendspin_bridge.bridge.client.save_device_static_delay", _fake_save)
 
     await client._read_subprocess_output()
+    await asyncio.sleep(0.1)  # let the debounced write fire
 
     assert saved == [("AA:BB:CC:DD:EE:FF", 750)]
+    # The in-memory cache is still updated synchronously (survives warm restart).
+    assert client.static_delay_ms == 750.0
     # Parent-side cache also updated so warm_restart re-spawns with the new value.
     assert client.static_delay_ms == 750.0
 
