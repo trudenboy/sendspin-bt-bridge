@@ -30,6 +30,20 @@ def normalize_update_channel(raw_channel: object) -> str:
     return DEFAULT_UPDATE_CHANNEL
 
 
+def _coerce_int(raw: Any, default: int = 0) -> int:
+    """Best-effort int coercion that never raises.
+
+    Legacy per-device migrations run inside ``load_config``; a hand-edited or
+    uploaded ``config.json`` with a non-numeric value in a numeric field would
+    otherwise raise and boot-loop the bridge.  Falls back to *default*.
+    """
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid integer value %r in config; using %r", raw, default)
+        return default
+
+
 def _normalize_int_setting(
     config: dict, key: str, *, defaults: Mapping[str, Any], min_value: int | None = None, max_value: int | None = None
 ) -> None:
@@ -199,9 +213,9 @@ def _migrate_device_idle_mode(device: dict) -> None:
             device.pop("idle_mode")
         return
 
-    keepalive_interval = int(device.get("keepalive_interval") or 0)
+    keepalive_interval = _coerce_int(device.get("keepalive_interval") or 0)
     keepalive_enabled = bool(device.get("keepalive_enabled"))
-    idle_disconnect = int(device.get("idle_disconnect_minutes") or 0)
+    idle_disconnect = _coerce_int(device.get("idle_disconnect_minutes") or 0)
 
     if keepalive_interval > 0 or keepalive_enabled:
         device["idle_mode"] = "keep_alive"
@@ -213,7 +227,7 @@ def _migrate_power_save_delay(device: dict) -> None:
     """Convert legacy power_save_delay_seconds to power_save_delay_minutes."""
     old = device.pop("power_save_delay_seconds", None)
     if old is not None and "power_save_delay_minutes" not in device:
-        seconds = int(old)
+        seconds = _coerce_int(old)
         device["power_save_delay_minutes"] = max(1, round(seconds / 60))
 
 
@@ -230,19 +244,23 @@ def _prune_last_volumes(config: dict, *, defaults: Mapping[str, Any]) -> None:
         config["LAST_VOLUMES"] = {}
         return
 
-    configured_macs = {
-        device.get("mac")
+    # Map UPPER(mac) → the device's canonical MAC casing so a saved volume
+    # under a differently-cased key still matches (MACs are compared
+    # case-insensitively everywhere else).
+    configured_by_upper = {
+        device["mac"].upper(): device["mac"]
         for device in config.get("BLUETOOTH_DEVICES", [])
         if isinstance(device, dict) and isinstance(device.get("mac"), str) and device.get("mac")
     }
     sanitized: dict[str, int] = {}
     for mac, volume in last_volumes.items():
-        if mac not in configured_macs:
+        canonical = configured_by_upper.get(mac.upper()) if isinstance(mac, str) else None
+        if canonical is None:
             continue
         if not isinstance(volume, int) or not 0 <= volume <= 100:
             logger.warning("Ignoring invalid saved volume %r for %s", volume, mac)
             continue
-        sanitized[mac] = volume
+        sanitized[canonical] = volume
     config["LAST_VOLUMES"] = sanitized
 
 

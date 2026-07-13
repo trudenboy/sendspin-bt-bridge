@@ -60,19 +60,23 @@ def _validate_number_value(spec: EntitySpec, value: Any) -> tuple[float | None, 
     return num, None
 
 
-def _coerce_switch_value(value: Any, spec: EntitySpec) -> bool:
-    """Map MQTT ``ON``/``OFF`` payloads or JSON booleans to a clean bool."""
+def _coerce_switch_value(value: Any, spec: EntitySpec) -> bool | None:
+    """Map MQTT ``ON``/``OFF`` payloads or JSON booleans to a clean bool.
+
+    Returns ``None`` for an unrecognised payload so the caller can reject it —
+    a plain ``bool(text)`` fallback would turn any non-empty garbage string
+    (``"maybe"``, ``"1.0"``) into ``ON``.
+    """
     if isinstance(value, bool):
         return value
     if value is None:
-        return False
+        return None
     text = str(value).strip().lower()
     if text in {spec.payload_on.lower(), "on", "true", "1", "yes"}:
         return True
     if text in {spec.payload_off.lower(), "off", "false", "0", "no"}:
         return False
-    # Fall back to truthy semantics so ``"1.0"`` / ``"True"`` etc. still work.
-    return bool(text)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +142,8 @@ class HaCommandDispatcher:
         # Switches ----------------------------------------------------------
         if spec.kind is EntityKind.SWITCH:
             target = _coerce_switch_value(value, spec)
+            if target is None:
+                return _err(f"Unrecognised switch payload for {command}: {value!r}", code=400)
             if command == "set_enabled":
                 return _call_bt_helper("apply_device_enabled", player_id, target)
             if command == "set_bt_management":

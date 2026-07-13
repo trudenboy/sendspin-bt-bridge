@@ -108,7 +108,7 @@ async def test_initialize_runtime_loads_config_and_updates_progress():
     assert bootstrap.bt_churn_window == 120.0
     assert bootstrap.device_configs[0]["player_name"] == "Kitchen"
     progress = state.get_startup_progress()
-    assert progress["phase"] == "sendspin_bridge.config"
+    assert progress["phase"] == "config"
     assert progress["status"] == "running"
     assert progress["details"]["demo_mode"] is False
     runtime_info = state.get_runtime_mode_info()

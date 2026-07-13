@@ -326,6 +326,65 @@ def test_emit_status_different(capsys):
     assert json.loads(lines[1])["player_name"] == "b"
 
 
+# ── status snapshot (avoids "dict changed size during iteration") ─────────
+
+
+def test_snapshot_status_returns_independent_copy():
+    from sendspin_bridge.services.ipc.daemon_process import _snapshot_status
+
+    src = {"player_name": "x", "volume": 40}
+    snap = _snapshot_status(src)
+    assert snap == src
+    src["volume"] = 99  # mutate source after snapshot
+    assert snap["volume"] == 40  # snapshot is decoupled
+
+
+def test_snapshot_status_retries_when_copy_sees_size_change():
+    """A live status dict can change size mid-copy; the snapshot must retry
+    instead of propagating ``RuntimeError``."""
+    from sendspin_bridge.services.ipc.daemon_process import _snapshot_status
+
+    class _FlakyMapping:
+        def __init__(self, data):
+            self._data = dict(data)
+            self._fail = 1
+
+        def keys(self):
+            if self._fail > 0:
+                self._fail -= 1
+                raise RuntimeError("dictionary changed size during iteration")
+            return self._data.keys()
+
+        def __getitem__(self, key):
+            return self._data[key]
+
+        def get(self, key, default=None):
+            return self._data.get(key, default)
+
+        def __iter__(self):
+            return iter(self._data)
+
+    snap = _snapshot_status(_FlakyMapping({"player_name": "x", "connected": True}))
+    assert snap == {"player_name": "x", "connected": True}
+
+
+def test_emit_status_serializes_a_snapshot(monkeypatch):
+    """``_emit_status`` must serialise via ``_snapshot_status`` (a private copy)
+    rather than the live dict handed to the sendspin daemon."""
+    import sendspin_bridge.services.ipc.daemon_process as dp
+
+    seen = {}
+    real = dp._snapshot_status
+
+    def _spy(status):
+        seen["called"] = True
+        return real(status)
+
+    monkeypatch.setattr(dp, "_snapshot_status", _spy)
+    dp._emit_status({"player_name": "x", "connected": True})
+    assert seen.get("called") is True
+
+
 def test_emit_error_structured_envelope(capsys):
     _emit_error("audio_output_missing", "No audio output device found")
 

@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Music Assistant volume ramps no longer trigger a burst of disk writes that can stutter audio.** Rapid volume and delay changes coming from the daemon are now coalesced into a single debounced save that runs off the audio path, instead of rewriting the config file on every step.
 - **One speaker's slow Bluetooth stack no longer hitches the others.** Blocking system operations — adapter recovery, battery-level reads, device-name lookups, standby-sink creation, network name resolution and MQTT/config file access — were moved off the main loop, so they can't momentarily stall playback or status updates for unrelated speakers.
 - **Background audio-routing corrections and monitor-loop errors are now logged with full detail** instead of failing silently, making intermittent Bluetooth issues easier to diagnose from the logs.
+- **A malformed value in an uploaded or hand-edited configuration file no longer stops the bridge from starting.** Non-numeric values in legacy numeric fields fall back to a safe default with a warning instead of crashing the load in a boot loop.
+- **The status and diagnostics views now correctly report whether Music Assistant is configured and which update channel is selected**, instead of always showing "not configured" and the stable channel.
+- **Changing the Music Assistant server address or token now correctly asks for a restart to take effect**, rather than reporting the change as applied while the bridge kept using the old connection.
+- **A speaker process that can't be stopped gracefully is now reliably force-stopped and reaped**, so its audio port is freed for the next start (fixes occasional "address already in use" after a restart).
+- **Hardened the status channel between the bridge and each speaker process** so heavy log/status traffic can't interleave and corrupt a message, and a status update mid-change can no longer crash the reporter.
+- **Bluetooth reconnect handling no longer accumulates duplicate signal handlers across reconnects** (which caused repeated reconnect and Home Assistant re-registration work), and audio is now configured immediately after a reconnect instead of after a fixed delay.
+- **A forced reconnect or reset now waits behind an in-progress scan or pairing** instead of driving the Bluetooth adapter at the same time, and returns a clear "operation already in progress" response.
+- **Saved per-speaker volumes are no longer lost when the stored address differs only in letter case** from the configured device.
+- **Unrecognised on/off payloads sent to a switch entity are now rejected instead of defaulting to "on".**
+- **Corrected Home Assistant entity categories and internal status labels** that an earlier refactor had mangled, so the custom component's configuration entities are categorised correctly again.
 
 ### Security
 

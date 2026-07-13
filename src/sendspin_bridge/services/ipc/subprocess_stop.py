@@ -48,15 +48,26 @@ class SubprocessStopService:
                 await asyncio.wait_for(proc.wait(), timeout=3.0)
             except TimeoutError:
                 self._logger.warning("[%s] Daemon subprocess did not exit, killing", player_name)
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    self._logger.debug("[%s] Process already exited before kill", player_name)
-                await proc.wait()
+                await self._force_kill(proc, player_name)
             except Exception as exc:
-                self._logger.debug("stop_sendspin: %s", exc)
+                # The graceful stop couldn't be delivered (e.g. the daemon's
+                # stdin is already broken).  Kill and reap anyway — a lingering
+                # daemon keeps holding its listen port → EADDRINUSE on respawn.
+                self._logger.warning("[%s] Graceful stop failed (%s); killing", player_name, exc)
+                await self._force_kill(proc, player_name)
 
         cleared: dict[str, None] | None = None
         if reader_tasks is not None:
             cleared = await self.cancel_reader_tasks(reader_tasks)
         return cleared
+
+    async def _force_kill(self, proc, player_name: str) -> None:
+        """Kill the process and reap it, tolerating an already-dead process."""
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            self._logger.debug("[%s] Process already exited before kill", player_name)
+        try:
+            await proc.wait()
+        except Exception as exc:  # pragma: no cover - defensive reap
+            self._logger.debug("[%s] reap after kill failed: %s", player_name, exc)

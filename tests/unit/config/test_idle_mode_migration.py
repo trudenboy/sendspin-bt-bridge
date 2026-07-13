@@ -88,3 +88,26 @@ class TestIdleModeMigration:
         }
         devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
         assert "idle_mode" not in devices[0]
+
+
+class TestMalformedNumericValuesDoNotBootLoop:
+    """A hand-edited / uploaded config.json with a non-numeric value in a
+    legacy numeric field must not raise during migration (which runs inside
+    load_config) — otherwise the bridge boot-loops."""
+
+    def test_malformed_keepalive_interval_does_not_raise(self):
+        config = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "keepalive_interval": "not-a-number"}]}
+        devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
+        # Non-numeric → treated as 0 → no keep_alive inferred, no crash.
+        assert devices[0].get("idle_mode") is None
+
+    def test_malformed_idle_disconnect_minutes_does_not_raise(self):
+        config = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "idle_disconnect_minutes": "soon"}]}
+        devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
+        assert devices[0].get("idle_mode") is None
+
+    def test_malformed_power_save_delay_seconds_does_not_raise(self):
+        config = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "power_save_delay_seconds": "fast"}]}
+        devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
+        # Non-numeric legacy value → default 0 → clamped to a 1-minute floor.
+        assert devices[0].get("power_save_delay_minutes") == 1

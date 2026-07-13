@@ -130,11 +130,33 @@ def _spawn_thread(target, *args) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _bt_operation_lock_funcs() -> tuple[Any, Any]:
+    """Return ``(try_acquire, release)`` for the shared bt-operation lock.
+
+    The lock serialises all blocking ``bluetoothctl`` work (scan / RSSI /
+    pair / reconnect) so two operations can't drive the adapter at once.
+    Older builds without the helper module fall through to "always acquire".
+    """
+    try:
+        from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation as _release
+        from sendspin_bridge.services.bluetooth.bt_operation_lock import try_acquire_bt_operation as _try_acquire
+
+        return _try_acquire, _release
+    except Exception:  # pragma: no cover
+        return (lambda: True), (lambda: None)
+
+
 def command_reconnect(client) -> CommandResult:
     """Force BT reconnect (disconnect → wait → connect)."""
     bt = getattr(client, "bt_manager", None)
     if bt is None:
         return _err("No BT manager for this player", code=503)
+
+    # Serialise against scan / RSSI / pair — driving the adapter concurrently
+    # corrupts bluetoothctl state.  409 on conflict, matching ``command_pair``.
+    try_acquire, release = _bt_operation_lock_funcs()
+    if not try_acquire():
+        return _err("Bluetooth operation already in progress", code=409)
 
     def _do_reconnect():
         try:
@@ -143,6 +165,8 @@ def command_reconnect(client) -> CommandResult:
             bt.connect_device()
         except Exception as exc:
             logger.error("[%s] Force reconnect failed: %s", getattr(client, "player_name", ""), exc)
+        finally:
+            release()
 
     _spawn_thread(_do_reconnect)
     return _ok("Reconnect started")
@@ -169,22 +193,9 @@ def command_pair(client) -> CommandResult:
         return _err("No BT manager for this player", code=503)
 
     # Reuse the existing bt-operation lock used by routes/api_bt.py so we
-    # don't pair while a scan / RSSI poll holds it.  Older builds without
-    # the helper module fall through to "always acquire" — never seen in
-    # practice but kept for forward-compat.
-    _try_acquire: Any = None
-    _release: Any = None
-    try:
-        from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation as _release_impl
-        from sendspin_bridge.services.bluetooth.bt_operation_lock import try_acquire_bt_operation as _try_acquire_impl
-
-        _try_acquire = _try_acquire_impl
-        _release = _release_impl
-    except Exception:  # pragma: no cover
-        _try_acquire = lambda: True  # noqa: E731
-        _release = lambda: None  # noqa: E731
-
-    if not _try_acquire():
+    # don't pair while a scan / RSSI poll holds it.
+    try_acquire, release = _bt_operation_lock_funcs()
+    if not try_acquire():
         return _err("Bluetooth operation already in progress", code=409)
 
     def _do_pair():
@@ -194,7 +205,7 @@ def command_pair(client) -> CommandResult:
         except Exception as exc:
             logger.error("[%s] Force pair failed: %s", getattr(client, "player_name", ""), exc)
         finally:
-            _release()
+            release()
 
     _spawn_thread(_do_pair)
     return _ok("Pairing started (~25s)")
@@ -271,6 +282,11 @@ def command_reset_reconnect(client) -> CommandResult:
     if bt is None:
         return _err("No BT manager for this player", code=503)
 
+    # Serialise against scan / RSSI / pair (409 on conflict).
+    try_acquire, release = _bt_operation_lock_funcs()
+    if not try_acquire():
+        return _err("Bluetooth operation already in progress", code=409)
+
     # Best-effort kick: disconnect → spawn a thread that pairs again.
     # Mirrors the simpler reset path from rc.4; the full ladder behind
     # /api/bt/reset_reconnect remains user-visible via the web UI.
@@ -282,6 +298,8 @@ def command_reset_reconnect(client) -> CommandResult:
             bt.connect_device()
         except Exception as exc:
             logger.error("[%s] reset_reconnect failed: %s", getattr(client, "player_name", ""), exc)
+        finally:
+            release()
 
     _spawn_thread(_do_reset)
     return _ok("BT reset started")

@@ -196,8 +196,8 @@ def build_bridge_state_model(
         configured_device_count=len(device_configs),
         enabled_device_count=enabled_device_count,
         disabled_device_count=disabled_device_count,
-        update_channel=str(config.get("update_channel") or "stable"),
-        ma_configured=bool(config.get("ma_base_url")) or bool(config.get("ma_token")),
+        update_channel=str(config.get("UPDATE_CHANNEL") or "stable"),
+        ma_configured=bool(config.get("MA_API_URL")) or bool(config.get("MA_API_TOKEN")),
         has_auth_password=bool(config.get("AUTH_PASSWORD_HASH")),
     )
     normalized_devices = [build_normalized_device_state(device) for device in devices]

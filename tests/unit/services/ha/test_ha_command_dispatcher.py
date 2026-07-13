@@ -266,6 +266,16 @@ def test_set_enabled_coerces_payloads(dispatcher_with_calls, raw, expected):
     assert args[1] is expected, f"{raw!r} → {args[1]} expected {expected}"
 
 
+def test_set_enabled_rejects_unrecognised_payload(dispatcher_with_calls):
+    """An unknown switch payload must be rejected, not silently coerced to ON
+    (``bool("garbage")`` is truthy)."""
+    d, calls = dispatcher_with_calls
+    result = d.dispatch_device("player-aaa", "set_enabled", "garbage")
+    assert not result.success
+    assert result.code == 400
+    assert not any(c[0] == "apply_device_enabled" for c in calls)
+
+
 def test_set_bt_management_coerces_payloads(dispatcher_with_calls):
     d, calls = dispatcher_with_calls
     d.dispatch_device("player-aaa", "set_bt_management", "ON")

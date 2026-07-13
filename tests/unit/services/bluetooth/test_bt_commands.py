@@ -119,7 +119,11 @@ def test_find_client_by_player_id_case_insensitive(monkeypatch, fake_client):
 # ---------------------------------------------------------------------------
 
 
-def test_command_reconnect_returns_immediately(fake_client):
+def test_command_reconnect_returns_immediately(fake_client, monkeypatch):
+    # Stub the bt-operation lock so the test doesn't hold the real singleton
+    # (the worker thread would otherwise keep it for ~1s).
+    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: None)))
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: None)
     result = M.command_reconnect(fake_client)
     assert result.success
     assert "Reconnect" in result.message
@@ -130,6 +134,38 @@ def test_command_reconnect_without_bt_manager_fails():
     result = M.command_reconnect(client)
     assert not result.success
     assert result.code == 503
+
+
+def test_command_reconnect_returns_409_when_bt_operation_in_progress(fake_client, monkeypatch):
+    """Force reconnect must not drive the adapter while a scan/RSSI/pair holds
+    the bt-operation lock — it returns 409 and spawns no worker thread."""
+    spawned = []
+    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: False), (lambda: None)))
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: spawned.append(target))
+    result = M.command_reconnect(fake_client)
+    assert not result.success
+    assert result.code == 409
+    assert spawned == []  # never touched the adapter
+
+
+def test_command_reconnect_releases_lock_after_worker(fake_client, monkeypatch):
+    released = []
+    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: target(*a))  # run synchronously
+    monkeypatch.setattr(M.threading, "Event", lambda: SimpleNamespace(wait=lambda _t: None))  # no real sleep
+    result = M.command_reconnect(fake_client)
+    assert result.success
+    assert released == [True]
+
+
+def test_command_reset_reconnect_returns_409_when_bt_operation_in_progress(fake_client, monkeypatch):
+    spawned = []
+    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: False), (lambda: None)))
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: spawned.append(target))
+    result = M.command_reset_reconnect(fake_client)
+    assert not result.success
+    assert result.code == 409
+    assert spawned == []
 
 
 def test_command_disconnect_without_bt_manager_fails():

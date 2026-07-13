@@ -262,6 +262,51 @@ async def test_monitor_dbus_raises_after_max_introspection_failures(bt_manager):
         await _monitor_dbus(bt_manager, MockMessageBus, MockBusType)
 
 
+@pytest.mark.asyncio
+async def test_monitor_dbus_removes_handler_before_resubscribe(bt_manager):
+    """Each reconnect cycle must remove its PropertiesChanged handler, or they
+    accumulate on the bus and every signal fires (re-registering MPRIS) N times."""
+    from sendspin_bridge.bluetooth import monitor as M
+
+    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    bt_manager._apply_connected_state = MagicMock()
+    bt_manager.host = None
+
+    registered = []
+    removed = []
+    props_iface = MagicMock()
+    props_iface.on_properties_changed = lambda h: registered.append(h)
+    props_iface.off_properties_changed = lambda h: removed.append(h)
+
+    device_iface = AsyncMock()
+    device_iface.get_connected = AsyncMock(return_value=True)
+
+    proxy = MagicMock()
+    proxy.get_interface = lambda name: props_iface if name == "org.freedesktop.DBus.Properties" else device_iface
+
+    mock_bus = AsyncMock()
+    mock_bus.connected = True
+    mock_bus.introspect = AsyncMock(return_value=MagicMock())
+    mock_bus.get_proxy_object = MagicMock(return_value=proxy)
+
+    MockMessageBus = MagicMock()
+    MockMessageBus.return_value.connect = AsyncMock(return_value=mock_bus)
+    MockBusType = MagicMock()
+    MockBusType.SYSTEM = "system"
+
+    async def _fake_inner(mgr, *_a):
+        mgr._running = False  # exit after a single re-subscription cycle
+
+    with (
+        patch.object(M, "_inner_dbus_monitor", side_effect=_fake_inner),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        await M._monitor_dbus(bt_manager, MockMessageBus, MockBusType)
+
+    assert len(registered) == 1
+    assert removed == registered  # the exact handler was removed before re-subscribe
+
+
 # ---------------------------------------------------------------------------
 # _monitor_polling — management_enabled gating
 # ---------------------------------------------------------------------------

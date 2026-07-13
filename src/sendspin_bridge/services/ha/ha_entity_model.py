@@ -42,7 +42,7 @@ DeviceExtractor = Callable[[dict[str, Any], dict[str, Any]], Any]
 BridgeExtractor = Callable[[dict[str, Any]], Any]
 
 
-AVAILABILITY_CLASSES = ("sendspin_bridge.config", "runtime", "cumulative")
+AVAILABILITY_CLASSES = ("config", "runtime", "cumulative")
 
 
 @dataclass(frozen=True)
@@ -392,7 +392,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="config",
         icon="mdi:check-circle-outline",
         command="set_enabled",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="bt_management_enabled",
@@ -402,7 +402,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="config",
         icon="mdi:tools",
         command="set_bt_management",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         # Standby switch: ON = device is in standby, OFF = active.  The
@@ -446,7 +446,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:power-sleep",
         options=("default", "power_save", "auto_disconnect", "keep_alive"),
         command="set_idle_mode",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="keep_alive_method",
@@ -457,7 +457,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         icon="mdi:waveform",
         options=("infrasound", "silence", "none"),
         command="set_keep_alive_method",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="static_delay_ms",
@@ -471,7 +471,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=10,
         icon="mdi:timer-cog",
         command="set_static_delay_ms",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="power_save_delay_minutes",
@@ -485,7 +485,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=1,
         icon="mdi:timer-outline",
         command="set_power_save_delay_minutes",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     # Buttons (BT-level commands MA cannot perform) — always pressable
     # while in fleet, including during standby and when device is disabled.
@@ -495,7 +495,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         name="Reconnect",
         icon="mdi:bluetooth-connect",
         command="reconnect",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="disconnect",
@@ -503,7 +503,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         name="Disconnect",
         icon="mdi:bluetooth-off",
         command="disconnect",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     # Pairing and reset_reconnect intentionally NOT exposed:
     #   - pair: one-shot interactive workflow needing the speaker in pairing
@@ -524,7 +524,7 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:hand-back-right",
         command="claim_audio",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
 )
 
@@ -544,7 +544,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_b_version,
         entity_category="diagnostic",
         icon="mdi:tag-outline",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="ma_connected",
@@ -554,7 +554,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         device_class="connectivity",
         entity_category="diagnostic",
         icon="mdi:music",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="startup_phase",
@@ -563,7 +563,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_b_startup_phase,
         entity_category="diagnostic",
         icon="mdi:rocket-launch",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="runtime_mode",
@@ -572,7 +572,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         extractor=_b_runtime_mode,
         entity_category="diagnostic",
         icon="mdi:cog-outline",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="update_available",
@@ -582,7 +582,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:package-up",
         expose_attrs=("latest_version",),
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     EntitySpec(
         object_id="restart",
@@ -591,7 +591,7 @@ BRIDGE_ENTITIES: tuple[EntitySpec, ...] = (
         entity_category="diagnostic",
         icon="mdi:restart",
         command="restart",
-        availability_class="sendspin_bridge.config",
+        availability_class="config",
     ),
     # ``Scan for devices`` intentionally NOT exposed — scan results
     # only mean anything inside the bridge web UI's pair-flow modal,

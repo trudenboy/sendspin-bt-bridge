@@ -204,7 +204,7 @@ class _JsonLineHandler(logging.Handler):
                     except Exception:
                         pass  # cannot log inside log handler
             line = json.dumps(build_log_envelope(level=record.levelname.lower(), name=record.name, msg=msg))
-            print(line, flush=True)
+            _write_line(line)
         except Exception:
             pass  # cannot log inside log handler
 
@@ -227,7 +227,33 @@ def _setup_logging() -> None:
 
 _last_status_json: str = ""
 _status_lock = threading.Lock()
+# Serialises EVERY write to stdout.  Status emissions (asyncio callbacks), log
+# lines (any thread) and error envelopes otherwise race and interleave partial
+# lines, corrupting the parent's JSON-line parser.
+_stdout_lock = threading.Lock()
 _background_tasks: set[asyncio.Task] = set()
+
+
+def _write_line(payload: str) -> None:
+    """Write one JSON line to stdout atomically w.r.t. other writers."""
+    with _stdout_lock:
+        print(payload, flush=True)
+
+
+def _snapshot_status(status: dict) -> dict:
+    """Return a private copy of the live status dict.
+
+    ``status`` is mutated by the sendspin daemon, the log handler and the
+    command reader on other threads, so serialising it directly can raise
+    ``dictionary changed size during iteration``.  Copy it (retrying on a
+    transient size change) so ``json.dumps`` only ever sees a stable dict.
+    """
+    for _ in range(5):
+        try:
+            return dict(status)
+        except RuntimeError:
+            continue
+    return {k: status.get(k) for k in tuple(status)}
 
 
 def _filter_supported_daemon_args_kwargs(daemon_args_cls, kwargs: dict[str, object]) -> dict[str, object]:
@@ -247,12 +273,14 @@ def _emit_status(status: dict) -> None:
     the write is skipped to avoid flooding the parent with no-op updates.
     """
     global _last_status_json
+    # Serialise a private snapshot so a concurrent daemon mutation can't change
+    # the dict's size mid-``json.dumps``.
+    payload = json.dumps(build_status_envelope(_snapshot_status(status)), default=_str_default, sort_keys=True)
     with _status_lock:
-        payload = json.dumps(build_status_envelope(status), default=_str_default, sort_keys=True)
-    if payload == _last_status_json:
-        return
-    _last_status_json = payload
-    print(payload, flush=True)
+        if payload == _last_status_json:
+            return
+        _last_status_json = payload
+    _write_line(payload)
 
 
 def _emit_error(error_code: str, message: str, *, details: dict[str, object] | None = None) -> None:
@@ -264,7 +292,7 @@ def _emit_error(error_code: str, message: str, *, details: dict[str, object] | N
         default=_str_default,
         sort_keys=True,
     )
-    print(payload, flush=True)
+    _write_line(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -882,22 +910,20 @@ async def _run(params: dict) -> None:
 def main() -> None:
     _setup_logging()
     if len(sys.argv) < 2:
-        print(
+        _write_line(
             json.dumps(
                 with_protocol_version(
                     {"type": "log", "level": "error", "msg": "Usage: daemon_process.py <json_params>"}
                 )
-            ),
-            flush=True,
+            )
         )
         _emit_error("missing_params", "Usage: daemon_process.py <json_params>")
         sys.exit(1)
     try:
         params = json.loads(sys.argv[1])
     except json.JSONDecodeError as e:
-        print(
-            json.dumps(with_protocol_version({"type": "log", "level": "error", "msg": f"Invalid JSON params: {e}"})),
-            flush=True,
+        _write_line(
+            json.dumps(with_protocol_version({"type": "log", "level": "error", "msg": f"Invalid JSON params: {e}"}))
         )
         _emit_error("invalid_params_json", f"Invalid JSON params: {e}")
         sys.exit(1)

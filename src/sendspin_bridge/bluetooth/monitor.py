@@ -401,10 +401,25 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
 
                 return on_props_changed
 
-            props_iface.on_properties_changed(_make_props_handler(disconnect_event, connect_event))
+            props_handler = _make_props_handler(disconnect_event, connect_event)
+            props_iface.on_properties_changed(props_handler)
             logger.info("[%s] D-Bus monitoring active (connected=%s)", mgr.device_name, mgr.connected)
 
-            await _inner_dbus_monitor(mgr, device_iface, disconnect_event, connect_event, loop)
+            try:
+                await _inner_dbus_monitor(mgr, device_iface, disconnect_event, connect_event, loop)
+            finally:
+                # Remove our handler before the loop re-subscribes — otherwise
+                # each reconnect cycle stacks another PropertiesChanged handler
+                # on the bus and every signal fires (and re-registers MPRIS)
+                # multiple times.
+                try:
+                    props_iface.off_properties_changed(props_handler)
+                except Exception as exc:
+                    logger.debug("[%s] off_properties_changed failed: %s", mgr.device_name, exc)
+            # Successful re-subscription cycle — loop immediately.  (The old
+            # unconditional 10s sleep here delayed audio setup after every
+            # reconnect.)
+            continue
 
         except RuntimeError:
             raise  # propagate to monitor_and_reconnect for polling fallback
@@ -421,7 +436,8 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
                         logger.debug("D-Bus cleanup on failure failed: %s", exc)
                     bus = None
                 raise RuntimeError(f"D-Bus monitor failed {connect_failures} consecutive times: {e}") from e
-        await asyncio.sleep(10)
+            # Back off before retrying a failed connection only.
+            await asyncio.sleep(10)
 
 
 async def _inner_dbus_monitor(
