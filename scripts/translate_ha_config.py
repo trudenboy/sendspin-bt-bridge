@@ -83,26 +83,35 @@ def _detect_adapters() -> list[dict]:
 
 def _merge_adapters(detected: list[dict], raw_adapters: list[dict]) -> list[dict]:
     """Merge user-supplied adapter options with detected hardware adapters."""
-    existing_macs = {a["mac"]: a for a in detected if a.get("mac")}
+
+    def _mac_key(a: dict) -> str | None:
+        mac = a.get("mac")
+        return mac.upper() if isinstance(mac, str) and mac else None
+
+    # Key by UPPER(mac) so a user option whose MAC differs only in case still
+    # matches the detected adapter (else it's dropped AND appended as a dupe).
+    existing_macs = {key: a for a in detected if (key := _mac_key(a))}
     existing_ids = {a["id"]: a for a in detected if a.get("id")}
     for a in raw_adapters:
         opt_name = (a.get("name") or "").strip()
         opt_class = (a.get("device_class") or "").strip()
-        if a.get("mac") and a["mac"] in existing_macs:
+        mac_key = _mac_key(a)
+        if mac_key and mac_key in existing_macs:
             if opt_name:
-                existing_macs[a["mac"]]["name"] = opt_name
+                existing_macs[mac_key]["name"] = opt_name
             if opt_class:
-                existing_macs[a["mac"]]["device_class"] = opt_class
+                existing_macs[mac_key]["device_class"] = opt_class
         elif a.get("id") and a["id"] in existing_ids:
             if opt_name:
                 existing_ids[a["id"]]["name"] = opt_name
             if opt_class:
                 existing_ids[a["id"]]["device_class"] = opt_class
-        elif a.get("mac") and a["mac"] not in existing_macs:
+        elif mac_key and mac_key not in existing_macs:
             entry = {"id": a.get("id", ""), "mac": a["mac"], "name": opt_name or a.get("id", "")}
             if opt_class:
                 entry["device_class"] = opt_class
             detected.append(entry)
+            existing_macs[mac_key] = entry
         elif a.get("id") and a["id"] not in existing_ids:
             entry = {"id": a["id"], "mac": a.get("mac", ""), "name": opt_name or a["id"]}
             if opt_class:
@@ -333,11 +342,19 @@ def main() -> None:
                 ):
                     if field not in dev and field in existing_devs[mac]:
                         dev[field] = existing_devs[mac][field]
-    except (FileNotFoundError, json.JSONDecodeError) as exc:
-        logger.debug("preserve existing device settings failed: %s", exc)
+    except Exception as exc:
+        # Best-effort preservation: a malformed / partially-typed existing
+        # config.json (non-int numeric, non-string MAC, …) must NOT crash the
+        # translator — that would brick addon startup.  Proceed with the freshly
+        # translated config instead.
+        logger.warning("Skipping preservation of existing config settings: %s", exc)
 
-    with open(CONFIG_FILE, "w") as f:
+    # Write atomically so an interrupted run (power loss / OOM kill) can't leave
+    # a truncated config.json that fails to parse on the next startup.
+    tmp_path = f"{CONFIG_FILE}.tmp"
+    with open(tmp_path, "w") as f:
         json.dump(config, f, indent=2)
+    os.replace(tmp_path, CONFIG_FILE)
 
     print(
         f"[translate_ha_config] Generated {CONFIG_FILE} with "

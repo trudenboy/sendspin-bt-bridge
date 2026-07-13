@@ -183,6 +183,18 @@ def test_r7_fires_on_internal_file_path():
     assert "R7" in _rules_fired(text)
 
 
+def test_r7_silent_on_common_abbreviations():
+    """``e.g.`` / ``i.e.`` are English abbreviations, not internal symbols."""
+    text = _doc("### Changed\n- The scan retries flaky adapters (e.g. USB dongles) automatically.\n")
+    assert "R7" not in _rules_fired(text)
+
+
+def test_r7_still_fires_on_symbol_after_abbreviation():
+    """Whitelisting the abbreviation must not mask a real symbol later in the bullet."""
+    text = _doc("### Changed\n- e.g. the module.private_helper path changed.\n")
+    assert "R7" in _rules_fired(text)
+
+
 def test_r7_silent_on_url_with_dotted_tld():
     """`astral.sh` inside a markdown link target must not be flagged."""
     text = _doc("### Changed\n- Migrated to [uv](https://docs.astral.sh/uv/).\n")

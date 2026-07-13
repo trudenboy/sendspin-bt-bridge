@@ -43,12 +43,16 @@ async def post(
         ) as resp:
             try:
                 body = await resp.json(content_type=None)
-            except aiohttp.ContentTypeError:
+            except (aiohttp.ContentTypeError, ValueError):
+                body = {}
+            # Guard before ``.get`` — a non-dict body (list / string) would
+            # otherwise raise ``AttributeError`` on the error path below.
+            if not isinstance(body, dict):
                 body = {}
             if resp.status >= 400:
                 raise HomeAssistantError(f"Bridge {path} returned {resp.status}: {body.get('error') or body}")
-            return body if isinstance(body, dict) else {}
-    except aiohttp.ClientError as exc:
+            return body
+    except (TimeoutError, aiohttp.ClientError) as exc:
         raise HomeAssistantError(f"Bridge {path} request failed: {exc}") from exc
 
 
