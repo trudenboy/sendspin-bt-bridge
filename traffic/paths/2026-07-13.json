@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/trudenboy/sendspin-bt-bridge",
+    "title": "Overview",
+    "count": 465,
+    "uniques": 300
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues",
+    "title": "/issues",
+    "count": 57,
+    "uniques": 32
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/pulls",
+    "title": "/pulls",
+    "count": 19,
+    "uniques": 7
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases/tag/v2.71.2",
+    "title": "/releases/tag/v2.71.2",
+    "count": 17,
+    "uniques": 14
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "title": "/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "count": 16,
+    "uniques": 15
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/commits/main",
+    "title": "/commits/main",
+    "count": 15,
+    "uniques": 4
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/ROADMAP.md",
+    "title": "/blob/main/ROADMAP.md",
+    "count": 7,
+    "uniques": 7
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases",
+    "title": "/releases",
+    "count": 6,
+    "uniques": 6
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/tree/main",
+    "title": "/tree/main",
+    "count": 6,
+    "uniques": 6
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docker-compose.yml",
+    "title": "/blob/main/docker-compose.yml",
+    "count": 6,
+    "uniques": 5
+  }
+]
