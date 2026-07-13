@@ -699,6 +699,20 @@ def api_config():
     if not isinstance(config, dict):
         return _error_response("Invalid JSON body")
 
+    # The settings form submits a partial config that never includes
+    # CONFIG_SCHEMA_VERSION.  Carry the on-disk schema version into the payload
+    # so the one-shot schema migrations (e.g. the BT_MAX_RECONNECT_FAILS 0 → 5
+    # default flip) don't re-fire on every save and silently overwrite the
+    # operator's choice (#332).
+    if "CONFIG_SCHEMA_VERSION" not in config and CONFIG_FILE.exists():
+        try:
+            with config_lock, open(CONFIG_FILE) as _schema_fh:
+                existing_schema = json.load(_schema_fh).get("CONFIG_SCHEMA_VERSION")
+            if existing_schema is not None:
+                config["CONFIG_SCHEMA_VERSION"] = existing_schema
+        except (json.JSONDecodeError, OSError):
+            pass
+
     validation = validate_uploaded_config(config, default_base_listen_port=resolve_base_listen_port())
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     if not validation.is_valid:

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The auto-disable reconnect threshold no longer resets to 5 when you set it to 0.** Saving `0` (unlimited reconnects, opting out of auto-disable) from the settings form used to be silently reverted to the default on the next save/reload, because a one-time upgrade migration re-ran on every save. The setting now sticks. ([#332](https://github.com/trudenboy/sendspin-bt-bridge/issues/332))
+
 ## [2.72.0-rc.3] - 2026-07-13
 
 ### Changed
