@@ -1953,6 +1953,44 @@ def test_api_config_post_accepts_empty_manual_port_overrides(client, tmp_path, m
     assert saved["BASE_LISTEN_PORT"] is None
 
 
+def test_config_post_preserves_zero_reconnect_threshold(client, tmp_path, monkeypatch):
+    """#332: saving BT_MAX_RECONNECT_FAILS=0 from the settings form must stick.
+
+    The one-shot 0→5 migration must not re-fire just because the form payload
+    omits CONFIG_SCHEMA_VERSION — the handler carries the on-disk schema version
+    into the payload so migration sees the already-upgraded config.
+    """
+    import sendspin_bridge.web.routes.api_config as api_config_mod
+    from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
+
+    cfg_file = tmp_path / "config.json"
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", cfg_file)
+    # Existing config is already schema-stamped (migration long since ran).
+    cfg_file.write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
+                "BT_MAX_RECONNECT_FAILS": 5,
+                "BLUETOOTH_DEVICES": [],
+            }
+        )
+    )
+    payload = {
+        "SENDSPIN_SERVER": "auto",
+        "BLUETOOTH_DEVICES": [],
+        "BLUETOOTH_ADAPTERS": [],
+        "TZ": "UTC",
+        "BT_MAX_RECONNECT_FAILS": 0,  # operator opts out of auto-disable
+        "AUTH_ENABLED": False,
+    }
+    resp = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert resp.status_code == 200
+    saved = json.loads(cfg_file.read_text())
+    assert saved["BT_MAX_RECONNECT_FAILS"] == 0
+    assert saved["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
+
+
 def test_sync_ha_options_omits_manual_ports_when_unset(monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
 
