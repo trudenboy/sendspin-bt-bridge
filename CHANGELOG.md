@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Saved per-speaker volumes are no longer lost when the stored address differs only in letter case** from the configured device.
 - **Unrecognised on/off payloads sent to a switch entity are now rejected instead of defaulting to "on".**
 - **Corrected Home Assistant entity categories and internal status labels** that an earlier refactor had mangled, so the custom component's configuration entities are categorised correctly again.
+- **The Home Assistant integration now recovers on its own after the bridge restarts** — it pulls a fresh snapshot as soon as the event stream reconnects and polls on a slow safety-net interval, instead of showing stale entity states until the next event.
+- **Rotating or invalidating the bridge's API token now prompts Home Assistant to re-authenticate** instead of the integration silently freezing until a restart.
+- **Adding the integration is more robust to a slow or unreachable bridge** — connection timeouts and non-JSON responses during setup now surface a clean error instead of an unhandled failure.
+- **A malformed or partially-written addon configuration can no longer prevent startup**: the option translator preserves prior settings on a best-effort basis and writes the generated configuration atomically, so an interrupted run can't leave a truncated file.
+- **A Bluetooth adapter's saved name is no longer lost (or duplicated) when its address is stored in a different letter case** than the detected hardware.
 
 ### Security
 

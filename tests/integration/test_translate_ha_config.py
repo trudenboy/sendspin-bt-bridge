@@ -694,3 +694,40 @@ def test_translate_script_runs_as_direct_file() -> None:
 
     assert result.returncode == 0
     assert "options.json not found" in result.stdout
+
+
+# ── #20: preservation must not brick startup; write must be atomic ────────
+
+
+def test_malformed_existing_config_does_not_crash(tmp_path):
+    """A previous config.json with a bad value in a preserved field (here a
+    non-string adapter MAC) must not crash the translator — that would brick
+    addon startup.  It falls back to the freshly translated config."""
+    _write_json(tmp_path / "options.json", _minimal_options())
+    # Non-string MAC → ``.upper()`` in the preservation block would raise.
+    _write_json(tmp_path / "config.json", {"BLUETOOTH_ADAPTERS": [{"mac": 12345}]})
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()  # must not raise
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert "BLUETOOTH_DEVICES" in cfg  # a valid config was still written
+
+
+def test_write_leaves_no_temp_file(tmp_path):
+    """The atomic write must os.replace the temp file, not leave it behind."""
+    _write_json(tmp_path / "options.json", _minimal_options())
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    assert not (tmp_path / "config.json.tmp").exists()
+    assert (tmp_path / "config.json").exists()
+
+
+def test_merge_adapters_matches_mac_case_insensitively():
+    """A user option whose MAC differs only in letter case from the detected
+    adapter must update it in place, not append a duplicate."""
+    detected = [{"id": "hci0", "mac": "FC:58:FA:EB:08:6C", "name": "hci0"}]
+    user = [{"mac": "fc:58:fa:eb:08:6c", "name": "Living Room"}]
+    result = _merge_adapters(detected, user)
+    assert len(result) == 1
+    assert result[0]["name"] == "Living Room"

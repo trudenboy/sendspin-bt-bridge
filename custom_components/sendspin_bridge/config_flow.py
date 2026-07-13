@@ -64,7 +64,8 @@ async def _validate_token(
             if resp.status != 200:
                 return False, None
             return True, await resp.json()
-    except aiohttp.ClientError:
+    except (TimeoutError, aiohttp.ClientError, ValueError):
+        # Timeout, connection error, or a non-JSON / malformed body.
         return False, None
 
 
@@ -199,7 +200,8 @@ async def _attempt_supervisor_pair(hass, host: str, port: int, use_https: bool) 
                 return None
             body = await resp.json()
             return body.get("token") if isinstance(body, dict) else None
-    except aiohttp.ClientError:
+    except (TimeoutError, aiohttp.ClientError, ValueError):
+        # Timeout, connection error, or a non-JSON / malformed body.
         return None
 
 

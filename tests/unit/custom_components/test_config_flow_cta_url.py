@@ -406,3 +406,46 @@ def test_lan_host_display_host_none_keeps_ip(monkeypatch):
     hass = MagicMock()
     url = asyncio.run(_resolve_user_facing_url(hass, "192.168.10.10", 8080, display_host=None))
     assert url == "http://192.168.10.10:8080/"
+
+
+# ---------------------------------------------------------------------------
+# _validate_token error handling (#19): a timeout or a non-JSON / malformed
+# body must yield (False, None), never propagate and crash the config flow.
+# ---------------------------------------------------------------------------
+
+
+class _JsonRaisingResponse:
+    status = 200
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        return False
+
+    async def json(self):
+        raise ValueError("malformed JSON body")
+
+
+class _JsonRaisingSession:
+    def get(self, *_a, **_k):
+        return _JsonRaisingResponse()
+
+
+class _TimeoutSession:
+    def get(self, *_a, **_k):
+        raise TimeoutError("connect timed out")
+
+
+def test_validate_token_handles_non_json_body(monkeypatch):
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda _hass: _JsonRaisingSession())
+    ok, projection = asyncio.run(_cf._validate_token(MagicMock(), "192.168.1.10", 8080, "tok"))
+    assert ok is False
+    assert projection is None
+
+
+def test_validate_token_handles_timeout(monkeypatch):
+    monkeypatch.setattr(_cf, "async_get_clientsession", lambda _hass: _TimeoutSession())
+    ok, projection = asyncio.run(_cf._validate_token(MagicMock(), "192.168.1.10", 8080, "tok"))
+    assert ok is False
+    assert projection is None

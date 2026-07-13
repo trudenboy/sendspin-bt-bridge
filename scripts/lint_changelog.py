@@ -80,6 +80,8 @@ _PRIVATE_FUNC_RE = re.compile(r"\b_[a-z][a-z0-9_]+\b")
 # ``_FILE_PATH_RE`` so they get the more specific message.
 _DOTTED_PRIVATE_RE = re.compile(r"\b(?:[A-Z][A-Za-z0-9]*|[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\.[a-z_][a-z0-9_]*\b")
 _FILE_PATH_RE = re.compile(r"\b[\w/]+\.(?:py|yml|yaml|toml|sh)\b")
+# Common English abbreviations the dotted-symbol regex would otherwise flag.
+_R7_ABBREVIATIONS = frozenset({"e.g", "i.e", "etc", "vs"})
 
 # Heading regex compatible with scripts/generate_ha_addon_variants.py:264.
 # Trailing free-form text after the date is tolerated for legacy entries
@@ -378,15 +380,18 @@ def check_r7_no_private_identifiers(text: str, sections: list[Section]) -> list[
                     )
                 )
                 continue
-            dotted = _DOTTED_PRIVATE_RE.search(scrubbed)
-            if dotted:
+            for dotted in _DOTTED_PRIVATE_RE.finditer(scrubbed):
+                token = dotted.group(0)
+                if token.lower().rstrip(".") in _R7_ABBREVIATIONS:
+                    continue  # English abbreviation, not an internal symbol
                 violations.append(
                     Violation(
                         "R7",
                         line_no,
-                        f"Internal symbol {dotted.group(0)!r} in bullet — describe behaviour, not implementation.",
+                        f"Internal symbol {token!r} in bullet — describe behaviour, not implementation.",
                     )
                 )
+                break
     return violations
 
 

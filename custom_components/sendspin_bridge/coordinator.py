@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -39,6 +40,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# SSE drives near-real-time updates; this slow poll is only a safety net so
+# entities still recover if the event stream wedges without erroring.
+_SLOW_POLL_INTERVAL = timedelta(minutes=5)
+
 
 class SendspinDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Pulls state from the bridge and pushes entity-state deltas to HA."""
@@ -48,7 +53,7 @@ class SendspinDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=f"{DOMAIN}:{entry.entry_id[:8]}",
-            update_interval=None,  # SSE drives updates; polling kicks in only on drops
+            update_interval=_SLOW_POLL_INTERVAL,  # SSE drives updates; slow poll is a safety net
         )
         self.entry = entry
         self.host: str = entry.data[CONF_HOST]
@@ -135,6 +140,11 @@ class SendspinDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     backoff = DEFAULT_RECONNECT_BACKOFF_SECS  # reset on success
 
+                    # Pull a fresh snapshot on every (re)connect: after a bridge
+                    # restart the stream reconnects but no event may arrive for a
+                    # while, so without this the entities stay stale.
+                    self.hass.async_create_task(self.async_request_refresh())
+
                     async for raw in resp.content:
                         if self._stopped.is_set():
                             break
@@ -169,6 +179,11 @@ class SendspinDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _async_log_auth_failure(self) -> None:
         _LOGGER.error("Bearer token rejected by bridge — re-pair the integration in HA")
+        # Start HA's reauth flow so the user is prompted to re-pair (e.g. after
+        # the bridge rotates/invalidates tokens) instead of the integration
+        # silently freezing until a restart.  Idempotent if one is already open.
+        self.entry.async_start_reauth(self.hass)
+        self.async_update_listeners()
 
     # -- Convenience accessors used by entity platforms ----------------
 
