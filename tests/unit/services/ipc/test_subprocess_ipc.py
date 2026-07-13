@@ -150,3 +150,23 @@ def test_handle_message_defaults_invalid_error_details_to_empty_dict():
     assert returned == {"last_error": "boom", "last_error_at": None}
     assert updates == [returned]
     logger.error.assert_called_once()
+
+
+def test_allowed_keys_none_allows_all_status_keys():
+    """``allowed_keys=None`` means 'no filter' — every status key must pass.
+
+    ``self._allowed_keys = allowed_keys or frozenset()`` previously turned None
+    into an empty set, i.e. deny-all, silently dropping every status update.
+    """
+    updates: list[dict] = []
+    service = SubprocessIpcService(
+        player_name="Kitchen",
+        protocol_warning_cache=set(),
+        status_updater=updates.append,
+        allowed_keys=None,
+    )
+    service.handle_message({"type": "status", "playing": True, "volume": 55, "rssi_dbm": -60})
+    assert updates, "status update was dropped — None allowed_keys denied everything"
+    assert updates[0].get("playing") is True
+    assert updates[0].get("volume") == 55
+    assert updates[0].get("rssi_dbm") == -60

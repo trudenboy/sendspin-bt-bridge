@@ -265,13 +265,26 @@ def test_volume_via_ma_change_is_ignored_after_proxy_removal():
     assert actions == []
 
 
-def test_ma_url_change_is_global_broadcast():
+def test_ma_url_change_is_restart_required():
+    # Was GLOBAL_BROADCAST, but the reconfig orchestrator's broadcast handler
+    # only applies LOG_LEVEL — an MA credential change was reported "applied
+    # live" while the bridge kept using the old broker.  It genuinely needs a
+    # restart to re-init the MA connection, so it's classified RESTART_REQUIRED.
     old = _config(MA_API_URL="http://old.local:8095")
     new = _config(MA_API_URL="http://new.local:8095")
 
     (act,) = diff_configs(old, new)
-    assert act.kind is ActionKind.GLOBAL_BROADCAST
+    assert act.kind is ActionKind.RESTART_REQUIRED
     assert act.fields == ["MA_API_URL"]
+
+
+def test_ma_token_change_is_restart_required():
+    old = _config(MA_API_TOKEN="tok-old")
+    new = _config(MA_API_TOKEN="tok-new")
+
+    (act,) = diff_configs(old, new)
+    assert act.kind is ActionKind.RESTART_REQUIRED
+    assert act.fields == ["MA_API_TOKEN"]
 
 
 # ---------------------------------------------------------------------------

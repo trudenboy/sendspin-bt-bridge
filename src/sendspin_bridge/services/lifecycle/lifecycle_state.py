@@ -37,7 +37,7 @@ class BridgeLifecycleState:
         )
         _state.reset_startup_progress(self.startup_steps, message="Startup initiated")
         _state.update_startup_progress(
-            "sendspin_bridge.config",
+            "config",
             "Loading configuration",
             current_step=1,
             details={"demo_mode": demo_mode},

@@ -1518,7 +1518,7 @@ def api_bugreport():
             "diagnostics": diag,
             "subprocesses": subprocs,
             "bt_device_info": bt_device_info,
-            "sendspin_bridge.config": config_info,
+            "config": config_info,
             "recent_issue_logs": issue_summary["issue_lines"],
             "last_run": last_run_summary,
             "logs": log_lines,
@@ -1885,7 +1885,7 @@ def _build_full_text_report(
     full.append("")
 
     # Config
-    config = masked.get("sendspin_bridge.config")
+    config = masked.get("config")
     if config:
         full.append(sep)
         full.append("  CONFIG (sanitized)")
@@ -1945,7 +1945,7 @@ def api_diagnostics_download():
             "environment": diag.get("environment", {}),
             "diagnostics": diag,
             "subprocesses": diag.get("subprocesses", []),
-            "sendspin_bridge.config": config_info,
+            "config": config_info,
             "recent_issue_logs": issue_summary["issue_lines"],
             "last_run": last_run_summary,
             "logs": log_lines,

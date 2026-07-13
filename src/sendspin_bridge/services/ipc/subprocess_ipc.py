@@ -87,7 +87,10 @@ class SubprocessIpcService:
             "error": self._logger.error,
             "critical": self._logger.critical,
         }
-        self._allowed_keys = allowed_keys or frozenset()
+        # Keep ``None`` as-is: ``parse_status_envelope`` treats None as "no
+        # filter, allow all keys".  Coercing to ``frozenset()`` would instead
+        # deny every key (drop all status updates).
+        self._allowed_keys = allowed_keys
         self._log_gate = _LogRateGate(log_rate_per_s, log_burst, log_clock)
 
     async def read_stream(self, stdout) -> None:

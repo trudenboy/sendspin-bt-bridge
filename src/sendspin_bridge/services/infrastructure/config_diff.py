@@ -47,12 +47,8 @@ _DEVICE_WARM_FIELDS: frozenset[str] = frozenset(
 _GLOBAL_BROADCAST_FIELDS: frozenset[str] = frozenset(
     {
         "LOG_LEVEL",
-        "MA_API_URL",
-        "MA_API_TOKEN",
         "HA_AREA_NAME_ASSIST_ENABLED",
         "HA_ADAPTER_AREA_MAP",
-        "MA_AUTO_SILENT_AUTH",
-        "MA_WEBSOCKET_MONITOR",
         "DUPLICATE_DEVICE_CHECK",
     }
 )
@@ -78,6 +74,13 @@ _GLOBAL_RESTART_FIELDS: frozenset[str] = frozenset(
 # auth secrets, session machinery).
 _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
     {
+        # MA connection settings: the broadcast handler doesn't re-init the MA
+        # runtime, so these only take effect after a restart.  Classifying them
+        # here stops the UI reporting a no-op as "applied live".
+        "MA_API_URL",
+        "MA_API_TOKEN",
+        "MA_AUTO_SILENT_AUTH",
+        "MA_WEBSOCKET_MONITOR",
         "WEB_PORT",
         "AUTH_ENABLED",
         "AUTH_PASSWORD_HASH",

@@ -70,3 +70,21 @@ async def test_stop_process_kills_when_wait_times_out():
     assert sent == [{"cmd": "stop"}]
     assert proc.kill_called is True
     logger.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_process_kills_when_send_stop_raises():
+    """If the graceful stop command can't be delivered (e.g. the daemon's
+    stdin is already broken), the process must still be killed and reaped —
+    otherwise an orphaned daemon keeps holding its listen port (EADDRINUSE
+    on the next spawn)."""
+    logger = Mock()
+    service = SubprocessStopService(logger_=logger)
+    proc = _FakeProc()
+
+    async def fake_send(cmd):
+        raise BrokenPipeError("daemon stdin closed")
+
+    await service.stop_process(proc, send_stop=fake_send, player_name="Kitchen")
+
+    assert proc.kill_called is True
