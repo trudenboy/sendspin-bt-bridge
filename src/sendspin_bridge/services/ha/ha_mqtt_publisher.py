@@ -587,9 +587,13 @@ class HaMqttPublisher:
     # -- main loop ---------------------------------------------------
 
     async def _run(self) -> None:
+        loop = asyncio.get_running_loop()
         backoff = self._backoff_initial
         while not self._stop_event.is_set():
-            cfg = self._config_provider()
+            # ``_config_provider`` reads config.json and, in add-on mode with
+            # broker=auto, does a blocking Supervisor HTTP call — run it off
+            # the loop so it can't stall device IPC on every reconnect cycle.
+            cfg = await loop.run_in_executor(None, self._config_provider)
             if cfg is None:
                 self.state = "disabled"
                 # Wait for either stop or a config change; the
@@ -879,12 +883,19 @@ class HaMqttPublisher:
     # -- command subscription loop -----------------------------------
 
     async def _command_loop(self, client, cfg: MqttPublisherConfig) -> None:
+        loop = asyncio.get_running_loop()
         try:
             async for msg in client.messages:
                 if self._stop_event.is_set():
                     break
                 try:
-                    self._handle_command(msg, cfg)
+                    # Run the handler OFF the loop thread.  The dispatcher it
+                    # calls schedules a coroutine on this loop and blocks on
+                    # ``fut.result()`` (see ``bt_commands._schedule_coroutine``);
+                    # running that inline here would freeze the loop that must
+                    # execute the coroutine, stalling every device for the whole
+                    # command timeout.
+                    await loop.run_in_executor(None, self._handle_command, msg, cfg)
                 except Exception:  # pragma: no cover
                     logger.exception("HA MQTT command handler raised")
         except asyncio.CancelledError:

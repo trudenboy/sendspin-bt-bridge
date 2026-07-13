@@ -346,10 +346,11 @@ async def _mute_when_transport_ready(
     """
     if not device_path:
         return await do_mute(sink_name, True)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     deadline = loop.time() + max(0.0, timeout)
     while True:
-        state = _dbus_get_media_transport_state(device_path)
+        # Synchronous D-Bus read — run it off the loop each poll tick.
+        state = await loop.run_in_executor(None, _dbus_get_media_transport_state, device_path)
         if state in ("pending", "active"):
             return await do_mute(sink_name, True)
         remaining = deadline - loop.time()

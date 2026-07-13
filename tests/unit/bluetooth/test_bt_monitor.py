@@ -423,15 +423,18 @@ async def test_inner_dbus_monitor_successful_reconnect_starts_subprocess(bt_mana
 
     loop = asyncio.get_running_loop()
 
-    # is_device_paired → True, connect_device → True
-    executor_results = iter([True, True])
-
+    # Transparent executor: run the (patched) method so behaviour follows the
+    # return values, not a fixed call count.  ``_handle_reconnect_failure`` is
+    # now offloaded via ``run_in_executor`` too, so a canned-sequence mock would
+    # be coupled to the exact number of executor calls.
     async def _mock_run_in_executor(executor, fn, *args):
-        return next(executor_results)
+        return fn(*args)
 
     with (
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "connect_device", return_value=True),
         patch.object(bt_manager, "_handle_reconnect_failure", return_value=False),
         patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
         patch.object(bt_manager, "_record_reconnect"),
@@ -472,6 +475,40 @@ async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
     ):
         # Should return without attempting connect
         await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), loop)
+
+
+@pytest.mark.asyncio
+async def test_handle_reconnect_failure_runs_off_the_loop(bt_manager):
+    """The recovery ladder + config write in ``_handle_reconnect_failure`` must
+    be dispatched via ``run_in_executor`` (off the loop), never inline — an
+    inline call would freeze every other device's IPC during USB rebind."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = False
+    bt_manager.management_enabled = True
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+
+    disconnect_event = asyncio.Event()
+    disconnect_event.set()
+    loop = asyncio.get_running_loop()
+
+    dispatched = []
+
+    async def _recording_executor(executor, fn, *args):
+        dispatched.append(getattr(fn, "_mock_name", None) or getattr(fn, "__name__", None))
+        return fn(*args)
+
+    with (
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
+        patch.object(loop, "run_in_executor", side_effect=_recording_executor),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), loop)
+
+    assert "_handle_reconnect_failure" in dispatched, "reconnect-failure handling was not offloaded"
 
 
 # ---------------------------------------------------------------------------
@@ -568,26 +605,21 @@ async def test_inner_dbus_monitor_backoff_falls_through_on_timeout(bt_manager):
 
     loop = asyncio.get_running_loop()
 
-    # First iteration: is_device_paired → True, connect_device → False
-    # → backoff path → timeout. Bail on the second iteration to keep
-    # the test deterministic.
-    call_count = {"n": 0}
+    # Each disconnected-branch iteration reconnects: is_device_paired → True,
+    # connect_device → False so the backoff path is exercised.  Stop the outer
+    # loop after one full fall-through to keep the test deterministic.  The
+    # executor mock runs the (patched) method directly, so this is robust to
+    # ``_handle_reconnect_failure`` now being offloaded via run_in_executor too.
+    iteration = {"n": 0}
 
     def _is_paired_and_maybe_stop():
-        # Stop the outer while loop on the second iteration's paired check
-        # so the test terminates after one full backoff fall-through.
-        if call_count["n"] > 2:
+        iteration["n"] += 1
+        if iteration["n"] > 1:
             bt_manager._running = False
         return True
 
     async def _mock_run_in_executor(executor, fn, *args):
-        # Each disconnected-branch iteration calls is_device_paired (odd
-        # call) then connect_device (even call). Paired → True; connect →
-        # False so the backoff path is exercised every iteration.
-        call_count["n"] += 1
-        if call_count["n"] % 2 == 1:
-            return _is_paired_and_maybe_stop()
-        return False
+        return fn(*args)
 
     async def _instant_sleep(_delay):
         return None
@@ -599,6 +631,8 @@ async def test_inner_dbus_monitor_backoff_falls_through_on_timeout(bt_manager):
     with (
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
+        patch.object(bt_manager, "is_device_paired", side_effect=_is_paired_and_maybe_stop),
+        patch.object(bt_manager, "connect_device", return_value=False),
         patch.object(bt_manager, "_handle_reconnect_failure", return_value=False),
         patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
         patch.object(bt_manager, "_record_reconnect"),
