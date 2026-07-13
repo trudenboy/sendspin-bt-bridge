@@ -355,7 +355,9 @@ def test_command_reclaim_reenables_bt_management(fake_client, monkeypatch):
     """#357: the Reclaim button re-enables BT management (enabled=True) so the
     reconnect monitor takes an auto-released device back over."""
     called = {}
-    monkeypatch.setattr(fake_client, "set_bt_management_enabled", lambda enabled: called.__setitem__("enabled", enabled))
+    monkeypatch.setattr(
+        fake_client, "set_bt_management_enabled", lambda enabled: called.__setitem__("enabled", enabled)
+    )
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: target(*a))  # run synchronously
     result = M.command_reclaim(fake_client)
     assert result.success
