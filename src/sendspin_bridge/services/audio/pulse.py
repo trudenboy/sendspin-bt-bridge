@@ -157,6 +157,26 @@ async def aset_sink_volume(sink_name: str, volume_pct: int) -> bool:
                     logger.warning("aset_sink_volume: sink %s not found", sink_name)
                     return False
                 await pulse.volume_set_all_chans(sink, volume_pct / 100.0)
+
+                # Playback may use an independent sink-input volume. In that
+                # case changing only the Bluetooth sink updates the reported
+                # volume but does not change the audible stream volume.
+                sink_inputs = await pulse.sink_input_list()
+                for sink_input in sink_inputs:
+                    if sink_input.sink != sink.index:
+                        continue
+
+                    await pulse.volume_set_all_chans(
+                        sink_input,
+                        volume_pct / 100.0,
+                    )
+                    logger.info(
+                        "Set sink-input %d volume to %d%% for sink %s",
+                        sink_input.index,
+                        volume_pct,
+                        sink_name,
+                    )
+
                 return True
     except Exception as exc:
         logger.debug(
