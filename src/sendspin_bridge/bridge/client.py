@@ -663,7 +663,7 @@ class SendspinClient:
 
     def _event_device_id(self) -> str:
         """Return the stable event-history key for this device."""
-        return self.player_id or f"sendspin-{self._safe_id}" or self.player_name
+        return self.player_id or f"sendspin-{self._safe_id}"
 
     def _build_status_events(
         self,
