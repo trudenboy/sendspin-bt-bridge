@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.72.1] - 2026-07-13
+
+### Added
+
+- **A per-speaker "Reclaim" button in the Home Assistant integration.** Exposes the web-UI Reclaim action as a Home Assistant button, so you can take an auto-released speaker back over — or trigger it from an automation when the speaker comes back — without opening the bridge web UI. ([#357](https://github.com/trudenboy/sendspin-bt-bridge/issues/357))
+
+### Changed
+
+- **A speaker left off for a long time no longer floods the log with reconnect attempts.** The repeated "reconnecting… (attempt N)" message is now logged as a warning only on the first attempt and quietly at debug level thereafter, so the saturated-back-off retries of an unavailable speaker don't bury the rest of the log. ([#322](https://github.com/trudenboy/sendspin-bt-bridge/issues/322))
+
 ## [2.72.0] - 2026-07-13
 
 ### Added

@@ -250,6 +250,15 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         command="disconnect",
         availability_class="config",
     ),
+    # One-press reclaim of an auto-released device (#357).
+    EntitySpec(
+        "reclaim",
+        "button",
+        "Reclaim",
+        icon="mdi:bluetooth-transfer",
+        command="reclaim",
+        availability_class="config",
+    ),
     # Pairing and reset_reconnect intentionally NOT exposed (see
     # services/ha_entity_model.py).
     # ``wake`` / ``standby`` / ``power_save_toggle`` buttons removed in

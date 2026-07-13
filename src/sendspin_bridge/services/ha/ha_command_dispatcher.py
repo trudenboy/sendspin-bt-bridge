@@ -238,6 +238,7 @@ class HaCommandDispatcher:
 _BUTTON_HANDLER_NAMES: dict[str, str] = {
     "reconnect": "command_reconnect",
     "disconnect": "command_disconnect",
+    "reclaim": "command_reclaim",
     "claim_audio": "command_claim_audio",
     # ``wake`` / ``standby`` / ``power_save_toggle`` are no longer
     # buttons — see the ``standby`` and ``power_save`` switches in
