@@ -725,3 +725,96 @@ def test_status_events_does_not_set_hop_by_hop_headers(client):
         assert resp.headers.get("Content-Encoding") == "identity"
     finally:
         resp.close()
+
+
+# ---------------------------------------------------------------------------
+# /api/ha/mqtt/test — redacted-password handling must not exfiltrate the
+# saved broker credential to a different host.
+# ---------------------------------------------------------------------------
+
+
+def _seed_saved_mqtt(monkeypatch, *, broker: str, port: int, password: str) -> None:
+    """Point ``load_config`` at a config carrying a saved MQTT broker."""
+    monkeypatch.setattr(
+        "sendspin_bridge.config.load_config",
+        lambda: {
+            "HA_INTEGRATION": {
+                "mode": "mqtt",
+                "mqtt": {"broker": broker, "port": port, "password": password},
+            }
+        },
+    )
+
+
+def _capture_probe_password(monkeypatch):
+    """Replace the async broker probe with a stub recording the password."""
+    import sendspin_bridge.web.routes.api_ha as M
+
+    seen: dict[str, object] = {}
+
+    async def _stub(host, port, username, password, tls):
+        seen["host"] = host
+        seen["port"] = port
+        seen["password"] = password
+        return {"ok": True, "elapsed_ms": 1}
+
+    monkeypatch.setattr(M, "_probe_mqtt_broker", _stub)
+    return seen
+
+
+def test_mqtt_test_does_not_leak_saved_password_to_foreign_host(client, monkeypatch):
+    """An authed request that submits the ``***REDACTED***`` marker for a
+    *different* broker host must NOT transmit the saved password — that is
+    a credential-exfiltration vector."""
+    _seed_saved_mqtt(monkeypatch, broker="saved-broker.local", port=1883, password="s3cret")
+    seen = _capture_probe_password(monkeypatch)
+
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "attacker.example.com", "port": 1883, "password": "***REDACTED***"},
+    )
+    assert resp.status_code == 200
+    assert seen["password"] == "", "saved broker password leaked to a foreign host"
+
+
+def test_mqtt_test_does_not_leak_saved_password_on_port_mismatch(client, monkeypatch):
+    """Same host but a different port is still a different broker target —
+    the saved password must not be handed over."""
+    _seed_saved_mqtt(monkeypatch, broker="saved-broker.local", port=1883, password="s3cret")
+    seen = _capture_probe_password(monkeypatch)
+
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "saved-broker.local", "port": 8883, "password": "***REDACTED***"},
+    )
+    assert resp.status_code == 200
+    assert seen["password"] == ""
+
+
+def test_mqtt_test_resolves_saved_password_for_matching_broker(client, monkeypatch):
+    """The convenience path still works: re-testing the *same* broker with
+    the redacted marker resolves the saved password so the operator need
+    not retype it."""
+    _seed_saved_mqtt(monkeypatch, broker="saved-broker.local", port=1883, password="s3cret")
+    seen = _capture_probe_password(monkeypatch)
+
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "saved-broker.local", "port": 1883, "password": "***REDACTED***"},
+    )
+    assert resp.status_code == 200
+    assert seen["password"] == "s3cret"
+
+
+def test_mqtt_test_matches_broker_with_embedded_port(client, monkeypatch):
+    """A saved ``host:port`` broker string matches a submission whose host
+    and port equal the embedded values."""
+    _seed_saved_mqtt(monkeypatch, broker="saved-broker.local:8883", port=1883, password="s3cret")
+    seen = _capture_probe_password(monkeypatch)
+
+    resp = client.post(
+        "/api/ha/mqtt/test",
+        json={"host": "saved-broker.local", "port": 8883, "password": "***REDACTED***"},
+    )
+    assert resp.status_code == 200
+    assert seen["password"] == "s3cret"

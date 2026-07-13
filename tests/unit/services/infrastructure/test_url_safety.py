@@ -206,3 +206,73 @@ class TestMultiAnswer:
             _fake_getaddrinfo({"mixed": ["93.184.216.34", "169.254.169.254"]}),
         )
         assert is_safe_external_url("http://mixed/") is False
+
+
+class TestIPv4MappedIPv6:
+    """IPv4-mapped IPv6 (``::ffff:a.b.c.d``) must be unwrapped before
+    classification — otherwise ``::ffff:169.254.169.254`` slips past the
+    link-local block (Python classifies it ``is_private``, not
+    ``is_link_local``) and reaches the cloud-metadata endpoint."""
+
+    def test_mapped_link_local_metadata_rejected_default(self, monkeypatch):
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
+        monkeypatch.setattr(
+            url_safety.socket,
+            "getaddrinfo",
+            _fake_getaddrinfo({"meta": ["::ffff:169.254.169.254"]}),
+        )
+        assert is_safe_external_url("http://meta/") is False
+
+    def test_mapped_loopback_rejected_in_strict(self, monkeypatch):
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.setenv("SENDSPIN_STRICT_SSRF", "1")
+        monkeypatch.setattr(
+            url_safety.socket,
+            "getaddrinfo",
+            _fake_getaddrinfo({"lo6": ["::ffff:127.0.0.1"]}),
+        )
+        assert is_safe_external_url("http://lo6/") is False
+
+    def test_mapped_private_rejected_in_strict(self, monkeypatch):
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.setenv("SENDSPIN_STRICT_SSRF", "1")
+        monkeypatch.setattr(
+            url_safety.socket,
+            "getaddrinfo",
+            _fake_getaddrinfo({"p6": ["::ffff:10.0.0.1"]}),
+        )
+        assert is_safe_external_url("http://p6/") is False
+
+    def test_verify_peer_rejects_mapped_metadata_peer(self, monkeypatch):
+        """Connect-time re-check (DNS-rebinding defence) must also unwrap."""
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
+
+        class _FakeSock:
+            def __init__(self):
+                self.closed = False
+
+            def getpeername(self):
+                return ("::ffff:169.254.169.254", 80)
+
+            def close(self):
+                self.closed = True
+
+        sock = _FakeSock()
+        with pytest.raises(url_safety.UnsafePeerError):
+            url_safety._verify_peer_safe(sock, "meta")
+        assert sock.closed is True
+
+    def test_mapped_public_recognized_by_embedded_ipv4(self, monkeypatch):
+        """Classification must follow the embedded IPv4, not the incidental
+        ``is_reserved`` status of the whole ``::ffff:0:0/96`` block.  A
+        mapped *public* address is a legitimate target."""
+        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+        monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
+        monkeypatch.setattr(
+            url_safety.socket,
+            "getaddrinfo",
+            _fake_getaddrinfo({"pub6": ["::ffff:8.8.8.8"]}),
+        )
+        assert is_safe_external_url("http://pub6/") is True

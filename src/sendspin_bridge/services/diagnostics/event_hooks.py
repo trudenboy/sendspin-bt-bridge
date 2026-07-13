@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from sendspin_bridge.services.infrastructure.url_safety import safe_urlopen
+
 UTC = timezone.utc
 
 if TYPE_CHECKING:
@@ -235,7 +237,12 @@ class EventHookRegistry:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=hook.timeout_sec) as response:
+            # Deliver through the SSRF-safe opener with strict policy: it
+            # re-verifies the *connected* peer IP (blocking loopback / RFC1918
+            # / link-local), closing the DNS-rebinding TOCTOU where the
+            # register-time resolution returns a public IP but the delivery-time
+            # resolution points at 127.0.0.1 or a cloud-metadata endpoint.
+            with safe_urlopen(request, timeout=hook.timeout_sec, strict=True) as response:
                 status_value = getattr(response, "status", None)
                 if status_value is None:
                     status_value = response.getcode()

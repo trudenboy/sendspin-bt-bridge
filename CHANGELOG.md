@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Routine dependency refresh in the frozen lockfile.** `requests` 2.34.1 → 2.34.2, `cffi` 2.0.0 → 2.1.0, `charset-normalizer` 3.4.7 → 3.4.9, `click` 8.3.3 → 8.4.2 (all transitive patch/minor updates), plus `pyobjc-framework-libdispatch` 12.1 → 12.2.1 (macOS-only). The dependency audit stays clean. ([#371](https://github.com/trudenboy/sendspin-bt-bridge/pull/371), [#372](https://github.com/trudenboy/sendspin-bt-bridge/pull/372), [#373](https://github.com/trudenboy/sendspin-bt-bridge/pull/373), [#374](https://github.com/trudenboy/sendspin-bt-bridge/pull/374), [#375](https://github.com/trudenboy/sendspin-bt-bridge/pull/375))
+- **The Home Assistant integration re-pairs once after this upgrade.** API access tokens for the Home Assistant custom component now use a faster verification scheme that also removes a per-request processing cost on every authenticated call. Existing tokens are retired as part of the upgrade, so the integration prompts you to re-pair a single time — a click in the add-on's Home Assistant panel, after which everything reconnects normally.
+
+### Security
+
+- **The web-UI password can no longer be bypassed on standalone (non-Home-Assistant) installs.** The automatic sign-in used for Home Assistant's ingress is now honored only when the bridge actually runs as a Home Assistant add-on. On plain Docker / LXC deployments a local process on the host can no longer present an ingress marker to skip the login prompt.
+- **A local process on a standalone host can no longer mint a full-access API token.** The one-shot Home Assistant pairing endpoint now operates only when running as a Home Assistant add-on, matching where legitimate pairing actually happens.
+- **Revoking an API token now requires the same anti-forgery token as creating one**, so a malicious web page can no longer silently delete your tokens.
+- **The MQTT "Test connection" button no longer sends your saved broker password to a different broker.** When the password field keeps its masked placeholder, the saved password is now reused only if the host and port match the saved broker; testing against any other broker requires entering the password explicitly.
+- **Outgoing event webhooks are re-checked at delivery time, not just when they are added.** Delivery now verifies the address actually connected to, blocking a webhook host that later resolves to a loopback, private-network, or cloud-metadata address (DNS-rebinding).
+- **Server-side link checks now correctly handle IPv4-mapped IPv6 addresses**, closing a path that could have reached loopback or cloud-metadata endpoints through a crafted address.
+- **The bug-report submission rate limit can no longer be bypassed by spoofing a forwarding header** — the client address is trusted from a forwarding header only when the request arrives through a trusted proxy.
+- **Authentication and token exchange responses are no longer written to debug logs**, so a long-lived token or authorization code can't leak into captured log output.
+- **Image library `pillow` updated 12.2.0 → 12.3.0**, clearing five advisories flagged by the dependency audit. The CVE audit reports a clean tree again.
 
 ## [2.72.0-rc.1] - 2026-07-05
 

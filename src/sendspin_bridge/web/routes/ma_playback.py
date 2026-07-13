@@ -158,11 +158,18 @@ def _resolve_ma_artwork_url(raw_url: str) -> tuple[str, bool]:
     if parsed_raw.scheme and parsed_raw.scheme.lower() not in ("http", "https"):
         raise ValueError("Unsupported artwork URL scheme")
 
-    if not parsed_raw.scheme:
+    if not parsed_raw.scheme and not parsed_raw.netloc:
+        # Pure relative path (e.g. ``/imageproxy/...``) — genuinely resolves
+        # against the MA base and is same-origin.
         base = ma_url.rstrip("/") + "/"
         return _up.urljoin(base, trimmed), True
 
-    resolved = trimmed
+    # Absolute or scheme-relative (``//host/...``).  A scheme-relative URL
+    # carries a *different* netloc while lacking a scheme; joining it against
+    # the base swaps the host, so it must be classified by the resolved
+    # origin — never assumed same-origin, or the artwork proxy would HMAC-sign
+    # a foreign host as if it were MA.
+    resolved = trimmed if parsed_raw.scheme else _up.urljoin(ma_url, trimmed)
     parsed = _up.urlparse(resolved)
     is_ma_origin = (parsed.scheme.lower(), parsed.netloc.lower()) == (
         base_parsed.scheme.lower(),

@@ -28,6 +28,7 @@ from sendspin_bridge.config import (
     resolve_web_port,
 )
 from sendspin_bridge.config.logging_setup import apply_log_level
+from sendspin_bridge.web.trusted_proxies import peer_in_trust_set
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -77,10 +78,19 @@ if _auth_enabled:
         logger.info("Web UI password protection is enabled (restart required to change)")
 
 
-_TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.1", "172.30.32.2"}
+# Entries may be literal IPs or CIDR networks; matched via the canonical
+# CIDR-aware ``peer_in_trust_set`` from ``routes/auth.py``.  Defaults mirror
+# ``auth._TRUSTED_PROXY_DEFAULTS`` (loopback + the whole hassio 172.30.32.0/23
+# network) so the auth gate and the rate-limiter agree.
+_TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.0/23"}
 _extra = _startup_config.get("TRUSTED_PROXIES") or []
 if isinstance(_extra, list):
-    _TRUSTED_PROXIES |= set(_extra)
+    _TRUSTED_PROXIES |= {v.strip() for v in _extra if isinstance(v, str) and v.strip()}
+
+
+def _peer_trusted(peer: str) -> bool:
+    """CIDR-aware trust check against ``_TRUSTED_PROXIES`` (shared matcher)."""
+    return peer_in_trust_set(peer, _TRUSTED_PROXIES)
 
 
 class _IngressMiddleware:
@@ -96,7 +106,7 @@ class _IngressMiddleware:
 
     def __call__(self, environ, start_response):
         peer = environ.get("REMOTE_ADDR", "")
-        if peer in _TRUSTED_PROXIES:
+        if _peer_trusted(peer):
             ingress_path = environ.get("HTTP_X_INGRESS_PATH", "").rstrip("/")
             # Only accept a single-leading-slash absolute path (no //, no scheme)
             if ingress_path and ingress_path.startswith("/") and not ingress_path.startswith("//"):
@@ -357,11 +367,14 @@ def _check_auth():
     if not _auth_enabled:
         return  # auth disabled — allow all
 
-    # HA Ingress: trust the header only when the request originates from the
-    # local Supervisor proxy (prevents spoofing from LAN clients).
-    if request.headers.get("X-Ingress-Path"):
+    # HA Ingress: trust the header only in HA-addon mode AND only when the
+    # request originates from a trusted Supervisor-network peer.  In
+    # standalone Docker/LXC there is no ingress, so a loopback-origin request
+    # setting the header itself (a local process or an SSRF/proxy pivot on the
+    # host) must never be auto-authenticated — it would bypass the password.
+    if _is_ha_addon and request.headers.get("X-Ingress-Path"):
         peer = request.remote_addr or ""
-        if peer in _TRUSTED_PROXIES:
+        if _peer_trusted(peer):
             # Supervisor sends user identity headers (HA 2024.x+)
             display_name = (
                 request.headers.get("X-Remote-User-Display-Name") or request.headers.get("X-Remote-User-Name") or ""

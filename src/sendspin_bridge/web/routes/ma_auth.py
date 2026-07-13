@@ -832,7 +832,9 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
         req = _ur.Request(url, data=payload, headers=headers, method="POST")
         with safe_urlopen(req, timeout=10) as resp:
             raw = resp.read().decode()
-            logger.debug("MA Ingress raw response: %s", raw[:200])
+            # The success response body *is* the long-lived MA token (bare
+            # string or ``{"result": "<token>"}``) — never log it.
+            logger.debug("MA Ingress response received (%d bytes)", len(raw))
             data = json.loads(raw)
 
         # MA JSONRPC may return the result directly as a string (the token),

@@ -454,22 +454,73 @@ async def _probe_mqtt_broker(
         }
 
 
-def _resolve_redacted_password(submitted: str) -> str:
-    """If the form submitted the redacted-password marker, resolve the
-    actual password from saved config so testing host/user/TLS edits
-    works without forcing the operator to retype the password."""
-    if submitted != _REDACTED_PASSWORD_MARKER:
-        return submitted
+def _saved_mqtt_block() -> dict[str, Any]:
+    """Return the saved ``HA_INTEGRATION.mqtt`` block (or an empty dict)."""
     try:
         from sendspin_bridge.config import load_config
 
         cfg = load_config()
         block = cfg.get("HA_INTEGRATION") or {}
-        mqtt = block.get("mqtt") or {}
-        return str(mqtt.get("password") or "")
+        return dict(block.get("mqtt") or {})
     except Exception:
-        logger.debug("Could not resolve redacted MQTT password from config", exc_info=True)
+        logger.debug("Could not load saved MQTT config", exc_info=True)
+        return {}
+
+
+def _split_broker_host_port(broker: str, default_port: int) -> tuple[str, int]:
+    """Normalise a saved ``broker`` value to ``(host_lower, port)``.
+
+    ``broker`` may be a bare host, ``host:port`` (IPv4 / hostname), or a
+    bracketed IPv6 literal with an optional port.  A port embedded in the
+    string wins over ``default_port``.
+    """
+    broker = (broker or "").strip()
+    if not broker:
+        return "", default_port
+    if broker.startswith("[") and "]" in broker:  # [ipv6] or [ipv6]:port
+        host, _, rest = broker.partition("]")
+        host = host.lstrip("[").strip().lower()
+        if rest.startswith(":"):
+            try:
+                return host, int(rest[1:])
+            except ValueError:
+                return host, default_port
+        return host, default_port
+    if ":" in broker:  # host:port — IPv6 handled above, so a lone colon is a port
+        host, _, port_s = broker.rpartition(":")
+        try:
+            return host.strip().lower(), int(port_s)
+        except ValueError:
+            return broker.lower(), default_port
+    return broker.lower(), default_port
+
+
+def _resolve_redacted_password(submitted: str, host: str, port: int) -> str:
+    """Resolve the ``***REDACTED***`` marker — but only for the saved broker.
+
+    The marker lets an operator re-test after editing unrelated fields
+    (username, TLS) without retyping the password.  It must never hand the
+    saved broker credential to a *different* target: an authed request with
+    ``host=attacker.tld, password=***REDACTED***`` would otherwise
+    exfiltrate the real broker password.  On any host/port mismatch we
+    return an empty password so the operator must supply one explicitly for
+    the new target.
+    """
+    if submitted != _REDACTED_PASSWORD_MARKER:
+        return submitted
+    mqtt = _saved_mqtt_block()
+    saved_password = str(mqtt.get("password") or "")
+    if not saved_password:
         return ""
+    saved_host, saved_port = _split_broker_host_port(str(mqtt.get("broker") or ""), int(mqtt.get("port") or 1883))
+    if host.strip().lower() == saved_host and int(port) == saved_port:
+        return saved_password
+    logger.info(
+        "MQTT test: redacted-password marker submitted for a broker that does "
+        "not match the saved one; requiring an explicit password rather than "
+        "sending the saved credential to a different host.",
+    )
+    return ""
 
 
 @ha_bp.route("/api/ha/mqtt/test", methods=["POST"])
@@ -507,7 +558,7 @@ def api_ha_mqtt_test():
     if not (1 <= port <= 65535):
         return jsonify({"ok": False, "error_class": "ValueError", "error": "port out of range"}), 400
     username = str(payload.get("username") or "").strip()
-    password = _resolve_redacted_password(str(payload.get("password") or ""))
+    password = _resolve_redacted_password(str(payload.get("password") or ""), host, port)
     tls_raw = payload.get("tls")
     if isinstance(tls_raw, bool):
         tls = tls_raw

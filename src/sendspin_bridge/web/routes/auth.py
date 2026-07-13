@@ -34,6 +34,11 @@ from urllib.parse import urlparse
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from sendspin_bridge.config import check_password, load_config
+from sendspin_bridge.web.trusted_proxies import (
+    TRUSTED_PROXY_DEFAULTS,
+    parse_trusted_entry,
+    peer_in_trust_set,
+)
 
 if TYPE_CHECKING:
     from werkzeug.wrappers.response import Response as WerkzeugResponse
@@ -74,46 +79,13 @@ _LOCKOUT_DURATION_SECS = 300  # 5 minutes
 #:
 #: Operators can extend this set via ``TRUSTED_PROXIES`` in the bridge
 #: config when their deployment uses a different proxy chain.  Entries
-#: there may be either literal IPs or CIDR networks.
-_TRUSTED_PROXY_DEFAULTS = frozenset({"127.0.0.1", "::1", "172.30.32.0/23"})
-
-
-def _parse_trusted_entry(entry: str):
-    """Return an ``ip_network`` for *entry* (single IP or CIDR), or None.
-
-    ``entry`` is taken from either ``_TRUSTED_PROXY_DEFAULTS`` or the
-    operator-managed ``TRUSTED_PROXIES`` config key, so it must tolerate
-    bad input gracefully — invalid entries are silently dropped from
-    the trust set rather than crashing the request.
-    """
-    import ipaddress as _ip
-
-    entry = (entry or "").strip()
-    if not entry:
-        return None
-    try:
-        # ``strict=False`` lets ``172.30.32.0/24`` host-bits work, and
-        # also accepts a bare IP like ``172.30.32.1``.
-        return _ip.ip_network(entry, strict=False)
-    except ValueError:
-        return None
-
-
-def _peer_in_trust_set(peer: str, trust_set) -> bool:
-    """True when *peer* falls inside any IP / CIDR entry in *trust_set*."""
-    import ipaddress as _ip
-
-    if not peer:
-        return False
-    try:
-        ip_obj = _ip.ip_address(peer)
-    except ValueError:
-        return False
-    for entry in trust_set:
-        net = _parse_trusted_entry(entry)
-        if net is not None and ip_obj in net:
-            return True
-    return False
+#: there may be either literal IPs or CIDR networks.  The matcher and
+#: defaults live in ``web/trusted_proxies.py`` so the auth gate, the
+#: ingress middleware and this rate-limiter share one implementation.
+_TRUSTED_PROXY_DEFAULTS = TRUSTED_PROXY_DEFAULTS
+# Backward-compatible private aliases (kept for existing internal callers).
+_parse_trusted_entry = parse_trusted_entry
+_peer_in_trust_set = peer_in_trust_set
 
 
 _failed: dict[str, tuple[int, float]] = {}  # client_id → (count, first_failure_ts)
@@ -365,6 +337,26 @@ def _get_ha_core_url_from_ma() -> str | None:
     return f"{parsed.scheme}://{parsed.hostname}:8123"
 
 
+def _redact_flow_result(result: object) -> dict:
+    """Summarise an HA ``login_flow`` step result for safe logging.
+
+    On success the result carries ``result`` — the authorization code that
+    is exchanged for access/refresh tokens — so the raw dict must never be
+    logged.  Keep only non-secret routing fields.
+    """
+    if not isinstance(result, dict):
+        return {"type": type(result).__name__}
+    summary: dict[str, object] = {}
+    for key in ("type", "flow_id", "step_id", "handler", "reason"):
+        if key in result:
+            summary[key] = result[key]
+    errors = result.get("errors")
+    if isinstance(errors, dict):
+        summary["errors"] = sorted(errors.keys())
+    summary["has_result"] = bool(result.get("result"))
+    return summary
+
+
 def _ha_remote_flow_start(ha_url: str) -> dict | None:
     """Start HA Core login_flow on a remote HA instance."""
     client_id = f"{ha_url}/"
@@ -411,7 +403,7 @@ def _ha_remote_flow_step(ha_url: str, flow_id: str, data: dict) -> dict | None:
         )
         with _ur.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read())
-            logger.debug("Remote HA flow step result: %s", result)
+            logger.debug("Remote HA flow step result: %s", _redact_flow_result(result))
             return result
     except HTTPError as exc:
         try:
@@ -509,7 +501,7 @@ def _ha_flow_step(flow_id: str, data: dict) -> dict | None:
         )
         with _ur.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read())
-            logger.debug("HA flow step result: %s", result)
+            logger.debug("HA flow step result: %s", _redact_flow_result(result))
             return result
     except HTTPError as exc:
         try:
@@ -975,6 +967,11 @@ def api_auth_tokens_delete(token_id: str):
     blocked = _require_authenticated_session()
     if blocked:
         return blocked
+    # Revocation is a state-changing request — require the CSRF token, same
+    # as the mint route, so a cross-site request can't silently revoke a
+    # user's tokens.
+    if not _validate_csrf_token():
+        return jsonify({"error": "Invalid CSRF token"}), 403
     from sendspin_bridge.services.diagnostics.auth_tokens import revoke_token
 
     removed = revoke_token(token_id)
@@ -994,12 +991,23 @@ def api_auth_ha_pair():
     token labelled ``ha-custom-component`` and return it once.
 
     Threat model: an attacker who can reach this endpoint from outside
-    the Supervisor network must NOT receive a token.  We trust the
-    Supervisor proxy chain by checking the immediate peer is in
-    ``_TRUSTED_PROXIES`` (same set used by ``_check_auth``) AND that the
-    request carries an ``X-Ingress-Path`` header — only Supervisor injects
-    that header.
+    the Supervisor network must NOT receive a token.  Defence is layered:
+
+    1. The bridge must actually be running as an HA addon
+       (``SUPERVISOR_TOKEN`` present).  In standalone Docker/LXC there is
+       no Supervisor and no legitimate custom_component pairing, so a
+       local process — or an SSRF/proxy pivot — that loops back from a
+       trusted peer (127.0.0.1) and forges ``X-Ingress-Path`` itself must
+       never be able to mint a full-access bearer token behind the
+       operator's back.  This mirrors the ingress gate in ``_check_auth``.
+    2. The immediate peer must be in ``_TRUSTED_PROXIES`` (the hassio
+       Docker network) — same set used by ``_check_auth``.
+    3. The request must carry an ``X-Ingress-Path`` header (only the
+       Supervisor proxy injects it).
     """
+    if not _is_ha_addon():
+        return jsonify({"success": False, "error": "Not allowed from this network"}), 403
+
     peer = (request.remote_addr or "").strip()
     # ``_get_trusted_proxies`` already merges defaults + the operator
     # ``TRUSTED_PROXIES`` config key.  Both can be literal IPs or CIDR
