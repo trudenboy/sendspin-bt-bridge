@@ -779,6 +779,59 @@ def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict
             "summary": "Recommended when virtualization or HAOS needs extra buffer.",
         },
     ]
+
+    def _runtime_value(device: Any, key: str, default: Any = None) -> Any:
+        status = getattr(device, "status", None)
+        if isinstance(status, dict):
+            value = status.get(key)
+            if value is not None:
+                return value
+        extra = getattr(device, "extra", None)
+        if isinstance(extra, dict):
+            value = extra.get(key)
+            if value is not None:
+                return value
+        return getattr(device, key, default)
+
+    actively_playing = [device for device in devices if bool(_runtime_value(device, "playing", False))]
+    reanchor_count = sum(
+        int(
+            _runtime_value(device, "reanchor_count_5m", None)
+            if _runtime_value(device, "reanchor_count_5m", None) is not None
+            else _runtime_value(device, "reanchor_count", 0)
+        )
+        for device in actively_playing
+    )
+    if configured_count >= 2 and reanchor_count >= 3:
+        current_min_buffer = max(
+            [int(_runtime_value(device, "min_buffer_ms", 250) or 250) for device in actively_playing] or [250]
+        )
+        recommended_min_buffer = min(3000, max(400, current_min_buffer + 150))
+        buffered_values = [
+            float(value)
+            for device in actively_playing
+            if (value := _runtime_value(device, "buffered_audio_ms")) is not None
+        ]
+        return {
+            "tone": "warning",
+            "summary": "Repeated re-anchors were observed during active playback.",
+            "current_pulse_latency_msec": pulse_latency,
+            "recommended_pulse_latency_msec": pulse_latency,
+            "recommended_min_buffer_ms": recommended_min_buffer,
+            "recommended_summary": "Increase the Sendspin ongoing buffer before changing static delay.",
+            "delta_from_recommendation_msec": 0,
+            "evidence": {
+                "reanchor_count": reanchor_count,
+                "active_devices": len(actively_playing),
+                "buffered_audio_ms": round(min(buffered_values), 1) if buffered_values else None,
+            },
+            "hints": [
+                "Static delay corrects a stable offset; it does not repair an unstable stream.",
+                f"Try min_buffer_ms={recommended_min_buffer} and observe another playback session.",
+            ],
+            "safe_actions": [RecoveryAction(key="open_devices_settings", label="Review buffer settings").to_dict()],
+            "presets": presets,
+        }
     if configured_count < 2:
         recommended = pulse_latency or 300
         return {

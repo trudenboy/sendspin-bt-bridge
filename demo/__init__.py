@@ -359,6 +359,8 @@ def install() -> None:
                 "bluetooth_available": True,
                 "buffering": initial.get("buffering", False),
                 "reanchor_count": initial.get("reanchor_count", 0),
+                "reanchor_count_5m": initial.get("reanchor_count_5m", 0),
+                "reanchor_count_30m": initial.get("reanchor_count_30m", 0),
                 "last_sync_error_ms": initial.get("last_sync_error_ms"),
                 "last_reanchor_at": initial.get("last_reanchor_at"),
                 "reanchoring": initial.get("reanchoring", False),
@@ -371,6 +373,23 @@ def install() -> None:
                 "group_name": initial.get("group_name"),
                 "rssi_dbm": initial.get("rssi_dbm"),
                 "rssi_at_ts": time.time() if initial.get("rssi_dbm") is not None else None,
+                "bt_codec_name": initial.get("bt_codec_name"),
+                "bt_reported_delay_ms": initial.get("bt_reported_delay_ms"),
+                "bt_delay_reporting_supported": initial.get("bt_delay_reporting_supported", False),
+                "suggested_static_delay_ms": initial.get("suggested_static_delay_ms"),
+                "latency_suggestion_source": initial.get("latency_suggestion_source", "unavailable"),
+                "latency_suggestion_confidence": initial.get("latency_suggestion_confidence", "none"),
+                "latency_suggestion_explanation": initial.get("latency_suggestion_explanation", ""),
+                "latency_suggestion_revision": initial.get("latency_suggestion_revision"),
+                "latency_double_count_risk": initial.get("latency_double_count_risk", False),
+                "timing_metrics_available": initial.get("timing_metrics_available", False),
+                "backend_output_latency_ms": initial.get("backend_output_latency_ms"),
+                "buffered_audio_ms": initial.get("buffered_audio_ms"),
+                "playback_sync_error_ms": initial.get("playback_sync_error_ms"),
+                "clock_synchronized": initial.get("clock_synchronized", False),
+                "clock_offset_ms": initial.get("clock_offset_ms"),
+                "clock_uncertainty_ms": initial.get("clock_uncertainty_ms"),
+                "timing_sampled_at": initial.get("timing_sampled_at"),
             }
         )
         logger.info("[demo] Player '%s' started (no subprocess)", self.player_name)
@@ -418,6 +437,12 @@ def install() -> None:
 
     _SendspinClient._start_sendspin_inner = _demo_start_sendspin_inner
     _SendspinClient._send_subprocess_command = _demo_send_command
+
+    async def _demo_play_calibration_tone(self: Any) -> bool:
+        logger.info("[demo] Calibration clicks played on %s", self.player_name)
+        return bool(self.status.get("bluetooth_connected"))
+
+    _SendspinClient.play_calibration_tone = _demo_play_calibration_tone
     _SendspinClient.stop_sendspin = _demo_stop_sendspin
 
     # ------------------------------------------------------------------
@@ -717,11 +742,17 @@ def install() -> None:
         result["CHECK_UPDATES"] = True
         result["UPDATE_CHANNEL"] = "stable"
         result["AUTO_UPDATE"] = False
+        result["ENABLE_LATENCY_CALIBRATION_BETA"] = True
         if not result.get("BRIDGE_NAME"):
             result["BRIDGE_NAME"] = "DEMO"
         # Always inject canonical MA credentials in demo mode.
         result["MA_API_URL"] = DEMO_MA_URL
         result["MA_API_TOKEN"] = DEMO_MA_TOKEN
+        # Demo MA state and commands are fully simulated in-process.  Disable
+        # the production websocket monitor so bootstrap can never leak a real
+        # connection attempt to the intentionally fake demo-ma.local host.
+        result["MA_WEBSOCKET_MONITOR"] = False
+        result["DUPLICATE_DEVICE_CHECK"] = False
         return result
 
     _demo_canonical_config = _build_demo_base_config()
@@ -924,28 +955,22 @@ def install() -> None:
     )
     _api_status_mod._collect_subprocess_info = _demo_collect_subprocess_info
 
-    try:
-        import sendspin.audio as _sendspin_audio  # type: ignore[import-not-found]
-    except Exception:
-        sendspin_pkg = sys.modules.get("sendspin")
-        if sendspin_pkg is None:
-            sendspin_pkg = ModuleType("sendspin")
-            sys.modules["sendspin"] = sendspin_pkg
-        _sendspin_audio = ModuleType("sendspin.audio")
-        sys.modules["sendspin.audio"] = _sendspin_audio
-        cast("Any", sendspin_pkg).audio = _sendspin_audio
+    # Never import the real audio modules in demo mode.  PortAudio probing can
+    # block indefinitely on a headless host before we get a chance to patch
+    # ``query_devices``.  Lightweight modules are sufficient for diagnostics.
+    sendspin_pkg = sys.modules.get("sendspin")
+    if sendspin_pkg is None:
+        sendspin_pkg = ModuleType("sendspin")
+        sendspin_pkg.__path__ = []  # type: ignore[attr-defined]
+        sys.modules["sendspin"] = sendspin_pkg
+    _sendspin_audio = sys.modules.get("sendspin.audio") or ModuleType("sendspin.audio")
+    sys.modules["sendspin.audio"] = _sendspin_audio
+    cast("Any", sendspin_pkg).audio = _sendspin_audio
     _sendspin_audio.query_devices = lambda: [SimpleNamespace(**device) for device in DEMO_PORTAUDIO_DEVICES]
 
-    try:
-        import sendspin.audio_devices as _sendspin_audio_devices  # type: ignore[import-not-found]
-    except Exception:
-        sendspin_pkg = sys.modules.get("sendspin")
-        if sendspin_pkg is None:
-            sendspin_pkg = ModuleType("sendspin")
-            sys.modules["sendspin"] = sendspin_pkg
-        _sendspin_audio_devices = ModuleType("sendspin.audio_devices")
-        sys.modules["sendspin.audio_devices"] = _sendspin_audio_devices
-        cast("Any", sendspin_pkg).audio_devices = _sendspin_audio_devices
+    _sendspin_audio_devices = sys.modules.get("sendspin.audio_devices") or ModuleType("sendspin.audio_devices")
+    sys.modules["sendspin.audio_devices"] = _sendspin_audio_devices
+    cast("Any", sendspin_pkg).audio_devices = _sendspin_audio_devices
     _sendspin_audio_devices.query_devices = lambda: [SimpleNamespace(**device) for device in DEMO_PORTAUDIO_DEVICES]
 
     # ------------------------------------------------------------------

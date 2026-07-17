@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-IPC_PROTOCOL_VERSION = 1
+IPC_PROTOCOL_VERSION = 2
 IPC_PROTOCOL_VERSION_KEY = "protocol_version"
 
 

@@ -56,6 +56,8 @@ def filter_supported_call_kwargs(callable_obj, kwargs: dict[str, object]) -> dic
         supported = inspect.signature(callable_obj).parameters
     except (TypeError, ValueError):
         return dict(kwargs)
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in supported.values()):
+        return dict(kwargs)
     return {key: value for key, value in kwargs.items() if key in supported}
 
 

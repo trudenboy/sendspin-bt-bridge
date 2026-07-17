@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import sys
 
 import pytest
@@ -155,6 +156,7 @@ def test_restart_handles_process_lookup_error(client, monkeypatch):
     import sendspin_bridge.web.routes.api as api_mod
 
     monkeypatch.setattr(api_mod, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_mod, "_running_in_container", lambda: True)
 
     killed_pids: list[int] = []
 
@@ -173,9 +175,9 @@ def test_restart_handles_process_lookup_error(client, monkeypatch):
     assert data["runtime"] == "docker"
 
     # The restart thread runs in background — wait briefly for it
-    import time
+    import threading
 
-    time.sleep(0.1)
+    threading.Event().wait(0.1)
     assert os.getpid() in killed_pids
 
 
@@ -184,6 +186,7 @@ def test_restart_handles_permission_error(client, monkeypatch):
     import sendspin_bridge.web.routes.api as api_mod
 
     monkeypatch.setattr(api_mod, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_mod, "_running_in_container", lambda: True)
 
     killed_pids: list[int] = []
 
@@ -200,10 +203,45 @@ def test_restart_handles_permission_error(client, monkeypatch):
     data = resp.get_json()
     assert data["success"] is True
 
-    import time
+    import threading
 
-    time.sleep(0.1)
+    threading.Event().wait(0.1)
     assert os.getpid() in killed_pids
+
+
+def test_restart_standalone_spawns_relauncher_before_shutdown(client, monkeypatch):
+    """A direct Python launch must arrange its own successor before exiting."""
+    import sendspin_bridge.web.routes.api as api_mod
+
+    monkeypatch.setattr(api_mod, "_detect_runtime", lambda: "docker")
+    monkeypatch.setattr(api_mod, "_running_in_container", lambda: False)
+    monkeypatch.setattr(api_mod.time, "sleep", lambda _: None)
+    popen_calls: list[tuple[list[str], dict]] = []
+    killed: list[tuple[int, signal.Signals]] = []
+
+    def _fake_popen(command, **kwargs):
+        popen_calls.append((command, kwargs))
+        return object()
+
+    monkeypatch.setattr(api_mod.subprocess, "Popen", _fake_popen)
+    monkeypatch.setattr(api_mod.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+
+    response = client.post("/api/restart")
+
+    assert response.status_code == 200
+    assert response.get_json()["runtime"] == "standalone"
+    import threading
+
+    threading.Event().wait(0.1)
+    command, kwargs = popen_calls[0]
+    assert command == [
+        sys.executable,
+        "-m",
+        "sendspin_bridge.services.lifecycle.standalone_restart",
+        str(os.getpid()),
+    ]
+    assert kwargs["start_new_session"] is True
+    assert killed == [(os.getpid(), signal.SIGTERM)]
 
 
 # Invalid MAC address in BluetoothManager.pair_and_trust

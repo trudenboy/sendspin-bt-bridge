@@ -96,11 +96,23 @@ VERSION = _CONFIG_VERSION
 
 _sse_count = 0
 _sse_lock = threading.Lock()
-# v2.65.0: bumped from 4 to 6 because the HA custom_component coordinator
-# may open both /api/status/stream (snapshots) and /api/status/events
-# (typed events) per HA host.  4 was enough for the web UI alone.
-_MAX_SSE = 6
+# Keep half of Waitress' default eight-worker pool available for ordinary API
+# requests.  HA may use both streams, so four listeners still accommodate a
+# browser plus one HA host without letting idle streams starve the web UI.
+_MAX_SSE = 4
 _SSE_MAX_LIFETIME = 1800  # 30 minutes
+
+
+@status_bp.route("/api/devices/<player_id>/latency/history", methods=["GET"])
+def api_latency_history(player_id: str):
+    """Return the current process' bounded timing history for one player."""
+    clients = get_device_registry_snapshot().active_clients
+    client = next((item for item in clients if str(getattr(item, "player_id", "")) == player_id), None)
+    if client is None:
+        return jsonify({"success": False, "error": "Unknown player_id"}), 404
+    getter = getattr(client, "timing_history_snapshot", None)
+    samples = getter() if callable(getter) else []
+    return jsonify({"success": True, "player_id": player_id, "retention": "memory", "samples": samples})
 
 
 # ---------------------------------------------------------------------------

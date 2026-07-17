@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONFIG_SCHEMA_VERSION = 3
+CONFIG_SCHEMA_VERSION = 4
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
 _VALID_IDLE_MODES = frozenset(("default", "power_save", "auto_disconnect", "keep_alive"))
@@ -161,6 +161,15 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized.pop("room_name", None)
         normalized.pop("handoff_mode", None)
         _migrate_negative_static_delay(normalized)
+        if "static_delay_ms" in normalized and not normalized.get("static_delay_source"):
+            normalized["static_delay_source"] = "legacy"
+        for latency_key in ("required_lead_time_ms", "min_buffer_ms"):
+            if latency_key not in normalized:
+                continue
+            try:
+                normalized[latency_key] = max(0, min(30000, int(normalized[latency_key])))
+            except (TypeError, ValueError):
+                normalized.pop(latency_key, None)
         _migrate_device_idle_mode(normalized)
         _migrate_power_save_delay(normalized)
         normalized_devices.append(normalized)

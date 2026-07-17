@@ -37,6 +37,7 @@ from sendspin_bridge.services.diagnostics.sendspin_compat import (
 )
 from sendspin_bridge.services.diagnostics.update_checker import run_update_checker
 from sendspin_bridge.services.infrastructure.port_bind_probe import is_port_available
+from sendspin_bridge.services.infrastructure.runtime_detection import detect_installation_type
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import set_activation_context
 from sendspin_bridge.services.lifecycle.exit_breadcrumb import BreadcrumbStore
 from sendspin_bridge.services.lifecycle.lifecycle_state import BridgeLifecycleState
@@ -59,13 +60,7 @@ def _resolve_config_dir() -> Path:
 
 def _detect_runtime_label() -> str:
     """Best-effort label of the deployment mode for breadcrumbs."""
-    if os.path.exists("/data/options.json"):
-        return "ha_addon"
-    if os.path.exists("/.dockerenv"):
-        return "docker"
-    if os.path.exists("/run/systemd/system"):
-        return "systemd"
-    return "unknown"
+    return detect_installation_type()
 
 
 def _harden_pulseaudio(*, disable_rescue_streams: bool) -> None:

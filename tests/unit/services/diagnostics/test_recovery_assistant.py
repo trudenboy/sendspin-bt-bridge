@@ -726,3 +726,27 @@ def test_recovery_assistant_samsung_cod_filter_takes_precedence_over_repair():
         "Samsung CoD filter card must replace, not coexist with, repair_required — "
         "the operator should see exactly one actionable card per device"
     )
+
+
+def test_latency_assistant_uses_runtime_reanchor_evidence():
+    from sendspin_bridge.services.diagnostics.recovery_assistant import _build_latency_assistant
+
+    device = SimpleNamespace(
+        static_delay_ms=125,
+        status={
+            "playing": True,
+            "reanchor_count": 4,
+            "buffered_audio_ms": 120.0,
+            "min_buffer_ms": 250,
+            "clock_synchronized": True,
+        },
+    )
+
+    result = _build_latency_assistant(
+        {"BLUETOOTH_DEVICES": [{"mac": "A"}, {"mac": "B"}], "PULSE_LATENCY_MSEC": 600},
+        [device],
+    )
+
+    assert result["tone"] == "warning"
+    assert result["recommended_min_buffer_ms"] == 400
+    assert result["evidence"]["reanchor_count"] == 4

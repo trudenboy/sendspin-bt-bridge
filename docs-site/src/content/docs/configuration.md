@@ -71,6 +71,20 @@ Advanced row details expose:
 
 Current runtime behavior is interval-based: any positive `keepalive_interval` enables silence keepalive, values below 30 seconds are raised to 30, and `0` or an empty field disables it. Older Home Assistant addon configs may still contain the legacy `keepalive_silence` flag, but the current bridge behavior keys off `keepalive_interval > 0`.
 
+### Per-speaker latency and synchronization
+
+Each device card now keeps three different measurements separate:
+
+- **BT delay** is the advisory AVDTP delay reported by the speaker through BlueZ. It includes the peer's buffering/decoder/DSP estimate, but it is firmware-reported rather than acoustically measured.
+- **Delay** is the configured `static_delay_ms` correction. Use the ±10/±50 controls for live tuning; changes are applied through IPC without restarting the player.
+- **Backend/buffer/clock metrics** are sampled from the running Sendspin audio path and exposed in diagnostics and Home Assistant. They describe the host and clock-sync path, not the hidden acoustic delay inside the speaker.
+
+When BlueZ exposes no delay report, the bridge offers a low-confidence codec starting point (125 ms for SBC/AAC/aptX/LDAC, 40 ms for aptX LL/FastStream, 20 ms for LC3). Recommendations are never applied automatically. The **Apply suggestion** action records its source and codec so a later recommendation cannot silently overwrite a confirmed value.
+
+The advanced device row also contains **Startup lead** (`required_lead_time_ms`) and **Minimum buffer** (`min_buffer_ms`). Both hot-apply to compatible `aiosendspin` versions. Increase them when repeated re-anchors indicate that the Bluetooth/QEMU path is exhausting the default 250 ms headroom; they do not replace `static_delay_ms`.
+
+**Test clicks** plays a bounded click track directly through the selected Bluetooth sink. **Mic compare** is an experimental relative calibration between two speakers: enable *Microphone latency calibration beta*, open the UI through HTTPS or localhost, keep the phone fixed, and let the three reference/target trials finish. Recordings remain in memory for at most ten minutes. The result compensates the faster speaker; it is relative rather than a certified end-to-end absolute latency measurement.
+
 ### Bluetooth tab
 
 ![Bluetooth tab with adapter inventory and recovery policy](/sendspin-bt-bridge/screenshots/screenshot-config-adapters.png)

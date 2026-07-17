@@ -258,3 +258,25 @@ def test_validate_uploaded_config_accepts_valid_static_delay():
     )
     assert result.is_valid is True
     assert result.normalized_config["BLUETOOTH_DEVICES"][0]["static_delay_ms"] == 150
+
+
+def test_validate_uploaded_config_accepts_latency_tuning_metadata():
+    result = validate_uploaded_config(
+        {
+            "BLUETOOTH_DEVICES": [
+                {
+                    "mac": "AA:BB:CC:DD:EE:FF",
+                    "required_lead_time_ms": 400,
+                    "min_buffer_ms": 600,
+                    "static_delay_source": "bluez_report",
+                    "static_delay_calibrated_at": "2026-07-17T10:00:00+00:00",
+                    "static_delay_codec": "sbc",
+                }
+            ]
+        }
+    )
+
+    assert result.errors == []
+    device = result.normalized_config["BLUETOOTH_DEVICES"][0]
+    assert device["required_lead_time_ms"] == 400
+    assert device["min_buffer_ms"] == 600

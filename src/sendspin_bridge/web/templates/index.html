@@ -732,6 +732,18 @@
                                     </span>
                                 </span>
                             </label>
+                            <label class="config-setting-row config-setting-row--compact" data-experimental title="Enables the browser microphone correlation API. Recordings stay in memory for at most ten minutes and are never persisted.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Microphone latency calibration beta</strong>
+                                    <span class="form-hint">Enable short-lived acoustic comparison sessions for the guided calibration workflow.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="ENABLE_LATENCY_CALIBRATION_BETA" id="latency-calibration-beta">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
                             <label class="config-setting-row config-setting-row--compact" data-experimental title="Permit HSP/HFP service UUIDs in the pairing agent. Default off — most DSPs (Bose QC, AKG Y500, Sony XM4/5) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Enable only for HFP-only headsets that A2DP-block at the peer.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Allow HFP / HSP profile</strong>

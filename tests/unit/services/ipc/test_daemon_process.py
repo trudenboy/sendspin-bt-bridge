@@ -13,7 +13,7 @@ import re
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -53,8 +53,12 @@ from sendspin_bridge.services.ipc.daemon_process import (  # noqa: E402
     _emit_error,
     _emit_status,
     _filter_supported_daemon_args_kwargs,
+    _log_background_task_result,
+    _observe_structured_reanchor,
     _patch_sendspin_audio_player_runtime_guards,
     _read_commands,
+    _select_audio_output_device,
+    _startup_sink_routing_watcher,
 )
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
 
@@ -75,6 +79,64 @@ def _reset_last_status():
 def _clamp_volume(raw_value):
     """Reproduce the volume clamping logic from _read_commands."""
     return max(0, min(100, int(raw_value)))
+
+
+def test_structured_reanchor_marker_is_counted_once():
+    status = {"reanchor_count": 0}
+    audio = SimpleNamespace(_last_reanchor_loop_time_us=123_000, _sync_error_filtered_us=640_000)
+
+    assert _observe_structured_reanchor(audio, status) is True
+    assert _observe_structured_reanchor(audio, status) is False
+    assert status["reanchor_count"] == 1
+    assert status["last_sync_error_ms"] == 640.0
+
+
+def test_background_task_callback_ignores_cancelled_task():
+    task = MagicMock()
+    task.cancelled.return_value = True
+
+    _log_background_task_result(task, "reconnect")
+
+    task.exception.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sink_routing_watcher_corrects_every_new_stream(monkeypatch):
+    pulse_mod = sys.modules["sendspin_bridge.services.audio.pulse"]
+    move = AsyncMock(return_value=1)
+    monkeypatch.setattr(pulse_mod, "amove_pid_sink_inputs", move)
+    status = {"audio_streaming": False}
+    stop_event = asyncio.Event()
+    watcher = asyncio.create_task(_startup_sink_routing_watcher(status, "bluez_output.wh", stop_event, "Headphones"))
+
+    await asyncio.sleep(0.55)
+    status["audio_streaming"] = True
+    await asyncio.sleep(0.55)
+    status["audio_streaming"] = False
+    await asyncio.sleep(0.55)
+    status["audio_streaming"] = True
+    await asyncio.sleep(0.55)
+    stop_event.set()
+    await watcher
+
+    assert move.await_count == 2
+
+
+def test_audio_device_selection_prefers_pulse_when_target_sink_is_set():
+    pipewire_default = SimpleNamespace(name="default", is_default=True)
+    pulse = SimpleNamespace(name="pulse", is_default=False)
+
+    selected = _select_audio_output_device([pipewire_default, pulse], target_sink="bluez_output.wh")
+
+    assert selected is pulse
+
+
+def test_audio_device_selection_falls_back_to_default_without_pulse_device():
+    pipewire_default = SimpleNamespace(name="default", is_default=True)
+
+    selected = _select_audio_output_device([pipewire_default], target_sink="bluez_output.wh")
+
+    assert selected is pipewire_default
 
 
 def test_set_volume_clamps_above_100():
@@ -543,6 +605,8 @@ def _make_static_delay_daemon(*, connected: bool = True, setter=None, raise_on_s
     daemon._audio_handler = SimpleNamespace(volume=42, muted=False)
     daemon._last_player_state = "synchronized-sentinel"
     daemon._static_delay_ms = 0.0
+    daemon._bridge_status = {"static_delay_ms": 300}
+    daemon._notify = MagicMock()
     return daemon, send_state, applied_ref
 
 
@@ -572,6 +636,8 @@ async def test_read_commands_set_static_delay_applies_and_pushes_to_ma():
 
     assert applied == [750.0]
     assert daemon._static_delay_ms == 750.0
+    assert daemon._bridge_status["static_delay_ms"] == 750
+    daemon._notify.assert_called_once_with()
     assert len(send_state.calls) == 1
     pushed = send_state.calls[0]
     assert pushed["volume"] == 42
@@ -626,6 +692,8 @@ async def test_read_commands_set_static_delay_skips_cache_when_setter_raises():
 
     # Cache untouched — next reconnect uses the prior value, not the failed one.
     assert daemon._static_delay_ms == 0.0
+    assert daemon._bridge_status["static_delay_ms"] == 300
+    daemon._notify.assert_not_called()
     # And MA isn't told about a value the local setter rejected.
     assert send_state.calls == []
 

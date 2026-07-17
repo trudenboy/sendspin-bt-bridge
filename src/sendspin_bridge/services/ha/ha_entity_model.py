@@ -185,6 +185,38 @@ def _d_last_sync_error_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None
     return _float_or_none(d.get("last_sync_error_ms"))
 
 
+def _d_bt_reported_delay_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None:
+    return _float_or_none(d.get("bt_reported_delay_ms"))
+
+
+def _d_backend_output_latency_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None:
+    return _float_or_none(d.get("backend_output_latency_ms"))
+
+
+def _d_buffered_audio_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None:
+    return _float_or_none(d.get("buffered_audio_ms"))
+
+
+def _d_clock_uncertainty_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None:
+    return _float_or_none(d.get("clock_uncertainty_ms"))
+
+
+def _d_playback_sync_error_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None:
+    return _float_or_none(d.get("playback_sync_error_ms"))
+
+
+def _d_clock_offset_ms(d: dict[str, Any], _b: dict[str, Any]) -> float | None:
+    return _float_or_none(d.get("clock_offset_ms"))
+
+
+def _d_reanchor_count_5m(d: dict[str, Any], _b: dict[str, Any]) -> int:
+    return int(d.get("reanchor_count_5m") or 0)
+
+
+def _d_reanchor_count_30m(d: dict[str, Any], _b: dict[str, Any]) -> int:
+    return int(d.get("reanchor_count_30m") or 0)
+
+
 def _d_reconnect_attempt(d: dict[str, Any], _b: dict[str, Any]) -> int:
     return int(d.get("reconnect_attempt") or 0)
 
@@ -210,6 +242,14 @@ def _d_keep_alive_method(d: dict[str, Any], _b: dict[str, Any]) -> str:
 
 def _d_static_delay_ms(d: dict[str, Any], _b: dict[str, Any]) -> int:
     return int(d.get("static_delay_ms") or 0)
+
+
+def _d_required_lead_time_ms(d: dict[str, Any], _b: dict[str, Any]) -> int:
+    return int(d.get("required_lead_time_ms") or 250)
+
+
+def _d_min_buffer_ms(d: dict[str, Any], _b: dict[str, Any]) -> int:
+    return int(d.get("min_buffer_ms") or 250)
 
 
 def _d_power_save_delay_minutes(d: dict[str, Any], _b: dict[str, Any]) -> int:
@@ -366,6 +406,90 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         availability_class="cumulative",
     ),
     EntitySpec(
+        object_id="bt_reported_delay_ms",
+        kind=EntityKind.SENSOR,
+        name="Bluetooth reported delay",
+        extractor=_d_bt_reported_delay_ms,
+        device_class="duration",
+        state_class="measurement",
+        unit="ms",
+        entity_category="diagnostic",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        object_id="backend_output_latency_ms",
+        kind=EntityKind.SENSOR,
+        name="Audio backend latency",
+        extractor=_d_backend_output_latency_ms,
+        device_class="duration",
+        state_class="measurement",
+        unit="ms",
+        entity_category="diagnostic",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        object_id="buffered_audio_ms",
+        kind=EntityKind.SENSOR,
+        name="Buffered audio",
+        extractor=_d_buffered_audio_ms,
+        device_class="duration",
+        state_class="measurement",
+        unit="ms",
+        entity_category="diagnostic",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        object_id="clock_uncertainty_ms",
+        kind=EntityKind.SENSOR,
+        name="Clock uncertainty",
+        extractor=_d_clock_uncertainty_ms,
+        device_class="duration",
+        state_class="measurement",
+        unit="ms",
+        entity_category="diagnostic",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        object_id="playback_sync_error_ms",
+        kind=EntityKind.SENSOR,
+        name="Playback sync error",
+        extractor=_d_playback_sync_error_ms,
+        device_class="duration",
+        state_class="measurement",
+        unit="ms",
+        entity_category="diagnostic",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        object_id="clock_offset_ms",
+        kind=EntityKind.SENSOR,
+        name="Clock offset",
+        extractor=_d_clock_offset_ms,
+        device_class="duration",
+        state_class="measurement",
+        unit="ms",
+        entity_category="diagnostic",
+        availability_class="runtime",
+    ),
+    EntitySpec(
+        object_id="reanchor_count_5m",
+        kind=EntityKind.SENSOR,
+        name="Re-anchors in 5 minutes",
+        extractor=_d_reanchor_count_5m,
+        state_class="measurement",
+        entity_category="diagnostic",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
+        object_id="reanchor_count_30m",
+        kind=EntityKind.SENSOR,
+        name="Re-anchors in 30 minutes",
+        extractor=_d_reanchor_count_30m,
+        state_class="measurement",
+        entity_category="diagnostic",
+        availability_class="cumulative",
+    ),
+    EntitySpec(
         object_id="last_error",
         kind=EntityKind.SENSOR,
         name="Last error",
@@ -485,6 +609,34 @@ DEVICE_ENTITIES: tuple[EntitySpec, ...] = (
         step=1,
         icon="mdi:timer-outline",
         command="set_power_save_delay_minutes",
+        availability_class="config",
+    ),
+    EntitySpec(
+        object_id="required_lead_time_ms",
+        kind=EntityKind.NUMBER,
+        name="Required lead time",
+        extractor=_d_required_lead_time_ms,
+        entity_category="config",
+        unit="ms",
+        min_value=100,
+        max_value=3000,
+        step=50,
+        icon="mdi:timer-play-outline",
+        command="set_required_lead_time_ms",
+        availability_class="config",
+    ),
+    EntitySpec(
+        object_id="min_buffer_ms",
+        kind=EntityKind.NUMBER,
+        name="Minimum buffer",
+        extractor=_d_min_buffer_ms,
+        entity_category="config",
+        unit="ms",
+        min_value=100,
+        max_value=3000,
+        step=50,
+        icon="mdi:tray-full",
+        command="set_min_buffer_ms",
         availability_class="config",
     ),
     # Buttons (BT-level commands MA cannot perform) — always pressable

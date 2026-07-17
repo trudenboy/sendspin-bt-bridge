@@ -8,6 +8,7 @@ import cleanly on Python 3.9.  No module-level sys.modules manipulation needed.
 import asyncio
 import io
 import json
+import logging
 import sys
 import threading
 from types import SimpleNamespace
@@ -3867,6 +3868,7 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
     )
     monkeypatch.setattr(api_status, "get_server_name", lambda: "pulseaudio 16.1")
     monkeypatch.setattr(api_status, "list_sinks", lambda: [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}])
+    monkeypatch.setattr(api_status, "list_cards", lambda: [])
     monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
     monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])
     monkeypatch.setattr(api_status, "_collect_portaudio_device_diagnostics", lambda: [])
@@ -4928,3 +4930,135 @@ def test_run_standalone_pair_skips_quiesce_when_flag_absent(monkeypatch):
     api_bt_mod._run_standalone_pair("job-nq", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
     assert sentinel.entered is False
     inner_called.assert_called_once()
+
+
+def test_latency_endpoint_rejects_stale_recommendation(client, monkeypatch):
+    import sendspin_bridge.web.routes.api as api_mod
+
+    fake_client = SimpleNamespace(
+        player_id="player-1",
+        status={"latency_suggestion_revision": "new"},
+    )
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: SimpleNamespace(active_clients=[fake_client]),
+    )
+
+    response = client.post(
+        "/api/latency",
+        json={"player_id": "player-1", "value": 125, "recommendation_revision": "old"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_calibration_tone_is_a_wav(client):
+    response = client.get("/api/calibration/tone.wav")
+
+    assert response.status_code == 200
+    assert response.mimetype == "audio/wav"
+    assert response.data.startswith(b"RIFF")
+
+
+def test_calibration_play_targets_selected_device(client, monkeypatch):
+    import sendspin_bridge.web.routes.api as api_mod
+
+    played: list[str] = []
+
+    class _DoneFuture:
+        def result(self, timeout=None):
+            return True
+
+    class _FakeClient:
+        player_id = "player-1"
+
+        async def play_calibration_tone(self):
+            played.append(self.player_id)
+            return True
+
+    def _run_coroutine_threadsafe(coro, loop):
+        temp_loop = asyncio.new_event_loop()
+        try:
+            temp_loop.run_until_complete(coro)
+        finally:
+            temp_loop.close()
+        return _DoneFuture()
+
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: SimpleNamespace(active_clients=[_FakeClient()]),
+    )
+    monkeypatch.setattr(api_mod, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    response = client.post("/api/calibration/play", json={"player_id": "player-1"})
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert played == ["player-1"]
+
+
+def test_calibration_session_returns_relative_estimate(client, monkeypatch):
+    import sendspin_bridge.web.routes.api as api_mod
+
+    monkeypatch.setattr(api_mod, "_calibration_enabled", lambda: True)
+    created = client.post("/api/calibration/sessions")
+    assert created.status_code == 201
+    session_id = created.get_json()["session_id"]
+
+    reference = [0.0] * 400
+    target = [0.0] * 400
+    reference[100:105] = [0.2, 0.7, 1.0, 0.7, 0.2]
+    target[137:142] = [0.2, 0.7, 1.0, 0.7, 0.2]
+
+    waiting = client.post(
+        f"/api/calibration/sessions/{session_id}/audio",
+        json={"role": "reference", "sample_rate": 8000, "samples": reference},
+    )
+    complete = client.post(
+        f"/api/calibration/sessions/{session_id}/audio",
+        json={"role": "target", "sample_rate": 8000, "samples": target},
+    )
+
+    assert waiting.get_json()["status"] == "waiting_for_other_recording"
+    payload = complete.get_json()
+    assert payload["success"] is True
+    assert payload["estimate"]["delay_ms"] == pytest.approx(4.625)
+
+
+def test_calibration_session_explains_and_logs_silent_recording(client, monkeypatch, caplog):
+    import sendspin_bridge.web.routes.api as api_mod
+
+    monkeypatch.setattr(api_mod, "_calibration_enabled", lambda: True)
+    session_id = client.post("/api/calibration/sessions").get_json()["session_id"]
+
+    with caplog.at_level(logging.INFO):
+        client.post(
+            f"/api/calibration/sessions/{session_id}/audio",
+            json={"role": "reference", "sample_rate": 8000, "samples": [0.0] * 400},
+        )
+        complete = client.post(
+            f"/api/calibration/sessions/{session_id}/audio",
+            json={"role": "target", "sample_rate": 8000, "samples": [0.0] * 400},
+        )
+
+    payload = complete.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "No calibration sound was detected; check microphone permission and move closer"
+    assert "reason=silence" in caplog.text
+
+
+def test_status_stream_reserves_waitress_workers(client, monkeypatch):
+    import sendspin_bridge.web.routes.api_status as status_mod
+
+    assert status_mod._MAX_SSE == 4
+    monkeypatch.setattr(status_mod, "_sse_count", status_mod._MAX_SSE)
+
+    response = client.get("/api/status/stream", buffered=False)
+    try:
+        assert response.status_code == 503
+        assert b"too many listeners" in response.get_data()
+    finally:
+        response.close()

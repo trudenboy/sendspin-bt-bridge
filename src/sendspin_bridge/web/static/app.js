@@ -3533,6 +3533,7 @@ function buildDeviceCard(i) {
           '<span id="dsync-detail-' + i + '" style="display:none"></span>' +
           '<span id="dbattery-' + i + '" style="display:none"></span>' +
           '<span id="drssi-' + i + '" style="display:none"></span>' +
+          '<span id="dlatency-chip-' + i + '" style="display:none"></span>' +
         '</div>' +
         '<div class="card-controls">' +
           _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
@@ -3549,6 +3550,16 @@ function buildDeviceCard(i) {
             '<span class="vol-pct" id="dvol-' + i + '">100</span>' +
           '</div>' +
           '<button type="button" class="media-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
+        '</div>' +
+        '<div class="latency-tune" id="dlatency-tune-' + i + '" style="display:none">' +
+          '<span class="latency-tune-label" id="dlatency-label-' + i + '"></span>' +
+          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',-50" aria-label="Decrease delay by 50 milliseconds">−50</button>' +
+          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',-10" aria-label="Decrease delay by 10 milliseconds">−10</button>' +
+          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',10" aria-label="Increase delay by 10 milliseconds">+10</button>' +
+          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',50" aria-label="Increase delay by 50 milliseconds">+50</button>' +
+          '<button type="button" class="action-btn" data-action="latency-test-tone" data-arg="' + i + '" title="Play a short click track on this speaker">Test clicks</button>' +
+          '<button type="button" class="action-btn" data-action="latency-mic-calibrate" data-arg="' + i + '" title="Compare this speaker with another speaker using this browser microphone">Mic compare</button>' +
+          '<button type="button" class="action-btn accent" id="dlatency-apply-' + i + '" data-action="latency-apply-suggestion" data-arg="' + i + '">Apply suggestion</button>' +
         '</div>' +
         '<div class="card-np" id="dnp-' + i + '" style="display:none">' +
           _renderNowPlayingArtworkHtml(i, placeholderMedia, {
@@ -3594,6 +3605,30 @@ function buildDeviceCard(i) {
     return card;
 }
 
+function _getLatencyUiState(dev, peerDelays) {
+    var configuredDelay = Number(dev.static_delay_ms || 0);
+    var reportedDelay = typeof dev.bt_reported_delay_ms === 'number' ? dev.bt_reported_delay_ms : null;
+    var suggestedDelay = typeof dev.suggested_static_delay_ms === 'number' ? dev.suggested_static_delay_ms : null;
+    var relativeText = peerDelays.length > 1
+        ? ' · group +' + Math.max(0, configuredDelay - Math.min.apply(null, peerDelays)).toFixed(0) + ' ms'
+        : '';
+    return {
+        configuredDelay: configuredDelay,
+        reportedDelay: reportedDelay,
+        suggestedDelay: suggestedDelay,
+        label: 'Delay ' + configuredDelay.toFixed(0) + ' ms' + relativeText,
+        chipVisible: reportedDelay !== null,
+        chipText: reportedDelay === null ? '' : 'BT delay ' + reportedDelay.toFixed(1) + ' ms',
+        chipTitle: reportedDelay === null
+            ? ''
+            : 'Delay reported by the speaker through AVDTP; this is advisory, not an acoustic measurement.',
+        applyVisible: suggestedDelay !== null && suggestedDelay !== configuredDelay,
+        applyText: suggestedDelay === null ? 'Apply suggestion' : 'Apply ' + suggestedDelay + ' ms',
+        applyTitle: (dev.latency_suggestion_explanation || '') + ' Confidence: ' + (dev.latency_suggestion_confidence || 'unknown'),
+        applyWarn: !!dev.latency_double_count_risk,
+    };
+}
+
 function populateDeviceCard(i, dev) {
     var name = dev.player_name || ('Device ' + (i + 1));
     var statusMeta = getDeviceDisplayStatusMeta(dev);
@@ -3602,6 +3637,30 @@ function populateDeviceCard(i, dev) {
     var transportState = _getDeviceTransportState(dev, mediaState);
     var nameEl = document.getElementById('dname-' + i);
     if (nameEl) nameEl.textContent = name;
+
+    var latencyTune = document.getElementById('dlatency-tune-' + i);
+    var latencyLabel = document.getElementById('dlatency-label-' + i);
+    var latencyChip = document.getElementById('dlatency-chip-' + i);
+    var applyLatency = document.getElementById('dlatency-apply-' + i);
+    var peers = (lastDevices || []).filter(function(peer) {
+        return peer.enabled !== false && dev.group_id && peer.group_id === dev.group_id;
+    });
+    var peerDelays = peers.map(function(peer) { return Number(peer.static_delay_ms || 0); });
+    var latencyUi = _getLatencyUiState(dev, peerDelays);
+    if (latencyTune) latencyTune.style.display = dev.enabled === false ? 'none' : '';
+    if (latencyLabel) latencyLabel.textContent = latencyUi.label;
+    if (latencyChip) {
+        latencyChip.style.display = latencyUi.chipVisible ? '' : 'none';
+        latencyChip.className = 'chip meta-badge is-neutral';
+        latencyChip.textContent = latencyUi.chipText;
+        latencyChip.title = latencyUi.chipTitle;
+    }
+    if (applyLatency) {
+        applyLatency.style.display = latencyUi.applyVisible ? '' : 'none';
+        applyLatency.textContent = latencyUi.applyText;
+        applyLatency.title = latencyUi.applyTitle;
+        applyLatency.classList.toggle('warn', latencyUi.applyWarn);
+    }
 
     var releasedBadge = document.getElementById('dreleased-badge-' + i);
     if (releasedBadge) {
@@ -3863,7 +3922,12 @@ function populateDeviceCard(i, dev) {
     if (syncEl) {
         var syncRenderData = _getSyncBadgeRenderData(dev, i, 'chip sync-chip', 'chip sync-detail-chip');
         syncEl.className = syncRenderData.className;
-        syncEl.title = syncRenderData.title;
+        var timingDetails = [];
+        if (typeof dev.playback_sync_error_ms === 'number') timingDetails.push('playback error ' + dev.playback_sync_error_ms.toFixed(1) + ' ms');
+        if (typeof dev.backend_output_latency_ms === 'number') timingDetails.push('backend ' + dev.backend_output_latency_ms.toFixed(1) + ' ms');
+        if (typeof dev.buffered_audio_ms === 'number') timingDetails.push('buffered ' + dev.buffered_audio_ms.toFixed(1) + ' ms');
+        if (typeof dev.clock_uncertainty_ms === 'number') timingDetails.push('clock uncertainty ' + dev.clock_uncertainty_ms.toFixed(1) + ' ms');
+        syncEl.title = syncRenderData.title + (timingDetails.length ? ' · ' + timingDetails.join(' · ') : '');
         syncEl.innerHTML = syncRenderData.innerHtml;
         syncEl.style.display = syncRenderData.visible ? '' : 'none';
         if (syncDetail) {
@@ -7160,7 +7224,7 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
-function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, idleDisconnectMinutes, idleMode, powerSaveDelay) {
+function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, idleDisconnectMinutes, idleMode, powerSaveDelay, requiredLeadTime, minBuffer) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
     wrap.className = 'bt-device-wrap';
@@ -7182,6 +7246,8 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
     if (['default','power_save','auto_disconnect','keep_alive'].indexOf(idleModeVal) < 0) idleModeVal = 'default';
     var psDelayVal = (powerSaveDelay !== undefined && powerSaveDelay !== null) ? parseInt(powerSaveDelay, 10) : 1;
     if (isNaN(psDelayVal) || psDelayVal < 0) psDelayVal = 1;
+    var leadTimeVal = Number.isFinite(Number(requiredLeadTime)) ? Number(requiredLeadTime) : 250;
+    var minBufferVal = Number.isFinite(Number(minBuffer)) ? Number(minBuffer) : 250;
     row.innerHTML =
         '<div class="bt-enabled-cell bt-cell" data-label="Enabled"><label class="bt-switch" title="Enable or disable device">' +
             '<input type="checkbox" class="bt-enabled"' + (isEnabled ? ' checked' : '') + '>' +
@@ -7240,6 +7306,10 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         '<div><label>Listen Address</label>' +
             '<input type="text" class="bt-listen-host" placeholder="auto" title="IP address this player advertises" value="' +
             escHtmlAttr(listenHost || '') + '"></div>' +
+        '<div><label>Startup lead (ms)</label>' +
+            '<input type="number" class="bt-required-lead-time" min="100" max="3000" step="50" title="Sendspin startup lead time" value="' + escHtmlAttr(String(leadTimeVal)) + '"></div>' +
+        '<div><label>Minimum buffer (ms)</label>' +
+            '<input type="number" class="bt-min-buffer" min="100" max="3000" step="50" title="Sendspin ongoing jitter buffer" value="' + escHtmlAttr(String(minBufferVal)) + '"></div>' +
         '<div><label>Idle mode</label>' +
             '<select class="bt-idle-mode" title="Per-device idle behavior">' +
                 '<option value="default"' + (idleModeVal === 'default' ? ' selected' : '') + '>Default (no action)</option>' +
@@ -7414,12 +7484,18 @@ function collectBtDevices() {
         var idleModeVal = idleModeEl ? idleModeEl.value : 'default';
         var psDelayEl  = detail ? detail.querySelector('.bt-power-save-delay') : null;
         var psDelayVal = psDelayEl ? parseInt(psDelayEl.value, 10) : 1;
+        var leadTimeEl = detail ? detail.querySelector('.bt-required-lead-time') : null;
+        var minBufferEl = detail ? detail.querySelector('.bt-min-buffer') : null;
+        var leadTime = leadTimeEl ? parseInt(leadTimeEl.value, 10) : 250;
+        var minBuffer = minBufferEl ? parseInt(minBufferEl.value, 10) : 250;
         var roomNameEl = detail ? detail.querySelector('.bt-room-name') : null;
         var roomIdEl   = detail ? detail.querySelector('.bt-room-id') : null;
         if (isNaN(kaVal) || kaVal < 0) kaVal = 0;
         if (kaVal > 0 && kaVal < 30) kaVal = 30;
         if (isNaN(idleVal) || idleVal < 0) idleVal = 0;
         var dev = { mac: mac, adapter: adapter, player_name: name, static_delay_ms: delay, preferred_format: preferredFormat || 'flac:44100:16:2' };
+        dev.required_lead_time_ms = isNaN(leadTime) ? 250 : Math.max(100, Math.min(3000, leadTime));
+        dev.min_buffer_ms = isNaN(minBuffer) ? 250 : Math.max(100, Math.min(3000, minBuffer));
         if (listenHost) dev.listen_host = listenHost;
         if (listenPort) dev.listen_port = listenPort;
         dev.keepalive_interval = kaVal;
@@ -7432,6 +7508,9 @@ function collectBtDevices() {
         var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
         if (roomName) dev.room_name = roomName;
         if (roomId) dev.room_id = roomId;
+        if (wrap.dataset.staticDelaySource) dev.static_delay_source = wrap.dataset.staticDelaySource;
+        if (wrap.dataset.staticDelayCalibratedAt) dev.static_delay_calibrated_at = wrap.dataset.staticDelayCalibratedAt;
+        if (wrap.dataset.staticDelayCodec) dev.static_delay_codec = wrap.dataset.staticDelayCodec;
         // Read enabled state from checkbox
         var enabledCb = row.querySelector('.bt-enabled');
         if (enabledCb && !enabledCb.checked) dev.enabled = false;
@@ -7486,7 +7565,14 @@ function populateBtDeviceRows(devices) {
         addBtDeviceRow(d.player_name || '', d.mac || '', d.adapter || '',
                        d.static_delay_ms, d.listen_host, d.listen_port, d.enabled,
                        d.preferred_format, d.keepalive_interval, d.room_name, d.room_id,
-                       d.idle_disconnect_minutes, d.idle_mode, d.power_save_delay_minutes);
+                       d.idle_disconnect_minutes, d.idle_mode, d.power_save_delay_minutes,
+                       d.required_lead_time_ms, d.min_buffer_ms);
+        var added = document.querySelector('#bt-devices-table .bt-device-wrap:last-child');
+        if (added) {
+            added.dataset.staticDelaySource = d.static_delay_source || '';
+            added.dataset.staticDelayCalibratedAt = d.static_delay_calibrated_at || '';
+            added.dataset.staticDelayCodec = d.static_delay_codec || '';
+        }
     });
     refreshBtDeviceRowsRuntime();
     _applyExperimentalVisibility();
@@ -8897,6 +8983,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
+    config.ENABLE_LATENCY_CALIBRATION_BETA = !!(document.getElementById('latency-calibration-beta') || {}).checked;
     config.RSSI_BADGE = !!(document.getElementById('rssi-badge') || {}).checked;
     config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
@@ -11820,6 +11907,8 @@ async function loadConfig(options) {
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
+        var latencyCalibrationCheck = document.getElementById('latency-calibration-beta');
+        if (latencyCalibrationCheck) latencyCalibrationCheck.checked = !!config.ENABLE_LATENCY_CALIBRATION_BETA;
         var rssiBadgeCheck = document.getElementById('rssi-badge');
         if (rssiBadgeCheck) {
             // Default ON when key absent (fresh / migrated config); honour
@@ -12644,7 +12733,14 @@ function _openBugReport(e, context) {
         var env = (rep || {}).environment || {};
         var diag = (rep || {}).diagnostics || {};
         var runtime = (rep || {}).runtime || '';
-        var runtimeMap = { ha_addon: 'Home Assistant Addon', docker: 'Docker Compose', systemd: 'Proxmox LXC' };
+        var runtimeMap = {
+            ha_addon: 'Home Assistant Addon',
+            'ha-addon': 'Home Assistant Addon',
+            docker: 'Docker Compose',
+            systemd: 'Systemd service',
+            lxc: 'Proxmox LXC',
+            standalone: 'Standalone'
+        };
         var deployment = runtimeMap[runtime] || '';
         var info = [];
         if (env.platform) info.push('OS:       ' + env.platform);
@@ -14768,6 +14864,15 @@ _showSkeletonCards(3);
 // event-stream payload.
 var _statusInterval = null;
 
+function _recoverBackendUiAfterStatusStreamOpen() {
+    // Opening the stream proves that the backend is reachable.  Preserve the
+    // initial connecting state until at least one real status snapshot exists.
+    if (!_statusHasEverSucceeded || !lastDevices.length) return false;
+    _applyBackendServiceState(null);
+    _syncRestartBanner(null, null);
+    return true;
+}
+
 (function _initStatusStream() {
     var _es = null;
     if (typeof EventSource === 'undefined') {
@@ -14789,6 +14894,7 @@ var _statusInterval = null;
         _es.onopen = function() {
             _sseRetries = 0;
             if (_statusInterval) { clearInterval(_statusInterval); _statusInterval = null; }
+            _recoverBackendUiAfterStatusStreamOpen();
         };
         _es.onmessage = function(e) {
             try { renderStatusPayload(JSON.parse(e.data)); }
@@ -14818,6 +14924,197 @@ window.addEventListener('beforeunload', function() {
 refreshLogs();
 toggleAutoRefresh(false);
 loadVersionInfo();
+
+async function _applyLatencyValue(i, value, source, revision) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev || !dev.player_id) return false;
+    value = Math.max(0, Math.min(5000, Math.round(Number(value) || 0)));
+    try {
+        var payload = {player_id: dev.player_id, field: 'static_delay_ms', value: value, source: source || 'manual'};
+        if (revision) payload.recommendation_revision = revision;
+        var response = await fetch(API_BASE + '/api/latency', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        var result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || 'Latency update failed');
+        dev.static_delay_ms = result.value;
+        populateDeviceCard(i, dev);
+        showToast('Delay applied: ' + result.value + ' ms', 'success');
+        return true;
+    } catch (error) {
+        showToast(error.message || 'Latency update failed', 'error');
+        return false;
+    }
+}
+
+function nudgeDeviceLatency(arg) {
+    var parts = String(arg || '').split(',');
+    var i = Number(parts[0]);
+    var delta = Number(parts[1]);
+    var dev = lastDevices && lastDevices[i];
+    if (!dev || !Number.isFinite(delta)) return false;
+    return _applyLatencyValue(i, Number(dev.static_delay_ms || 0) + delta, 'manual');
+}
+
+function applyDeviceLatencySuggestion(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev || typeof dev.suggested_static_delay_ms !== 'number') return false;
+    return _applyLatencyValue(
+        i,
+        dev.suggested_static_delay_ms,
+        dev.latency_suggestion_source || 'manual',
+        dev.latency_suggestion_revision
+    );
+}
+
+async function playDeviceCalibrationTone(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev || !dev.player_id) return false;
+    showToast('Playing calibration clicks on ' + (dev.player_name || 'speaker') + '…', 'info');
+    try {
+        var response = await fetch(API_BASE + '/api/calibration/play', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_id: dev.player_id}),
+        });
+        var result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || 'Calibration tone failed');
+        return true;
+    } catch (error) {
+        showToast(error.message || 'Calibration tone failed', 'error');
+        return false;
+    }
+}
+
+async function _captureCalibrationAudio(stream, playerId) {
+    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error('Web Audio is unavailable in this browser');
+    var context = new AudioContextClass();
+    var source = context.createMediaStreamSource(stream);
+    var processor = context.createScriptProcessor(4096, 1, 1);
+    var chunks = [];
+    processor.onaudioprocess = function(event) {
+        chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(context.destination);
+    var contextSampleRate = context.sampleRate;
+    try {
+        await new Promise(function(resolve) { setTimeout(resolve, 250); });
+        var playResponse = await fetch(API_BASE + '/api/calibration/play', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_id: playerId}),
+        });
+        var playResult = await playResponse.json();
+        if (!playResponse.ok || !playResult.success) throw new Error(playResult.error || 'Could not play calibration clicks');
+        await new Promise(function(resolve) { setTimeout(resolve, 2500); });
+    } finally {
+        processor.disconnect();
+        source.disconnect();
+        await context.close();
+    }
+    var stride = Math.max(1, Math.round(contextSampleRate / 8000));
+    var samples = [];
+    var absoluteIndex = 0;
+    chunks.forEach(function(chunk) {
+        for (var index = 0; index < chunk.length; index++, absoluteIndex++) {
+            if (absoluteIndex % stride === 0) samples.push(Number(chunk[index].toFixed(6)));
+        }
+    });
+    var sampleRate = Math.round(contextSampleRate / stride);
+    return {samples: samples, sample_rate: sampleRate};
+}
+
+async function _uploadCalibrationRecording(sessionId, role, recording) {
+    var response = await fetch(API_BASE + '/api/calibration/sessions/' + encodeURIComponent(sessionId) + '/audio', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({role: role, samples: recording.samples, sample_rate: recording.sample_rate}),
+    });
+    var result = await response.json();
+    if (!response.ok || result.success === false) throw new Error(result.error || 'Calibration analysis failed');
+    return result;
+}
+
+function _getMicrophoneCalibrationPeers(devices, targetIndex) {
+    return (devices || []).filter(function(dev, index) {
+        return index !== Number(targetIndex) && dev.enabled !== false &&
+            dev.bluetooth_connected !== false && dev.player_id;
+    });
+}
+
+async function calibrateDeviceWithMicrophone(i) {
+    var target = lastDevices && lastDevices[i];
+    if (!target || !target.player_id) return false;
+    var peers = _getMicrophoneCalibrationPeers(lastDevices, i);
+    if (!peers.length) {
+        showToast('A second Bluetooth-connected speaker is required for microphone comparison', 'error');
+        return false;
+    }
+    var reference = peers[0];
+    var accepted = window.confirm(
+        'Compare ' + (target.player_name || 'target') + ' with ' + (reference.player_name || 'reference') +
+        '? Keep the phone in exactly the same position. Three pairs of clicks will play.'
+    );
+    if (!accepted) return false;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Microphone access requires HTTPS or localhost', 'error');
+        return false;
+    }
+    var stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 1,
+        }});
+        var estimates = [];
+        for (var trial = 0; trial < 3; trial++) {
+            showToast('Calibration ' + (trial + 1) + '/3: ' + (reference.player_name || 'reference'), 'info');
+            var sessionResponse = await fetch(API_BASE + '/api/calibration/sessions', {method: 'POST'});
+            var session = await sessionResponse.json();
+            if (!sessionResponse.ok || !session.success) throw new Error(session.error || 'Could not start calibration');
+            var referenceRecording = await _captureCalibrationAudio(stream, reference.player_id);
+            await _uploadCalibrationRecording(session.session_id, 'reference', referenceRecording);
+            showToast('Calibration ' + (trial + 1) + '/3: ' + (target.player_name || 'target'), 'info');
+            var targetRecording = await _captureCalibrationAudio(stream, target.player_id);
+            var analysis = await _uploadCalibrationRecording(session.session_id, 'target', targetRecording);
+            fetch(API_BASE + '/api/calibration/sessions/' + encodeURIComponent(session.session_id), {method: 'DELETE'});
+            if (analysis.estimate && analysis.estimate.valid) estimates.push(Number(analysis.estimate.delay_ms));
+        }
+        if (estimates.length < 2) throw new Error('The clicks were not detected reliably; move closer and retry');
+        estimates.sort(function(a, b) { return a - b; });
+        var median = estimates[Math.floor(estimates.length / 2)];
+        var deviations = estimates.map(function(value) { return Math.abs(value - median); }).sort(function(a, b) { return a - b; });
+        var mad = deviations[Math.floor(deviations.length / 2)];
+        if (mad > 15) throw new Error('Measurements varied by ' + mad.toFixed(0) + ' ms; keep the phone still and retry');
+        var fasterIndex;
+        var correctedValue;
+        if (median >= 0) {
+            fasterIndex = lastDevices.indexOf(reference);
+            correctedValue = Number(target.static_delay_ms || 0) + median;
+        } else {
+            fasterIndex = i;
+            correctedValue = Number(reference.static_delay_ms || 0) - median;
+        }
+        var faster = lastDevices[fasterIndex];
+        var apply = window.confirm(
+            'Measured relative delay: ' + median.toFixed(1) + ' ms (variation ' + mad.toFixed(1) + ' ms). Apply ' +
+            Math.round(correctedValue) + ' ms correction to ' + (faster.player_name || 'the faster speaker') + '?'
+        );
+        if (!apply) return true;
+        return _applyLatencyValue(fasterIndex, correctedValue, 'microphone_calibration');
+    } catch (error) {
+        showToast(error.message || 'Microphone calibration failed', 'error');
+        return false;
+    } finally {
+        if (stream) stream.getTracks().forEach(function(track) { track.stop(); });
+    }
+}
 
 // CSP-safe event delegation. Replaces inline on* attributes so script-src can drop 'unsafe-inline'.
 // Map data-action="kebab-name" → function. `data-event` (default "click") picks which listener fires.
@@ -14906,6 +15203,10 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'latency-nudge':            (_el, _ev, arg) => nudgeDeviceLatency(arg),
+    'latency-test-tone':        (_el, _ev, arg) => playDeviceCalibrationTone(Number(arg)),
+    'latency-mic-calibrate':    (_el, _ev, arg) => calibrateDeviceWithMicrophone(Number(arg)),
+    'latency-apply-suggestion': (_el, _ev, arg) => applyDeviceLatencySuggestion(Number(arg)),
     'bt-start-pairing':         (_el, _ev, arg) => btStartPairing(Number(arg)),
     'bt-claim-audio':           (_el, _ev, arg) => btClaimAudio(Number(arg)),
     'bt-toggle-management':     (_el, _ev, arg) => btToggleManagement(Number(arg)),

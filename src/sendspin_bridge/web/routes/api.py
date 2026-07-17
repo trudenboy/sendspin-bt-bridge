@@ -7,16 +7,21 @@ Configuration, status, and diagnostics routes live in api_config.py and api_stat
 
 import asyncio
 import concurrent.futures
+import io
 import logging
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
+import uuid
+import wave
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
-from sendspin_bridge.config import save_device_volume
+from sendspin_bridge.config import save_device_buffer_setting, save_device_static_delay, save_device_volume
+from sendspin_bridge.services.audio.latency_calibration import build_calibration_pcm
 from sendspin_bridge.services.audio.pulse import (
     get_sink_mute,
     set_sink_mute,
@@ -32,6 +37,162 @@ logger = logging.getLogger(__name__)
 
 api_bp = Blueprint("api", __name__)
 _restart_override = None
+_calibration_sessions: dict[str, dict] = {}
+_calibration_lock = threading.Lock()
+_CALIBRATION_ERROR_MESSAGES = {
+    "silence": "No calibration sound was detected; check microphone permission and move closer",
+    "weak_correlation": "The recordings did not match reliably; keep the phone still, move closer, and reduce noise",
+    "insufficient_samples": "The microphone recording was too short; keep this page active and retry",
+}
+
+
+def _running_in_container() -> bool:
+    """Return whether the current process has an external container supervisor."""
+    if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup") as cgroup_file:
+            cgroup = cgroup_file.read().lower()
+    except OSError:
+        return False
+    return any(marker in cgroup for marker in ("docker", "containerd", "kubepods", "libpod"))
+
+
+def _calibration_enabled() -> bool:
+    from sendspin_bridge.config import load_config
+
+    return bool(load_config().get("ENABLE_LATENCY_CALIBRATION_BETA", False))
+
+
+@api_bp.route("/api/calibration/tone.wav", methods=["GET"])
+def calibration_tone():
+    """Return a deterministic click track for ordinary MA group playback."""
+    sample_rate = 48000
+    duration_seconds = 8
+    frames = build_calibration_pcm(sample_rate=sample_rate, duration_seconds=duration_seconds)
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(2)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(frames)
+    return Response(output.getvalue(), mimetype="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@api_bp.route("/api/calibration/play", methods=["POST"])
+def play_calibration_tone():
+    """Play the calibration click track directly through one Bluetooth sink."""
+    data = request.get_json(silent=True) or {}
+    player_id = str(data.get("player_id") or "").strip()
+    client = next(
+        (
+            item
+            for item in get_device_registry_snapshot().active_clients
+            if str(getattr(item, "player_id", "")) == player_id
+        ),
+        None,
+    )
+    if client is None:
+        return jsonify({"success": False, "error": "Unknown player_id"}), 404
+    loop = get_main_loop()
+    if loop is None:
+        return jsonify({"success": False, "error": "Runtime loop unavailable"}), 503
+    try:
+        future = asyncio.run_coroutine_threadsafe(client.play_calibration_tone(), loop)
+        played = bool(future.result(timeout=12.0))
+    except Exception:
+        logger.exception("Calibration tone playback failed")
+        return jsonify({"success": False, "error": "Calibration tone playback failed"}), 503
+    if not played:
+        return jsonify({"success": False, "error": "Bluetooth audio sink is unavailable"}), 409
+    return jsonify({"success": True, "player_id": player_id})
+
+
+@api_bp.route("/api/calibration/sessions", methods=["POST"])
+def create_calibration_session():
+    """Create an in-memory relative microphone calibration beta session."""
+    if not _calibration_enabled():
+        return jsonify({"success": False, "error": "Latency calibration beta is disabled"}), 404
+    now = time.time()
+    session_id = str(uuid.uuid4())
+    with _calibration_lock:
+        expired = [key for key, value in _calibration_sessions.items() if now - value["created_at"] > 600]
+        for key in expired:
+            del _calibration_sessions[key]
+        _calibration_sessions[session_id] = {"created_at": now, "recordings": {}}
+    return jsonify({"success": True, "session_id": session_id, "expires_in_seconds": 600}), 201
+
+
+@api_bp.route("/api/calibration/sessions/<session_id>/audio", methods=["POST"])
+def upload_calibration_audio(session_id: str):
+    """Accept bounded Float32-like samples and return a relative estimate."""
+    if not _calibration_enabled():
+        return jsonify({"success": False, "error": "Latency calibration beta is disabled"}), 404
+    data = request.get_json(silent=True) or {}
+    role = str(data.get("role") or "")
+    samples = data.get("samples")
+    raw_sample_rate = data.get("sample_rate")
+    try:
+        sample_rate = int(raw_sample_rate) if raw_sample_rate is not None else 0
+    except (TypeError, ValueError):
+        sample_rate = 0
+    if role not in {"reference", "target"} or not isinstance(samples, list):
+        return jsonify({"success": False, "error": "role and samples are required"}), 400
+    max_samples = min(sample_rate * 10, 500_000)
+    if sample_rate < 8000 or sample_rate > 192000 or len(samples) < 8 or len(samples) > max_samples:
+        return jsonify({"success": False, "error": "Unsupported recording size or sample rate"}), 400
+    try:
+        normalized = [max(-1.0, min(1.0, float(value))) for value in samples]
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Samples must be numeric"}), 400
+    peak = max(abs(value) for value in normalized)
+    logger.info(
+        "Calibration recording received: session=%s role=%s samples=%d rate=%d peak=%.4f",
+        session_id[:8],
+        role,
+        len(normalized),
+        sample_rate,
+        peak,
+    )
+    with _calibration_lock:
+        session = _calibration_sessions.get(session_id)
+        if session is None or time.time() - session["created_at"] > 600:
+            _calibration_sessions.pop(session_id, None)
+            return jsonify({"success": False, "error": "Calibration session expired"}), 404
+        session["recordings"][role] = (sample_rate, normalized)
+        recordings = dict(session["recordings"])
+    if set(recordings) != {"reference", "target"}:
+        return jsonify({"success": True, "status": "waiting_for_other_recording"})
+    if recordings["reference"][0] != recordings["target"][0]:
+        return jsonify({"success": False, "error": "Recordings must use the same sample rate"}), 400
+    from sendspin_bridge.services.audio.latency_calibration import estimate_relative_delay_ms
+
+    estimate = estimate_relative_delay_ms(
+        recordings["reference"][1], recordings["target"][1], sample_rate=recordings["reference"][0]
+    )
+    log_method = logger.info if estimate.valid else logger.warning
+    log_method(
+        "Calibration analysis completed: session=%s valid=%s delay_ms=%s confidence=%.4f reason=%s",
+        session_id[:8],
+        estimate.valid,
+        estimate.delay_ms,
+        estimate.confidence,
+        estimate.reason or "ok",
+    )
+    payload = {"success": estimate.valid, "status": "complete", "estimate": estimate.to_dict()}
+    if not estimate.valid:
+        payload["error"] = _CALIBRATION_ERROR_MESSAGES.get(
+            estimate.reason,
+            "Calibration analysis could not produce a reliable result",
+        )
+    return jsonify(payload)
+
+
+@api_bp.route("/api/calibration/sessions/<session_id>", methods=["DELETE"])
+def delete_calibration_session(session_id: str):
+    with _calibration_lock:
+        _calibration_sessions.pop(session_id, None)
+    return jsonify({"success": True})
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +288,67 @@ def _ensure_target_pairs(targets):
     return target_pairs
 
 
+@api_bp.route("/api/latency", methods=["POST"])
+def set_latency_setting():
+    """Hot-apply a confirmed per-device latency setting."""
+    data = request.get_json(silent=True) or {}
+    player_id = str(data.get("player_id") or "").strip()
+    field = str(data.get("field") or "static_delay_ms")
+    if field not in {"static_delay_ms", "required_lead_time_ms", "min_buffer_ms"}:
+        return jsonify({"success": False, "error": "Unsupported latency field"}), 400
+    try:
+        value = float(data.get("value"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid latency value"}), 400
+    max_value = 5000 if field == "static_delay_ms" else 30000
+    if not 0 <= value <= max_value:
+        return jsonify({"success": False, "error": f"{field} must be between 0 and {max_value}"}), 400
+
+    client = next(
+        (
+            item
+            for item in get_device_registry_snapshot().active_clients
+            if str(getattr(item, "player_id", "")) == player_id
+        ),
+        None,
+    )
+    if client is None:
+        return jsonify({"success": False, "error": "Unknown player_id"}), 404
+    expected_revision = data.get("recommendation_revision")
+    if expected_revision is not None and expected_revision != client.status.get("latency_suggestion_revision"):
+        return jsonify({"success": False, "error": "Latency recommendation changed; refresh and retry"}), 409
+    loop = get_main_loop()
+    if loop is None:
+        return jsonify({"success": False, "error": "Runtime loop unavailable"}), 503
+    try:
+        future = asyncio.run_coroutine_threadsafe(client.apply_hot_config({field: value}), loop)
+        applied = future.result(timeout=2.0)
+    except Exception:
+        logger.exception("Latency hot-apply failed")
+        return jsonify({"success": False, "error": "Latency hot-apply failed"}), 503
+    if field not in applied:
+        return jsonify({"success": False, "error": "Latency value was not applied"}), 503
+
+    mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
+    if field == "static_delay_ms" and mac:
+        source = str(data.get("source") or "manual")
+        save_device_static_delay(
+            mac,
+            round(value),
+            source=source,
+            codec=client.status.get("bt_codec_name") or client.status.get("audio_format"),
+        )
+        client._update_status(
+            {
+                "static_delay_source": source,
+                "static_delay_codec": client.status.get("bt_codec_name") or client.status.get("audio_format"),
+            }
+        )
+    elif mac:
+        save_device_buffer_setting(mac, field, round(value))
+    return jsonify({"success": True, "player_id": player_id, "field": field, "value": round(value)})
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -134,12 +356,14 @@ def _ensure_target_pairs(targets):
 
 @api_bp.route("/api/restart", methods=["POST"])
 def api_restart():
-    """Restart the service (systemd, HA addon, or Docker)."""
+    """Restart the bridge under systemd, HA, Docker, or a direct Python launch."""
     if _restart_override is not None:
         override_response = _restart_override()
         if override_response is not None:
             return override_response
     runtime = _detect_runtime()
+    if runtime == "docker" and not _running_in_container():
+        runtime = "standalone"
     try:
         if runtime == "systemd":
 
@@ -181,7 +405,7 @@ def api_restart():
                     os.kill(os.getpid(), signal.SIGTERM)
 
             threading.Thread(target=_do_ha_restart, daemon=True).start()
-        else:
+        elif runtime == "docker":
 
             def _do_docker():
                 time.sleep(0.5)
@@ -191,6 +415,30 @@ def api_restart():
                     os.kill(os.getpid(), signal.SIGTERM)
 
             threading.Thread(target=_do_docker, daemon=True).start()
+        else:
+
+            def _do_standalone():
+                time.sleep(0.5)
+                try:
+                    subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-m",
+                            "sendspin_bridge.services.lifecycle.standalone_restart",
+                            str(os.getpid()),
+                        ],
+                        cwd=os.getcwd(),
+                        env=os.environ.copy(),
+                        stdin=subprocess.DEVNULL,
+                        close_fds=True,
+                        start_new_session=True,
+                    )
+                except Exception:
+                    logger.exception("Could not launch standalone restart helper")
+                    return
+                os.kill(os.getpid(), signal.SIGTERM)
+
+            threading.Thread(target=_do_standalone, daemon=True).start()
 
         return jsonify({"success": True, "runtime": runtime})
     except Exception:

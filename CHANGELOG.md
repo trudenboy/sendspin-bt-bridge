@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.0-rc.1] - 2026-07-17
+
+### Added
+
+- **Per-speaker synchronization telemetry and guided latency tuning.** Device cards can show the AVDTP delay reported by the Bluetooth speaker, offer codec-based starting values when no report exists, apply ±10/±50 ms corrections live, play calibration clicks, and run an opt-in three-trial browser-microphone comparison between two speakers.
+- **Live Sendspin timing and buffer controls.** Backend output latency, buffered audio, playback error, clock offset/uncertainty, and rolling re-anchor counts now flow through device status, history API, diagnostics, and Home Assistant entities. Per-device startup lead and minimum buffer settings hot-apply without a player restart when supported by the installed client library.
+
+### Changed
+
+- **Latency Assistant now uses runtime instability, not configuration alone.** Repeated re-anchors during playback produce an evidence-backed buffer recommendation, while confirmed manual or microphone calibration remains distinct from advisory Bluetooth and codec estimates.
+
+### Fixed
+
+- **Standalone lifecycle and installation labels are now accurate.** **Save & Restart** launches a detached successor before stopping a directly started Python process, while the header reports `Standalone` unless the host exposes an actual Home Assistant, Docker, LXC, or installed systemd-service marker.
+- **Live latency tuning now remains applied and renders correctly for every speaker.** Successful changes are reflected in the daemon's next status snapshot instead of being overwritten by an older value, devices without AVDTP delay reporting show their numeric codec fallback, microphone comparison accepts a Bluetooth-connected speaker from a different Music Assistant group while rejecting disconnected peers before recording begins, calibration audio waits for suspended Bluetooth sinks to wake before emitting an audible chirp, comparison uses the acoustic energy envelope so speakers with different frequency responses still correlate, and a recovered status stream clears stale backend-unavailable warnings without exhausting the web server's request workers.
+- **Each Sendspin player now stays routed to its own Bluetooth speaker on PipeWire.** Bluetooth subprocesses use the PulseAudio-compatible PortAudio output that honors their explicit target sink, instead of PipeWire's shared ALSA default, and route correction remains active for later streams rather than expiring shortly after startup.
+
 ## [2.72.1] - 2026-07-13
 
 ### Added

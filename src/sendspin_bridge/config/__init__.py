@@ -84,6 +84,7 @@ __all__ = [
     "resolve_base_listen_port",
     "resolve_device_room_context",
     "resolve_web_port",
+    "save_device_buffer_setting",
     "save_device_sink",
     "save_device_static_delay",
     "save_device_volume",
@@ -152,6 +153,7 @@ DEFAULT_CONFIG = {
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
     "EXPERIMENTAL_PAIR_JUST_WORKS": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
+    "ENABLE_LATENCY_CALIBRATION_BETA": False,
     # Periodic live-RSSI refresh for connected speakers (mgmt opcode 0x0031).
     # On by default since v2.64.0 — feature has been stable since
     # 2.63.0-rc.8.  The refresh tick adds one mgmt round-trip per
@@ -414,7 +416,13 @@ def save_device_sink(mac: str | None, sink_name: str) -> None:
         logger.warning("Could not save sink for %s: %s", mac, e)
 
 
-def save_device_static_delay(mac: str | None, delay_ms: int) -> None:
+def save_device_static_delay(
+    mac: str | None,
+    delay_ms: int,
+    *,
+    source: str | None = None,
+    codec: str | None = None,
+) -> None:
     """Persist per-device static_delay_ms to BLUETOOTH_DEVICES[i].static_delay_ms.
 
     Used when MA pushes a SET_STATIC_DELAY command — the parent extracts the
@@ -439,6 +447,11 @@ def save_device_static_delay(mac: str | None, delay_ms: int) -> None:
             device_mac = device.get("mac", "")
             if isinstance(device_mac, str) and device_mac.strip().upper() == normalized_mac:
                 device["static_delay_ms"] = clamped
+                if source:
+                    device["static_delay_source"] = source
+                    device["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                if codec:
+                    device["static_delay_codec"] = codec
                 return
         logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", normalized_mac)
 
@@ -446,6 +459,28 @@ def save_device_static_delay(mac: str | None, delay_ms: int) -> None:
         update_config(_set_delay)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save static_delay_ms for %s: %s", mac, e)
+
+
+def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> None:
+    """Persist a confirmed per-device Sendspin buffer setting."""
+    if not mac or field not in {"required_lead_time_ms", "min_buffer_ms"} or not CONFIG_FILE.exists():
+        return
+    try:
+        clamped = max(0, min(30000, int(value_ms)))
+    except (TypeError, ValueError):
+        return
+
+    def _set_value(cfg: dict) -> None:
+        normalized_mac = mac.strip().upper()
+        for device in cfg.get("BLUETOOTH_DEVICES", []):
+            if isinstance(device, dict) and str(device.get("mac") or "").strip().upper() == normalized_mac:
+                device[field] = clamped
+                return
+
+    try:
+        update_config(_set_value)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Could not save %s for %s: %s", field, mac, exc)
 
 
 def load_config() -> dict:

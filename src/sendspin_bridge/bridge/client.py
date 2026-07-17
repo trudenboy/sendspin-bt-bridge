@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     import concurrent.futures
 
 import sendspin_bridge.bridge.state as _state
-from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property
+from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property, _dbus_get_media_transport_snapshot
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.bridge.exceptions import IPCError
@@ -40,6 +40,8 @@ from sendspin_bridge.config import (
     save_device_static_delay,
     save_device_volume,
 )
+from sendspin_bridge.services.audio.latency_calibration import build_calibration_pcm
+from sendspin_bridge.services.audio.latency_recommendation import build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -186,6 +188,9 @@ _IPC_ALLOWED_KEYS = frozenset(
         "sink_muted",
         "reanchoring",
         "reanchor_count",
+        "reanchor_count_session",
+        "reanchor_count_5m",
+        "reanchor_count_30m",
         "last_sync_error_ms",
         "last_reanchor_at",
         "current_track",
@@ -208,6 +213,18 @@ _IPC_ALLOWED_KEYS = frozenset(
         "track_duration_ms",
         "ma_reconnecting",
         "static_delay_ms",
+        "timing_metrics_available",
+        "backend_output_latency_ms",
+        "buffered_audio_ms",
+        "playback_position_us",
+        "dac_samples_recorded",
+        "playback_sync_error_ms",
+        "clock_synchronized",
+        "clock_offset_ms",
+        "clock_uncertainty_ms",
+        "timing_sampled_at",
+        "required_lead_time_ms",
+        "min_buffer_ms",
     }
 )
 
@@ -350,7 +367,39 @@ class DeviceStatus:
     muted: bool = False
     sink_muted: bool = False
     audio_format: str | None = None
+    bt_transport_path: str | None = None
+    bt_transport_state: str | None = None
+    bt_codec_id: int | None = None
+    bt_codec_name: str | None = None
+    bt_reported_delay_ms: float | None = None
+    bt_delay_reporting_supported: bool = False
+    bt_delay_updated_at: str | None = None
+    timing_metrics_available: bool = False
+    backend_output_latency_ms: float | None = None
+    buffered_audio_ms: float | None = None
+    playback_position_us: int | None = None
+    dac_samples_recorded: int = 0
+    playback_sync_error_ms: float | None = None
+    clock_synchronized: bool = False
+    clock_offset_ms: float | None = None
+    clock_uncertainty_ms: float | None = None
+    timing_sampled_at: str | None = None
+    required_lead_time_ms: int = 250
+    min_buffer_ms: int = 250
+    static_delay_ms: float = 0.0
+    static_delay_source: str = "default"
+    static_delay_calibrated_at: str | None = None
+    static_delay_codec: str | None = None
+    suggested_static_delay_ms: int | None = None
+    latency_suggestion_source: str = "unavailable"
+    latency_suggestion_confidence: str = "none"
+    latency_suggestion_explanation: str = ""
+    latency_suggestion_revision: str | None = None
+    latency_double_count_risk: bool = False
     reanchor_count: int = 0
+    reanchor_count_session: int = 0
+    reanchor_count_5m: int = 0
+    reanchor_count_30m: int = 0
     last_sync_error_ms: float | None = None
     last_reanchor_at: float | None = None
     reanchoring: bool = False
@@ -545,6 +594,11 @@ class SendspinClient:
         idle_mode: str = "default",
         power_save_delay_minutes: int = 1,
         keep_alive_method: str = "infrasound",
+        required_lead_time_ms: int = 250,
+        min_buffer_ms: int = 250,
+        static_delay_source: str = "default",
+        static_delay_calibrated_at: str | None = None,
+        static_delay_codec: str | None = None,
     ):
         self.player_name = player_name
         self.server_host = server_host
@@ -562,6 +616,8 @@ class SendspinClient:
         self.keep_alive_method = keep_alive_method if keep_alive_method in _KEEPALIVE_METHODS else "infrasound"
         self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
         self.power_save_delay_minutes = max(0, power_save_delay_minutes)
+        self.required_lead_time_ms = max(0, min(30000, int(required_lead_time_ms)))
+        self.min_buffer_ms = max(0, min(30000, int(min_buffer_ms)))
 
         # Status tracking
         self.status = DeviceStatus(
@@ -569,6 +625,12 @@ class SendspinClient:
             ip_address=listen_host or self.get_ip_address(),
             hostname=socket.gethostname(),
             idle_mode=idle_mode,
+            required_lead_time_ms=self.required_lead_time_ms,
+            min_buffer_ms=self.min_buffer_ms,
+            static_delay_ms=float(static_delay_ms or 0.0),
+            static_delay_source=static_delay_source,
+            static_delay_calibrated_at=static_delay_calibrated_at,
+            static_delay_codec=static_delay_codec,
         )
 
         self._status_lock = threading.Lock()
@@ -630,6 +692,7 @@ class SendspinClient:
         # and on death (exit fields filled).  Used for the diagnostics report
         # and for the repeating-interval pattern detector (#291 follow-up).
         self._spawn_history: deque[SpawnRecord] = deque(maxlen=10)
+        self._timing_history: deque[dict[str, object]] = deque(maxlen=360)
         self._current_spawn: SpawnRecord | None = None
         # Set by ``stop_sendspin`` immediately before signalling the daemon so
         # the death-handler can flag the corresponding SpawnRecord as
@@ -693,6 +756,20 @@ class SendspinClient:
                 now=time.monotonic(),
             )
             self.status.update(updates)
+            if updates.get("timing_sampled_at"):
+                self._timing_history.append(
+                    {
+                        key: self.status.get(key)
+                        for key in (
+                            "timing_sampled_at",
+                            "backend_output_latency_ms",
+                            "buffered_audio_ms",
+                            "playback_sync_error_ms",
+                            "clock_uncertainty_ms",
+                            "reanchor_count",
+                        )
+                    }
+                )
             recorded_events = self._build_status_events(previous, self.status.copy(), updates)
         for event in recorded_events:
             _state.publish_device_event(
@@ -1632,6 +1709,8 @@ class SendspinClient:
                         "listen_port": self.listen_port,
                         "url": server_url,
                         "static_delay_ms": static_delay_ms,
+                        "required_lead_time_ms": self.required_lead_time_ms,
+                        "min_buffer_ms": self.min_buffer_ms,
                         "bluetooth_sink_name": self.bluetooth_sink_name,
                         "bluetooth_device_path": bt_dbus_path,
                         "volume": self.status.get("volume", 100),
@@ -1935,23 +2014,28 @@ class SendspinClient:
         applied: list[str] = []
 
         for key, value in fields_payload.items():
-            if key == "static_delay_ms":
+            if key in ("static_delay_ms", "required_lead_time_ms", "min_buffer_ms"):
                 try:
                     delay_ms = float(value) if value is not None else 0.0  # type: ignore[arg-type]
                 except (TypeError, ValueError):
-                    logger.warning("[%s] Ignoring invalid static_delay_ms: %r", self.player_name, value)
+                    logger.warning("[%s] Ignoring invalid %s: %r", self.player_name, key, value)
                     continue
                 if self.is_running():
                     try:
-                        await self._send_subprocess_command({"cmd": "set_static_delay_ms", "value": delay_ms})
+                        await self._send_subprocess_command({"cmd": f"set_{key}", "value": delay_ms})
                     except IPCError as exc:
                         logger.warning(
-                            "[%s] hot-apply static_delay_ms IPC failed: %s — parent-state unchanged",
+                            "[%s] hot-apply %s IPC failed: %s — parent-state unchanged",
                             self.player_name,
+                            key,
                             exc,
                         )
                         continue
-                self.static_delay_ms = delay_ms
+                if key == "static_delay_ms":
+                    self.static_delay_ms = delay_ms
+                else:
+                    setattr(self, key, round(delay_ms))
+                self._update_status({key: round(delay_ms)})
                 applied.append(key)
             elif key == "keepalive_interval":
                 try:
@@ -2066,6 +2150,61 @@ class SendspinClient:
         except asyncio.CancelledError:
             return
 
+    async def _transport_telemetry_loop(self) -> None:
+        """Poll optional BlueZ transport telemetry without blocking the loop."""
+        if not self.bt_manager:
+            return
+        while self.running:
+            path = getattr(self.bt_manager, "_dbus_device_path", None)
+            if path:
+                snapshot = await asyncio.get_running_loop().run_in_executor(
+                    None, _dbus_get_media_transport_snapshot, path
+                )
+                recommendation = build_latency_recommendation(
+                    reported_bt_delay_ms=snapshot.delay_ms,
+                    codec_name=(
+                        snapshot.codec_name
+                        or ("sbc" if getattr(self.bt_manager, "prefer_sbc", False) else None)
+                        or self.status.get("bt_codec_name")
+                    ),
+                    calibrated_delay_ms=(
+                        self.status.get("static_delay_ms")
+                        if self.status.get("static_delay_source") in {"microphone_calibration", "manual_calibration"}
+                        else None
+                    ),
+                    calibration_source=self.status.get("static_delay_source"),
+                )
+                revision = f"{snapshot.path}:{snapshot.delay_tenths_ms}:{snapshot.codec_id}"
+                backend_latency = self.status.get("backend_output_latency_ms")
+                double_count_risk = bool(
+                    snapshot.delay_ms is not None
+                    and isinstance(backend_latency, (int, float))
+                    and backend_latency >= snapshot.delay_ms * 0.75
+                )
+                explanation = recommendation.explanation
+                if double_count_risk:
+                    explanation += (
+                        " The audio backend reports a similar latency; verify by ear to avoid double compensation."
+                    )
+                self._update_status(
+                    {
+                        "bt_transport_path": snapshot.path,
+                        "bt_transport_state": snapshot.state,
+                        "bt_codec_id": snapshot.codec_id,
+                        "bt_codec_name": snapshot.codec_name,
+                        "bt_reported_delay_ms": snapshot.delay_ms,
+                        "bt_delay_reporting_supported": snapshot.delay_supported,
+                        "bt_delay_updated_at": snapshot.updated_at,
+                        "suggested_static_delay_ms": recommendation.value_ms,
+                        "latency_suggestion_source": recommendation.source,
+                        "latency_suggestion_confidence": recommendation.confidence,
+                        "latency_suggestion_explanation": explanation,
+                        "latency_suggestion_revision": revision,
+                        "latency_double_count_risk": double_count_risk,
+                    }
+                )
+            await asyncio.sleep(5.0 if self.status.get("audio_streaming") else 15.0)
+
     async def _send_keepalive_burst(self) -> None:
         """Write the configured keepalive payload to the BT PulseAudio sink via paplay.
 
@@ -2096,6 +2235,46 @@ class SendspinClient:
             logger.debug("[%s] Keepalive burst sent to %s", self.player_name, self.bluetooth_sink_name)
         except Exception as exc:
             logger.debug("[%s] Keepalive burst failed: %s", self.player_name, exc)
+
+    async def play_calibration_tone(self) -> bool:
+        """Play a bounded calibration chirp directly on this device's BT sink."""
+        if not self.bluetooth_sink_name or not self.status.get("bluetooth_connected"):
+            return False
+        try:
+            logger.info(
+                "[%s] Starting calibration chirp on %s",
+                self.player_name,
+                self.bluetooth_sink_name,
+            )
+            proc = await asyncio.create_subprocess_exec(
+                "paplay",
+                f"--device={self.bluetooth_sink_name}",
+                "--raw",
+                "--format=s16le",
+                "--rate=48000",
+                "--channels=2",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await asyncio.wait_for(
+                proc.communicate(build_calibration_pcm(duration_seconds=2)),
+                timeout=12.0,
+            )
+            if proc.returncode == 0:
+                logger.info("[%s] Calibration chirp completed", self.player_name)
+                return True
+            detail = stderr.decode(errors="replace").strip() if stderr else "no stderr"
+            logger.warning(
+                "[%s] Calibration chirp exited with code %s: %s",
+                self.player_name,
+                proc.returncode,
+                detail,
+            )
+            return False
+        except Exception as exc:
+            logger.warning("[%s] Calibration tone failed: %s", self.player_name, exc)
+            return False
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
@@ -2164,6 +2343,8 @@ class SendspinClient:
                 "server_host": self.server_host,
                 "server_port": self.server_port,
                 "static_delay_ms": self.static_delay_ms,
+                "required_lead_time_ms": self.required_lead_time_ms,
+                "min_buffer_ms": self.min_buffer_ms,
                 "bt_manager": bt_mgr,
                 "bluetooth_mac": bt_mgr.mac_address if bt_mgr else None,
                 "effective_adapter_mac": getattr(bt_mgr, "effective_adapter_mac", None) if bt_mgr else None,
@@ -2173,6 +2354,11 @@ class SendspinClient:
                 "paired": getattr(bt_mgr, "paired", None) if bt_mgr else None,
                 "max_reconnect_fails": int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0) if bt_mgr else 0,
             }
+
+    def timing_history_snapshot(self) -> list[dict[str, object]]:
+        """Return the bounded in-memory timing history."""
+        with self._status_lock:
+            return [dict(sample) for sample in self._timing_history]
 
     async def run(self) -> None:
         """Main run loop — connects BT, starts subprocess, monitors health."""
@@ -2265,6 +2451,7 @@ class SendspinClient:
 
             rssi_task.add_done_callback(_on_rssi_done)
             tasks.append(rssi_task)
+            tasks.append(asyncio.create_task(self._transport_telemetry_loop()))
 
         try:
             # Keep running

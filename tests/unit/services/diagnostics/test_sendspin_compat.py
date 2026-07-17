@@ -40,6 +40,15 @@ def test_filter_supported_call_kwargs_drops_unknown_fields():
     }
 
 
+def test_filter_supported_call_kwargs_preserves_fields_for_var_keyword_factory():
+    def factory(*args, **kwargs):
+        return args, kwargs
+
+    candidate = {"required_lead_time_ms": 400, "min_buffer_ms": 600}
+
+    assert filter_supported_call_kwargs(factory, candidate) == candidate
+
+
 def test_analyze_daemon_args_compatibility_flags_missing_required_fields():
     class FakeDaemonArgs:
         def __init__(self, audio_device, client_id, new_required):

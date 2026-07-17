@@ -29,6 +29,7 @@ import re
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -167,6 +168,46 @@ _SYNC_ERROR_PREFIX = "Sync error "
 _REANCHOR_AUTO_CLEAR_S = 5.0
 
 logger = logging.getLogger(__name__)
+_reanchor_times: deque[float] = deque(maxlen=1000)
+
+
+def _record_reanchor_status(status: dict, *, sync_error_ms: float | None = None) -> None:
+    """Update rolling re-anchor status from a structured or log fallback event."""
+    now_mono = time.monotonic()
+    _reanchor_times.append(now_mono)
+    while _reanchor_times and now_mono - _reanchor_times[0] > 1800:
+        _reanchor_times.popleft()
+    status["reanchor_count"] = status.get("reanchor_count", 0) + 1
+    status["reanchor_count_session"] = status["reanchor_count"]
+    status["reanchor_count_5m"] = sum(1 for value in _reanchor_times if now_mono - value <= 300)
+    status["reanchor_count_30m"] = len(_reanchor_times)
+    status["reanchoring"] = True
+    status["last_reanchor_monotonic"] = now_mono
+    status["last_reanchor_at"] = datetime.now(tz=timezone.utc).isoformat()
+    if sync_error_ms is not None:
+        status["last_sync_error_ms"] = round(abs(float(sync_error_ms)), 3)
+
+
+def _observe_structured_reanchor(audio_handler: object, status: dict) -> bool:
+    """Count a new AudioPlayer re-anchor marker without parsing log wording."""
+    try:
+        marker = int(getattr(audio_handler, "_last_reanchor_loop_time_us", 0) or 0)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    previous = getattr(audio_handler, "_bridge_observed_reanchor_marker_us", None)
+    try:
+        audio_handler._bridge_observed_reanchor_marker_us = marker  # type: ignore[attr-defined]
+    except Exception:
+        return False
+    if marker <= 0 or marker == previous:
+        return False
+    try:
+        sync_error_ms = float(getattr(audio_handler, "_sync_error_filtered_us", 0.0)) / 1000.0
+    except (TypeError, ValueError, OverflowError):
+        sync_error_ms = None
+    with _status_lock:
+        _record_reanchor_status(status, sync_error_ms=sync_error_ms)
+    return True
 
 
 class _JsonLineHandler(logging.Handler):
@@ -188,16 +229,15 @@ class _JsonLineHandler(logging.Handler):
             # Detect re-anchor log message from sendspin/audio.py
             if self._status is not None and _REANCHOR_MSG in msg:
                 with _status_lock:
-                    self._status["reanchor_count"] = self._status.get("reanchor_count", 0) + 1
-                    self._status["reanchoring"] = True
-                    self._status["last_reanchor_at"] = time.monotonic()
                     # Extract sync error value if present: "Sync error 123.4 ms too large; re-anchoring"
+                    sync_error_ms = None
                     if _SYNC_ERROR_PREFIX in msg:
                         try:
                             after = msg.split(_SYNC_ERROR_PREFIX, 1)[1]
-                            self._status["last_sync_error_ms"] = float(after.split()[0])
+                            sync_error_ms = float(after.split()[0])
                         except (IndexError, ValueError):
                             pass  # best-effort parse inside log handler
+                    _record_reanchor_status(self._status, sync_error_ms=sync_error_ms)
                 if callable(self._on_status_change):
                     try:
                         self._on_status_change()
@@ -234,6 +274,18 @@ _stdout_lock = threading.Lock()
 _background_tasks: set[asyncio.Task] = set()
 
 
+def _log_background_task_result(task: asyncio.Future, label: str) -> None:
+    """Log a background-task failure without treating cancellation as an error."""
+    if task.cancelled():
+        return
+    try:
+        error = task.exception()
+    except asyncio.CancelledError:
+        return
+    if error is not None:
+        logger.debug("%s error: %s", label, error)
+
+
 def _write_line(payload: str) -> None:
     """Write one JSON line to stdout atomically w.r.t. other writers."""
     with _stdout_lock:
@@ -259,6 +311,20 @@ def _snapshot_status(status: dict) -> dict:
 def _filter_supported_daemon_args_kwargs(daemon_args_cls, kwargs: dict[str, object]) -> dict[str, object]:
     """Keep only kwargs supported by the installed sendspin DaemonArgs signature."""
     return filter_supported_call_kwargs(daemon_args_cls, kwargs)
+
+
+def _select_audio_output_device(devices: list, *, target_sink: str | None = None):
+    """Choose an output that honors the per-process PulseAudio target sink."""
+    if target_sink:
+        pulse_device = next(
+            (device for device in devices if str(getattr(device, "name", "")).strip().lower() == "pulse"),
+            None,
+        )
+        if pulse_device is not None:
+            return pulse_device
+    return next((device for device in devices if getattr(device, "is_default", False)), None) or (
+        devices[0] if devices else None
+    )
 
 
 def _str_default(obj) -> str:
@@ -310,8 +376,8 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
     """
     while not stop_event.is_set():
         await asyncio.sleep(1.0)
-        if status.get("reanchoring") and status.get("last_reanchor_at") is not None:
-            age = time.monotonic() - status["last_reanchor_at"]
+        if status.get("reanchoring") and status.get("last_reanchor_monotonic") is not None:
+            age = time.monotonic() - status["last_reanchor_monotonic"]
             if age >= _REANCHOR_AUTO_CLEAR_S:
                 with _status_lock:
                     status["reanchoring"] = False
@@ -322,32 +388,58 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
                         logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
+async def _timing_telemetry_watcher(daemon, status: dict, on_status_change, stop_event: asyncio.Event) -> None:
+    """Publish bounded-rate Sendspin timing metrics through status IPC."""
+    from sendspin_bridge.services.audio.timing_telemetry import collect_timing_snapshot
+
+    next_metrics_at = 0.0
+    while not stop_event.is_set():
+        audio_handler = getattr(daemon, "_audio_handler", None)
+        client = getattr(daemon, "_client", None)
+        changed = False
+        if audio_handler is not None:
+            changed = _observe_structured_reanchor(audio_handler, status)
+        now = time.monotonic()
+        if audio_handler is not None and client is not None and now >= next_metrics_at:
+            snapshot = collect_timing_snapshot(audio_handler, client)
+            with _status_lock:
+                status.update(snapshot)
+            changed = True
+            next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
+        if changed and callable(on_status_change):
+            on_status_change()
+        await asyncio.sleep(1.0)
+
+
 async def _startup_sink_routing_watcher(
     status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str
 ) -> None:
-    """Once audio starts, correct PA sink routing for this daemon's PID.
+    """Correct PA sink routing whenever this daemon starts an audio stream.
 
     PulseAudio may ignore ``PULSE_SINK`` and route our sink-input to the
     default sink instead (module-stream-restore / default-sink override).
-    When ``audio_streaming`` becomes True we move our PID's sink-inputs back
-    to the intended sink.  Gives up after a bounded window if audio never
-    starts.  (The former anti-crackle startup mute/unmute was removed; this
-    keeps only the independent sink-routing correction.)
+    On every ``audio_streaming`` rising edge, move this process' sink-inputs
+    back to the intended sink.  The watcher must remain alive because a first
+    stream can start long after the daemon, and WirePlumber can restore a
+    stale target again for a later stream.
     """
     _logger = logging.getLogger(__name__)
     from sendspin_bridge.services.audio.pulse import amove_pid_sink_inputs
 
-    deadline = time.monotonic() + 15.0
-    while not stop_event.is_set() and time.monotonic() < deadline:
+    was_streaming = False
+    while not stop_event.is_set():
         await asyncio.sleep(0.5)
-        if status.get("audio_streaming"):
+        if stop_event.is_set():
+            break
+        is_streaming = bool(status.get("audio_streaming"))
+        if is_streaming and not was_streaming:
             try:
                 moved = await amove_pid_sink_inputs(os.getpid(), sink_name)
                 if moved:
                     _logger.info("[%s] Corrected %d sink-input(s) → %s", player_name, moved, sink_name)
             except Exception as exc:
                 _logger.debug("[%s] Sink routing correction failed: %s", player_name, exc)
-            return
+        was_streaming = is_streaming
 
 
 async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink_name: str | None = None) -> None:
@@ -389,9 +481,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 _task = asyncio.ensure_future(daemon._client.send_group_command(mc))
                 _background_tasks.add(_task)
                 _task.add_done_callback(_background_tasks.discard)
-                _task.add_done_callback(
-                    lambda t: logger.debug("send_group_command error: %s", t.exception()) if t.exception() else None
-                )
+                _task.add_done_callback(lambda t: _log_background_task_result(t, "send_group_command"))
         elif cmd.cmd == "set_volume":
             daemon = daemon_ref[0] if daemon_ref else None
             value = cmd.payload.get("value")
@@ -425,9 +515,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 _reconnect_task = asyncio.ensure_future(_delayed_reconnect())
                 _background_tasks.add(_reconnect_task)
                 _reconnect_task.add_done_callback(_background_tasks.discard)
-                _reconnect_task.add_done_callback(
-                    lambda t: logger.debug("reconnect error: %s", t.exception()) if t.exception() else None
-                )
+                _reconnect_task.add_done_callback(lambda t: _log_background_task_result(t, "reconnect"))
         elif cmd.cmd == "set_log_level":
             level_name = str(cmd.payload.get("level", "INFO")).upper()
             if level_name not in _VALID_LOG_LEVELS:
@@ -463,6 +551,12 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             # just emitted.
             if applied and daemon is not None:
                 daemon._static_delay_ms = delay_ms
+                # Keep the shared status snapshot in sync with the live
+                # aiosendspin client.  Otherwise the next unrelated status
+                # notification republishes the previous value and the parent
+                # process persists that stale value back to config.
+                daemon._bridge_status["static_delay_ms"] = round(delay_ms)
+                daemon._notify()
             # Push the updated player state to MA so its slider repaints.
             # aiosendspin.set_static_delay_ms updates _static_delay_us locally
             # but does NOT auto-emit client/state — explicit push is required.
@@ -484,6 +578,43 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     )
                 except Exception as exc:
                     logger.warning("Failed to push static_delay_ms to MA: %s", exc)
+        elif cmd.cmd in ("set_required_lead_time_ms", "set_min_buffer_ms"):
+            daemon = daemon_ref[0] if daemon_ref else None
+            client = getattr(daemon, "_client", None) if daemon else None
+            if daemon is None or client is None:
+                logger.warning("%s ignored — client not available", cmd.cmd)
+                continue
+            raw_value = cmd.payload.get("value")
+            if raw_value is None:
+                logger.warning("Invalid %s value: %r", cmd.cmd, raw_value)
+                continue
+            try:
+                value_ms = max(0.0, min(30000.0, float(raw_value)))
+            except (TypeError, ValueError):
+                logger.warning("Invalid %s value: %r", cmd.cmd, raw_value)
+                continue
+            attr = "required_lead_time_ms" if cmd.cmd.startswith("set_required") else "min_buffer_ms"
+            setter = getattr(client, f"set_{attr}", None) if client else None
+            if not callable(setter):
+                logger.warning("%s not supported by current sendspin client", cmd.cmd)
+                continue
+            try:
+                setter(value_ms)
+                setattr(daemon, f"_{attr}", value_ms)
+                with _status_lock:
+                    daemon._bridge_status[attr] = round(value_ms)
+                daemon._notify()
+                if getattr(client, "connected", False):
+                    from aiosendspin.models.types import PlayerStateType
+
+                    audio_handler = getattr(daemon, "_audio_handler", None)
+                    await client.send_player_state(
+                        state=getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED,
+                        volume=int(getattr(audio_handler, "volume", 100)),
+                        muted=bool(getattr(audio_handler, "muted", False)),
+                    )
+            except Exception as exc:
+                logger.warning("%s failed: %s", cmd.cmd, exc)
         elif cmd.cmd == "transport":
             daemon = daemon_ref[0] if daemon_ref else None
             action = str(cmd.payload.get("action", "")).strip()
@@ -510,11 +641,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             _task = asyncio.ensure_future(daemon._client.send_group_command(mc, **kwargs))
             _background_tasks.add(_task)
             _task.add_done_callback(_background_tasks.discard)
-            _task.add_done_callback(
-                lambda t, _a=action: (
-                    logger.debug("transport %s error: %s", _a, t.exception()) if t.exception() else None
-                )
-            )
+            _task.add_done_callback(lambda t, _a=action: _log_background_task_result(t, f"transport {_a}"))
         elif cmd.cmd == "set_standby":
             sink = cmd.payload.get("sink")
             if sink:
@@ -541,6 +668,8 @@ async def _run(params: dict) -> None:
     listen_port: int = params["listen_port"]
     server_url: str | None = params.get("url")
     static_delay_ms: float = params.get("static_delay_ms", 0.0)
+    required_lead_time_ms: float = params.get("required_lead_time_ms", 250.0)
+    min_buffer_ms: float = params.get("min_buffer_ms", 250.0)
     bluetooth_sink_name: str | None = params.get("bluetooth_sink_name")
     initial_volume: int = params.get("volume", 100)
     initial_muted: bool = bool(params.get("muted", False))
@@ -569,16 +698,16 @@ async def _run(params: dict) -> None:
             params.get(IPC_PROTOCOL_VERSION_KEY),
         )
 
-    # Resolve audio device — use default since PULSE_SINK in env handles routing
+    # Route Bluetooth players through the ALSA PulseAudio plugin.  On PipeWire,
+    # the ALSA "default" device ignores PULSE_SINK and WirePlumber may restore
+    # another speaker as its target; the "pulse" device honors PULSE_SINK.
     try:
         devices = query_audio_devices()
     except RuntimeError:
         _emit_error("audio_api_missing", "sendspin.audio.query_devices is unavailable")
         logger.error("sendspin.audio.query_devices is unavailable")
         sys.exit(1)
-    audio_device = next((d for d in devices if d.is_default), None)
-    if audio_device is None:
-        audio_device = devices[0] if devices else None
+    audio_device = _select_audio_output_device(devices, target_sink=bluetooth_sink_name)
     if audio_device is None:
         _emit_error("audio_output_missing", "No audio output device found")
         logger.error("No audio output device found")
@@ -659,6 +788,9 @@ async def _run(params: dict) -> None:
         "connected_server_url": None,
         "last_error": None,
         "reanchor_count": 0,
+        "reanchor_count_session": 0,
+        "reanchor_count_5m": 0,
+        "reanchor_count_30m": 0,
         "reanchoring": False,
         "last_reanchor_at": None,
         "last_sync_error_ms": None,
@@ -677,6 +809,9 @@ async def _run(params: dict) -> None:
         "supported_commands": None,
         "group_volume": None,
         "group_muted": None,
+        "required_lead_time_ms": round(required_lead_time_ms),
+        "min_buffer_ms": round(min_buffer_ms),
+        "timing_metrics_available": False,
     }
 
     # Emit initial status so parent knows subprocess is alive
@@ -698,6 +833,8 @@ async def _run(params: dict) -> None:
         on_status_change=_on_status_change,
         bt_product_name=bt_product_name,
         bt_manufacturer=bt_manufacturer,
+        required_lead_time_ms=required_lead_time_ms,
+        min_buffer_ms=min_buffer_ms,
     )
     daemon_ref.append(daemon)
 
@@ -723,6 +860,7 @@ async def _run(params: dict) -> None:
     cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event, bt_sink_name=bluetooth_sink_name))
     daemon_task = asyncio.create_task(daemon.run())
     watcher_task = asyncio.create_task(_reanchor_watcher(status, _on_status_change, stop_event))
+    timing_task = asyncio.create_task(_timing_telemetry_watcher(daemon, status, _on_status_change, stop_event))
     # Connection watchdog: surfaces a clear error when daemon cannot reach the server
     conn_watchdog_task = asyncio.create_task(daemon._connection_watchdog())
     # Correct PA sink routing once audio starts (PA may ignore PULSE_SINK).
@@ -735,7 +873,7 @@ async def _run(params: dict) -> None:
     # Wait until stop command or daemon exits.
     # routing_task and conn_watchdog_task are fire-and-forget so their completion
     # doesn't trigger FIRST_COMPLETED and kill the daemon.
-    all_tasks = [cmd_task, daemon_task, watcher_task, asyncio.create_task(stop_event.wait())]
+    all_tasks = [cmd_task, daemon_task, watcher_task, timing_task, asyncio.create_task(stop_event.wait())]
     _done, pending = await asyncio.wait(
         all_tasks,
         return_when=asyncio.FIRST_COMPLETED,
@@ -744,6 +882,7 @@ async def _run(params: dict) -> None:
     daemon_task.cancel()
     cmd_task.cancel()
     watcher_task.cancel()
+    timing_task.cancel()
     conn_watchdog_task.cancel()
     if routing_task:
         routing_task.cancel()

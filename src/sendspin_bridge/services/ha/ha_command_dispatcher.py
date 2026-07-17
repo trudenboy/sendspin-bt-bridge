@@ -263,6 +263,8 @@ _SELECT_CONFIG_KEYS = {
 
 _NUMBER_CONFIG_KEYS = {
     "set_static_delay_ms": "static_delay_ms",
+    "set_required_lead_time_ms": "required_lead_time_ms",
+    "set_min_buffer_ms": "min_buffer_ms",
     "set_power_save_delay_minutes": "power_save_delay_minutes",
 }
 

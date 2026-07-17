@@ -89,6 +89,8 @@ class BridgeDaemon(SendspinDaemon):
         *,
         bt_product_name: str = "",
         bt_manufacturer: str = "",
+        required_lead_time_ms: float = 250.0,
+        min_buffer_ms: float = 250.0,
     ) -> None:
         super().__init__(args)
         self._bridge_status = status
@@ -100,6 +102,8 @@ class BridgeDaemon(SendspinDaemon):
         # or the speaker hasn't reported a friendly Name/Alias yet.
         self._bt_product_name = bt_product_name
         self._bt_manufacturer = bt_manufacturer
+        self._required_lead_time_ms = required_lead_time_ms
+        self._min_buffer_ms = min_buffer_ms
         # Initialise the synchronized state lazily so test fixtures that
         # build a BridgeDaemon without aiosendspin installed still work.
         try:
@@ -177,6 +181,8 @@ class BridgeDaemon(SendspinDaemon):
                     supported_commands=[PlayerCommand.VOLUME, PlayerCommand.MUTE],
                 ),
                 "static_delay_ms": static_delay_ms,
+                "required_lead_time_ms": getattr(self, "_required_lead_time_ms", 250.0),
+                "min_buffer_ms": getattr(self, "_min_buffer_ms", 250.0),
                 "initial_volume": self._audio_handler.volume,
                 "initial_muted": self._audio_handler.muted,
                 # client/state advertises SET_STATIC_DELAY so MA can drive the

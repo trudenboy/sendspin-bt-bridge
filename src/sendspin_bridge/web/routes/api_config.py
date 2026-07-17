@@ -454,6 +454,12 @@ def _sync_ha_options(config: dict) -> None:
                 entry["adapter"] = d["adapter"]
             if d.get("static_delay_ms"):
                 entry["static_delay_ms"] = int(d["static_delay_ms"])
+            for latency_key in ("required_lead_time_ms", "min_buffer_ms"):
+                if d.get(latency_key) is not None:
+                    entry[latency_key] = int(d[latency_key])
+            for metadata_key in ("static_delay_source", "static_delay_calibrated_at", "static_delay_codec"):
+                if d.get(metadata_key):
+                    entry[metadata_key] = d[metadata_key]
             if d.get("listen_host"):
                 entry["listen_host"] = d["listen_host"]
             if d.get("listen_port"):

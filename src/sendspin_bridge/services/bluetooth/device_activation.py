@@ -25,6 +25,7 @@ from sendspin_bridge.services.audio.mpris_player import (
     resolve_avrcp_source_client,
 )
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
+from sendspin_bridge.services.diagnostics.sendspin_compat import filter_supported_call_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -566,23 +567,36 @@ def activate_device(
     idle_mode = str(device.get("idle_mode") or "default")
     power_save_delay_minutes = int(device.get("power_save_delay_minutes") or 1)
     keep_alive_method = str(device.get("keep_alive_method") or "infrasound")
+    required_lead_time_ms = int(device.get("required_lead_time_ms", 250))
+    min_buffer_ms = int(device.get("min_buffer_ms", 250))
 
+    client_kwargs = filter_supported_call_kwargs(
+        context.client_factory,
+        {
+            "listen_port": listen_port,
+            "static_delay_ms": static_delay_ms,
+            "listen_host": listen_host,
+            "effective_bridge": context.effective_bridge,
+            "preferred_format": preferred_format or None,
+            "keepalive_enabled": keepalive_enabled,
+            "keepalive_interval": keepalive_interval,
+            "idle_disconnect_minutes": idle_disconnect_minutes,
+            "idle_mode": idle_mode,
+            "power_save_delay_minutes": power_save_delay_minutes,
+            "keep_alive_method": keep_alive_method,
+            "required_lead_time_ms": required_lead_time_ms,
+            "min_buffer_ms": min_buffer_ms,
+            "static_delay_source": str(device.get("static_delay_source") or "default"),
+            "static_delay_calibrated_at": device.get("static_delay_calibrated_at"),
+            "static_delay_codec": device.get("static_delay_codec"),
+        },
+    )
     client = context.client_factory(
         player_name,
         context.server_host,
         context.server_port,
         None,
-        listen_port=listen_port,
-        static_delay_ms=static_delay_ms,
-        listen_host=listen_host,
-        effective_bridge=context.effective_bridge,
-        preferred_format=preferred_format or None,
-        keepalive_enabled=keepalive_enabled,
-        keepalive_interval=keepalive_interval,
-        idle_disconnect_minutes=idle_disconnect_minutes,
-        idle_mode=idle_mode,
-        power_save_delay_minutes=power_save_delay_minutes,
-        keep_alive_method=keep_alive_method,
+        **client_kwargs,
     )
 
     bt_mgr: Any | None = None

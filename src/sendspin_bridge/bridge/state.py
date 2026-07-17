@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import socket
 import threading
 from collections import deque
@@ -36,6 +35,7 @@ from sendspin_bridge.services.diagnostics.internal_events import (
     InternalEventPublisher,
     normalize_device_event,
 )
+from sendspin_bridge.services.infrastructure.runtime_detection import detect_installation_type
 from sendspin_bridge.services.lifecycle import async_job_state as _async_job_state
 from sendspin_bridge.services.lifecycle import bridge_runtime_state as _bridge_runtime_state
 from sendspin_bridge.services.music_assistant import ma_runtime_state as _ma_runtime_state
@@ -105,12 +105,8 @@ bridge_start_time = _bridge_runtime_state.bridge_start_time
 
 
 def _detect_runtime_type() -> str:
-    """Detect whether we're running as HA addon, Docker, or LXC/bare metal."""
-    if os.environ.get("SUPERVISOR_TOKEN"):
-        return "ha-addon"
-    if os.path.exists("/.dockerenv"):
-        return "docker"
-    return "lxc"
+    """Return the installation type displayed in status surfaces."""
+    return detect_installation_type()
 
 
 def get_bridge_system_info() -> dict:

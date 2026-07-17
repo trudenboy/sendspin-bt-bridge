@@ -171,6 +171,30 @@ def _dbus_get_media_transport_state(device_path: str | None) -> str | None:
         return None
 
 
+def _dbus_get_media_transport_snapshot(device_path: str | None):
+    """Return the best MediaTransport snapshot for *device_path*.
+
+    The helper deliberately returns an empty typed snapshot on failure.  A
+    missing ``Delay`` is a supported and common capability outcome, not an
+    operational error.
+    """
+    from sendspin_bridge.services.bluetooth.transport_telemetry import (
+        BluetoothTransportSnapshot,
+        select_transport_snapshot,
+    )
+
+    if not device_path or dbus is None:
+        return BluetoothTransportSnapshot()
+    try:
+        bus = dbus.SystemBus()
+        root = bus.get_object("org.bluez", "/")
+        om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
+        return select_transport_snapshot(om.GetManagedObjects(), device_path)
+    except Exception as exc:
+        logger.debug("D-Bus MediaTransport1 telemetry read failed: %s", exc)
+        return BluetoothTransportSnapshot()
+
+
 def _dbus_connect_profile(device_path: str | None, uuid: str) -> tuple[bool, str]:
     """Call BlueZ Device1.ConnectProfile(uuid) explicitly.
 

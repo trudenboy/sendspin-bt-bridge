@@ -10332,3 +10332,21 @@ body {
         max-width: 100%;
     }
 }
+
+.latency-tune {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.55rem 0;
+}
+.latency-tune-label {
+    min-width: 6.5rem;
+    color: var(--secondary-text-color);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+.latency-tune .action-btn {
+    min-height: 2rem;
+    padding: 0.25rem 0.55rem;
+}
