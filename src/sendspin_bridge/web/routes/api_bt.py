@@ -813,6 +813,10 @@ def api_bt_reset_reconnect():
         return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
+    no_io_raw = data.get("no_input_no_output_agent")
+    no_input_no_output_agent = no_io_raw if isinstance(no_io_raw, bool) else False
+    allow_hfp_raw = data.get("allow_hfp_profile")
+    allow_hfp_profile = allow_hfp_raw if isinstance(allow_hfp_raw, bool) else False
     if not _try_acquire_bt_operation():
         return _bt_operation_conflict_response()
     job_id = str(uuid.uuid4())
@@ -820,7 +824,13 @@ def api_bt_reset_reconnect():
 
     def _run_job():
         try:
-            _run_reset_reconnect(job_id, mac, adapter)
+            _run_reset_reconnect(
+                job_id,
+                mac,
+                adapter,
+                no_input_no_output_agent=no_input_no_output_agent,
+                allow_hfp_profile=allow_hfp_profile,
+            )
         finally:
             _release_bt_operation()
 
@@ -871,7 +881,14 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
     return adapter
 
 
-def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
+def _run_reset_reconnect(
+    job_id: str,
+    mac: str,
+    adapter: str,
+    *,
+    no_input_no_output_agent: bool = False,
+    allow_hfp_profile: bool = False,
+) -> None:
     """Remove device, then pair + trust + connect from scratch."""
     adapter = _resolve_adapter_to_mac(adapter)
     try:
@@ -913,9 +930,10 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
         native_agent: PairingAgent | None = None
         try:
             native_agent = PairingAgent(
-                capability="DisplayYesNo",
+                capability="NoInputNoOutput" if no_input_no_output_agent else "DisplayYesNo",
                 pin="0000",
-                allow_hfp=bool(load_config().get("ALLOW_HFP_PROFILE", False)),
+                allow_hfp=allow_hfp_profile,
+                target_mac=mac,
             ).__enter__()
             logger.info("Reset & Reconnect %s: native agent active", mac)
         except Exception as exc:
@@ -936,7 +954,9 @@ def _run_reset_reconnect(job_id: str, mac: str, adapter: str) -> None:
                 initial_cmds.append(f"select {adapter}")
             initial_cmds.append("power on")
             if native_agent is None:
-                initial_cmds.extend(["agent on", "default-agent"])
+                initial_cmds.extend(
+                    ["agent NoInputNoOutput" if no_input_no_output_agent else "agent on", "default-agent"]
+                )
             initial_cmds.append("scan bredr")
             pair_cmds = [f"pair {mac}"]
 
@@ -1050,9 +1070,10 @@ def api_bt_scan():
     """Start an async BT device scan; returns a job_id immediately."""
     data = request.get_json(silent=True) or {}
     raw_adapter = (data.get("adapter") or "").strip()
-    adapter_value = "" if raw_adapter.lower() == "all" else raw_adapter
+    if not raw_adapter or raw_adapter.lower() == "all":
+        return jsonify({"error": "A specific Bluetooth adapter is required"}), 400
     try:
-        adapter = validate_adapter(adapter_value)
+        adapter = validate_adapter(raw_adapter)
         audio_only = _coerce_scan_audio_only(data.get("audio_only"))
         adapter_macs = _resolve_scan_adapter_macs(adapter)
     except ValueError as exc:
@@ -1152,13 +1173,9 @@ def _coerce_scan_audio_only(value) -> bool:
 def _resolve_scan_adapter_macs(adapter: str) -> "list[str]":
     """Resolve a selected adapter identifier into bluetoothctl adapter MACs."""
     adapter_macs = list_bt_adapters()
-    if not adapter:
-        return adapter_macs
     normalized = adapter.strip()
-    if not normalized:
-        return adapter_macs
-    if normalized.lower() == "all":
-        return adapter_macs
+    if not normalized or normalized.lower() == "all":
+        raise ValueError("A specific Bluetooth adapter is required")
     if normalized.lower().startswith("hci"):
         kernel_hci = normalized.lower()
         try:
@@ -1192,8 +1209,8 @@ def _build_scan_options(adapter: str, audio_only: bool, adapter_macs: "list[str]
     return {
         "adapter": adapter,
         "audio_only": audio_only,
-        "adapter_scope": "all" if not adapter else "selected",
-        "adapter_count": max(len(adapter_macs), 1 if adapter else 0),
+        "adapter_scope": "selected",
+        "adapter_count": len(adapter_macs),
     }
 
 
@@ -1533,14 +1550,13 @@ def api_bt_pair_new():
     if not _try_acquire_bt_operation():
         return _bt_operation_conflict_response()
     quiesce = bool(data.get("quiesce_adapter"))
-    # Per-pair override for the NoInputNoOutput pairing agent. The scan
-    # modal's experimental toggle sends this explicitly; when absent
-    # (legacy clients, hand-crafted curl) or when the payload supplies a
-    # non-bool value, the pair runner falls back to the persisted config
-    # key. Non-bool coercion (``bool("false") -> True``) would silently
-    # force NoInputNoOutput, so we accept only JSON booleans here.
+    # Pairing compatibility options are explicit, one-shot request values.
+    # Non-bool coercion (``bool("false") -> True``) would silently weaken
+    # pairing or authorize HFP, so only JSON booleans are accepted.
     no_io_agent_raw = data.get("no_input_no_output_agent")
-    no_input_no_output_agent: bool | None = no_io_agent_raw if isinstance(no_io_agent_raw, bool) else None
+    no_input_no_output_agent = no_io_agent_raw if isinstance(no_io_agent_raw, bool) else False
+    allow_hfp_raw = data.get("allow_hfp_profile")
+    allow_hfp_profile = allow_hfp_raw if isinstance(allow_hfp_raw, bool) else False
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
 
@@ -1552,6 +1568,7 @@ def api_bt_pair_new():
                 adapter,
                 quiesce=quiesce,
                 no_input_no_output_agent=no_input_no_output_agent,
+                allow_hfp_profile=allow_hfp_profile,
             )
         finally:
             _release_bt_operation()
@@ -1580,15 +1597,13 @@ def _run_standalone_pair(
     adapter: str,
     *,
     quiesce: bool = False,
-    no_input_no_output_agent: bool | None = None,
+    no_input_no_output_agent: bool = False,
+    allow_hfp_profile: bool = False,
 ) -> None:
     """Run pair + trust via bluetoothctl for a device not yet in config.
 
-    ``no_input_no_output_agent`` is a per-request override for the
-    NoInputNoOutput pairing agent (Just-Works SSP). ``None`` (the
-    default) means "use whatever config.EXPERIMENTAL_PAIR_JUST_WORKS
-    says". A bool explicitly wins over config — the scan-modal toggle is
-    the authoritative intent for this pair attempt.
+    Compatibility options apply to this pairing job only and are never
+    sourced from persisted global configuration.
 
     When the device asks for a legacy PIN and rejects our first guess,
     the orchestrator retries the whole pair flow with the next PIN from
@@ -1602,10 +1617,20 @@ def _run_standalone_pair(
         if quiesce and adapter:
             with quiesce_adapter_peers(adapter, exclude_mac=mac):
                 return _run_standalone_pair_inner(
-                    job_id, mac, adapter, pin=pin, no_input_no_output_agent=no_input_no_output_agent
+                    job_id,
+                    mac,
+                    adapter,
+                    pin=pin,
+                    no_input_no_output_agent=no_input_no_output_agent,
+                    allow_hfp_profile=allow_hfp_profile,
                 )
         return _run_standalone_pair_inner(
-            job_id, mac, adapter, pin=pin, no_input_no_output_agent=no_input_no_output_agent
+            job_id,
+            mac,
+            adapter,
+            pin=pin,
+            no_input_no_output_agent=no_input_no_output_agent,
+            allow_hfp_profile=allow_hfp_profile,
         )
 
     tried_pins: list[str] = []
@@ -1652,7 +1677,8 @@ def _run_standalone_pair_inner(
     adapter: str,
     *,
     pin: str = "0000",
-    no_input_no_output_agent: bool | None = None,
+    no_input_no_output_agent: bool = False,
+    allow_hfp_profile: bool = False,
 ) -> dict:
     """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op.
 
@@ -1684,15 +1710,7 @@ def _run_standalone_pair_inner(
         # without a passkey exchange). Many consumer BT audio sinks cancel
         # authentication when the default `KeyboardDisplay` agent negotiates
         # a passkey; opt-in toggle lets affected users work around it (issue #168).
-        # Precedence: per-request override (scan modal toggle) > config key.
-        if no_input_no_output_agent is not None:
-            use_no_io_agent = no_input_no_output_agent
-        else:
-            try:
-                cfg = load_config()
-            except Exception:
-                cfg = {}
-            use_no_io_agent = bool(cfg.get("EXPERIMENTAL_PAIR_JUST_WORKS"))
+        use_no_io_agent = bool(no_input_no_output_agent)
         agent_cmd = "agent NoInputNoOutput" if use_no_io_agent else "agent on"
 
         # Native D-Bus agent: exports org.bluez.Agent1 directly so BlueZ calls
@@ -1708,7 +1726,8 @@ def _run_standalone_pair_inner(
             native_agent = PairingAgent(
                 capability=native_capability,
                 pin=pin,
-                allow_hfp=bool(load_config().get("ALLOW_HFP_PROFILE", False)),
+                allow_hfp=bool(allow_hfp_profile),
+                target_mac=mac,
             ).__enter__()
             logger.info(
                 "Standalone pair %s: native agent active (cap=%s)",

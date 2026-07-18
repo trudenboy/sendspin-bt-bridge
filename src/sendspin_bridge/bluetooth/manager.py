@@ -35,19 +35,6 @@ from sendspin_bridge.services.bluetooth import bt_operation_lock as _bt_op_lock
 from sendspin_bridge.services.bluetooth import bt_rssi_mgmt, classify_pair_failure, describe_pair_failure
 from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 
-
-def _load_allow_hfp() -> bool:
-    """Read the runtime ``ALLOW_HFP_PROFILE`` flag without forcing a config
-    import at module load — keeps test fixtures cheap and lets late config
-    edits take effect on the next pair attempt."""
-    try:
-        from sendspin_bridge.config import load_config
-
-        return bool(load_config().get("ALLOW_HFP_PROFILE", False))
-    except Exception:
-        return False
-
-
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
 # socket (``MGMT_OP_GET_CONN_INFO`` opcode 0x0031), wrapped in
 # ``services/bt_rssi_mgmt.py`` using the ``btsocket`` library so we
@@ -224,7 +211,7 @@ class BluetoothManager:
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
         # EXPERIMENTAL_ADAPTER_AUTO_RECOVERY — gates the last-ditch
         # bluetooth-auto-recovery ladder call in _handle_reconnect_failure.
-        # Off by default because USB unbind/rebind briefly disconnects
+        # Off by default because a USB reset briefly disconnects
         # every device on the same controller.
         self._enable_adapter_auto_recovery = bool(enable_adapter_auto_recovery)
         # Per-pair-attempt raw HCI Write_Class_Of_Device — re-applies the
@@ -640,7 +627,8 @@ class BluetoothManager:
             native_agent = PairingAgent(
                 capability="DisplayYesNo",
                 pin="0000",
-                allow_hfp=_load_allow_hfp(),
+                allow_hfp=False,
+                target_mac=mac,
             ).__enter__()
             logger.info("[%s] Pair: native agent active", self.device_name)
         except Exception as exc:
@@ -1373,7 +1361,7 @@ class BluetoothManager:
         if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
             return False
         # Last-ditch adapter recovery before either auto-disable or auto-release.
-        # Gated by the experimental flag because USB unbind/rebind is disruptive.
+        # Gated by the compatibility flag because a USB reset is disruptive.
         # Needs both the resolved adapter MAC and an hci index to hand to
         # the bluetooth-auto-recovery library.
         if self._enable_adapter_auto_recovery and self._try_adapter_auto_recovery():
@@ -1567,11 +1555,38 @@ class BluetoothManager:
         except Exception as _e:
             logger.debug("[%s] adapter_recovery module unavailable: %s", self.device_name, _e)
             return False
+        if self.host is not None:
+            self.host.update_status(
+                {
+                    "adapter_recovery_last_at": datetime.now(tz=UTC).isoformat(),
+                    "adapter_recovery_adapter": adapter_mac,
+                    "adapter_recovery_stage": "running",
+                    "adapter_recovery_result": None,
+                    "adapter_recovery_failure_reason": None,
+                }
+            )
         try:
-            return bool(recover_adapter_blocking(hci_index=hci_index, adapter_mac=adapter_mac))
+            recovered = bool(recover_adapter_blocking(hci_index=hci_index, adapter_mac=adapter_mac))
         except Exception as e:
             logger.warning("[%s] adapter auto-recovery raised: %s", self.device_name, e)
+            if self.host is not None:
+                self.host.update_status(
+                    {
+                        "adapter_recovery_stage": "completed",
+                        "adapter_recovery_result": "error",
+                        "adapter_recovery_failure_reason": str(e),
+                    }
+                )
             return False
+        if self.host is not None:
+            self.host.update_status(
+                {
+                    "adapter_recovery_stage": "completed",
+                    "adapter_recovery_result": "success" if recovered else "failed",
+                    "adapter_recovery_failure_reason": None if recovered else "Recovery backend reported failure.",
+                }
+            )
+        return recovered
 
     def _publish_client_event(
         self,

@@ -238,7 +238,6 @@ def main() -> None:
         web_ui_only_keys = (
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
             "EXPERIMENTAL_PA_MODULE_RELOAD",
-            "EXPERIMENTAL_PAIR_JUST_WORKS",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
             "RSSI_BADGE",
             "AUTH_ENABLED",
@@ -247,7 +246,6 @@ def main() -> None:
             "AUTO_UPDATE",
             "CHECK_UPDATES",
             "SMOOTH_RESTART",
-            "ALLOW_HFP_PROFILE",
             "TRUSTED_PROXIES",
         )
         for key in web_ui_only_keys:

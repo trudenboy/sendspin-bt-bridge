@@ -76,11 +76,12 @@ class _FakeSelector:
 
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
-    """Redirect config to a temp directory."""
+    """Redirect config and prevent accidental access to the host audio server."""
     import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr("sendspin_bridge.bluetooth.audio.cycle_card_profile", lambda *_args, **_kwargs: False)
 
 
 @pytest.fixture()
@@ -1411,6 +1412,29 @@ def test_handle_reconnect_failure_keeps_management_when_recovery_succeeds(bt_man
     assert released is False
     assert bt_manager.management_enabled is True
     mock_persist.assert_not_called()
+
+
+def test_adapter_recovery_publishes_structured_status(bt_manager):
+    """Recovery progress is observable without scraping log messages."""
+    bt_manager.host = MagicMock()
+    bt_manager.effective_adapter_mac = "C0:FB:F9:62:D6:9D"
+    bt_manager.adapter_hci_name = "hci2"
+
+    with patch(
+        "sendspin_bridge.services.bluetooth.adapter_recovery.recover_adapter_blocking",
+        return_value=True,
+    ):
+        assert bt_manager._try_adapter_auto_recovery() is True
+
+    updates = [call.args[0] for call in bt_manager.host.update_status.call_args_list]
+    assert updates[0]["adapter_recovery_stage"] == "running"
+    assert updates[0]["adapter_recovery_adapter"] == "C0:FB:F9:62:D6:9D"
+    assert updates[0]["adapter_recovery_last_at"]
+    assert updates[-1] == {
+        "adapter_recovery_stage": "completed",
+        "adapter_recovery_result": "success",
+        "adapter_recovery_failure_reason": None,
+    }
 
 
 def test_handle_reconnect_failure_skips_recovery_when_no_adapter_mac(bt_manager):

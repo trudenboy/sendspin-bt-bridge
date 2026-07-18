@@ -151,22 +151,16 @@ DEFAULT_CONFIG = {
     "TRUSTED_PROXIES": [],
     "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": False,
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
-    "EXPERIMENTAL_PAIR_JUST_WORKS": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
     # Periodic live-RSSI refresh for connected speakers (mgmt opcode 0x0031).
     # On by default since v2.64.0 — feature has been stable since
     # 2.63.0-rc.8.  The refresh tick adds one mgmt round-trip per
-    # connected device every 30 s gated by the shared bt_operation_lock;
+    # connected device every 5 s gated by the shared bt_operation_lock;
     # value semantics are platform-specific (BR/EDR returns delta from
     # the controller's Golden Receive Power Range, LE returns absolute
     # dBm) — the device card normalises both to a single coloured chip.
     # Legacy key ``EXPERIMENTAL_RSSI_BADGE`` is migrated transparently.
     "RSSI_BADGE": True,
-    # v2.63.0-rc.2: HSP/HFP profiles are blocked at AuthorizeService time
-    # by default. Some headphones (Bose QC, AKG Y500) prefer HFP over A2DP
-    # when both are accepted, dropping the speaker to an 8 kHz mono call
-    # codec. Enable only for HFP-only headsets that A2DP-block at the peer.
-    "ALLOW_HFP_PROFILE": False,
     # v2.65.0 — Home Assistant integration.  Two transports share one
     # config namespace; ``mode`` selects which is active.  See
     # ``services/ha_mqtt_publisher.py`` (B-path) and the

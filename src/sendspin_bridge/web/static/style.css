@@ -6000,7 +6000,7 @@ body {
             padding-bottom: 4px;
             border-bottom: none;
         }
-        /* Warning treatment for the "Show experimental features" master
+        /* Warning treatment for the advanced compatibility-tools master
            toggle: amber border + glyph cue so the user understands the
            switch reveals risky in-development surface area.  Distinct
            from per-row ``data-experimental`` styling which marks

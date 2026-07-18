@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONFIG_SCHEMA_VERSION = 4
+CONFIG_SCHEMA_VERSION = 5
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
 _VALID_IDLE_MODES = frozenset(("default", "power_save", "auto_disconnect", "keep_alive"))
@@ -426,7 +426,6 @@ def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> No
         "CHECK_UPDATES",
         "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
         "EXPERIMENTAL_PA_MODULE_RELOAD",
-        "EXPERIMENTAL_PAIR_JUST_WORKS",
         "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",
         "RSSI_BADGE",
     ):

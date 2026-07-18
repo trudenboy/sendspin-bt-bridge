@@ -211,6 +211,52 @@ process.stdout.write(JSON.stringify({
 """
 )
 
+_CHECKLIST_AND_ADAPTER_SCRIPT = (
+    _COMMON_JS
+    + r"""
+const bootstrap = [
+  extractFunction('_getBtScanAdapters'),
+  extractFunction('_getBtScanAdapterValue'),
+  extractFunction('_renderBtScanAdapterOptions'),
+  extractFunction('_goToBluetoothAndScan'),
+].join('\n\n');
+
+vm.runInThisContext(bootstrap);
+
+const select = {innerHTML: '', value: ''};
+const scanButton = {focusCount: 0, focus() { this.focusCount += 1; }};
+global.document = {
+  getElementById(id) {
+    return {'scan-adapter-select': select, 'scan-btn': scanButton}[id] || null;
+  },
+};
+global.btAdapters = [
+  {id: 'hci0', mac: 'AA:BB:CC:DD:EE:01', detectedName: 'Primary', manual: false},
+  {id: 'hci1', mac: 'AA:BB:CC:DD:EE:02', detectedName: 'Secondary', manual: false},
+];
+global._btScanModalState = {adapter: ''};
+global.escHtml = (value) => String(value);
+global.escHtmlAttr = (value) => String(value);
+global._hasDetectedAdapter = () => true;
+global._goToAdapters = () => { throw new Error('unexpected adapter redirect'); };
+global._openBluetoothInventory = () => {};
+global.setTimeout = (fn) => { fn(); return 1; };
+let openOptions = null;
+global.openBtScanModal = (options) => { openOptions = options; return false; };
+
+_renderBtScanAdapterOptions();
+_goToBluetoothAndScan({expandPaired: true});
+
+process.stdout.write(JSON.stringify({
+  selectedAdapter: _btScanModalState.adapter,
+  selectValue: select.value,
+  optionsHtml: select.innerHTML,
+  checklistAutoStart: openOptions && openOptions.autoStart,
+  scanButtonFocusCount: scanButton.focusCount,
+}));
+"""
+)
+
 _POLLING_SCRIPT = (
     _COMMON_JS
     + r"""
@@ -383,6 +429,16 @@ def test_scan_modal_launcher_and_focus_trap_helpers_cover_running_and_edges() ->
     assert result["trapForwardWraps"] is True
     assert result["trapBackwardWraps"] is True
     assert result["trapMiddleSkips"] is None
+
+
+def test_checklist_opens_without_autostart_and_scan_selects_a_concrete_adapter() -> None:
+    result = _run_frontend_script(_CHECKLIST_AND_ADAPTER_SCRIPT)
+
+    assert result["checklistAutoStart"] is False
+    assert result["scanButtonFocusCount"] == 1
+    assert result["selectedAdapter"] == "hci0"
+    assert result["selectValue"] == "hci0"
+    assert "All adapters" not in result["optionsHtml"]
 
 
 def test_scan_modal_shared_polling_helper_completes_and_respects_stale_guard() -> None:

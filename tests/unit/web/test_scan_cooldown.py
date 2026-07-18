@@ -93,6 +93,7 @@ def test_scan_returns_429_during_cooldown(client):
     with (
         patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
         patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
+        patch("sendspin_bridge.web.routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01"]),
     ):
         # Simulate a scan that completed 5 seconds ago (within 10 s cooldown)
         mock_time.monotonic.return_value = 100.0
@@ -100,7 +101,7 @@ def test_scan_returns_429_during_cooldown(client):
 
         _mod._last_scan_completed = 95.0  # 5 s ago
 
-        resp = client.post("/api/bt/scan")
+        resp = client.post("/api/bt/scan", json={"adapter": "AA:BB:CC:DD:EE:01"})
         assert resp.status_code == 429
         assert "cooldown" in resp.get_json()["error"].lower()
 
@@ -123,19 +124,32 @@ def test_scan_allowed_after_cooldown_expires(client):
 
         mock_thread.return_value.start = lambda: None
 
-        resp = client.post("/api/bt/scan")
+        resp = client.post("/api/bt/scan", json={"adapter": "AA:BB:CC:DD:EE:01"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "job_id" in data
         assert data["scan_options"]["audio_only"] is True
-        assert data["scan_options"]["adapter_scope"] == "all"
-        assert data["expected_duration"] == 17
+        assert data["scan_options"]["adapter_scope"] == "selected"
+        assert data["scan_options"]["adapter"] == "AA:BB:CC:DD:EE:01"
+        assert data["expected_duration"] == 15
+
+
+def test_scan_requires_a_specific_adapter(client):
+    """An ambiguous scan request is rejected before any BT operation starts."""
+    with patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False):
+        resp = client.post("/api/bt/scan", json={})
+
+    assert resp.status_code == 400
+    assert "specific" in resp.get_json()["error"].lower()
 
 
 def test_concurrent_scan_returns_409(client):
     """POST /api/bt/scan while another scan is running returns 409."""
-    with patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=True):
-        resp = client.post("/api/bt/scan")
+    with (
+        patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=True),
+        patch("sendspin_bridge.web.routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01"]),
+    ):
+        resp = client.post("/api/bt/scan", json={"adapter": "AA:BB:CC:DD:EE:01"})
         assert resp.status_code == 409
         assert "already in progress" in resp.get_json()["error"].lower()
 
@@ -195,8 +209,8 @@ def test_scan_result_running_includes_metadata(client):
         "sendspin_bridge.web.routes.api_bt.get_scan_job",
         return_value={
             "status": "running",
-            "scan_options": {"adapter": "", "audio_only": True, "adapter_scope": "all", "adapter_count": 2},
-            "expected_duration": 17,
+            "scan_options": {"adapter": "hci1", "audio_only": True, "adapter_scope": "selected", "adapter_count": 1},
+            "expected_duration": 15,
             "started_at": 123.0,
         },
     ):
@@ -204,8 +218,8 @@ def test_scan_result_running_includes_metadata(client):
         assert resp.status_code == 200
         assert resp.get_json() == {
             "status": "running",
-            "scan_options": {"adapter": "", "audio_only": True, "adapter_scope": "all", "adapter_count": 2},
-            "expected_duration": 17,
+            "scan_options": {"adapter": "hci1", "audio_only": True, "adapter_scope": "selected", "adapter_count": 1},
+            "expected_duration": 15,
             "started_at": 123.0,
         }
 
@@ -220,7 +234,7 @@ def test_cooldown_timestamp_updated_after_scan(client):
     with (
         patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
         patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
-        patch("sendspin_bridge.web.routes.api_bt.list_bt_adapters", return_value=[]),
+        patch("sendspin_bridge.web.routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01"]),
         patch("sendspin_bridge.web.routes.api_bt._run_bluetoothctl_scan", return_value=""),
         patch("sendspin_bridge.web.routes.api_bt._parse_scan_output", return_value=(set(), {}, {}, set())),
         patch("sendspin_bridge.web.routes.api_bt._resolve_unnamed_devices"),
@@ -228,8 +242,8 @@ def test_cooldown_timestamp_updated_after_scan(client):
     ):
         mock_time.monotonic.return_value = fake_time
 
-        _mod._run_bt_scan("test-job-id")
+        _mod._run_bt_scan("test-job-id", "AA:BB:CC:DD:EE:01")
 
-        resp = client.post("/api/bt/scan")
+        resp = client.post("/api/bt/scan", json={"adapter": "AA:BB:CC:DD:EE:01"})
         assert resp.status_code == 429
         assert "cooldown" in resp.get_json()["error"].lower()

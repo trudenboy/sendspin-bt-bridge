@@ -167,7 +167,7 @@ The redesigned **Configuration** section is organized into six tabs:
 
 | Tab | Purpose |
 |---|---|
-| **General** | Bridge identity, timezone, direct web port, base listener port, restart behavior, update policy, guidance visibility, and experimental features toggle |
+| **General** | Bridge identity, timezone, direct web port, base listener port, restart behavior, update policy, guidance visibility, and advanced compatibility-tools toggle |
 | **Audio** | PulseAudio latency, codec preference, and PA rescue-streams control |
 | **Devices** | Speaker fleet table and per-device saved settings |
 | **Bluetooth** | Adapter inventory, paired-device management, scan modal, and reconnect policy |
@@ -186,14 +186,9 @@ Unsaved edits enable **Cancel**, mark the configuration area as dirty, and trigg
 
 ### General tab
 
-Beyond the core identity and policy fields listed in the table, the General tab includes a **Show experimental features** toggle at the bottom. The toggle is a UI-only preference stored in the browser and is not persisted to the config file. While it is on, the dashboard reveals early-stage settings that may change or be removed in future versions:
+Beyond the core identity and policy fields listed in the table, the General tab includes an **Advanced compatibility tools** toggle. This browser-local preference reveals narrowly targeted recovery and pairing workarounds; it is not written to the config file. Stable controls such as adapter-area naming, room labels, RSSI, pairing peer-quiesce, and microphone calibration remain visible without it.
 
-- **General** — `HA_AREA_NAME_ASSIST_ENABLED` (auto-resolve Bluetooth-adapter friendly names from Home Assistant area names).
-- **Bluetooth** — an **Experimental features** card with `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`, `EXPERIMENTAL_PA_MODULE_RELOAD`, `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`, and `ALLOW_HFP_PROFILE` (see the [Bluetooth Adapters](/sendspin-bt-bridge/bluetooth-adapters/) page for what each one does).
-- **Bluetooth → Scan modal** — additional checkboxes for **Pause other speakers on same adapter** (peer-quiesce, a workaround for single-adapter setups that fail to pair while another A2DP ACL is active) and **NoInputNoOutput pair agent** (Just Works pairing for speakers that send no SSP confirmation).
-- **Devices → per-device details** — `room_name` and `room_id` fields used by the room-handoff workflow.
-
-Experimental rows are visually distinct (warning iconography on the section heading and amber accents on the `Show experimental features` row itself) so it stays obvious that you are looking at unstable surfaces.
+Compatibility rows show their restart requirement and runtime support. An unavailable PulseAudio or adapter-recovery control is disabled with the detected reason instead of accepting a setting that cannot work on the current host.
 
 ### Audio tab
 
@@ -209,8 +204,8 @@ The **Audio** tab groups latency and codec settings that affect all speakers:
 
 The **Devices** tab is now the saved fleet table only:
 
-- **Enabled**, **player name**, **MAC**, **adapter**, **port**, **delay**, **live badge**, and **remove** all live here.
-- Advanced per-speaker fields include **preferred audio format**, **`listen_host`**, and **`keepalive_interval`**.
+- **Enabled**, **player name**, **MAC**, **adapter**, **port**, a compact live delay panel, **live badge**, and **remove** all live here.
+- Per-speaker details include **preferred audio format**, **`listen_host`**, **`keepalive_interval`**, and optional **room name / room ID** context. Room values may come from a Home Assistant area or be entered as local labels; they do not imply Music Assistant room handoff.
 - Dashboard device gears scroll here, highlight the matching row, and focus the relevant controls.
 
 If `listen_port` is left blank, the runtime uses **`BASE_LISTEN_PORT + device index`**. Positive `keepalive_interval` values enable silence keepalive, values below 30 seconds are raised to 30, and the old `keepalive_silence` compatibility flag is no longer exposed as a separate web-UI toggle.
@@ -226,11 +221,11 @@ The **Bluetooth** tab now owns the bridge-side Bluetooth tools:
 - **Scan nearby** opens a dedicated Bluetooth scan modal from this tab.
 - **Show live signal-strength badges** (`RSSI_BADGE`) — controls whether the device cards display the live RSSI chip described above. Default on.
 - **Connection recovery** settings cover BT check interval, auto-disable threshold, and the rapid-reconnect churn-isolation thresholds (`BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`) used to auto-disable a device that is stuck in a reconnect loop.
-- **Experimental features** card (visible only with **Show experimental features** turned on) — see the table further down.
+- **Advanced recovery workarounds** card (visible only with **Advanced compatibility tools** turned on) — see the table further down.
 
 The scan modal improves first-run discovery and troubleshooting:
 
-- choose **All adapters** or a specific adapter;
+- choose the specific adapter that should perform this scan (the first detected adapter is preselected);
 - keep **Audio devices only** on for normal use, or turn it off when debugging non-audio candidates;
 - watch a live **countdown/progress bar** while the scan runs;
 - use **Pair and Add** (primary action) for the normal case, or the **Add to fleet** dropdown alternative when the speaker is already paired with the host;
@@ -242,25 +237,25 @@ Each scan result row carries its own context chips: an `Audio device` / `Other` 
 
 ![Scan results with the Pair and Add split-button on a discovered audio device](/sendspin-bt-bridge/screenshots/screenshot-scan-pair-and-add.png)
 
-#### Experimental Bluetooth toggles
+#### Advanced Bluetooth compatibility tools
 
-Visible only with **Show experimental features** turned on:
+Visible only with **Advanced compatibility tools** turned on:
 
 | Toggle | What it does |
 |---|---|
 | `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE` | Adds a profile-disconnect / reconnect dance after BlueZ misses the A2DP sink during connect. Workaround for the dual-role regression in BlueZ 5.86 ([bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922)). |
-| `EXPERIMENTAL_PA_MODULE_RELOAD` | Reloads `module-bluez5-device` if a sink is reported missing after connect. Slower but covers PulseAudio side races. |
-| `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` | Runs the progressive adapter-recovery ladder (HCI mgmt reset → rfkill → USB unbind/rebind) when an adapter stops responding. Requires Linux capabilities not always present in containers. |
-| `ALLOW_HFP_PROFILE` | Allows the bridge's pairing agent to authorize the HFP / HSP profile during pairing. Off by default — HFP is a frequent source of audio-quality regressions and is not used by the bridge for playback. |
+| `EXPERIMENTAL_PA_MODULE_RELOAD` | Reloads PulseAudio's `module-bluez5-discover` if a Bluetooth card never appears. It is unavailable on PipeWire and disrupts all classic-PulseAudio Bluetooth devices. |
+| `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` | At the reconnect-failure threshold, validates rfkill state, power-cycles the controller through MGMT/HCI, and optionally resets a USB adapter if the power-cycle fails. Requires Linux `NET_ADMIN` + `NET_RAW`; USB reset additionally needs writable USB-device access. The UI reports the detected level. |
 
 ![The three experimental recovery toggles in the Bluetooth tab, each labelled with an EXPERIMENTAL chip](/sendspin-bt-bridge/screenshots/screenshot-experimental-bluetooth-toggles.png)
 
-Two more experimental switches live inside the **Scan nearby** modal and apply only to the next pair attempt:
+The scan modal also has pairing-attempt controls:
 
 | Toggle | What it does |
 |---|---|
-| **Pause other speakers on same adapter** (peer-quiesce) | Temporarily holds audio on already-connected speakers on the same adapter so BlueZ can complete a fresh pair. Workaround for the BlueZ 5.78–5.86 single-adapter pairing regression. |
-| **NoInputNoOutput pair agent** | Switches the agent to a Just-Works capability for speakers that never send an SSP confirmation. Less secure — accept any pair request silently — so it is gated behind the experimental toggle. |
+| **Temporarily disconnect other speakers** (peer-quiesce) | Stable pairing aid: disconnects peers on the selected adapter, then lets their normal reconnect paths restore them after the attempt. |
+| **NoInputNoOutput pair agent** | One-shot Just-Works mode for speakers that never send SSP confirmation. It removes authenticated numeric comparison, is hidden behind the compatibility toggle, resets after the request, and the BlueZ agent rejects requests for every MAC except the selected target. |
+| **Authorize HFP/HSP for this pair** | One-shot service authorization for multi-profile devices that otherwise refuse pairing. Playback remains A2DP-only; this does not install an HFP audio backend. It resets after the request. |
 
 ![Scan nearby modal with the experimental peer-quiesce and NoInputNoOutput pair-agent toggles visible](/sendspin-bt-bridge/screenshots/screenshot-scan-modal-experimental.png)
 

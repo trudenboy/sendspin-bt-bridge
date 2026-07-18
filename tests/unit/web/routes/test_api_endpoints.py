@@ -620,12 +620,8 @@ def test_run_standalone_pair_still_pairs_when_device_not_seen_in_scan(monkeypatc
     )
 
 
-def test_run_standalone_pair_uses_no_input_no_output_when_just_works_enabled(monkeypatch):
-    """When EXPERIMENTAL_PAIR_JUST_WORKS=True, the bluetoothctl agent must be
-    registered with `NoInputNoOutput` capability. Many consumer audio sinks
-    expect Just-Works SSP and cancel authentication when the default
-    `KeyboardDisplay` agent negotiates passkey exchange (issue #168).
-    """
+def test_run_standalone_pair_uses_no_input_no_output_for_explicit_request(monkeypatch):
+    """The one-shot request must select NoInputNoOutput for this job."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
@@ -634,14 +630,13 @@ def test_run_standalone_pair_uses_no_input_no_output_when_just_works_enabled(mon
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    monkeypatch.setattr(
-        api_bt_mod,
-        "load_config",
-        lambda: {"EXPERIMENTAL_PAIR_JUST_WORKS": True},
-    )
-
     with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-jw", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+        api_bt_mod._run_standalone_pair(
+            "job-jw",
+            "AA:BB:CC:DD:EE:FF",
+            "C0:FB:F9:62:D6:9D",
+            no_input_no_output_agent=True,
+        )
 
     # The init batch is the first stdin write (a newline-joined block).
     init_batch = fake_proc.stdin.writes[0]
@@ -674,11 +669,8 @@ def test_run_standalone_pair_uses_default_agent_when_just_works_disabled(monkeyp
     assert "agent NoInputNoOutput\n" not in init_batch
 
 
-def test_run_standalone_pair_no_io_agent_override_true_beats_config_false(monkeypatch):
-    """When the scan-modal toggle passes no_input_no_output_agent=True as
-    a per-request override, NoInputNoOutput must be used even if
-    config.json has the flag unset. The scan-modal toggle is the
-    authoritative intent for this pair attempt."""
+def test_run_standalone_pair_no_io_agent_true_is_one_shot(monkeypatch):
+    """An explicit true request uses NoInputNoOutput for this attempt."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
@@ -687,9 +679,6 @@ def test_run_standalone_pair_no_io_agent_override_true_beats_config_false(monkey
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    # Config has the flag UNSET — the override must still win.
-    monkeypatch.setattr(api_bt_mod, "load_config", lambda: {"EXPERIMENTAL_PAIR_JUST_WORKS": False})
-
     with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
         api_bt_mod._run_standalone_pair_inner(
             "job-override-true",
@@ -700,15 +689,12 @@ def test_run_standalone_pair_no_io_agent_override_true_beats_config_false(monkey
 
     init_batch = fake_proc.stdin.writes[0]
     assert "agent NoInputNoOutput\n" in init_batch, (
-        f"override=True must force NoInputNoOutput despite config=False, got: {init_batch!r}"
+        f"request=True must force NoInputNoOutput, got: {init_batch!r}"
     )
 
 
-def test_run_standalone_pair_no_io_agent_override_false_beats_config_true(monkeypatch):
-    """When the scan-modal toggle passes no_input_no_output_agent=False
-    as a per-request override, `agent on` must be used even if
-    config.json has the flag set. The override is authoritative both
-    ways."""
+def test_run_standalone_pair_no_io_agent_false_uses_safe_default(monkeypatch):
+    """An explicit false request uses the normal DisplayYesNo path."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
@@ -717,9 +703,6 @@ def test_run_standalone_pair_no_io_agent_override_false_beats_config_true(monkey
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    # Config has the flag SET — the override must still win.
-    monkeypatch.setattr(api_bt_mod, "load_config", lambda: {"EXPERIMENTAL_PAIR_JUST_WORKS": True})
-
     with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
         api_bt_mod._run_standalone_pair_inner(
             "job-override-false",
@@ -730,7 +713,7 @@ def test_run_standalone_pair_no_io_agent_override_false_beats_config_true(monkey
 
     init_batch = fake_proc.stdin.writes[0]
     assert "agent on\n" in init_batch, (
-        f"override=False must force KeyboardDisplay despite config=True, got: {init_batch!r}"
+        f"request=False must use the safe default agent, got: {init_batch!r}"
     )
     assert "agent NoInputNoOutput\n" not in init_batch
 
@@ -802,7 +785,15 @@ def _make_pin_inner_stub(outcomes_by_pin):
     result so stale tests surface loud."""
     calls: list[str] = []
 
-    def _fake_inner(job_id, mac, adapter, *, pin="0000", no_input_no_output_agent=None):
+    def _fake_inner(
+        job_id,
+        mac,
+        adapter,
+        *,
+        pin="0000",
+        no_input_no_output_agent=False,
+        allow_hfp_profile=False,
+    ):
         calls.append(pin)
         default = {
             "success": True,
@@ -939,12 +930,21 @@ def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkey
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+    def _fake_run(
+        job_id,
+        mac,
+        adapter,
+        *,
+        quiesce=False,
+        no_input_no_output_agent=False,
+        allow_hfp_profile=False,
+    ):
         captured["job_id"] = job_id
         captured["mac"] = mac
         captured["adapter"] = adapter
         captured["quiesce"] = quiesce
         captured["no_input_no_output_agent"] = no_input_no_output_agent
+        captured["allow_hfp_profile"] = allow_hfp_profile
 
     monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
     monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
@@ -958,23 +958,30 @@ def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkey
             "mac": "AA:BB:CC:DD:EE:FF",
             "adapter": "C0:FB:F9:62:D6:9D",
             "no_input_no_output_agent": True,
+            "allow_hfp_profile": True,
         },
     )
     assert resp.status_code == 200, resp.get_json()
     assert captured["no_input_no_output_agent"] is True
+    assert captured["allow_hfp_profile"] is True
     assert captured["mac"] == "AA:BB:CC:DD:EE:FF"
 
 
-def test_bt_pair_new_without_no_io_agent_field_passes_none_to_runner(client, monkeypatch):
-    """When the body omits ``no_input_no_output_agent``, the pair runner
-    must receive ``None`` so the persisted EXPERIMENTAL_PAIR_JUST_WORKS
-    config key is honoured as a fallback. This is the CHANGELOG-promised
-    behaviour for hand-edited config."""
+def test_bt_pair_new_without_no_io_agent_field_passes_false_to_runner(client, monkeypatch):
+    """Omitted one-shot options must use the secure/default pairing path."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+    def _fake_run(
+        job_id,
+        mac,
+        adapter,
+        *,
+        quiesce=False,
+        no_input_no_output_agent=False,
+        allow_hfp_profile=False,
+    ):
         captured["no_input_no_output_agent"] = no_input_no_output_agent
 
     monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
@@ -985,21 +992,27 @@ def test_bt_pair_new_without_no_io_agent_field_passes_none_to_runner(client, mon
 
     resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
     assert resp.status_code == 200, resp.get_json()
-    assert captured["no_input_no_output_agent"] is None, (
-        "field omitted from body must yield None (fall back to config), not False"
-    )
+    assert captured["no_input_no_output_agent"] is False
 
 
 def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
     """Non-bool JSON values for ``no_input_no_output_agent`` must not be
     coerced via ``bool()`` — a string like ``"false"`` is truthy and
     would silently force NoInputNoOutput. The pair runner must receive
-    ``None`` (fall back to config) instead of the coerced truthy value."""
+    ``False`` instead of the coerced truthy value."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+    def _fake_run(
+        job_id,
+        mac,
+        adapter,
+        *,
+        quiesce=False,
+        no_input_no_output_agent=False,
+        allow_hfp_profile=False,
+    ):
         captured["no_input_no_output_agent"] = no_input_no_output_agent
 
     monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
@@ -1013,9 +1026,7 @@ def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
         json={"mac": "AA:BB:CC:DD:EE:FF", "no_input_no_output_agent": "false"},
     )
     assert resp.status_code == 200, resp.get_json()
-    assert captured["no_input_no_output_agent"] is None, (
-        'non-bool input "false" must NOT be coerced to True — expected None fallback'
-    )
+    assert captured["no_input_no_output_agent"] is False
 
 
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
@@ -1036,8 +1047,9 @@ def test_bt_scan_returns_409_when_bt_operation_busy(client, monkeypatch):
     monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
     monkeypatch.setattr(api_bt_mod, "_last_scan_completed", 0.0)
     monkeypatch.setattr(api_bt_mod.time, "monotonic", lambda: 1000.0)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:01"])
 
-    resp = client.post("/api/bt/scan", json={})
+    resp = client.post("/api/bt/scan", json={"adapter": "AA:BB:CC:DD:EE:01"})
 
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "Another Bluetooth operation is already in progress"
@@ -4902,7 +4914,15 @@ def test_bt_pair_new_threads_quiesce_flag(client, monkeypatch):
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+    def _fake_run(
+        job_id,
+        mac,
+        adapter,
+        *,
+        quiesce=False,
+        no_input_no_output_agent=False,
+        allow_hfp_profile=False,
+    ):
         captured["job_id"] = job_id
         captured["mac"] = mac
         captured["adapter"] = adapter
@@ -4929,7 +4949,15 @@ def test_bt_pair_new_default_has_quiesce_false(client, monkeypatch):
 
     captured: dict = {}
 
-    def _fake_run(job_id, mac, adapter, *, quiesce=False, no_input_no_output_agent=None):
+    def _fake_run(
+        job_id,
+        mac,
+        adapter,
+        *,
+        quiesce=False,
+        no_input_no_output_agent=False,
+        allow_hfp_profile=False,
+    ):
         captured["quiesce"] = quiesce
 
     monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)

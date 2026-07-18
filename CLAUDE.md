@@ -163,7 +163,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `BluetoothManager` — orchestrates pairing/connection. Pair flow now uses native `PairingAgent` (`services/pairing_agent.py`) instead of `bluetoothctl agent on`. Auto-reconnect monitor loop lives in `bt_monitor.py`. Provides callbacks `on_connected` / `on_disconnected` (wire MprisPlayer registration) and `on_rssi_update` (drives `DeviceStatus.rssi_dbm`).
 - `_connected_state_lock` (threading.Lock) — guards `_apply_connected_state()` from double-fire on rapid connect/disconnect events.
 - `run_rssi_refresh_loop()` — 5 s cadence; gated by `bt_operation_lock` so it doesn't collide with pair/scan/reconnect.
-- `pair_device()` — uses `PairingAgent` context manager; allowlist of A2DP_SINK + AVRCP UUIDs (HFP gated by `ALLOW_HFP_PROFILE`).
+- `pair_device()` — uses a target-MAC-bound `PairingAgent` context manager; allowlist of A2DP_SINK + AVRCP UUIDs. HFP authorization and NoInputNoOutput are explicit one-shot pairing-request options.
 
 **`bt_audio.py`** — audio routing helpers split out of `bluetooth_manager.py`:
 - `configure_bluetooth_audio()` — finds the correct PA/PipeWire sink name for the connected device
@@ -189,13 +189,13 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `get_runtime_version()` / `get_installed_version_ref()` — returns version from `.release-ref` file or falls back to `VERSION`
 - `VERSION = "2.64.3"`, `BUILD_DATE = "2026-04-27"` — set by CI from `VERSION` file
 - Re-exports from `config_auth.py` (password hashing), `config_migration.py` (schema migration, normalization), `config_network.py` (port resolution, HA addon detection)
-- New keys (v2.62→v2.64): `BT_CHURN_THRESHOLD`, `BT_CHURN_WINDOW`, `BRUTE_FORCE_PROTECTION`, `BRUTE_FORCE_MAX_ATTEMPTS`, `BRUTE_FORCE_WINDOW_MINUTES`, `BRUTE_FORCE_LOCKOUT_MINUTES`, `STARTUP_BANNER_GRACE_SECONDS`, `RECOVERY_BANNER_GRACE_SECONDS`, `RSSI_BADGE` (stable, migrated from `EXPERIMENTAL_RSSI_BADGE`), `ALLOW_HFP_PROFILE`, `DISABLE_PA_RESCUE_STREAMS`, `TRUSTED_PROXIES`, `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`, `EXPERIMENTAL_PAIR_JUST_WORKS`, `VOLUME_VIA_MA`, `MUTE_VIA_MA`. Per-device: `keep_alive_method` (`infrasound`/`silence`/`none`), `power_save_delay_minutes` (migrated from `power_save_delay_seconds`), `room_id`/`room_name` (HA area context).
+- Current compatibility keys include `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE`, `EXPERIMENTAL_PA_MODULE_RELOAD`, and `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY`. Risky pairing choices are request-local and are not persisted. Per-device context includes `keep_alive_method` (`infrasound`/`silence`/`none`), `power_save_delay_minutes`, and optional `room_id`/`room_name` (Home Assistant area or local labels).
 
 **`services/` module (core):**
 - `bridge_daemon.py` — `BridgeDaemon` subclass. Runs inside each subprocess. Handles `on_status_change` callbacks, stream events. `_sink_routed` flag prevents re-anchor feedback loop after PA rescue-streams correction.
 - `daemon_process.py` — subprocess entry point. Reads JSON args from argv, sets up `BridgeDaemon`, emits status as JSON to stdout, reads commands from stdin. IPC commands: `set_volume`, `set_mute`, `stop`, `pause`, `play`, `reconnect`, `set_log_level`, `set_static_delay_ms`, `transport`, `set_standby`. `_startup_unmute_watcher` accepts `on_status_change` callback and calls it after unmuting; startup unmute timeout is 15 s.
 - `bluetooth.py` — BT helpers: `bt_remove_device()`, `persist_device_enabled()`, `persist_device_released()` (sync to config.json + options.json), `is_audio_device()`, `_match_player_name()`
-- `adapter_recovery.py` — progressive BT adapter recovery ladder (HCI mgmt reset → rfkill unblock → USB unbind/rebind) via `bluetooth-auto-recovery`; fails soft on non-Linux or without required capabilities
+- `adapter_recovery.py` — BT adapter recovery through rfkill validation, MGMT/HCI power-cycle, and optional USB reset via `bluetooth-auto-recovery`; fails soft on non-Linux or without required capabilities
 - `pairing_quiesce.py` — opt-in peer-quiesce context manager for single-adapter multi-speaker setups that can't pair a second device while another A2DP ACL is active (BlueZ 5.78→5.86 regression band)
 - `pulse.py` — PulseAudio async helpers: `afind_sink_for_mac()`, `amove_pid_sink_inputs()` (corrects streams after PA module-rescue-streams moves them on BT reconnect), `_PULSECTL_AVAILABLE` flag
 - `sink_monitor.py` — parent-process PulseAudio sink-state monitor (via `pulsectl_asyncio`); tracks `running ↔ idle/suspended` transitions for registered BT sinks to drive idle disconnect
@@ -209,7 +209,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `subprocess_stop.py` — handles reader-task cancellation and graceful daemon stop/kill flow with configurable timeouts
 
 **`services/` module (BT advanced control — added v2.62→v2.64):**
-- `pairing_agent.py` — native `org.bluez.Agent1` implemented via `dbus_fast`. Used as a context manager around each pair attempt. Auto-confirms SSP (`DisplayYesNo`), supplies PIN, authorizes service UUIDs from an allowlist (A2DP sink + AVRCP). HFP gated by `ALLOW_HFP_PROFILE` (default false). Logs `method_calls`, `authorized_services`, `rejected_services` for diagnostics.
+- `pairing_agent.py` — native `org.bluez.Agent1` implemented via `dbus_fast`. Used as a target-MAC-bound context manager around each pair attempt. Auto-confirms SSP (`DisplayYesNo`), supplies PIN, and authorizes A2DP sink + AVRCP by default. HFP and NoInputNoOutput require explicit one-shot request options. Logs `method_calls`, `authorized_services`, `rejected_services` for diagnostics.
 - `mpris_player.py` — per-device `org.mpris.MediaPlayer2.Player` registered via `Media1.RegisterPlayer` on `/org/bluez/hciN` at connect, unregistered at disconnect. Bidirectional: speaker buttons → BlueZ → MPRIS methods → MA queue command; MA playback state → `set_playback_status` / `set_metadata` / `set_volume` → BlueZ → speaker display. Echo guard prevents volume feedback loop. `MprisPlayerRegistry` (singleton) — thread-safe by-MAC + by-player_id lookup.
 - `avrcp_source_tracker.py` — singleton `AvrcpSourceTracker` mapping `{MAC → monotonic_ts}` of last AVRCP key-press activity. Thread-safe writes from BT monitor thread; asyncio-aware `wait_for_next_activity()` consumed by inbound MPRIS dispatcher.
 - `hci_avrcp_monitor.py` — asyncio task opening `HCI_CHANNEL_MONITOR` raw socket, parsing HCI traffic to extract ACL connection-handle → MAC mapping at AVRCP passthrough op_id. Required because BlueZ forwards all CT events to `players[0]`, breaking multi-speaker-on-same-adapter routing. Requires `CAP_NET_RAW`; degrades gracefully (falls back to default_client) when unavailable.

@@ -104,7 +104,7 @@ The **Bluetooth** tab combines inventory, discovery, and policy:
 
 The Bluetooth scan flow is now its own modal rather than an inline card:
 
-- choose **All adapters** or a specific adapter;
+- choose the specific adapter that should scan; the first detected adapter is selected initially;
 - leave **Audio devices only** enabled for normal speaker discovery;
 - watch the **countdown and progress bar** while the scan runs;
 - use **Add** or **Add & Pair** directly from the results;

@@ -462,6 +462,11 @@ class DeviceStatus:
     stopping: bool = False
     bt_management_enabled: bool = True
     bt_released_by: str | None = None
+    adapter_recovery_last_at: str | None = None
+    adapter_recovery_adapter: str | None = None
+    adapter_recovery_stage: str = "idle"
+    adapter_recovery_result: str | None = None
+    adapter_recovery_failure_reason: str | None = None
     battery_level: int | None = None
     group_name: str | None = None
     group_id: str | None = None

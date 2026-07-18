@@ -511,8 +511,8 @@
 
                             <label class="config-setting-row config-setting-row--warn">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong><span class="config-setting-warn-glyph" aria-hidden="true">⚠</span>Show experimental features</strong>
-                                    <span class="form-hint">Reveal early-stage settings that may change or be removed in future versions. Enable only if you're comfortable troubleshooting unstable behaviour.</span>
+                                    <strong><span class="config-setting-warn-glyph" aria-hidden="true">⚠</span>Advanced compatibility tools</strong>
+                                    <span class="form-hint">Reveal targeted pairing and recovery workarounds. Use them only for the specific failure described by each option.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -677,10 +677,10 @@
                                     <input type="number" name="BT_MAX_RECONNECT_FAILS" placeholder="0" min="0" max="100">
                                 </div>
                             </div>
-                            <label class="config-setting-row config-setting-row--compact" title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
+                            <label class="config-setting-row config-setting-row--compact" title="Poll live RSSI for connected speakers via the kernel mgmt socket (opcode 0x0031) every 5 s and surface a coloured signal-strength chip in the device card. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good); LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick. Requires CAP_NET_ADMIN.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Live RSSI badge</strong>
-                                    <span class="form-hint">Poll every 30 s via mgmt 0x0031. Disable to skip the signal-strength chip and the round-trip cost.</span>
+                                    <span class="form-hint">Poll every 5 s via mgmt 0x0031. Disable to skip the signal-strength chip and the round-trip cost.</span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -693,8 +693,8 @@
 
                         <div class="config-settings-card config-settings-card--experimental" data-experimental style="display:none">
                             <div class="config-card-header ui-stack ui-stack--sm">
-                                <div class="config-card-title"><span class="config-card-title-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>Experimental features</div>
-                                <p class="config-card-subtitle">Opt-in toggles for in-development behaviour. Visible only when "Show experimental features" is enabled in the onboarding section. Each requires an addon / container restart to take effect.</p>
+                                <div class="config-card-title"><span class="config-card-title-icon ui-icon-slot" data-ui-icon="warning" aria-hidden="true"></span>Advanced recovery workarounds</div>
+                                <p class="config-card-subtitle">Targeted workarounds for specific BlueZ and PulseAudio failures. Platform support and restart requirements are shown per option.</p>
                             </div>
                             <label class="config-setting-row config-setting-row--compact" data-experimental title="Last-resort workaround for bluez/bluez#1922. If a sink fails to publish after connect, the bridge disconnects and reconnects the device once per attempt. May cause extra churn — try leaving disabled first.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
@@ -711,7 +711,7 @@
                             <label class="config-setting-row config-setting-row--compact" data-experimental title="Last-resort recovery when a BT card never registers in PulseAudio. Reloads module-bluez5-discover — disrupts all Bluetooth audio bridge-wide. Throttled to once per 60 seconds.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Reload PulseAudio BT module</strong>
-                                    <span class="form-hint">Last-resort sink recovery. Disrupts all BT audio.</span>
+                                    <span class="form-hint">Last-resort sink recovery. Disrupts all BT audio. <span id="pa-reload-support">Checking platform support…</span></span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
@@ -720,26 +720,14 @@
                                     </span>
                                 </span>
                             </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental title="Last-ditch adapter recovery: when reconnects fail BT_MAX_RECONNECT_FAILS times, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind). The USB step briefly disconnects every device on that controller — throttled per-adapter to once per 60 seconds. Requires CAP_NET_ADMIN, /dev/rfkill, /sys/bus/usb.">
+                            <label class="config-setting-row config-setting-row--compact" data-experimental title="Last-ditch adapter recovery: after BT_MAX_RECONNECT_FAILS, power-cycle the controller through Bluetooth MGMT/HCI and optionally issue a USB reset if that fails. Disrupts every device on the controller and is throttled per adapter to once per 60 seconds.">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>Adapter auto-recovery</strong>
-                                    <span class="form-hint">HCI mgmt reset → rfkill → USB rebind before auto-release.</span>
+                                    <span class="form-hint">MGMT/HCI power-cycle with optional USB reset before auto-release. <span id="adapter-recovery-support">Checking platform support…</span></span>
                                 </span>
                                 <span class="config-setting-control">
                                     <span class="config-switch">
                                         <input type="checkbox" name="EXPERIMENTAL_ADAPTER_AUTO_RECOVERY" id="experimental-adapter-auto-recovery">
-                                        <span class="config-switch-track"></span>
-                                    </span>
-                                </span>
-                            </label>
-                            <label class="config-setting-row config-setting-row--compact" data-experimental title="Permit HSP/HFP service UUIDs in the pairing agent. Default off — most DSPs (Bose QC, AKG Y500, Sony XM4/5) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Enable only for HFP-only headsets that A2DP-block at the peer.">
-                                <span class="config-setting-copy ui-stack ui-stack--xs">
-                                    <strong>Allow HFP / HSP profile</strong>
-                                    <span class="form-hint">For HFP-only headsets. Risk: most BT speakers/headphones drop to 8 kHz mono.</span>
-                                </span>
-                                <span class="config-setting-control">
-                                    <span class="config-switch">
-                                        <input type="checkbox" name="ALLOW_HFP_PROFILE" id="experimental-allow-hfp-profile">
                                         <span class="config-switch-track"></span>
                                     </span>
                                 </span>
@@ -760,9 +748,7 @@
                                 <div class="bt-scan-toolbar">
                                     <label class="bt-scan-field">
                                         <span class="bt-scan-field-label">Adapter</span>
-                                        <select id="scan-adapter-select" class="bt-scan-select" data-action="bt-scan-option-change" data-event="change">
-                                            <option value="">All adapters</option>
-                                        </select>
+                                        <select id="scan-adapter-select" class="bt-scan-select" data-action="bt-scan-option-change" data-event="change"></select>
                                     </label>
                                     <label class="bt-scan-toggle">
                                         <span>Audio devices only</span>
@@ -771,8 +757,8 @@
                                             <span class="config-switch-track"></span>
                                         </span>
                                     </label>
-                                    <label class="bt-scan-toggle" data-experimental style="display:none" title="Experimental. Pause active speakers on the same adapter during pair. They auto-reconnect afterwards. Use when a second speaker refuses to pair while the first is streaming (single-adapter setups).">
-                                        <span>Pause other speakers on same adapter (experimental)</span>
+                                    <label class="bt-scan-toggle" title="Temporarily disconnect active speakers on the same adapter during pairing. Bonds are retained and peers reconnect afterwards.">
+                                        <span>Temporarily disconnect other speakers</span>
                                         <span class="config-switch compact">
                                             <input type="checkbox" id="pair-quiesce-adapter">
                                             <span class="config-switch-track"></span>
@@ -782,6 +768,13 @@
                                         <span>NoInputNoOutput pair agent (experimental)</span>
                                         <span class="config-switch compact">
                                             <input type="checkbox" id="experimental-no-input-no-output-agent">
+                                            <span class="config-switch-track"></span>
+                                        </span>
+                                    </label>
+                                    <label class="bt-scan-toggle" data-experimental style="display:none" title="Authorize HFP/HSP services for this pairing attempt only. Playback remains A2DP-only; use only when a multi-profile device refuses to complete pairing.">
+                                        <span>Allow HFP/HSP authorization for this pair</span>
+                                        <span class="config-switch compact">
+                                            <input type="checkbox" id="pair-allow-hfp-profile">
                                             <span class="config-switch-track"></span>
                                         </span>
                                     </label>
@@ -795,7 +788,7 @@
                                             <span id="scan-progress-state" class="scan-status-pill meta-badge meta-badge-status is-neutral">Ready to scan</span>
                                             <span id="scan-progress-remaining" class="bt-scan-progress-remaining">15 s</span>
                                         </div>
-                                        <div id="scan-progress-detail" class="bt-scan-progress-detail" aria-live="polite">All adapters · Audio devices only</div>
+                                        <div id="scan-progress-detail" class="bt-scan-progress-detail" aria-live="polite">Selected adapter · Audio devices only</div>
                                     </div>
                                     <div class="bt-scan-progress-bar" aria-hidden="true">
                                         <span id="scan-progress-bar-fill" class="bt-scan-progress-bar-fill"></span>

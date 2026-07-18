@@ -225,7 +225,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         )
 
                     # Offload: this may run the adapter-recovery ladder
-                    # (USB unbind/rebind) and a config write — never inline
+                    # (including a possible USB reset) and a config write — never inline
                     # on the loop.
                     if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
                         reconnect_attempt = 0

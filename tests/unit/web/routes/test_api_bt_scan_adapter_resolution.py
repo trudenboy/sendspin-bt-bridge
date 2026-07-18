@@ -56,12 +56,12 @@ def test_hci_label_falls_back_to_position_without_sysfs(monkeypatch):
         _resolve_scan_adapter_macs("hci2")
 
 
-def test_mac_and_all_selections_unchanged(swapped_order):
-    # Direct MAC selection and the "all" scope predate the hciN labels
-    # and must keep working as-is.
+def test_direct_mac_selection_and_ambiguous_scope_rejection(swapped_order):
     assert _resolve_scan_adapter_macs("a0:ad:9f:6e:b2:d5") == ["A0:AD:9F:6E:B2:D5"]
-    assert _resolve_scan_adapter_macs("all") == BT_LIST_MACS
-    assert _resolve_scan_adapter_macs("") == BT_LIST_MACS
+    with pytest.raises(ValueError, match="specific"):
+        _resolve_scan_adapter_macs("all")
+    with pytest.raises(ValueError, match="specific"):
+        _resolve_scan_adapter_macs("")
 
 
 def test_invalid_hci_suffix_raises(swapped_order):

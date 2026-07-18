@@ -1,9 +1,8 @@
-"""UI-wiring regression tests for the experimental feature toggles.
+"""UI-wiring regression tests for advanced compatibility controls.
 
 These tests guard against the bug where the server config supports a key
 (defaults, schema, diff classification) but the web UI has no way to flip
-it — which is exactly what happened to ``EXPERIMENTAL_PAIR_JUST_WORKS``
-in 2.61.0-rc.1. They are intentionally coarse string-level assertions: the
+it. They are intentionally coarse string-level assertions: the
 point is to catch a completely missing checkbox or missing wiring, not to
 pin down exact markup.
 
@@ -23,8 +22,8 @@ toolbar instead — it's context-local to a pair attempt (next to the
 pair-quiesce toggle), takes effect on the next pair without a restart,
 and travels as a ``no_input_no_output_agent`` per-request override in
 the ``/api/bt/pair_new`` POST body rather than being persisted via the
-Settings form. The legacy ``EXPERIMENTAL_PAIR_JUST_WORKS`` config key is
-still honoured as a fallback for hand-edited config.json / options.json.
+Settings form. Both security-sensitive pairing overrides reset after each
+attempt and are never persisted as global defaults.
 """
 
 from __future__ import annotations
@@ -52,8 +51,8 @@ PAIR_AGENT_TOGGLE_ID = "experimental-no-input-no-output-agent"
 @pytest.mark.parametrize(("config_key", "dom_id"), SETTINGS_EXPERIMENTAL_KEYS)
 def test_settings_experimental_toggle_has_template_checkbox(config_key: str, dom_id: str) -> None:
     """Settings-page experimental flags must have a checkbox in index.html
-    guarded by data-experimental so it only renders when the master
-    'Show experimental features' switch is on.
+    guarded by data-experimental so it only renders when the advanced
+    compatibility-tools switch is on.
     """
     html = INDEX_HTML.read_text(encoding="utf-8")
     assert f'name="{config_key}"' in html, f'{config_key}: no <input name="{config_key}"> in templates/index.html'
@@ -92,7 +91,7 @@ def test_settings_experimental_toggle_is_populated_on_load(config_key: str, dom_
 
 def test_pair_agent_toggle_is_not_in_settings_experimental_section() -> None:
     """Regression: the NoInputNoOutput pair-agent toggle must NOT live
-    under Settings → Show experimental features. It belongs in the scan
+    under the Settings recovery card. It belongs in the scan
     modal's toolbar next to pair-quiesce because it's a per-pair context
     option, not a global restart-required setting."""
     html = INDEX_HTML.read_text(encoding="utf-8")
@@ -155,30 +154,15 @@ def test_pair_agent_state_is_passed_in_pair_request_body() -> None:
     )
 
 
-def test_pair_agent_field_is_only_sent_when_checkbox_is_checked() -> None:
-    """pairAndAdd must only include ``no_input_no_output_agent`` in the
-    POST body when the user explicitly ticks the scan-modal toggle.
-    Sending it unconditionally (e.g. ``no_input_no_output_agent: false``
-    on every pair) would override the persisted
-    ``EXPERIMENTAL_PAIR_JUST_WORKS`` config key that hand-edited configs
-    rely on as a fallback. The JS must gate the field on the checkbox
-    state, e.g. ``if (noIoAgent) body.no_input_no_output_agent = true``.
-    """
+def test_pair_agent_field_is_always_explicit_and_resets_after_attempt() -> None:
+    """Every request carries an exact boolean and the risky choice is one-shot."""
     js = APP_JS.read_text(encoding="utf-8")
     idx = js.find("async function pairAndAdd(")
     assert idx != -1, "pairAndAdd not found in app.js"
     end = js.find("\nasync function ", idx + 1)
     fn_body = js[idx : end if end != -1 else len(js)]
-    # Field must not appear as a plain key-in-literal-object next to quiesce_adapter,
-    # which would mean it's sent unconditionally.
-    assert not re.search(
-        r"quiesce_adapter\s*:[^,}]+,\s*no_input_no_output_agent\s*:",
-        fn_body,
-    ), (
-        "no_input_no_output_agent is still baked into the body literal next to "
-        "quiesce_adapter — it would be sent on every pair (always false when "
-        "unchecked), overriding the EXPERIMENTAL_PAIR_JUST_WORKS config fallback"
-    )
+    assert "pairBody.no_input_no_output_agent = noIoAgent" in fn_body
+    assert "noIoAgentEl.checked = false" in fn_body
 
 
 # --- Visual highlight: red treatment on any [data-experimental] element ---

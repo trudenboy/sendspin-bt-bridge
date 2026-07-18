@@ -125,10 +125,7 @@ The same speaker pairs fine with a phone or another Linux desktop, and the failu
 
 Tracked upstream as [bluez/bluez#1025](https://github.com/bluez/bluez/issues/1025).
 
-**Fix.** Two steps:
-
-1. **Enable the experimental flag.** Open **Configuration → Advanced → Experimental features** and toggle on **Per-adapter Class of Device override (Samsung Q-series workaround)**. Save and restart the bridge.
-2. **Set the CoD value.** Go to **Configuration → Bluetooth**, find your adapter row — the **Class of Device** dropdown is now editable. Pick **0x00010c — Computer / Laptop (Samsung Q-series)**. Save the config and restart the bridge, then re-pair the soundbar.
+**Fix.** Open **Configuration → Bluetooth** after this failure. The diagnostics fingerprint makes the affected adapter's **Class of Device** field visible contextually; an already configured override remains visible too. Pick **0x00010c — Computer / Laptop (Samsung Q-series)**, save and restart the bridge, then re-pair the soundbar.
 
 If the laptop preset doesn't fix it, the dropdown also exposes three other documented presets (generic Computer, A/V Loudspeaker, A/V Headset) plus a custom-hex field. See **[Class of Device override — preset reference](#class-of-device-override--preset-reference)** below for a per-value table of which speakers each one was reported to fix.
 
@@ -219,7 +216,7 @@ Failed to connect: org.bluez.Error.Failed br-connection-profile-unavailable
 
 **Root cause.** The error means BlueZ could not bring up **any** profile on the new link. Speakers with a mic often insist on connecting the HFP (hands-free) profile first. Connecting HFP requires a host-side HFP backend (oFono or hsphfpd) — which server installs, and **Proxmox/OpenWrt LXC containers in particular, do not have**. When the peer refuses to proceed to A2DP until HFP is up, no profile connects at all and BlueZ reports `br-connection-profile-unavailable`.
 
-Note that the bridge's `ALLOW_HFP_PROFILE` option does **not** help here: it only controls whether the bridge's pairing agent *authorizes* the HFP service during pairing — it cannot provide the missing HFP backend.
+The scan modal's one-shot **Authorize HFP/HSP for this pair** option does **not** provide an HFP audio backend. It only lets the target-bound pairing agent authorize those service UUIDs for the selected device during that attempt; playback remains A2DP-only.
 
 **Recipe.**
 
@@ -358,7 +355,7 @@ If **Scan nearby** returns no useful results:
 
 1. Open **Configuration → Bluetooth** and make sure you are scanning from the correct bridge instance.
 2. Put the speaker into pairing mode before starting the scan.
-3. Pick the right adapter in the scan modal, or switch to **All adapters**.
+3. Pick the specific adapter that should perform the scan.
 4. Leave **Audio devices only** enabled for normal speaker discovery.
 5. Wait for the full timed scan to finish instead of closing the modal early.
 6. Retry only after the cooldown expires and **Rescan** becomes available again.

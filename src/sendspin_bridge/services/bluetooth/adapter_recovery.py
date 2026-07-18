@@ -1,6 +1,6 @@
 """Wrapper around ``bluetooth-auto-recovery`` for recovering a stuck BT
-adapter via a progressive ladder (HCI mgmt reset → rfkill unblock →
-USB unbind/rebind). The library is Linux-only; we fail soft if it
+adapter via an rfkill check, MGMT/HCI power-cycle and optional USB reset.
+The library is Linux-only; we fail soft if it
 isn't installed (dev machines, non-Linux platforms) or if the running
 user lacks the capabilities for the recovery steps it tries.
 
@@ -21,7 +21,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Cooldown in seconds. Recovery can unbind/rebind the USB device, which
+# Cooldown in seconds. Recovery can reset and re-enumerate the USB device, which
 # briefly disconnects every device on that controller — so we don't
 # want two threshold hits (e.g. two devices on the same adapter going
 # silent simultaneously) to trigger recovery twice in rapid succession.

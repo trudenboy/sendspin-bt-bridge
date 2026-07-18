@@ -24,7 +24,7 @@ When the bridge is missing key setup steps, the page can show a **Setup checklis
 When the checklist is not taking over the page, the empty state gives you the fastest next action:
 
 - If no adapter is detected, **Add adapter** opens **Configuration → Bluetooth**, inserts a manual adapter row, and focuses the first field.
-- If adapters exist but no speakers are configured, **Scan for devices** opens **Configuration → Bluetooth** and launches the **Scan nearby** modal automatically.
+- If adapters exist but no speakers are configured, **Scan for devices** opens the **Scan nearby** modal and highlights **Start Scan** without starting radio traffic automatically.
 
 ## Adding a speaker
 
@@ -32,7 +32,7 @@ The recommended flow is now split between the **Bluetooth** and **Devices** tabs
 
 1. Open **Configuration → Bluetooth**.
 2. Click **Scan nearby**.
-3. Choose **All adapters** or a specific adapter.
+3. Confirm the specific adapter that should perform the scan.
 4. Leave **Audio devices only** enabled unless you are debugging non-audio candidates.
 5. Use **Add** or **Add & Pair** on a discovered speaker.
 6. Open **Configuration → Devices** to fine-tune player name, adapter binding, ports, delay, and advanced fields.
@@ -45,7 +45,7 @@ The Bluetooth scan flow is now a dedicated modal instead of an inline card.
 - The scan runs in the background and shows a live **countdown/progress bar**.
 - **Rescan** is available from inside the modal after the cooldown expires.
 - **Add & Pair** performs pairing/trust/connect before importing the device.
-- You can narrow the scan to one adapter or broaden it to **All adapters**.
+- Every scan uses one explicit adapter, so results and later pairing actions have unambiguous controller attribution.
 - Turning off **Audio devices only** is useful when you need to inspect non-speaker Bluetooth candidates.
 
 ![Bluetooth scan modal with adapter selection, audio-only filter, progress, and import actions](/sendspin-bt-bridge/screenshots/screenshot-bt-scan-modal.png)

@@ -2207,7 +2207,7 @@ function _getTransferReadinessBadgeRenderData(dev, className) {
     if (!readiness || typeof readiness !== 'object') return null;
     var ready = !!readiness.ready;
     var reason = String(readiness.reason || '').trim();
-    var label = ready ? 'Transfer ready' : 'Not ready';
+    var label = ready ? 'Transfer' : 'Not ready';
     var toneClass = ready ? _deviceStatusToneClass('success') : _deviceStatusToneClass(readiness.severity || 'warning');
     var title = ready
         ? 'Ready for room handoff'
@@ -6741,9 +6741,8 @@ function _updateAdaptersHaAssistSummary() {
 function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
     // Per-adapter Bluetooth Class of Device override — compact inline
     // widget that slots into the adapter row right of the custom name.
-    // Visibility is gated on the global "Show experimental features"
-    // toggle via ``data-experimental``; when shown, the widget is
-    // outlined red with a warning icon to flag it as experimental.
+    // The widget is shown only when an existing override must remain editable
+    // or Recovery Assistant identifies a Class-of-Device pairing failure.
     // opts: { liveClass: string|null }
     var liveClass = (opts && opts.liveClass) || null;
     var current = String(currentValue || '').toLowerCase();
@@ -6766,7 +6765,8 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
         liveHtml = '<span class="adapter-cod-live' + (match ? ' adapter-cod-live--match' : '') + '" title="Live Class of Device read from the adapter">' +
             escHtml(liveClass) + '</span>';
     }
-    return '<div class="adapter-cod-override adapter-cod-inline" data-experimental title="' + escHtmlAttr(helpText) + '">' +
+    return '<div class="adapter-cod-override adapter-cod-inline" data-cod-context data-cod-configured="' +
+        (current ? 'true' : 'false') + '" hidden title="' + escHtmlAttr(helpText) + '">' +
         '<select class="adp-cod-preset" title="' + escHtmlAttr(helpText) + '">' +
             '<option value="" ' + (presetValue === '' ? 'selected' : '') + '>CoD: default</option>' +
             '<option value="0x00010c" ' + (presetValue === '0x00010c' ? 'selected' : '') + '>0x00010c — Computer / Laptop (Samsung Q-series)</option>' +
@@ -6781,6 +6781,14 @@ function _buildAdapterClassOfDeviceHtml(currentValue, opts) {
         liveHtml +
         '<div class="adapter-cod-error" hidden></div>' +
     '</div>';
+}
+
+function _applyCodContextVisibility() {
+    var guidanceText = JSON.stringify(_lastOperatorGuidance || {});
+    var recommended = guidanceText.indexOf('samsung_cod_filter') !== -1;
+    document.querySelectorAll('[data-cod-context]').forEach(function(el) {
+        el.hidden = !(el.dataset.codConfigured === 'true' || recommended);
+    });
 }
 
 function _bindAdapterClassOfDevice(row) {
@@ -6996,6 +7004,7 @@ function renderAdaptersTable() {
         }
     });
     _updateAdaptersHaAssistSummary();
+    _applyCodContextVisibility();
 }
 
 function buildManualRow(id, mac, name, dirtyKey, deviceClass) {
@@ -7331,11 +7340,11 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             '<input type="number" class="bt-keepalive-interval" min="0" placeholder="0" ' +
             'title="0 = disabled, min 30 when enabled" value="' +
             escHtmlAttr(String(kaVal)) + '"></div>' +
-        '<div data-experimental style="display:none"><label>Room name</label>' +
-            '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Stable room label for MA/HA/MassDroid interoperability" value="' +
+        '<div><label>Room name</label>' +
+            '<input type="text" class="bt-room-name" placeholder="e.g. Living Room" title="Human-readable room or Home Assistant area name" value="' +
             escHtmlAttr(roomNameVal) + '"></div>' +
-        '<div data-experimental style="display:none"><label>Room ID</label>' +
-            '<input type="text" class="bt-room-id" placeholder="living-room" title="Stable machine-readable room identifier" value="' +
+        '<div><label>Room ID</label>' +
+            '<input type="text" class="bt-room-id" placeholder="living-room" title="Stable machine-readable room or area identifier" value="' +
             escHtmlAttr(roomIdVal) + '"></div>';
 
     var enabledCb = row.querySelector('.bt-enabled');
@@ -7941,15 +7950,14 @@ function _getBtScanAdapterValue(adapter) {
 }
 
 function _getBtScanAdapterLabel(adapterValue) {
-    if (!adapterValue) return 'All adapters';
+    if (!adapterValue) return 'Select adapter';
     var adapter = _findAdapterRecord(adapterValue, adapterValue);
     if (!adapter) return adapterValue;
     return adapter.customName || adapter.detectedName || adapter.name || adapter.id || adapter.mac || adapterValue;
 }
 
 function _estimateBtScanDurationForSelection(adapterValue) {
-    var adapterCount = adapterValue ? 1 : _getBtScanAdapters().length;
-    return 15 + Math.max(adapterCount - 1, 0) * 2;
+    return adapterValue ? 15 : 0;
 }
 
 function _renderBtScanAdapterOptions() {
@@ -7957,7 +7965,7 @@ function _renderBtScanAdapterOptions() {
     if (!select) return;
     var adapters = _getBtScanAdapters();
     var currentValue = _btScanModalState.adapter || '';
-    var options = ['<option value="">All adapters</option>'];
+    var options = [];
     adapters.forEach(function(adapter) {
         var value = _getBtScanAdapterValue(adapter);
         var label = adapter.customName || adapter.detectedName || adapter.name || value;
@@ -7971,11 +7979,13 @@ function _renderBtScanAdapterOptions() {
         );
     });
     select.innerHTML = options.join('');
-    var isAvailable = !currentValue || adapters.some(function(adapter) {
+    var isAvailable = !!currentValue && adapters.some(function(adapter) {
         return _getBtScanAdapterValue(adapter) === currentValue;
     });
-    _btScanModalState.adapter = isAvailable ? currentValue : '';
-    select.value = _btScanModalState.adapter || '';
+    _btScanModalState.adapter = isAvailable
+        ? currentValue
+        : (adapters.length ? _getBtScanAdapterValue(adapters[0]) : '');
+    select.value = _btScanModalState.adapter;
 }
 
 function _setBtScanProgressPill(variant, label) {
@@ -8262,7 +8272,7 @@ function _goToBluetoothAndScan(options) {
     setTimeout(function() {
         var scanBtn = document.getElementById('scan-btn');
         if (scanBtn) scanBtn.focus({preventScroll: true});
-        openBtScanModal({autoStart: true});
+        openBtScanModal({autoStart: opts.autoStart === true});
     }, 180);
     return false;
 }
@@ -8275,10 +8285,8 @@ function btStartPairing(i) {
     // v2.70.0-rc.2 (#261) — entry point for the "Start pairing" button on
     // never-paired device cards. Resolves the device's MAC from the cached
     // lastDevices array, then deep-links to the Bluetooth panel and
-    // auto-starts a scan with the MAC pre-highlighted in the paired-devices
-    // list. If the user already arrived at this UI from a recovery flow
-    // and the speaker is in pairing mode, the scan will surface the
-    // device and the existing pair button on that row takes over.
+    // opens the scan modal with the MAC pre-highlighted in the paired-devices
+    // list. The operator confirms the concrete adapter and starts the scan.
     if (typeof i !== 'number' || !Array.isArray(lastDevices) || !lastDevices[i]) {
         _goToBluetoothAndScan();
         return false;
@@ -8499,6 +8507,12 @@ function _renderBtScanResults(devices) {
 async function startBtScan() {
     if (_btScanModalState.isRunning) return false;
     _onBtScanOptionChange();
+    if (!_btScanModalState.adapter) {
+        _btScanModalState.lastError = 'Choose a specific Bluetooth adapter before scanning.';
+        _renderBtScanOutcome();
+        _syncBtScanControls();
+        return false;
+    }
     var btn = document.getElementById('scan-btn');
     var requestToken = ++_btScanModalState.requestToken;
 
@@ -8521,7 +8535,7 @@ async function startBtScan() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                adapter: _btScanModalState.adapter || '',
+                adapter: _btScanModalState.adapter,
                 audio_only: _btScanModalState.audioOnly !== false,
             })
         });
@@ -8640,23 +8654,27 @@ async function pairAndAdd(mac, name, adapter, btnEl) {
     var quiesce = !!(quiesceEl && quiesceEl.checked);
     var noIoAgentEl = document.getElementById('experimental-no-input-no-output-agent');
     var noIoAgent = !!(noIoAgentEl && noIoAgentEl.checked);
+    var allowHfpEl = document.getElementById('pair-allow-hfp-profile');
+    var allowHfp = !!(allowHfpEl && allowHfpEl.checked);
     var confirmMsg = 'Put "' + (name || mac) + '" into pairing mode, then click OK.\n\nThis will pair, trust, and add the device (~25 s).';
     if (quiesce) {
-        confirmMsg += '\n\nOther speakers on the same adapter will pause for ~30 s during pairing and auto-reconnect afterwards.';
+        confirmMsg += '\n\nOther speakers on the same adapter will disconnect for ~30 s during pairing and auto-reconnect afterwards.';
     }
     if (noIoAgent) {
-        confirmMsg += '\n\nPairing agent will be registered as NoInputNoOutput (Just-Works SSP) for this attempt.';
+        confirmMsg += '\n\nJust-Works SSP will be used for this attempt. This removes authenticated numeric comparison.';
+    }
+    if (allowHfp) {
+        confirmMsg += '\n\nHFP/HSP services will be authorized for this attempt. Playback remains A2DP-only.';
     }
     if (!confirm(confirmMsg)) return;
+    // Security-sensitive compatibility overrides are one-shot: the next
+    // pairing attempt starts from the safe defaults even if this one fails.
+    if (noIoAgentEl) noIoAgentEl.checked = false;
+    if (allowHfpEl) allowHfpEl.checked = false;
     _setScanActionState(btnEl, 'pairing', 'Pairing\u2026');
-    // Only include the per-pair override when the user explicitly ticks
-    // the scan-modal toggle. Sending `no_input_no_output_agent: false`
-    // on every pair would override the persisted EXPERIMENTAL_PAIR_JUST_WORKS
-    // config fallback that hand-edited configs rely on.
     var pairBody = {mac: mac, adapter: adapter || autoAdapter(), quiesce_adapter: quiesce};
-    if (noIoAgent) {
-        pairBody.no_input_no_output_agent = true;
-    }
+    pairBody.no_input_no_output_agent = noIoAgent;
+    pairBody.allow_hfp_profile = allowHfp;
     try {
         var startedPair = await _fetchJsonOrThrow(API_BASE + '/api/bt/pair_new', {
             method: 'POST',
@@ -8752,11 +8770,19 @@ async function removePairedDevice(mac, name, rowEl) {
 
 async function resetAndReconnect(mac, name, btnEl, adapter) {
     if (!confirm('Reset & Reconnect "' + (name || mac) + '"?\n\nThis will:\n1. Remove device from BT stack\n2. Power cycle adapter\n3. Re-pair + trust + connect (~30 s)\n\nPut the device in pairing mode, then click OK.')) return;
+    var resetNoIoEl = document.getElementById('experimental-no-input-no-output-agent');
+    var resetAllowHfpEl = document.getElementById('pair-allow-hfp-profile');
+    var resetNoIo = !!(resetNoIoEl && resetNoIoEl.checked);
+    var resetAllowHfp = !!(resetAllowHfpEl && resetAllowHfpEl.checked);
+    if (resetNoIoEl) resetNoIoEl.checked = false;
+    if (resetAllowHfpEl) resetAllowHfpEl.checked = false;
     var origText = btnEl.textContent;
     _setScanActionState(btnEl, 'pairing', 'Resetting\u2026');
     try {
         var body = {mac: mac};
         if (adapter) body.adapter = adapter;
+        body.no_input_no_output_agent = resetNoIo;
+        body.allow_hfp_profile = resetAllowHfp;
         var resp = await fetch(API_BASE + '/api/bt/reset_reconnect', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -9120,11 +9146,6 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
     config.RSSI_BADGE = !!(document.getElementById('rssi-badge') || {}).checked;
-    config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
-    // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
-    // scan modal toolbar (see pairAndAdd) — deliberately NOT persisted via
-    // the Settings form. The config key is still honoured as a fallback for
-    // hand-edited config.json / options.json.
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
@@ -10034,7 +10055,7 @@ function _resetGuidancePreferences() {
     return false;
 }
 
-/* ---------- Experimental features toggle ---------- */
+/* ---------- Advanced compatibility-tools visibility ---------- */
 
 function _isExperimentalEnabled() {
     try {
@@ -10061,6 +10082,36 @@ function _applyExperimentalVisibility() {
     });
     var toggle = document.getElementById('guidance-show-experimental');
     if (toggle && toggle.checked !== show) toggle.checked = show;
+}
+
+function _applyCompatibilityCapabilities(config) {
+    var capabilities = (config && config._compatibility_capabilities) || {};
+    var pa = capabilities.pa_module_reload || {};
+    var adapterRecovery = capabilities.adapter_auto_recovery || {};
+    var threshold = Number((config && config.BT_MAX_RECONNECT_FAILS) || 0);
+
+    function applyState(inputId, supportId, capability, extraUnavailableReason) {
+        var input = document.getElementById(inputId);
+        var support = document.getElementById(supportId);
+        if (!input) return;
+        var available = capability.available === true && !extraUnavailableReason;
+        input.disabled = !available;
+        input.setAttribute('aria-disabled', available ? 'false' : 'true');
+        var row = input.closest('label');
+        if (row) row.classList.toggle('is-unavailable', !available);
+        if (support) {
+            var reason = extraUnavailableReason || capability.reason || 'Platform support could not be detected.';
+            support.textContent = available ? ('Available: ' + reason) : ('Unavailable: ' + reason);
+        }
+    }
+
+    applyState('experimental-pa-module-reload', 'pa-reload-support', pa, '');
+    applyState(
+        'experimental-adapter-auto-recovery',
+        'adapter-recovery-support',
+        adapterRecovery,
+        threshold <= 0 ? 'Set Auto-disable threshold above 0 first.' : ''
+    );
 }
 
 function _openDiagnosticsPanel() {
@@ -10858,6 +10909,7 @@ function _applyOperatorGuidance(guidance) {
     );
     _setRecoveryAssistantBanner(guidance || null);
     _syncEmptyStatePlaceholder(guidance || null);
+    _applyCodContextVisibility();
 }
 
 function _hideOperatorGuidance() {
@@ -12042,6 +12094,7 @@ async function loadConfig(options) {
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
+        _applyCompatibilityCapabilities(config);
         var rssiBadgeCheck = document.getElementById('rssi-badge');
         if (rssiBadgeCheck) {
             // Default ON when key absent (fresh / migrated config); honour
@@ -12054,8 +12107,6 @@ async function loadConfig(options) {
             if (current === undefined) current = legacy;
             rssiBadgeCheck.checked = current === undefined ? true : !!current;
         }
-        var expAllowHfpCheck = document.getElementById('experimental-allow-hfp-profile');
-        if (expAllowHfpCheck) expAllowHfpCheck.checked = !!config.ALLOW_HFP_PROFILE;
         var authCheck = document.getElementById('auth-enabled');
         if (authCheck) authCheck.checked = !!config.AUTH_ENABLED;
         var haAreaAssistCheck = document.getElementById('ha-area-name-assist-enabled');

@@ -167,18 +167,18 @@ sudo rfkill unblock bluetooth
 
 ## Software workarounds for adapter / BlueZ regressions
 
-The bridge ships several **experimental toggles** that target specific kernel / BlueZ / PulseAudio behaviors rather than a particular hardware model. They live in **Configuration → Bluetooth → Experimental features** and stay hidden until you turn on **Show experimental features** on the General tab. They are described in detail with screenshots on the [Web UI page](/sendspin-bt-bridge/web-ui/#experimental-bluetooth-toggles); the table below is a quick map from "what the adapter is doing" to "which switch is likely to help":
+The bridge ships **advanced compatibility tools** for specific kernel, BlueZ, or PulseAudio failures. They live in **Configuration → Bluetooth → Advanced recovery workarounds** and stay hidden until you turn on **Advanced compatibility tools** on the General tab. The UI disables tools unsupported by the running host and explains why. See the [Web UI page](/sendspin-bt-bridge/web-ui/#advanced-bluetooth-compatibility-tools) for details.
 
 | Symptom | Toggle |
 |---|---|
 | Speaker connects but PulseAudio reports no sink (BlueZ 5.86 dual-role regression, [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922)) | `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE` |
 | Sink appears intermittently or only after a manual replug | `EXPERIMENTAL_PA_MODULE_RELOAD` |
-| The whole adapter goes silent under load and bridge cannot recover it | `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` (HCI mgmt reset → rfkill → USB rebind) |
-| Cannot pair a second speaker on a single-adapter setup while the first one is streaming | **Pause other speakers on same adapter** in the Scan modal |
+| The whole adapter goes silent under load and bridge cannot recover it | `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` (rfkill check → MGMT/HCI power-cycle → optional USB reset) |
+| Cannot pair a second speaker on a single-adapter setup while the first one is streaming | **Temporarily disconnect other speakers** in the Scan modal |
 | Speaker shows no SSP confirmation at all and bridge waits indefinitely | **NoInputNoOutput pair agent** in the Scan modal |
-| HFP/HSP keeps showing up in pair logs even though the bridge only plays A2DP | leave `ALLOW_HFP_PROFILE` off (default) |
+| A multi-profile device refuses to finish pairing unless HFP/HSP is accepted | **Authorize HFP/HSP for this pair** for that attempt; playback is still A2DP-only |
 
-Treat these as targeted painkillers. They are not meant to be turned on preemptively — most adapters and most kernels do not need them, and several of them require a bridge restart to take effect.
+Treat these as targeted painkillers. Do not turn them on preemptively. Pairing compatibility options are one-shot, reset after every request, and the agent rejects requests from every MAC except the selected target.
 
 ## Adapters to avoid
 

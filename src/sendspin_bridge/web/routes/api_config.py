@@ -45,6 +45,7 @@ from sendspin_bridge.services import (
 from sendspin_bridge.services.bluetooth import _MAC_RE
 from sendspin_bridge.services.bluetooth.adapter_names import refresh_adapter_name_cache
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.diagnostics.compatibility_capabilities import get_compatibility_capabilities
 from sendspin_bridge.services.diagnostics.log_analysis import summarize_issue_logs
 from sendspin_bridge.services.diagnostics.sendspin_compat import get_runtime_dependency_versions
 from sendspin_bridge.services.diagnostics.update_checker import (
@@ -216,6 +217,7 @@ def _build_config_get_response():
         config["_effective_web_port"] = resolve_web_port()
         config["_delivery_channel"] = detect_ha_addon_channel()
     config["_effective_base_listen_port"] = resolve_base_listen_port()
+    config["_compatibility_capabilities"] = get_compatibility_capabilities()
 
     # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
     registry = get_device_registry_snapshot()

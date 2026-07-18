@@ -7,7 +7,7 @@
   "properties": {
     "CONFIG_SCHEMA_VERSION": {
       "type": "integer",
-      "const": 4,
+      "const": 5,
       "description": "Schema version; managed by the application — do not change."
     },
     "SENDSPIN_SERVER": {
@@ -295,25 +295,15 @@
       "default": false,
       "description": "Experimental: reload PulseAudio module-bluez5-discover as a last resort when bluez_card.* fails to appear. Disrupts all active BT audio on the bridge."
     },
-    "EXPERIMENTAL_PAIR_JUST_WORKS": {
-      "type": "boolean",
-      "default": false,
-      "description": "Experimental: use `agent NoInputNoOutput` during standalone pair so bluetoothctl negotiates Just-Works SSP instead of the default passkey/confirmation dance. Helps audio sinks that cancel authentication with the KeyboardDisplay agent (issue #168)."
-    },
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
       "type": "boolean",
       "default": false,
-      "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, run the bluetooth-auto-recovery ladder (mgmt reset → rfkill unblock → USB unbind/rebind) on the adapter as a last-ditch attempt before auto-releasing BT management. Disruptive: the USB step briefly disconnects every device on that controller, and it requires CAP_NET_ADMIN plus /dev/rfkill and /sys/bus/usb access (Docker privileged or matching capabilities)."
+      "description": "Experimental: after BT_MAX_RECONNECT_FAILS consecutive failed reconnects, power-cycle the adapter through Bluetooth MGMT/HCI and optionally issue a USB reset if the power cycle fails. Disruptive to every device on that controller. Requires Linux Bluetooth capabilities; USB escalation additionally requires /dev/bus/usb access."
     },
     "RSSI_BADGE": {
       "type": "boolean",
       "default": true,
-      "description": "Poll live RSSI for connected BR/EDR speakers via the kernel mgmt socket (opcode 0x0031) every 30 s and surface it in the device card / scan results as a coloured signal-strength chip. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good, negative = weak), LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick, gated by the shared bt_operation_lock. Legacy key ``EXPERIMENTAL_RSSI_BADGE`` is migrated automatically."
-    },
-    "ALLOW_HFP_PROFILE": {
-      "type": "boolean",
-      "default": false,
-      "description": "Permit HSP/HFP service UUIDs in the pairing agent. Default false — most DSPs (Bose QC, AKG Y500) prefer HFP over A2DP and collapse the link to an 8 kHz mono call codec, so HSP/HFP are rejected at AuthorizeService time. Set true only for HFP-only headsets that A2DP-block at the peer."
+      "description": "Poll live RSSI for connected BR/EDR speakers via the kernel mgmt socket (opcode 0x0031) every 5 s and surface it in the device card / scan results as a coloured signal-strength chip. BR/EDR returns delta from the controller's Golden Receive Power Range (0 = good, negative = weak), LE returns absolute dBm. Adds one mgmt round-trip per connected device per tick, gated by the shared bt_operation_lock. Legacy key ``EXPERIMENTAL_RSSI_BADGE`` is migrated automatically."
     },
     "HA_INTEGRATION": {
       "type": "object",

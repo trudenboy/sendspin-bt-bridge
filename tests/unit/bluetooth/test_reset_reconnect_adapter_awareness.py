@@ -127,9 +127,18 @@ def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
     captured: dict[str, Any] = {}
     done = threading.Event()
 
-    def fake_run(job_id: str, mac: str, adapter: str) -> None:
+    def fake_run(
+        job_id: str,
+        mac: str,
+        adapter: str,
+        *,
+        no_input_no_output_agent: bool = False,
+        allow_hfp_profile: bool = False,
+    ) -> None:
         captured["mac"] = mac
         captured["adapter"] = adapter
+        captured["no_io"] = no_input_no_output_agent
+        captured["allow_hfp"] = allow_hfp_profile
         module.finish_scan_job(job_id, {"success": True})
         done.set()
 
@@ -142,7 +151,12 @@ def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
     assert resp.status_code == 200
     assert resp.get_json().get("job_id")
     assert done.wait(2.0), "background thread never invoked _run_reset_reconnect"
-    assert captured == {"mac": "AA:BB:CC:DD:EE:01", "adapter": "C0:FB:F9:62:D7:D6"}
+    assert captured == {
+        "mac": "AA:BB:CC:DD:EE:01",
+        "adapter": "C0:FB:F9:62:D7:D6",
+        "no_io": False,
+        "allow_hfp": False,
+    }
 
 
 def test_reset_reconnect_preserves_default_adapter_when_omitted(client, monkeypatch):
@@ -153,7 +167,7 @@ def test_reset_reconnect_preserves_default_adapter_when_omitted(client, monkeypa
     captured: dict[str, Any] = {}
     done = threading.Event()
 
-    def fake_run(job_id: str, mac: str, adapter: str) -> None:
+    def fake_run(job_id: str, mac: str, adapter: str, **_pair_options: Any) -> None:
         captured["adapter"] = adapter
         module.finish_scan_job(job_id, {"success": True})
         done.set()

@@ -45,7 +45,7 @@ _VALID_CAPABILITIES = {
 # bond as, for example, a HID keyboard alongside the requested audio profile
 # — undesirable both for compatibility (some DSPs prefer HFP over A2DP when
 # both are offered and accepted) and for security (unexpected service binds).
-# HSP/HFP UUIDs — gated behind ``ALLOW_HFP_PROFILE`` (v2.63.0-rc.2).
+# HSP/HFP UUIDs — authorized only by an explicit one-shot pairing option.
 # Some DSPs (Bose QC, AKG Y500) prefer HFP over A2DP when both are
 # offered, leaving the speaker on an 8 kHz mono call codec instead of
 # the A2DP stereo we just configured.  Default-block to keep the audio
@@ -103,7 +103,7 @@ def _normalize_service_uuid(raw: str) -> str:
     return f"{compact[0:8]}-{compact[8:12]}-{compact[12:16]}-{compact[16:20]}-{compact[20:32]}"
 
 
-def _build_agent_iface(pin: str, allow_hfp: bool = False):
+def _build_agent_iface(pin: str, allow_hfp: bool = False, *, target_mac: str = ""):
     """Build the org.bluez.Agent1 service interface object.
 
     Constructed lazily so ``import services.pairing_agent`` stays cheap
@@ -114,6 +114,7 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False):
     for the gate's rationale.
     """
     authorized_uuids = _AUTHORIZED_SERVICE_UUIDS | (_HFP_SERVICE_UUIDS if allow_hfp else frozenset())
+    target_suffix = f"/dev_{target_mac.strip().upper().replace(':', '_')}" if target_mac else ""
     from dbus_fast import DBusError  # type: ignore
     from dbus_fast.service import ServiceInterface, method  # type: ignore
 
@@ -133,6 +134,16 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False):
             self.authorized_services: list[str] = []
             self.rejected_services: list[str] = []
 
+        def _require_target(self, device: str) -> None:
+            """Reject unrelated requests while this temporary default agent is active."""
+            if target_suffix and not str(device).upper().endswith(target_suffix.upper()):
+                logger.warning(
+                    "PairingAgent rejected request from unexpected device %s (target=%s)",
+                    device,
+                    target_mac,
+                )
+                raise DBusError("org.bluez.Error.Rejected", f"unexpected pairing device {device}")
+
         @method()
         def Release(self):  # type: ignore[no-untyped-def]
             logger.debug("BlueZ released pairing agent")
@@ -140,6 +151,7 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False):
 
         @method()
         def RequestPinCode(self, device: "o") -> "s":  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             logger.info("Agent.RequestPinCode(%s) → '%s'", device, self.pin)
             self.pin_attempted = True
             self.method_calls.append("RequestPinCode")
@@ -147,6 +159,7 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False):
 
         @method()
         def RequestPasskey(self, device: "o") -> "u":  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             # Mirrors the legacy bluetoothctl flow which handles both
             # "enter pin code" (RequestPinCode) and "enter passkey"
             # (RequestPasskey) by supplying the configured PIN.  BlueZ
@@ -178,17 +191,20 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False):
 
         @method()
         def DisplayPasskey(self, device: "o", passkey: "u", entered: "q"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             logger.info("Agent.DisplayPasskey(%s): %06d (entered=%d)", device, passkey, entered)
             self.last_passkey = int(passkey)
             self.method_calls.append("DisplayPasskey")
 
         @method()
         def DisplayPinCode(self, device: "o", pincode: "s"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             logger.info("Agent.DisplayPinCode(%s): %s", device, pincode)
             self.method_calls.append("DisplayPinCode")
 
         @method()
         def RequestConfirmation(self, device: "o", passkey: "u"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             self.last_passkey = int(passkey)
             self.method_calls.append("RequestConfirmation")
             logger.info(
@@ -199,11 +215,13 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False):
 
         @method()
         def RequestAuthorization(self, device: "o"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             logger.info("Agent.RequestAuthorization(%s): auto-authorize", device)
             self.method_calls.append("RequestAuthorization")
 
         @method()
         def AuthorizeService(self, device: "o", uuid: "s"):  # type: ignore[valid-type,name-defined]  # noqa: F821, UP037
+            self._require_target(device)
             self.method_calls.append("AuthorizeService")
             normalized = _normalize_service_uuid(uuid)
             if normalized in authorized_uuids:
@@ -239,12 +257,14 @@ class PairingAgent:
         capability: str = "DisplayYesNo",
         pin: str = "0000",
         allow_hfp: bool = False,
+        target_mac: str = "",
     ) -> None:
         if capability not in _VALID_CAPABILITIES:
             raise ValueError(f"Invalid agent capability: {capability}")
         self._capability = capability
         self._pin = pin
         self._allow_hfp = bool(allow_hfp)
+        self._target_mac = str(target_mac or "").strip().upper()
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         # Typed as Any so mypy doesn't require an eager dbus_fast import at
@@ -252,14 +272,8 @@ class PairingAgent:
         self._bus: Any = None
         self._iface: Any = None
         self._ready = threading.Event()
+        self._stop_requested = threading.Event()
         self._start_error: BaseException | None = None
-        # ``True`` only while the agent thread is in ``loop.run_forever()``.
-        # Used by ``_force_stop`` to decide whether ``loop.stop()`` is safe:
-        # if registration failed the thread is already in its ``finally``
-        # running ``loop.run_until_complete(_unregister())`` and stopping
-        # the loop there interrupts cleanup (leaks the SystemBus connection
-        # and the exported agent object).
-        self._running_forever = False
 
     @property
     def capability(self) -> str:
@@ -327,13 +341,18 @@ class PairingAgent:
         self._force_stop()
 
     def _force_stop(self) -> None:
+        self._stop_requested.set()
         loop = self._loop
-        if loop is not None and self._running_forever:
-            # Only stop the loop while the thread is in ``run_forever`` —
-            # otherwise we could interrupt a ``run_until_complete`` already
-            # running cleanup inside the thread's ``finally`` block.
+        if loop is not None:
+            # The normal start-error path never calls _force_stop; it joins
+            # the cleanup thread directly. Therefore every caller reaching
+            # here either owns a registered agent or is deliberately aborting
+            # a hung registration, and must always wake/stop the loop.
             try:
-                loop.call_soon_threadsafe(loop.stop)
+                if self._ready.is_set():
+                    loop.call_soon_threadsafe(lambda: None)
+                else:
+                    loop.call_soon_threadsafe(loop.stop)
             except RuntimeError:
                 pass
         if self._thread is not None:
@@ -357,11 +376,7 @@ class PairingAgent:
                 self._ready.set()
                 return
             self._ready.set()
-            self._running_forever = True
-            try:
-                loop.run_forever()
-            finally:
-                self._running_forever = False
+            loop.run_until_complete(self._wait_for_stop())
         finally:
             if loop is not None:
                 try:
@@ -375,11 +390,20 @@ class PairingAgent:
                     logger.debug("PairingAgent loop close failed: %s", exc)
             self._loop = None
 
+    async def _wait_for_stop(self) -> None:
+        """Keep the agent alive until the owning context requests shutdown."""
+        while not self._stop_requested.is_set():
+            await asyncio.sleep(0.05)
+
     async def _register(self) -> None:
         from dbus_fast import BusType  # type: ignore
         from dbus_fast.aio import MessageBus  # type: ignore
 
-        self._iface = _build_agent_iface(self._pin, allow_hfp=self._allow_hfp)
+        self._iface = _build_agent_iface(
+            self._pin,
+            allow_hfp=self._allow_hfp,
+            target_mac=self._target_mac,
+        )
         self._bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         self._bus.export(AGENT_PATH, self._iface)
         introspect = await self._bus.introspect(_BLUEZ_BUS, _AGENT_MANAGER_PATH)

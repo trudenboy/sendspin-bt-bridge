@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.0-rc.3] - 2026-07-18
+
+### Added
+
+- **Advanced Bluetooth recovery controls now report whether they can work on the current host.** The UI distinguishes PipeWire from classic PulseAudio, verifies the loaded Bluetooth discovery module, Linux networking capabilities, rfkill access, and USB-reset access, then disables unavailable controls with a concrete reason.
+- **Adapter recovery now has structured runtime status.** Diagnostics can show when recovery ran, which adapter it targeted, its current stage, result, and failure reason without scraping log wording.
+
+### Changed
+
+- **Experimental features are now presented as narrowly scoped advanced compatibility tools.** Stable RSSI, room labels, pairing peer-quiesce, and microphone calibration remain visible normally; the Class of Device workaround appears only when already configured or when diagnostics identify the matching Samsung failure; recovery workarounds retain their warnings and restart requirements.
+- **Risky pairing compatibility choices are now one-shot and target-bound.** Just-Works and HFP/HSP authorization apply only to the selected request, reset in the UI immediately after it starts, and the BlueZ pairing agent rejects every device other than the selected MAC. Temporarily making an adapter quiet is now accurately described as disconnecting its other speakers rather than pausing them.
+- **Bluetooth discovery now starts only after explicit confirmation on one concrete adapter.** Checklist and empty-state Scan actions open the modal and emphasize **Start Scan** without starting automatically; the first detected controller is selected and the ambiguous all-adapters scope is removed. The room-handoff readiness badge is shortened to **Transfer**.
+
+### Removed
+
+- **Persisted global defaults for Just-Works and HFP/HSP pairing authorization.** Legacy saved values are discarded during configuration migration so an earlier troubleshooting choice cannot silently weaken or alter later pairing attempts.
+
 ## [2.73.0-rc.2] - 2026-07-18
 
 ### Changed

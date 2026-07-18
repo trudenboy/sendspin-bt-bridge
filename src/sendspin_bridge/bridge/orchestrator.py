@@ -144,10 +144,9 @@ def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> Non
     """Apply ``BLUETOOTH_ADAPTERS[].device_class`` to each kernel controller.
 
     Runs unconditionally on startup; entries without a ``device_class``
-    value are skipped. The UI surface that lets operators set this is
-    gated on the global "Show experimental features" toggle, but the
-    runtime always honours configured values so existing setups keep
-    working without an extra flip.
+    value are skipped. The UI surfaces the field when the operator already
+    configured it or when diagnostics identify the Samsung CoD fingerprint;
+    runtime always honours configured values.
 
     The value is a 6-hex-digit CoD (e.g. ``0x00010c``) delivered via
     raw HCI ``Write_Class_Of_Device`` (OGF=0x03, OCF=0x0024) on a

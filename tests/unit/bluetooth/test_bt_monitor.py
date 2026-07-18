@@ -526,7 +526,7 @@ async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
 async def test_handle_reconnect_failure_runs_off_the_loop(bt_manager):
     """The recovery ladder + config write in ``_handle_reconnect_failure`` must
     be dispatched via ``run_in_executor`` (off the loop), never inline — an
-    inline call would freeze every other device's IPC during USB rebind."""
+    inline call would freeze every other device's IPC during a USB reset."""
     from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
 
     bt_manager.connected = False

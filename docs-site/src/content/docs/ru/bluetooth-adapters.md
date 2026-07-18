@@ -135,18 +135,18 @@ Home Assistant.
 
 ## Программные обходы регрессий адаптера / BlueZ
 
-Bridge содержит несколько **экспериментальных тогглов**, рассчитанных на конкретное поведение ядра / BlueZ / PulseAudio, а не на конкретную модель железа. Они находятся в **Configuration → Bluetooth → Experimental features** и спрятаны до тех пор, пока не включить **Show experimental features** на вкладке General. Подробное описание со скриншотами — на [странице Web UI](/sendspin-bt-bridge/ru/web-ui/#экспериментальные-bluetooth-переключатели); таблица ниже — короткая карта «что наблюдается на адаптере → какой тоггл может помочь»:
+Bridge содержит **advanced compatibility tools** для конкретных сбоев ядра, BlueZ или PulseAudio. Они находятся в **Configuration → Bluetooth → Advanced recovery workarounds** и скрыты до включения **Advanced compatibility tools** на вкладке General. UI блокирует неподдерживаемые текущим хостом механизмы и показывает причину. Подробности — на [странице Web UI](/sendspin-bt-bridge/ru/web-ui/#расширенные-bluetooth-compatibility-tools).
 
 | Симптом | Тоггл |
 |---|---|
 | Колонка подключается, но PulseAudio не видит sink (dual-role регрессия BlueZ 5.86, [bluez/bluez#1922](https://github.com/bluez/bluez/issues/1922)) | `EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE` |
 | Sink появляется через раз или только после ручного переподключения | `EXPERIMENTAL_PA_MODULE_RELOAD` |
-| Весь адаптер замолкает под нагрузкой, и bridge не может его восстановить | `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` (HCI mgmt reset → rfkill → USB rebind) |
-| Не получается допарить вторую колонку на одном адаптере, пока первая стримит | **Pause other speakers on same adapter** в Scan modal |
+| Весь адаптер замолкает под нагрузкой, и bridge не может его восстановить | `EXPERIMENTAL_ADAPTER_AUTO_RECOVERY` (rfkill check → MGMT/HCI power-cycle → optional USB reset) |
+| Не получается допарить вторую колонку на одном адаптере, пока первая стримит | **Temporarily disconnect other speakers** в Scan modal |
 | Колонка вообще не отправляет SSP-подтверждение, и bridge ждёт бесконечно | **NoInputNoOutput pair agent** в Scan modal |
-| HFP/HSP постоянно появляется в pair-логах, хотя bridge играет только A2DP | оставьте `ALLOW_HFP_PROFILE` выключенным (по умолчанию) |
+| Multi-profile устройство не завершает pairing без HFP/HSP | включите **Authorize HFP/HSP for this pair** для одной попытки; playback остаётся A2DP-only |
 
-Это точечные обезболивающие — их не нужно включать «на всякий случай». Большинству адаптеров на большинстве ядер они не требуются, и часть из них требует рестарта bridge для применения.
+Это точечные обезболивающие — их не нужно включать «на всякий случай». Pairing overrides одноразовые, сбрасываются после каждого запроса, а pairing-агент принимает обращения только от выбранного MAC.
 
 ## Чего избегать
 

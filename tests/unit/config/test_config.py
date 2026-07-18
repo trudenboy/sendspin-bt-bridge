@@ -36,8 +36,8 @@ def test_default_config_keys_present_in_json_schema():
     silently — operators editing config.json get no validation hint
     for the missing key.
 
-    Regression test for Copilot review on PR #196 (``ALLOW_HFP_PROFILE``
-    landed in ``DEFAULT_CONFIG`` but was missing from the schema).
+    Regression test for a historical key that landed in ``DEFAULT_CONFIG``
+    without a matching schema property.
     """
     from pathlib import Path
 

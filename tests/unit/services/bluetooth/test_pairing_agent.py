@@ -38,6 +38,25 @@ def test_agent_request_confirmation_records_passkey():
     assert agent.cancelled is False
 
 
+def test_agent_rejects_authentication_request_from_non_target_device():
+    from dbus_fast import DBusError
+
+    agent = _build_agent_iface(pin="0000", target_mac="AA:BB:CC:DD:EE:FF")
+
+    with pytest.raises(DBusError, match="unexpected pairing device"):
+        agent.RequestConfirmation("/org/bluez/hci0/dev_11_22_33_44_55_66", 941189)
+
+    assert agent.method_calls == []
+
+
+def test_agent_accepts_target_device_on_any_adapter_path():
+    agent = _build_agent_iface(pin="0000", target_mac="AA:BB:CC:DD:EE:FF")
+
+    agent.RequestConfirmation("/org/bluez/hci7/dev_AA_BB_CC_DD_EE_FF", 941189)
+
+    assert agent.last_passkey == 941189
+
+
 def test_agent_request_passkey_uses_configured_pin():
     # Mirrors RequestPinCode semantics so legacy devices that drive the
     # "enter passkey" prompt pair with the same configured PIN the pair
@@ -125,7 +144,7 @@ def test_agent_authorize_service_rejects_hfp_by_default(hfp_uuid):
     Some DSPs (Bose QC headphones, AKG Y500) prefer HFP over A2DP when both
     are accepted, leaving the speaker on a low-quality 8 kHz mono call codec
     instead of the A2DP stereo we just configured.  Block by default; let
-    operators with HFP-only headphones opt in via ``ALLOW_HFP_PROFILE``.
+    operators with unusual multi-profile headphones opt in for one attempt.
     """
     from dbus_fast import DBusError
 
@@ -144,7 +163,7 @@ def test_agent_authorize_service_rejects_hfp_by_default(hfp_uuid):
     ],
 )
 def test_agent_authorize_service_accepts_hfp_when_flag_enabled(hfp_uuid):
-    """``ALLOW_HFP_PROFILE=true`` (passed through ``allow_hfp=True``) restores
+    """The one-shot ``allow_hfp=True`` option authorizes
     the pre-rc.2 behaviour for HFP-only headphones (rare edge case)."""
     agent = _build_agent_iface(pin="0000", allow_hfp=True)
     agent.AuthorizeService("/org/bluez/hci0/dev_AA_BB", hfp_uuid)

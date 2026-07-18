@@ -122,9 +122,6 @@ _IGNORED_FIELDS: frozenset[str] = frozenset(
         "SMOOTH_RESTART",
         "STARTUP_BANNER_GRACE_SECONDS",
         "RECOVERY_BANNER_GRACE_SECONDS",
-        # Consulted at pair-time via load_config() in _run_standalone_pair_inner —
-        # toggling is picked up on the very next pair attempt without a restart.
-        "EXPERIMENTAL_PAIR_JUST_WORKS",
         # Removed in 2.62.0-rc.8: bridge no longer proxies volume / mute
         # through MA — sendspin's PulseVolumeController.start_monitoring
         # pushes external sink changes to MA directly, so the toggles are
