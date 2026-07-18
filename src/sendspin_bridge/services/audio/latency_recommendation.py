@@ -1,8 +1,8 @@
 """Pure latency recommendation model.
 
-Recommendations are intentionally advisory and always require confirmation.
-Observed transport delay, configured correction, and acoustic calibration are
-kept as separate concepts.
+The model is pure and never mutates configuration.  Callers keep observed
+transport delay, configured correction, and acoustic calibration separate;
+new-device registration may consume one result as a one-time starting value.
 """
 
 from __future__ import annotations

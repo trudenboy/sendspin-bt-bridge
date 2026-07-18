@@ -12,6 +12,7 @@ import logging
 import math
 import os
 import random
+import shutil
 import socket
 import struct
 import sys
@@ -40,8 +41,13 @@ from sendspin_bridge.config import (
     save_device_static_delay,
     save_device_volume,
 )
-from sendspin_bridge.services.audio.latency_calibration import build_calibration_pcm
-from sendspin_bridge.services.audio.latency_recommendation import build_latency_recommendation
+from sendspin_bridge.services.audio.latency_calibration import (
+    build_calibration_pcm,
+    build_metronome_beat_pcm,
+    build_subsonic_carrier_pcm,
+    calculate_metronome_lead_frames,
+)
+from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -69,6 +75,44 @@ _MAX_BIND_FAILURES = 5
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+_CALIBRATION_METRONOME_SAMPLE_RATE = 48000
+_CALIBRATION_METRONOME_BPM = 120
+_CALIBRATION_METRONOME_CLICK_MS = 40
+_CALIBRATION_METRONOME_GATE_PREROLL_MS = 80
+_CALIBRATION_METRONOME_EPOCH = time.monotonic()
+
+
+def _calibration_metronome_paplay_args(sink_name: str) -> tuple[str, ...]:
+    """Return paplay arguments with a small fixed scheduling quantum."""
+    return (
+        "paplay",
+        f"--device={sink_name}",
+        "--raw",
+        "--format=s16le",
+        f"--rate={_CALIBRATION_METRONOME_SAMPLE_RATE}",
+        "--channels=2",
+        "--latency-msec=20",
+        "--process-time-msec=5",
+    )
+
+
+def _calibration_metronome_player_args(sink_name: str) -> tuple[str, ...]:
+    """Select the native low-latency player for the active audio backend."""
+    pw_play = shutil.which("pw-play")
+    if sink_name.startswith("bluez_output.") and pw_play:
+        return (
+            pw_play,
+            f"--target={sink_name}",
+            "--latency=20ms",
+            f"--rate={_CALIBRATION_METRONOME_SAMPLE_RATE}",
+            "--channels=2",
+            "--channel-map=stereo",
+            "--format=s16",
+            "-",
+        )
+    return _calibration_metronome_paplay_args(sink_name)
+
 
 # In-memory ring buffer so the web UI can read logs even when docker CLI
 # is unavailable (e.g. inside the container itself).
@@ -396,6 +440,7 @@ class DeviceStatus:
     latency_suggestion_explanation: str = ""
     latency_suggestion_revision: str | None = None
     latency_double_count_risk: bool = False
+    calibration_metronome_active: bool = False
     reanchor_count: int = 0
     reanchor_count_session: int = 0
     reanchor_count_5m: int = 0
@@ -653,6 +698,8 @@ class SendspinClient:
         self._stderr_task: asyncio.Task | None = None  # stderr reader task
         self._monitor_task: asyncio.Task | None = None
         self._ma_reconnect_task: asyncio.Task | None = None
+        self._calibration_metronome_process: asyncio.subprocess.Process | None = None
+        self._calibration_metronome_task: asyncio.Task | None = None
         self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._start_sendspin_requests = 0
@@ -2012,6 +2059,9 @@ class SendspinClient:
         unconditionally.
         """
         applied: list[str] = []
+        restart_metronome = bool(
+            "static_delay_ms" in fields_payload and self.status.get("calibration_metronome_active")
+        )
 
         for key, value in fields_payload.items():
             if key in ("static_delay_ms", "required_lead_time_ms", "min_buffer_ms"):
@@ -2060,10 +2110,17 @@ class SendspinClient:
                 self.keepalive_enabled = new_mode == "keep_alive" or explicit_keepalive
                 self._update_status({"idle_mode": new_mode})
                 applied.append(key)
+            elif key in {"static_delay_source", "static_delay_calibrated_at", "static_delay_codec"}:
+                self._update_status({key: value})
+                applied.append(key)
             elif key in self._RECONFIG_PARENT_ONLY_FIELDS:
                 if hasattr(self, key):
                     setattr(self, key, value)
                     applied.append(key)
+
+        if restart_metronome and "static_delay_ms" in applied:
+            await self.stop_calibration_metronome()
+            await self.start_calibration_metronome()
 
         return applied
 
@@ -2127,6 +2184,11 @@ class SendspinClient:
             {
                 "idle_mode": self.idle_mode,
                 "listen_port": self.listen_port,
+                **{
+                    key: device[key]
+                    for key in ("static_delay_source", "static_delay_calibrated_at", "static_delay_codec")
+                    if key in device
+                },
             }
         )
 
@@ -2160,13 +2222,14 @@ class SendspinClient:
                 snapshot = await asyncio.get_running_loop().run_in_executor(
                     None, _dbus_get_media_transport_snapshot, path
                 )
+                codec_name = (
+                    snapshot.codec_name
+                    or ("sbc" if getattr(self.bt_manager, "prefer_sbc", False) else None)
+                    or self.status.get("bt_codec_name")
+                )
                 recommendation = build_latency_recommendation(
                     reported_bt_delay_ms=snapshot.delay_ms,
-                    codec_name=(
-                        snapshot.codec_name
-                        or ("sbc" if getattr(self.bt_manager, "prefer_sbc", False) else None)
-                        or self.status.get("bt_codec_name")
-                    ),
+                    codec_name=codec_name,
                     calibrated_delay_ms=(
                         self.status.get("static_delay_ms")
                         if self.status.get("static_delay_source") in {"microphone_calibration", "manual_calibration"}
@@ -2203,7 +2266,53 @@ class SendspinClient:
                         "latency_double_count_risk": double_count_risk,
                     }
                 )
+                await self._apply_initial_latency_recommendation(recommendation, codec_name)
             await asyncio.sleep(5.0 if self.status.get("audio_streaming") else 15.0)
+
+    async def _apply_initial_latency_recommendation(
+        self,
+        recommendation: LatencyRecommendation,
+        codec_name: object | None,
+    ) -> bool:
+        """Consume the one-shot delay initializer for a newly registered device.
+
+        ``auto_pending`` is the sole opt-in.  Once a value is applied, its real
+        provenance replaces the marker both in runtime state and config, so
+        future BlueZ changes can never overwrite a manual adjustment.
+        """
+        if self.status.get("static_delay_source") != "auto_pending" or recommendation.value_ms is None:
+            return False
+
+        applied = await self.apply_hot_config({"static_delay_ms": recommendation.value_ms})
+        if "static_delay_ms" not in applied:
+            return False
+
+        source = recommendation.source
+        codec = str(codec_name).strip() if codec_name else None
+        calibrated_at = datetime.now(UTC).isoformat()
+        self._update_status(
+            {
+                "static_delay_source": source,
+                "static_delay_calibrated_at": calibrated_at,
+                "static_delay_codec": codec,
+            }
+        )
+        mac = getattr(self.bt_manager, "mac_address", None) if self.bt_manager else None
+        if mac:
+            await asyncio.to_thread(
+                save_device_static_delay,
+                mac,
+                recommendation.value_ms,
+                source=source,
+                codec=codec,
+            )
+        logger.info(
+            "[%s] Applied initial static delay %d ms from %s; automatic initialization is now complete",
+            self.player_name,
+            recommendation.value_ms,
+            source,
+        )
+        return True
 
     async def _send_keepalive_burst(self) -> None:
         """Write the configured keepalive payload to the BT PulseAudio sink via paplay.
@@ -2276,8 +2385,138 @@ class SendspinClient:
             logger.warning("[%s] Calibration tone failed: %s", self.player_name, exc)
             return False
 
+    async def _feed_calibration_metronome(
+        self,
+        proc: asyncio.subprocess.Process,
+        lead_pcm: bytes,
+        beat_pcm: bytes,
+    ) -> None:
+        """Feed one phase-aligned click period repeatedly until cancelled."""
+        try:
+            if proc.stdin is None:
+                return
+            proc.stdin.write(lead_pcm)
+            await proc.stdin.drain()
+            while proc.returncode is None:
+                proc.stdin.write(beat_pcm)
+                await proc.stdin.drain()
+        except asyncio.CancelledError:
+            raise
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            logger.debug("[%s] Calibration metronome pipe closed: %s", self.player_name, exc)
+        except Exception as exc:
+            logger.warning("[%s] Calibration metronome failed: %s", self.player_name, exc)
+        finally:
+            if proc.stdin is not None:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+            await self._terminate_calibration_metronome_process(proc)
+            if self._calibration_metronome_process is proc:
+                self._calibration_metronome_process = None
+                self._calibration_metronome_task = None
+                self._update_status({"calibration_metronome_active": False})
+
+    async def _terminate_calibration_metronome_process(self, proc: asyncio.subprocess.Process) -> None:
+        """Terminate paplay and escalate to SIGKILL if it does not exit."""
+        if proc.returncode is None:
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2.0)
+            return
+        except TimeoutError:
+            logger.warning("[%s] Calibration metronome ignored terminate; killing paplay", self.player_name)
+        except Exception:
+            return
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2.0)
+        except Exception:
+            logger.warning("[%s] Calibration metronome paplay could not be reaped", self.player_name)
+
+    async def start_calibration_metronome(self) -> bool:
+        """Start a phase-aligned continuous metronome on this device's BT sink."""
+        current = self._calibration_metronome_process
+        if current is not None and current.returncode is None:
+            return True
+        if not self.bluetooth_sink_name or not self.status.get("bluetooth_connected"):
+            return False
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *_calibration_metronome_player_args(self.bluetooth_sink_name),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except Exception as exc:
+            logger.warning("[%s] Could not start calibration metronome: %s", self.player_name, exc)
+            return False
+
+        started_at = time.monotonic()
+        lead_frames = calculate_metronome_lead_frames(
+            started_at,
+            sample_rate=_CALIBRATION_METRONOME_SAMPLE_RATE,
+            bpm=_CALIBRATION_METRONOME_BPM,
+            epoch_seconds=(_CALIBRATION_METRONOME_EPOCH - float(self.status.get("static_delay_ms") or 0.0) / 1000.0),
+        )
+        # Keep the A2DP stream non-silent before and between clicks.  Some
+        # speakers (notably Lenco LS-500) close their input gate during the
+        # otherwise-silent gap and only reproduce an occasional probe.
+        lead_pcm = build_subsonic_carrier_pcm(
+            lead_frames,
+            sample_rate=_CALIBRATION_METRONOME_SAMPLE_RATE,
+        )
+        beat_pcm = build_metronome_beat_pcm(
+            sample_rate=_CALIBRATION_METRONOME_SAMPLE_RATE,
+            bpm=_CALIBRATION_METRONOME_BPM,
+            keepalive_amplitude=100,
+            click_duration_ms=_CALIBRATION_METRONOME_CLICK_MS,
+            gate_preroll_ms=_CALIBRATION_METRONOME_GATE_PREROLL_MS,
+        )
+        self._calibration_metronome_process = proc
+        self._calibration_metronome_task = asyncio.create_task(
+            self._feed_calibration_metronome(proc, lead_pcm, beat_pcm)
+        )
+        self._update_status({"calibration_metronome_active": True})
+        logger.info(
+            "[%s] Calibration metronome started on %s (shared phase, %.0f ms lead)",
+            self.player_name,
+            self.bluetooth_sink_name,
+            lead_frames * 1000.0 / _CALIBRATION_METRONOME_SAMPLE_RATE,
+        )
+        return True
+
+    async def stop_calibration_metronome(self) -> None:
+        """Stop this device's continuous calibration metronome immediately."""
+        proc = self._calibration_metronome_process
+        task = self._calibration_metronome_task
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        if proc is not None:
+            if proc.stdin is not None:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+            await self._terminate_calibration_metronome_process(proc)
+        self._calibration_metronome_process = None
+        self._calibration_metronome_task = None
+        self._update_status({"calibration_metronome_active": False})
+        if proc is not None:
+            logger.info("[%s] Calibration metronome stopped", self.player_name)
+
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
+        await self.stop_calibration_metronome()
         self._cancel_persist_timers()
         # Flag the upcoming death as expected so the death-handler does NOT
         # populate ``last_error`` or emit the "exited unexpectedly" log.  Only

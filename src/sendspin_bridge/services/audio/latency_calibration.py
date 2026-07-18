@@ -28,6 +28,105 @@ def build_calibration_pcm(*, sample_rate: int = 48000, duration_seconds: int = 8
     return bytes(frames)
 
 
+def build_subsonic_carrier_pcm(
+    frame_count: int,
+    *,
+    sample_rate: int = 48000,
+    amplitude: int = 100,
+    frequency_hz: float = 2.0,
+) -> bytes:
+    """Build an inaudible stereo carrier that keeps speaker audio gates open."""
+    frame_count = max(0, int(frame_count))
+    sample_rate = max(1, int(sample_rate))
+    amplitude = max(0, min(1000, int(amplitude)))
+    frames = bytearray(frame_count * 4)
+    phase_step = 2.0 * math.pi * float(frequency_hz) / sample_rate
+    for index in range(frame_count):
+        sample = int(amplitude * math.sin(phase_step * index))
+        struct.pack_into("<hh", frames, index * 4, sample, sample)
+    return bytes(frames)
+
+
+def build_metronome_beat_pcm(
+    *,
+    sample_rate: int = 48000,
+    bpm: int = 120,
+    keepalive_amplitude: int = 0,
+    click_duration_ms: int | None = None,
+    gate_preroll_ms: int = 0,
+) -> bytes:
+    """Build one stereo metronome period with an optional speaker-gate pre-roll."""
+    sample_rate = max(1, int(sample_rate))
+    bpm = max(30, min(300, int(bpm)))
+    total_frames = max(1, round(sample_rate * 60.0 / bpm))
+    if click_duration_ms is None:
+        # Backward-compatible DSP-safe chirp used by callers that do not opt
+        # into the shorter manual-sync transient.
+        click_frames = min(total_frames, max(2, round(sample_rate * 0.12)))
+        preroll_frames = 0
+    else:
+        click_duration_ms = max(10, min(200, int(click_duration_ms)))
+        click_frames = min(total_frames, max(2, round(sample_rate * click_duration_ms / 1000.0)))
+        gate_preroll_ms = max(0, min(200, int(gate_preroll_ms)))
+        preroll_frames = min(
+            max(0, total_frames - click_frames),
+            round(sample_rate * gate_preroll_ms / 1000.0),
+        )
+    frames = bytearray(
+        build_subsonic_carrier_pcm(
+            total_frames,
+            sample_rate=sample_rate,
+            amplitude=keepalive_amplitude,
+        )
+    )
+    for index in range(preroll_frames):
+        elapsed = index / sample_rate
+        attack = min(1.0, elapsed / 0.005)
+        sample = int(9000 * attack * math.sin(2 * math.pi * 1100.0 * elapsed))
+        struct.pack_into("<hh", frames, index * 4, sample, sample)
+    for index in range(click_frames):
+        elapsed = index / sample_rate
+        if click_duration_ms is None:
+            envelope = math.sin(math.pi * index / (click_frames - 1)) ** 2
+            probe_duration = click_frames / sample_rate
+            sweep_rate = (2400.0 - 1000.0) / probe_duration
+            phase = 2 * math.pi * (1000.0 * elapsed + 0.5 * sweep_rate * elapsed * elapsed)
+            sample = int(26000 * envelope * math.sin(phase))
+        else:
+            duration = click_frames / sample_rate
+            attack = min(1.0, elapsed / 0.001)
+            decay = math.exp(-4.0 * elapsed / duration)
+            woodblock = 0.72 * math.sin(2 * math.pi * 1700.0 * elapsed)
+            woodblock += 0.28 * math.sin(2 * math.pi * 2800.0 * elapsed)
+            sample = int(30000 * attack * decay * woodblock)
+        frame_index = preroll_frames + index
+        struct.pack_into("<hh", frames, frame_index * 4, sample, sample)
+    return bytes(frames)
+
+
+def calculate_metronome_lead_frames(
+    started_at: float,
+    *,
+    sample_rate: int = 48000,
+    bpm: int = 120,
+    epoch_seconds: float = 0.0,
+    min_lead_seconds: float = 1.0,
+) -> int:
+    """Return silence frames needed to join a process-wide metronome phase.
+
+    Each speaker begins with a different amount of silence, but the first
+    click lands on the same shared beat boundary.  Starting a speaker later
+    therefore joins the already-running rhythm instead of creating a new one.
+    """
+    sample_rate = max(1, int(sample_rate))
+    bpm = max(30, min(300, int(bpm)))
+    period = 60.0 / bpm
+    earliest = float(started_at) + max(0.0, float(min_lead_seconds))
+    periods = math.ceil((earliest - float(epoch_seconds)) / period - 1e-12)
+    target = float(epoch_seconds) + periods * period
+    return max(0, round((target - float(started_at)) * sample_rate))
+
+
 @dataclass(frozen=True, slots=True)
 class RelativeDelayEstimate:
     delay_ms: float | None

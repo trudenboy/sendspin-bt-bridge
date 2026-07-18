@@ -55,6 +55,7 @@ htmlcov/
 
 # IDE / tool artifacts
 .playwright-mcp/
+.superdesign/tmp/
 .venv
 .claude/
 .wrangler/

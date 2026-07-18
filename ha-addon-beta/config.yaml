@@ -96,6 +96,11 @@ schema:
       player_name: str
       adapter: str?
       static_delay_ms: int?
+      static_delay_source: str?
+      static_delay_calibrated_at: str?
+      static_delay_codec: str?
+      required_lead_time_ms: int?
+      min_buffer_ms: int?
       listen_host: str?
       listen_port: port?
       enabled: bool?

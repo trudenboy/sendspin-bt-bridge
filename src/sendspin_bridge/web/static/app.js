@@ -253,6 +253,10 @@ var listSortState = {column: 'status', direction: 'desc'};
 var expandedListRowKey = null;
 var _muteDebounce = {};  // player_name → timestamp of last user mute action
 var _btnLocks = {};      // btnId → expiry timestamp
+var _calibrationTonePending = {}; // player_id → metronome request in flight
+var _latencyNudgeStepMs = 10; // shared precision for all Configuration device rows
+var _latencyHoldTimeout = null;
+var _latencyHoldInterval = null;
 var _deviceSettingsHighlightTimer = null;
 var _adapterSettingsHighlightTimer = null;
 var _restartMonitor = null;
@@ -956,6 +960,18 @@ function _uiIconSvg(kind, className) {
     if (kind === 'speaker') {
         return '<svg' + cls + ' viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
             '<path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 16c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>' +
+        '</svg>';
+    }
+    if (kind === 'metronome') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M9 3h6l3.5 18h-13L9 3Z"/><path d="M8 17h8"/>' +
+            '<path d="m12 6 3.5 8"/><circle cx="15.5" cy="14" r="1.35" fill="currentColor" stroke="none"/>' +
+        '</svg>';
+    }
+    if (kind === 'microphone') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 10.5V12a6.5 6.5 0 0 0 13 0v-1.5"/>' +
+            '<path d="M12 18.5v3"/><path d="M8.5 21.5h7"/>' +
         '</svg>';
     }
     if (kind === 'check') return _checkIconSvg(className);
@@ -3551,16 +3567,6 @@ function buildDeviceCard(i) {
           '</div>' +
           '<button type="button" class="media-btn" id="dmute-' + i + '" title="Mute/Unmute"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>' +
         '</div>' +
-        '<div class="latency-tune" id="dlatency-tune-' + i + '" style="display:none">' +
-          '<span class="latency-tune-label" id="dlatency-label-' + i + '"></span>' +
-          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',-50" aria-label="Decrease delay by 50 milliseconds">−50</button>' +
-          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',-10" aria-label="Decrease delay by 10 milliseconds">−10</button>' +
-          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',10" aria-label="Increase delay by 10 milliseconds">+10</button>' +
-          '<button type="button" class="action-btn" data-action="latency-nudge" data-arg="' + i + ',50" aria-label="Increase delay by 50 milliseconds">+50</button>' +
-          '<button type="button" class="action-btn" data-action="latency-test-tone" data-arg="' + i + '" title="Play a short click track on this speaker">Test clicks</button>' +
-          '<button type="button" class="action-btn" data-action="latency-mic-calibrate" data-arg="' + i + '" title="Compare this speaker with another speaker using this browser microphone">Mic compare</button>' +
-          '<button type="button" class="action-btn accent" id="dlatency-apply-' + i + '" data-action="latency-apply-suggestion" data-arg="' + i + '">Apply suggestion</button>' +
-        '</div>' +
         '<div class="card-np" id="dnp-' + i + '" style="display:none">' +
           _renderNowPlayingArtworkHtml(i, placeholderMedia, {
               persistent: true,
@@ -3608,24 +3614,18 @@ function buildDeviceCard(i) {
 function _getLatencyUiState(dev, peerDelays) {
     var configuredDelay = Number(dev.static_delay_ms || 0);
     var reportedDelay = typeof dev.bt_reported_delay_ms === 'number' ? dev.bt_reported_delay_ms : null;
-    var suggestedDelay = typeof dev.suggested_static_delay_ms === 'number' ? dev.suggested_static_delay_ms : null;
     var relativeText = peerDelays.length > 1
         ? ' · group +' + Math.max(0, configuredDelay - Math.min.apply(null, peerDelays)).toFixed(0) + ' ms'
         : '';
     return {
         configuredDelay: configuredDelay,
         reportedDelay: reportedDelay,
-        suggestedDelay: suggestedDelay,
         label: 'Delay ' + configuredDelay.toFixed(0) + ' ms' + relativeText,
         chipVisible: reportedDelay !== null,
         chipText: reportedDelay === null ? '' : 'BT delay ' + reportedDelay.toFixed(1) + ' ms',
         chipTitle: reportedDelay === null
             ? ''
             : 'Delay reported by the speaker through AVDTP; this is advisory, not an acoustic measurement.',
-        applyVisible: suggestedDelay !== null && suggestedDelay !== configuredDelay,
-        applyText: suggestedDelay === null ? 'Apply suggestion' : 'Apply ' + suggestedDelay + ' ms',
-        applyTitle: (dev.latency_suggestion_explanation || '') + ' Confidence: ' + (dev.latency_suggestion_confidence || 'unknown'),
-        applyWarn: !!dev.latency_double_count_risk,
     };
 }
 
@@ -3638,30 +3638,17 @@ function populateDeviceCard(i, dev) {
     var nameEl = document.getElementById('dname-' + i);
     if (nameEl) nameEl.textContent = name;
 
-    var latencyTune = document.getElementById('dlatency-tune-' + i);
-    var latencyLabel = document.getElementById('dlatency-label-' + i);
     var latencyChip = document.getElementById('dlatency-chip-' + i);
-    var applyLatency = document.getElementById('dlatency-apply-' + i);
-    var peers = (lastDevices || []).filter(function(peer) {
+    var peerDelays = (lastDevices || []).filter(function(peer) {
         return peer.enabled !== false && dev.group_id && peer.group_id === dev.group_id;
-    });
-    var peerDelays = peers.map(function(peer) { return Number(peer.static_delay_ms || 0); });
+    }).map(function(peer) { return Number(peer.static_delay_ms || 0); });
     var latencyUi = _getLatencyUiState(dev, peerDelays);
-    if (latencyTune) latencyTune.style.display = dev.enabled === false ? 'none' : '';
-    if (latencyLabel) latencyLabel.textContent = latencyUi.label;
     if (latencyChip) {
         latencyChip.style.display = latencyUi.chipVisible ? '' : 'none';
         latencyChip.className = 'chip meta-badge is-neutral';
         latencyChip.textContent = latencyUi.chipText;
         latencyChip.title = latencyUi.chipTitle;
     }
-    if (applyLatency) {
-        applyLatency.style.display = latencyUi.applyVisible ? '' : 'none';
-        applyLatency.textContent = latencyUi.applyText;
-        applyLatency.title = latencyUi.applyTitle;
-        applyLatency.classList.toggle('warn', latencyUi.applyWarn);
-    }
-
     var releasedBadge = document.getElementById('dreleased-badge-' + i);
     if (releasedBadge) {
         var releaseRenderData = _getReleaseBadgeRenderData(releaseMeta, 'chip');
@@ -7224,6 +7211,21 @@ function btAdapterOptions(selected) {
     return opts;
 }
 
+function _renderConfigLatencyControlsHtml(delayMs) {
+    var value = Math.max(0, Math.min(5000, Math.round(Number(delayMs) || 0)));
+    return '<div class="bt-latency-controls" aria-label="Live delay controls">' +
+        '<input type="hidden" class="bt-delay" value="' + value + '" data-applied-delay="' + value + '">' +
+        '<div class="bt-latency-stepper">' +
+            '<button type="button" class="action-btn bt-latency-nudge" data-action="config-latency-nudge" data-arg="-1" aria-label="Decrease delay by 10 milliseconds" title="Decrease delay (Shift: 50 ms; hold to repeat)">−</button>' +
+            '<span class="bt-latency-value" aria-live="polite">' + value + ' ms</span>' +
+            '<button type="button" class="action-btn bt-latency-nudge" data-action="config-latency-nudge" data-arg="1" aria-label="Increase delay by 10 milliseconds" title="Increase delay (Shift: 50 ms; hold to repeat)">+</button>' +
+        '</div>' +
+        '<button type="button" class="action-btn bt-latency-step-toggle" data-action="toggle-config-latency-step" aria-label="Delay adjustment step: 10 milliseconds" aria-pressed="false" title="Switch delay adjustment step">±10</button>' +
+        '<button type="button" class="action-btn latency-test-clicks" data-action="config-latency-test-tone" aria-label="Start metronome" aria-pressed="false" title="Start continuous synchronized metronome on this speaker" disabled>' + _uiIconSvg('metronome', 'latency-action-icon') + '</button>' +
+        '<button type="button" class="action-btn latency-mic-compare" data-action="config-latency-mic-calibrate" aria-label="Compare speakers using microphone" title="Compare this speaker with another speaker using this browser microphone" disabled>' + _uiIconSvg('microphone', 'latency-action-icon') + '</button>' +
+    '</div>';
+}
+
 function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabled, preferredFormat, keepaliveInterval, roomName, roomId, idleDisconnectMinutes, idleMode, powerSaveDelay, requiredLeadTime, minBuffer) {
     var tbody = document.getElementById('bt-devices-table');
     var wrap = document.createElement('div');
@@ -7233,7 +7235,9 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
 
     var row = document.createElement('div');
     row.className = 'bt-device-row';
-    var delayVal = (delay !== undefined && delay !== null && delay !== '') ? delay : 300;
+    var hasConfiguredDelay = delay !== undefined && delay !== null && delay !== '';
+    var delayVal = hasConfiguredDelay ? delay : 0;
+    if (!hasConfiguredDelay) wrap.dataset.staticDelaySource = 'auto_pending';
     var portVal  = (listenPort !== undefined && listenPort !== null && listenPort !== '') ? listenPort : '';
     var fmtVal   = (preferredFormat !== undefined && preferredFormat !== null) ? preferredFormat : 'flac:44100:16:2';
     var kaVal = (keepaliveInterval !== undefined && keepaliveInterval !== null && keepaliveInterval !== '') ? parseInt(keepaliveInterval, 10) : 0;
@@ -7272,17 +7276,13 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
             '<input type="number" class="bt-listen-port" placeholder="8928" aria-label="Listen port" min="1024" max="65535" value="' +
                 escHtmlAttr(String(portVal)) + '">' +
         '</div>' +
-        '<div class="bt-cell bt-cell--delay" data-label="Delay">' +
-            '<input type="number" class="bt-delay" title="Extra delay on top of DAC-anchored sync (0\u20135000 ms)" aria-label="Static delay in milliseconds" placeholder="0" min="0" max="5000" value="' +
-                escHtmlAttr(String(delayVal)) + '" step="50" data-applied-delay="' +
-                escHtmlAttr(String(delayVal)) + '">' +
-        '</div>' +
         '<div class="bt-cell bt-cell--runtime" data-label="Live">' +
             '<div class="bt-runtime" aria-live="polite"></div>' +
         '</div>' +
         '<div class="bt-row-actions bt-cell" data-label="Actions">' +
+            _renderConfigLatencyControlsHtml(delayVal) +
             '<details class="bt-device-action-menu ui-action-menu">' +
-                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle ui-action-menu-toggle">' + _bluetoothIconSvg('scan-action-icon') + '<span>Tools</span></summary>' +
+                '<summary class="btn btn-sm btn-secondary bt-device-action-toggle ui-action-menu-toggle" title="Bluetooth actions" aria-label="Bluetooth actions">' + _bluetoothIconSvg('scan-action-icon') + '<span>Tools</span></summary>' +
                 '<div class="bt-device-action-menu-list ui-action-menu-list">' +
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-info">Bluetooth info</button>' +
                     '<button type="button" class="btn btn-sm btn-secondary bt-device-action-item ui-action-menu-item bt-device-action-reset">Reset & reconnect</button>' +
@@ -7425,6 +7425,11 @@ function addBtDeviceRow(name, mac, adapter, delay, listenHost, listenPort, enabl
         syncBtRowIdentity();
         refreshBtDeviceRowsRuntime();
     });
+    row.querySelector('.bt-delay').addEventListener('input', function() {
+        wrap.dataset.staticDelaySource = 'manual';
+        delete wrap.dataset.staticDelayCalibratedAt;
+        delete wrap.dataset.staticDelayCodec;
+    });
     // Show/hide mode-specific fields when idle_mode changes
     var idleModeSelect = detail.querySelector('.bt-idle-mode');
     function _syncIdleModeFields() {
@@ -7519,6 +7524,128 @@ function collectBtDevices() {
     return devices;
 }
 
+function _getConfigLatencyRuntime(row) {
+    if (!row) return null;
+    var nameEl = row.querySelector('.bt-name');
+    var macEl = row.querySelector('.bt-mac');
+    return _findRuntimeDevice(
+        nameEl ? nameEl.value.trim() : '',
+        macEl ? macEl.value.trim() : ''
+    );
+}
+
+function _getConfigLatencyRuntimeIndex(row) {
+    var runtime = _getConfigLatencyRuntime(row);
+    if (!runtime) return -1;
+    return (lastDevices || []).indexOf(runtime);
+}
+
+function _populateConfigLatencyControls(row, runtime) {
+    if (!row) return;
+    var controls = row.querySelector('.bt-latency-controls');
+    if (!controls) return;
+    var delayEl = controls.querySelector('.bt-delay');
+    var valueEl = controls.querySelector('.bt-latency-value');
+    var delay = Math.max(0, Math.min(5000, Math.round(Number(delayEl && delayEl.value) || 0)));
+    if (valueEl) valueEl.textContent = delay + ' ms';
+
+    var step = _latencyNudgeStepMs === 50 ? 50 : 10;
+    var stepToggle = controls.querySelector('.bt-latency-step-toggle');
+    if (stepToggle) {
+        stepToggle.textContent = '±' + step;
+        stepToggle.setAttribute('aria-label', 'Delay adjustment step: ' + step + ' milliseconds');
+        stepToggle.setAttribute('aria-pressed', step === 50 ? 'true' : 'false');
+        stepToggle.classList.toggle('accent', step === 50);
+    }
+    controls.querySelectorAll('.bt-latency-nudge').forEach(function(button) {
+        var direction = Number(button.getAttribute('data-arg')) < 0 ? 'Decrease' : 'Increase';
+        button.setAttribute('aria-label', direction + ' delay by ' + step + ' milliseconds');
+    });
+
+    var runtimeAvailable = !!(runtime && runtime.player_id && runtime.enabled !== false);
+    var testClicks = controls.querySelector('.latency-test-clicks');
+    if (testClicks) {
+        var metronomeActive = runtimeAvailable && !!runtime.calibration_metronome_active;
+        testClicks.disabled = !runtimeAvailable || !!_calibrationTonePending[runtime.player_id];
+        testClicks.title = metronomeActive
+            ? 'Stop continuous synchronized metronome on this speaker'
+            : 'Start continuous synchronized metronome on this speaker';
+        testClicks.setAttribute('aria-label', metronomeActive ? 'Stop metronome' : 'Start metronome');
+        testClicks.setAttribute('aria-pressed', metronomeActive ? 'true' : 'false');
+        testClicks.classList.toggle('warn', metronomeActive);
+    }
+    var micCompare = controls.querySelector('.latency-mic-compare');
+    if (micCompare) micCompare.disabled = !runtimeAvailable || runtime.bluetooth_connected === false;
+}
+
+function toggleConfigLatencyStep() {
+    _latencyNudgeStepMs = _latencyNudgeStepMs === 10 ? 50 : 10;
+    document.querySelectorAll('#bt-devices-table .bt-device-row').forEach(function(row) {
+        _populateConfigLatencyControls(row, _getConfigLatencyRuntime(row));
+    });
+    return false;
+}
+
+function _acceptPersistedConfigDelay(runtime, value) {
+    if (!runtime) return;
+    document.querySelectorAll('#bt-devices-table .bt-device-wrap').forEach(function(wrap) {
+        var row = wrap.querySelector('.bt-device-row');
+        if (_getConfigLatencyRuntime(row) !== runtime) return;
+        var delayEl = row.querySelector('.bt-delay');
+        if (!delayEl) return;
+        var normalized = String(Math.max(0, Math.min(5000, Math.round(Number(value) || 0))));
+        delayEl.value = normalized;
+        delayEl.dataset.appliedDelay = normalized;
+        var key = wrap.dataset.configDirtyKey;
+        if (_configCleanSnapshot && key && _configCleanSnapshot.btDevicesByKey[key]) {
+            _configCleanSnapshot.btDevicesByKey[key].static_delay_ms = Number(normalized);
+        }
+        _populateConfigLatencyControls(row, runtime);
+    });
+    _recomputeConfigDirtyState();
+}
+
+async function nudgeConfigDeviceLatency(button, event, directionArg) {
+    if (button && event && event.type === 'click' && button.dataset.suppressLatencyClick === 'true') {
+        delete button.dataset.suppressLatencyClick;
+        return false;
+    }
+    if (!button || button._latencyNudgePending) return false;
+    var row = button.closest('.bt-device-row');
+    var delayEl = row && row.querySelector('.bt-delay');
+    if (!row || !delayEl) return false;
+    var direction = Number(directionArg) < 0 ? -1 : 1;
+    var isHold = !!(event && event.type === 'latency-hold');
+    var step = event && event.shiftKey ? 50 : _latencyNudgeStepMs;
+    var nextValue = Math.max(0, Math.min(5000, Math.round(Number(delayEl.value) || 0) + direction * step));
+    var runtimeIndex = _getConfigLatencyRuntimeIndex(row);
+    if (runtimeIndex < 0) {
+        delayEl.value = String(nextValue);
+        _populateConfigLatencyControls(row, null);
+        _recomputeConfigDirtyState();
+        if (!isHold) showToast('Delay set to ' + nextValue + ' ms — save configuration to apply', 'info');
+        return true;
+    }
+    button._latencyNudgePending = true;
+    try {
+        return await _applyLatencyValue(runtimeIndex, nextValue, 'manual', null, isHold);
+    } finally {
+        button._latencyNudgePending = false;
+    }
+}
+
+function playConfigDeviceCalibrationTone(button) {
+    var row = button && button.closest('.bt-device-row');
+    var runtimeIndex = _getConfigLatencyRuntimeIndex(row);
+    return runtimeIndex >= 0 ? playDeviceCalibrationTone(runtimeIndex) : false;
+}
+
+function calibrateConfigDeviceWithMicrophone(button) {
+    var row = button && button.closest('.bt-device-row');
+    var runtimeIndex = _getConfigLatencyRuntimeIndex(row);
+    return runtimeIndex >= 0 ? calibrateDeviceWithMicrophone(runtimeIndex) : false;
+}
+
 function refreshBtDeviceRowsRuntime() {
     document.querySelectorAll('#bt-devices-table .bt-device-row').forEach(function(row) {
         var runtimeEl = row.querySelector('.bt-runtime');
@@ -7555,7 +7682,16 @@ function refreshBtDeviceRowsRuntime() {
                 delayEl.value = runtimeStr;
                 delayEl.dataset.appliedDelay = runtimeStr;
             }
+            if (!hasPendingEdit && document.activeElement !== delayEl) {
+                var wrap = row.closest('.bt-device-wrap');
+                if (wrap && runtime.static_delay_source) {
+                    wrap.dataset.staticDelaySource = runtime.static_delay_source;
+                    wrap.dataset.staticDelayCalibratedAt = runtime.static_delay_calibrated_at || '';
+                    wrap.dataset.staticDelayCodec = runtime.static_delay_codec || '';
+                }
+            }
         }
+        _populateConfigLatencyControls(row, runtime);
     });
 }
 
@@ -8983,7 +9119,6 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE = !!(document.getElementById('experimental-a2dp-sink-recovery-dance') || {}).checked;
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
-    config.ENABLE_LATENCY_CALIBRATION_BETA = !!(document.getElementById('latency-calibration-beta') || {}).checked;
     config.RSSI_BADGE = !!(document.getElementById('rssi-badge') || {}).checked;
     config.ALLOW_HFP_PROFILE = !!(document.getElementById('experimental-allow-hfp-profile') || {}).checked;
     // EXPERIMENTAL_PAIR_JUST_WORKS is a per-pair transient override from the
@@ -11231,7 +11366,7 @@ function _defaultBtDeviceDirtyFields() {
         player_name: '',
         mac: '',
         adapter: '',
-        static_delay_ms: 300,
+        static_delay_ms: 0,
         listen_host: '',
         listen_port: null,
         preferred_format: 'flac:44100:16:2',
@@ -11907,8 +12042,6 @@ async function loadConfig(options) {
         if (expPaReloadCheck) expPaReloadCheck.checked = !!config.EXPERIMENTAL_PA_MODULE_RELOAD;
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
-        var latencyCalibrationCheck = document.getElementById('latency-calibration-beta');
-        if (latencyCalibrationCheck) latencyCalibrationCheck.checked = !!config.ENABLE_LATENCY_CALIBRATION_BETA;
         var rssiBadgeCheck = document.getElementById('rssi-badge');
         if (rssiBadgeCheck) {
             // Default ON when key absent (fresh / migrated config); honour
@@ -14925,7 +15058,7 @@ refreshLogs();
 toggleAutoRefresh(false);
 loadVersionInfo();
 
-async function _applyLatencyValue(i, value, source, revision) {
+async function _applyLatencyValue(i, value, source, revision, quiet) {
     var dev = lastDevices && lastDevices[i];
     if (!dev || !dev.player_id) return false;
     value = Math.max(0, Math.min(5000, Math.round(Number(value) || 0)));
@@ -14940,8 +15073,9 @@ async function _applyLatencyValue(i, value, source, revision) {
         var result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.error || 'Latency update failed');
         dev.static_delay_ms = result.value;
-        populateDeviceCard(i, dev);
-        showToast('Delay applied: ' + result.value + ' ms', 'success');
+        _acceptPersistedConfigDelay(dev, result.value);
+        if (currentViewMode !== 'list') populateDeviceCard(i, dev);
+        if (!quiet) showToast('Delay applied: ' + result.value + ' ms', 'success');
         return true;
     } catch (error) {
         showToast(error.message || 'Latency update failed', 'error');
@@ -14949,42 +15083,34 @@ async function _applyLatencyValue(i, value, source, revision) {
     }
 }
 
-function nudgeDeviceLatency(arg) {
-    var parts = String(arg || '').split(',');
-    var i = Number(parts[0]);
-    var delta = Number(parts[1]);
-    var dev = lastDevices && lastDevices[i];
-    if (!dev || !Number.isFinite(delta)) return false;
-    return _applyLatencyValue(i, Number(dev.static_delay_ms || 0) + delta, 'manual');
-}
-
-function applyDeviceLatencySuggestion(i) {
-    var dev = lastDevices && lastDevices[i];
-    if (!dev || typeof dev.suggested_static_delay_ms !== 'number') return false;
-    return _applyLatencyValue(
-        i,
-        dev.suggested_static_delay_ms,
-        dev.latency_suggestion_source || 'manual',
-        dev.latency_suggestion_revision
-    );
-}
-
 async function playDeviceCalibrationTone(i) {
     var dev = lastDevices && lastDevices[i];
     if (!dev || !dev.player_id) return false;
-    showToast('Playing calibration clicks on ' + (dev.player_name || 'speaker') + '…', 'info');
+    if (_calibrationTonePending[dev.player_id]) return false;
+    var action = dev.calibration_metronome_active ? 'stop' : 'start';
+    _calibrationTonePending[dev.player_id] = true;
     try {
-        var response = await fetch(API_BASE + '/api/calibration/play', {
+        var response = await fetch(API_BASE + '/api/calibration/metronome', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({player_id: dev.player_id}),
+            body: JSON.stringify({player_id: dev.player_id, action: action}),
         });
         var result = await response.json();
-        if (!response.ok || !result.success) throw new Error(result.error || 'Calibration tone failed');
+        if (!response.ok || !result.success) throw new Error(result.error || 'Calibration metronome failed');
+        dev.calibration_metronome_active = !!result.active;
+        showToast(
+            result.active
+                ? 'Synchronized clicks started on ' + (dev.player_name || 'speaker')
+                : 'Calibration clicks stopped on ' + (dev.player_name || 'speaker'),
+            result.active ? 'info' : 'success'
+        );
         return true;
     } catch (error) {
-        showToast(error.message || 'Calibration tone failed', 'error');
+        showToast(error.message || 'Calibration metronome failed', 'error');
         return false;
+    } finally {
+        delete _calibrationTonePending[dev.player_id];
+        refreshBtDeviceRowsRuntime();
     }
 }
 
@@ -15203,10 +15329,10 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
-    'latency-nudge':            (_el, _ev, arg) => nudgeDeviceLatency(arg),
-    'latency-test-tone':        (_el, _ev, arg) => playDeviceCalibrationTone(Number(arg)),
-    'latency-mic-calibrate':    (_el, _ev, arg) => calibrateDeviceWithMicrophone(Number(arg)),
-    'latency-apply-suggestion': (_el, _ev, arg) => applyDeviceLatencySuggestion(Number(arg)),
+    'config-latency-nudge':     (el, ev, arg) => nudgeConfigDeviceLatency(el, ev, arg),
+    'toggle-config-latency-step': toggleConfigLatencyStep,
+    'config-latency-test-tone': (el) => playConfigDeviceCalibrationTone(el),
+    'config-latency-mic-calibrate': (el) => calibrateConfigDeviceWithMicrophone(el),
     'bt-start-pairing':         (_el, _ev, arg) => btStartPairing(Number(arg)),
     'bt-claim-audio':           (_el, _ev, arg) => btClaimAudio(Number(arg)),
     'bt-toggle-management':     (_el, _ev, arg) => btToggleManagement(Number(arg)),
@@ -15283,6 +15409,33 @@ function _dispatchAction(eventName) {
         if (result === false) ev.preventDefault();
     };
 }
+
+function _stopConfigLatencyHold() {
+    if (_latencyHoldTimeout) clearTimeout(_latencyHoldTimeout);
+    if (_latencyHoldInterval) clearInterval(_latencyHoldInterval);
+    _latencyHoldTimeout = null;
+    _latencyHoldInterval = null;
+}
+
+document.addEventListener('pointerdown', function(ev) {
+    var button = ev.target && ev.target.closest
+        ? ev.target.closest('[data-action="config-latency-nudge"]')
+        : null;
+    if (!button || button.disabled || (ev.button !== undefined && ev.button !== 0)) return;
+    _stopConfigLatencyHold();
+    var direction = button.getAttribute('data-arg');
+    var shiftKey = !!ev.shiftKey;
+    _latencyHoldTimeout = setTimeout(function() {
+        button.dataset.suppressLatencyClick = 'true';
+        nudgeConfigDeviceLatency(button, {type: 'latency-hold', shiftKey: shiftKey}, direction);
+        _latencyHoldInterval = setInterval(function() {
+            nudgeConfigDeviceLatency(button, {type: 'latency-hold', shiftKey: shiftKey}, direction);
+        }, 220);
+    }, 400);
+});
+document.addEventListener('pointerup', _stopConfigLatencyHold);
+document.addEventListener('pointercancel', _stopConfigLatencyHold);
+document.addEventListener('lostpointercapture', _stopConfigLatencyHold, true);
 
 document.addEventListener('click',  _dispatchAction('click'));
 document.addEventListener('change', _dispatchAction('change'));

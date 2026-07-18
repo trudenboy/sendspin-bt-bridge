@@ -742,7 +742,6 @@ def install() -> None:
         result["CHECK_UPDATES"] = True
         result["UPDATE_CHANNEL"] = "stable"
         result["AUTO_UPDATE"] = False
-        result["ENABLE_LATENCY_CALIBRATION_BETA"] = True
         if not result.get("BRIDGE_NAME"):
             result["BRIDGE_NAME"] = "DEMO"
         # Always inject canonical MA credentials in demo mode.

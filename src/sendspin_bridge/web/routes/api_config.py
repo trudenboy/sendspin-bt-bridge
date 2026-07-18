@@ -705,6 +705,19 @@ def api_config():
     if not isinstance(config, dict):
         return _error_response("Invalid JSON body")
 
+    # Preserve the caller's delay intent across schema normalization.  The
+    # migration layer labels an explicit source-less static_delay_ms as
+    # ``legacy``; for a newly registered device we need to distinguish that
+    # explicit value from a device which omitted delay altogether.
+    incoming_delay_intent = {
+        _normalize_device_mac(device.get("mac")): {
+            "has_delay": "static_delay_ms" in device,
+            "has_source": bool(device.get("static_delay_source")),
+        }
+        for device in config.get("BLUETOOTH_DEVICES", [])
+        if isinstance(device, dict) and _normalize_device_mac(device.get("mac"))
+    }
+
     # The settings form submits a partial config that never includes
     # CONFIG_SCHEMA_VERSION.  Carry the on-disk schema version into the payload
     # so the one-shot schema migrations (e.g. the BT_MAX_RECONNECT_FAILS 0 → 5
@@ -929,6 +942,23 @@ def api_config():
 
         old_devices = {d["mac"]: d for d in existing.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
         new_devices = {d["mac"]: d for d in config.get("BLUETOOTH_DEVICES", []) if d.get("mac")}
+
+        # A delay recommendation is a one-shot starting value, never an
+        # ongoing policy.  Only brand-new devices without an explicit delay
+        # enter auto_pending.  The telemetry loop consumes that marker after
+        # its first usable BlueZ report or codec fallback.  An explicit value
+        # supplied through the API is user intent and therefore manual.
+        for mac, new_device in new_devices.items():
+            if mac in old_devices:
+                continue
+            intent = incoming_delay_intent.get(mac, {})
+            if intent.get("has_source"):
+                continue
+            if intent.get("has_delay"):
+                new_device["static_delay_source"] = "manual"
+            else:
+                new_device["static_delay_ms"] = 0
+                new_device["static_delay_source"] = "auto_pending"
 
         client_adapter = {
             mac: getattr(getattr(client, "bt_manager", None), "_adapter_select", "")

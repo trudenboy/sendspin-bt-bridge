@@ -153,7 +153,6 @@ DEFAULT_CONFIG = {
     "EXPERIMENTAL_PA_MODULE_RELOAD": False,
     "EXPERIMENTAL_PAIR_JUST_WORKS": False,
     "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": False,
-    "ENABLE_LATENCY_CALIBRATION_BETA": False,
     # Periodic live-RSSI refresh for connected speakers (mgmt opcode 0x0031).
     # On by default since v2.64.0 — feature has been stable since
     # 2.63.0-rc.8.  The refresh tick adds one mgmt round-trip per

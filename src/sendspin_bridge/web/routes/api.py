@@ -58,12 +58,6 @@ def _running_in_container() -> bool:
     return any(marker in cgroup for marker in ("docker", "containerd", "kubepods", "libpod"))
 
 
-def _calibration_enabled() -> bool:
-    from sendspin_bridge.config import load_config
-
-    return bool(load_config().get("ENABLE_LATENCY_CALIBRATION_BETA", False))
-
-
 @api_bp.route("/api/calibration/tone.wav", methods=["GET"])
 def calibration_tone():
     """Return a deterministic click track for ordinary MA group playback."""
@@ -108,11 +102,47 @@ def play_calibration_tone():
     return jsonify({"success": True, "player_id": player_id})
 
 
+@api_bp.route("/api/calibration/metronome", methods=["POST"])
+def set_calibration_metronome():
+    """Start or stop the phase-aligned continuous click track for one sink."""
+    data = request.get_json(silent=True) or {}
+    player_id = str(data.get("player_id") or "").strip()
+    action = str(data.get("action") or "").strip().lower()
+    if action not in {"start", "stop"}:
+        return jsonify({"success": False, "error": "action must be start or stop"}), 400
+    client = next(
+        (
+            item
+            for item in get_device_registry_snapshot().active_clients
+            if str(getattr(item, "player_id", "")) == player_id
+        ),
+        None,
+    )
+    if client is None:
+        return jsonify({"success": False, "error": "Unknown player_id"}), 404
+    loop = get_main_loop()
+    if loop is None:
+        return jsonify({"success": False, "error": "Runtime loop unavailable"}), 503
+    try:
+        if action == "start":
+            future = asyncio.run_coroutine_threadsafe(client.start_calibration_metronome(), loop)
+            started = bool(future.result(timeout=5.0))
+            if not started:
+                return jsonify({"success": False, "error": "Bluetooth audio sink is unavailable"}), 409
+            active = True
+        else:
+            future = asyncio.run_coroutine_threadsafe(client.stop_calibration_metronome(), loop)
+            future.result(timeout=5.0)
+            active = False
+    except Exception:
+        logger.exception("Calibration metronome update failed")
+        return jsonify({"success": False, "error": "Calibration metronome update failed"}), 503
+    return jsonify({"success": True, "player_id": player_id, "active": active})
+
+
 @api_bp.route("/api/calibration/sessions", methods=["POST"])
 def create_calibration_session():
-    """Create an in-memory relative microphone calibration beta session."""
-    if not _calibration_enabled():
-        return jsonify({"success": False, "error": "Latency calibration beta is disabled"}), 404
+    """Create an in-memory relative microphone calibration session."""
     now = time.time()
     session_id = str(uuid.uuid4())
     with _calibration_lock:
@@ -126,8 +156,6 @@ def create_calibration_session():
 @api_bp.route("/api/calibration/sessions/<session_id>/audio", methods=["POST"])
 def upload_calibration_audio(session_id: str):
     """Accept bounded Float32-like samples and return a relative estimate."""
-    if not _calibration_enabled():
-        return jsonify({"success": False, "error": "Latency calibration beta is disabled"}), 404
     data = request.get_json(silent=True) or {}
     role = str(data.get("role") or "")
     samples = data.get("samples")

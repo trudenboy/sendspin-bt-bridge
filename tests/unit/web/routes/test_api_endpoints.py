@@ -2563,6 +2563,50 @@ def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_pat
     assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 60}
 
 
+def test_api_config_post_marks_only_unconfigured_new_device_for_initial_delay(client, tmp_path, monkeypatch):
+    import sendspin_bridge.web.routes.api_config as api_config_mod
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Existing",
+                        "static_delay_ms": 210,
+                        "static_delay_source": "manual",
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(api_config_mod, "CONFIG_FILE", config_file)
+    monkeypatch.setattr(api_config_mod, "_sync_ha_options", lambda _config: None)
+    payload = {
+        "BLUETOOTH_DEVICES": [
+            {
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "player_name": "Existing",
+                "static_delay_ms": 210,
+                "static_delay_source": "manual",
+            },
+            {"mac": "11:22:33:44:55:66", "player_name": "Automatic"},
+            {"mac": "22:33:44:55:66:77", "player_name": "Explicit", "static_delay_ms": 90},
+        ]
+    }
+
+    response = client.post("/api/config", data=json.dumps(payload), content_type="application/json")
+
+    assert response.status_code == 200
+    devices = {device["mac"]: device for device in json.loads(config_file.read_text())["BLUETOOTH_DEVICES"]}
+    assert devices["AA:BB:CC:DD:EE:FF"]["static_delay_source"] == "manual"
+    assert devices["11:22:33:44:55:66"]["static_delay_ms"] == 0
+    assert devices["11:22:33:44:55:66"]["static_delay_source"] == "auto_pending"
+    assert devices["22:33:44:55:66:77"]["static_delay_ms"] == 90
+    assert devices["22:33:44:55:66:77"]["static_delay_source"] == "manual"
+
+
 def test_api_config_post_returns_validation_warnings(client, tmp_path, monkeypatch):
     import sendspin_bridge.web.routes.api_config as api_config_mod
 
@@ -5000,10 +5044,62 @@ def test_calibration_play_targets_selected_device(client, monkeypatch):
     assert played == ["player-1"]
 
 
-def test_calibration_session_returns_relative_estimate(client, monkeypatch):
+def test_calibration_metronome_starts_and_stops_selected_device(client, monkeypatch):
     import sendspin_bridge.web.routes.api as api_mod
 
-    monkeypatch.setattr(api_mod, "_calibration_enabled", lambda: True)
+    actions: list[str] = []
+
+    class _DoneFuture:
+        def __init__(self, value):
+            self.value = value
+
+        def result(self, timeout=None):
+            return self.value
+
+    class _FakeClient:
+        player_id = "player-1"
+
+        async def start_calibration_metronome(self):
+            actions.append("start")
+            return True
+
+        async def stop_calibration_metronome(self):
+            actions.append("stop")
+
+    def _run_coroutine_threadsafe(coro, loop):
+        temp_loop = asyncio.new_event_loop()
+        try:
+            value = temp_loop.run_until_complete(coro)
+        finally:
+            temp_loop.close()
+        return _DoneFuture(value)
+
+    monkeypatch.setattr(
+        api_mod,
+        "get_device_registry_snapshot",
+        lambda: SimpleNamespace(active_clients=[_FakeClient()]),
+    )
+    monkeypatch.setattr(api_mod, "get_main_loop", lambda: object())
+    monkeypatch.setattr(api_mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+
+    started = client.post("/api/calibration/metronome", json={"player_id": "player-1", "action": "start"})
+    stopped = client.post("/api/calibration/metronome", json={"player_id": "player-1", "action": "stop"})
+
+    assert started.status_code == 200
+    assert started.get_json()["active"] is True
+    assert stopped.status_code == 200
+    assert stopped.get_json()["active"] is False
+    assert actions == ["start", "stop"]
+
+
+def test_microphone_calibration_session_is_stable_and_always_available(client):
+    created = client.post("/api/calibration/sessions")
+
+    assert created.status_code == 201
+    assert created.get_json()["success"] is True
+
+
+def test_calibration_session_returns_relative_estimate(client):
     created = client.post("/api/calibration/sessions")
     assert created.status_code == 201
     session_id = created.get_json()["session_id"]
@@ -5028,10 +5124,7 @@ def test_calibration_session_returns_relative_estimate(client, monkeypatch):
     assert payload["estimate"]["delay_ms"] == pytest.approx(4.625)
 
 
-def test_calibration_session_explains_and_logs_silent_recording(client, monkeypatch, caplog):
-    import sendspin_bridge.web.routes.api as api_mod
-
-    monkeypatch.setattr(api_mod, "_calibration_enabled", lambda: True)
+def test_calibration_session_explains_and_logs_silent_recording(client, caplog):
     session_id = client.post("/api/calibration/sessions").get_json()["session_id"]
 
     with caplog.at_level(logging.INFO):

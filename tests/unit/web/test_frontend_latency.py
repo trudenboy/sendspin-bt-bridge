@@ -9,6 +9,8 @@ from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_JS_PATH = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "static" / "app.js"
+STYLE_CSS_PATH = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "static" / "style.css"
+INDEX_HTML_PATH = REPO_ROOT / "src" / "sendspin_bridge" / "web" / "templates" / "index.html"
 
 _FRONTEND_LATENCY_SCRIPT = r"""
 const fs = require('fs');
@@ -18,7 +20,9 @@ const source = fs.readFileSync(process.env.APP_JS_PATH, 'utf8');
 
 function extractFunction(name) {
   const marker = `function ${name}(`;
-  const start = source.indexOf(marker);
+  const asyncMarker = `async ${marker}`;
+  const asyncStart = source.indexOf(asyncMarker);
+  const start = asyncStart === -1 ? source.indexOf(marker) : asyncStart;
   if (start === -1) throw new Error(`Function not found: ${name}`);
   const openBrace = source.indexOf('{', start);
   let depth = 0;
@@ -57,6 +61,39 @@ if (mode === 'latency') {
   const devices = JSON.parse(process.env.DEVICES_JSON);
   const targetIndex = Number(process.env.TARGET_INDEX);
   process.stdout.write(JSON.stringify(_getMicrophoneCalibrationPeers(devices, targetIndex)));
+} else if (mode === 'config-latency-markup') {
+  vm.runInThisContext(extractFunction('_uiIconSvg'));
+  vm.runInThisContext(extractFunction('_renderConfigLatencyControlsHtml'));
+  process.stdout.write(JSON.stringify({
+    html: _renderConfigLatencyControlsHtml(Number(process.env.DELAY_MS)),
+  }));
+} else if (mode === 'latency-icons') {
+  vm.runInThisContext(extractFunction('_uiIconSvg'));
+  process.stdout.write(JSON.stringify({
+    metronome: _uiIconSvg('metronome', 'latency-action-icon'),
+    microphone: _uiIconSvg('microphone', 'latency-action-icon'),
+  }));
+} else if (mode === 'metronome-toggle') {
+  vm.runInThisContext(extractFunction('playDeviceCalibrationTone'));
+  global.API_BASE = '';
+  global.currentViewMode = 'grid';
+  global.lastDevices = [{player_id: 'speaker-1', player_name: 'Speaker', calibration_metronome_active: false}];
+  global._calibrationTonePending = {};
+  const requests = [];
+  let refreshes = 0;
+  const toasts = [];
+  global.fetch = async (url, options) => {
+    const payload = JSON.parse(options.body);
+    requests.push({url, payload});
+    return {ok: true, json: async () => ({success: true, active: payload.action === 'start'})};
+  };
+  global.refreshBtDeviceRowsRuntime = () => { refreshes += 1; };
+  global.showToast = (message, level) => toasts.push({message, level});
+  (async () => {
+    await playDeviceCalibrationTone(0);
+    await playDeviceCalibrationTone(0);
+    process.stdout.write(JSON.stringify({requests, refreshes, toasts, device: lastDevices[0]}));
+  })();
 } else {
   throw new Error(`Unsupported mode: ${mode}`);
 }
@@ -77,12 +114,14 @@ def _run_node(mode: str, **values: object) -> dict[str, Any]:
         env=env,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if completed.returncode != 0:
+        raise AssertionError(completed.stderr or completed.stdout)
     return cast("dict[str, Any]", json.loads(completed.stdout))
 
 
-def test_latency_ui_without_bluez_delay_still_renders_numeric_suggestion() -> None:
+def test_latency_ui_does_not_expose_codec_recommendation() -> None:
     state = _run_node(
         "latency",
         DEVICE_JSON={
@@ -98,11 +137,12 @@ def test_latency_ui_without_bluez_delay_still_renders_numeric_suggestion() -> No
     assert state["label"] == "Delay 300 ms"
     assert state["chipVisible"] is False
     assert state["chipText"] == ""
-    assert state["applyVisible"] is True
-    assert state["applyText"] == "Apply 125 ms"
+    assert "suggestedDelay" not in state
+    assert "applyVisible" not in state
+    assert "applyText" not in state
 
 
-def test_latency_ui_renders_bluez_report_and_hides_applied_suggestion() -> None:
+def test_latency_ui_renders_bluez_report_without_apply_action() -> None:
     state = _run_node(
         "latency",
         DEVICE_JSON={
@@ -117,8 +157,9 @@ def test_latency_ui_renders_bluez_report_and_hides_applied_suggestion() -> None:
 
     assert state["chipVisible"] is True
     assert state["chipText"] == "BT delay 170.0 ms"
-    assert state["applyVisible"] is False
-    assert state["applyText"] == "Apply 170 ms"
+    assert "suggestedDelay" not in state
+    assert "applyVisible" not in state
+    assert "applyText" not in state
 
 
 def test_status_stream_open_clears_stale_backend_warning() -> None:
@@ -180,3 +221,83 @@ def test_microphone_calibration_rejects_disconnected_peer() -> None:
     )
 
     assert peers == []
+
+
+def test_configuration_delay_controls_use_compact_stepper() -> None:
+    html = _run_node("config-latency-markup", DELAY_MS="240")["html"]
+
+    assert 'class="bt-latency-controls"' in html
+    assert 'class="bt-delay"' in html
+    assert 'type="hidden"' in html
+    assert 'data-action="config-latency-nudge"' in html
+    assert 'data-arg="-1"' in html
+    assert 'data-arg="1"' in html
+    assert 'class="bt-latency-value"' in html
+    assert ">240 ms<" in html
+    assert 'data-action="toggle-config-latency-step"' in html
+    assert ">±10<" in html
+    assert 'class="action-btn latency-test-clicks"' in html
+    assert 'class="action-btn latency-mic-compare"' in html
+    assert html.count('class="latency-action-icon"') == 2
+    assert html.index('data-arg="-1"') < html.index('class="bt-latency-value"')
+    assert html.index('class="bt-latency-value"') < html.index('data-arg="1"')
+    assert html.index("toggle-config-latency-step") < html.index("latency-test-clicks")
+
+
+def test_latency_action_icons_are_inline_accessibility_safe_svgs() -> None:
+    icons = _run_node("latency-icons")
+
+    assert icons["metronome"].startswith('<svg class="latency-action-icon"')
+    assert icons["microphone"].startswith('<svg class="latency-action-icon"')
+    assert 'aria-hidden="true"' in icons["metronome"]
+    assert 'aria-hidden="true"' in icons["microphone"]
+    assert icons["metronome"] != icons["microphone"]
+
+
+def test_latency_controls_live_only_in_configuration_device_actions() -> None:
+    source = APP_JS_PATH.read_text(encoding="utf-8")
+    template = INDEX_HTML_PATH.read_text(encoding="utf-8")
+
+    assert "_renderLatencyTuneHtml(i, 'd')" not in source
+    assert "_renderLatencyTuneHtml(i, 'l')" not in source
+    assert "_renderConfigLatencyControlsHtml(delayVal)" in source
+    actions_pos = source.index("_renderConfigLatencyControlsHtml(delayVal)")
+    bluetooth_actions_pos = source.index("Bluetooth actions", actions_pos)
+    assert actions_pos < bluetooth_actions_pos
+    assert "<span>Delay</span>" not in template
+    assert "<span>Live</span><span>Actions</span>" in template
+
+
+def test_configuration_latency_controls_stay_on_one_row() -> None:
+    css = STYLE_CSS_PATH.read_text(encoding="utf-8")
+
+    assert ".bt-latency-controls" in css
+    assert ".bt-latency-stepper" in css
+    assert "flex-wrap: nowrap" in css
+
+
+def test_test_clicks_toggles_continuous_metronome() -> None:
+    result = _run_node("metronome-toggle")
+
+    assert result["requests"] == [
+        {
+            "url": "/api/calibration/metronome",
+            "payload": {"player_id": "speaker-1", "action": "start"},
+        },
+        {
+            "url": "/api/calibration/metronome",
+            "payload": {"player_id": "speaker-1", "action": "stop"},
+        },
+    ]
+    assert result["refreshes"] == 2
+    assert result["device"]["calibration_metronome_active"] is False
+
+
+def test_microphone_calibration_is_not_experimental_ui() -> None:
+    template = INDEX_HTML_PATH.read_text(encoding="utf-8")
+    source = APP_JS_PATH.read_text(encoding="utf-8")
+
+    assert "latency-calibration-beta" not in template
+    assert "ENABLE_LATENCY_CALIBRATION_BETA" not in template
+    assert "latency-calibration-beta" not in source
+    assert "ENABLE_LATENCY_CALIBRATION_BETA" not in source

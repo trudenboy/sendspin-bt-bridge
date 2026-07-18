@@ -21,6 +21,9 @@ from typing import Any
 _DEVICE_HOT_FIELDS: frozenset[str] = frozenset(
     {
         "static_delay_ms",
+        "static_delay_source",
+        "static_delay_calibrated_at",
+        "static_delay_codec",
         "required_lead_time_ms",
         "min_buffer_ms",
         "idle_mode",

@@ -101,11 +101,6 @@
       "default": false,
       "description": "Prefer SBC codec over AAC/aptX for Bluetooth audio."
     },
-    "ENABLE_LATENCY_CALIBRATION_BETA": {
-      "type": "boolean",
-      "default": false,
-      "description": "Enable the experimental browser microphone relative-latency calibration API."
-    },
     "BT_CHECK_INTERVAL": {
       "type": "integer",
       "default": 10,
@@ -413,8 +408,8 @@
         },
         "static_delay_source": {
           "type": "string",
-          "enum": ["legacy", "manual", "music_assistant", "bluez_report", "bluez_delay_report", "codec_fallback", "manual_calibration", "microphone_calibration"],
-          "description": "Provenance of the confirmed per-device static delay."
+          "enum": ["auto_pending", "legacy", "manual", "music_assistant", "bluez_report", "bluez_delay_report", "codec_fallback", "manual_calibration", "microphone_calibration"],
+          "description": "Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker."
         },
         "static_delay_calibrated_at": {
           "type": "string",

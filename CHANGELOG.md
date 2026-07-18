@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.0-rc.2] - 2026-07-18
+
+### Changed
+
+- **Test clicks now toggles a continuous synchronized metronome.** Multiple speakers join one shared 120-BPM woodblock phase, active buttons switch to Stop clicks, and live delay adjustments rejoin the shared phase with the new compensation value while microphone comparison keeps its bounded recording chirp. PipeWire uses a low-latency native stream, while an inaudible carrier and short gate pre-roll keep DSP-heavy speakers active between clicks.
+- **Latency recommendations are now one-shot defaults for newly registered devices.** The first available BlueZ delay report or codec fallback is applied and persisted automatically, then permanently yields to live nudges, microphone calibration, and every other manual value. Existing devices are never changed by this initialization path.
+- **Delay tuning now lives with each device's configuration actions.** The duplicate grid/list controls and standalone Delay column are replaced by one compact minus/value/plus stepper before Bluetooth actions, with a shared ±10/±50 selector, press-and-hold adjustment, metronome, and microphone controls. Microphone comparison is now a stable always-available workflow instead of an experimental opt-in.
+
 ## [2.73.0-rc.1] - 2026-07-17
 
 ### Added

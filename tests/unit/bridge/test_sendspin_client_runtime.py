@@ -12,6 +12,7 @@ import pytest
 
 import sendspin_bridge.bridge.state as state
 from sendspin_bridge.bridge.client import SendspinClient, _filter_duplicate_bluetooth_devices
+from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation
 from sendspin_bridge.services.diagnostics.log_analysis import classify_subprocess_stderr_level
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
@@ -92,6 +93,157 @@ async def test_send_subprocess_command_delegates_to_command_service():
     await client._send_subprocess_command({"cmd": "pause"})
 
     assert fake_service.calls == [(proc, {"cmd": "pause"})]
+
+
+@pytest.mark.asyncio
+async def test_calibration_metronome_runs_until_explicitly_stopped(monkeypatch):
+    import sendspin_bridge.bridge.client as client_mod
+
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.bluetooth_sink_name = "bluez_sink.test"
+    client.status.update({"bluetooth_connected": True, "static_delay_ms": 180})
+    phase_epochs: list[float] = []
+
+    def _calculate_lead(_started_at, **kwargs):
+        phase_epochs.append(kwargs["epoch_seconds"])
+        return 1
+
+    class _MetronomeStdin:
+        def __init__(self):
+            self.writes: list[bytes] = []
+            self.closed = False
+
+        def write(self, data):
+            self.writes.append(data)
+
+        async def drain(self):
+            await asyncio.sleep(3600)
+
+        def close(self):
+            self.closed = True
+
+    class _MetronomeProc:
+        def __init__(self):
+            self.stdin = _MetronomeStdin()
+            self.returncode = None
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+
+        async def wait(self):
+            return self.returncode
+
+    proc = _MetronomeProc()
+
+    async def _fake_exec(*args, **kwargs):
+        return proc
+
+    monkeypatch.setattr("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr(client_mod, "calculate_metronome_lead_frames", _calculate_lead)
+
+    assert await client.start_calibration_metronome() is True
+    await asyncio.sleep(0)
+    assert client.status.get("calibration_metronome_active") is True
+    assert proc.stdin.writes
+
+    await client.stop_calibration_metronome()
+
+    assert proc.terminated is True
+    assert proc.stdin.closed is True
+    assert client.status.get("calibration_metronome_active") is False
+    assert len(phase_epochs) == 1
+    assert phase_epochs[0] - client_mod._CALIBRATION_METRONOME_EPOCH == pytest.approx(-0.18, abs=1e-6)
+
+
+def test_calibration_metronome_requests_a_small_deterministic_pulse_buffer():
+    import sendspin_bridge.bridge.client as client_mod
+
+    args = client_mod._calibration_metronome_paplay_args("bluez_sink.test")
+
+    assert "--latency-msec=20" in args
+    assert "--process-time-msec=5" in args
+
+
+def test_calibration_metronome_uses_native_pipewire_player_for_pipewire_sink(monkeypatch):
+    import sendspin_bridge.bridge.client as client_mod
+
+    monkeypatch.setattr(client_mod.shutil, "which", lambda name: "/usr/bin/pw-play" if name == "pw-play" else None)
+
+    args = client_mod._calibration_metronome_player_args("bluez_output.test.1")
+
+    assert args[0] == "/usr/bin/pw-play"
+    assert "--target=bluez_output.test.1" in args
+    assert "--latency=20ms" in args
+
+
+def test_calibration_metronome_keeps_paplay_fallback_for_pulseaudio_sink(monkeypatch):
+    import sendspin_bridge.bridge.client as client_mod
+
+    monkeypatch.setattr(client_mod.shutil, "which", lambda _name: "/usr/bin/pw-play")
+
+    args = client_mod._calibration_metronome_player_args("bluez_sink.test.a2dp_sink")
+
+    assert args[0] == "paplay"
+    assert "--device=bluez_sink.test.a2dp_sink" in args
+
+
+@pytest.mark.asyncio
+async def test_active_metronome_rejoins_shared_phase_after_delay_nudge(monkeypatch):
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.status.update({"calibration_metronome_active": True})
+    calls: list[object] = []
+
+    async def _stop():
+        calls.append("stop")
+
+    async def _start():
+        calls.append(("start", client.status.get("static_delay_ms")))
+        return True
+
+    monkeypatch.setattr(client, "stop_calibration_metronome", _stop)
+    monkeypatch.setattr(client, "start_calibration_metronome", _start)
+
+    applied = await client.apply_hot_config({"static_delay_ms": 180})
+
+    assert applied == ["static_delay_ms"]
+    assert calls == ["stop", ("start", 180)]
+
+
+@pytest.mark.asyncio
+async def test_calibration_metronome_kills_paplay_that_ignores_terminate():
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.status.update({"calibration_metronome_active": True})
+
+    class _StubbornProc:
+        returncode = None
+        stdin = None
+
+        def __init__(self):
+            self.terminated = False
+            self.killed = False
+
+        def terminate(self):
+            self.terminated = True
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        async def wait(self):
+            if not self.killed:
+                raise TimeoutError
+            return self.returncode
+
+    proc = _StubbornProc()
+    client._calibration_metronome_process = proc
+
+    await client.stop_calibration_metronome()
+
+    assert proc.terminated is True
+    assert proc.killed is True
+    assert client.status.get("calibration_metronome_active") is False
 
 
 @pytest.mark.asyncio
@@ -966,6 +1118,71 @@ async def test_read_subprocess_output_skips_static_delay_persist_when_no_mac(mon
     await client._read_subprocess_output()
 
     assert saved == []
+
+
+@pytest.mark.asyncio
+async def test_initial_latency_recommendation_is_applied_and_persisted_once(monkeypatch):
+    client = SendspinClient(
+        "Test Player",
+        "localhost",
+        9000,
+        static_delay_ms=0,
+        static_delay_source="auto_pending",
+    )
+    client.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF")
+    applied: list[dict[str, int]] = []
+    saved: list[tuple[str, int, str | None, str | None]] = []
+
+    async def _apply_hot_config(updates):
+        applied.append(updates)
+        client.static_delay_ms = float(updates["static_delay_ms"])
+        client.status["static_delay_ms"] = float(updates["static_delay_ms"])
+        return ["static_delay_ms"]
+
+    def _save(mac, value, *, source=None, codec=None):
+        saved.append((mac, value, source, codec))
+
+    monkeypatch.setattr(client, "apply_hot_config", _apply_hot_config)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.save_device_static_delay", _save)
+    recommendation = LatencyRecommendation(
+        value_ms=125,
+        source="codec_fallback",
+        confidence="low",
+        explanation="SBC starting point",
+    )
+
+    assert await client._apply_initial_latency_recommendation(recommendation, "sbc") is True
+    assert await client._apply_initial_latency_recommendation(recommendation, "sbc") is False
+
+    assert applied == [{"static_delay_ms": 125}]
+    assert saved == [("AA:BB:CC:DD:EE:FF", 125, "codec_fallback", "sbc")]
+    assert client.status["static_delay_source"] == "codec_fallback"
+    assert client.status["static_delay_codec"] == "sbc"
+
+
+@pytest.mark.asyncio
+async def test_initial_latency_recommendation_never_overwrites_manual_delay(monkeypatch):
+    client = SendspinClient(
+        "Test Player",
+        "localhost",
+        9000,
+        static_delay_ms=210,
+        static_delay_source="manual",
+    )
+    client.bt_manager = SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF")
+
+    async def _unexpected_apply(_updates):
+        raise AssertionError("manual delay must not be overwritten")
+
+    monkeypatch.setattr(client, "apply_hot_config", _unexpected_apply)
+    recommendation = LatencyRecommendation(
+        value_ms=125,
+        source="codec_fallback",
+        confidence="low",
+        explanation="SBC starting point",
+    )
+
+    assert await client._apply_initial_latency_recommendation(recommendation, "sbc") is False
 
 
 @pytest.mark.asyncio
