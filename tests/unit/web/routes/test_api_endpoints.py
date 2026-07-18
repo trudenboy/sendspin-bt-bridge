@@ -688,9 +688,7 @@ def test_run_standalone_pair_no_io_agent_true_is_one_shot(monkeypatch):
         )
 
     init_batch = fake_proc.stdin.writes[0]
-    assert "agent NoInputNoOutput\n" in init_batch, (
-        f"request=True must force NoInputNoOutput, got: {init_batch!r}"
-    )
+    assert "agent NoInputNoOutput\n" in init_batch, f"request=True must force NoInputNoOutput, got: {init_batch!r}"
 
 
 def test_run_standalone_pair_no_io_agent_false_uses_safe_default(monkeypatch):
@@ -712,9 +710,7 @@ def test_run_standalone_pair_no_io_agent_false_uses_safe_default(monkeypatch):
         )
 
     init_batch = fake_proc.stdin.writes[0]
-    assert "agent on\n" in init_batch, (
-        f"request=False must use the safe default agent, got: {init_batch!r}"
-    )
+    assert "agent on\n" in init_batch, f"request=False must use the safe default agent, got: {init_batch!r}"
     assert "agent NoInputNoOutput\n" not in init_batch
 
 

@@ -101,9 +101,9 @@ def detect_compatibility_capabilities(
         },
         "adapter_auto_recovery": {
             "available": adapter_available,
-            "level": "full" if adapter_available and usb_access else (
-                "power_cycle_only" if adapter_available else "unavailable"
-            ),
+            "level": "full"
+            if adapter_available and usb_access
+            else ("power_cycle_only" if adapter_available else "unavailable"),
             "usb_reset_available": bool(adapter_available and usb_access),
             "rfkill_available": bool(adapter_available and rfkill_access),
             "reason": adapter_reason,
