@@ -1,0 +1,52 @@
+[
+  {
+    "referrer": "github.com",
+    "count": 161,
+    "uniques": 33
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 124,
+    "uniques": 68
+  },
+  {
+    "referrer": "Google",
+    "count": 116,
+    "uniques": 51
+  },
+  {
+    "referrer": "yandex.ru",
+    "count": 15,
+    "uniques": 3
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 11,
+    "uniques": 9
+  },
+  {
+    "referrer": "sendspin-bt-bridge.pages.dev",
+    "count": 11,
+    "uniques": 2
+  },
+  {
+    "referrer": "Yahoo",
+    "count": 10,
+    "uniques": 2
+  },
+  {
+    "referrer": "forum.hacf.fr",
+    "count": 9,
+    "uniques": 6
+  },
+  {
+    "referrer": "DuckDuckGo",
+    "count": 7,
+    "uniques": 7
+  },
+  {
+    "referrer": "l.facebook.com",
+    "count": 7,
+    "uniques": 4
+  }
+]
