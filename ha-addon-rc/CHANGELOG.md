@@ -7,48 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.73.0-rc.3] - 2026-07-18
-
-### Added
-
-- **Advanced Bluetooth recovery controls now report whether they can work on the current host.** The UI distinguishes PipeWire from classic PulseAudio, verifies the loaded Bluetooth discovery module, Linux networking capabilities, rfkill access, and USB-reset access, then disables unavailable controls with a concrete reason.
-- **Adapter recovery now has structured runtime status.** Diagnostics can show when recovery ran, which adapter it targeted, its current stage, result, and failure reason without scraping log wording.
-
-### Changed
-
-- **Experimental features are now presented as narrowly scoped advanced compatibility tools.** Stable RSSI, room labels, pairing peer-quiesce, and microphone calibration remain visible normally; the Class of Device workaround appears only when already configured or when diagnostics identify the matching Samsung failure; recovery workarounds retain their warnings and restart requirements.
-- **Risky pairing compatibility choices are now one-shot and target-bound.** Just-Works and HFP/HSP authorization apply only to the selected request, reset in the UI immediately after it starts, and the BlueZ pairing agent rejects every device other than the selected MAC. Temporarily making an adapter quiet is now accurately described as disconnecting its other speakers rather than pausing them.
-- **Bluetooth discovery now starts only after explicit confirmation on one concrete adapter.** Checklist and empty-state Scan actions open the modal and emphasize **Start Scan** without starting automatically; the first detected controller is selected and the ambiguous all-adapters scope is removed. The room-handoff readiness badge is shortened to **Transfer**.
-
-### Removed
-
-- **Persisted global defaults for Just-Works and HFP/HSP pairing authorization.** Legacy saved values are discarded during configuration migration so an earlier troubleshooting choice cannot silently weaken or alter later pairing attempts.
-
-## [2.73.0-rc.2] - 2026-07-18
-
-### Changed
-
-- **Test clicks now toggles a continuous synchronized metronome.** Multiple speakers join one shared 120-BPM woodblock phase, active buttons switch to Stop clicks, and live delay adjustments rejoin the shared phase with the new compensation value while microphone comparison keeps its bounded recording chirp. PipeWire uses a low-latency native stream, while an inaudible carrier and short gate pre-roll keep DSP-heavy speakers active between clicks.
-- **Latency recommendations are now one-shot defaults for newly registered devices.** The first available BlueZ delay report or codec fallback is applied and persisted automatically, then permanently yields to live nudges, microphone calibration, and every other manual value. Existing devices are never changed by this initialization path.
-- **Delay tuning now lives with each device's configuration actions.** The duplicate grid/list controls and standalone Delay column are replaced by one compact minus/value/plus stepper before Bluetooth actions, with a shared ±10/±50 selector, press-and-hold adjustment, metronome, and microphone controls. Microphone comparison is now a stable always-available workflow instead of an experimental opt-in.
-
-## [2.73.0-rc.1] - 2026-07-17
-
-### Added
-
-- **Per-speaker synchronization telemetry and guided latency tuning.** Device cards can show the AVDTP delay reported by the Bluetooth speaker, offer codec-based starting values when no report exists, apply ±10/±50 ms corrections live, play calibration clicks, and run an opt-in three-trial browser-microphone comparison between two speakers.
-- **Live Sendspin timing and buffer controls.** Backend output latency, buffered audio, playback error, clock offset/uncertainty, and rolling re-anchor counts now flow through device status, history API, diagnostics, and Home Assistant entities. Per-device startup lead and minimum buffer settings hot-apply without a player restart when supported by the installed client library.
-
-### Changed
-
-- **Latency Assistant now uses runtime instability, not configuration alone.** Repeated re-anchors during playback produce an evidence-backed buffer recommendation, while confirmed manual or microphone calibration remains distinct from advisory Bluetooth and codec estimates.
-
-### Fixed
-
-- **Standalone lifecycle and installation labels are now accurate.** **Save & Restart** launches a detached successor before stopping a directly started Python process, while the header reports `Standalone` unless the host exposes an actual Home Assistant, Docker, LXC, or installed systemd-service marker.
-- **Live latency tuning now remains applied and renders correctly for every speaker.** Successful changes are reflected in the daemon's next status snapshot instead of being overwritten by an older value, devices without AVDTP delay reporting show their numeric codec fallback, microphone comparison accepts a Bluetooth-connected speaker from a different Music Assistant group while rejecting disconnected peers before recording begins, calibration audio waits for suspended Bluetooth sinks to wake before emitting an audible chirp, comparison uses the acoustic energy envelope so speakers with different frequency responses still correlate, and a recovered status stream clears stale backend-unavailable warnings without exhausting the web server's request workers.
-- **Each Sendspin player now stays routed to its own Bluetooth speaker on PipeWire.** Bluetooth subprocesses use the PulseAudio-compatible PortAudio output that honors their explicit target sink, instead of PipeWire's shared ALSA default, and route correction remains active for later streams rather than expiring shortly after startup.
-
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)
