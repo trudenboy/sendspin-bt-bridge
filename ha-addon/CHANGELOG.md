@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.1] - 2026-07-22
+
+### Fixed
+
+- **Fresh installs and upgrades on x86_64 LXC no longer fail while resolving Python dependencies.** The installer preserves the required `aiosendspin` 6.1.1 override and installs `sendspin` separately instead of asking pip to resolve its stale dependency metadata. ([#393](https://github.com/trudenboy/sendspin-bt-bridge/issues/393))
+
 ## [2.73.0] - 2026-07-22
 
 ### Added
@@ -5190,7 +5196,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.0...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.1...HEAD
+[2.73.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.0...v2.73.1
 [2.73.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.72.1...v2.73.0
 [2.72.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.72.0...v2.72.1
 [2.72.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.71.2...v2.72.0
