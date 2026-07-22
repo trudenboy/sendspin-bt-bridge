@@ -156,6 +156,7 @@ update_python_dependencies() {
   # exit codes via die().
   local requirements_file="$1"
   local arch
+  local sendspin_requirement
 
   arch=$(uname -m)
   if [[ "${arch}" == "armv7l" || "${arch}" == "armhf" ]]; then
@@ -170,8 +171,17 @@ update_python_dependencies() {
       pip3 install --break-system-packages -q -r /dev/stdin \
         || die "pip3 install of remaining requirements (armv7 branch) failed; aborting upgrade"
   else
-    pip3 install --break-system-packages -q -r "${requirements_file}" \
-      || die "pip3 install -r requirements.txt failed; aborting upgrade. Check that the host has network access and that pip can resolve the pinned package set."
+    # requirements.txt cannot encode uv's aiosendspin override. Keep the
+    # pinned dependency set, but prevent pip from re-resolving sendspin's
+    # stale aiosendspin~=6.0.1 metadata (same split used by Docker).
+    sendspin_requirement="$(sed -n '/^sendspin==/{p;q;}' "${requirements_file}")"
+    [[ -n "${sendspin_requirement}" ]] \
+      || die "Pinned sendspin requirement missing from requirements.txt; aborting upgrade"
+    grep -v '^sendspin==' "${requirements_file}" | \
+      pip3 install --break-system-packages -q -r /dev/stdin \
+        || die "pip3 install of requirements excluding sendspin failed; aborting upgrade. Check that the host has network access."
+    pip3 install --break-system-packages -q --no-deps -U "${sendspin_requirement}" \
+      || die "pip3 install of pinned sendspin (--no-deps) failed; aborting upgrade"
   fi
 }
 

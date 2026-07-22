@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.1] - 2026-07-22
+
+### Fixed
+
+- **Fresh installs and upgrades on x86_64 LXC no longer fail while resolving Python dependencies.** The installer preserves the required `aiosendspin` 6.1.1 override and installs `sendspin` separately instead of asking pip to resolve its stale dependency metadata. ([#393](https://github.com/trudenboy/sendspin-bt-bridge/issues/393))
+
 ## [2.73.0] - 2026-07-22
 
 ### Added

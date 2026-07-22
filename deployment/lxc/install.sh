@@ -147,7 +147,18 @@ if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
   grep -v '^sendspin' /opt/sendspin-client/requirements.txt | \
     pip3 install --break-system-packages --ignore-installed -q -r /dev/stdin
 else
-  pip3 install --break-system-packages --ignore-installed -q -r /opt/sendspin-client/requirements.txt
+  # requirements.txt cannot represent uv's intentional aiosendspin override:
+  # sendspin 7.5.0 still declares aiosendspin~=6.0.1, while the bridge needs
+  # aiosendspin 6.1.1 for Music Assistant's seek_relative controller state.
+  # Install the fully pinned dependency set first, then install sendspin
+  # without re-resolving its stale dependency metadata (same as Docker).
+  SENDSPIN_REQUIREMENT="$(sed -n '/^sendspin==/{p;q;}' /opt/sendspin-client/requirements.txt)"
+  [[ -n "${SENDSPIN_REQUIREMENT}" ]] \
+    || die "Pinned sendspin requirement missing from requirements.txt"
+  grep -v '^sendspin==' /opt/sendspin-client/requirements.txt | \
+    pip3 install --break-system-packages --ignore-installed -q -r /dev/stdin
+  pip3 install --break-system-packages --ignore-installed -q --no-deps \
+    "${SENDSPIN_REQUIREMENT}"
 fi
 # Install the bridge package itself so `python3 -m sendspin_bridge` resolves.
 pip3 install --break-system-packages -q --no-deps -e /opt/sendspin-client
