@@ -55,7 +55,10 @@ jobs:
         # Replaces the previous ``pip install -r requirements.txt -r
         # dev-requirements.txt pytest-cov`` + ``pip install --no-deps -e .``
         # dance — pytest-cov is now in [project.optional-dependencies].dev.
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --extra dev
+
+      - name: Verify installed dev tool pins
+        run: uv run --no-sync python scripts/check_locked_dev_tools.py
 
       - name: Audit dependencies for CVEs
         # Run pip-audit *against the project venv* — pip-audit with no

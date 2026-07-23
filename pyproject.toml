@@ -28,15 +28,15 @@ dependencies = [
     "aiomqtt>=2.0",
     # Transitive minimum-version pins for security fixes.
     # See requirements.txt for per-CVE rationale; bump alongside pip-audit findings.
-    "aiohttp>=3.14.1",
+    "aiohttp>=3.14.3",
     "pillow>=12.2.0",
     "pygments>=2.20.0",
     "requests>=2.33.0",
 ]
 
 [tool.uv]
-# Pin uv version range so all contributors / CI / Dockerfile use a compatible
-# resolver and lockfile schema. Bump deliberately alongside the Dockerfile pin.
+# Pin the project resolver used by contributors and CI. The Docker builder uses
+# a newer standalone ``uv pip`` binary without loading this project-level config.
 required-version = ">=0.9.27,<0.10"
 
 # ``sendspin`` 7.5.0 caps its own ``aiosendspin`` dependency at ``~=6.0.1``
@@ -82,7 +82,7 @@ dev = [
     # CI's _test.yml runs pytest with --cov; keep coverage opt-in via the
     # dev extra so contributors can `uv run pytest --cov=...` locally too.
     "pytest-cov>=5.0,<8.0",
-    "ruff==0.15.21",
+    "ruff==0.15.22",
     "mypy>=1.20.2,<3.0",
 ]
 

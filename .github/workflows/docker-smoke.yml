@@ -1,0 +1,55 @@
+name: Docker smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Dockerfile
+      - pyproject.toml
+      - requirements.txt
+      - uv.lock
+      - scripts/check_container_runtime.py
+      - scripts/check_sendspin_compat.py
+      - .github/workflows/docker-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Resolve pinned runtime versions
+        id: versions
+        run: |
+          sendspin_version="$(sed -n -E 's/^sendspin==//p' requirements.txt | head -n 1)"
+          aiosendspin_version="$(sed -n -E 's/^aiosendspin(\[server\])?==//p' requirements.txt | head -n 1)"
+          test -n "${sendspin_version}"
+          test -n "${aiosendspin_version}"
+          echo "sendspin=${sendspin_version}" >> "$GITHUB_OUTPUT"
+          echo "aiosendspin=${aiosendspin_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg "SENDSPIN_VERSION=${{ steps.versions.outputs.sendspin }}" \
+            --tag sendspin-pr-smoke:local \
+            .
+
+      - name: Smoke test image
+        run: |
+          docker run --rm --entrypoint python3 sendspin-pr-smoke:local \
+            scripts/check_sendspin_compat.py \
+            --expect-aiosendspin "${{ steps.versions.outputs.aiosendspin }}"
+          docker run --rm --entrypoint python3 sendspin-pr-smoke:local \
+            scripts/check_container_runtime.py

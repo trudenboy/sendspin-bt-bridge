@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated `aiohttp` to 3.14.3, `certifi` to 2026.7.22, Ruff to 0.15.22, and the Docker uv stage to 0.11.31. CI now verifies installed exact dev-tool pins against project metadata.
+
+### Fixed
+
+- **Bluetooth volume now uses one gain stage.** Bridge-owned sink-inputs are normalized to 100% when streams start or move, while the Bluetooth sink remains the only volume-control point; unrelated application streams are left untouched.
+- **The Render demo now preserves the required `aiosendspin` override.** Demo dependencies install first and `sendspin` installs with `--no-deps`, preventing its stale 6.0.x constraint from replacing `aiosendspin` 6.1.1.
+
 ## [2.73.2] - 2026-07-23
 
 ### Fixed
