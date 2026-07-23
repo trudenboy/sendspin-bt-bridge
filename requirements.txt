@@ -38,7 +38,7 @@ btsocket==0.3.0
     # via
     #   bluetooth-auto-recovery
     #   sendspin-bt-bridge
-certifi==2026.6.17
+certifi==2026.7.22
     # via requests
 cffi==2.1.0
     # via
