@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.2] - 2026-07-23
+
+### Fixed
+
+- **Docker images now retain the required `aiosendspin` 6.1.1 override.** Installing `sendspin` can no longer silently downgrade the already pinned client library to 6.0.5, and every release image now fails its smoke test if the installed version drifts from `requirements.txt`.
+- **Bluetooth reconnect failures now expose the actual BlueZ error.** Diagnostics preserve `bluetoothctl` stderr and discard the harmless `Agent registered` banner, while the duplicate-bridge warning validates Linux process identity before treating a reused Docker PID as another running instance. ([forum report](https://community.home-assistant.io/t/sendspin-bluetooth-bridge-turn-any-bt-speaker-into-an-ma-player-and-ha/993762/146))
+
 ## [2.73.1] - 2026-07-22
 
 ### Fixed
@@ -5196,7 +5203,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.1...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.2...HEAD
+[2.73.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.1...v2.73.2
 [2.73.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.0...v2.73.1
 [2.73.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.72.1...v2.73.0
 [2.72.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.72.0...v2.72.1
