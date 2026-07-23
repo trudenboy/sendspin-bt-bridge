@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.4] - 2026-07-23
+
+### Fixed
+
+- **Slow Sendspin handshakes no longer restart the player daemon.** Timing telemetry now waits for clock synchronization before reading uncertainty, and optional observability tasks cannot terminate playback if metric collection fails. ([#403](https://github.com/trudenboy/sendspin-bt-bridge/issues/403))
+
 ## [2.73.3] - 2026-07-23
 
 ### Changed

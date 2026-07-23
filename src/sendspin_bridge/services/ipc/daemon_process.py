@@ -388,27 +388,41 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
                         logger.debug("reanchor auto-clear callback failed: %s", exc)
 
 
-async def _timing_telemetry_watcher(daemon, status: dict, on_status_change, stop_event: asyncio.Event) -> None:
+async def _timing_telemetry_watcher(
+    daemon,
+    status: dict,
+    on_status_change,
+    stop_event: asyncio.Event,
+    *,
+    poll_interval: float = 1.0,
+) -> None:
     """Publish bounded-rate Sendspin timing metrics through status IPC."""
     from sendspin_bridge.services.audio.timing_telemetry import collect_timing_snapshot
 
     next_metrics_at = 0.0
+    failure_reported = False
     while not stop_event.is_set():
-        audio_handler = getattr(daemon, "_audio_handler", None)
-        client = getattr(daemon, "_client", None)
-        changed = False
-        if audio_handler is not None:
-            changed = _observe_structured_reanchor(audio_handler, status)
-        now = time.monotonic()
-        if audio_handler is not None and client is not None and now >= next_metrics_at:
-            snapshot = collect_timing_snapshot(audio_handler, client)
-            with _status_lock:
-                status.update(snapshot)
-            changed = True
-            next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
-        if changed and callable(on_status_change):
-            on_status_change()
-        await asyncio.sleep(1.0)
+        try:
+            audio_handler = getattr(daemon, "_audio_handler", None)
+            client = getattr(daemon, "_client", None)
+            changed = False
+            if audio_handler is not None:
+                changed = _observe_structured_reanchor(audio_handler, status)
+            now = time.monotonic()
+            if audio_handler is not None and client is not None and now >= next_metrics_at:
+                snapshot = collect_timing_snapshot(audio_handler, client)
+                with _status_lock:
+                    status.update(snapshot)
+                changed = True
+                next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
+            if changed and callable(on_status_change):
+                on_status_change()
+            failure_reported = False
+        except Exception as exc:
+            log = logger.debug if failure_reported else logger.warning
+            log("Timing telemetry update failed; playback will continue: %s", exc)
+            failure_reported = True
+        await asyncio.sleep(poll_interval)
 
 
 async def _startup_sink_routing_watcher(
@@ -870,10 +884,11 @@ async def _run(params: dict) -> None:
             _startup_sink_routing_watcher(status, bluetooth_sink_name, stop_event, player_name)
         )
 
-    # Wait until stop command or daemon exits.
-    # routing_task and conn_watchdog_task are fire-and-forget so their completion
-    # doesn't trigger FIRST_COMPLETED and kill the daemon.
-    all_tasks = [cmd_task, daemon_task, watcher_task, timing_task, asyncio.create_task(stop_event.wait())]
+    # Wait until stdin closes, a stop command arrives, or the daemon exits.
+    # Observability helpers are deliberately excluded: diagnostics must never
+    # own the playback lifecycle if a metric collector fails unexpectedly.
+    stop_task = asyncio.create_task(stop_event.wait())
+    all_tasks = [cmd_task, daemon_task, stop_task]
     _done, pending = await asyncio.wait(
         all_tasks,
         return_when=asyncio.FIRST_COMPLETED,
@@ -888,6 +903,11 @@ async def _run(params: dict) -> None:
         routing_task.cancel()
     for t in pending:
         t.cancel()
+
+    auxiliary_tasks = [watcher_task, timing_task, conn_watchdog_task]
+    if routing_task:
+        auxiliary_tasks.append(routing_task)
+    await asyncio.gather(*auxiliary_tasks, return_exceptions=True)
 
     # Cancel tracked fire-and-forget tasks
     for t in list(_background_tasks):
