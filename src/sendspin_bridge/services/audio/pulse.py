@@ -285,12 +285,17 @@ async def amove_sink_input(sink_input_idx: int, sink_name: str) -> bool:
 
 
 async def amove_pid_sink_inputs(pid: int, sink_name: str) -> int:
-    """Move all sink-inputs belonging to *pid* to *sink_name*.
+    """Normalize and move all sink-inputs belonging to *pid* to *sink_name*.
 
     Returns the number of sink-inputs moved (0 means nothing to do or nothing found).
     Used from within a daemon subprocess to correct PipeWire auto-routing after a BT
     sink disappears and re-appears: PULSE_SINK handles initial routing but WirePlumber
     may re-route streams to the default sink during reconnect events.
+
+    The bridge sink is the sole volume-control point. Matching stream inputs are kept
+    at unity gain so a requested 50% does not become 50% sink × 50% stream = 25%.
+    PID matching is essential: other applications sharing the Bluetooth sink retain
+    their independent stream volumes.
     """
     if not _PULSECTL_AVAILABLE:
         return _fallback_move_pid_sink_inputs(pid, sink_name)
@@ -307,6 +312,13 @@ async def amove_pid_sink_inputs(pid: int, sink_name: str) -> int:
                 for si in inputs:
                     props = getattr(si, "proplist", {}) or {}
                     if str(props.get("application.process.id", "")) == str(pid):
+                        try:
+                            await pulse.volume_set_all_chans(si, 1.0)
+                            logger.debug("Normalized sink-input %d (pid=%d) volume to 100%%", si.index, pid)
+                        except Exception as exc:
+                            # Routing is more important than normalization. A stream
+                            # can disappear between list and update during reconnect.
+                            logger.debug("Could not normalize sink-input %d volume: %s", si.index, exc)
                         if si.sink != target.index:
                             await pulse.sink_input_move(si, target)
                             logger.info("Moved sink-input %d (pid=%d) → %s", si.index, pid, sink_name)
@@ -978,7 +990,7 @@ def _fallback_move_sink_input(sink_input_idx: int, sink_name: str) -> bool:
 
 
 def _fallback_move_pid_sink_inputs(pid: int, sink_name: str) -> int:
-    """pactl fallback: find sink-inputs by pid and move them to sink_name."""
+    """pactl fallback: normalize PID-owned inputs and move them to sink_name."""
     try:
         # Get all sink-input details to find our PID
         r = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=5)
@@ -995,6 +1007,18 @@ def _fallback_move_pid_sink_inputs(pid: int, sink_name: str) -> int:
             elif "application.process.id" in line:
                 current_pid = line.split("=", 1)[-1].strip().strip('"')
             if current_id is not None and current_pid == str(pid):
+                normalized = subprocess.run(
+                    ["pactl", "set-sink-input-volume", str(current_id), "100%"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                if normalized.returncode != 0:
+                    logger.debug(
+                        "Could not normalize sink-input %d volume: %s",
+                        current_id,
+                        normalized.stderr.strip(),
+                    )
                 r2 = subprocess.run(
                     ["pactl", "move-sink-input", str(current_id), sink_name],
                     capture_output=True,

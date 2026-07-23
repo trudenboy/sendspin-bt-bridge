@@ -2,7 +2,8 @@
 
 import asyncio
 import sys
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -16,6 +17,92 @@ sys.modules.pop("sendspin_bridge.services.audio.pulse", None)
 
 import sendspin_bridge.services.audio.pulse as _pulse_mod  # noqa: E402
 from sendspin_bridge.services.audio.pulse import _fallback_set_volume  # noqa: E402
+
+
+def _pulse_context(pulse: MagicMock) -> MagicMock:
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=pulse)
+    context.__aexit__ = AsyncMock(return_value=False)
+    return context
+
+
+@pytest.mark.asyncio
+async def test_move_pid_sink_inputs_normalizes_only_bridge_streams():
+    """The sink remains the sole gain point; unrelated app streams are untouched."""
+    own_input = SimpleNamespace(index=11, sink=7, proplist={"application.process.id": "1234"})
+    other_input = SimpleNamespace(index=12, sink=7, proplist={"application.process.id": "9999"})
+    target = SimpleNamespace(index=7, name="bluez_sink.target")
+    pulse = MagicMock()
+    pulse.sink_input_list = AsyncMock(return_value=[own_input, other_input])
+    pulse.sink_list = AsyncMock(return_value=[target])
+    pulse.volume_set_all_chans = AsyncMock()
+    pulse.sink_input_move = AsyncMock()
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        moved = await _pulse_mod.amove_pid_sink_inputs(1234, target.name)
+
+    assert moved == 0
+    pulse.volume_set_all_chans.assert_awaited_once_with(own_input, 1.0)
+    pulse.sink_input_move.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_move_pid_sink_inputs_normalizes_before_routing():
+    own_input = SimpleNamespace(index=11, sink=3, proplist={"application.process.id": "1234"})
+    target = SimpleNamespace(index=7, name="bluez_sink.target")
+    pulse = MagicMock()
+    pulse.sink_input_list = AsyncMock(return_value=[own_input])
+    pulse.sink_list = AsyncMock(return_value=[target])
+    pulse.volume_set_all_chans = AsyncMock()
+    pulse.sink_input_move = AsyncMock()
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)),
+    ):
+        moved = await _pulse_mod.amove_pid_sink_inputs(1234, target.name)
+
+    assert moved == 1
+    pulse.volume_set_all_chans.assert_awaited_once_with(own_input, 1.0)
+    pulse.sink_input_move.assert_awaited_once_with(own_input, target)
+
+
+def test_fallback_move_pid_sink_inputs_normalizes_only_matching_pid():
+    listing = """\
+Sink Input #11
+    application.process.id = "1234"
+Sink Input #12
+    application.process.id = "9999"
+"""
+    with patch.object(_pulse_mod.subprocess, "run") as run:
+        run.side_effect = [
+            MagicMock(returncode=0, stdout=listing),
+            MagicMock(returncode=0, stderr=""),
+            MagicMock(returncode=0, stderr=""),
+        ]
+
+        moved = _pulse_mod._fallback_move_pid_sink_inputs(1234, "bluez_sink.target")
+
+    assert moved == 1
+    assert run.call_args_list == [
+        call(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=5),
+        call(
+            ["pactl", "set-sink-input-volume", "11", "100%"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        ),
+        call(
+            ["pactl", "move-sink-input", "11", "bluez_sink.target"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        ),
+    ]
+
 
 # ---------------------------------------------------------------------------
 # _fallback_set_volume clamping

@@ -40,13 +40,16 @@ jobs:
 
       - name: Install system build dependencies
         # dbus-python ships sdist-only on PyPI; building requires the
-        # libdbus headers. The full ``uv sync --frozen --extra dev`` pulls
+        # libdbus headers. The full ``uv sync --locked --extra dev`` pulls
         # the bridge package + all runtime deps so mypy sees the same
         # import surface as production.
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libdbus-1-dev libglib2.0-dev
 
       - name: Install dependencies (sync from uv.lock)
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --extra dev
+
+      - name: Verify installed dev tool pins
+        run: uv run --no-sync python scripts/check_locked_dev_tools.py
 
       - name: Ruff check
         run: uv run ruff check .

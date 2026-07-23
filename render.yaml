@@ -22,7 +22,11 @@ services:
     # because the wheel only ships ``src/sendspin_bridge`` — the
     # ``demo/`` simulator package lives at the repo root and is loaded
     # directly off the checkout via PYTHONPATH below.
-    buildCommand: pip install -r requirements-demo.txt
+    # Install the bridge-selected aiosendspin version first, then install
+    # sendspin without dependency resolution. sendspin 7.5.0 declares a
+    # stale aiosendspin 6.0.x cap; resolving both in one pip invocation would
+    # either fail or discard the controller-state support required by MA.
+    buildCommand: pip install -r requirements-demo.txt && pip install --no-deps sendspin==7.5.0
     # Run from source: ``src/`` exposes ``sendspin_bridge``, ``.`` (repo
     # root) exposes ``demo`` so ``from demo import install`` in
     # bridge/orchestrator.py resolves.

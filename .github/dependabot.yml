@@ -30,6 +30,7 @@ updates:
       # newer transitive, dependabot will pick it up via the parent.
       - dependency-name: "music-assistant-models"  # pinned by music-assistant-client
       - dependency-name: "pulsectl"                # pinned by pulsectl-asyncio
+      - dependency-name: "certifi"                 # transitive via requests; update through uv.lock
 
   - package-ecosystem: docker
     directory: /

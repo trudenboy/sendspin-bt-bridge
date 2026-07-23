@@ -1,4 +1,5 @@
 import re
+import tomllib
 from pathlib import Path
 
 
@@ -133,3 +134,40 @@ def test_dockerfile_preserves_requirements_pin_when_installing_sendspin():
     assert len(install_lines) == 2
     assert all("--no-deps" in line for line in install_lines)
     assert "NO_DEPS" not in sendspin_layer
+
+
+def test_render_demo_preserves_runtime_dependency_override():
+    root = Path(__file__).resolve().parents[2]
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text())
+    runtime = pyproject["project"]["dependencies"]
+    sendspin = next(requirement for requirement in runtime if requirement.startswith("sendspin=="))
+    aiosendspin = next(requirement for requirement in runtime if requirement.startswith("aiosendspin[server]=="))
+    demo = (root / "requirements-demo.txt").read_text()
+    render = (root / "render.yaml").read_text()
+
+    assert not re.search(r"^sendspin(?:\[.*\])?[=<>~]", demo, re.MULTILINE)
+    assert aiosendspin in demo
+    assert f"pip install --no-deps {sendspin}" in render
+    for dependency in ("aiosendspin-mpris", "qrcode", "readchar", "rich", "sounddevice", "textual-image"):
+        assert re.search(rf"^{re.escape(dependency)}[=<>~]", demo, re.MULTILINE)
+
+
+def test_ci_verifies_locked_dev_tool_versions():
+    root = Path(__file__).resolve().parents[2]
+    lint = (root / ".github" / "workflows" / "_lint.yml").read_text()
+    test = (root / ".github" / "workflows" / "_test.yml").read_text()
+
+    for workflow in (lint, test):
+        assert "uv sync --locked --extra dev" in workflow
+        assert "scripts/check_locked_dev_tools.py" in workflow
+        assert "uv sync --frozen --extra dev" not in workflow
+
+
+def test_dependency_prs_build_and_smoke_test_the_docker_image():
+    workflow = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "docker-smoke.yml").read_text()
+
+    assert "docker build" in workflow
+    assert "SENDSPIN_VERSION=${{ steps.versions.outputs.sendspin }}" in workflow
+    assert "scripts/check_sendspin_compat.py" in workflow
+    assert '--expect-aiosendspin "${{ steps.versions.outputs.aiosendspin }}"' in workflow
+    assert "scripts/check_container_runtime.py" in workflow

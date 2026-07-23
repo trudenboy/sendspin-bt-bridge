@@ -2,10 +2,10 @@
 #
 # Render's Python runtime ("Native") doesn't allow apt-install, so any
 # wheel that requires building against system C headers will fail.
-# This file is a strict subset of pyproject.toml's runtime dependencies
-# minus the Linux-BT/D-Bus packages — those are lazy-imported throughout
-# the bridge code (every consumer is wrapped in try/except ImportError),
-# so they degrade gracefully when absent.
+# This file is a curated Render install set: pyproject.toml's runtime
+# dependencies minus Linux-BT/D-Bus packages, plus the transitive packages
+# normally installed with sendspin. The omitted platform integrations are
+# lazy-imported and degrade gracefully when unavailable.
 #
 # Excluded (Linux-only / system-header dependent):
 #   dbus-python              — needs libdbus-1-dev
@@ -13,11 +13,18 @@
 #   bluetooth-auto-recovery  — Linux rfkill / hci_mgmt
 #
 # Keep this list synchronized with pyproject.toml ``dependencies`` minus
-# the three excluded packages above.  When bumping a runtime dep version,
-# bump it here too.
+# the three excluded packages above. Sendspin itself is installed separately
+# with ``--no-deps`` by render.yaml: sendspin 7.5.0 still caps aiosendspin at
+# 6.0.x, while the bridge intentionally uses 6.1.1 for current MA server/state.
+# Its transitive dependencies must therefore remain explicit in this file.
 
-sendspin==7.3.1
-aiosendspin[server]==5.3.0
+aiosendspin[server]==6.1.1
+aiosendspin-mpris==2.1.1
+qrcode>=8.0
+readchar>=4.0.0
+rich>=13.0.0
+sounddevice>=0.4.6
+textual-image>=0.13.0
 flask==3.1.3
 waitress==3.0.2
 dbus-fast==5.0.22
@@ -28,7 +35,7 @@ zeroconf==0.150.0
 PyJWT>=2.13.0
 cryptography>=48.0.1
 aiomqtt>=2.0
-aiohttp>=3.14.1
+aiohttp>=3.14.3
 pillow>=12.2.0
 pygments>=2.20.0
 requests>=2.33.0
