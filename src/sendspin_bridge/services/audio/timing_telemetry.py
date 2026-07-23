@@ -15,6 +15,16 @@ def _milliseconds(value: Any) -> float | None:
         return None
 
 
+def _safe_attr(obj: object | None, name: str) -> object | None:
+    """Read an optional metric property without letting telemetry affect playback."""
+    if obj is None:
+        return None
+    try:
+        return getattr(obj, name, None)
+    except Exception:
+        return None
+
+
 def collect_timing_snapshot(audio_handler: object, client: object) -> dict[str, object]:
     """Collect public metrics and guarded compatibility fields.
 
@@ -47,6 +57,14 @@ def collect_timing_snapshot(audio_handler: object, client: object) -> dict[str, 
     except (TypeError, ValueError, OverflowError):
         dac_samples = 0
 
+    # The aiosendspin time filter exposes ``error`` as ``round(sqrt(covariance))``.
+    # Before the first samples arrive its covariance is infinite, so reading the
+    # property raises OverflowError.  Do not touch either clock metric until the
+    # filter reports synchronization, and keep guarded reads for future library
+    # implementations whose metric properties may raise for other transient states.
+    clock_offset = _safe_attr(time_filter, "offset") if clock_synchronized else None
+    clock_uncertainty = _safe_attr(time_filter, "error") if clock_synchronized else None
+
     return {
         "timing_metrics_available": bool(metrics),
         "backend_output_latency_ms": _milliseconds(metrics.get("output_latency_us")),
@@ -55,7 +73,7 @@ def collect_timing_snapshot(audio_handler: object, client: object) -> dict[str, 
         "dac_samples_recorded": dac_samples,
         "playback_sync_error_ms": _milliseconds(getattr(audio_handler, "_sync_error_filtered_us", None)),
         "clock_synchronized": clock_synchronized,
-        "clock_offset_ms": _milliseconds(getattr(time_filter, "offset", None)),
-        "clock_uncertainty_ms": _milliseconds(getattr(time_filter, "error", None)),
+        "clock_offset_ms": _milliseconds(clock_offset),
+        "clock_uncertainty_ms": _milliseconds(clock_uncertainty),
         "timing_sampled_at": datetime.now(tz=UTC).isoformat(),
     }

@@ -43,3 +43,24 @@ def test_missing_private_metrics_degrades_to_none():
     assert result["timing_metrics_available"] is False
     assert result["playback_sync_error_ms"] is None
     assert result["clock_uncertainty_ms"] is None
+
+
+def test_unsynchronized_clock_with_infinite_covariance_degrades_to_none():
+    class _UnsynchronizedFilter:
+        offset = 0
+
+        @property
+        def error(self):
+            raise OverflowError("cannot convert float infinity to integer")
+
+    class _UnsynchronizedClient:
+        _time_filter = _UnsynchronizedFilter()
+
+        def is_time_synchronized(self):
+            return False
+
+    result = collect_timing_snapshot(_Audio(), _UnsynchronizedClient())
+
+    assert result["clock_synchronized"] is False
+    assert result["clock_offset_ms"] is None
+    assert result["clock_uncertainty_ms"] is None

@@ -59,6 +59,7 @@ from sendspin_bridge.services.ipc.daemon_process import (  # noqa: E402
     _read_commands,
     _select_audio_output_device,
     _startup_sink_routing_watcher,
+    _timing_telemetry_watcher,
 )
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
 
@@ -98,6 +99,39 @@ def test_background_task_callback_ignores_cancelled_task():
     _log_background_task_result(task, "reconnect")
 
     task.exception.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_timing_telemetry_failure_does_not_stop_watcher(monkeypatch):
+    import sendspin_bridge.services.audio.timing_telemetry as telemetry
+
+    calls = 0
+
+    def _fail_snapshot(_audio, _client):
+        nonlocal calls
+        calls += 1
+        raise OverflowError("clock covariance is not finite")
+
+    monkeypatch.setattr(telemetry, "collect_timing_snapshot", _fail_snapshot)
+    daemon = SimpleNamespace(_audio_handler=object(), _client=object())
+    stop_event = asyncio.Event()
+    watcher = asyncio.create_task(
+        _timing_telemetry_watcher(
+            daemon,
+            {"playing": False},
+            MagicMock(),
+            stop_event,
+            poll_interval=0.01,
+        )
+    )
+
+    try:
+        await asyncio.sleep(0.03)
+        assert calls >= 2
+        assert watcher.done() is False
+    finally:
+        stop_event.set()
+        await watcher
 
 
 @pytest.mark.asyncio
