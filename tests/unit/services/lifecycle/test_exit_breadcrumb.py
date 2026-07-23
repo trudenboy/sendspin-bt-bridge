@@ -67,11 +67,21 @@ def test_init_boot_creates_dir_and_writes_boot_json(tmp_path: Path):
     payload = json.loads(store.boot_path.read_text())
     assert payload["bridge_version"] == "9.9.9"
     assert payload["pid"] == 4711
+    assert "pid_start_ticks" in payload
     assert payload["host"]["runtime"] == "test"
     assert payload["host"]["hostname"] == "test-host"
     assert payload["shutdown_started"] is False
     assert payload["shutdown_completed"] is False
     assert payload["phase_timestamps"] == {}
+
+
+def test_init_boot_records_linux_process_identity(tmp_path: Path):
+    store = BreadcrumbStore(tmp_path)
+    _init(store, pid=os.getpid())
+
+    payload = json.loads(store.boot_path.read_text())
+    assert isinstance(payload["pid_start_ticks"], int)
+    assert payload["pid_start_ticks"] > 0
 
 
 def test_mark_phase_records_timestamp_and_message(store: BreadcrumbStore):
@@ -298,16 +308,82 @@ def test_warn_if_pid_collision_returns_string_when_pid_alive(tmp_path: Path):
     store = BreadcrumbStore(tmp_path)
     store.boot_prev_path.parent.mkdir(parents=True, exist_ok=True)
     store.boot_prev_path.write_text(
-        json.dumps({"schema_version": 1, "pid": 12345}),
+        json.dumps({"schema_version": 1, "pid": 12345, "pid_start_ticks": 67890}),
         encoding="utf-8",
     )
-    with mock.patch(
-        "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_alive",
-        return_value=True,
+    with (
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_alive",
+            return_value=True,
+        ),
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_start_ticks",
+            return_value=67890,
+        ),
     ):
         msg = store.warn_if_pid_collision(os.getpid())
         assert msg is not None
         assert "pid=12345" in msg
+
+
+def test_warn_if_pid_collision_ignores_reused_pid(tmp_path: Path):
+    store = BreadcrumbStore(tmp_path)
+    store.boot_prev_path.parent.mkdir(parents=True, exist_ok=True)
+    store.boot_prev_path.write_text(
+        json.dumps({"schema_version": 1, "pid": 12345, "pid_start_ticks": 111}),
+        encoding="utf-8",
+    )
+    with (
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_alive",
+            return_value=True,
+        ),
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_start_ticks",
+            return_value=222,
+        ),
+    ):
+        assert store.warn_if_pid_collision(os.getpid()) is None
+
+
+def test_warn_if_pid_collision_legacy_record_requires_bridge_cmdline(tmp_path: Path):
+    store = BreadcrumbStore(tmp_path)
+    store.boot_prev_path.parent.mkdir(parents=True, exist_ok=True)
+    store.boot_prev_path.write_text(
+        json.dumps({"schema_version": 1, "pid": 12345}),
+        encoding="utf-8",
+    )
+    with (
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_alive",
+            return_value=True,
+        ),
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_start_ticks",
+            return_value=222,
+        ),
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_cmdline_is_bridge",
+            return_value=False,
+        ),
+    ):
+        assert store.warn_if_pid_collision(os.getpid()) is None
+
+    with (
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_alive",
+            return_value=True,
+        ),
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_start_ticks",
+            return_value=222,
+        ),
+        mock.patch(
+            "sendspin_bridge.services.lifecycle.exit_breadcrumb._pid_cmdline_is_bridge",
+            return_value=True,
+        ),
+    ):
+        assert store.warn_if_pid_collision(os.getpid()) is not None
 
 
 def test_warn_if_pid_collision_ignores_self(tmp_path: Path):

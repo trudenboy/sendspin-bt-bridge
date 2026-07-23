@@ -1234,6 +1234,7 @@ def test_summarize_connect_output_no_signal_returns_empty():
     from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
 
     stdout = (
+        "Agent registered\n"
         "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
         "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
         "[NEW] Device AA:BB:CC:DD:EE:FF Some Speaker\n"
@@ -1241,6 +1242,24 @@ def test_summarize_connect_output_no_signal_returns_empty():
         "[bluetooth]#\n"
     )
     assert _summarize_bluetoothctl_connect_output(stdout) == ""
+
+
+def test_run_bluetoothctl_preserves_stderr_for_connect_diagnostics(bt_manager):
+    completed = MagicMock(
+        returncode=1,
+        stdout="Agent registered\n",
+        stderr="Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n",
+    )
+    with patch("sendspin_bridge.bluetooth.manager.subprocess.run", return_value=completed):
+        success, output = bt_manager._run_bluetoothctl(["connect AA:BB:CC:DD:EE:FF"])
+
+    assert success is False
+    assert "Agent registered" in output
+    assert "br-connection-page-timeout" in output
+
+    from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
+
+    assert _summarize_bluetoothctl_connect_output(output).endswith("br-connection-page-timeout")
 
 
 # ---------------------------------------------------------------------------

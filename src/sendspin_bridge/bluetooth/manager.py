@@ -126,6 +126,10 @@ def _summarize_bluetoothctl_connect_output(output: str) -> str:
             continue
         if line.startswith(("[CHG]", "[NEW]", "[DEL]")):
             continue
+        # bluetoothctl prints this startup banner even when the actual Connect
+        # error is emitted on stderr. It is transport noise, not a diagnosis.
+        if line.casefold() == "agent registered":
+            continue
         cleaned.append(line)
     if not cleaned:
         return ""
@@ -485,7 +489,12 @@ class BluetoothManager:
                 text=True,
                 timeout=10,
             )
-            return result.returncode == 0, result.stdout
+            # BlueZ/bluetoothctl versions disagree on whether command failures
+            # belong on stdout or stderr. Preserve both so reconnect warnings
+            # surface the real org.bluez error instead of the harmless
+            # "Agent registered" startup banner.
+            output = "\n".join(part.strip("\n") for part in (result.stdout, result.stderr) if part)
+            return result.returncode == 0, output
         except subprocess.TimeoutExpired:
             logger.warning("Bluetoothctl timed out after 10s for commands: %s", commands)
             return False, "timeout"

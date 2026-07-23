@@ -49,6 +49,7 @@ jobs:
       is_stable: ${{ steps.resolve.outputs.is_stable }}
       metadata_tags: ${{ steps.resolve.outputs.metadata_tags }}
       sendspin_version: ${{ steps.resolve.outputs.sendspin_version }}
+      aiosendspin_version: ${{ steps.resolve.outputs.aiosendspin_version }}
       source_branch: ${{ steps.resolve.outputs.source_branch }}
     steps:
       - name: Checkout code
@@ -107,6 +108,11 @@ jobs:
 
           # Extract sendspin version from requirements.txt
           SENDSPIN_VERSION="$(grep '^sendspin==' requirements.txt | sed 's/sendspin==//' || echo '')"
+          AIOSENDSPIN_VERSION="$(sed -n -E 's/^aiosendspin(\[server\])?==//p' requirements.txt | head -n 1)"
+          if [ -z "${AIOSENDSPIN_VERSION}" ]; then
+            echo "::error::Pinned aiosendspin version not found in requirements.txt"
+            exit 1
+          fi
 
           # Determine source branch
           SOURCE_BRANCH="${GITHUB_REF_NAME:-main}"
@@ -116,6 +122,7 @@ jobs:
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
           echo "is_stable=${IS_STABLE}" >> "$GITHUB_OUTPUT"
           echo "sendspin_version=${SENDSPIN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "aiosendspin_version=${AIOSENDSPIN_VERSION}" >> "$GITHUB_OUTPUT"
           echo "source_branch=${SOURCE_BRANCH}" >> "$GITHUB_OUTPUT"
           {
             echo "metadata_tags<<EOF"
@@ -131,6 +138,7 @@ jobs:
             echo "- Channel: \`${CHANNEL}\`"
             echo "- Branch: \`${SOURCE_BRANCH}\`"
             echo "- Sendspin: \`${SENDSPIN_VERSION}\`"
+            echo "- aiosendspin: \`${AIOSENDSPIN_VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── 2. Lint (reusable) ───────────────────────────────────────────
@@ -268,7 +276,8 @@ jobs:
         run: |
           image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
           docker pull "${image}"
-          docker run --rm --entrypoint python3 "${image}" scripts/check_sendspin_compat.py
+          docker run --rm --entrypoint python3 "${image}" scripts/check_sendspin_compat.py \
+            --expect-aiosendspin "${{ needs.prepare.outputs.aiosendspin_version }}"
           docker run --rm --entrypoint python3 "${image}" scripts/check_container_runtime.py
 
       - name: Export digest
@@ -567,7 +576,8 @@ jobs:
         run: |
           image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
           docker pull --platform linux/arm/v7 "${image}"
-          docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_sendspin_compat.py
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_sendspin_compat.py \
+            --expect-aiosendspin "${{ needs.prepare.outputs.aiosendspin_version }}"
           docker run --rm --platform linux/arm/v7 --entrypoint python3 "${image}" scripts/check_container_runtime.py
 
       - name: Extract metadata for tags

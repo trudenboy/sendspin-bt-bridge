@@ -94,15 +94,15 @@ RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
     fi
 
 # Layer 2: sendspin package only — lightweight, rebuilt each release.
-# armv7 uses --no-deps because all transitive deps are explicit in layer 1;
-# amd64/arm64 omit it so pip resolves transitive deps like aiosendspin-mpris.
+# Every transitive dependency (including aiosendspin-mpris) is pinned and
+# installed in layer 1. Always use --no-deps here: sendspin 7.5.0 still
+# declares aiosendspin~=6.0.1, while the bridge intentionally overrides it to
+# 6.1.1 for Music Assistant's seek_relative controller-state support.
 ARG SENDSPIN_VERSION=""
-RUN NO_DEPS="" && \
-    if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then NO_DEPS="--no-deps"; fi && \
-    if [ -n "${SENDSPIN_VERSION}" ]; then \
-        uv pip install --system --no-cache --prefix=/install ${NO_DEPS} "sendspin==${SENDSPIN_VERSION}"; \
+RUN if [ -n "${SENDSPIN_VERSION}" ]; then \
+        uv pip install --system --no-cache --no-deps --prefix=/install "sendspin==${SENDSPIN_VERSION}"; \
     else \
-        uv pip install --system --no-cache --prefix=/install ${NO_DEPS} "sendspin>=5.3.0,<6.0.0"; \
+        uv pip install --system --no-cache --no-deps --prefix=/install "sendspin>=5.3.0,<6.0.0"; \
     fi
 
 # Layer 3: the bridge package itself (sendspin_bridge). Install into the same

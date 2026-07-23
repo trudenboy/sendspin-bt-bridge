@@ -69,6 +69,33 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _pid_start_ticks(pid: int) -> int | None:
+    """Return Linux ``/proc/<pid>/stat`` start time, or ``None``.
+
+    PID values are routinely reused after a Docker container is recreated.
+    Field 22 identifies the process lifetime and lets us distinguish the
+    original bridge from an unrelated process that inherited its numeric PID.
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        closing_paren = stat.rfind(")")
+        if closing_paren < 0:
+            return None
+        fields_after_comm = stat[closing_paren + 1 :].split()
+        return int(fields_after_comm[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _pid_cmdline_is_bridge(pid: int) -> bool:
+    """Best-effort identity check for legacy breadcrumbs without start ticks."""
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+    except OSError:
+        return False
+    return "sendspin_bridge" in cmdline or "sendspin-client" in cmdline
+
+
 @dataclass
 class PreviousRun:
     """Derived summary of the prior run, paired from boot.prev + exit.prev."""
@@ -141,6 +168,7 @@ class BreadcrumbStore:
                 "schema_version": _SCHEMA_VERSION,
                 "bridge_version": bridge_version,
                 "pid": int(pid),
+                "pid_start_ticks": _pid_start_ticks(int(pid)),
                 "started_at": now,
                 "host": {"runtime": runtime, "hostname": hostname},
                 "demo_mode": bool(demo_mode),
@@ -378,8 +406,8 @@ class BreadcrumbStore:
     def warn_if_pid_collision(self, current_pid: int) -> str | None:
         """Best-effort detection of a second bridge against the same CONFIG_DIR.
 
-        If ``boot.prev.json`` references a PID that still appears alive
-        (and isn't this process), return a one-line warning string.
+        If ``boot.prev.json`` references the same still-running process
+        (and it isn't this process), return a one-line warning string.
         Callers may log it and continue — we don't try to coordinate.
         """
         boot = self._safe_load(self._boot_prev_path)
@@ -389,6 +417,16 @@ class BreadcrumbStore:
         if not isinstance(pid, int) or pid <= 0 or pid == int(current_pid):
             return None
         if not _pid_alive(pid):
+            return None
+        previous_start_ticks = boot.get("pid_start_ticks")
+        live_start_ticks = _pid_start_ticks(pid)
+        if isinstance(previous_start_ticks, int) and live_start_ticks is not None:
+            if live_start_ticks != previous_start_ticks:
+                return None
+        elif not _pid_cmdline_is_bridge(pid):
+            # Breadcrumbs written before pid_start_ticks existed can only be
+            # trusted when the live process command line still identifies a
+            # bridge. This avoids false warnings from PID reuse on upgrade.
             return None
         return (
             f"Another sendspin bridge appears to be running with pid={pid} "

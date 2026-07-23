@@ -109,6 +109,8 @@ def test_armv7_publish_workflow_builds_pinned_sendspin_and_smoke_tests_import():
     assert "sendspin_version" in workflow
     assert "SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}" in workflow
     assert "scripts/check_sendspin_compat.py" in workflow
+    assert "aiosendspin_version" in workflow
+    assert workflow.count('--expect-aiosendspin "${{ needs.prepare.outputs.aiosendspin_version }}"') == 2
     assert "linux/arm/v7" in workflow
 
 
@@ -120,7 +122,14 @@ def test_requirements_pin_aiosendspin_for_all_architectures():
     )
 
 
-def test_dockerfile_relies_on_requirements_pin_for_aiosendspin():
+def test_dockerfile_preserves_requirements_pin_when_installing_sendspin():
     dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
 
     assert '"aiosendspin~=4.3"' not in dockerfile
+    sendspin_layer = dockerfile.split("# Layer 2: sendspin package only", 1)[1].split(
+        "# Layer 3: the bridge package itself", 1
+    )[0]
+    install_lines = [line for line in sendspin_layer.splitlines() if "uv pip install" in line]
+    assert len(install_lines) == 2
+    assert all("--no-deps" in line for line in install_lines)
+    assert "NO_DEPS" not in sendspin_layer
