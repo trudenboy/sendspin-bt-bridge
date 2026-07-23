@@ -1,0 +1,226 @@
+{
+  "weekly_commits": [
+    {
+      "week_offset": -29,
+      "total": 1,
+      "owner": 0
+    },
+    {
+      "week_offset": -28,
+      "total": 13,
+      "owner": 0
+    },
+    {
+      "week_offset": -20,
+      "total": 292,
+      "owner": 283
+    },
+    {
+      "week_offset": -19,
+      "total": 492,
+      "owner": 395
+    },
+    {
+      "week_offset": -18,
+      "total": 243,
+      "owner": 213
+    },
+    {
+      "week_offset": -17,
+      "total": 317,
+      "owner": 249
+    },
+    {
+      "week_offset": -16,
+      "total": 322,
+      "owner": 94
+    },
+    {
+      "week_offset": -15,
+      "total": 161,
+      "owner": 8
+    },
+    {
+      "week_offset": -14,
+      "total": 36,
+      "owner": 0
+    },
+    {
+      "week_offset": -13,
+      "total": 97,
+      "owner": 23
+    },
+    {
+      "week_offset": -12,
+      "total": 254,
+      "owner": 34
+    },
+    {
+      "week_offset": -11,
+      "total": 99,
+      "owner": 28
+    },
+    {
+      "week_offset": -10,
+      "total": 67,
+      "owner": 32
+    },
+    {
+      "week_offset": -9,
+      "total": 35,
+      "owner": 4
+    },
+    {
+      "week_offset": -7,
+      "total": 11,
+      "owner": 4
+    },
+    {
+      "week_offset": -3,
+      "total": 1,
+      "owner": 1
+    },
+    {
+      "week_offset": -2,
+      "total": 13,
+      "owner": 8
+    },
+    {
+      "week_offset": -1,
+      "total": 20,
+      "owner": 8
+    },
+    {
+      "week_offset": 0,
+      "total": 22,
+      "owner": 0
+    }
+  ],
+  "code_frequency": [
+    {
+      "week": "2025-12-28",
+      "additions": 2100,
+      "deletions": 115
+    },
+    {
+      "week": "2026-02-22",
+      "additions": 5195,
+      "deletions": 1487
+    },
+    {
+      "week": "2026-03-01",
+      "additions": 42942,
+      "deletions": 14646
+    },
+    {
+      "week": "2026-03-08",
+      "additions": 32343,
+      "deletions": 9590
+    },
+    {
+      "week": "2026-03-15",
+      "additions": 52529,
+      "deletions": 18252
+    },
+    {
+      "week": "2026-03-22",
+      "additions": 40699,
+      "deletions": 14965
+    },
+    {
+      "week": "2026-03-29",
+      "additions": 482885,
+      "deletions": 2638
+    },
+    {
+      "week": "2026-04-05",
+      "additions": 4000,
+      "deletions": 505
+    },
+    {
+      "week": "2026-04-12",
+      "additions": 8606,
+      "deletions": 669
+    },
+    {
+      "week": "2026-04-19",
+      "additions": 17211,
+      "deletions": 2471
+    },
+    {
+      "week": "2026-04-26",
+      "additions": 159551,
+      "deletions": 129286
+    },
+    {
+      "week": "2026-05-03",
+      "additions": 1009,
+      "deletions": 250
+    },
+    {
+      "week": "2026-05-10",
+      "additions": 6641,
+      "deletions": 699
+    },
+    {
+      "week": "2026-05-24",
+      "additions": 637,
+      "deletions": 217
+    },
+    {
+      "week": "2026-06-28",
+      "additions": 1410,
+      "deletions": 220
+    },
+    {
+      "week": "2026-07-05",
+      "additions": 203,
+      "deletions": 152
+    },
+    {
+      "week": "2026-07-12",
+      "additions": 3155,
+      "deletions": 1834
+    },
+    {
+      "week": "2026-07-19",
+      "additions": 20,
+      "deletions": 16
+    }
+  ],
+  "ai": {
+    "commits_scanned": 200,
+    "ai_commits": 62,
+    "ai_ratio": 0.31,
+    "agents": [
+      {
+        "name": "Claude Opus 4.7 (1M context)",
+        "commits": 29
+      },
+      {
+        "name": "Administrator",
+        "commits": 23
+      },
+      {
+        "name": "dependabot[bot]",
+        "commits": 19
+      },
+      {
+        "name": "Claude Fable 5",
+        "commits": 8
+      },
+      {
+        "name": "Claude Opus 4.8",
+        "commits": 7
+      },
+      {
+        "name": "Mikhail Nevskiy",
+        "commits": 4
+      },
+      {
+        "name": "Claude Opus 4.8 (1M context)",
+        "commits": 3
+      }
+    ]
+  }
+}
