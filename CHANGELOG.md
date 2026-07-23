@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.3] - 2026-07-23
+
 ### Changed
 
-- Updated `aiohttp` to 3.14.3, `certifi` to 2026.7.22, Ruff to 0.15.22, and the Docker uv stage to 0.11.31. CI now verifies installed exact dev-tool pins against project metadata.
+- Updated `aiohttp` to 3.14.3, `certifi` to 2026.7.22, `websockets` to 16.1.1, Ruff to 0.15.22, and the Docker uv stage to 0.11.31. CI now verifies installed exact dev-tool pins against project metadata.
 
 ### Fixed
 
