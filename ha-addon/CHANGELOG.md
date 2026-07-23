@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.73.3] - 2026-07-23
+
+### Changed
+
+- Updated `aiohttp` to 3.14.3, `certifi` to 2026.7.22, `websockets` to 16.1.1, Ruff to 0.15.22, and the Docker uv stage to 0.11.31. CI now verifies installed exact dev-tool pins against project metadata.
+
+### Fixed
+
+- **Bluetooth volume now uses one gain stage.** Bridge-owned sink-inputs are normalized to 100% when streams start or move, while the Bluetooth sink remains the only volume-control point; unrelated application streams are left untouched.
+- **The Render demo now preserves the required `aiosendspin` override.** Demo dependencies install first and `sendspin` installs with `--no-deps`, preventing its stale 6.0.x constraint from replacing `aiosendspin` 6.1.1.
+
 ## [2.73.2] - 2026-07-23
 
 ### Fixed
@@ -5203,7 +5214,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.2...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.3...HEAD
+[2.73.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.2...v2.73.3
 [2.73.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.1...v2.73.2
 [2.73.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.0...v2.73.1
 [2.73.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.72.1...v2.73.0
