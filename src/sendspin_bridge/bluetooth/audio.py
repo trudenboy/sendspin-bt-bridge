@@ -14,7 +14,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
-from sendspin_bridge.bluetooth.dbus import _dbus_get_media_transport_state
+from sendspin_bridge.bluetooth.dbus import _dbus_get_media_transport_state, _dbus_has_media_endpoint
 from sendspin_bridge.config import CONFIG_FILE, save_device_sink
 from sendspin_bridge.config import config_lock as config_lock
 from sendspin_bridge.services.audio.pulse import (
@@ -357,7 +357,7 @@ def configure_bluetooth_audio(
         elif not success:
             logger.warning("Could not find Bluetooth sink for %s", mac_address)
             logger.warning("Audio may play from default device instead of Bluetooth")
-            _warn_pipewire_session(known_names)
+            _warn_pipewire_session(known_names, device_path)
 
         return success
 
@@ -366,7 +366,7 @@ def configure_bluetooth_audio(
         return False
 
 
-def _warn_pipewire_session(known_sink_names: set[str]) -> None:
+def _warn_pipewire_session(known_sink_names: set[str], device_path: str | None = None) -> None:
     """Log a targeted warning when sink discovery fails on PipeWire.
 
     On PipeWire, Bluetooth audio sinks are managed by WirePlumber which
@@ -396,10 +396,26 @@ def _warn_pipewire_session(known_sink_names: set[str]) -> None:
     if has_bt_sink:
         return
 
-    logger.warning(
-        "PipeWire detected but no Bluetooth audio sinks are visible. "
-        "WirePlumber (the Bluetooth policy manager) may not be running."
-    )
+    # The file-path checks below (_warn_wireplumber_logind /
+    # _warn_wireplumber_seat_monitoring) read host config files that are
+    # invisible from inside a Docker container — they only ever fire on
+    # bare-metal/LXC installs. _dbus_has_media_endpoint() instead asks
+    # BlueZ directly whether *any* local audio backend has registered
+    # A2DP support for this device — a signal that works the same way
+    # inside a container and is independent of audio server or
+    # WirePlumber version.
+    has_endpoint = _dbus_has_media_endpoint(device_path)
+    if has_endpoint is False:
+        logger.warning(
+            "BlueZ has no registered Bluetooth audio (A2DP) endpoint for this device at all — "
+            "this is independent of PipeWire/PulseAudio internals: no local audio backend has "
+            "claimed Bluetooth audio yet."
+        )
+    else:
+        logger.warning(
+            "PipeWire detected but no Bluetooth audio sinks are visible. "
+            "WirePlumber (the Bluetooth policy manager) may not be running."
+        )
     logger.warning(
         "On headless/server systems, run 'loginctl enable-linger <user>' "
         "so PipeWire + WirePlumber start at boot without a login session. "

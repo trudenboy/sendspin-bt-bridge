@@ -192,6 +192,42 @@ def _dbus_get_media_transport_state(device_path: str | None) -> str | None:
         return None
 
 
+def _dbus_has_media_endpoint(device_path: str | None) -> bool | None:
+    """Return whether BlueZ has negotiated a local ``MediaEndpoint1`` for *device_path*.
+
+    BlueZ creates ``<device_path>/sepN`` child objects implementing
+    ``org.bluez.MediaEndpoint1`` once it matches the peer's advertised AVDTP
+    stream endpoints against a *locally registered* media endpoint — normally
+    registered by PipeWire/WirePlumber's bluez5 SPA plugin or PulseAudio's
+    module-bluetooth-discover, via ``Media1.RegisterEndpoint``. If no audio
+    backend on the host has ever registered one, BlueZ has nothing to match
+    against and these objects never appear for that device, regardless of
+    which audio server or WirePlumber version is involved. This makes it a
+    much more direct, audio-server-agnostic signal than probing specific
+    config files for known headless-PipeWire footguns.
+
+    Returns ``True``/``False`` once BlueZ has had a chance to negotiate
+    (i.e. after ``Device1.ServicesResolved`` is true), ``None`` when
+    dbus-python is unavailable or the lookup fails — callers MUST treat
+    ``None`` as "unknown", not "no endpoint".
+    """
+    if not device_path or dbus is None:
+        return None
+    try:
+        bus = dbus.SystemBus()
+        root = bus.get_object("org.bluez", "/")
+        om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
+        managed = om.GetManagedObjects()
+        prefix = device_path + "/sep"
+        for path, ifaces in managed.items():
+            if str(path).startswith(prefix) and "org.bluez.MediaEndpoint1" in ifaces:
+                return True
+        return False
+    except Exception as exc:
+        logger.debug("D-Bus MediaEndpoint1 lookup failed: %s", exc)
+        return None
+
+
 def _dbus_get_media_transport_snapshot(device_path: str | None):
     """Return the best MediaTransport snapshot for *device_path*.
 
