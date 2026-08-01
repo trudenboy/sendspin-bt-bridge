@@ -33,6 +33,52 @@ def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code
     assert "loginctl enable-linger" in joined_actions
 
 
+def test_onboarding_audio_unknown_socket_missing_emits_pa_socket_missing_reason_code():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {
+                "system": "unknown",
+                "sinks": 0,
+                "socket": "unix:/run/user/1000/pulse/native",
+                "socket_exists": False,
+            },
+            "bluetooth": {"controller": True, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    audio = next(check for check in snapshot.checks if check.key == "audio")
+    assert audio.status == "error"
+    assert audio.details["reason_code"] == "pa_socket_missing"
+    assert audio.details["socket"] == "unix:/run/user/1000/pulse/native"
+    assert "unix:/run/user/1000/pulse/native" in audio.summary
+    joined_actions = " ".join(audio.actions)
+    assert "loginctl enable-linger" in joined_actions
+
+
+def test_onboarding_audio_unknown_without_socket_skips_missing_reason_code():
+    snapshot = build_onboarding_assistant_snapshot(
+        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        preflight={
+            "audio": {"system": "unknown", "sinks": 0},
+            "bluetooth": {"controller": True, "paired_devices": 0},
+        },
+        devices=[],
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+    audio = next(check for check in snapshot.checks if check.key == "audio")
+    assert audio.status == "error"
+    assert audio.details.get("reason_code") != "pa_socket_missing"
+    joined_actions = " ".join(audio.actions)
+    assert "loginctl enable-linger" not in joined_actions
+    assert "PULSE_SERVER" in joined_actions
+
+
 def test_onboarding_bluetooth_step_cross_references_audio_when_both_fail():
     """When BT preflight fails (no controller) AND the user-scoped audio socket is
     mounted but unreachable, both symptoms usually share one root cause: the

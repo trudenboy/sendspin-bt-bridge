@@ -284,7 +284,7 @@ pactl list sinks short | grep -i bluez
   The bridge logs a specific warning when it detects PipeWire but no Bluetooth sinks are visible: *"WirePlumber (the Bluetooth policy manager) may not be running"*. This is the most common cause of "sink not found" on headless PipeWire installations.
 </Aside>
 
-**Option B — disable WirePlumber's `with-logind`** if connections also drop on logout, or churn every ~10 s even with linger enabled. See [WirePlumber `with-logind` endpoint churn](#wireplumber-with-logind-endpoint-churn) below for the per-user override.
+**Option B — disable WirePlumber's logind integration** if connections also drop on logout, churn every ~10 s even with linger enabled, or Bluetooth never initializes at all (`wpctl status` shows no devices under `Audio`). See [WirePlumber `with-logind` endpoint churn](#wireplumber-with-logind-endpoint-churn) below — the exact fix depends on your WirePlumber version (0.4.x vs 0.5+), both are covered there.
 
 ### WirePlumber `with-logind` endpoint churn
 
@@ -313,7 +313,54 @@ sudo journalctl -u bluetooth --since '30 sec ago' | grep -i unregistered
 ```
 
 <Aside type="caution">
-  The `with-logind` option is only present in WirePlumber 0.4.x (Ubuntu 24.04, Fedora 39). WirePlumber 0.5+ uses a different configuration system. If you are on WirePlumber 0.5+, check the [WirePlumber documentation](https://pipewire.pages.freedesktop.org/wireplumber/) for the equivalent setting.
+  The `with-logind` option above is only present in WirePlumber 0.4.x (Ubuntu 24.04, Fedora 39). If you're on WirePlumber 0.5+ (Fedora 40+, newer Ubuntu/Debian), see the next section instead — the config system and the correct fix are both different.
+</Aside>
+
+### WirePlumber 0.5+: Bluetooth never initializes on headless hosts
+
+Check your version with `wireplumber --version`. WirePlumber 0.5's Bluetooth monitor script (`monitors/bluez.lua`) only creates the actual BlueZ device monitor when logind reports the session's seat state as `active`:
+
+```lua
+function startStopMonitor(seat_state)
+  if seat_state == "active" then
+    monitor = createMonitor()
+  elseif monitor then
+    monitor:deactivate(Feature.SpaDevice.ENABLED)
+  end
+end
+```
+
+A headless session kept alive via `loginctl enable-linger` (see Option A above) reaches seat state `online`, but **never** `active` — that state normally requires a focused console/display login, which a lingering background session never has. As a result `createMonitor()` is never called, BlueZ never gets an A2DP sink media endpoint registered, and every Bluetooth connection eventually fails.
+
+**Symptom:** `wpctl status` shows no devices at all under `Audio` (only a synthetic `Dummy Output` sink), even though `bluetoothctl` shows the speaker as paired and briefly `Connected: yes`. `sudo journalctl -u bluetooth` shows the connection failing with:
+
+```
+bluetoothd[...]: src/service.c:btd_service_connect() a2dp-sink profile connect failed for <MAC>: Protocol not available
+```
+
+**Fix:** disable BlueZ seat-monitoring for the profile WirePlumber actually runs (`main`, unless you've customized `WIREPLUMBER_PROFILE`):
+
+```bash
+mkdir -p ~/.config/wireplumber/wireplumber.conf.d
+cat > ~/.config/wireplumber/wireplumber.conf.d/99-headless-bluez-no-seat-monitoring.conf << 'EOF'
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+EOF
+systemctl --user restart wireplumber
+```
+
+Verify Bluetooth devices now appear:
+
+```bash
+wpctl status
+# Should list a "bluez5" device under Audio > Devices once a speaker is paired/connected
+```
+
+<Aside type="tip">
+  Setting `support.logind = disabled` (as seen in some stock WirePlumber configs) does **not** fix this on its own — that property only applies to the `main-systemwide`/`main-embedded` profiles, not the default `main` profile most `systemd --user` installs actually run. Confirm your active profile with `WIREPLUMBER_DEBUG=3 wireplumber` (foreground, briefly) and check for `parsing & loading components for profile [...]` in the output before assuming a fix applies.
 </Aside>
 
 ## Applying configuration changes

@@ -468,13 +468,20 @@ def _audio_backend_issue(
 
     # Headless PipeWire / PulseAudio — only relevant outside HA addon where
     # the operator can run `loginctl enable-linger` on the Docker host.
-    if reason_code == "pa_socket_refused" and not is_ha_addon_runtime():
+    if reason_code in ("pa_socket_refused", "pa_socket_missing") and not is_ha_addon_runtime():
         socket_path = str(details.get("socket") or "")
-        summary = (
-            f"The audio socket ({socket_path or 'configured path'}) is mounted into the container, "
-            "but the host's PipeWire/PulseAudio server refused the connection. This is the classic "
-            "symptom of a headless host without user-session lingering."
-        )
+        if reason_code == "pa_socket_refused":
+            summary = (
+                f"The audio socket ({socket_path or 'configured path'}) is mounted into the container, "
+                "but the host's PipeWire/PulseAudio server refused the connection. This is the classic "
+                "symptom of a headless host without user-session lingering."
+            )
+        else:
+            summary = (
+                f"The audio socket ({socket_path or 'configured path'}) is configured but does not exist "
+                "on the host yet — no PipeWire/PulseAudio server has ever bound it. This is the classic "
+                "symptom of a headless host without user-session lingering."
+            )
         actions = [
             "On the Docker host: `sudo loginctl enable-linger <user>` (the user whose UID matches AUDIO_UID).",
             "Reboot the host, or restart the user session's audio units (`systemctl --user start pipewire.socket pipewire.service wireplumber.service`).",
@@ -482,7 +489,7 @@ def _audio_backend_issue(
             "Docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
         ]
         return {
-            "key": "pa_socket_refused",
+            "key": reason_code,
             "title": "Audio server unreachable — enable user lingering",
             "summary": summary,
             "details": details,
