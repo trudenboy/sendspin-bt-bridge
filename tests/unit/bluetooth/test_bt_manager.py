@@ -110,6 +110,64 @@ def bt_manager():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# BluetoothManager._resolve_adapter_select — hciN -> MAC resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_adapter_select_prefers_dbus_over_bluetoothctl_list_order():
+    """Regression: bluetoothctl list ordering does not always match ascending
+    hci-index order (e.g. after hot-plugging a second adapter, the newer one
+    can be listed first). Resolution must use D-Bus's /org/bluez/<hciN>
+    object path, which matches the kernel index unambiguously, not the
+    position of a MAC within `bluetoothctl list` output."""
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    # bluetoothctl list would (misleadingly) list hci1's real adapter first,
+    # so the old position-counting logic would resolve "hci1" -> hci0's MAC.
+    misleading_bluetoothctl_list = (
+        "Controller F0:2F:74:6B:3C:BD mass #2 [default]\nController 1C:79:2D:E5:AD:68 localhost \n"
+    )
+
+    def fake_dbus_get_adapter_address(hci_name):
+        return {"hci0": "1C:79:2D:E5:AD:68", "hci1": "F0:2F:74:6B:3C:BD"}.get(hci_name)
+
+    with (
+        patch("subprocess.check_output", return_value=""),
+        patch("subprocess.run", return_value=MagicMock(stdout=misleading_bluetoothctl_list)),
+        patch(
+            "sendspin_bridge.bluetooth.manager._dbus_get_adapter_address",
+            side_effect=fake_dbus_get_adapter_address,
+        ),
+    ):
+        mgr = BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="TestSpeaker",
+            adapter="hci1",
+        )
+
+    assert mgr._adapter_select == "F0:2F:74:6B:3C:BD"
+
+
+def test_resolve_adapter_select_falls_back_to_bluetoothctl_list_when_dbus_unavailable():
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    bluetoothctl_list = "Controller AA:AA:AA:AA:AA:AA first [default]\nController BB:BB:BB:BB:BB:BB second \n"
+
+    with (
+        patch("subprocess.check_output", return_value=""),
+        patch("subprocess.run", return_value=MagicMock(stdout=bluetoothctl_list)),
+        patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address", return_value=None),
+    ):
+        mgr = BluetoothManager(
+            mac_address="AA:BB:CC:DD:EE:FF",
+            device_name="TestSpeaker",
+            adapter="hci1",
+        )
+
+    assert mgr._adapter_select == "BB:BB:BB:BB:BB:BB"
+
+
 def test_bt_executor_pool_size():
     """The module-level thread pool must have at least 4 workers."""
     from sendspin_bridge.bluetooth.manager import _bt_executor
@@ -1888,6 +1946,46 @@ def test_dbus_connect_profile_returns_false_for_empty_device_path():
     ok, reason = bt_dbus._dbus_connect_profile(None, bt_dbus.A2DP_SINK_UUID)
     assert ok is False
     assert reason
+
+
+# ---------------------------------------------------------------------------
+# bt_dbus._dbus_get_adapter_address — hciN -> MAC resolution
+# ---------------------------------------------------------------------------
+
+
+def test_dbus_get_adapter_address_returns_none_when_dbus_module_missing():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    with patch.object(bt_dbus, "dbus", None):
+        assert bt_dbus._dbus_get_adapter_address("hci1") is None
+
+
+def test_dbus_get_adapter_address_returns_none_for_empty_name():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    assert bt_dbus._dbus_get_adapter_address("") is None
+
+
+def test_dbus_get_adapter_address_reads_address_property_at_hci_path():
+    """The BlueZ object path /org/bluez/<hciN> matches the kernel hci index
+    exactly, unlike bluetoothctl list's registration-order output."""
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    fake_dbus = MagicMock()
+    fake_bus = MagicMock()
+    fake_adapter_obj = MagicMock()
+    fake_props = MagicMock()
+    fake_props.Get.return_value = "F0:2F:74:6B:3C:BD"
+    fake_dbus.SystemBus.return_value = fake_bus
+    fake_bus.get_object.return_value = fake_adapter_obj
+    fake_dbus.Interface.return_value = fake_props
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        addr = bt_dbus._dbus_get_adapter_address("hci1")
+
+    assert addr == "F0:2F:74:6B:3C:BD"
+    fake_bus.get_object.assert_called_once_with("org.bluez", "/org/bluez/hci1")
+    fake_props.Get.assert_called_once_with("org.bluez.Adapter1", "Address")
 
 
 # ---------------------------------------------------------------------------
