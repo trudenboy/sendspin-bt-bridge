@@ -2064,6 +2064,7 @@ def test_dbus_has_media_endpoint_returns_true_when_sep_object_present():
     fake_bus = MagicMock()
     fake_om = MagicMock()
     fake_om.GetManagedObjects.return_value = {
+        device_path: {"org.bluez.Device1": {"ServicesResolved": True}},
         f"{device_path}/sep1": {"org.bluez.MediaEndpoint1": {"UUID": "0000110b-..."}},
     }
     fake_dbus.SystemBus.return_value = fake_bus
@@ -2072,10 +2073,43 @@ def test_dbus_has_media_endpoint_returns_true_when_sep_object_present():
     with patch.object(bt_dbus, "dbus", fake_dbus):
         assert bt_dbus._dbus_has_media_endpoint(device_path) is True
 
+    fake_om.GetManagedObjects.assert_called_once_with()
 
-def test_dbus_has_media_endpoint_returns_false_when_no_sep_objects():
-    """No org.bluez.MediaEndpoint1 anywhere under the device path means no
-    local audio backend has registered A2DP support with BlueZ at all."""
+
+def test_dbus_has_media_endpoint_returns_none_until_services_resolved():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    fake_dbus = MagicMock()
+    fake_om = MagicMock()
+    fake_om.GetManagedObjects.return_value = {
+        device_path: {"org.bluez.Device1": {"ServicesResolved": False}},
+    }
+    fake_dbus.Interface.return_value = fake_om
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        assert bt_dbus._dbus_has_media_endpoint(device_path) is None
+
+    fake_om.GetManagedObjects.assert_called_once_with()
+
+
+def test_dbus_has_media_endpoint_returns_none_when_device_missing_from_snapshot():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    fake_dbus = MagicMock()
+    fake_om = MagicMock()
+    fake_om.GetManagedObjects.return_value = {}
+    fake_dbus.Interface.return_value = fake_om
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        assert bt_dbus._dbus_has_media_endpoint(device_path) is None
+
+    fake_om.GetManagedObjects.assert_called_once_with()
+
+
+def test_dbus_has_media_endpoint_returns_false_when_resolved_device_has_no_sep_objects():
+    """An endpoint for another device must not affect the requested device."""
     import sendspin_bridge.bluetooth.dbus as bt_dbus
 
     device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
@@ -2083,13 +2117,16 @@ def test_dbus_has_media_endpoint_returns_false_when_no_sep_objects():
     fake_bus = MagicMock()
     fake_om = MagicMock()
     fake_om.GetManagedObjects.return_value = {
-        device_path: {"org.bluez.Device1": {"Connected": True}},
+        device_path: {"org.bluez.Device1": {"Connected": True, "ServicesResolved": True}},
+        "/org/bluez/hci0/dev_11_22_33_44_55_66/sep1": {"org.bluez.MediaEndpoint1": {}},
     }
     fake_dbus.SystemBus.return_value = fake_bus
     fake_dbus.Interface.return_value = fake_om
 
     with patch.object(bt_dbus, "dbus", fake_dbus):
         assert bt_dbus._dbus_has_media_endpoint(device_path) is False
+
+    fake_om.GetManagedObjects.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------

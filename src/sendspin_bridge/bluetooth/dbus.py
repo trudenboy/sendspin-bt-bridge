@@ -218,9 +218,17 @@ def _dbus_has_media_endpoint(device_path: str | None) -> bool | None:
         root = bus.get_object("org.bluez", "/")
         om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
         managed = om.GetManagedObjects()
-        prefix = device_path + "/sep"
+
+        device_ifaces = next((ifaces for path, ifaces in managed.items() if str(path) == device_path), None)
+        if not device_ifaces:
+            return None
+        device_props = device_ifaces.get("org.bluez.Device1")
+        if not device_props or not bool(device_props.get("ServicesResolved", False)):
+            return None
+
         for path, ifaces in managed.items():
-            if str(path).startswith(prefix) and "org.bluez.MediaEndpoint1" in ifaces:
+            parent, _, child = str(path).rpartition("/")
+            if parent == device_path and child.startswith("sep") and "org.bluez.MediaEndpoint1" in ifaces:
                 return True
         return False
     except Exception as exc:
