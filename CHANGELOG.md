@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.74.0-rc.1] - 2026-08-05
+
 ### Fixed
 
 - Updated `cryptography` to 50.0.0 to address `PYSEC-2026-3552` and restore a clean dependency audit.
