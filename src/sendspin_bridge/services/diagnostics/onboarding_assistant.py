@@ -623,16 +623,40 @@ def build_onboarding_assistant_snapshot(
             )
         )
     elif audio_system == "unknown":
+        socket_path = str(audio.get("socket") or "")
+        socket_exists = bool(audio.get("socket_exists"))
+        details = {"sinks": audio_sinks, "socket": socket_path or None, "socket_exists": socket_exists}
+        if socket_path and not socket_exists:
+            details["reason_code"] = "pa_socket_missing"
+            summary = (
+                f"Audio socket {socket_path} is configured but does not exist on this host — "
+                "no PulseAudio/PipeWire server has ever bound it."
+            )
+            actions = [
+                "On headless hosts, PipeWire/PulseAudio only start on login. Run "
+                "`sudo loginctl enable-linger <user>` for the audio user so the socket exists at boot.",
+                "Reboot the host (or `systemctl --user start pipewire.socket pipewire-pulse.socket wireplumber.service`) and restart the container.",
+                "See docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
+            ]
+        elif not socket_path:
+            summary = "No PulseAudio or PipeWire server was detected — `PULSE_SERVER` is not set."
+            actions = [
+                "Set `PULSE_SERVER` to the host's PulseAudio/PipeWire socket path and mount that socket into the container.",
+                "See docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#requirements for the required volume mounts and environment variables.",
+            ]
+        else:
+            summary = "No PulseAudio or PipeWire server was detected."
+            actions = [
+                "Open diagnostics to confirm the runtime can reach PulseAudio or PipeWire.",
+                "Verify the audio socket mount and `PULSE_SERVER` configuration.",
+            ]
         checks.append(
             OnboardingCheck(
                 key="audio",
                 status="error",
-                summary="No PulseAudio or PipeWire server was detected.",
-                details={"sinks": audio_sinks},
-                actions=[
-                    "Open diagnostics to confirm the runtime can reach PulseAudio or PipeWire.",
-                    "Verify the audio socket mount and `PULSE_SERVER` configuration.",
-                ],
+                summary=summary,
+                details=details,
+                actions=actions,
             )
         )
     elif audio_sinks == 0:
