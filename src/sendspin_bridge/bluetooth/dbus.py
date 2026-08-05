@@ -55,6 +55,27 @@ def _dbus_get_battery_level(device_path: str | None) -> int | None:
         return None
 
 
+def _dbus_get_adapter_address(hci_name: str) -> str | None:
+    """Read org.bluez.Adapter1.Address for a given hci name (e.g. "hci0").
+
+    The BlueZ object path for an adapter is always ``/org/bluez/<hci_name>``,
+    which matches the kernel hci index exactly — unlike ``bluetoothctl list``
+    output order, which reflects BlueZ's registration order and is not
+    guaranteed to match ascending hci-index order (e.g. after hot-plugging a
+    second adapter). This is the unambiguous way to resolve hciN -> MAC.
+    """
+    if not hci_name or dbus is None:
+        return None
+    try:
+        bus = dbus.SystemBus()
+        adapter = bus.get_object("org.bluez", f"/org/bluez/{hci_name}")
+        props = dbus.Interface(adapter, "org.freedesktop.DBus.Properties")
+        return str(props.Get("org.bluez.Adapter1", "Address"))
+    except Exception as exc:
+        logger.debug("D-Bus adapter address read failed for %s: %s", hci_name, exc)
+        return None
+
+
 def _dbus_call_device_method(device_path: str | None, method_name: str) -> bool:
     """Call a BlueZ Device1 method synchronously via dbus-python.
 

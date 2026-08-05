@@ -27,6 +27,7 @@ from sendspin_bridge.bluetooth.dbus import (
     AUDIO_SINK_UUIDS,
     _dbus_call_device_method,
     _dbus_connect_profile,
+    _dbus_get_adapter_address,
     _dbus_get_device_property,
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
@@ -451,6 +452,16 @@ class BluetoothManager:
             idx = int(adapter[3:])  # N from hciN
         except ValueError:
             return adapter
+        # BlueZ's D-Bus object path for an adapter is always /org/bluez/<hciN>,
+        # which matches the kernel hci index unambiguously. Prefer this over
+        # counting lines in `bluetoothctl list`, whose ordering reflects
+        # BlueZ's adapter-registration order and is NOT guaranteed to match
+        # ascending hci-index order (e.g. after hot-plugging a second
+        # adapter, the newly-plugged one can be listed first).
+        dbus_addr = _dbus_get_adapter_address(adapter)
+        if dbus_addr:
+            logger.info("Resolved adapter %s → %s", adapter, dbus_addr)
+            return dbus_addr.upper()
         try:
             result = subprocess.run(
                 ["bluetoothctl", "list"],
