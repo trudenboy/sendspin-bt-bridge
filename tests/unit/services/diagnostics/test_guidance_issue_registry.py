@@ -3,6 +3,15 @@ from __future__ import annotations
 from sendspin_bridge.services.diagnostics.guidance_issue_registry import ISSUE_REGISTRY
 
 
+def test_pa_socket_missing_is_classified_as_high_signal_audio_error():
+    definition = ISSUE_REGISTRY["pa_socket_missing"]
+
+    assert definition.layer == "audio"
+    assert definition.priority == 32
+    assert definition.severity == "error"
+    assert definition.default_reason_codes == ("pa_socket_missing",)
+
+
 def test_sink_system_muted_issue_definition_exists():
     assert "sink_system_muted" in ISSUE_REGISTRY
     defn = ISSUE_REGISTRY["sink_system_muted"]

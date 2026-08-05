@@ -143,6 +143,14 @@ def test_pa_socket_missing_emits_linger_issue_in_standalone(monkeypatch):
     summary_text = audio_group["summary"].lower()
     assert "socket" in summary_text
     assert audio_group["primary_action"]["key"] == "open_diagnostics"
+    issue = module._audio_backend_issue(
+        _audio_unknown_socket_missing_onboarding(),
+        all_devices_globally_disabled=False,
+    )
+    assert issue is not None
+    actions = " ".join(issue["actions"])
+    for unit in ("pipewire.socket", "pipewire-pulse.socket", "pipewire.service", "wireplumber.service"):
+        assert unit in actions
 
 
 def test_pa_socket_missing_suppressed_in_ha_addon(monkeypatch):

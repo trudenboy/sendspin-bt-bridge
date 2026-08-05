@@ -484,7 +484,7 @@ def _audio_backend_issue(
             )
         actions = [
             "On the Docker host: `sudo loginctl enable-linger <user>` (the user whose UID matches AUDIO_UID).",
-            "Reboot the host, or restart the user session's audio units (`systemctl --user start pipewire.socket pipewire.service wireplumber.service`).",
+            "Reboot the host, or restart the user session's audio units (`systemctl --user start pipewire.socket pipewire-pulse.socket pipewire.service wireplumber.service`).",
             "Restart the bridge container once the server is up.",
             "Docs: https://trudenboy.github.io/sendspin-bt-bridge/installation/docker/#headless-pipewire-bluetooth-sinks-not-appearing-after-reboot",
         ]
