@@ -52,7 +52,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   qrcode
-cryptography==49.0.0
+cryptography==50.0.0
     # via sendspin-bt-bridge
 dbus-fast==5.0.22
     # via

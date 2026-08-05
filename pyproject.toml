@@ -19,7 +19,7 @@ dependencies = [
     "websockets==16.1.1",
     "zeroconf==0.150.0",
     "PyJWT>=2.13.0",
-    "cryptography>=48.0.1",
+    "cryptography>=50.0.0",
     # services.adapter_recovery — optional BT adapter recovery ladder (Linux-only).
     "bluetooth-auto-recovery==1.6.4",
     # services.bt_rssi_mgmt — live RSSI via BlueZ mgmt socket (Linux-only).
