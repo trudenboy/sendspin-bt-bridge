@@ -448,6 +448,10 @@ class BluetoothManager:
         Falls back to the original name if resolution fails."""
         if not adapter or not adapter.startswith("hci"):
             return adapter  # Already a MAC or empty string
+        try:
+            idx = int(adapter[3:])  # N from hciN
+        except ValueError:
+            return adapter
         # BlueZ's D-Bus object path for an adapter is always /org/bluez/<hciN>,
         # which matches the kernel hci index unambiguously. Prefer this over
         # counting lines in `bluetoothctl list`, whose ordering reflects
@@ -458,10 +462,6 @@ class BluetoothManager:
         if dbus_addr:
             logger.info("Resolved adapter %s → %s", adapter, dbus_addr)
             return dbus_addr.upper()
-        try:
-            idx = int(adapter[3:])  # N from hciN
-        except ValueError:
-            return adapter
         try:
             result = subprocess.run(
                 ["bluetoothctl", "list"],

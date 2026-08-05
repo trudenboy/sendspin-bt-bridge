@@ -168,6 +168,17 @@ def test_resolve_adapter_select_falls_back_to_bluetoothctl_list_when_dbus_unavai
     assert mgr._adapter_select == "BB:BB:BB:BB:BB:BB"
 
 
+def test_resolve_adapter_select_skips_dbus_for_malformed_hci_name():
+    from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    manager = BluetoothManager.__new__(BluetoothManager)
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address") as get_address:
+        resolved = manager._resolve_adapter_select("hci-not-an-index")
+
+    assert resolved == "hci-not-an-index"
+    get_address.assert_not_called()
+
+
 def test_bt_executor_pool_size():
     """The module-level thread pool must have at least 4 workers."""
     from sendspin_bridge.bluetooth.manager import _bt_executor
