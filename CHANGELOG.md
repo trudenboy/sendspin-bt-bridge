@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated `cryptography` to 50.0.0 to address `PYSEC-2026-3552` and restore a clean dependency audit.
 - Bluetooth adapter selection now resolves `hci1`, `hci2`, etc. via each adapter's own D-Bus address instead of counting positions in `bluetoothctl list` output, whose ordering does not always match ascending adapter index (for example after hot-plugging a second adapter). Previously this could silently select the wrong physical adapter.
+- Bluetooth sink-not-found diagnostics now ask BlueZ directly whether any local audio backend has registered an A2DP media endpoint for the device, instead of only guessing based on WirePlumber config files that aren't visible from inside a Docker container. This catches a real headless-host failure mode (WirePlumber running, but its Bluetooth monitor never registering an endpoint) that the previous file-based checks silently missed.
 
 ## [2.73.4] - 2026-07-23
 

@@ -560,6 +560,42 @@ def test_warn_pipewire_session_silent_when_bt_sinks_present():
     mock_warn.assert_not_called()
 
 
+def test_warn_pipewire_session_emits_definitive_message_when_no_media_endpoint():
+    """When BlueZ confirms no MediaEndpoint1 is registered for the device,
+    the warning should say so directly rather than guessing "WirePlumber
+    may not be running" — a message that doesn't apply to PulseAudio and
+    is misleading when WirePlumber is running but its Bluetooth monitor
+    just never registered an endpoint (headless seat-monitoring gap)."""
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    with (
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch.object(bt_audio, "_dbus_has_media_endpoint", return_value=False),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_pipewire_session({"sendspin_fallback"}, "/org/bluez/hci0/dev_AA_BB")
+
+    messages = [call.args[0] for call in mock_warn.call_args_list]
+    assert any("no registered Bluetooth audio" in m for m in messages)
+    assert not any("WirePlumber (the Bluetooth policy manager) may not be running" in m for m in messages)
+
+
+def test_warn_pipewire_session_keeps_generic_message_when_endpoint_check_unknown():
+    """Regression guard: when the D-Bus MediaEndpoint1 check can't determine
+    an answer (e.g. no device_path yet), the original generic message must
+    still fire so behavior for existing callers is unchanged."""
+    import sendspin_bridge.bluetooth.audio as bt_audio
+
+    with (
+        patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
+        patch.object(bt_audio.logger, "warning") as mock_warn,
+    ):
+        bt_audio._warn_pipewire_session({"sendspin_fallback"})
+
+    messages = [call.args[0] for call in mock_warn.call_args_list]
+    assert any("WirePlumber (the Bluetooth policy manager) may not be running" in m for m in messages)
+
+
 def test_warn_pipewire_session_also_checks_wireplumber_logind():
     """_warn_pipewire_session calls _warn_wireplumber_logind when PipeWire has no BT sinks."""
     import sendspin_bridge.bluetooth.audio as bt_audio
@@ -1997,6 +2033,100 @@ def test_dbus_get_adapter_address_reads_address_property_at_hci_path():
     assert addr == "F0:2F:74:6B:3C:BD"
     fake_bus.get_object.assert_called_once_with("org.bluez", "/org/bluez/hci1")
     fake_props.Get.assert_called_once_with("org.bluez.Adapter1", "Address")
+
+
+# ---------------------------------------------------------------------------
+# bt_dbus._dbus_has_media_endpoint — BlueZ MediaEndpoint1 registration check
+# ---------------------------------------------------------------------------
+
+
+def test_dbus_has_media_endpoint_returns_none_when_dbus_module_missing():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    with patch.object(bt_dbus, "dbus", None):
+        assert bt_dbus._dbus_has_media_endpoint("/org/bluez/hci0/dev_AA_BB") is None
+
+
+def test_dbus_has_media_endpoint_returns_none_for_empty_device_path():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    assert bt_dbus._dbus_has_media_endpoint(None) is None
+
+
+def test_dbus_has_media_endpoint_returns_true_when_sep_object_present():
+    """A <device_path>/sepN object implementing MediaEndpoint1 means BlueZ
+    successfully matched the peer's AVDTP capabilities against a locally
+    registered audio backend endpoint."""
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    fake_dbus = MagicMock()
+    fake_bus = MagicMock()
+    fake_om = MagicMock()
+    fake_om.GetManagedObjects.return_value = {
+        device_path: {"org.bluez.Device1": {"ServicesResolved": True}},
+        f"{device_path}/sep1": {"org.bluez.MediaEndpoint1": {"UUID": "0000110b-..."}},
+    }
+    fake_dbus.SystemBus.return_value = fake_bus
+    fake_dbus.Interface.return_value = fake_om
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        assert bt_dbus._dbus_has_media_endpoint(device_path) is True
+
+    fake_om.GetManagedObjects.assert_called_once_with()
+
+
+def test_dbus_has_media_endpoint_returns_none_until_services_resolved():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    fake_dbus = MagicMock()
+    fake_om = MagicMock()
+    fake_om.GetManagedObjects.return_value = {
+        device_path: {"org.bluez.Device1": {"ServicesResolved": False}},
+    }
+    fake_dbus.Interface.return_value = fake_om
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        assert bt_dbus._dbus_has_media_endpoint(device_path) is None
+
+    fake_om.GetManagedObjects.assert_called_once_with()
+
+
+def test_dbus_has_media_endpoint_returns_none_when_device_missing_from_snapshot():
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    fake_dbus = MagicMock()
+    fake_om = MagicMock()
+    fake_om.GetManagedObjects.return_value = {}
+    fake_dbus.Interface.return_value = fake_om
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        assert bt_dbus._dbus_has_media_endpoint(device_path) is None
+
+    fake_om.GetManagedObjects.assert_called_once_with()
+
+
+def test_dbus_has_media_endpoint_returns_false_when_resolved_device_has_no_sep_objects():
+    """An endpoint for another device must not affect the requested device."""
+    import sendspin_bridge.bluetooth.dbus as bt_dbus
+
+    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    fake_dbus = MagicMock()
+    fake_bus = MagicMock()
+    fake_om = MagicMock()
+    fake_om.GetManagedObjects.return_value = {
+        device_path: {"org.bluez.Device1": {"Connected": True, "ServicesResolved": True}},
+        "/org/bluez/hci0/dev_11_22_33_44_55_66/sep1": {"org.bluez.MediaEndpoint1": {}},
+    }
+    fake_dbus.SystemBus.return_value = fake_bus
+    fake_dbus.Interface.return_value = fake_om
+
+    with patch.object(bt_dbus, "dbus", fake_dbus):
+        assert bt_dbus._dbus_has_media_endpoint(device_path) is False
+
+    fake_om.GetManagedObjects.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------
