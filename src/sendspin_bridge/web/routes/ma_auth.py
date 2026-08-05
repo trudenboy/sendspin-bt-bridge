@@ -242,7 +242,7 @@ async def _rediscover_after_login(
 
 def _save_ma_token_and_rediscover(
     ma_url: str, ma_token: str, username: str = "", auth_provider: str = ""
-) -> None | tuple[Response, int]:
+) -> tuple[Response, int] | None:
     """Save MA token to config and trigger group rediscovery.
 
     Returns ``None`` on success, or a Flask ``(response, status)`` tuple
