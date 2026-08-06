@@ -258,14 +258,17 @@ COPY VERSION /app/
 COPY scripts/translate_ha_config.py scripts/check_sendspin_compat.py scripts/check_container_runtime.py scripts/
 # Templates / static / config schema travel inside src/sendspin_bridge/ via the editable install above.
 
-# GitHub App private key for bug report proxy (base64-encoded PEM)
+# The release workflow intentionally supplies this GitHub App key at build time.
+# hadolint ignore=DL3064
 ARG BUGREPORTER_PRIVATE_KEY=""
+# hadolint ignore=DL3064
 ENV GITHUB_APP_PRIVATE_KEY=${BUGREPORTER_PRIVATE_KEY}
 
 # Expose web interface port
 EXPOSE 8080
 
-# Health check — read the actual bound port written by interface.py at startup
+# Health check — shell expansion reads the actual startup-bound port.
+# hadolint ignore=DL3025
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD port=$(cat /tmp/sendspin-web-port 2>/dev/null || echo "${WEB_PORT:-8080}") && \
         curl -fsS "http://localhost:${port}/api/health" >/dev/null || exit 1
