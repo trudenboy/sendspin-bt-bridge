@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
 import remarkMermaid from './src/plugins/remark-mermaid.mjs';
 
@@ -7,7 +8,9 @@ export default defineConfig({
   site: 'https://trudenboy.github.io/sendspin-bt-bridge',
   base: '/sendspin-bt-bridge',
   markdown: {
-    remarkPlugins: [remarkMermaid],
+    processor: unified({
+      remarkPlugins: [remarkMermaid],
+    }),
   },
   integrations: [
     starlight({
@@ -30,7 +33,7 @@ export default defineConfig({
         { label: 'Home', translations: { ru: 'Главная' }, link: '/' },
         {
           label: 'Installation', translations: { ru: 'Установка' },
-          autogenerate: { directory: 'installation' },
+          items: [{ autogenerate: { directory: 'installation' } }],
         },
         { label: 'Configuration', translations: { ru: 'Настройка' }, slug: 'configuration' },
         { label: 'Web UI', translations: { ru: 'Веб-интерфейс' }, slug: 'web-ui' },
@@ -47,8 +50,8 @@ export default defineConfig({
         {
           label: 'Journey log',
           translations: { ru: 'Бортжурнал' },
-          autogenerate: { directory: 'journey-log' },
           collapsed: true,
+          items: [{ autogenerate: { directory: 'journey-log' } }],
         },
       ],
     }),

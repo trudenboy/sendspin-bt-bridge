@@ -301,25 +301,19 @@ import Default from '@astrojs/starlight/components/Head.astro';
   </div>
 </div>
 
-<script is:inline>
-  function initMermaid() {
-    const diagrams = document.querySelectorAll('pre.mermaid');
+<script>
+  async function initMermaid() {
+    const diagrams = [...document.querySelectorAll('pre.mermaid')]
+      .filter(diagram => !diagram.dataset.mermaidInitialized);
     if (!diagrams.length) return;
 
+    diagrams.forEach(diagram => { diagram.dataset.mermaidInitialized = '1'; });
+    const { default: mermaid } = await import('mermaid');
     const isDark = document.documentElement.dataset.theme === 'dark';
 
-    const render = () => {
-      window.mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
-      window.mermaid.run({ nodes: diagrams });
-      attachLightbox();
-    };
-
-    if (window.__mermaidLoaded) { render(); return; }
-
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-    script.onload = () => { window.__mermaidLoaded = true; render(); };
-    document.head.appendChild(script);
+    mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
+    await mermaid.run({ nodes: diagrams });
+    attachLightbox();
   }
 
   function attachLightbox() {

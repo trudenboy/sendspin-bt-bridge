@@ -35,9 +35,10 @@ dependencies = [
 ]
 
 [tool.uv]
-# Pin the project resolver used by contributors and CI. The Docker builder uses
-# a newer standalone ``uv pip`` binary without loading this project-level config.
-required-version = ">=0.9.27,<0.10"
+# Pin the project resolver used by contributors and CI to the same version as
+# Docker and pre-commit. The armv7 Docker fallback installs this version from
+# PyPI because the GHCR image manifest lacks linux/arm/v7.
+required-version = "==0.12.2"
 
 # ``sendspin`` 7.5.0 caps its own ``aiosendspin`` dependency at ``~=6.0.1``
 # (``>=6.0.1,<6.1``), but ``seek_relative`` (advertised by current Music
@@ -56,10 +57,10 @@ override-dependencies = [
 # version OR dropping `--only-binary :all:` on armv7 (slow source compile).
 constraint-dependencies = [
     "av<17",
-    # piwheels' cp313 build for yarl lags PyPI by one minor release; the
-    # latest published cp313 armv7 wheel is yarl 1.22.0, while PyPI is on
-    # 1.23.0. Lift this cap when piwheels catches up.
-    "yarl<1.23",
+    # piwheels publishes a CPython 3.13 armv7 binary wheel through yarl
+    # 1.24.2. Keep the cap below 1.24.3 so armv7 installs remain
+    # compatible with Docker's `--only-binary :all:` requirement.
+    "yarl<1.24.3",
 ]
 
 [tool.hatch.version]
@@ -82,7 +83,7 @@ dev = [
     # CI's _test.yml runs pytest with --cov; keep coverage opt-in via the
     # dev extra so contributors can `uv run pytest --cov=...` locally too.
     "pytest-cov>=5.0,<8.0",
-    "ruff==0.16.0",
+    "ruff==0.16.1",
     "mypy>=1.20.2,<3.0",
 ]
 

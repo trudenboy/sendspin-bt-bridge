@@ -9,16 +9,13 @@ ARG UV_STAGE=uv-default
 # Default — pull the static binary directly from the upstream image.
 # This is what amd64/arm64 builds use; the COPY --from below short-
 # circuits to a single layer copy (~50 MB pull amortised across builds).
-FROM ghcr.io/astral-sh/uv:0.12.0 AS uv-default
+FROM ghcr.io/astral-sh/uv:0.12.2 AS uv-default
 
-# armv7 fallback. ghcr.io/astral-sh/uv ships no linux/arm/v7 manifest,
-# so the COPY in the default stage above would fail with "no match for
-# platform in manifest". Install uv via pip on a python:3.13-slim base
-# instead — functionally identical, just adds a couple seconds at
-# layer build time. Selected by passing --build-arg UV_STAGE=uv-armv7
-# in the release workflow.
+# armv7 fallback — the upstream image has no linux/arm/v7 manifest, so install
+# the same pinned uv version from its PyPI armv7 wheel instead.
+# Selected by passing --build-arg UV_STAGE=uv-armv7 in the release workflow.
 FROM python:3.13-slim AS uv-armv7
-RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.9.27" && \
+RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.12.2" && \
     cp "$(command -v uv)" /uv
 
 FROM ${UV_STAGE} AS uv-source
@@ -128,7 +125,7 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
 FROM python:3.13-slim
 
 # S6 overlay version
-ARG S6_OVERLAY_VERSION=3.2.0.2
+ARG S6_OVERLAY_VERSION=3.2.3.2
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -261,14 +258,17 @@ COPY VERSION /app/
 COPY scripts/translate_ha_config.py scripts/check_sendspin_compat.py scripts/check_container_runtime.py scripts/
 # Templates / static / config schema travel inside src/sendspin_bridge/ via the editable install above.
 
-# GitHub App private key for bug report proxy (base64-encoded PEM)
+# The release workflow intentionally supplies this GitHub App key at build time.
+# hadolint ignore=DL3064
 ARG BUGREPORTER_PRIVATE_KEY=""
+# hadolint ignore=DL3064
 ENV GITHUB_APP_PRIVATE_KEY=${BUGREPORTER_PRIVATE_KEY}
 
 # Expose web interface port
 EXPOSE 8080
 
-# Health check — read the actual bound port written by interface.py at startup
+# Health check — shell expansion reads the actual startup-bound port.
+# hadolint ignore=DL3025
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD port=$(cat /tmp/sendspin-web-port 2>/dev/null || echo "${WEB_PORT:-8080}") && \
         curl -fsS "http://localhost:${port}/api/health" >/dev/null || exit 1
