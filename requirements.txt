@@ -40,7 +40,7 @@ btsocket==0.3.0
     #   sendspin-bt-bridge
 certifi==2026.7.22
     # via requests
-cffi==2.1.0
+cffi==2.1.1
     # via
     #   cryptography
     #   sounddevice
@@ -220,7 +220,7 @@ winrt-windows-foundation-collections==3.2.1 ; sys_platform == 'win32'
     # via bleak
 winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
     # via bleak
-yarl==1.22.0
+yarl==1.24.2
     # via aiohttp
 zeroconf==0.150.0
     # via
