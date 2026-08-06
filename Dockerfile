@@ -11,12 +11,11 @@ ARG UV_STAGE=uv-default
 # circuits to a single layer copy (~50 MB pull amortised across builds).
 FROM ghcr.io/astral-sh/uv:0.12.2 AS uv-default
 
-# armv7 fallback — the sole uv-version architecture exception. The upstream
-# image has no linux/arm/v7 manifest and uv 0.12.2 has no PyPI CPython 3.13
-# linux_armv7l wheel, so this retains the last proven pip-installable version.
+# armv7 fallback — the upstream image has no linux/arm/v7 manifest, so install
+# the same pinned uv version from its PyPI armv7 wheel instead.
 # Selected by passing --build-arg UV_STAGE=uv-armv7 in the release workflow.
 FROM python:3.13-slim AS uv-armv7
-RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.9.27" && \
+RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.12.2" && \
     cp "$(command -v uv)" /uv
 
 FROM ${UV_STAGE} AS uv-source

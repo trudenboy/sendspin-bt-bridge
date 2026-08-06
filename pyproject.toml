@@ -36,8 +36,8 @@ dependencies = [
 
 [tool.uv]
 # Pin the project resolver used by contributors and CI to the same version as
-# Docker and pre-commit. The armv7 Docker fallback is the sole exception: uv
-# 0.12.2 has no PyPI CPython 3.13 linux_armv7l wheel.
+# Docker and pre-commit. The armv7 Docker fallback installs this version from
+# PyPI because the GHCR image manifest lacks linux/arm/v7.
 required-version = "==0.12.2"
 
 # ``sendspin`` 7.5.0 caps its own ``aiosendspin`` dependency at ``~=6.0.1``
