@@ -9,14 +9,12 @@ ARG UV_STAGE=uv-default
 # Default — pull the static binary directly from the upstream image.
 # This is what amd64/arm64 builds use; the COPY --from below short-
 # circuits to a single layer copy (~50 MB pull amortised across builds).
-FROM ghcr.io/astral-sh/uv:0.12.0 AS uv-default
+FROM ghcr.io/astral-sh/uv:0.12.2 AS uv-default
 
-# armv7 fallback. ghcr.io/astral-sh/uv ships no linux/arm/v7 manifest,
-# so the COPY in the default stage above would fail with "no match for
-# platform in manifest". Install uv via pip on a python:3.13-slim base
-# instead — functionally identical, just adds a couple seconds at
-# layer build time. Selected by passing --build-arg UV_STAGE=uv-armv7
-# in the release workflow.
+# armv7 fallback — the sole uv-version architecture exception. The upstream
+# image has no linux/arm/v7 manifest and uv 0.12.2 has no PyPI CPython 3.13
+# linux_armv7l wheel, so this retains the last proven pip-installable version.
+# Selected by passing --build-arg UV_STAGE=uv-armv7 in the release workflow.
 FROM python:3.13-slim AS uv-armv7
 RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.9.27" && \
     cp "$(command -v uv)" /uv
@@ -128,7 +126,7 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
 FROM python:3.13-slim
 
 # S6 overlay version
-ARG S6_OVERLAY_VERSION=3.2.0.2
+ARG S6_OVERLAY_VERSION=3.2.3.2
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
