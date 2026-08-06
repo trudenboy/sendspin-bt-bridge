@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.74.0-rc.2] - 2026-08-06
+
+### Changed
+
+- The documentation site now uses Astro 7 and current Starlight, Mermaid, and image-processing releases, with diagram code loaded only on pages that need it.
+- Python, container, CI, and developer tooling dependencies were refreshed and now use uv 0.12.2 consistently, including the Home Assistant and ARMv7 build paths.
+- Render deployments now use Python 3.13.
+
+### Fixed
+
+- Documentation diagrams now preserve their source formatting and avoid duplicate initialization, so architecture and multiroom diagrams render reliably on desktop and mobile.
+- Local type checking now follows the same application-package scope as CI.
+
+### Security
+
+- The documentation dependency tree no longer reports known npm audit findings, and externally loaded Mermaid assets are bundled or pinned with integrity metadata.
+
 ## [2.74.0-rc.1] - 2026-08-05
 
 ### Fixed
