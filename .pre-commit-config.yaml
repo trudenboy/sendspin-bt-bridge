@@ -45,7 +45,10 @@ repos:
         language: system
         types: [python]
         require_serial: true
-        exclude: "(sendspin-cli/|scripts/)"
+        # Match CI's src-only mypy scope. Explicit filenames bypass mypy's
+        # [tool.mypy].exclude policy, so retain its excluded source trees too.
+        files: ^src/sendspin_bridge/
+        exclude: "(sendspin-cli/|scripts/|custom_components/)"
 
       - id: lint-changelog
         name: lint CHANGELOG.md (Keep a Changelog discipline)
