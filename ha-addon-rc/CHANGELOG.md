@@ -7,32 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.74.0-rc.2] - 2026-08-06
-
-### Changed
-
-- The documentation site now uses Astro 7 and current Starlight, Mermaid, and image-processing releases, with diagram code loaded only on pages that need it.
-- Python, container, CI, and developer tooling dependencies were refreshed and now use uv 0.12.2 consistently, including the Home Assistant and ARMv7 build paths.
-- Render deployments now use Python 3.13.
-
-### Fixed
-
-- Documentation diagrams now preserve their source formatting and avoid duplicate initialization, so architecture and multiroom diagrams render reliably on desktop and mobile.
-- Local type checking now follows the same application-package scope as CI.
-
-### Security
-
-- The documentation dependency tree no longer reports known npm audit findings, and externally loaded Mermaid assets are bundled or pinned with integrity metadata.
-
-## [2.74.0-rc.1] - 2026-08-05
-
-### Fixed
-
-- Updated `cryptography` to 50.0.0 to address `PYSEC-2026-3552` and restore a clean dependency audit.
-- Bluetooth adapter selection now resolves `hci1`, `hci2`, etc. via each adapter's own D-Bus address instead of counting positions in `bluetoothctl list` output, whose ordering does not always match ascending adapter index (for example after hot-plugging a second adapter). Previously this could silently select the wrong physical adapter.
-- Bluetooth sink-not-found diagnostics now ask BlueZ directly whether any local audio backend has registered an A2DP media endpoint for the device, instead of only guessing based on WirePlumber config files that aren't visible from inside a Docker container. This catches a real headless-host failure mode (WirePlumber running, but its Bluetooth monitor never registering an endpoint) that the previous file-based checks silently missed.
-- Onboarding and diagnostics now recognize a headless host where the PulseAudio/PipeWire socket was never created (not just refused), and surface the same `loginctl enable-linger` guidance for it.
-
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)
