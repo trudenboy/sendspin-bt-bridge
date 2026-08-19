@@ -119,3 +119,24 @@ def test_bluetooth_daemon_unknown_when_systemctl_unavailable():
         assert preflight._default_daemon_state() == "unknown"
     finally:
         preflight.subprocess.run = original_run
+
+
+def test_bluetooth_collection_errors_when_transport_unavailable(fake_bluez):
+    """bluetoothctl missing/broken must not masquerade as "no controllers".
+
+    ``list_adapters()`` returns ``[]`` on transport failure by contract, so
+    without a distinguishing re-probe the collector would report ``ok`` with
+    zero controllers and a systemd guess — the pre-migration code failed the
+    collection on ``FileNotFoundError`` instead.  When the transport is down
+    the bluetooth collection must land in ``failed_collections`` and the
+    systemd probe must not run (its answer would be noise).
+    """
+    fake_bluez.fail("list")
+    fake_bluez.fail("show")
+    probe = _DaemonProbe("unused")
+
+    result = _collect(fake_bluez, probe)
+
+    assert "bluetooth" in result["failed_collections"]
+    assert result["collections_status"]["bluetooth"]["status"] == "error"
+    assert probe.calls == 0

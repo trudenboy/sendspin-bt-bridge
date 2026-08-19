@@ -9,7 +9,7 @@ import socket as _socket
 import subprocess
 from typing import Any
 
-from sendspin_bridge.bluetooth.bluez import get_bluez
+from sendspin_bridge.bluetooth.bluez import Outcome, get_bluez
 from sendspin_bridge.config import get_runtime_version
 from sendspin_bridge.services.audio.pulse import get_server_name, list_sinks
 
@@ -282,6 +282,13 @@ def collect_preflight_status(
             bt_info["adapter"] = adapters[0].mac
             bt_info["daemon"] = "active"
         else:
+            # ``list_adapters()`` returns [] on transport failure by
+            # contract — re-probe once with an outcome-carrying call so a
+            # missing/broken bluetoothctl fails the collection instead of
+            # masquerading as "daemon up, zero controllers".
+            probe = bluez.show()
+            if probe.outcome is not Outcome.OK:
+                raise RuntimeError(f"bluetoothctl transport failed: {probe.outcome.value}")
             # No controller surfaced — probe systemd to disambiguate
             # "daemon down" from "daemon up but no adapter" (issue #254).
             bt_info["daemon"] = daemon_state_fn()

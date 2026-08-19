@@ -71,6 +71,26 @@ def test_bluetooth_daemon_status_falls_back_to_systemctl(installed_bluez, monkey
     assert api_status._collect_bluetooth_daemon_status() == "inactive"
 
 
+def test_bluetooth_daemon_status_unknown_when_systemctl_missing(installed_bluez, monkeypatch):
+    """Non-systemd hosts (LXC, alpine, WSL): the systemctl probe raises
+    FileNotFoundError; the collector must degrade to ``unknown`` like the
+    preflight ``_default_daemon_state`` contract, not crash diagnostics."""
+    installed_bluez.on("list", stdout="")  # no controllers → probe runs
+
+    from sendspin_bridge.web.routes import api_status
+
+    real_run = subprocess.run
+
+    def fake_run(args, **kwargs):
+        if list(args[:2]) == ["systemctl", "is-active"]:
+            raise FileNotFoundError("systemctl")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(api_status.subprocess, "run", fake_run)
+
+    assert api_status._collect_bluetooth_daemon_status() == "unknown"
+
+
 def test_collect_adapter_diagnostics_maps_controller_rows(installed_bluez):
     installed_bluez.on(
         "list",
@@ -120,6 +140,20 @@ def test_collect_bt_device_info_maps_fields(installed_bluez, monkeypatch):
 
 def test_collect_bt_device_info_marks_error_on_transport_failure(installed_bluez, monkeypatch):
     installed_bluez.fail("info")
+    _patch_bugreport_devices(monkeypatch, [{"mac": "6C:5C:3D:35:17:99", "name": "ENEBY Portable"}])
+
+    from sendspin_bridge.web.routes import api_status
+
+    rows = api_status._collect_bt_device_info()
+
+    assert rows[0]["error"] == "Failed to retrieve device info"
+
+
+def test_collect_bt_device_info_marks_error_on_nonzero_exit(installed_bluez, monkeypatch):
+    """A bluetoothctl exit ≠ 0 is a command failure, not "device absent":
+    the bugreport row must carry the error instead of a misleading bare
+    row that looks like the device simply isn't present."""
+    installed_bluez.nonzero("info", stderr="org.bluez.Error.Failed")
     _patch_bugreport_devices(monkeypatch, [{"mac": "6C:5C:3D:35:17:99", "name": "ENEBY Portable"}])
 
     from sendspin_bridge.web.routes import api_status

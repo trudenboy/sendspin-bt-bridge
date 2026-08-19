@@ -175,12 +175,17 @@ def _collection_status_payload(status: str, *, count: int | None = None, error: 
 def _collect_bluetooth_daemon_status() -> str:
     if get_bluez().list_adapters():
         return "active"
-    r2 = subprocess.run(
-        ["systemctl", "is-active", "bluetooth"],
-        capture_output=True,
-        text=True,
-        timeout=3,
-    )
+    try:
+        r2 = subprocess.run(
+            ["systemctl", "is-active", "bluetooth"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        # Non-systemd hosts (LXC, alpine, WSL) — same contract as the
+        # preflight ``_default_daemon_state``: never false-flag, never crash.
+        return "unknown"
     return r2.stdout.strip() or "inactive"
 
 
@@ -1345,7 +1350,7 @@ def _collect_bt_device_info() -> list[dict]:
             continue
         entry: dict = {"mac": mac, "name": dev.get("name", "?")}
         info = get_bluez().device_info(mac)
-        if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+        if info.outcome is not Outcome.OK:
             logger.warning("Failed to get BT info for %s: outcome=%s", mac, info.outcome.value)
             entry["error"] = "Failed to retrieve device info"
         else:
