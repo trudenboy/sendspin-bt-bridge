@@ -94,6 +94,36 @@ def test_device_info_transcript_paired_device():
     assert set(info.fields) <= {"name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"}
 
 
+def test_device_info_raw_excludes_prompt_echo_and_banner_noise():
+    """R8: /api/bt/info renders ``raw`` verbatim in the modal — transport
+    noise (banner-glue, prompt echo, ``Agent registered``) must not leak in.
+
+    Shape captured live from the dev stand (2026-08-19): bluetoothctl in
+    piped mode prepends the daemon banner glued to the first prompt echo,
+    and emits ``Agent registered`` on its own prompt line.  The frozen
+    info-*.txt transcripts predate the prompt-redraw fix and don't carry
+    the banner lines, so this sample is inline.
+    """
+    stdout = (
+        "Waiting to connect to bluetoothd...\x1b[0;94m[bluetooth]\x1b[0m# select C0:FB:F9:62:D7:D6\n"
+        "\x1b[0;94m[bluetooth]\x1b[0m# Agent registered\n"
+        "\x1b[0;94m[bluetooth]\x1b[0m# info 6C:5C:3D:35:17:99\n"
+        "Device 6C:5C:3D:35:17:99 (public)\n"
+        "\tName: ENEBY Portable\n"
+        "\tPaired: yes\n"
+    )
+    info = parse_device_info(stdout, ENEBY_MAC)
+
+    assert info.present is True
+    assert info.name == "ENEBY Portable"
+    assert "Waiting to connect" not in "".join(info.raw)
+    assert not any("Agent registered" in line for line in info.raw)
+    assert not any(line.lstrip().startswith("#") for line in info.raw)
+    # The real payload survives untouched.
+    assert "Device 6C:5C:3D:35:17:99 (public)" in info.raw
+    assert "Name: ENEBY Portable" in info.raw
+
+
 def test_device_info_transcript_second_device():
     info = parse_device_info(load_transcript("5.72", "info-lenco"), LENCO_MAC)
     assert info.present is True

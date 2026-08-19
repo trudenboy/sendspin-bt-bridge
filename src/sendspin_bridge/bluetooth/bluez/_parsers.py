@@ -256,8 +256,15 @@ def parse_show(stdout: str, *, outcome: Outcome = Outcome.OK) -> AdapterInfo:
 
 
 def parse_device_info(stdout: str, mac: str, *, outcome: Outcome = Outcome.OK) -> DeviceInfo:
-    """Parse ``info <MAC>`` output into a :class:`DeviceInfo`."""
-    raw_lines = tuple(strip_ansi(ln).strip() for ln in stdout.splitlines() if ln.strip())
+    """Parse ``info <MAC>`` output into a :class:`DeviceInfo`.
+
+    ``raw`` is what the /api/bt/info modal renders verbatim, so it carries
+    CONTENT lines only — the prompt-echo glue, the daemon banner and
+    ``Agent registered``-style banners are transport noise, not payload.
+    """
+    from ._lines import classify_lines
+
+    raw_lines = tuple(line.text for line in classify_lines(stdout) if line.kind is LineKind.CONTENT)
     fields: dict[str, str] = {}
     present = False
     for line in raw_lines:
