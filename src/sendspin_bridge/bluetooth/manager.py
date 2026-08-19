@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
-from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
@@ -33,9 +33,9 @@ from sendspin_bridge.bluetooth.dbus import (
     _dbus_get_device_uuids,
     _dbus_wait_services_resolved,
 )
+from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
+from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS, bt_rssi_mgmt
 from sendspin_bridge.services.bluetooth import bt_operation_lock as _bt_op_lock
-from sendspin_bridge.services.bluetooth import bt_rssi_mgmt, classify_pair_failure, describe_pair_failure
-from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
 # socket (``MGMT_OP_GET_CONN_INFO`` opcode 0x0031), wrapped in
@@ -466,14 +466,13 @@ class BluetoothManager:
     def pair_device(self) -> bool:
         """Pair with the Bluetooth device.
 
-        Uses a single long-running bluetoothctl session with stdin kept open:
-        1. Scan for 12s so BlueZ caches the device (required for 'pair' to work)
-        2. Pair + trust while device is still in cache / pairing mode
         The device MUST be in pairing/discoverable mode when this runs.
-        Uses stdin pipe directly — no shell, no injection risk.
-
-        Reads stdout in real-time during pairing to auto-confirm SSP passkey
-        prompts (e.g. ``Confirm passkey 312997 (yes/no):``).
+        The choreography — discovery, SSP auto-confirm, the PIN ladder,
+        trust after a confirmed pair — is :class:`PairSession`, shared
+        with the manual pair and reset-and-reconnect flows.  What belongs
+        to this path is the device state around it: the Class-of-Device
+        override, the post-pair audio-profile checks, and the failure
+        fingerprint the recovery card reads.
         """
         mac = self.mac_address
         if not re.fullmatch(r"([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", mac):
@@ -502,235 +501,69 @@ class BluetoothManager:
             logger.info("[%s] Pairing skipped because reconnect was cancelled", self.device_name)
             return False
 
-        # Tear down any agent object lingering on the system bus from a previous
-        # bluetoothctl session, and drop any stale BlueZ device cache entry.
-        # Without `agent off`, the next `agent on` returns
-        # `Failed to register agent object`, leaving pairing without an
-        # authentication agent → org.bluez.Error.ConnectionAttemptFailed (#162).
         try:
-            get_bluez().run(
-                ["agent off", f"remove {mac}"],
+            outcome = PairSession(
+                get_bluez(),
                 adapter=self._bluez_adapter(),
-                tier=Deadline.MUTATE,
-            )
-        except Exception as e:  # defensive — the transport reports via Outcome
-            logger.debug("[%s] Pre-pair cleanup failed (non-fatal): %s", self.device_name, e)
-
-        # Native BlueZ agent mirrors _run_standalone_pair_inner so monitor-
-        # loop re-pair after bond loss benefits from the same SSP Numeric
-        # Comparison fix (#168). Falls back to bluetoothctl's built-in
-        # agent on hosts that can't reach dbus-fast / SystemBus.
-        native_agent: PairingAgent | None = None
-        try:
-            native_agent = PairingAgent(
-                capability="DisplayYesNo",
-                pin="0000",
-                allow_hfp=False,
-                target_mac=mac,
-            ).__enter__()
-            logger.info("[%s] Pair: native agent active", self.device_name)
-        except Exception as exc:
-            native_agent = None
-            logger.warning(
-                "[%s] Pair: native agent unavailable (%s) — falling back to bluetoothctl agent",
-                self.device_name,
-                exc,
-            )
-
-        initial_cmds = []
-        if self._adapter_select:
-            initial_cmds.append(f"select {self._adapter_select}")
-        initial_cmds.append("power on")
-        if native_agent is None:
-            # `scan bredr` (not `scan on`) narrows discovery to the BR/EDR
-            # transport — A2DP sinks only speak classic BT. Excluding LE-only
-            # advertisers (beacons, BLE wearables) keeps the scan window
-            # responsive and sidesteps BlueZ's occasional LE/BR/EDR result
-            # interleaving that can delay the pair target appearing
-            # (bluez/bluez#826 workaround; safe on bluetoothctl ≥ 5.65).
-            initial_cmds.extend(["agent on", "default-agent"])
-        initial_cmds.append("scan bredr")
-
-        pair_cmds = [f"pair {mac}"]
-
-        proc = None
-        try:
-            proc = subprocess.Popen(
-                ["bluetoothctl"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            if proc.stdin is None:
-                raise RuntimeError("bluetoothctl subprocess stdin unavailable")
-
-            # Re-check after subprocess is spawned to close the race window
-            if self._reconnect_cancelled():
-                logger.info("[%s] Pairing cancelled after subprocess spawn", self.device_name)
-                proc.terminate()
-                proc.wait(timeout=3)
-                return False
-
-            proc.stdin.write("\n".join(initial_cmds) + "\n")
-            proc.stdin.flush()
-            if not self._wait_with_cancel(_PAIRING_SCAN_DURATION):
-                return False
-
-            # Re-apply per-adapter Class of Device override just before the
-            # outbound BR/EDR Connect — Samsung Q-series soundbars filter
-            # incoming connections by initiator CoD (bluez/bluez#1025) and
-            # bluetoothd may have reset CoD on the `power on` above.
-            # Idempotent + cheap (~1ms HCI round-trip); gated on the
-            # experimental flag so non-Q-series users aren't affected.
-            self._maybe_apply_cod_override_pre_pair()
-
-            proc.stdin.write("\n".join(pair_cmds) + "\n")
-            proc.stdin.flush()
-
-            # Read stdout in real-time to detect and answer SSP passkey prompts.
-            # Only trust the device after pair succeeded; trusting too early can
-            # leave BlueZ with a stale Trusted=yes, Paired=no entry.
-            collected: list[str] = []
-            paired_ok = False
-            pin_attempted = False
-            deadline = time.monotonic() + _PAIRING_WAIT_DURATION
-            import selectors
-
-            sel = selectors.DefaultSelector()
-            sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
-            try:
-                while time.monotonic() < deadline and proc.poll() is None:
-                    if self._reconnect_cancelled():
-                        return False
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        break
-                    events = sel.select(timeout=min(remaining, 0.5))
-                    if not events:
-                        continue
-                    line = proc.stdout.readline()  # type: ignore[union-attr]
-                    if not line:
-                        break
-                    collected.append(line)
-                    stripped = line.strip()
-                    # SSP passkey confirmation prompt
-                    lowered = stripped.lower()
-                    if "confirm passkey" in lowered or "request confirmation" in lowered:
-                        logger.info("SSP passkey prompt detected — auto-confirming: %s", stripped)
-                        proc.stdin.write("yes\n")
-                        proc.stdin.flush()
-                    # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
-                    # ask for a numeric PIN. `0000` is the BlueZ-default fallback
-                    # and what most consumer audio sinks accept (#162).
-                    elif "enter pin code" in lowered or "enter passkey" in lowered:
-                        logger.info("Legacy PIN prompt — auto-entering 0000: %s", stripped)
-                        proc.stdin.write("0000\n")
-                        proc.stdin.flush()
-                        pin_attempted = True
-                    # Early exit on success
-                    if "pairing successful" in stripped.lower() or "already paired" in stripped.lower():
-                        paired_ok = True
-                        break
-            finally:
-                sel.close()
-
-            if paired_ok:
-                proc.stdin.write(f"trust {mac}\n")
-            proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-            proc.stdin.flush()
-
-            # Drain remaining output
-            try:
-                out_tail, _ = proc.communicate(timeout=3)
-                collected.append(out_tail)
-            except subprocess.TimeoutExpired:
-                pass
-
-            out = "".join(collected)
-            ok = (
-                paired_ok
-                or "pairing successful" in out.lower()
-                or "already paired" in out.lower()
-                or "paired: yes" in out.lower()
-            )
-            self.paired = ok
-            if native_agent is not None:
-                try:
-                    telemetry = native_agent.telemetry
-                    logger.info(
-                        "[%s] Pair agent telemetry: outcome=%s capability=%s methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
-                        self.device_name,
-                        "success" if ok else "fail",
-                        telemetry.get("capability"),
-                        telemetry.get("method_calls"),
-                        telemetry.get("last_passkey"),
-                        telemetry.get("peer_cancelled"),
-                        telemetry.get("authorized_services"),
-                        telemetry.get("rejected_services"),
-                    )
-                except Exception as exc:
-                    logger.debug("[%s] pair telemetry read failed: %s", self.device_name, exc)
-            if ok:
-                logger.info("Pairing successful")
-                logger.debug("Pair output tail: %s", out[-600:])
-                self._check_audio_profiles_after_pair()
-                # Explicit A2DP Sink registration right after pair — narrows
-                # the window where BlueZ 5.86's dual-role auto-negotiation
-                # (bluez/bluez#1922) can settle on the wrong profile before
-                # _connect_device_inner gets its turn. Best-effort: helper
-                # logs AlreadyConnected silently and swallows errors, so a
-                # failing hint here must not flip the pair result to False.
-                try:
-                    self._force_a2dp_sink_profile()
-                except Exception as exc:
-                    logger.debug("[%s] post-pair A2DP Sink hint raised: %s", self.device_name, exc)
-            else:
-                failure_reason = (
-                    describe_pair_failure(out, pin_attempted=pin_attempted, pin_used="0000")
-                    or "no explicit bluetoothctl reason captured"
-                )
-                logger.warning("Pairing may have failed: %s", failure_reason)
-                logger.debug("Pair output tail: %s", out[-600:])
-                # Fingerprint the failure for downstream operator guidance.
-                # Right now only the Samsung Q-series Class-of-Device filter
-                # quirk (bluez/bluez#1025) is recognised; ``classify_pair_failure``
-                # returns ``None`` for everything else so the recovery card
-                # only fires when we have a confident, actionable diagnosis.
-                agent_telemetry: dict | None = None
-                if native_agent is not None:
-                    try:
-                        agent_telemetry = native_agent.telemetry
-                    except Exception as exc:
-                        logger.debug("[%s] agent telemetry capture failed: %s", self.device_name, exc)
-                kind = classify_pair_failure(out, agent_telemetry=agent_telemetry)
-                if kind and self.host is not None:
-                    try:
-                        self.host.update_status(
-                            {
-                                "pair_failure_kind": kind,
-                                "pair_failure_adapter_mac": self.effective_adapter_mac or "",
-                                "pair_failure_at": datetime.now(tz=UTC).isoformat(),
-                            }
-                        )
-                    except Exception as exc:
-                        logger.debug("[%s] pair_failure_kind status push failed: %s", self.device_name, exc)
-            return ok
+                mac=mac,
+                options=PairOptions(
+                    pins=COMMON_BT_PAIR_PINS,
+                    timings=PairTimings(
+                        scan_window_s=_PAIRING_SCAN_DURATION,
+                        pair_wait_s=_PAIRING_WAIT_DURATION,
+                    ),
+                ),
+                cancel=self._reconnect_cancelled,
+                # Re-apply the per-adapter Class of Device override right
+                # before the outbound BR/EDR Connect — Samsung Q-series
+                # soundbars filter incoming connections by initiator CoD
+                # (bluez/bluez#1025) and bluetoothd may have reset CoD on
+                # the ``power on`` the session opens with.
+                on_before_pair=self._maybe_apply_cod_override_pre_pair,
+                label=self.device_name,
+            ).run()
         except (OSError, subprocess.SubprocessError) as e:
             logger.error("Pair error: %s", e)
             return False
-        finally:
-            if proc is not None and proc.poll() is None:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=3)
-                except Exception as exc:
-                    logger.debug("pair_device proc cleanup failed: %s", exc)
-            if native_agent is not None:
-                try:
-                    native_agent.__exit__(None, None, None)
-                except Exception as exc:
-                    logger.debug("pair_device agent cleanup failed: %s", exc)
+
+        if outcome.cancelled:
+            return False
+
+        ok = outcome.success
+        self.paired = ok
+        if ok:
+            logger.info("Pairing successful")
+            self._check_audio_profiles_after_pair()
+            # Explicit A2DP Sink registration right after pair — narrows
+            # the window where BlueZ 5.86's dual-role auto-negotiation
+            # (bluez/bluez#1922) can settle on the wrong profile before
+            # _connect_device_inner gets its turn. Best-effort: helper
+            # logs AlreadyConnected silently and swallows errors, so a
+            # failing hint here must not flip the pair result to False.
+            try:
+                self._force_a2dp_sink_profile()
+            except Exception as exc:
+                logger.debug("[%s] post-pair A2DP Sink hint raised: %s", self.device_name, exc)
+            return True
+
+        logger.warning("Pairing may have failed: %s", outcome.reason)
+        # Fingerprint the failure for downstream operator guidance.
+        # Right now only the Samsung Q-series Class-of-Device filter
+        # quirk (bluez/bluez#1025) is recognised; ``classify_pair_failure``
+        # returns ``None`` for everything else so the recovery card
+        # only fires when we have a confident, actionable diagnosis.
+        if outcome.failure_kind and self.host is not None:
+            try:
+                self.host.update_status(
+                    {
+                        "pair_failure_kind": outcome.failure_kind,
+                        "pair_failure_adapter_mac": self.effective_adapter_mac or "",
+                        "pair_failure_at": datetime.now(tz=UTC).isoformat(),
+                    }
+                )
+            except Exception as exc:
+                logger.debug("[%s] pair_failure_kind status push failed: %s", self.device_name, exc)
+        return False
 
     def _check_audio_profiles_after_pair(self) -> None:
         """Log/surface a warning when a freshly-paired device advertises no audio profiles.
