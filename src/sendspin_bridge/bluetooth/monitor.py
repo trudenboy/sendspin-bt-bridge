@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.dbus import _dbus_get_battery_level
+from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 if TYPE_CHECKING:
@@ -212,61 +213,78 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         )
 
                 if not connected:
-                    mgr.battery_level = None
-                    paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
-                    mgr.paired = paired
-                    reconnect_attempt += 1
-                    if mgr.host:
-                        mgr.host.update_status(
-                            {
-                                "reconnecting": True,
-                                "reconnect_attempt": reconnect_attempt,
-                            }
+                    if not try_acquire_bt_operation():
+                        # A UI scan/pair/reconnect holds the adapter — defer
+                        # this poll instead of contending. Lock-free monitor
+                        # reconnects were a live-observed source of wedged
+                        # scans (the paired-probe and connect both drive
+                        # bluetoothctl); contention is not a device failure,
+                        # so the auto-disable counter is left untouched.
+                        logger.info(
+                            "[%s] BT operation in progress — deferring reconnect poll",
+                            mgr.device_name,
                         )
-
-                    # Offload: this may run the adapter-recovery ladder
-                    # (including a possible USB reset) and a config write — never inline
-                    # on the loop.
-                    if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
-                        reconnect_attempt = 0
-                        continue
-
-                    if mgr.host and mgr.host.is_subprocess_running():
-                        logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
-                        is_grouped = bool(mgr.host.get_status_value("group_id"))
-                        if not is_grouped:
-                            await mgr.host.send_subprocess_command({"cmd": "pause"})
-                            await asyncio.sleep(0.2)
-                        await mgr.host.stop_subprocess()
-
-                    _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
-                    success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
-                    if mgr._reconnect_cancelled():
-                        reconnect_attempt = 0
-                        continue
-                    if success and mgr.host:
-                        completed_attempt = reconnect_attempt
-                        reconnect_attempt = 0
-                        mgr._record_reconnect()
-                        mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
-                        mgr._publish_client_event(
-                            DeviceEventType.BLUETOOTH_RECONNECTED,
-                            message="Bluetooth reconnect succeeded",
-                            details={"attempt": completed_attempt},
-                        )
-                        logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
-                        await mgr.host.start_subprocess()
-                        _spawn_background(_correct_other_devices_routing(mgr))
                     else:
-                        delay = mgr._reconnect_delay(reconnect_attempt)
-                        mgr._publish_client_event(
-                            DeviceEventType.BLUETOOTH_RECONNECT_FAILED,
-                            level="warning",
-                            message="Bluetooth reconnect attempt failed",
-                            details={"attempt": reconnect_attempt, "next_retry_delay": delay},
-                        )
-                        mgr.last_check = time.time() + delay - mgr.check_interval
-                        logger.debug("[%s] Backoff: next attempt in %.0fs", mgr.device_name, delay)
+                        try:
+                            mgr.battery_level = None
+                            paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
+                            mgr.paired = paired
+                            reconnect_attempt += 1
+                            if mgr.host:
+                                mgr.host.update_status(
+                                    {
+                                        "reconnecting": True,
+                                        "reconnect_attempt": reconnect_attempt,
+                                    }
+                                )
+
+                            # Offload: this may run the adapter-recovery ladder
+                            # (including a possible USB reset) and a config write — never inline
+                            # on the loop.
+                            if await loop.run_in_executor(
+                                _bt_executor, mgr._handle_reconnect_failure, reconnect_attempt
+                            ):
+                                reconnect_attempt = 0
+                                continue
+
+                            if mgr.host and mgr.host.is_subprocess_running():
+                                logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
+                                is_grouped = bool(mgr.host.get_status_value("group_id"))
+                                if not is_grouped:
+                                    await mgr.host.send_subprocess_command({"cmd": "pause"})
+                                    await asyncio.sleep(0.2)
+                                await mgr.host.stop_subprocess()
+
+                            _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
+                            success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
+                        finally:
+                            release_bt_operation()
+                        if mgr._reconnect_cancelled():
+                            reconnect_attempt = 0
+                            continue
+                        if success and mgr.host:
+                            completed_attempt = reconnect_attempt
+                            reconnect_attempt = 0
+                            mgr._record_reconnect()
+                            mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
+                            mgr._publish_client_event(
+                                DeviceEventType.BLUETOOTH_RECONNECTED,
+                                message="Bluetooth reconnect succeeded",
+                                details={"attempt": completed_attempt},
+                            )
+                            logger.info("BT reconnected for %s, starting sendspin...", mgr.device_name)
+                            await mgr.host.start_subprocess()
+                            _spawn_background(_correct_other_devices_routing(mgr))
+                        else:
+                            delay = mgr._reconnect_delay(reconnect_attempt)
+                            mgr._publish_client_event(
+                                DeviceEventType.BLUETOOTH_RECONNECT_FAILED,
+                                level="warning",
+                                message="Bluetooth reconnect attempt failed",
+                                details={"attempt": reconnect_attempt, "next_retry_delay": delay},
+                            )
+                            mgr.last_check = time.time() + delay - mgr.check_interval
+                            logger.debug("[%s] Backoff: next attempt in %.0fs", mgr.device_name, delay)
                 else:
                     if mgr.host and mgr.host.get_status_value("reconnecting"):
                         mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
@@ -528,35 +546,50 @@ async def _inner_dbus_monitor(
                 # bt_waking: reconnect BT but skip daemon kill below
                 logger.info("[%s] Standby wake — reconnecting BT (daemon stays alive)", mgr.device_name)
 
-            paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
-            mgr.paired = paired
-            reconnect_attempt += 1
-            if mgr.host:
-                mgr.host.update_status(
-                    {
-                        "reconnecting": True,
-                        "reconnect_attempt": reconnect_attempt,
-                    }
+            if not try_acquire_bt_operation():
+                # A UI scan/pair/reconnect holds the adapter — defer instead
+                # of contending (same rationale as the polling path). The
+                # defer is not a device failure and must not feed the
+                # auto-disable counter. Sleep first — this branch is the
+                # loop bottom, so without a cadence the defer would spin hot.
+                logger.info(
+                    "[%s] BT operation in progress — deferring reconnect poll",
+                    mgr.device_name,
                 )
+                await asyncio.sleep(min(mgr.check_interval, 5))
+                continue
+            try:
+                paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
+                mgr.paired = paired
+                reconnect_attempt += 1
+                if mgr.host:
+                    mgr.host.update_status(
+                        {
+                            "reconnecting": True,
+                            "reconnect_attempt": reconnect_attempt,
+                        }
+                    )
 
-            # Auto-disable after too many failures.  Offload: may run the
-            # adapter-recovery ladder + a config write — never on the loop.
-            if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
-                return
+                # Auto-disable after too many failures.  Offload: may run the
+                # adapter-recovery ladder + a config write — never on the loop.
+                if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
+                    return
 
-            # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
-            # Skip when waking from standby — daemon must stay alive for reroute.
-            is_waking = mgr.host and mgr.host.get_status_value("bt_waking")
-            if not is_waking and mgr.host and mgr.host.is_subprocess_running():
-                logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
-                is_grouped = bool(mgr.host.get_status_value("group_id"))
-                if not is_grouped:
-                    await mgr.host.send_subprocess_command({"cmd": "pause"})
-                    await asyncio.sleep(0.2)
-                await mgr.host.stop_subprocess()
+                # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
+                # Skip when waking from standby — daemon must stay alive for reroute.
+                is_waking = mgr.host and mgr.host.get_status_value("bt_waking")
+                if not is_waking and mgr.host and mgr.host.is_subprocess_running():
+                    logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
+                    is_grouped = bool(mgr.host.get_status_value("group_id"))
+                    if not is_grouped:
+                        await mgr.host.send_subprocess_command({"cmd": "pause"})
+                        await asyncio.sleep(0.2)
+                    await mgr.host.stop_subprocess()
 
-            _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
-            success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
+                _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
+                success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
+            finally:
+                release_bt_operation()
             if mgr._reconnect_cancelled():
                 reconnect_attempt = 0
                 continue

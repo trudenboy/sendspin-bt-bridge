@@ -871,22 +871,24 @@ def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):
     bt_manager.host.update_status.assert_called_once_with({"reconnecting": False, "reconnect_attempt": 0})
 
 
-def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager):
+def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager, installed_bluez):
+    from sendspin_bridge.bluetooth.bluez import get_bluez
+
+    control = get_bluez()  # the installed singleton (FakeBluez.control builds a fresh one per access)
+    real_connect = control.connect
+
+    def _connect_then_cancel(mac, adapter=None, **kwargs):
+        bt_manager.cancel_reconnect()
+        return real_connect(mac, adapter)
+
     with (
         patch.object(bt_manager, "is_device_connected", side_effect=[False, True]),
         patch.object(bt_manager, "is_device_paired", return_value=True),
         patch.object(bt_manager, "disconnect_device", return_value=True) as disconnect_device,
         patch.object(bt_manager, "configure_bluetooth_audio"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        patch.object(control, "connect", side_effect=_connect_then_cancel),
     ):
-
-        def _run_side_effect(commands):
-            if commands == [f"connect {bt_manager.mac_address}"]:
-                bt_manager.cancel_reconnect()
-            return True, ""
-
-        bt_manager._run_bluetoothctl = MagicMock(side_effect=_run_side_effect)
-
         assert bt_manager.connect_device() is False
 
     disconnect_device.assert_called_once()
@@ -962,8 +964,6 @@ def test_connect_device_does_not_repair_when_pairing_state_unknown(bt_manager):
         patch.object(bt_manager, "configure_bluetooth_audio"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         assert bt_manager.connect_device() is True
 
     pair_device.assert_not_called()
@@ -1099,7 +1099,7 @@ def test_pair_device_cancelled_after_popen(bt_manager):
     assert fake_proc._returncode is not None
 
 
-def test_pair_device_clears_stale_agent_before_pairing(bt_manager):
+def test_pair_device_clears_stale_agent_before_pairing(bt_manager, installed_bluez):
     """pair_device must run `agent off` cleanup before the main pair session.
 
     Without it, a leftover D-Bus agent object from a previous bluetoothctl
@@ -1111,32 +1111,38 @@ def test_pair_device_clears_stale_agent_before_pairing(bt_manager):
         stdout_lines=["Pairing successful\n"],
         tail="Trusted: yes\nPaired: yes\n",
     )
-    cleanup_calls = []
+    from sendspin_bridge.bluetooth.bluez import get_bluez
 
-    def _capture_run(cmd, **kwargs):
-        cleanup_calls.append({"cmd": cmd, "input": kwargs.get("input", "")})
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = ""
-        result.stderr = ""
-        return result
+    order: list[str] = []
+    scripts: list[list[str]] = []
+    control = get_bluez()  # the installed singleton (FakeBluez.control builds a fresh one per access)
+    real_run = control.run
+
+    def _capture_run(script, *, adapter=None, tier=None):
+        order.append("bluez-run")
+        scripts.append(list(script))
+        return real_run(script, adapter=adapter, tier=tier)
+
+    def _popen(*_args, **_kwargs):
+        order.append("popen")
+        return fake_proc
 
     with (
-        patch("sendspin_bridge.bluetooth.manager.subprocess.run", side_effect=_capture_run),
-        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", return_value=fake_proc),
+        patch.object(control, "run", side_effect=_capture_run),
+        patch("sendspin_bridge.bluetooth.manager.subprocess.Popen", side_effect=_popen),
         patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
         assert bt_manager.pair_device() is True
 
-    assert cleanup_calls, "Expected a subprocess.run cleanup call before Popen"
-    cleanup_input = cleanup_calls[0]["input"]
-    assert "agent off\n" in cleanup_input
+    assert order[:2] == ["bluez-run", "popen"], f"Expected the BluezControl cleanup before Popen; got {order!r}"
+    cleanup = scripts[0]
+    assert "agent off" in cleanup
     # `agent off` must come before any `remove` so the next `agent on` is clean
-    assert cleanup_input.index("agent off") < cleanup_input.index(f"remove {bt_manager.mac_address}")
+    assert cleanup.index("agent off") < cleanup.index(f"remove {bt_manager.mac_address}")
 
 
-def test_connect_device_clears_stale_bluez_entry_after_repeated_unknown_pairing(bt_manager):
+def test_connect_device_clears_stale_bluez_entry_after_repeated_unknown_pairing(bt_manager, installed_bluez):
     """After K consecutive failed reconnects where BlueZ has no device object,
     purge the stale cache entry so the next cycle can trigger pair_device.
 
@@ -1146,37 +1152,25 @@ def test_connect_device_clears_stale_bluez_entry_after_repeated_unknown_pairing(
     status checks)`. Forcing `bluetoothctl remove {mac}` lets the next reconnect
     see paired==False and escalate to pair_device (which now has #162 cleanups).
     """
-    run_calls: list[str] = []
 
-    def _capture_run(cmd, **kwargs):
-        run_calls.append(kwargs.get("input", ""))
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = ""
-        result.stderr = ""
-        return result
-
-    def _remove_inputs():
-        return [s for s in run_calls if f"remove {bt_manager.mac_address}" in s]
+    def _remove_commands():
+        return [c for c in installed_bluez.commands if c.verb == "remove" and bt_manager.mac_address in c.script]
 
     with (
         patch.object(bt_manager, "is_device_connected", return_value=False),
         patch.object(bt_manager, "is_device_paired", return_value=None),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
-        patch("sendspin_bridge.bluetooth.manager.subprocess.run", side_effect=_capture_run),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         for _ in range(2):
             bt_manager.connect_device()
 
-        assert _remove_inputs() == [], (
-            f"Stale-cache cleanup must not trigger before threshold; got {_remove_inputs()!r}"
+        assert _remove_commands() == [], (
+            f"Stale-cache cleanup must not trigger before threshold; got {_remove_commands()!r}"
         )
 
         bt_manager.connect_device()
 
-        assert _remove_inputs(), "Expected `remove {mac}` cleanup once paired-unknown count reached threshold"
+        assert _remove_commands(), "Expected `remove {mac}` cleanup once paired-unknown count reached threshold"
 
 
 def test_connect_device_resets_paired_unknown_count_on_success(bt_manager):
@@ -1191,7 +1185,6 @@ def test_connect_device_resets_paired_unknown_count_on_success(bt_manager):
         patch.object(bt_manager, "configure_bluetooth_audio"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
 
     assert bt_manager._paired_unknown_count == 0
@@ -1368,8 +1361,6 @@ def test_connect_device_retries_status_checks(bt_manager):
         patch.object(bt_manager, "configure_bluetooth_audio"),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         result = bt_manager.connect_device()
 
     assert result is True
@@ -1384,14 +1375,12 @@ def test_connect_device_fails_after_all_retries(bt_manager):
         patch.object(bt_manager, "is_device_paired", return_value=True),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         result = bt_manager.connect_device()
 
     assert result is False
 
 
-def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, caplog):
+def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, installed_bluez, caplog):
     """When status checks fail, the warning must include the bluetoothctl
     connect stdout so the actual BlueZ error reaches the operator.
 
@@ -1401,15 +1390,14 @@ def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, cap
     / link-key-mismatch / ...). Without it, neither the operator nor the
     maintainer can distinguish the candidate causes.
     """
-    connect_output = (
-        "Attempting to connect to D0:C9:07:11:C9:DF\n"
-        "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+    installed_bluez.on(
+        f"connect {bt_manager.mac_address}",
+        stdout=(
+            "Attempting to connect to AA:BB:CC:DD:EE:FF\n"
+            "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+        ),
+        returncode=1,
     )
-
-    def _fake_bctl(cmds):
-        if cmds and cmds[0].startswith("connect "):
-            return False, connect_output
-        return True, ""
 
     with (
         patch.object(bt_manager, "is_device_connected", return_value=False),
@@ -1417,7 +1405,6 @@ def test_connect_device_failure_log_surfaces_bluetoothctl_output(bt_manager, cap
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         caplog.at_level("WARNING", logger="sendspin_bridge.bluetooth.manager"),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(side_effect=_fake_bctl)
         result = bt_manager.connect_device()
 
     assert result is False
@@ -1472,22 +1459,32 @@ def test_summarize_connect_output_no_signal_returns_empty():
     assert _summarize_bluetoothctl_connect_output(stdout) == ""
 
 
-def test_run_bluetoothctl_preserves_stderr_for_connect_diagnostics(bt_manager):
-    completed = MagicMock(
-        returncode=1,
+def test_connect_diagnostics_preserve_stderr(bt_manager, installed_bluez, caplog):
+    """BlueZ versions disagree on whether the connect failure lands on stdout
+    or stderr; the failure warning must surface it either way.
+
+    The stdout+stderr merge itself is owned by the transport contract
+    (``BluezResult.text``, covered in test_bluez_control.py) — this pins the
+    manager-level regression from #302: a stderr-only error still reaches
+    the operator's log.
+    """
+    installed_bluez.on(
+        f"connect {bt_manager.mac_address}",
         stdout="Agent registered\n",
         stderr="Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n",
+        returncode=1,
     )
-    with patch("sendspin_bridge.bluetooth.manager.subprocess.run", return_value=completed):
-        success, output = bt_manager._run_bluetoothctl(["connect AA:BB:CC:DD:EE:FF"])
+    with (
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "_wait_with_cancel", return_value=True),
+        caplog.at_level("WARNING", logger="sendspin_bridge.bluetooth.manager"),
+    ):
+        assert bt_manager.connect_device() is False
 
-    assert success is False
-    assert "Agent registered" in output
-    assert "br-connection-page-timeout" in output
-
-    from sendspin_bridge.bluetooth.manager import _summarize_bluetoothctl_connect_output
-
-    assert _summarize_bluetoothctl_connect_output(output).endswith("br-connection-page-timeout")
+    assert any("br-connection-page-timeout" in msg for msg in caplog.messages), (
+        f"stderr connect diagnostics missing from warning log; got: {caplog.messages!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1528,6 +1525,45 @@ def test_is_device_connected_bluetoothctl_fallback_disconnected(bt_manager, inst
     )
     with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None):
         assert bt_manager.is_device_connected() is False
+
+
+# ---------------------------------------------------------------------------
+# Mutation verbs via BluezControl (batch 5) — trust/connect/disconnect/remove
+# ---------------------------------------------------------------------------
+
+
+def test_trust_device_success(bt_manager, installed_bluez):
+    assert bt_manager.trust_device() is True
+    assert any(c.verb == "trust" for c in installed_bluez.commands)
+
+
+def test_trust_device_false_on_transport_failure(bt_manager, installed_bluez):
+    installed_bluez.fail("trust")
+    assert bt_manager.trust_device() is False
+
+
+def test_disconnect_device_bluetoothctl_fallback_success(bt_manager, installed_bluez):
+    """D-Bus Disconnect unavailable → the scoped ``disconnect`` verb runs and
+    the connected state flips to False."""
+    bt_manager.connected = True
+    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=False):
+        assert bt_manager.disconnect_device() is True
+    assert bt_manager.connected is False
+    assert any(c.verb == "disconnect" for c in installed_bluez.commands)
+
+
+def test_disconnect_device_false_on_transport_failure(bt_manager, installed_bluez):
+    bt_manager.connected = True
+    installed_bluez.fail("disconnect")
+    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=False):
+        assert bt_manager.disconnect_device() is False
+    assert bt_manager.connected is True  # state untouched on failure
+
+
+def test_purge_stale_bluez_entry_removes_device(bt_manager, installed_bluez):
+    """The #162 stale-entry purge issues a scoped ``remove``."""
+    bt_manager._purge_stale_bluez_entry()
+    assert any(c.verb == "remove" and "AA:BB:CC:DD:EE:FF" in c.script for c in installed_bluez.commands)
 
 
 def test_is_device_connected_exception_returns_false(bt_manager):
@@ -1796,8 +1832,6 @@ def test_connect_device_force_a2dp_sink_profile_after_successful_connect(bt_mana
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         assert bt_manager.connect_device() is True
 
     mock_force.assert_called_once()
@@ -1820,8 +1854,6 @@ def test_connect_device_triggers_a2dp_dance_when_no_sink_appears(bt_manager):
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
         patch.object(bt_manager, "_a2dp_recovery_dance", return_value=True) as mock_dance,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         assert bt_manager.connect_device() is True
 
     mock_dance.assert_called_once()
@@ -1839,8 +1871,6 @@ def test_connect_device_does_not_dance_when_sink_appears_immediately(bt_manager)
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
         patch.object(bt_manager, "_a2dp_recovery_dance") as mock_dance,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         assert bt_manager.connect_device() is True
 
     mock_dance.assert_not_called()
@@ -1859,8 +1889,6 @@ def test_connect_device_dance_runs_at_most_once_per_connect_cycle(bt_manager):
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
         patch.object(bt_manager, "_a2dp_recovery_dance") as mock_dance,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         # connect_device resets the counter on entry, so the dance still runs once.
         bt_manager.connect_device()
 
@@ -1896,8 +1924,6 @@ def test_a2dp_recovery_dance_returns_true_on_successful_reconnect(bt_manager):
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         result = bt_manager._a2dp_recovery_dance()
 
     assert result is True
@@ -1914,8 +1940,6 @@ def test_a2dp_recovery_dance_returns_false_when_reconnect_never_succeeds(bt_mana
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
-
         assert bt_manager._a2dp_recovery_dance() is False
 
 
@@ -1953,7 +1977,6 @@ def test_connect_device_does_not_dance_when_flag_disabled(installed_bluez):
         patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=True),
         patch.object(mgr, "_a2dp_recovery_dance") as mock_dance,
     ):
-        mgr._run_bluetoothctl = MagicMock(return_value=(True, ""))
         mgr.connect_device()
     mock_dance.assert_not_called()
 
@@ -1978,7 +2001,6 @@ def test_connect_device_does_not_reload_pa_module_when_flag_disabled(installed_b
         patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=True),
         patch.object(mgr, "_reload_pa_bluez5_module") as mock_reload,
     ):
-        mgr._run_bluetoothctl = MagicMock(return_value=(True, ""))
         mgr.connect_device()
     mock_reload.assert_not_called()
 
@@ -2002,7 +2024,6 @@ def test_connect_device_reloads_pa_module_as_last_resort_when_flag_enabled(bt_ma
         patch.object(bt_manager, "_a2dp_recovery_dance", return_value=True),
         patch.object(bt_manager, "_reload_pa_bluez5_module", return_value=True) as mock_reload,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
 
     mock_reload.assert_called_once()
@@ -2037,7 +2058,6 @@ def test_connect_device_waits_for_services_resolved_before_configure_audio(bt_ma
         patch.object(bt_manager, "_force_a2dp_sink_profile", side_effect=_force),
         patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", side_effect=_wait) as mock_wait,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
 
     mock_wait.assert_called_once()
@@ -2054,7 +2074,6 @@ def test_connect_device_proceeds_when_services_resolved_timeout(bt_manager):
         patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
         patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=False),
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
 
     mock_force.assert_called_once()
@@ -2382,7 +2401,6 @@ def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manage
         patch("sendspin_bridge.bluetooth.manager._dbus_wait_services_resolved", return_value=None),
         patch("sendspin_bridge.bluetooth.manager.logger") as mock_logger,
     ):
-        bt_manager._run_bluetoothctl = MagicMock(return_value=(True, ""))
         assert bt_manager.connect_device() is True
 
     warn_msgs = [str(call) for call in mock_logger.warning.call_args_list]

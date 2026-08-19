@@ -9,8 +9,9 @@ all run on the BlueZ default controller and silently fail.
 * Invalid adapter identifiers are rejected up-front.
 * Backwards compatibility: a missing ``adapter`` preserves the historic
   "default controller" behaviour (empty string).
-* The background routine threads ``select <adapter>`` through every
-  bluetoothctl session (remove, power cycle, pair + trust + connect).
+* The background routine scopes every phase to that controller — the
+  remove and power-cycle verbs via the BlueZ transport's adapter scoping,
+  the pair + trust + connect session via its own ``select`` line.
 """
 
 from __future__ import annotations
@@ -43,11 +44,9 @@ def _extract_select_lines(input_text: str) -> list[str]:
     return adapters
 
 
-class _FakeCompletedProcess:
-    def __init__(self, stdout: str = "", stderr: str = "", returncode: int = 0) -> None:
-        self.stdout = stdout
-        self.stderr = stderr
-        self.returncode = returncode
+def _scoped_verbs(fake_bluez, mac: str) -> list[str]:
+    """Verbs the transport ran under ``select <mac>``, in order."""
+    return [c.verb for c in fake_bluez.scoped(mac) if c.kind == "run"]
 
 
 class _FakePopen:
@@ -200,27 +199,19 @@ def test_reset_reconnect_rejects_invalid_adapter(client, monkeypatch):
     assert not called.is_set()
 
 
-def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypatch):
-    """``select <adapter>`` must appear in remove, power-cycle, *and*
-    the pair/trust/connect bluetoothctl session — otherwise the power
-    cycle hits the default controller and pairing happens on the wrong
-    radio.
+def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypatch, installed_bluez):
+    """Remove, power-cycle *and* the pair/trust/connect session must all be
+    scoped to the requested controller — otherwise the power cycle hits the
+    default controller and pairing happens on the wrong radio.
     """
 
     import sendspin_bridge.web.routes.api_bt as module
-
-    captured_runs: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        captured_runs.append(kw.get("input", "") or "")
-        return _FakeCompletedProcess()
 
     fake_proc = _FakePopen(stdout_text="Pairing successful\n")
 
     def fake_popen(*_a: Any, **_kw: Any) -> _FakePopen:
         return fake_proc
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
     monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
     monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
@@ -234,10 +225,8 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     module.create_scan_job(job_id)
     module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:04", "C0:FB:F9:62:D7:D6")
 
-    # Two ``subprocess.run`` calls: remove phase + power-cycle phase.
-    assert len(captured_runs) == 2
-    assert _extract_select_lines(captured_runs[0]) == ["C0:FB:F9:62:D7:D6"]
-    assert _extract_select_lines(captured_runs[1]) == ["C0:FB:F9:62:D7:D6"]
+    # Remove + power-cycle phases, both scoped to the requested controller.
+    assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6") == ["remove", "power"]
 
     # Pair/trust/connect session: inspect everything written to the Popen stdin.
     popen_input = "".join(fake_proc.stdin.buffer)
@@ -248,7 +237,7 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     assert "connect AA:BB:CC:DD:EE:04" in popen_input
 
 
-def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch):
+def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, installed_bluez):
     """``bluetoothctl select hci1`` fails on HAOS / LXC with ``Controller
     hci1 not available`` — only the controller MAC is accepted. The fleet
     row's ``<select>`` sends ``hci0``/``hci1`` as its value, so the reset
@@ -258,18 +247,11 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch):
 
     import sendspin_bridge.web.routes.api_bt as module
 
-    captured_runs: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        captured_runs.append(kw.get("input", "") or "")
-        return _FakeCompletedProcess()
-
     fake_proc = _FakePopen(stdout_text="Pairing successful\n")
 
     def fake_popen(*_a: Any, **_kw: Any) -> _FakePopen:
         return fake_proc
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
     monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
     monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
@@ -289,16 +271,15 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch):
     module.create_scan_job(job_id)
     module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:05", "hci1")
 
-    # Every ``select`` across every phase must name the resolved MAC.
-    assert _extract_select_lines(captured_runs[0]) == ["C0:FB:F9:62:D7:D6"]
-    assert _extract_select_lines(captured_runs[1]) == ["C0:FB:F9:62:D7:D6"]
+    # Every phase must name the resolved MAC, never the hciN alias.
+    assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6") == ["remove", "power"]
     popen_input = "".join(fake_proc.stdin.buffer)
     assert _extract_select_lines(popen_input) == ["C0:FB:F9:62:D7:D6"]
     assert "select hci1" not in popen_input.lower()
 
 
-def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch):
-    """If ``bluetoothctl list`` is empty (e.g. all adapters down mid-flow),
+def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, installed_bluez):
+    """If no controller can be resolved (e.g. all adapters down mid-flow),
     fall back to the supplied ``hciN`` instead of dropping the ``select``
     prefix entirely.  The command may still fail at bluetoothctl layer,
     but silently running against the default controller is worse — a
@@ -307,18 +288,14 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch):
 
     import sendspin_bridge.web.routes.api_bt as module
 
-    captured_runs: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        captured_runs.append(kw.get("input", "") or "")
-        return _FakeCompletedProcess()
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
     monkeypatch.setattr(module.subprocess, "Popen", lambda *_a, **_kw: _FakePopen())
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
     monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
     monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
+    # No controllers anywhere: the endpoint keeps ``hci0`` and the transport
+    # has nothing to resolve it against either.
+    installed_bluez.on("list", stdout="")
 
     import selectors
 
@@ -328,4 +305,6 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch):
     module.create_scan_job(job_id)
     module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:06", "hci0")
 
-    assert _extract_select_lines(captured_runs[0]) == ["HCI0"]
+    removes = [c for c in installed_bluez.commands if c.kind == "run" and c.verb == "remove"]
+    assert removes, "remove phase never ran"
+    assert removes[0].adapter_selected == "hci0"

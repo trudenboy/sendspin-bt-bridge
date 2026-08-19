@@ -174,6 +174,28 @@ def test_command_disconnect_without_bt_manager_fails():
     assert not result.success
 
 
+def test_command_disconnect_returns_409_when_bt_operation_in_progress(fake_client, monkeypatch):
+    """Disconnect drives the adapter too — it must serialise with
+    scan/pair/reconnect instead of contending (lock-free disconnects were
+    part of the wedged-scan contention observed on the demo stand)."""
+    spawned = []
+    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: False), (lambda: None)))
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: spawned.append(target))
+    result = M.command_disconnect(fake_client)
+    assert not result.success
+    assert result.code == 409
+    assert spawned == []  # never touched the adapter
+
+
+def test_command_disconnect_releases_lock_after_worker(fake_client, monkeypatch):
+    released = []
+    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: target(*a))  # run synchronously
+    result = M.command_disconnect(fake_client)
+    assert result.success
+    assert released == [True]
+
+
 def test_command_pair_acquires_op_lock(fake_client, monkeypatch):
     """Pair must call into the BT operation lock so it serialises with
     the scan path."""

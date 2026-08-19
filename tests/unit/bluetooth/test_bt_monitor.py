@@ -343,6 +343,122 @@ async def test_monitor_polling_skips_when_management_disabled(bt_manager):
     assert iteration_count >= 2
 
 
+@pytest.mark.asyncio
+async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager):
+    """While a UI scan/pair holds the bt-operation lock, the polling monitor
+    must NOT contend for the adapter: no paired probe, no connect attempt.
+    Once the lock is released the next poll reconnects normally."""
+    from sendspin_bridge.bluetooth.monitor import _monitor_polling
+    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
+
+    bt_manager.management_enabled = True
+    bt_manager.check_interval = 0  # poll every iteration
+    bt_manager.last_check = 0.0
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+
+    calls = {"paired": 0, "connect": 0}
+
+    assert try_acquire_bt_operation()  # hold the adapter like a UI scan would
+
+    original_sleep = asyncio.sleep
+    iterations = 0
+
+    async def _counting_sleep(duration):
+        nonlocal iterations
+        iterations += 1
+        if iterations == 1:
+            release_bt_operation()  # scan finished — next poll may proceed
+        if iterations >= 4:
+            bt_manager._running = False
+        await original_sleep(0)
+
+    with (
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
+        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
+        patch.object(bt_manager, "is_device_connected", return_value=False),
+        patch.object(
+            bt_manager,
+            "is_device_paired",
+            side_effect=lambda: (calls.__setitem__("paired", calls["paired"] + 1), True)[1],
+        ),
+        patch.object(
+            bt_manager,
+            "connect_device",
+            side_effect=lambda: (
+                calls.__setitem__("connect", calls["connect"] + 1),
+                setattr(bt_manager, "_running", False),  # stop after the first post-release attempt
+                False,
+            )[2],
+        ),
+    ):
+        loop = asyncio.get_running_loop()
+
+        async def _mock_run_in_executor(executor, fn, *args):
+            return fn(*args) if args else fn()
+
+        with patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor):
+            await _monitor_polling(bt_manager)
+
+    assert calls == {"paired": 1, "connect": 1}  # exactly one attempt, after release
+    # The monitor's attempt released the lock behind it.
+    assert try_acquire_bt_operation()
+    release_bt_operation()
+
+
+@pytest.mark.asyncio
+async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_manager):
+    """D-Bus path: with the lock held, the monitor defers — connect_device is
+    never called and the attempt does not feed the auto-disable counter."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
+
+    bt_manager.connected = False
+    bt_manager.management_enabled = True
+    bt_manager.check_interval = 0.01
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+
+    calls = {"paired": 0, "connect": 0, "handle_failure": 0}
+    sleeps = {"n": 0}
+
+    async def _counting_sleep(duration):
+        sleeps["n"] += 1
+        if sleeps["n"] >= 3:
+            bt_manager._running = False
+
+    assert try_acquire_bt_operation()  # hold the adapter like a UI scan would
+    try:
+        with (
+            patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
+            patch.object(
+                bt_manager,
+                "is_device_paired",
+                side_effect=lambda: (calls.__setitem__("paired", calls["paired"] + 1), True)[1],
+            ),
+            patch.object(
+                bt_manager,
+                "connect_device",
+                side_effect=lambda: (calls.__setitem__("connect", calls["connect"] + 1), False)[1],
+            ),
+            patch.object(
+                bt_manager,
+                "_handle_reconnect_failure",
+                side_effect=lambda _n: (calls.__setitem__("handle_failure", calls["handle_failure"] + 1), False)[1],
+            ),
+        ):
+            await _inner_dbus_monitor(
+                bt_manager, MagicMock(), asyncio.Event(), asyncio.Event(), asyncio.get_running_loop()
+            )
+    finally:
+        release_bt_operation()
+
+    assert calls == {"paired": 0, "connect": 0, "handle_failure": 0}
+    assert sleeps["n"] >= 1  # the defer slept instead of spinning hot
+
+
 # ---------------------------------------------------------------------------
 # _inner_dbus_monitor — reconnect, churn, heartbeat
 # ---------------------------------------------------------------------------

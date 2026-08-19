@@ -4842,6 +4842,59 @@ def _patch_pair_worker_sync(monkeypatch, api_bt_mod):
     monkeypatch.setattr(api_bt_mod.threading, "Thread", _sync_thread)
 
 
+def test_bt_reconnect_returns_409_when_bt_operation_in_progress(client, monkeypatch):
+    """POST /api/bt/reconnect must not drive the adapter while a scan/pair
+    holds the bt-operation lock — 409 and no worker thread, matching
+    ``bt_commands.command_reconnect`` (the lock-free original was one of
+    the wedged-scan contention sources observed on the demo stand)."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    fake_bt = MagicMock()
+    fake_client = SimpleNamespace(bt_manager=fake_bt)
+
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    spawned = []
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", lambda *a, **kw: spawned.append((a, kw)) or MagicMock())
+
+    resp = client.post("/api/bt/reconnect", json={"player_name": "Test"})
+
+    assert resp.status_code == 409
+    assert spawned == []
+    fake_bt.connect_device.assert_not_called()
+    fake_bt.disconnect_device.assert_not_called()
+
+
+def test_bt_reconnect_releases_lock_after_worker(client, monkeypatch):
+    """Happy path: acquires the lock, runs disconnect→connect in the worker,
+    releases in finally."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    fake_bt = MagicMock()
+    fake_client = SimpleNamespace(bt_manager=fake_bt)
+    released: list[bool] = []
+
+    class _SyncThread:
+        def __init__(self, target=None, **_kw):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(True))
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", _SyncThread)
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _s: None)
+
+    resp = client.post("/api/bt/reconnect", json={"player_name": "Test"})
+
+    assert resp.status_code == 200
+    assert released == [True]
+    fake_bt.disconnect_device.assert_called_once()
+    fake_bt.connect_device.assert_called_once()
+
+
 def test_bt_pair_threads_quiesce_flag(client, monkeypatch):
     """POST /api/bt/pair with quiesce_adapter=true must wrap pair flow in quiesce CM."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod

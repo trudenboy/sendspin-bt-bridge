@@ -177,11 +177,19 @@ def command_disconnect(client) -> CommandResult:
     if bt is None:
         return _err("No BT manager for this player", code=503)
 
+    # Disconnect drives the adapter too — serialise against scan/RSSI/pair,
+    # 409 on conflict, matching ``command_reconnect``.
+    try_acquire, release = _bt_operation_lock_funcs()
+    if not try_acquire():
+        return _err("Bluetooth operation already in progress", code=409)
+
     def _do_disconnect():
         try:
             bt.disconnect_device()
         except Exception as exc:
             logger.error("[%s] Disconnect failed: %s", getattr(client, "player_name", ""), exc)
+        finally:
+            release()
 
     _spawn_thread(_do_disconnect)
     return _ok("Disconnect requested")

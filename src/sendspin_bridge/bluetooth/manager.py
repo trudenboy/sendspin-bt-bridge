@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
-from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
@@ -452,35 +452,6 @@ class BluetoothManager:
             return macs[idx]
         return adapter  # Fall back to hciN name
 
-    def _run_bluetoothctl(self, commands: list) -> tuple[bool, str]:
-        """Run bluetoothctl commands, prepending 'select <adapter_mac>' if configured.
-        Uses stdin pipe directly — no shell, no injection risk."""
-        try:
-            all_commands = []
-            if self._adapter_select:
-                all_commands.append(f"select {self._adapter_select}")
-            all_commands.extend(commands)
-            cmd_string = "\n".join(all_commands) + "\n"
-            result = subprocess.run(
-                ["bluetoothctl"],
-                input=cmd_string,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            # BlueZ/bluetoothctl versions disagree on whether command failures
-            # belong on stdout or stderr. Preserve both so reconnect warnings
-            # surface the real org.bluez error instead of the harmless
-            # "Agent registered" startup banner.
-            output = "\n".join(part.strip("\n") for part in (result.stdout, result.stderr) if part)
-            return result.returncode == 0, output
-        except subprocess.TimeoutExpired:
-            logger.warning("Bluetoothctl timed out after 10s for commands: %s", commands)
-            return False, "timeout"
-        except OSError as e:
-            logger.error("Bluetoothctl error: %s", e)
-            return False, str(e)
-
     def check_bluetooth_available(self) -> bool:
         """Check if Bluetooth is available on the system"""
         try:
@@ -589,20 +560,13 @@ class BluetoothManager:
         # Without `agent off`, the next `agent on` returns
         # `Failed to register agent object`, leaving pairing without an
         # authentication agent → org.bluez.Error.ConnectionAttemptFailed (#162).
-        cleanup_cmds: list[str] = []
-        if self._adapter_select:
-            cleanup_cmds.append(f"select {self._adapter_select}")
-        cleanup_cmds.append("agent off")
-        cleanup_cmds.append(f"remove {mac}")
         try:
-            subprocess.run(
-                ["bluetoothctl"],
-                input="\n".join(cleanup_cmds) + "\n",
-                capture_output=True,
-                text=True,
-                timeout=10,
+            get_bluez().run(
+                ["agent off", f"remove {mac}"],
+                adapter=self._bluez_adapter(),
+                tier=Deadline.MUTATE,
             )
-        except (OSError, subprocess.SubprocessError) as e:
+        except Exception as e:  # defensive — the transport reports via Outcome
             logger.debug("[%s] Pre-pair cleanup failed (non-fatal): %s", self.device_name, e)
 
         # Native BlueZ agent mirrors _run_standalone_pair_inner so monitor-
@@ -858,8 +822,7 @@ class BluetoothManager:
 
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
-        success, _ = self._run_bluetoothctl([f"trust {self.mac_address}"])
-        return success
+        return get_bluez().trust(self.mac_address, self._bluez_adapter()).outcome is Outcome.OK
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
@@ -930,12 +893,12 @@ class BluetoothManager:
             return False
 
         # Power on bluetooth
-        self._run_bluetoothctl(["power on"])
+        get_bluez().power(True, self._bluez_adapter())
         if not self._wait_with_cancel(1):
             return False
 
         # Try to connect
-        _success, _connect_output = self._run_bluetoothctl([f"connect {self.mac_address}"])
+        connect_result = get_bluez().connect(self.mac_address, self._bluez_adapter())
         if self._abort_connect_if_cancelled():
             return False
 
@@ -1005,7 +968,7 @@ class BluetoothManager:
                     sink_ok = self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
-        excerpt = _summarize_bluetoothctl_connect_output(_connect_output)
+        excerpt = _summarize_bluetoothctl_connect_output(connect_result.text)
         if excerpt:
             # #302 — surface the underlying BlueZ error (page-timeout,
             # br-connection-already-active, profile-unavailable, …) so the
@@ -1048,19 +1011,9 @@ class BluetoothManager:
             self.mac_address,
             _PAIRED_UNKNOWN_THRESHOLD,
         )
-        cleanup_cmds: list[str] = []
-        if self._adapter_select:
-            cleanup_cmds.append(f"select {self._adapter_select}")
-        cleanup_cmds.append(f"remove {self.mac_address}")
         try:
-            subprocess.run(
-                ["bluetoothctl"],
-                input="\n".join(cleanup_cmds) + "\n",
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (OSError, subprocess.SubprocessError) as e:
+            get_bluez().remove(self.mac_address, self._bluez_adapter())
+        except Exception as e:  # defensive — the transport reports via Outcome
             logger.debug("[%s] Stale BlueZ purge failed (non-fatal): %s", self.device_name, e)
         if self.host:
             try:
@@ -1096,10 +1049,11 @@ class BluetoothManager:
         if _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
             self._apply_connected_state(False)
             return True
-        success, _ = self._run_bluetoothctl([f"disconnect {self.mac_address}"])
-        if success:
+        result = get_bluez().disconnect(self.mac_address, self._bluez_adapter())
+        if result.outcome is Outcome.OK:
             self._apply_connected_state(False)
-        return success
+            return True
+        return False
 
     def _apply_connected_state(self, value: bool) -> None:
         """Single setter for ``self.connected`` that bookkeeps callbacks.
@@ -1208,7 +1162,7 @@ class BluetoothManager:
         # object on the bus and the reconnect's on_connected fire would
         # clash with it.
         if not _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
-            self._run_bluetoothctl([f"disconnect {self.mac_address}"])
+            get_bluez().disconnect(self.mac_address, self._bluez_adapter())
         self._apply_connected_state(False)
         # Short settle period — BlueZ needs a moment to tear down ACL state.
         if not self._wait_with_cancel(2):
@@ -1216,7 +1170,7 @@ class BluetoothManager:
         if self._abort_connect_if_cancelled():
             return False
         # Reconnect and re-issue the explicit A2DP Sink profile request.
-        self._run_bluetoothctl([f"connect {self.mac_address}"])
+        get_bluez().connect(self.mac_address, self._bluez_adapter())
         for _i in range(_CONNECT_CHECK_RETRIES):
             if not self._wait_with_cancel(1):
                 return False

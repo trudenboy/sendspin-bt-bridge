@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import re
-import subprocess
 import tempfile
 import threading
 from pathlib import Path
@@ -373,29 +372,17 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
         return
 
     def _run():
-        cmds = []
-        if adapter_mac:
-            cmds.append(f"select {adapter_mac}")
-        cmds.append(f"remove {mac}")
-        cmd_str = "\n".join(cmds) + "\n"
         try:
-            result = subprocess.run(
-                ["bluetoothctl"],
-                input=cmd_str,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            result = get_bluez().remove(mac, Adapter.of(adapter_mac))
             # `bluetoothctl` returns 0 even when `remove <mac>` fails with
-            # "Device not available" (device not in the BlueZ object tree).
-            # Rely on the stdout marker instead of returncode.
-            out = (result.stdout or "") + (result.stderr or "")
-            if "not available" in out.lower() or "failed to remove" in out.lower():
+            # "Device not available" (device not in the BlueZ object tree) —
+            # RemoveResult reads the stdout marker, not the returncode.
+            if result.not_available:
                 logger.warning(
                     "BT stack: remove %s reported failure (adapter: %s): %s",
                     mac,
                     adapter_mac or "default",
-                    out.strip() or "no output",
+                    result.result.text.strip() or "no output",
                 )
             else:
                 logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")

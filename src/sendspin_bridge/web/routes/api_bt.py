@@ -16,7 +16,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
@@ -174,6 +174,8 @@ def api_bt_reconnect():
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
         bt = client.bt_manager
+        if not _try_acquire_bt_operation():
+            return _bt_operation_conflict_response()
 
         def _do_reconnect():
             try:
@@ -182,6 +184,8 @@ def api_bt_reconnect():
                 bt.connect_device()
             except Exception as e:
                 logger.error("Force reconnect failed: %s", e)
+            finally:
+                _release_bt_operation()
 
         threading.Thread(target=_do_reconnect, daemon=True).start()
         return jsonify({"success": True, "message": "Reconnect started"})
@@ -682,14 +686,11 @@ def api_bt_disconnect():
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
-        r = subprocess.run(
-            ["bluetoothctl"],
-            input=f"disconnect {mac}\n",
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        ok = "successful" in r.stdout.lower()
+        result = get_bluez().disconnect(mac)
+        if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            logger.error("Failed to disconnect device %s: outcome=%s", mac, result.outcome.value)
+            return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
+        ok = "successful" in result.stdout.lower()
         return jsonify({"ok": ok, "mac": mac})
     except Exception:
         logger.exception("Failed to disconnect device %s", mac)
@@ -705,23 +706,14 @@ def api_bt_adapter_power():
     except ValueError:
         return jsonify({"error": "Invalid adapter identifier"}), 400
     power = data.get("power", True)
-    cmd = "power on" if power else "power off"
-    cmds = f"select {adapter}\n{cmd}\n" if adapter else f"{cmd}\n"
     try:
-        r = subprocess.run(
-            ["bluetoothctl"],
-            input=cmds,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        clean = _ANSI_RE.sub("", r.stdout).lower()
-        ok = (
-            "succeeded" in clean
-            or "changing power" in clean
-            or (("powered: yes" in clean) if power else ("powered: no" in clean))
-        )
-        return jsonify({"ok": ok, "power": power})
+        result = get_bluez().power(bool(power), Adapter.of(adapter))
+        if result.result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            logger.error("Failed to toggle adapter power: outcome=%s", result.result.outcome.value)
+            return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
+        # ``changed`` reproduces the historical ok-heuristic (succeeded /
+        # changing power / powered: marker) exactly.
+        return jsonify({"ok": result.changed, "power": power})
     except Exception:
         logger.exception("Failed to toggle adapter power")
         return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
@@ -819,34 +811,16 @@ def _run_reset_reconnect(
 ) -> None:
     """Remove device, then pair + trust + connect from scratch."""
     adapter = _resolve_adapter_to_mac(adapter)
+    bluez = get_bluez()
+    scope = Adapter.of(adapter)
     try:
         # Step 1: Remove existing pairing
         logger.info("Reset & Reconnect %s: removing…", mac)
-        remove_cmds: list[str] = []
-        if adapter:
-            remove_cmds.append(f"select {adapter}")
-        remove_cmds.append(f"remove {mac}")
-        subprocess.run(
-            ["bluetoothctl"],
-            input="\n".join(remove_cmds) + "\n",
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        bluez.remove(mac, scope)
         time.sleep(1)
 
         # Step 2: Power cycle adapter
-        power_cmds: list[str] = []
-        if adapter:
-            power_cmds.append(f"select {adapter}")
-        power_cmds.extend(["power off"])
-        subprocess.run(
-            ["bluetoothctl"],
-            input="\n".join(power_cmds) + "\n",
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+        bluez.power(False, scope)
         time.sleep(2)
 
         # Step 3: Pair from scratch (power on + scan + pair, trust only after success)
@@ -1550,22 +1524,15 @@ def _run_standalone_pair_inner(
     PIN or surface the failure to the UI.
     """
     try:
-        cleanup_cmds: list[str] = []
-        if adapter:
-            cleanup_cmds.append(f"select {adapter}")
         # `agent off` tears down any agent object lingering on the system bus
         # from a previous bluetoothctl session. Without it, `agent on` below
         # can return `Failed to register agent object`, leaving the pair
         # without an authentication agent and producing
         # `org.bluez.Error.ConnectionAttemptFailed` (issue #162).
-        cleanup_cmds.append("agent off")
-        cleanup_cmds.append(f"remove {mac}")
-        subprocess.run(
-            ["bluetoothctl"],
-            input="\n".join(cleanup_cmds) + "\n",
-            capture_output=True,
-            text=True,
-            timeout=10,
+        get_bluez().run(
+            ["agent off", f"remove {mac}"],
+            adapter=Adapter.of(adapter),
+            tier=Deadline.MUTATE,
         )
         time.sleep(1)
 
