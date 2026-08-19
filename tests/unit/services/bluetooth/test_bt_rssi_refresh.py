@@ -44,14 +44,20 @@ def _reset_bt_operation_lock():
             break
 
 
+@pytest.fixture(autouse=True)
+def _no_default_controller(installed_bluez):
+    """Constructors in this module resolve no adapter (``show`` → empty),
+    matching the historical ``check_output("")`` guard."""
+    installed_bluez.on("show", stdout="")
+
+
 def _make_manager(adapter_hci_name: str = "hci0"):
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
-    with patch("subprocess.check_output", return_value=""):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-        )
+    mgr = BluetoothManager(
+        mac_address="AA:BB:CC:DD:EE:FF",
+        device_name="TestSpeaker",
+    )
     # Force the resolved adapter name regardless of what sysfs returned in CI.
     mgr.adapter_hci_name = adapter_hci_name
     return mgr

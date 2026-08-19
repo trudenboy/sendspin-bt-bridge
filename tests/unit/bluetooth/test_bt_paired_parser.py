@@ -1,4 +1,4 @@
-"""Robustness of ``_parse_paired_stdout`` against real-world bluetoothctl noise.
+"""Robustness of the ``devices [Paired]`` parser against real-world noise.
 
 Interactive ``bluetoothctl`` emits asynchronous discovery notifications
 (``[CHG] Device <mac> RSSI: …``, ``[NEW] Device …``, ``[DEL] Device …``,
@@ -12,11 +12,19 @@ Only lines that are literally a *response* to ``devices Paired`` count:
 - start with ``Device <mac>`` (no ``[CHG]``/``[NEW]``/``[DEL]`` bracket);
 - no residual control keywords (``RSSI:``, ``ManufacturerData.*``) in the
   name portion.
+
+Batch 4 (BluezControl migration): the grammar moved from the route-local
+``_parse_paired_stdout`` into ``bluetooth.bluez.parse_devices``; these
+regression shapes now pin the shared parser directly.
 """
 
 from __future__ import annotations
 
-from sendspin_bridge.web.routes.api_bt import _parse_paired_stdout
+from sendspin_bridge.bluetooth.bluez import parse_devices
+
+
+def _pairs(stdout: str) -> list[tuple[str, str]]:
+    return [(entry.mac, entry.name) for entry in parse_devices(stdout)]
 
 
 def test_parse_ignores_chg_rssi_async_notifications():
@@ -27,7 +35,7 @@ def test_parse_ignores_chg_rssi_async_notifications():
         "Device FC:58:FA:EB:08:6C ENEBY20\n"
         "Device 30:21:0E:0A:AE:5A Lenco LS-500\n"
     )
-    result = _parse_paired_stdout(stdout)
+    result = _pairs(stdout)
     assert sorted(result) == sorted(
         [
             ("FC:58:FA:EB:08:6C", "ENEBY20"),
@@ -45,7 +53,7 @@ def test_parse_ignores_chg_manufacturerdata_and_multiline_hex_dumps():
         "  00                                               .               \n"
         "Device AA:BB:CC:DD:EE:FF Real Speaker\n"
     )
-    result = _parse_paired_stdout(stdout)
+    result = _pairs(stdout)
     assert result == [("AA:BB:CC:DD:EE:FF", "Real Speaker")]
 
 
@@ -55,12 +63,12 @@ def test_parse_ignores_new_and_del_notifications():
         "[DEL] Device 11:22:33:44:55:66 Ghost Discovery\n"
         "Device AA:BB:CC:DD:EE:01 Real Speaker\n"
     )
-    result = _parse_paired_stdout(stdout)
+    result = _pairs(stdout)
     assert result == [("AA:BB:CC:DD:EE:01", "Real Speaker")]
 
 
 def test_parse_accepts_ansi_coloured_prompt_prefix_on_real_line():
     """Prompt echo (``[ENEBY20]> ``) may prefix the first real line."""
     stdout = "\x1b[0;94m[ENEBY20]> \x1b[0mdevices Paired\nDevice FC:58:FA:EB:08:6C ENEBY20\n"
-    result = _parse_paired_stdout(stdout)
+    result = _pairs(stdout)
     assert result == [("FC:58:FA:EB:08:6C", "ENEBY20")]

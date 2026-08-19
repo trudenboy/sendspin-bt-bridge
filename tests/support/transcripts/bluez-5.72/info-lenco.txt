@@ -1,0 +1,18 @@
+Waiting to connect to bluetoothd...[0;94m[bluetooth][0m#            info 30:21:0E:0A:AE:5A
+Device 30:21:0E:0A:AE:5A (public)
+	Name: Lenco LS-500
+	Alias: Lenco LS-500
+	Class: 0x00200418 (2098200)
+	Icon: audio-headphones
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: no
+	LegacyPairing: no
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)
+	UUID: Advanced Audio Distribu.. (0000110d-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)
+[0;94m[bluetooth][0m# exit
+[0;94m[bluetooth][0m#                         

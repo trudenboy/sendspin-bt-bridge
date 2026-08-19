@@ -3,8 +3,13 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-ast
+      # Captured bluetoothctl transcripts are byte-for-byte fixtures: the
+      # trailing spaces after a prompt and the missing final newline are
+      # part of what the parsers must handle, so they are left alone.
       - id: trailing-whitespace
+        exclude: ^tests/support/transcripts/
       - id: end-of-file-fixer
+        exclude: ^tests/support/transcripts/
       - id: check-yaml
 
   - repo: https://github.com/astral-sh/ruff-pre-commit

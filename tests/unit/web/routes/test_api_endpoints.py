@@ -16,63 +16,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
-class _FakeStdout:
-    def __init__(self, lines):
-        self._lines = list(lines)
-
-    def readline(self):
-        if self._lines:
-            return self._lines.pop(0)
-        return ""
-
-
-class _FakeStdin:
-    def __init__(self):
-        self.writes = []
-
-    def write(self, data):
-        self.writes.append(data)
-
-    def flush(self):
-        return None
-
-
-class _FakeProc:
-    def __init__(self, stdout_lines, tail=""):
-        self.stdin = _FakeStdin()
-        self.stdout = _FakeStdout(stdout_lines)
-        self._tail = tail
-        self._returncode = None
-
-    def poll(self):
-        return self._returncode
-
-    def communicate(self, timeout=None):
-        self._returncode = 0
-        return self._tail, ""
-
-    def kill(self):
-        self._returncode = -9
-
-    def wait(self, timeout=None):
-        return 0
-
-
-class _FakeSelector:
-    def __init__(self, stdout):
-        self._stdout = stdout
-
-    def register(self, *_args, **_kwargs):
-        return None
-
-    def select(self, timeout=None):
-        return [object()] if self._stdout._lines else []
-
-    def close(self):
-        return None
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -343,579 +286,390 @@ def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, t
     assert not any("may belong to another bridge" in message for message in messages)
 
 
-def test_run_standalone_pair_cleans_stale_device_before_trusting(monkeypatch):
+# ---------------------------------------------------------------------------
+# Standalone pair (POST /api/bt/pair_new)
+#
+# The pairing choreography itself is pinned in
+# tests/unit/bluetooth/test_pair_session.py.  What matters here is what the
+# route contributes: adapter resolution, per-request compatibility options,
+# peer quiesce, and the job payload the UI polls.
+# ---------------------------------------------------------------------------
+
+MAC = "AA:BB:CC:DD:EE:FF"
+HCI0_MAC = "C0:FB:F9:62:D6:9D"
+HCI1_MAC = "C0:FB:F9:62:D7:D6"
+
+
+class _RecordingAgent:
+    """Stand-in for the native BlueZ agent, capturing how it was built."""
+
+    instances: list["_RecordingAgent"] = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.telemetry = {"capability": kwargs.get("capability")}
+        _RecordingAgent.instances.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+@pytest.fixture
+def pair_agent(monkeypatch):
+    """Capture the native agent's construction arguments."""
+    import sendspin_bridge.services.bluetooth.pairing_agent as agent_mod
+
+    _RecordingAgent.instances = []
+    monkeypatch.setattr(agent_mod, "PairingAgent", _RecordingAgent)
+    return _RecordingAgent
+
+
+def _script_pair_ok(fake_bluez, mac=MAC):
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {mac} ENEBY Portable"]),
+            (f"pair {mac}", ["Pairing successful"]),
+        ]
+    )
+
+
+def _pin_hci_map(monkeypatch, api_bt_mod):
+    """Make hciN resolution deterministic regardless of the host's controllers.
+
+    The live stand has two real controllers; without pinning the kernel map
+    and the D-Bus lookup, what ``hci1`` resolves to depends on the machine
+    the suite runs on.
+    """
+    monkeypatch.setattr(
+        api_bt_mod,
+        "build_hci_map",
+        lambda: {HCI0_MAC.replace(":", ""): "hci0", HCI1_MAC.replace(":", ""): "hci1"},
+    )
+    monkeypatch.setattr(api_bt_mod, "_dbus_get_adapter_address", lambda _hci: None)
+
+
+def _selected_adapters(fake_bluez) -> list[str]:
+    return [c.adapter_selected for c in fake_bluez.commands if c.adapter_selected]
+
+
+def test_run_standalone_pair_resolves_hci_name_to_controller_mac(installed_bluez, monkeypatch):
+    """``bluetoothctl select hci1`` fails on HAOS/LXC with "Controller hci1
+    not available" and the whole pair sequence then silently runs against
+    the default controller — so ``hciN`` must become the controller MAC."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\nTrusted: yes\n")
-    cleanup_run = MagicMock()
+    _script_pair_ok(installed_bluez)
     finish_job = MagicMock()
-
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    # Pretend the host reports two controllers: hci0 + hci1.
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC, HCI1_MAC])
+    _pin_hci_map(monkeypatch, api_bt_mod)
+
+    api_bt_mod._run_standalone_pair("job-1", MAC, "hci1")
+
+    assert _selected_adapters(installed_bluez), "pair ran without ever scoping the controller"
+    assert set(_selected_adapters(installed_bluez)) == {HCI1_MAC}
+    finish_job.assert_called_once_with("job-1", {"success": True, "mac": MAC})
+
+
+def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(installed_bluez, monkeypatch):
+    """If ``list_bt_adapters`` returns nothing, keep the supplied ``hciN``
+    rather than dropping the ``select`` — a failed ``select`` is a visible
+    error, silently pairing against the default controller is not."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    _script_pair_ok(installed_bluez)
+    installed_bluez.on("list", stdout="")  # no controller the transport can map either
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [])
+    # Every resolution path dry: no sysfs map, no D-Bus answer.
+    monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {})
+    monkeypatch.setattr(api_bt_mod, "_dbus_get_adapter_address", lambda _hci: None)
+
+    api_bt_mod._run_standalone_pair("job-2", MAC, "hci0")
+
+    assert set(_selected_adapters(installed_bluez)) == {"hci0"}
+
+
+def test_resolve_adapter_to_mac_uses_kernel_hci_map_not_list_position(monkeypatch):
+    """Issue #340 on the pair path: ``bluetoothctl list`` order is BlueZ
+    registration order, not kernel hciN numbering.  When hci1 is registered
+    first (list position 0) the positional resolver silently paired against
+    hci0 — the live ENEBY pair failure on the two-adapter stand.  Resolution
+    must go through the sysfs-backed kernel map, same as the scan path."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    # bluetoothctl list returns hci1's MAC first (registration order).
     monkeypatch.setattr(
         api_bt_mod,
         "list_bt_adapters",
-        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
+        lambda: ["00:02:72:0A:E4:3B", "C0:FB:F9:62:D7:D6"],
+    )
+    # Kernel map (sysfs): hci0=C0:FB…, hci1=00:02….
+    monkeypatch.setattr(
+        api_bt_mod,
+        "build_hci_map",
+        lambda: {"C0FBF962D7D6": "hci0", "0002720AE43B": "hci1"},
     )
 
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-1", "AA:BB:CC:DD:EE:FF", "hci1")
-
-    cleanup_input = cleanup_run.call_args.kwargs["input"]
-    # ``hci1`` must be translated to the controller MAC before ``select`` —
-    # ``bluetoothctl select hci1`` fails on HAOS/LXC with "Controller hci1
-    # not available" and the whole pair sequence silently runs against the
-    # default controller.
-    assert "select C0:FB:F9:62:D7:D6\n" in cleanup_input
-    assert "remove AA:BB:CC:DD:EE:FF\n" in cleanup_input
-    assert fake_proc.stdin.writes[0].startswith("select C0:FB:F9:62:D7:D6\n")
-    # `scan bredr` (not `scan on`) — BlueZ 5.85 supports explicit transport
-    # selection; filtering out LE-only advertisers prevents scan-result
-    # noise during A2DP sink pairing (bluez/bluez#826 workaround).
-    assert fake_proc.stdin.writes[0].endswith("scan bredr\n")
-    assert fake_proc.stdin.writes[1] == "pair AA:BB:CC:DD:EE:FF\n"
-    assert fake_proc.stdin.writes[2].startswith("trust AA:BB:CC:DD:EE:FF\n")
-    finish_job.assert_called_once_with("job-1", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+    assert api_bt_mod._resolve_adapter_to_mac("hci1") == "00:02:72:0A:E4:3B"
+    assert api_bt_mod._resolve_adapter_to_mac("hci0") == "C0:FB:F9:62:D7:D6"
 
 
-def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(monkeypatch):
-    """If ``list_bt_adapters`` returns nothing, keep the supplied ``hciN``
-    rather than dropping the ``select`` prefix — a failed ``select`` is a
-    visible error, silently pairing against the default controller is not.
-    """
+def test_resolve_adapter_to_mac_falls_back_to_dbus_when_sysfs_has_no_address(monkeypatch):
+    """Live rc.1 stand finding: some kernels expose /sys/class/bluetooth/hciN
+    WITHOUT an ``address`` file (only device/power/rfkill) — the sysfs map is
+    then empty and positional ``bluetoothctl list`` indexing resolves hciN to
+    the wrong controller (registration order ≠ kernel numbering, issue #340).
+    The D-Bus adapter object path /org/bluez/hciN is keyed by the kernel index
+    unambiguously, so it must be tried before the positional fallback."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    cleanup_run = MagicMock()
+    # No sysfs visibility at all.
+    monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {})
+    # list order: hci1's MAC first (BlueZ registration order).
+    monkeypatch.setattr(
+        api_bt_mod,
+        "list_bt_adapters",
+        lambda: ["00:02:72:0A:E4:3B", "C0:FB:F9:62:D7:D6"],
+    )
+    # D-Bus knows the truth: hci0=C0:FB…, hci1=00:02….
+    monkeypatch.setattr(
+        api_bt_mod,
+        "_dbus_get_adapter_address",
+        lambda hci: {"hci0": "C0:FB:F9:62:D7:D6", "hci1": "00:02:72:0A:E4:3B"}.get(hci),
+    )
 
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [])
-
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-2", "AA:BB:CC:DD:EE:FF", "hci0")
-
-    cleanup_input = cleanup_run.call_args.kwargs["input"]
-    assert "select hci0\n" in cleanup_input
-    assert "remove AA:BB:CC:DD:EE:FF\n" in cleanup_input
+    # Without the D-Bus step, hci1 would positionally resolve to 00:02…'s
+    # list-position neighbour — the live mispairing.
+    assert api_bt_mod._resolve_adapter_to_mac("hci1") == "00:02:72:0A:E4:3B"
+    assert api_bt_mod._resolve_adapter_to_mac("hci0") == "C0:FB:F9:62:D7:D6"
 
 
-def test_run_standalone_pair_passes_mac_through_unchanged(monkeypatch):
+def test_run_standalone_pair_fails_when_the_bond_is_not_on_the_requested_adapter(installed_bluez, monkeypatch):
+    """Live two-adapter failure (rc.1 stand): the device is already bonded on
+    the other controller, so the SSP exchange never fires, the session prints
+    "Pairing successful" anyway, and the job used to report success while the
+    bond stayed put.  The route must surface the pair as failed."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    installed_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+            (f"info {MAC}", [f"Device {MAC} (public)", "\tPaired: no", "\tTrusted: no"]),
+        ]
+    )
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC, HCI1_MAC])
+
+    api_bt_mod._run_standalone_pair("job-bond", MAC, HCI1_MAC)
+
+    finish_job.assert_called_once_with("job-bond", {"success": False, "mac": MAC})
+
+
+def test_run_standalone_pair_succeeds_when_the_bond_is_confirmed(installed_bluez, monkeypatch):
+    """Happy-path guard for the verification: the scoped ``info`` confirms the
+    bond, so the job still reports success."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    installed_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+            (f"info {MAC}", [f"Device {MAC} (public)", "\tPaired: yes", "\tTrusted: yes"]),
+        ]
+    )
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC, HCI1_MAC])
+
+    api_bt_mod._run_standalone_pair("job-bond-ok", MAC, HCI1_MAC)
+
+    finish_job.assert_called_once_with("job-bond-ok", {"success": True, "mac": MAC})
+
+
+def test_run_standalone_pair_passes_adapter_mac_through_unchanged(installed_bluez, monkeypatch):
     """MAC inputs must never be mutated by ``_resolve_adapter_to_mac``."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    cleanup_run = MagicMock()
-
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    _script_pair_ok(installed_bluez)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(
-        api_bt_mod,
-        "list_bt_adapters",
-        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
-    )
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC, HCI1_MAC])
 
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-3", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D7:D6")
+    api_bt_mod._run_standalone_pair("job-3", MAC, HCI1_MAC)
 
-    cleanup_input = cleanup_run.call_args.kwargs["input"]
-    assert "select C0:FB:F9:62:D7:D6\n" in cleanup_input
-    assert "remove AA:BB:CC:DD:EE:FF\n" in cleanup_input
+    assert set(_selected_adapters(installed_bluez)) == {HCI1_MAC}
 
 
-def test_run_standalone_pair_clears_stale_agent_before_pairing(monkeypatch):
-    """Cleanup must `agent off` before the next pair attempt.
+def test_run_standalone_pair_clears_stale_agent_before_pairing(installed_bluez, monkeypatch):
+    """Cleanup must ``agent off`` before the next pair attempt.
 
-    BlueZ keeps an agent object registered on the system bus from the previous
-    bluetoothctl session if it didn't tear down cleanly (or if HA Core's own
-    Bluetooth integration registered one). On the next pair attempt
-    `agent on` then returns `Failed to register agent object`, leaving the
-    pair without an authentication agent and producing
-    `org.bluez.Error.ConnectionAttemptFailed` (issue #162).
+    BlueZ keeps an agent object registered on the system bus when the
+    previous bluetoothctl session didn't tear down cleanly (or when HA
+    Core's own Bluetooth integration registered one).  ``agent on`` then
+    returns ``Failed to register agent object``, leaving the pair without
+    an authentication agent and producing
+    ``org.bluez.Error.ConnectionAttemptFailed`` (issue #162).
     """
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    cleanup_run = MagicMock()
-
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", cleanup_run)
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    _script_pair_ok(installed_bluez)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-agent", "13:8F:E8:53:ED:2F", "C0:FB:F9:62:D6:9D")
+    api_bt_mod._run_standalone_pair("job-agent", MAC, HCI0_MAC)
 
-    cleanup_input = cleanup_run.call_args.kwargs["input"]
-    assert "agent off\n" in cleanup_input, f"expected `agent off` in cleanup commands, got: {cleanup_input!r}"
-    # `agent off` must run before `remove` so the next pair gets a fresh agent.
-    assert cleanup_input.index("agent off") < cleanup_input.index("remove"), (
-        f"`agent off` must precede `remove`, got: {cleanup_input!r}"
+    cleanup = next(c for c in installed_bluez.commands if "agent off" in c.script)
+    assert f"remove {MAC}" in cleanup.script
+    assert cleanup.script.index("agent off") < cleanup.script.index("remove")
+    assert cleanup.at < min(c.at for c in installed_bluez.commands if c.kind == "send" and "power on" in c.script), (
+        "the stale agent must be cleared before the pair session starts"
     )
 
 
-@pytest.mark.parametrize(
-    "prompt_line",
-    [
-        "[agent] Enter PIN code:\n",
-        "[agent] Enter passkey (number in 0-999999):\n",
-    ],
-    ids=["enter_pin_code", "enter_passkey"],
-)
-def test_run_standalone_pair_auto_answers_legacy_pin_prompt(monkeypatch, prompt_line):
-    """Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`) prompt for
-    a numeric PIN rather than the BT 2.1+ SSP passkey confirmation. BlueZ may
-    emit either `Enter PIN code:` or `Enter passkey:` depending on the device
-    profile and BlueZ version — both must auto-answer `0000` so the pair flow
-    doesn't hang to timeout (issue #162).
-    """
+def test_run_standalone_pair_reports_failure_in_the_job_payload(installed_bluez, monkeypatch):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(
-        stdout_lines=[
-            "Attempting to pair with 13:8F:E8:53:ED:2F\n",
-            prompt_line,
-            "Pairing successful\n",
-        ],
-        tail="Paired: yes\n",
-    )
+    installed_bluez.session_script([(f"pair {MAC}", ["Failed to pair: org.bluez.Error.AuthenticationCanceled"])])
     finish_job = MagicMock()
-
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-pin", "13:8F:E8:53:ED:2F", "C0:FB:F9:62:D6:9D")
+    api_bt_mod._run_standalone_pair("job-fail", MAC, HCI0_MAC)
 
-    pin_writes = [w for w in fake_proc.stdin.writes if w.strip() == "0000"]
-    assert pin_writes, (
-        f"expected '0000' written to stdin in response to {prompt_line!r}, got writes: {fake_proc.stdin.writes!r}"
-    )
-    finish_job.assert_called_once_with("job-pin", {"success": True, "mac": "13:8F:E8:53:ED:2F"})
+    finish_job.assert_called_once_with("job-fail", {"success": False, "mac": MAC})
 
 
-def test_run_standalone_pair_logs_full_stdout_on_fail(monkeypatch, caplog):
-    """On FAIL, the debug log must include the *full* bluetoothctl output, not
-    just the last ~800 bytes. The critical passkey/agent prompt and
-    `Attempting to pair...` lines typically appear early and get cut off by
-    a tail-only log (issue #168 — AuthenticationCanceled diagnostic).
-    """
-    import logging
-
+def test_run_standalone_pair_reports_failure_when_the_transport_raises(installed_bluez, monkeypatch):
+    """A crash inside pairing must still finish the job, or the UI polls a
+    job that never completes."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    early_marker = "EARLY_PROMPT_MARKER_shown_before_noise"
-    noise = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: 0xffffffc0 (-64)\n" * 40
-    fake_proc = _FakeProc(
-        stdout_lines=[
-            f"[agent] {early_marker}\n",
-            noise,
-            "Failed to pair: org.bluez.Error.AuthenticationCanceled\n",
-        ],
-        tail="Device AA:BB:CC:DD:EE:FF not available\n",
-    )
-    total_out_len = sum(len(line) for line in fake_proc.stdout._lines) + len(fake_proc._tail)
-    assert total_out_len > 1200, "test is only meaningful when output exceeds the old 800-byte tail"
+    finish_job = MagicMock()
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
+    monkeypatch.setattr(api_bt_mod, "PairSession", MagicMock(side_effect=RuntimeError("boom")))
 
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
-    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
+    api_bt_mod._run_standalone_pair("job-boom", MAC, HCI0_MAC)
 
-    caplog.set_level(logging.DEBUG, logger=api_bt_mod.logger.name)
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-fail-log", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
-
-    debug_records = [
-        r.getMessage()
-        for r in caplog.records
-        if r.levelno == logging.DEBUG and "Standalone pair" in r.getMessage() and "output" in r.getMessage()
-    ]
-    assert debug_records, "expected a debug log entry with the standalone pair output"
-    joined = "\n".join(debug_records)
-    assert early_marker in joined, (
-        f"expected full output to contain {early_marker!r} (truncation drops the crucial early prompt)"
-    )
+    finish_job.assert_called_once_with("job-boom", {"success": False, "mac": MAC})
 
 
-def test_run_standalone_pair_fires_pair_when_device_seen_without_fixed_scan_delay(monkeypatch):
-    """When bluetoothctl emits `[NEW] Device <mac>` during scan, the pair
-    command must be sent *without* waiting the full `_PAIR_SCAN_DURATION`
-    fixed sleep. This shortens the scan window so the speaker is still in
-    pairing mode when `pair` fires (issue #168 — Synergy 65 S).
-    """
+def test_run_standalone_pair_uses_no_input_no_output_for_explicit_request(installed_bluez, monkeypatch, pair_agent):
+    """``NoInputNoOutput`` forces Just-Works SSP for speakers that cancel a
+    passkey exchange (issue #168); it is a per-request override."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(
-        stdout_lines=[
-            "[NEW] Device AA:BB:CC:DD:EE:FF BoomBox\n",
-            "Pairing successful\n",
-        ],
-        tail="Paired: yes\n",
-    )
-    sleep_calls: list[float] = []
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    _script_pair_ok(installed_bluez)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda s: sleep_calls.append(s))
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-fast", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+    api_bt_mod._run_standalone_pair("job-noio", MAC, HCI0_MAC, no_input_no_output_agent=True)
 
-    # Current implementation blindly `time.sleep(_PAIR_SCAN_DURATION)` between
-    # `scan on` and `pair`. Event-driven impl must not burn the full window.
-    assert not any(s >= api_bt_mod._PAIR_SCAN_DURATION for s in sleep_calls), (
-        f"expected no sleep >= _PAIR_SCAN_DURATION ({api_bt_mod._PAIR_SCAN_DURATION}s) "
-        f"once device is visible, got sleeps={sleep_calls}"
-    )
-    # And `pair` must still be sent (second write after the init batch).
-    pair_writes = [w for w in fake_proc.stdin.writes if w.strip() == "pair AA:BB:CC:DD:EE:FF"]
-    assert pair_writes, f"expected `pair` to be written, got writes={fake_proc.stdin.writes!r}"
+    assert pair_agent.instances, "no native agent was constructed"
+    assert pair_agent.instances[0].kwargs["capability"] == "NoInputNoOutput"
 
 
-def test_run_standalone_pair_still_pairs_when_device_not_seen_in_scan(monkeypatch):
-    """Fallback: if bluetoothctl never emits `[NEW] Device <mac>` (e.g. device
-    took longer than expected to show up), we must still attempt the pair after
-    the hard cap — regression guard against an infinite event-wait.
-    """
+def test_run_standalone_pair_uses_display_yes_no_by_default(installed_bluez, monkeypatch, pair_agent):
+    """DisplayYesNo is what manual ``bluetoothctl`` uses and what reached
+    ``Bonded: yes`` in the #168 reproduction."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(
-        stdout_lines=[
-            "[CHG] Controller C0:FB:F9:62:D6:9D Discovering: yes\n",
-            "Failed to pair: org.bluez.Error.AuthenticationCanceled\n",
-        ],
-        tail="Device AA:BB:CC:DD:EE:FF not available\n",
-    )
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    _script_pair_ok(installed_bluez)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
-    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-nodev", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+    api_bt_mod._run_standalone_pair("job-default", MAC, HCI0_MAC)
 
-    pair_writes = [w for w in fake_proc.stdin.writes if w.strip() == "pair AA:BB:CC:DD:EE:FF"]
-    assert pair_writes, (
-        "pair must still be attempted as a fallback when `[NEW] Device` is never seen, "
-        f"got writes={fake_proc.stdin.writes!r}"
-    )
+    assert pair_agent.instances[0].kwargs["capability"] == "DisplayYesNo"
+    assert pair_agent.instances[0].kwargs["allow_hfp"] is False
 
 
-def test_run_standalone_pair_uses_no_input_no_output_for_explicit_request(monkeypatch):
-    """The one-shot request must select NoInputNoOutput for this job."""
+def test_run_standalone_pair_forwards_hfp_authorization_when_requested(installed_bluez, monkeypatch, pair_agent):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    _script_pair_ok(installed_bluez)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair(
-            "job-jw",
-            "AA:BB:CC:DD:EE:FF",
-            "C0:FB:F9:62:D6:9D",
-            no_input_no_output_agent=True,
-        )
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    # The init batch is the first stdin write (a newline-joined block).
-    init_batch = fake_proc.stdin.writes[0]
-    assert "agent NoInputNoOutput\n" in init_batch, (
-        f"expected `agent NoInputNoOutput` when flag set, got init batch: {init_batch!r}"
-    )
-    assert "agent on\n" not in init_batch, (
-        f"`agent on` and `agent NoInputNoOutput` are mutually exclusive — "
-        f"init batch must not contain both, got: {init_batch!r}"
-    )
+    api_bt_mod._run_standalone_pair("job-hfp", MAC, HCI0_MAC, allow_hfp_profile=True)
+
+    assert pair_agent.instances[0].kwargs["allow_hfp"] is True
 
 
-def test_run_standalone_pair_uses_default_agent_when_just_works_disabled(monkeypatch):
-    """Default: flag unset → keep current `agent on` (KeyboardDisplay) behavior."""
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    monkeypatch.setattr(api_bt_mod, "load_config", lambda: {})
-
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair("job-default", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
-
-    init_batch = fake_proc.stdin.writes[0]
-    assert "agent on\n" in init_batch, f"default path must keep `agent on` (KeyboardDisplay), got: {init_batch!r}"
-    assert "agent NoInputNoOutput\n" not in init_batch
-
-
-def test_run_standalone_pair_no_io_agent_true_is_one_shot(monkeypatch):
-    """An explicit true request uses NoInputNoOutput for this attempt."""
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair_inner(
-            "job-override-true",
-            "AA:BB:CC:DD:EE:FF",
-            "C0:FB:F9:62:D6:9D",
-            no_input_no_output_agent=True,
-        )
-
-    init_batch = fake_proc.stdin.writes[0]
-    assert "agent NoInputNoOutput\n" in init_batch, f"request=True must force NoInputNoOutput, got: {init_batch!r}"
-
-
-def test_run_standalone_pair_no_io_agent_false_uses_safe_default(monkeypatch):
-    """An explicit false request uses the normal DisplayYesNo path."""
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-
-    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\n")
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        api_bt_mod._run_standalone_pair_inner(
-            "job-override-false",
-            "AA:BB:CC:DD:EE:FF",
-            "C0:FB:F9:62:D6:9D",
-            no_input_no_output_agent=False,
-        )
-
-    init_batch = fake_proc.stdin.writes[0]
-    assert "agent on\n" in init_batch, f"request=False must use the safe default agent, got: {init_batch!r}"
-    assert "agent NoInputNoOutput\n" not in init_batch
-
-
-def test_run_standalone_pair_inner_pin_rejected_uses_raw_output_not_log_wording(monkeypatch):
-    """Regression: `pin_rejected` must be derived from the raw bluetoothctl
-    output (via `is_pin_rejection`), NOT from substring-matching the
-    human-readable `reason` string. Coupling control flow to log wording
-    means a reword of `describe_pair_failure` silently breaks PIN retry.
-
-    This test monkey-patches `describe_pair_failure` to return a message
-    that does NOT contain the literal phrase "rejected PIN" — the legacy
-    substring check would wrongly report `pin_rejected=False` here.
-    """
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-
-    fake_proc = _FakeProc(
-        stdout_lines=[
-            "[agent] Enter PIN code: \n",
-            "Failed to pair: org.bluez.Error.AuthenticationFailed\n",
-        ],
-        tail="Device AA:BB:CC:DD:EE:FF not available\n",
-    )
-    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
-    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
-    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-    monkeypatch.setattr(api_bt_mod, "_PAIR_WAIT_DURATION", 0.2)
-    monkeypatch.setattr(api_bt_mod, "_PAIR_SCAN_DURATION", 0.1)
-    # Force a reason string that lacks the old "rejected PIN" literal —
-    # the legacy substring check would wrongly return pin_rejected=False.
-    monkeypatch.setattr(
-        api_bt_mod,
-        "describe_pair_failure",
-        lambda out, *, pin_attempted, pin_used: "auth broke somewhere (reworded)",
-    )
-
-    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
-        result = api_bt_mod._run_standalone_pair_inner(
-            "job-raw-pin",
-            "AA:BB:CC:DD:EE:FF",
-            "C0:FB:F9:62:D6:9D",
-            pin="0000",
-        )
-
-    assert result["success"] is False
-    assert result["pin_attempted"] is True, "PIN prompt was in the fake output — pin_attempted must be True"
-    assert result["pin_rejected"] is True, (
-        "pin_rejected must be derived from raw AuthenticationFailed in output, "
-        "not from substring-matching the log wording"
-    )
-
-
-# ---------------------------------------------------------------------------
-# PIN retry orchestration
-#
-# When a BT audio device asks for a legacy PIN and rejects the bridge's
-# first guess (``0000``), the orchestrator must retry the pair attempt
-# with the next popular PIN from ``COMMON_BT_PAIR_PINS``. Non-PIN failures
-# (connection timeouts, protocol errors) must NOT trigger retries.
-# ---------------------------------------------------------------------------
-
-
-def _make_pin_inner_stub(outcomes_by_pin):
-    """Build a fake ``_run_standalone_pair_inner`` that records each pin
-    the orchestrator tries and returns the mapped outcome dict for that
-    pin. Unmapped pins produce a default "no PIN prompt seen, success"
-    result so stale tests surface loud."""
-    calls: list[str] = []
-
-    def _fake_inner(
-        job_id,
-        mac,
-        adapter,
-        *,
-        pin="0000",
-        no_input_no_output_agent=False,
-        allow_hfp_profile=False,
-    ):
-        calls.append(pin)
-        default = {
-            "success": True,
-            "pin_attempted": False,
-            "pin_rejected": False,
-            "reason": "",
-            "output": "",
-        }
-        return outcomes_by_pin.get(pin, default)
-
-    return _fake_inner, calls
-
-
-def test_run_standalone_pair_retries_with_next_popular_pin_after_rejection(monkeypatch):
-    """If 0000 is rejected with AuthenticationFailed, the outer runner
-    must re-invoke the inner pair with the next PIN from
-    ``COMMON_BT_PAIR_PINS`` rather than surfacing the first failure."""
+def test_run_standalone_pair_walks_the_pin_ladder_and_reports_exhaustion(installed_bluez, monkeypatch, caplog):
+    """A device that keeps rejecting PINs must be tried with every popular
+    candidate, then reported as needing a custom PIN."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
     from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS
 
-    first_pin, second_pin = COMMON_BT_PAIR_PINS[0], COMMON_BT_PAIR_PINS[1]
-    fake_inner, calls = _make_pin_inner_stub(
-        {
-            first_pin: {
-                "success": False,
-                "pin_attempted": True,
-                "pin_rejected": True,
-                "reason": f"AuthenticationFailed — device rejected PIN {first_pin}",
-                "output": "",
-            },
-            second_pin: {
-                "success": True,
-                "pin_attempted": True,
-                "pin_rejected": False,
-                "reason": "",
-                "output": "",
-            },
-        }
+    installed_bluez.session_script(
+        [
+            (f"pair {MAC}", ["[agent] Enter PIN code:"]),
+            ("0000", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+            ("1234", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+            ("1111", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+            ("8888", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+            ("1212", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+            ("9999", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+        ]
     )
     finish_job = MagicMock()
-    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    api_bt_mod._run_standalone_pair("job-retry", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+    with caplog.at_level(logging.WARNING):
+        api_bt_mod._run_standalone_pair("job-pins", MAC, HCI0_MAC)
 
-    assert calls[:2] == [first_pin, second_pin], f"expected retry with {second_pin} after {first_pin}, got {calls}"
-    finish_job.assert_called_once_with("job-retry", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+    replied = [c.script.strip() for c in installed_bluez.commands if c.kind == "reply"]
+    assert replied == list(COMMON_BT_PAIR_PINS)
+    finish_job.assert_called_once_with("job-pins", {"success": False, "mac": MAC})
+    assert any("custom PIN" in record.getMessage() for record in caplog.records)
 
 
-def test_run_standalone_pair_does_not_retry_on_non_pin_failure(monkeypatch):
-    """Connection / timeout / protocol failures are not PIN-related —
-    retrying with more PINs against an unreachable device wastes ~20 s
-    per attempt. The orchestrator must stop after the first attempt."""
+def test_run_standalone_pair_stops_the_ladder_on_a_non_pin_failure(installed_bluez, monkeypatch):
+    """Retrying a connection failure costs ~20 s per attempt and changes
+    nothing — the ladder is only for PIN rejections."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    fake_inner, calls = _make_pin_inner_stub(
-        {
-            "0000": {
-                "success": False,
-                "pin_attempted": False,
-                "pin_rejected": False,
-                "reason": "Failed to pair: org.bluez.Error.ConnectionAttemptFailed",
-                "output": "",
-            },
-        }
-    )
-    finish_job = MagicMock()
-    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    installed_bluez.session_script([(f"pair {MAC}", ["Failed to pair: org.bluez.Error.ConnectionAttemptFailed"])])
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
 
-    api_bt_mod._run_standalone_pair("job-no-retry", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+    api_bt_mod._run_standalone_pair("job-nonpin", MAC, HCI0_MAC)
 
-    assert calls == ["0000"], f"expected exactly one attempt, got {calls}"
-    finish_job.assert_called_once_with("job-no-retry", {"success": False, "mac": "AA:BB:CC:DD:EE:FF"})
+    pair_sends = [c for c in installed_bluez.commands if c.kind == "send" and f"pair {MAC}" in c.script]
+    assert len(pair_sends) == 1, f"expected one attempt, got {len(pair_sends)}"
 
 
-def test_run_standalone_pair_exhausts_all_pins_and_logs_summary(monkeypatch, caplog):
-    """When every popular PIN is rejected, the warning log must list
-    every PIN tried and flag the "custom PIN required" remediation so
-    the operator doesn't have to grep per-attempt entries."""
-    import logging
+def test_run_standalone_pair_quiesces_peers_only_when_requested(installed_bluez, monkeypatch):
+    """Single-adapter hosts can't pair while another A2DP ACL is up; the
+    peer-park is opt-in per request."""
+    import contextlib
 
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
-    from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS
 
-    outcomes = {
-        pin: {
-            "success": False,
-            "pin_attempted": True,
-            "pin_rejected": True,
-            "reason": f"AuthenticationFailed — device rejected PIN {pin}",
-            "output": "",
-        }
-        for pin in COMMON_BT_PAIR_PINS
-    }
-    fake_inner, calls = _make_pin_inner_stub(outcomes)
-    finish_job = MagicMock()
-    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    calls = []
 
-    caplog.set_level(logging.WARNING, logger=api_bt_mod.logger.name)
-    api_bt_mod._run_standalone_pair("job-exhaust", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
+    @contextlib.contextmanager
+    def fake_quiesce(adapter, *, exclude_mac):
+        calls.append((adapter, exclude_mac))
+        yield
 
-    assert list(calls) == list(COMMON_BT_PAIR_PINS), f"expected each PIN tried once in order, got {calls}"
-    final_msg = "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING)
-    for pin in COMMON_BT_PAIR_PINS:
-        assert pin in final_msg, f"expected PIN {pin} in warning summary, got:\n{final_msg}"
-    assert "custom" in final_msg.lower(), f"expected 'custom PIN' remediation hint in warnings, got:\n{final_msg}"
-    finish_job.assert_called_once_with("job-exhaust", {"success": False, "mac": "AA:BB:CC:DD:EE:FF"})
+    _script_pair_ok(installed_bluez)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC])
+    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", fake_quiesce)
 
+    api_bt_mod._run_standalone_pair("job-noq", MAC, HCI0_MAC)
+    assert calls == []
 
-def test_run_standalone_pair_succeeds_on_first_pin_without_extra_attempts(monkeypatch):
-    """SSP pairing (no PIN prompt) must finish with exactly one inner
-    invocation — no unnecessary retries eating a scan window."""
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-    from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS
-
-    fake_inner, calls = _make_pin_inner_stub({})  # default stub → success, no pin
-    finish_job = MagicMock()
-    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", fake_inner)
-    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
-
-    api_bt_mod._run_standalone_pair("job-first", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
-
-    assert calls == [COMMON_BT_PAIR_PINS[0]], f"expected a single attempt on success, got {calls}"
-    finish_job.assert_called_once_with("job-first", {"success": True, "mac": "AA:BB:CC:DD:EE:FF"})
+    api_bt_mod._run_standalone_pair("job-q", MAC, HCI0_MAC, quiesce=True)
+    assert calls == [(HCI0_MAC, MAC)]
 
 
 def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkeypatch):
@@ -1034,6 +788,54 @@ def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
 
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "Another Bluetooth operation is already in progress"
+
+
+# ---------------------------------------------------------------------------
+# Worker-thread startup failures must not wedge the Bluetooth operation lock.
+# Every endpoint below takes the lock in the request thread and hands the
+# release to a worker; if the thread never starts, the release never runs and
+# every later Bluetooth operation answers 409 until the process restarts.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        ("/api/bt/reconnect", {"player_name": "ENEBY20"}),
+        ("/api/bt/pair", {"player_name": "ENEBY20"}),
+        ("/api/bt/reset_reconnect", {"mac": MAC, "adapter": HCI0_MAC}),
+        ("/api/bt/pair_new", {"mac": MAC, "adapter": HCI0_MAC}),
+        ("/api/bt/scan", {"adapter": HCI0_MAC}),
+    ],
+)
+def test_bt_endpoints_release_the_operation_lock_when_the_worker_cannot_start(client, monkeypatch, path, payload):
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    released = []
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(path))
+
+    class _DeadThread:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", _DeadThread)
+
+    bt = MagicMock()
+    fake_client = SimpleNamespace(player_name="ENEBY20", bt_manager=bt, status={})
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _name: (fake_client, None))
+    # The scan route resolves the requested adapter against the host's real
+    # controllers; pin them so the test asserts lock behaviour, not hardware.
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC, HCI1_MAC])
+    monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {HCI0_MAC.replace(":", ""): "hci0"})
+
+    resp = client.post(path, json=payload)
+
+    assert resp.status_code == 500, f"{path} reported success although the worker never started"
+    assert released == [path], f"{path} kept the Bluetooth operation lock after the worker failed to start"
 
 
 def test_bt_scan_returns_409_when_bt_operation_busy(client, monkeypatch):
@@ -3697,7 +3499,6 @@ def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from sendspin_bridge.web.routes.api_status import (
         _parse_audio_server_name,
-        _parse_bluetoothctl_adapter,
         _parse_memtotal_mb,
         _parse_sink_input_id,
     )
@@ -3708,15 +3509,12 @@ def test_api_status_parse_helpers_are_defensive():
     assert _parse_audio_server_name("Server Name: PulseAudio") == "PulseAudio"
     assert _parse_audio_server_name("Server Name") is None
 
-    assert _parse_bluetoothctl_adapter("Controller AA:BB:CC:DD:EE:FF adapter") == "AA:BB:CC:DD:EE:FF"
-    assert _parse_bluetoothctl_adapter("Controller") is None
-
     assert _parse_memtotal_mb("MemTotal: 2048000 kB") == 2000
     assert _parse_memtotal_mb("MemTotal:") is None
     assert _parse_memtotal_mb("MemTotal: nope kB") is None
 
 
-def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkeypatch):
+def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkeypatch, installed_bluez):
     """GET /api/diagnostics should expose playing state and parsed sink-input metadata."""
     import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
@@ -3740,12 +3538,8 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     )
 
     def fake_run(cmd, capture_output=True, text=True, timeout=5):
-        if cmd == ["bluetoothctl", "list"]:
-            return SimpleNamespace(
-                returncode=0,
-                stdout="Controller AA:BB:CC:DD:EE:FF Test [default]\n",
-                stderr="",
-            )
+        # bluetoothctl no longer flows through subprocess here — the
+        # diagnostics collectors use the installed_bluez transport.
         if cmd == ["pactl", "list", "sink-inputs"]:
             return SimpleNamespace(
                 returncode=0,
@@ -3888,7 +3682,7 @@ def test_collect_preflight_status_surfaces_audio_probe_failure(monkeypatch):
     assert payload["audio"]["system"] == "unknown"
 
 
-def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(client, monkeypatch):
+def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(client, monkeypatch, installed_bluez):
     import subprocess
 
     import sendspin_bridge.bridge.state as state
@@ -3905,8 +3699,8 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
     )
 
     def fake_run(cmd, capture_output=True, text=True, timeout=5):
-        if cmd == ["bluetoothctl", "list"]:
-            return SimpleNamespace(returncode=0, stdout="Controller AA:BB:CC:DD:EE:FF Test [default]\n", stderr="")
+        # bluetoothctl no longer flows through subprocess here — the
+        # diagnostics collectors use the installed_bluez transport.
         if cmd == ["systemctl", "is-active", "bluetooth"]:
             return SimpleNamespace(returncode=0, stdout="active\n", stderr="")
         if cmd == ["pactl", "list", "sink-inputs"]:
@@ -4850,6 +4644,59 @@ def _patch_pair_worker_sync(monkeypatch, api_bt_mod):
     monkeypatch.setattr(api_bt_mod.threading, "Thread", _sync_thread)
 
 
+def test_bt_reconnect_returns_409_when_bt_operation_in_progress(client, monkeypatch):
+    """POST /api/bt/reconnect must not drive the adapter while a scan/pair
+    holds the bt-operation lock — 409 and no worker thread, matching
+    ``bt_commands.command_reconnect`` (the lock-free original was one of
+    the wedged-scan contention sources observed on the demo stand)."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    fake_bt = MagicMock()
+    fake_client = SimpleNamespace(bt_manager=fake_bt)
+
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    spawned = []
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", lambda *a, **kw: spawned.append((a, kw)) or MagicMock())
+
+    resp = client.post("/api/bt/reconnect", json={"player_name": "Test"})
+
+    assert resp.status_code == 409
+    assert spawned == []
+    fake_bt.connect_device.assert_not_called()
+    fake_bt.disconnect_device.assert_not_called()
+
+
+def test_bt_reconnect_releases_lock_after_worker(client, monkeypatch):
+    """Happy path: acquires the lock, runs disconnect→connect in the worker,
+    releases in finally."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    fake_bt = MagicMock()
+    fake_client = SimpleNamespace(bt_manager=fake_bt)
+    released: list[bool] = []
+
+    class _SyncThread:
+        def __init__(self, target=None, **_kw):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(True))
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", _SyncThread)
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _s: None)
+
+    resp = client.post("/api/bt/reconnect", json={"player_name": "Test"})
+
+    assert resp.status_code == 200
+    assert released == [True]
+    fake_bt.disconnect_device.assert_called_once()
+    fake_bt.connect_device.assert_called_once()
+
+
 def test_bt_pair_threads_quiesce_flag(client, monkeypatch):
     """POST /api/bt/pair with quiesce_adapter=true must wrap pair flow in quiesce CM."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
@@ -4965,39 +4812,6 @@ def test_bt_pair_new_default_has_quiesce_false(client, monkeypatch):
     resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
     assert resp.status_code == 200
     assert captured["quiesce"] is False
-
-
-def test_run_standalone_pair_wraps_inner_in_quiesce_when_flag_set(monkeypatch):
-    """_run_standalone_pair(quiesce=True) must invoke the context manager."""
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-
-    sentinel = _QuiesceSentinel()
-    inner_called = MagicMock()
-
-    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
-    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", inner_called)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-
-    api_bt_mod._run_standalone_pair("job-q", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D", quiesce=True)
-    assert sentinel.entered and sentinel.exited
-    assert sentinel.args == ("C0:FB:F9:62:D6:9D",)
-    assert sentinel.kwargs == {"exclude_mac": "AA:BB:CC:DD:EE:FF"}
-    inner_called.assert_called_once()
-
-
-def test_run_standalone_pair_skips_quiesce_when_flag_absent(monkeypatch):
-    import sendspin_bridge.web.routes.api_bt as api_bt_mod
-
-    sentinel = _QuiesceSentinel()
-    inner_called = MagicMock()
-
-    monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
-    monkeypatch.setattr(api_bt_mod, "_run_standalone_pair_inner", inner_called)
-    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D"])
-
-    api_bt_mod._run_standalone_pair("job-nq", "AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
-    assert sentinel.entered is False
-    inner_called.assert_called_once()
 
 
 def test_latency_endpoint_rejects_stale_recommendation(client, monkeypatch):

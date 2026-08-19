@@ -8,11 +8,11 @@ import json
 import logging
 import os
 import re
-import subprocess
 import tempfile
 import threading
 from pathlib import Path
 
+from sendspin_bridge.bluetooth.bluez import Adapter, DeviceInfo, Outcome, get_bluez
 from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
 from sendspin_bridge.config import config_lock as _config_lock
 
@@ -33,10 +33,6 @@ __all__ = [
     "persist_device_released",
     "resolve_hci_for_mac",
 ]
-
-# /sys/class/bluetooth/hciN/address is the canonical kernel mapping from
-# adapter MAC to interface name.  Override for tests.
-_BT_SYSFS_DIR: Path = Path("/sys/class/bluetooth")
 
 # Ordered list of PINs the bridge tries when a device asks for one. `0000`
 # is the BlueZ/consumer default; the rest are the most common fallbacks
@@ -60,7 +56,6 @@ _AUDIO_UUIDS = {
     "0000111e",  # Hands-Free
 }
 
-_ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
 _MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
 _BLUEZ_ERROR_RE = re.compile(r"org\.bluez\.Error\.[A-Za-z]+")
 
@@ -74,14 +69,18 @@ _BLUEZ_LIB_DIR: Path = Path("/var/lib/bluetooth")
 def _clean_bluez_cache(adapter_mac: str, device_mac: str) -> None:
     """Best-effort removal of the stale BlueZ cache file for *device_mac*
     under *adapter_mac*. Silent on ``FileNotFoundError`` (already gone);
-    warns on other OS errors but never raises — the caller runs in a
-    daemon thread and must not die."""
+    DEBUG on ``PermissionError`` (unprivileged LXC without write access to
+    /var/lib/bluetooth — environmental noise, not a malfunction); warns on
+    other OS errors but never raises — the caller runs in a daemon thread
+    and must not die."""
     cache_file = _BLUEZ_LIB_DIR / adapter_mac / "cache" / device_mac
     try:
         cache_file.unlink()
         logger.info("BlueZ cache: removed stale %s", cache_file)
     except FileNotFoundError:
         pass
+    except PermissionError as e:
+        logger.debug("BlueZ cache cleanup skipped (no write access) for %s: %s", cache_file, e)
     except OSError as e:
         logger.warning("BlueZ cache cleanup failed for %s: %s", cache_file, e)
 
@@ -99,65 +98,13 @@ def build_hci_map() -> dict[str, str]:
     adapters and avoids redundant filesystem I/O on hosts with several
     BT controllers.
 
-    Keys are uppercase, colon-stripped MACs (matching what
-    ``resolve_hci_for_mac`` compares internally). Sysfs is the
-    authoritative source — :file:`/sys/class/bluetooth/hciN/address` is
-    what BlueZ itself honours. When sysfs isn't mounted into the
-    process (the typical Docker case unless ``-v /sys:/sys:ro`` is
-    used) we fall back to parsing :command:`hciconfig -a`, which talks
-    to the kernel via the BlueZ control socket and returns the same
-    ``hciN`` labels. Returns an empty dict only when both paths fail.
+    Delegates to :meth:`bluetooth.bluez.BluezControl.hci_map` — the
+    transport module owns both the sysfs walk (the canonical kernel
+    mapping, issue #193) and the ``hciconfig -a`` fallback for hosts
+    without ``/sys`` mounted.  Keys are uppercase, colon-stripped MACs;
+    empty dict only when both paths fail.
     """
-    mapping: dict[str, str] = {}
-    try:
-        entries = sorted(_BT_SYSFS_DIR.iterdir())
-    except OSError as exc:
-        logger.debug("sysfs adapter lookup failed: %s", exc)
-    else:
-        for hci in entries:
-            addr_file = hci / "address"
-            if not addr_file.exists():
-                continue
-            try:
-                addr = addr_file.read_text().strip().upper().replace(":", "")
-            except OSError:
-                continue
-            if addr:
-                mapping[addr] = hci.name
-        if mapping:
-            return mapping
-
-    # Sysfs unmounted (Docker without /sys passthrough). Ask the kernel
-    # via hciconfig — it uses the BlueZ control socket and prints the
-    # canonical hciN labels with their MACs.
-    try:
-        import subprocess
-
-        out = subprocess.run(
-            ["hciconfig", "-a"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-            check=False,
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("hciconfig fallback failed: %s", exc)
-        return mapping
-
-    current: str | None = None
-    for line in out.splitlines():
-        head = line.split("\t", 1)[0].strip()
-        if head.endswith(":") and head[:-1].startswith("hci") and head[:-1][3:].isdigit():
-            current = head[:-1]
-            continue
-        if current and "BD Address:" in line:
-            # "    BD Address: AA:BB:CC:DD:EE:FF  ACL MTU: ..."
-            tail = line.split("BD Address:", 1)[1].strip()
-            mac = tail.split()[0] if tail else ""
-            if _MAC_RE.match(mac):
-                mapping[mac.upper().replace(":", "")] = current
-            current = None
-    return mapping
+    return get_bluez().hci_map()
 
 
 def resolve_hci_for_mac(mac: str) -> str:
@@ -187,62 +134,31 @@ def resolve_hci_for_mac(mac: str) -> str:
 def get_adapter_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:
     """Return ``(alias, powered)`` for *mac* via ``bluetoothctl show <MAC>``.
 
-    Uses the explicit ``show <MAC>`` form rather than ``select <MAC>;
-    show`` — the select-then-show recipe is unreliable in piped-stdin
-    mode (the ``select`` D-Bus call may not propagate before ``show``
-    runs, and the resulting stdout often contains the **default**
-    controller's ``Alias:`` line first plus the selected controller's
-    block second; the original frontend parser picked the first match
-    and surfaced the wrong alias — issue #193).
+    Uses the caller-visible ``Adapter.addressed`` form, which **never**
+    emits ``select`` — the select-then-show recipe was unreliable in
+    piped-stdin mode and surfaced the *default* controller's ``Alias:``
+    for the wrong adapter (issue #193; the rationale now lives on
+    ``bluetooth.bluez.Adapter.addressed``).
 
-    Returns ``("", False)`` on any subprocess / parse failure so callers
+    Returns ``("", False)`` on any transport / parse failure so callers
     can fall back to a synthetic label.
     """
     if not mac:
         return "", False
-    try:
-        result = subprocess.run(
-            ["bluetoothctl"],
-            input=f"show {mac}\n",
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except (subprocess.SubprocessError, OSError) as exc:
-        logger.debug("get_adapter_alias(%s) subprocess failed: %s", mac, exc)
+    info = get_bluez().show(Adapter.addressed(mac), timeout=float(timeout))
+    if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE) or not info.present:
+        logger.debug("get_adapter_alias(%s) failed: outcome=%s present=%s", mac, info.outcome.value, info.present)
         return "", False
-    stdout = result.stdout or ""
-
-    # Anchor on lines that look like "<whitespace>Alias: <value>" — bluetoothctl
-    # nests the property lines under the ``Controller`` block with a leading tab.
-    # Discovery / async events ("[CHG] Controller ... Pairable: yes") never
-    # match because they don't have the bare ``Alias:`` token at the start of
-    # the trimmed line.
-    alias = ""
-    powered = False
-    for raw_line in stdout.splitlines():
-        line = raw_line.strip()
-        if line.startswith("Alias:"):
-            value = line.split("Alias:", 1)[1].strip()
-            if value and not alias:
-                alias = value
-        elif line.startswith("Powered:"):
-            powered = "yes" in line.split("Powered:", 1)[1].lower()
-    return alias, powered
+    return info.alias, info.powered
 
 
 def list_bt_adapters(timeout: int = 5) -> list[str]:
-    """Return list of BT adapter MAC addresses from ``bluetoothctl list``."""
-    try:
-        result = subprocess.run(
-            ["bluetoothctl", "list"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return _ADAPTER_RE.findall(result.stdout)
-    except (subprocess.SubprocessError, OSError):
-        return []
+    """Return list of BT adapter MAC addresses from ``bluetoothctl list``.
+
+    Transport and parsing live in ``bluetooth.bluez``; this wrapper stays
+    because the name is a monkeypatch seam across the route/demo tests.
+    """
+    return [ref.mac for ref in get_bluez().list_adapters(timeout=float(timeout))]
 
 
 def extract_pair_failure_reason(output: str, *, tail_chars: int = 400) -> str:
@@ -404,29 +320,17 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
         return
 
     def _run():
-        cmds = []
-        if adapter_mac:
-            cmds.append(f"select {adapter_mac}")
-        cmds.append(f"remove {mac}")
-        cmd_str = "\n".join(cmds) + "\n"
         try:
-            result = subprocess.run(
-                ["bluetoothctl"],
-                input=cmd_str,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            result = get_bluez().remove(mac, Adapter.of(adapter_mac))
             # `bluetoothctl` returns 0 even when `remove <mac>` fails with
-            # "Device not available" (device not in the BlueZ object tree).
-            # Rely on the stdout marker instead of returncode.
-            out = (result.stdout or "") + (result.stderr or "")
-            if "not available" in out.lower() or "failed to remove" in out.lower():
+            # "Device not available" (device not in the BlueZ object tree) —
+            # RemoveResult reads the stdout marker, not the returncode.
+            if result.not_available:
                 logger.warning(
                     "BT stack: remove %s reported failure (adapter: %s): %s",
                     mac,
                     adapter_mac or "default",
-                    out.strip() or "no output",
+                    result.result.text.strip() or "no output",
                 )
             else:
                 logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")
@@ -561,28 +465,40 @@ def persist_device_released(player_name: str, released: bool, *, released_by: st
             logger.debug("Could not sync released flag to options.json: %s", e)
 
 
+def classify_audio_capability(info: DeviceInfo) -> tuple[bool, str]:
+    """Classify a scanned device's audio capability from its ``DeviceInfo``.
+
+    Merged home of the two legacy twins (the ``routes/api_bt`` scan filter
+    and ``is_audio_device`` below).  ``reason`` is a short machine-readable
+    label used for scan-filter diagnostics: ``audio_class_of_device`` /
+    ``non_audio_class_of_device`` / ``audio_uuid`` /
+    ``no_audio_class_no_uuid`` / ``no_class_info_defaults_audio``.
+    """
+    text = info.text
+    # Check Class field: major class 4 = Audio/Video
+    class_m = re.search(r"\bClass:\s+(0x[0-9A-Fa-f]+)", text)
+    if class_m:
+        cls = int(class_m.group(1), 16)
+        major = (cls >> 8) & 0x1F
+        if major == 4:
+            return True, "audio_class_of_device"
+        return False, "non_audio_class_of_device"
+    # No Class — check for any audio profile UUID
+    if any(u in text.lower() for u in _AUDIO_UUIDS):
+        return True, "audio_uuid"
+    # BlueZ has UUID info but no audio profile → definitely not audio
+    if "UUID:" in text:
+        return False, "no_audio_class_no_uuid"
+    # Name only (no Class, no UUID) — device may be in pairing mode, include cautiously
+    return True, "no_class_info_defaults_audio"
+
+
 def is_audio_device(mac: str) -> bool:
     """Return True if the BT device is an audio device (A2DP/HFP)."""
     if not _MAC_RE.match(mac):
         return False
-    try:
-        r = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True, timeout=4)
-        out = r.stdout
-        out_lower = out.lower()
-        # Check Class field: major class 4 = Audio/Video
-        class_m = re.search(r"Class:\s+(0x[0-9A-Fa-f]+)", out)
-        if class_m:
-            cls = int(class_m.group(1), 16)
-            major = (cls >> 8) & 0x1F
-            return major == 4
-        # No Class — check for any audio profile UUID
-        if any(u in out_lower for u in _AUDIO_UUIDS):
-            return True
-        # BlueZ has UUID info but no audio profile → definitely not audio
-        if "UUID:" in out:
-            return False
-        # Name only (no Class, no UUID) — device may be in pairing mode, include cautiously
-        return True
-    except (subprocess.SubprocessError, OSError, ValueError) as exc:
-        logger.debug("is_audio_device(%s) check failed: %s", mac, exc)
-        return True  # on error, include
+    info = get_bluez().device_info(mac, timeout=4.0)
+    if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+        logger.debug("is_audio_device(%s) check failed: outcome=%s", mac, info.outcome.value)
+        return True  # on transport failure, include (legacy contract)
+    return classify_audio_capability(info)[0]

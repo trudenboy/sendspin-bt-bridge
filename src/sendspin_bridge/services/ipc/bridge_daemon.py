@@ -391,11 +391,24 @@ class BridgeDaemon(SendspinDaemon):
             await asyncio.sleep(delay)
             if self._bridge_status.get("server_connected"):
                 return
-            url = self._bridge_status.get("server_url") or "unknown"
-            self._bridge_status["last_error"] = (
-                f"Cannot connect to Sendspin server at {url}. "
-                "Check that SENDSPIN_PORT matches your Music Assistant Sendspin port."
-            )
+            url = self._bridge_status.get("server_url")
+            if url:
+                # Outbound mode: the daemon dials MA — the URL is known and
+                # SENDSPIN_PORT mismatches are a real cause.
+                self._bridge_status["last_error"] = (
+                    f"Cannot connect to Sendspin server at {url}. "
+                    "Check that SENDSPIN_PORT matches your Music Assistant Sendspin port."
+                )
+            else:
+                # Inbound mode (SENDSPIN_SERVER=auto): the daemon listens and
+                # waits for MA to dial in after discovering the mDNS advert.
+                # No URL exists, so blame discovery, not a phantom endpoint.
+                self._bridge_status["last_error"] = (
+                    "Waiting for Music Assistant to connect — no inbound Sendspin "
+                    "connection received. Check mDNS/multicast reachability between "
+                    "this host and MA (VPN, firewall, or VLAN filtering blocks the "
+                    "_sendspin._tcp advert)."
+                )
             self._bridge_status["last_error_at"] = datetime.now(tz=UTC).isoformat()
             self._notify()
             # Keep watching — clear the error once connected

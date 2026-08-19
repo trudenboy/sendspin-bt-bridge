@@ -8,29 +8,27 @@ import concurrent.futures
 import json
 import logging
 import re
-import subprocess
 import threading
 import time
 import uuid
-from typing import Any
 
 from flask import Blueprint, jsonify, request
 
+from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
+from sendspin_bridge.bluetooth.dbus import _dbus_get_adapter_address
+from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
-    _AUDIO_UUIDS,
     COMMON_BT_PAIR_PINS,
     build_hci_map,
-    describe_pair_failure,
+    classify_audio_capability,
     get_adapter_alias,
-    is_pin_rejection,
     list_bt_adapters,
 )
 from sendspin_bridge.services.bluetooth import bt_remove_device as _bt_remove_device
 from sendspin_bridge.services.bluetooth import persist_device_released as _persist_device_released
 from sendspin_bridge.services.bluetooth.bt_class_of_device import read_device_class as _read_device_class
-from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 from sendspin_bridge.services.lifecycle.async_job_state import (
     create_scan_job,
@@ -44,30 +42,6 @@ logger = logging.getLogger(__name__)
 
 bt_bp = Blueprint("api_bt", __name__)
 
-# ---------------------------------------------------------------------------
-# Pre-compiled regex patterns for BT scan output parsing
-# ---------------------------------------------------------------------------
-
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-_DEV_PAT = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
-_NEW_DEV_PAT = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
-_CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
-_CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
-# v2.63.0-rc.2: capture the dB value as well so device cards can render
-# signal strength.  bluetoothctl emits two formats — modern decimal
-# (``RSSI: -43``) and legacy parenthesised hex (``RSSI: 0xffffffd5 (-43)``).
-# The parenthesised decimal takes priority; otherwise the trailing signed
-# integer is the value.
-_CHG_RSSI_VALUE_PAT = re.compile(
-    r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
-    r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
-)
-_INFO_RSSI_PAT = re.compile(
-    r"^\s*RSSI:\s*(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))",
-    re.MULTILINE,
-)
-_SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
-_SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _scan_lock = threading.Lock()
 
 
@@ -106,6 +80,24 @@ def _release_bt_operation() -> None:
     from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation
 
     release_bt_operation()
+
+
+def _start_bt_worker(target, *, name: str | None = None) -> bool:
+    """Start a worker that owns the Bluetooth operation lock's release.
+
+    Every caller takes the lock in the request thread and hands the
+    release to the worker's ``finally``.  When the thread cannot start,
+    that ``finally`` never runs and the lock stays held for the life of
+    the process — every later Bluetooth operation then answers 409.  The
+    release happens here instead, and the caller reports the failure.
+    """
+    try:
+        threading.Thread(target=target, daemon=True, name=name).start()
+    except Exception:
+        logger.exception("Bluetooth worker thread failed to start")
+        _release_bt_operation()
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +170,8 @@ def api_bt_reconnect():
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
         bt = client.bt_manager
+        if not _try_acquire_bt_operation():
+            return _bt_operation_conflict_response()
 
         def _do_reconnect():
             try:
@@ -186,8 +180,11 @@ def api_bt_reconnect():
                 bt.connect_device()
             except Exception as e:
                 logger.error("Force reconnect failed: %s", e)
+            finally:
+                _release_bt_operation()
 
-        threading.Thread(target=_do_reconnect, daemon=True).start()
+        if not _start_bt_worker(_do_reconnect, name="bt-reconnect"):
+            return jsonify({"success": False, "error": "Internal error"}), 500
         return jsonify({"success": True, "message": "Reconnect started"})
     except Exception:
         logger.exception("BT reconnect failed")
@@ -228,7 +225,8 @@ def api_bt_pair():
             finally:
                 _release_bt_operation()
 
-        threading.Thread(target=_do_pair, daemon=True).start()
+        if not _start_bt_worker(_do_pair, name="bt-pair"):
+            return jsonify({"success": False, "error": "Internal error"}), 500
         return jsonify({"success": True, "message": "Pairing started (~25s)"})
     except Exception:
         logger.exception("BT pairing failed")
@@ -534,42 +532,6 @@ def api_bt_adapters():
         return jsonify({"adapters": [], "error": "Failed to list adapters"}), 500
 
 
-def _parse_paired_stdout(stdout: str) -> "list[tuple[str, str]]":
-    """Extract ``(mac, name)`` pairs from bluetoothctl ``devices [Paired]`` output.
-
-    Interactive ``bluetoothctl`` interleaves async discovery notifications
-    (``[CHG] Device <mac> RSSI: …``, ``[NEW]/[DEL] Device …``, ``[CHG]
-    Device <mac> ManufacturerData.*``) on the same stdout we are parsing.
-    Only lines that begin with a bare ``Device <mac> <rest>`` token — after
-    stripping ANSI colour codes and any leading prompt echo — are genuine
-    responses to ``devices Paired``; everything else is noise.  Without
-    this discrimination the Already-Paired list contained ghost rows
-    whose ``bluetoothctl info`` actually reported ``Paired: no``.
-
-    Names that look like MAC-as-name (``AA:BB:…`` / ``AA-BB-…``) are normalized
-    to an empty string so downstream filters can treat them as unnamed.
-    """
-    results: list[tuple[str, str]] = []
-    for line in stdout.splitlines():
-        clean = _ANSI_RE.sub("", line)
-        # Strip any leading prompt echo like ``[ENEBY20]> ``. Anchored so
-        # bracket-prefixed async notifications (``[CHG] ``/``[NEW] ``/
-        # ``[DEL] ``) survive and fail the ``startswith("Device ")`` check
-        # below.
-        stripped = re.sub(r"^\[[^\]]+\]>\s*", "", clean).lstrip()
-        if not stripped.startswith("Device "):
-            continue
-        m = _DEV_PAT.match(stripped)
-        if not m:
-            continue
-        mac = m.group(1).upper()
-        name = m.group(2).strip()
-        if re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-            name = ""
-        results.append((mac, name))
-    return results
-
-
 @bt_bp.route("/api/bt/paired")
 def api_bt_paired():
     """Return already-paired Bluetooth devices across every known adapter."""
@@ -588,25 +550,14 @@ def api_bt_paired():
                 if adapter_mac:
                     entry["adapters"].add(adapter_mac)
 
+        bluez = get_bluez()
         if adapter_macs:
             for adapter in adapter_macs:
-                res = subprocess.run(
-                    ["bluetoothctl"],
-                    input=f"select {adapter}\ndevices Paired\n",
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                _ingest(_parse_paired_stdout(res.stdout), adapter)
+                _ingest(list(bluez.list_devices(Adapter.select(adapter))), adapter)
         else:
-            res = subprocess.run(
-                ["bluetoothctl"],
-                input="devices\n",
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            _ingest(_parse_paired_stdout(res.stdout))
+            # Legacy fallback contract: plain unfiltered ``devices``
+            # against the default controller, no select line.
+            _ingest(list(bluez.list_devices(filter="")))
 
         devices: list[dict] = []
         for mac, entry in merged.items():
@@ -666,66 +617,45 @@ def api_bt_remove():
     return jsonify({"ok": True, "mac": mac})
 
 
-_INFO_FIELDS = frozenset({"name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"})
-
-
-def _parse_bluetoothctl_info(stdout: str, mac: str) -> dict:
-    lines = [_ANSI_RE.sub("", ln).strip() for ln in stdout.splitlines() if ln.strip()]
-    info: dict = {"mac": mac, "raw": lines}
-    for ln in lines:
-        if ":" not in ln:
-            continue
-        key, _, val = ln.partition(":")
-        k = key.strip().lower().replace(" ", "_")
-        if k in _INFO_FIELDS:
-            info[k] = val.strip()
-    return info
-
-
-def _run_bluetoothctl_info(mac: str, adapter: str) -> dict:
-    cmds: list[str] = []
-    if adapter:
-        cmds.append(f"select {adapter}")
-    cmds.append(f"info {mac}")
-    r = subprocess.run(
-        ["bluetoothctl"],
-        input="\n".join(cmds) + "\n",
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return _parse_bluetoothctl_info(r.stdout, mac)
+def _device_info_payload(info, mac: str) -> dict:
+    """The public ``/api/bt/info`` JSON shape — ``mac`` + ``raw`` stdout
+    lines + the INFO_FIELDS keys, reproduced by ``DeviceInfo`` exactly
+    (``static/app.js`` renders ``raw`` verbatim in the info modal)."""
+    payload = {"mac": mac, "raw": list(info.raw)}
+    payload.update(info.fields)
+    return payload
 
 
 def _get_bt_device_info(mac: str, adapter: str = "") -> dict:
     """Return ``bluetoothctl info`` for ``mac``, adapter-aware.
 
-    With ``adapter`` explicit, ``select <adapter>`` is prefixed (``hciN``
-    is resolved to the controller MAC first — HAOS/LXC reject
-    ``select hciN``). Without ``adapter``, each known controller is
+    With ``adapter`` explicit, the query is scoped by ``select`` (``hciN``
+    is resolved to the controller MAC by the BluezControl chain — HAOS/LXC
+    reject ``select hciN``). Without ``adapter``, each known controller is
     probed in turn and the first response that actually contains device
     fields (``Name:``/``Paired:``/…) wins; this is what lets the info
     modal work for bonds on the non-default radio when older UI call
     sites haven't been updated to pass the adapter yet.
     """
+    bluez = get_bluez()
     if adapter:
-        return _run_bluetoothctl_info(mac, _resolve_adapter_to_mac(adapter))
+        return _device_info_payload(bluez.device_info(mac, Adapter.select(adapter)), mac)
 
     try:
         adapter_macs = [m.upper() for m in list_bt_adapters() if m]
     except Exception:  # pragma: no cover - defensive
         adapter_macs = []
 
-    last_result: dict | None = None
+    last_info = None
     for adapter_mac in adapter_macs:
-        result = _run_bluetoothctl_info(mac, adapter_mac)
-        if any(field in result for field in _INFO_FIELDS):
-            return result
-        last_result = result
+        info = bluez.device_info(mac, Adapter.select(adapter_mac))
+        if info.fields:
+            return _device_info_payload(info, mac)
+        last_info = info
 
-    if last_result is not None:
-        return last_result
-    return _run_bluetoothctl_info(mac, "")
+    if last_info is not None:
+        return _device_info_payload(last_info, mac)
+    return _device_info_payload(bluez.device_info(mac), mac)
 
 
 @bt_bp.route("/api/bt/info", methods=["POST"])
@@ -754,14 +684,29 @@ def api_bt_disconnect():
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
-        r = subprocess.run(
-            ["bluetoothctl"],
-            input=f"disconnect {mac}\n",
-            capture_output=True,
-            text=True,
-            timeout=10,
+        bluez = get_bluez()
+        # Target the adapter the device is bonded to: BlueZ bonds are
+        # per-controller (/org/bluez/hciN/dev_…), so an unscoped disconnect
+        # runs against the default controller — the wrong one on any host
+        # where the bond lives elsewhere (rc.1 checklist item 8).
+        owner = ""
+        for ref in bluez.list_adapters():
+            if any(entry.mac.upper() == mac for entry in bluez.list_devices(Adapter.select(ref.mac))):
+                owner = ref.mac
+                break
+        result = bluez.disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
+        if result.outcome is not Outcome.OK:
+            # Any non-OK outcome is a failed disconnect.  A non-zero exit
+            # often carries its error on stderr alone, where the
+            # silence-means-success heuristic below would read it as done.
+            logger.error("Failed to disconnect device %s: outcome=%s", mac, result.outcome.value)
+            return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
+        # BlueZ ≥5.72 prints "Attempting to disconnect…" and stays silent on
+        # success — only an explicit failure marker means the command failed.
+        lowered = result.stdout.lower()
+        ok = "successful" in lowered or not any(
+            marker in lowered for marker in ("failed", "not connected", "not available", "error")
         )
-        ok = "successful" in r.stdout.lower()
         return jsonify({"ok": ok, "mac": mac})
     except Exception:
         logger.exception("Failed to disconnect device %s", mac)
@@ -777,23 +722,14 @@ def api_bt_adapter_power():
     except ValueError:
         return jsonify({"error": "Invalid adapter identifier"}), 400
     power = data.get("power", True)
-    cmd = "power on" if power else "power off"
-    cmds = f"select {adapter}\n{cmd}\n" if adapter else f"{cmd}\n"
     try:
-        r = subprocess.run(
-            ["bluetoothctl"],
-            input=cmds,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        clean = _ANSI_RE.sub("", r.stdout).lower()
-        ok = (
-            "succeeded" in clean
-            or "changing power" in clean
-            or (("powered: yes" in clean) if power else ("powered: no" in clean))
-        )
-        return jsonify({"ok": ok, "power": power})
+        result = get_bluez().power(bool(power), Adapter.of(adapter))
+        if result.result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            logger.error("Failed to toggle adapter power: outcome=%s", result.result.outcome.value)
+            return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
+        # ``changed`` reproduces the historical ok-heuristic (succeeded /
+        # changing power / powered: marker) exactly.
+        return jsonify({"ok": result.changed, "power": power})
     except Exception:
         logger.exception("Failed to toggle adapter power")
         return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
@@ -834,12 +770,8 @@ def api_bt_reset_reconnect():
         finally:
             _release_bt_operation()
 
-    t = threading.Thread(
-        target=_run_job,
-        daemon=True,
-        name=f"bt-reset-{job_id[:8]}",
-    )
-    t.start()
+    if not _start_bt_worker(_run_job, name=f"bt-reset-{job_id[:8]}"):
+        return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id})
 
 
@@ -876,6 +808,27 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
         macs = [m.upper() for m in list_bt_adapters() if m]
     except Exception:  # pragma: no cover - defensive
         return adapter
+    # Resolve through the sysfs-backed kernel map first: ``bluetoothctl
+    # list`` order is BlueZ registration order, not kernel hciN numbering —
+    # positional indexing paired/scanned the wrong physical adapter on
+    # hosts where hci1 registers before hci0 (issue #340, hit live on the
+    # two-adapter stand where a pair for hci1 silently ran against hci0).
+    kernel_hci = adapter.lower()
+    hci_map = build_hci_map()
+    if hci_map:
+        for mac in macs:
+            if hci_map.get(mac.replace(":", "")) == kernel_hci:
+                return mac
+        return adapter  # mapped nowhere — let the failed select surface loudly
+    # Sysfs gave nothing (Docker without /sys, or kernels whose
+    # /sys/class/bluetooth/hciN lacks the ``address`` file — seen live on the
+    # rc.1 stand).  The D-Bus object path /org/bluez/hciN is keyed by the
+    # kernel index unambiguously — prefer it over list position.
+    dbus_addr = _dbus_get_adapter_address(kernel_hci)
+    if dbus_addr:
+        return dbus_addr.upper()
+    # No sysfs/hciconfig/D-Bus visibility: the adapters endpoint fell back
+    # to synthetic ``hci{i}`` labels in list order, so mirror that here.
     if 0 <= idx < len(macs):
         return macs[idx]
     return adapter
@@ -889,177 +842,63 @@ def _run_reset_reconnect(
     no_input_no_output_agent: bool = False,
     allow_hfp_profile: bool = False,
 ) -> None:
-    """Remove device, then pair + trust + connect from scratch."""
+    """Drop the bond, power-cycle the controller, then pair + trust + connect.
+
+    The reset is this path's own contribution; the pairing that follows is
+    the shared choreography, so this flow now gets the popular-PIN ladder
+    and the failure fingerprint it never had.
+    """
     adapter = _resolve_adapter_to_mac(adapter)
+    bluez = get_bluez()
+    scope = Adapter.of(adapter)
     try:
-        # Step 1: Remove existing pairing
         logger.info("Reset & Reconnect %s: removing…", mac)
-        remove_cmds: list[str] = []
-        if adapter:
-            remove_cmds.append(f"select {adapter}")
-        remove_cmds.append(f"remove {mac}")
-        subprocess.run(
-            ["bluetoothctl"],
-            input="\n".join(remove_cmds) + "\n",
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        bluez.remove(mac, scope)
         time.sleep(1)
 
-        # Step 2: Power cycle adapter
-        power_cmds: list[str] = []
-        if adapter:
-            power_cmds.append(f"select {adapter}")
-        power_cmds.extend(["power off"])
-        subprocess.run(
-            ["bluetoothctl"],
-            input="\n".join(power_cmds) + "\n",
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+        # A controller power cycle clears the kernel-side link state that
+        # survives `remove` and keeps some speakers from bonding again.
+        bluez.power(False, scope)
         time.sleep(2)
 
-        # Step 3: Pair from scratch (power on + scan + pair, trust only after success)
         logger.info("Reset & Reconnect %s: pairing…", mac)
-
-        # Native BlueZ agent first — same contract as _run_standalone_pair_inner.
-        # DisplayYesNo is the default because it reached Bonded: yes on Synergy
-        # 65 S in the #168 reproduction where the stdin-yes race kept losing.
-        native_agent: PairingAgent | None = None
-        try:
-            native_agent = PairingAgent(
+        outcome = PairSession(
+            bluez,
+            adapter=scope,
+            mac=mac,
+            options=PairOptions(
+                pins=COMMON_BT_PAIR_PINS,
                 capability="NoInputNoOutput" if no_input_no_output_agent else "DisplayYesNo",
-                pin="0000",
-                allow_hfp=allow_hfp_profile,
-                target_mac=mac,
-            ).__enter__()
-            logger.info("Reset & Reconnect %s: native agent active", mac)
-        except Exception as exc:
-            native_agent = None
-            logger.warning(
-                "Reset & Reconnect %s: native agent unavailable (%s) — falling back to bluetoothctl agent",
-                mac,
-                exc,
-            )
+                allow_hfp=bool(allow_hfp_profile),
+                connect_after_trust=True,
+                timings=PairTimings(
+                    scan_window_s=_PAIR_SCAN_DURATION,
+                    pair_wait_s=_PAIR_WAIT_DURATION,
+                    # The connect result and the closing ``info`` block land
+                    # during this window; without it the job reports
+                    # ``connected: false`` for a speaker that did connect.
+                    post_trust_settle_s=5.0,
+                ),
+            ),
+            label=mac,
+        ).run()
 
-        # Outer try/finally guarantees native_agent cleanup even when
-        # ``subprocess.Popen(["bluetoothctl"])`` below raises before the
-        # inner proc-scoped finally has a chance to run.  Otherwise the
-        # agent thread / SystemBus connection leaks per failed attempt.
-        try:
-            initial_cmds = []
-            if adapter:
-                initial_cmds.append(f"select {adapter}")
-            initial_cmds.append("power on")
-            if native_agent is None:
-                initial_cmds.extend(
-                    ["agent NoInputNoOutput" if no_input_no_output_agent else "agent on", "default-agent"]
-                )
-            initial_cmds.append("scan bredr")
-            pair_cmds = [f"pair {mac}"]
-
-            proc = subprocess.Popen(
-                ["bluetoothctl"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            try:
-                if proc.stdin is None:
-                    raise RuntimeError("bluetoothctl stdin unavailable")
-
-                proc.stdin.write("\n".join(initial_cmds) + "\n")
-                proc.stdin.flush()
-                time.sleep(_PAIR_SCAN_DURATION)
-
-                proc.stdin.write("\n".join(pair_cmds) + "\n")
-                proc.stdin.flush()
-
-                import selectors
-
-                collected: list[str] = []
-                paired_ok = False
-                deadline = time.monotonic() + _PAIR_WAIT_DURATION
-                sel = selectors.DefaultSelector()
-                sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
-                try:
-                    while time.monotonic() < deadline and proc.poll() is None:
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
-                            break
-                        events = sel.select(timeout=min(remaining, 0.5))
-                        if not events:
-                            continue
-                        line = proc.stdout.readline()  # type: ignore[union-attr]
-                        if not line:
-                            break
-                        collected.append(line)
-                        stripped = line.strip().lower()
-                        if "confirm passkey" in stripped or "request confirmation" in stripped:
-                            logger.info("SSP passkey prompt — auto-confirming")
-                            proc.stdin.write("yes\n")
-                            proc.stdin.flush()
-                        if "pairing successful" in stripped or "already paired" in stripped:
-                            paired_ok = True
-                            time.sleep(1)
-                            break
-                finally:
-                    sel.close()
-
-                if paired_ok:
-                    proc.stdin.write(f"trust {mac}\nconnect {mac}\n")
-                proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-                proc.stdin.flush()
-                if paired_ok:
-                    time.sleep(5)
-
-                try:
-                    tail, _ = proc.communicate(timeout=3)
-                    collected.append(tail)
-                except subprocess.TimeoutExpired:
-                    pass
-
-                out = "".join(collected)
-                ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-                connected = "connection successful" in out.lower() or "connected: yes" in out.lower()
-                agent_telemetry: dict[str, Any] | None = None
-                if native_agent is not None:
-                    try:
-                        agent_telemetry = native_agent.telemetry
-                    except Exception as exc:
-                        logger.debug("Reset & Reconnect %s: telemetry read failed: %s", mac, exc)
-                logger.info(
-                    "Reset & Reconnect %s: paired=%s connected=%s agent=%s (last 400: %s)",
-                    mac,
-                    ok,
-                    connected,
-                    agent_telemetry,
-                    out[-400:],
-                )
-                finish_scan_job(
-                    job_id,
-                    {
-                        "success": ok,
-                        "connected": connected,
-                        "mac": mac,
-                        "agent_telemetry": agent_telemetry,
-                    },
-                )
-            finally:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass
-        finally:
-            if native_agent is not None:
-                try:
-                    native_agent.__exit__(None, None, None)
-                except Exception as exc:
-                    logger.debug("Reset & Reconnect %s: agent cleanup error: %s", mac, exc)
+        logger.info(
+            "Reset & Reconnect %s: paired=%s connected=%s agent=%s",
+            mac,
+            outcome.success,
+            outcome.connected,
+            outcome.agent_telemetry,
+        )
+        finish_scan_job(
+            job_id,
+            {
+                "success": outcome.success,
+                "connected": outcome.connected,
+                "mac": mac,
+                "agent_telemetry": outcome.agent_telemetry,
+            },
+        )
     except Exception:
         logger.exception("Reset & Reconnect error for %s", mac)
         finish_scan_job(job_id, {"success": False, "mac": mac, "error": "Reset & reconnect failed"})
@@ -1104,12 +943,8 @@ def api_bt_scan():
         finally:
             _release_bt_operation()
 
-    t = threading.Thread(
-        target=_run_job,
-        daemon=True,
-        name=f"bt-scan-{job_id[:8]}",
-    )
-    t.start()
+    if not _start_bt_worker(_run_job, name=f"bt-scan-{job_id[:8]}"):
+        return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id, "scan_options": scan_options, "expected_duration": expected_duration})
 
 
@@ -1219,156 +1054,25 @@ def _estimate_scan_duration(adapter_macs: "list[str]") -> int:
     return _SCAN_BASE_DURATION + max(len(adapter_macs) - 1, 0) * _SCAN_ADAPTER_OVERHEAD
 
 
-def _classify_audio_capability(out: str) -> "tuple[bool, str]":
-    """Return ``(is_audio, reason)`` from bluetoothctl info output.
+def _describe_discovery_refusal(errors: "tuple[str, ...]") -> str:
+    """Turn ``Failed to start discovery: …`` into operator-facing guidance.
 
-    Reason is a short machine-readable label used for scan-filter diagnostics:
-    ``audio_class_of_device`` / ``non_audio_class_of_device`` / ``audio_uuid``
-    / ``no_audio_class_no_uuid`` / ``no_class_info_defaults_audio``.
+    A controller whose firmware has wedged answers every discovery request
+    with an error and then goes quiet, which used to be reported as "no
+    devices found" — the one outcome that hides the actual fault.
     """
-    out_lower = out.lower()
-    class_m = re.search(r"\bClass:\s+(0x[0-9A-Fa-f]+)", out)
-    if class_m:
-        cls = int(class_m.group(1), 16)
-        major = (cls >> 8) & 0x1F
-        if major == 4:
-            return True, "audio_class_of_device"
-        return False, "non_audio_class_of_device"
-    if any(u in out_lower for u in _AUDIO_UUIDS):
-        return True, "audio_uuid"
-    if "UUID:" in out:
-        return False, "no_audio_class_no_uuid"
-    return True, "no_class_info_defaults_audio"
-
-
-def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
-    """Run a bluetoothctl scan session and return combined stdout."""
-    bt_timeout = 12 + len(adapter_macs) * 2
-
-    proc = subprocess.Popen(
-        ["bluetoothctl"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
+    reason = errors[0]
+    lowered = reason.lower()
+    if "inprogress" in lowered:
+        detail = "the adapter reports a discovery already in progress"
+    elif "notready" in lowered:
+        detail = "the adapter is not ready — it may be powered off or blocked by rfkill"
+    else:
+        detail = f"the adapter refused it ({reason})"
+    return (
+        f"Bluetooth discovery could not be started: {detail}. "
+        "Power-cycle the adapter (Reboot adapter), or unplug and replug the USB dongle, then scan again."
     )
-    try:
-        if adapter_macs:
-            init_cmds: list[str] = ["agent on", "default-agent"]
-            for m in adapter_macs:
-                init_cmds.extend([f"select {m}", "power on", "scan bredr"])
-        else:
-            init_cmds = ["power on", "agent on", "default-agent", "scan bredr"]
-        if proc.stdin is None:
-            raise RuntimeError("bluetoothctl subprocess stdin unavailable")
-        proc.stdin.write("\n".join(init_cmds) + "\n")
-        proc.stdin.flush()
-        time.sleep(15)
-        proc.stdin.write("scan off\n")
-        proc.stdin.flush()
-        time.sleep(1)
-        result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
-    except Exception:
-        proc.kill()
-        proc.wait()
-        raise
-
-    # Per-adapter device enumeration runs in dedicated short sessions.
-    # Inside the long-lived scan session the ``select <MAC>; show``
-    # marker lines interleave with async discovery notifications on
-    # piped stdin — the same unreliability that produced the alias swap
-    # in #193 — so devices could be attributed to whichever controller
-    # happened to be selected when the output flushed (issue #340).
-    for m in adapter_macs:
-        try:
-            enum = subprocess.run(
-                ["bluetoothctl"],
-                input=f"select {m}\nshow\ndevices\n",
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            result_stdout += "\n" + enum.stdout
-        except Exception:
-            logger.debug("Post-scan device enumeration failed for %s", m, exc_info=True)
-    return result_stdout
-
-
-def _extract_rssi_from_info(info_text: str) -> "int | None":
-    """Pull the ``RSSI: <dB>`` value from ``bluetoothctl info <MAC>`` output.
-
-    Returns the signed dBm integer or ``None`` when the line is absent
-    or the value is unparseable.  Tolerates both the modern decimal
-    (``RSSI: -43``) and legacy parenthesised hex (``RSSI: 0xff... (-43)``)
-    formats — the same two formats handled in the scan-stream regex.
-    """
-    if not info_text:
-        return None
-    m = _INFO_RSSI_PAT.search(info_text)
-    if not m:
-        return None
-    value = m.group(1) or m.group(2)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_scan_output(
-    stdout: str,
-) -> "tuple[set[str], dict[str, str], dict[str, str], set[str], dict[str, int]]":
-    """Parse bluetoothctl scan output.
-
-    Returns ``(seen_macs, names, device_adapter, active_macs, rssi_by_mac)``
-    where ``rssi_by_mac`` maps MAC → most-recent dBm seen during the scan
-    window.  ``active_macs`` keeps the legacy contract (every MAC that
-    emitted ``[CHG] ... RSSI:`` regardless of value parseability).
-    """
-    seen: set[str] = set()
-    names: dict[str, str] = {}
-    device_adapter: dict[str, str] = {}
-    active_macs: set[str] = set()
-    rssi_by_mac: dict[str, int] = {}
-    current_show_adapter: str = ""
-    for line in stdout.splitlines():
-        clean = _ANSI_RE.sub("", line).strip()
-        if not clean.startswith("["):
-            ctrl_m = _SHOW_CTRL_PAT.match(clean)
-            if ctrl_m:
-                current_show_adapter = ctrl_m.group(1).upper()
-                continue
-            if current_show_adapter:
-                dev_m = _SHOW_DEV_PAT.match(clean)
-                if dev_m:
-                    dmac = dev_m.group(1).upper()
-                    if dmac not in device_adapter:
-                        device_adapter[dmac] = current_show_adapter
-                    continue
-        scan_m = _NEW_DEV_PAT.search(clean)
-        if scan_m:
-            mac = scan_m.group(1).upper()
-            name = scan_m.group(2).strip()
-            seen.add(mac)
-            if name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                names[mac] = name
-            continue
-        chg_n = _CHG_NAME_PAT.search(clean)
-        if chg_n:
-            mac = chg_n.group(1).upper()
-            names[mac] = chg_n.group(2).strip()
-            continue
-        chg_r = _CHG_RSSI_PAT.search(clean)
-        if chg_r:
-            mac = chg_r.group(1).upper()
-            active_macs.add(mac)
-            chg_v = _CHG_RSSI_VALUE_PAT.search(clean)
-            if chg_v:
-                value = chg_v.group(2) or chg_v.group(3)
-                try:
-                    rssi_by_mac[mac] = int(value)
-                except (TypeError, ValueError):
-                    pass
-    return seen, names, device_adapter, active_macs, rssi_by_mac
 
 
 def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> None:
@@ -1376,21 +1080,9 @@ def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> N
     unnamed = {mac for mac in all_macs if mac not in names}
     if not unnamed:
         return
-    db_result = subprocess.run(
-        ["bluetoothctl"],
-        input="devices\n",
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    for line in db_result.stdout.splitlines():
-        clean = _ANSI_RE.sub("", line)
-        db_m = _DEV_PAT.search(clean)
-        if db_m:
-            mac = db_m.group(1).upper()
-            name = db_m.group(2).strip()
-            if mac in unnamed and name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                names[mac] = name
+    for entry in get_bluez().list_devices(filter=""):
+        if entry.mac in unnamed and entry.name:
+            names[entry.mac] = entry.name
 
 
 def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = True) -> "tuple[dict | None, str | None]":
@@ -1402,23 +1094,15 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
     """
     if not validate_mac(mac):
         return {"mac": mac, "name": mac, "audio_capable": True}, None
-    try:
-        r = subprocess.run(
-            ["bluetoothctl", "info", mac],
-            capture_output=True,
-            text=True,
-            timeout=4,
-        )
-        out = r.stdout
-    except Exception:
+    info = get_bluez().device_info(mac, timeout=4.0)
+    if info.outcome is not Outcome.OK:
+        # Legacy contract: never drop a scannable speaker on the strength of
+        # an info block the command itself reported as failed — a non-zero
+        # exit can still leave a partial block behind.
         return {"mac": mac, "name": names.get(mac, mac), "audio_capable": True}, None
-    if mac not in names:
-        nm = re.search(r"\bName:\s+(.*)", out)
-        if nm:
-            n = nm.group(1).strip()
-            if n and not re.match(r"^[0-9A-Fa-f]{2}[-:]", n):
-                names[mac] = n
-    audio_capable, reason = _classify_audio_capability(out)
+    if mac not in names and info.name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", info.name):
+        names[mac] = info.name
+    audio_capable, reason = classify_audio_capability(info)
     if audio_only and not audio_capable:
         logger.info(
             "BT scan filter dropped %s (name=%s, reason=%s)",
@@ -1427,7 +1111,7 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
             reason,
         )
         return None, reason
-    info_rssi = _extract_rssi_from_info(out)
+    info_rssi = info.rssi
     device_info: dict = {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}
     if info_rssi is not None:
         device_info["rssi_dbm"] = info_rssi
@@ -1467,9 +1151,16 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
     try:
         adapter_macs = _resolve_scan_adapter_macs(adapter)
 
-        result_stdout = _run_bluetoothctl_scan(adapter_macs)
-        seen, names, device_adapter, active_macs, rssi_by_mac = _parse_scan_output(result_stdout)
-        all_macs = seen | active_macs
+        # The discovery window is the same number the UI is told to expect
+        # (``_estimate_scan_duration``), so the progress bar can't drift.
+        transcript = get_bluez().scan(adapter_macs, window_s=float(_SCAN_BASE_DURATION))
+        names = dict(transcript.names)
+        device_adapter = transcript.device_adapter
+        rssi_by_mac = transcript.rssi_by_mac
+        discovery_errors = transcript.discovery_errors
+        if discovery_errors:
+            logger.warning("BT scan: adapter refused to start discovery (%s)", "; ".join(discovery_errors))
+        all_macs = set(transcript.seen_macs) | set(transcript.active_macs)
 
         if len(all_macs) > _MAX_SCAN_RESULTS:
             logger.warning("BT scan found %d devices, capping to %d", len(all_macs), _MAX_SCAN_RESULTS)
@@ -1506,19 +1197,23 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
         _annotate_scan_conflicts(devices)
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
-        finish_scan_job(
-            job_id,
-            {
-                "devices": devices,
-                "stats": {
-                    "total_candidates": len(all_macs),
-                    "returned_candidates": len(devices),
-                    "audio_candidates": sum(1 for d in devices if d.get("audio_capable", True)),
-                    "audio_only": audio_only,
-                    "dropped_reasons": dropped_reasons,
-                },
-            },
-        )
+        if discovery_errors and not devices:
+            # Nothing found *and* discovery never started: report the refusal
+            # instead of an empty result the operator can't act on.
+            finish_scan_job(job_id, {"devices": [], "error": _describe_discovery_refusal(discovery_errors)})
+            return
+        stats: dict = {
+            "total_candidates": len(all_macs),
+            "returned_candidates": len(devices),
+            "audio_candidates": sum(1 for d in devices if d.get("audio_capable", True)),
+            "audio_only": audio_only,
+            "dropped_reasons": dropped_reasons,
+        }
+        if discovery_errors:
+            # Results survive a partial refusal (e.g. one of several
+            # controllers wedged); the refusal rides along as a stat.
+            stats["discovery_error"] = discovery_errors[0]
+        finish_scan_job(job_id, {"devices": devices, "stats": stats})
     except Exception:
         logger.exception("BT scan failed")
         finish_scan_job(job_id, {"devices": [], "error": "Bluetooth scan failed"})
@@ -1573,12 +1268,8 @@ def api_bt_pair_new():
         finally:
             _release_bt_operation()
 
-    t = threading.Thread(
-        target=_run_job,
-        daemon=True,
-        name=f"bt-pair-{job_id[:8]}",
-    )
-    t.start()
+    if not _start_bt_worker(_run_job, name=f"bt-pair-{job_id[:8]}"):
+        return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id})
 
 
@@ -1600,335 +1291,48 @@ def _run_standalone_pair(
     no_input_no_output_agent: bool = False,
     allow_hfp_profile: bool = False,
 ) -> None:
-    """Run pair + trust via bluetoothctl for a device not yet in config.
+    """Pair + trust a device that is not yet in the config.
 
     Compatibility options apply to this pairing job only and are never
-    sourced from persisted global configuration.
-
-    When the device asks for a legacy PIN and rejects our first guess,
-    the orchestrator retries the whole pair flow with the next PIN from
-    ``COMMON_BT_PAIR_PINS``. Non-PIN failures (connection errors,
-    timeouts) stop the loop — they aren't PIN-related and retrying
-    wastes ~20 s per attempt.
+    sourced from persisted global configuration.  The pairing choreography
+    itself — early pair on discovery, SSP auto-confirm, the popular-PIN
+    ladder — lives in :class:`PairSession`, shared with the monitor loop's
+    re-pair and with reset-and-reconnect.
     """
     adapter = _resolve_adapter_to_mac(adapter)
 
-    def _attempt(pin: str):
-        if quiesce and adapter:
-            with quiesce_adapter_peers(adapter, exclude_mac=mac):
-                return _run_standalone_pair_inner(
-                    job_id,
-                    mac,
-                    adapter,
-                    pin=pin,
-                    no_input_no_output_agent=no_input_no_output_agent,
-                    allow_hfp_profile=allow_hfp_profile,
-                )
-        return _run_standalone_pair_inner(
-            job_id,
-            mac,
-            adapter,
-            pin=pin,
-            no_input_no_output_agent=no_input_no_output_agent,
-            allow_hfp_profile=allow_hfp_profile,
-        )
+    attempt_context = None
+    if quiesce and adapter:
 
-    tried_pins: list[str] = []
-    last_reason = ""
-    for pin in COMMON_BT_PAIR_PINS:
-        tried_pins.append(pin)
-        result = _attempt(pin)
-        last_reason = result.get("reason", "") or last_reason
-        if result.get("success"):
-            logger.info("Standalone pair %s: OK", mac)
-            finish_scan_job(job_id, {"success": True, "mac": mac})
-            return
-        if not result.get("pin_rejected"):
-            logger.warning(
-                "Standalone pair %s: FAIL (%s)",
-                mac,
-                result.get("reason") or "no explicit bluetoothctl reason captured",
-            )
-            finish_scan_job(job_id, {"success": False, "mac": mac})
-            return
-        logger.warning(
-            "Standalone pair %s: PIN %s rejected — retrying with next candidate",
-            mac,
-            pin,
-        )
+        def attempt_context():
+            # Single-adapter hosts can't pair while another A2DP ACL is up;
+            # park the peers for the duration of each attempt.
+            return quiesce_adapter_peers(adapter, exclude_mac=mac)
 
-    # All popular PINs exhausted. The device almost certainly requires a
-    # custom PIN that the bridge can't auto-enter — surface that loud so
-    # the operator doesn't have to grep per-attempt warnings.
-    logger.warning(
-        "Standalone pair %s: FAIL — device rejected all popular PINs (%s). "
-        "Likely requires a custom PIN; the bridge cannot auto-enter non-popular PINs. "
-        "Last bluetoothctl reason: %s",
-        mac,
-        ", ".join(tried_pins),
-        last_reason or "no explicit bluetoothctl reason captured",
+    options = PairOptions(
+        pins=COMMON_BT_PAIR_PINS,
+        # NoInputNoOutput forces Just-Works SSP for speakers that cancel a
+        # passkey exchange; opt-in per request (issue #168).
+        capability="NoInputNoOutput" if no_input_no_output_agent else "DisplayYesNo",
+        allow_hfp=bool(allow_hfp_profile),
+        timings=PairTimings(
+            scan_window_s=_PAIR_SCAN_DURATION,
+            pair_wait_s=_PAIR_WAIT_DURATION,
+        ),
     )
-    finish_scan_job(job_id, {"success": False, "mac": mac})
 
-
-def _run_standalone_pair_inner(
-    job_id: str,
-    mac: str,
-    adapter: str,
-    *,
-    pin: str = "0000",
-    no_input_no_output_agent: bool = False,
-    allow_hfp_profile: bool = False,
-) -> dict:
-    """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op.
-
-    Returns a dict ``{success, pin_attempted, pin_rejected, reason, output}``
-    so the outer orchestrator can decide whether to retry with a different
-    PIN or surface the failure to the UI.
-    """
     try:
-        cleanup_cmds: list[str] = []
-        if adapter:
-            cleanup_cmds.append(f"select {adapter}")
-        # `agent off` tears down any agent object lingering on the system bus
-        # from a previous bluetoothctl session. Without it, `agent on` below
-        # can return `Failed to register agent object`, leaving the pair
-        # without an authentication agent and producing
-        # `org.bluez.Error.ConnectionAttemptFailed` (issue #162).
-        cleanup_cmds.append("agent off")
-        cleanup_cmds.append(f"remove {mac}")
-        subprocess.run(
-            ["bluetoothctl"],
-            input="\n".join(cleanup_cmds) + "\n",
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        time.sleep(1)
-
-        # `agent NoInputNoOutput` forces Just-Works SSP (both sides auto-accept
-        # without a passkey exchange). Many consumer BT audio sinks cancel
-        # authentication when the default `KeyboardDisplay` agent negotiates
-        # a passkey; opt-in toggle lets affected users work around it (issue #168).
-        use_no_io_agent = bool(no_input_no_output_agent)
-        agent_cmd = "agent NoInputNoOutput" if use_no_io_agent else "agent on"
-
-        # Native D-Bus agent: exports org.bluez.Agent1 directly so BlueZ calls
-        # RequestConfirmation / RequestPinCode on us without the bluetoothctl
-        # stdin-``yes`` race that loses to SSP agent timeouts on some speakers
-        # (issue #168, Synergy 65 S). Default capability is DisplayYesNo — the
-        # same one manual ``bluetoothctl`` uses, which reached ``Bonded: yes``
-        # in the issue reproduction. Falls back to bluetoothctl's built-in
-        # agent if dbus-fast / SystemBus are unavailable.
-        native_capability = "NoInputNoOutput" if use_no_io_agent else "DisplayYesNo"
-        native_agent: PairingAgent | None = None
-        try:
-            native_agent = PairingAgent(
-                capability=native_capability,
-                pin=pin,
-                allow_hfp=bool(allow_hfp_profile),
-                target_mac=mac,
-            ).__enter__()
-            logger.info(
-                "Standalone pair %s: native agent active (cap=%s)",
-                mac,
-                native_capability,
-            )
-        except Exception as exc:
-            native_agent = None
-            logger.warning(
-                "Standalone pair %s: native pairing agent unavailable (%s) — falling back to bluetoothctl stdin agent",
-                mac,
-                exc,
-            )
-
-        # Outer try/finally guarantees native_agent cleanup even if the
-        # bluetoothctl subprocess fails to launch before the inner
-        # proc-scoped finally has a chance to run.
-        try:
-            initial_cmds: list[str] = []
-            if adapter:
-                initial_cmds.append(f"select {adapter}")
-            initial_cmds.append("power on")
-            if native_agent is None:
-                # No native agent → rely on bluetoothctl's built-in agent as before.
-                initial_cmds.extend([agent_cmd, "default-agent"])
-            initial_cmds.append("scan bredr")
-
-            pair_cmds = [f"pair {mac}"]
-
-            proc = subprocess.Popen(
-                ["bluetoothctl"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            try:
-                if proc.stdin is None:
-                    raise RuntimeError("bluetoothctl stdin unavailable")
-
-                proc.stdin.write("\n".join(initial_cmds) + "\n")
-                proc.stdin.flush()
-
-                # Read stdout to auto-confirm SSP passkey
-                import selectors
-
-                collected: list[str] = []
-                paired_ok = False
-                pair_sent = False
-                pin_attempted = False
-                # Single loop that handles both scan-window observation and pair
-                # outcome parsing. `pair <mac>` fires as soon as `[NEW] Device <mac>`
-                # appears, rather than waiting the full `_PAIR_SCAN_DURATION` fixed
-                # sleep — shaves typical pair-mode window from ~12s to ~1-3s so the
-                # speaker is still accepting when `pair` arrives (issue #168).
-                mac_lower = mac.lower()
-                start = time.monotonic()
-                scan_deadline = start + _PAIR_SCAN_DURATION
-                full_deadline = scan_deadline + _PAIR_WAIT_DURATION
-                sel = selectors.DefaultSelector()
-                sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
-                try:
-                    while proc.poll() is None:
-                        now = time.monotonic()
-                        # Fire `pair` at scan deadline if device never advertised.
-                        if not pair_sent and now >= scan_deadline:
-                            proc.stdin.write("\n".join(pair_cmds) + "\n")
-                            proc.stdin.flush()
-                            pair_sent = True
-                        if now >= full_deadline:
-                            break
-                        end = full_deadline if pair_sent else scan_deadline
-                        remaining = end - now
-                        if remaining <= 0:
-                            continue
-                        events = sel.select(timeout=min(remaining, 0.5))
-                        if not events:
-                            continue
-                        line = proc.stdout.readline()  # type: ignore[union-attr]
-                        if not line:
-                            break
-                        collected.append(line)
-                        low = line.lower()
-                        stripped = line.strip().lower()
-
-                        if not pair_sent and "[new] device" in low and mac_lower in low:
-                            logger.debug("Device %s visible via scan, firing pair early", mac)
-                            proc.stdin.write("\n".join(pair_cmds) + "\n")
-                            proc.stdin.flush()
-                            pair_sent = True
-                            continue
-
-                        if "confirm passkey" in stripped or "request confirmation" in stripped:
-                            logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
-                            proc.stdin.write("yes\n")
-                            proc.stdin.flush()
-                        elif "enter pin code" in stripped or "enter passkey" in stripped:
-                            # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
-                            # ask for a numeric PIN. `0000` is the BlueZ-default fallback
-                            # and works for most consumer audio sinks (issue #162). If
-                            # this attempt is a retry, the outer orchestrator supplies
-                            # the next popular PIN from ``COMMON_BT_PAIR_PINS``.
-                            logger.info("Legacy PIN prompt — auto-entering %s: %s", pin, line.strip())
-                            proc.stdin.write(f"{pin}\n")
-                            proc.stdin.flush()
-                            pin_attempted = True
-                        if "pairing successful" in stripped or "already paired" in stripped:
-                            paired_ok = True
-                            break
-                finally:
-                    sel.close()
-
-                # Safety net: ensure `pair` was sent at least once even if the loop
-                # exited via proc.poll() before the scan deadline.
-                if not pair_sent and proc.poll() is None:
-                    proc.stdin.write("\n".join(pair_cmds) + "\n")
-                    proc.stdin.flush()
-
-                if paired_ok:
-                    proc.stdin.write(f"trust {mac}\n")
-                proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-                proc.stdin.flush()
-
-                try:
-                    tail, _ = proc.communicate(timeout=3)
-                    collected.append(tail)
-                except subprocess.TimeoutExpired:
-                    pass
-
-                out = "".join(collected)
-                ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-                reason = ""
-                pin_rejected = False
-                if not ok:
-                    reason = (
-                        describe_pair_failure(out, pin_attempted=pin_attempted, pin_used=pin)
-                        or "no explicit bluetoothctl reason captured"
-                    )
-                    # A PIN rejection means the device asked for a PIN AND the
-                    # attempt failed with AuthenticationFailed — derived from
-                    # the raw bluetoothctl output so the check is independent
-                    # of the human-readable `reason` wording (otherwise a reword
-                    # of `describe_pair_failure` would silently break retry).
-                    pin_rejected = pin_attempted and is_pin_rejection(out)
-                    # Log full captured output (not just a tail) so passkey/agent
-                    # prompts near the start of the session are visible in bug
-                    # reports. bluetoothctl's SSP dialog is typically <4 KB per
-                    # pair attempt (issue #168 diagnostic lost with 800-byte tail).
-                    logger.debug("Standalone pair %s output (pin=%s): %s", mac, pin, out)
-                # Structured pair-agent telemetry: what BlueZ asked us, passkey
-                # shown, authorized/rejected services.  Emitted regardless of
-                # outcome so success telemetry (e.g. "which capability worked")
-                # stays visible alongside failure triage.
-                agent_telemetry: dict[str, Any] | None = None
-                if native_agent is not None:
-                    try:
-                        agent_telemetry = native_agent.telemetry
-                        logger.info(
-                            "Standalone pair %s agent telemetry: outcome=%s capability=%s "
-                            "methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
-                            mac,
-                            "success" if ok else "fail",
-                            agent_telemetry.get("capability"),
-                            agent_telemetry.get("method_calls"),
-                            agent_telemetry.get("last_passkey"),
-                            agent_telemetry.get("peer_cancelled"),
-                            agent_telemetry.get("authorized_services"),
-                            agent_telemetry.get("rejected_services"),
-                        )
-                    except Exception as exc:
-                        logger.debug("Standalone pair %s: telemetry read failed: %s", mac, exc)
-                return {
-                    "success": ok,
-                    "pin_attempted": pin_attempted,
-                    "pin_rejected": pin_rejected,
-                    "reason": reason,
-                    "output": out,
-                    "agent_telemetry": agent_telemetry,
-                }
-            finally:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass
-        finally:
-            if native_agent is not None:
-                try:
-                    native_agent.__exit__(None, None, None)
-                except Exception as exc:
-                    logger.debug(
-                        "Standalone pair %s: native agent cleanup error (non-fatal): %s",
-                        mac,
-                        exc,
-                    )
+        outcome = PairSession(
+            get_bluez(),
+            adapter=Adapter.of(adapter),
+            mac=mac,
+            options=options,
+            attempt_context=attempt_context,
+            label=mac,
+        ).run()
     except Exception:
         logger.exception("Standalone pair error for %s", mac)
-        return {
-            "success": False,
-            "pin_attempted": False,
-            "pin_rejected": False,
-            "reason": "Pairing failed",
-            "output": "",
-        }
+        finish_scan_job(job_id, {"success": False, "mac": mac})
+        return
+
+    finish_scan_job(job_id, {"success": outcome.success, "mac": mac})

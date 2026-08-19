@@ -1,8 +1,7 @@
 """Tests for services/bluetooth.py — BT helpers that don't require hardware."""
 
 import json
-import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from sendspin_bridge.services.bluetooth import (
     bt_remove_device,
@@ -20,18 +19,15 @@ from sendspin_bridge.services.bluetooth import (
 # ---------------------------------------------------------------------------
 
 
-def test_bt_remove_device_invalid_mac():
-    """Invalid MAC should be rejected without spawning a subprocess."""
-    with (
-        patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run,
-        patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread,
-    ):
+def test_bt_remove_device_invalid_mac(installed_bluez):
+    """Invalid MAC should be rejected without touching bluetoothctl."""
+    with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device("invalid")
-        mock_run.assert_not_called()
         mock_thread.assert_not_called()
+    assert installed_bluez.commands == []
 
 
-def test_bt_remove_device_valid_mac():
+def test_bt_remove_device_valid_mac(installed_bluez):
     """Valid MAC should spawn a daemon thread that calls bluetoothctl."""
     with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device("AA:BB:CC:DD:EE:FF")
@@ -41,15 +37,12 @@ def test_bt_remove_device_valid_mac():
 
         # Execute the target function and verify bluetoothctl is called
         target_fn = kwargs["target"]
-        with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-            target_fn()
-            mock_run.assert_called_once()
-            args = mock_run.call_args
-            assert args[0][0] == ["bluetoothctl"]
-            assert "AA:BB:CC:DD:EE:FF" in args[1]["input"]
+        target_fn()
+        remove_cmds = [c for c in installed_bluez.commands if c.verb == "remove"]
+        assert remove_cmds and "remove AA:BB:CC:DD:EE:FF" in remove_cmds[0].script
 
 
-def test_bt_remove_device_cleans_bluez_cache_when_adapter_given(tmp_path, monkeypatch):
+def test_bt_remove_device_cleans_bluez_cache_when_adapter_given(tmp_path, monkeypatch, installed_bluez):
     """After ``bluetoothctl remove``, the stale cache file at
     ``/var/lib/bluetooth/<adapter>/cache/<device>`` must be deleted too —
     BlueZ's `RemoveDevice` leaves service-record entries there, and the
@@ -74,8 +67,7 @@ def test_bt_remove_device_cleans_bluez_cache_when_adapter_given(tmp_path, monkey
     with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device(device_mac, adapter_mac)
         target_fn = mock_thread.call_args[1]["target"]
-        with patch("sendspin_bridge.services.bluetooth.subprocess.run"):
-            target_fn()
+        target_fn()
 
     assert not cache_file.exists(), (
         "bt_remove_device must delete /var/lib/bluetooth/<adapter>/cache/<device> "
@@ -84,7 +76,7 @@ def test_bt_remove_device_cleans_bluez_cache_when_adapter_given(tmp_path, monkey
     )
 
 
-def test_bt_remove_device_cache_cleanup_missing_file_does_not_raise(tmp_path, monkeypatch):
+def test_bt_remove_device_cache_cleanup_missing_file_does_not_raise(tmp_path, monkeypatch, installed_bluez):
     """If the cache file does not exist (e.g. device never paired, or
     another process cleaned it first), the cleanup is a no-op — no
     exception propagates to kill the daemon thread and nothing is
@@ -98,11 +90,44 @@ def test_bt_remove_device_cache_cleanup_missing_file_does_not_raise(tmp_path, mo
     with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device("AA:BB:CC:DD:EE:FF", "C0:FB:F9:62:D6:9D")
         target_fn = mock_thread.call_args[1]["target"]
-        with patch("sendspin_bridge.services.bluetooth.subprocess.run"):
-            target_fn()  # must not raise
+        target_fn()  # must not raise
 
 
-def test_bt_remove_device_skips_cache_cleanup_without_adapter(tmp_path, monkeypatch):
+def test_bt_remove_device_cache_cleanup_permission_denied_is_debug_not_warning(
+    tmp_path, monkeypatch, installed_bluez, caplog
+):
+    """Unprivileged environments (LXC without /var/lib/bluetooth write
+    access) make the unlink fail with EACCES.  That is environmental noise,
+    not a malfunction — the stale cache only matters on the next pair and
+    the warning fires on every remove otherwise (12× in one live session).
+    Permission errors log at DEBUG; unexpected OS errors still warn."""
+    import logging
+
+    import sendspin_bridge.services.bluetooth as _bt_mod
+
+    adapter_mac = "C0:FB:F9:62:D6:9D"
+    device_mac = "AA:BB:CC:DD:EE:FF"
+    bluez_root = tmp_path / "var_lib_bluetooth"
+    cache_dir = bluez_root / adapter_mac / "cache"
+    cache_dir.mkdir(parents=True)
+    cache_file = cache_dir / device_mac
+    cache_file.write_text("[ServiceRecords] stale junk")
+    monkeypatch.setattr(_bt_mod, "_BLUEZ_LIB_DIR", bluez_root)
+
+    def _deny(self, *a, **k):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(type(cache_file), "unlink", _deny)
+
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.bluetooth"):
+        _bt_mod._clean_bluez_cache(adapter_mac, device_mac)
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not warnings, f"EACCES must not warn, got: {[r.getMessage() for r in warnings]}"
+    assert any("cache" in r.getMessage().lower() for r in caplog.records if r.levelno == logging.DEBUG)
+
+
+def test_bt_remove_device_skips_cache_cleanup_without_adapter(tmp_path, monkeypatch, installed_bluez):
     """No adapter MAC → no known cache path → cleanup must not walk the
     BlueZ tree blindly (could match the wrong device if multiple
     adapters cached the same peer). Only the bluetoothctl remove runs."""
@@ -115,15 +140,14 @@ def test_bt_remove_device_skips_cache_cleanup_without_adapter(tmp_path, monkeypa
     with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device("AA:BB:CC:DD:EE:FF")  # no adapter_mac
         target_fn = mock_thread.call_args[1]["target"]
-        with (
-            patch("sendspin_bridge.services.bluetooth.subprocess.run"),
-            patch.object(_bt_mod, "_clean_bluez_cache") as clean_mock,
-        ):
+        with patch.object(_bt_mod, "_clean_bluez_cache") as clean_mock:
             target_fn()
         clean_mock.assert_not_called()
+    # Unscoped remove: no select line without an explicit adapter.
+    assert installed_bluez.assert_never_selected(verb="remove") is None
 
 
-def test_bt_remove_device_logs_warning_when_bluetoothctl_reports_failure(caplog):
+def test_bt_remove_device_logs_warning_when_bluetoothctl_reports_failure(caplog, installed_bluez):
     """bluetoothctl returns exit 0 even when `remove <mac>` fails (device
     not in BlueZ tree, etc.). The "BT stack: removed" info log must not
     fire in that case — it misrepresents the state and misleads operators
@@ -131,14 +155,12 @@ def test_bt_remove_device_logs_warning_when_bluetoothctl_reports_failure(caplog)
     """
     import logging
 
+    installed_bluez.on("remove", stdout="Device AA:BB:CC:DD:EE:FF not available\n")
     with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device("AA:BB:CC:DD:EE:FF")
         target_fn = mock_thread.call_args[1]["target"]
-        failure_output = "Device AA:BB:CC:DD:EE:FF not available\n"
-        with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout=failure_output, stderr="", returncode=0)
-            with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.bluetooth"):
-                target_fn()
+        with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.bluetooth"):
+            target_fn()
 
     messages = [r.getMessage() for r in caplog.records]
     assert not any("BT stack: removed" in m for m in messages), (
@@ -149,19 +171,17 @@ def test_bt_remove_device_logs_warning_when_bluetoothctl_reports_failure(caplog)
     )
 
 
-def test_bt_remove_device_logs_removed_only_on_success(caplog):
+def test_bt_remove_device_logs_removed_only_on_success(caplog, installed_bluez):
     """When bluetoothctl actually removes the device (output contains
     "Device has been removed"), the success log fires as before."""
     import logging
 
+    installed_bluez.on("remove", stdout="[DEL] Device AA:BB:CC:DD:EE:FF Speaker\nDevice has been removed\n")
     with patch("sendspin_bridge.services.bluetooth.threading.Thread") as mock_thread:
         bt_remove_device("AA:BB:CC:DD:EE:FF")
         target_fn = mock_thread.call_args[1]["target"]
-        success_output = "[DEL] Device AA:BB:CC:DD:EE:FF Speaker\nDevice has been removed\n"
-        with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout=success_output, stderr="", returncode=0)
-            with caplog.at_level(logging.INFO, logger="sendspin_bridge.services.bluetooth"):
-                target_fn()
+        with caplog.at_level(logging.INFO, logger="sendspin_bridge.services.bluetooth"):
+            target_fn()
 
     messages = [r.getMessage() for r in caplog.records]
     assert any("BT stack: removed" in m for m in messages)
@@ -177,30 +197,39 @@ def test_is_audio_device_invalid_mac():
     assert is_audio_device("not-a-mac") is False
 
 
-def test_is_audio_device_valid():
+def test_is_audio_device_valid(installed_bluez):
     """bluetoothctl output with audio major class should return True."""
-    bt_output = (
-        "Device AA:BB:CC:DD:EE:FF Speaker\n"
-        "\tName: Speaker\n"
-        "\tClass: 0x240404\n"  # major class 4 = Audio/Video
-        "\tPaired: yes\n"
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout=(
+            "Device AA:BB:CC:DD:EE:FF Speaker\n"
+            "\tName: Speaker\n"
+            "\tClass: 0x240404\n"  # major class 4 = Audio/Video
+            "\tPaired: yes\n"
+        ),
     )
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(stdout=bt_output)
-        assert is_audio_device("AA:BB:CC:DD:EE:FF") is True
+    assert is_audio_device("AA:BB:CC:DD:EE:FF") is True
 
 
-def test_is_audio_device_not_audio():
+def test_is_audio_device_not_audio(installed_bluez):
     """bluetoothctl output without audio class or UUID should return False."""
-    bt_output = (
-        "Device AA:BB:CC:DD:EE:FF Keyboard\n"
-        "\tName: Keyboard\n"
-        "\tClass: 0x000540\n"  # major class 5 = Peripheral
-        "\tUUID: Human Interface Device (00001124-0000-1000-8000-00805f9b34fb)\n"
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout=(
+            "Device AA:BB:CC:DD:EE:FF Keyboard\n"
+            "\tName: Keyboard\n"
+            "\tClass: 0x000540\n"  # major class 5 = Peripheral
+            "\tUUID: Human Interface Device (00001124-0000-1000-8000-00805f9b34fb)\n"
+        ),
     )
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(stdout=bt_output)
-        assert is_audio_device("AA:BB:CC:DD:EE:FF") is False
+    assert is_audio_device("AA:BB:CC:DD:EE:FF") is False
+
+
+def test_is_audio_device_includes_on_transport_failure(installed_bluez):
+    """Legacy contract: on any bluetoothctl failure the device is included
+    (a transient timeout must not hide a speaker from the scan list)."""
+    installed_bluez.fail("info")
+    assert is_audio_device("AA:BB:CC:DD:EE:FF") is True
 
 
 def test_extract_pair_failure_reason_prefers_failed_to_pair_line():
@@ -363,8 +392,8 @@ def _make_fake_sysfs(tmp_path, entries: dict[str, str]) -> "object":
     """Build a fake ``/sys/class/bluetooth`` directory.
 
     ``entries`` maps ``hciN`` → MAC string (with colons, any case).  Returns
-    the root directory ready to monkeypatch onto
-    ``services.bluetooth._BT_SYSFS_DIR``.
+    the root directory ready to install via the ``bluez_sysfs`` fixture
+    (``BluezControl.sysfs_dir``).
     """
     sysfs = tmp_path / "bluetooth"
     sysfs.mkdir()
@@ -375,16 +404,17 @@ def _make_fake_sysfs(tmp_path, entries: dict[str, str]) -> "object":
     return sysfs
 
 
-def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, monkeypatch):
+def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, bluez_sysfs):
     # Pi built-in (Cypress) registered as hci0; USB BT500 plugged in second
     # registered as hci1.  Sysfs is the canonical mapping — bluetoothctl's
     # internal order may differ, but we must surface the kernel name so the
     # frontend label matches `hciconfig` (issue #193).
-    sysfs = _make_fake_sysfs(
-        tmp_path,
-        {"hci0": "A0:AD:9F:6E:B2:D5", "hci1": "88:A2:9E:C0:07:0D"},
+    bluez_sysfs(
+        _make_fake_sysfs(
+            tmp_path,
+            {"hci0": "A0:AD:9F:6E:B2:D5", "hci1": "88:A2:9E:C0:07:0D"},
+        )
     )
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", sysfs)
 
     assert resolve_hci_for_mac("A0:AD:9F:6E:B2:D5") == "hci0"
     assert resolve_hci_for_mac("88:A2:9E:C0:07:0D") == "hci1"
@@ -392,17 +422,16 @@ def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, monkeypatch)
     assert resolve_hci_for_mac("a0:ad:9f:6e:b2:d5") == "hci0"
 
 
-def test_resolve_hci_for_mac_returns_empty_when_unknown(tmp_path, monkeypatch):
-    sysfs = _make_fake_sysfs(tmp_path, {"hci0": "AA:BB:CC:DD:EE:FF"})
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", sysfs)
+def test_resolve_hci_for_mac_returns_empty_when_unknown(tmp_path, bluez_sysfs):
+    bluez_sysfs(_make_fake_sysfs(tmp_path, {"hci0": "AA:BB:CC:DD:EE:FF"}))
 
     assert resolve_hci_for_mac("00:00:00:00:00:01") == ""
 
 
-def test_resolve_hci_for_mac_returns_empty_when_sysfs_missing(tmp_path, monkeypatch):
+def test_resolve_hci_for_mac_returns_empty_when_sysfs_missing(tmp_path, bluez_sysfs):
     # /sys/class/bluetooth doesn't exist on macOS dev boxes / containers
     # without /sys mounted.  Caller falls back to a synthetic label.
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
+    bluez_sysfs(tmp_path / "missing")
 
     assert resolve_hci_for_mac("AA:BB:CC:DD:EE:FF") == ""
 
@@ -440,52 +469,49 @@ Controller 88:A2:9E:C0:07:0D (public)
 """
 
 
-def test_get_adapter_alias_returns_alias_and_powered_for_targeted_mac():
+def test_get_adapter_alias_returns_alias_and_powered_for_targeted_mac(installed_bluez):
     # Regression for issue #193: each ``show <MAC>`` call returns ONE
     # ``Alias:`` line for the explicitly addressed adapter — no risk of
     # picking up a stale default-controller line.
-    completed = MagicMock(stdout=_SHOW_OUTPUT_CYPRESS, returncode=0)
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run", return_value=completed) as run_mock:
-        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+    installed_bluez.on("show A0:AD:9F:6E:B2:D5", stdout=_SHOW_OUTPUT_CYPRESS)
+
+    alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
 
     assert alias == "SendSpinEG"
     assert powered is True
-    args, kwargs = run_mock.call_args
-    # Confirm we're using the explicit ``show <MAC>`` form, NOT the
-    # ``select <MAC>; show`` recipe that produced the alias swap in #193.
-    assert args[0] == ["bluetoothctl"]
-    assert kwargs["input"] == "show A0:AD:9F:6E:B2:D5\n"
+    # The #193 regression in one line: the addressed alias read must
+    # never emit ``select <MAC>`` — it passes the MAC as a verb argument.
+    installed_bluez.assert_never_selected(verb="show")
+    show_cmds = [c for c in installed_bluez.commands if c.verb == "show"]
+    assert show_cmds and "show A0:AD:9F:6E:B2:D5" in show_cmds[0].script
 
 
-def test_get_adapter_alias_does_not_pick_up_default_controller_alias():
+def test_get_adapter_alias_does_not_pick_up_default_controller_alias(installed_bluez):
     # Even if bluetoothctl banner / async events sneak a ``Pairable: yes``
     # or unrelated ``[CHG] Controller ...`` lines into stdout before the
     # block we want, the alias parser must still find the right one.
     noisy = "Agent registered\n[CHG] Controller 88:A2:9E:C0:07:0D Pairable: yes\n" + _SHOW_OUTPUT_CYPRESS
-    completed = MagicMock(stdout=noisy, returncode=0)
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run", return_value=completed):
-        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+    installed_bluez.on("show A0:AD:9F:6E:B2:D5", stdout=noisy)
+
+    alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
 
     assert alias == "SendSpinEG"
     assert powered is True
 
 
-def test_get_adapter_alias_returns_empty_when_subprocess_fails():
-    with patch(
-        "sendspin_bridge.services.bluetooth.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="bluetoothctl", timeout=5),
-    ):
-        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+def test_get_adapter_alias_returns_empty_when_subprocess_fails(installed_bluez):
+    installed_bluez.timeout("show")
+
+    alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
 
     assert alias == ""
     assert powered is False
 
 
-def test_get_adapter_alias_empty_mac_returns_empty():
+def test_get_adapter_alias_empty_mac_returns_empty(installed_bluez):
     # Defensive: never call bluetoothctl with an empty MAC.
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run") as run_mock:
-        alias, powered = get_adapter_alias("")
+    alias, powered = get_adapter_alias("")
 
     assert alias == ""
     assert powered is False
-    run_mock.assert_not_called()
+    assert installed_bluez.commands == []

@@ -13,14 +13,10 @@ could not be removed via the UI.  These tests lock in the new behaviour:
 
 from __future__ import annotations
 
-import re
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 from flask import Flask
-
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.fixture
@@ -36,22 +32,7 @@ def _make_paired_stdout(devices: list[tuple[str, str]]) -> str:
     return "\n".join(f"Device {mac} {name}" for mac, name in devices)
 
 
-def _extract_selected_adapter(input_text: str) -> str:
-    for line in str(input_text or "").splitlines():
-        clean = _ANSI_RE.sub("", line).strip()
-        if clean.startswith("select "):
-            return clean.split(" ", 1)[1].strip().upper()
-    return ""
-
-
-class _FakeCompletedProcess:
-    def __init__(self, stdout: str = "", stderr: str = "", returncode: int = 0) -> None:
-        self.stdout = stdout
-        self.stderr = stderr
-        self.returncode = returncode
-
-
-def test_paired_enumerates_every_adapter(client, monkeypatch):
+def test_paired_enumerates_every_adapter(client, monkeypatch, installed_bluez):
     """Two adapters, one device bonded on each → both surface with adapters[]."""
 
     import sendspin_bridge.web.routes.api_bt as module
@@ -59,17 +40,12 @@ def test_paired_enumerates_every_adapter(client, monkeypatch):
     adapters = ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"]
     monkeypatch.setattr(module, "list_bt_adapters", lambda: list(adapters))
 
-    per_adapter: dict[str, list[tuple[str, str]]] = {
-        "C0:FB:F9:62:D7:D6": [("AA:AA:AA:AA:AA:01", "Speaker Alpha")],
-        "00:15:83:FF:8F:2B": [("BB:BB:BB:BB:BB:02", "Speaker Bravo")],
-    }
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        input_text = kw.get("input", "") or ""
-        selected = _extract_selected_adapter(input_text)
-        return _FakeCompletedProcess(stdout=_make_paired_stdout(per_adapter.get(selected, [])))
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    installed_bluez.on_adapter("C0:FB:F9:62:D7:D6").on(
+        "devices Paired", stdout=_make_paired_stdout([("AA:AA:AA:AA:AA:01", "Speaker Alpha")])
+    )
+    installed_bluez.on_adapter("00:15:83:FF:8F:2B").on(
+        "devices Paired", stdout=_make_paired_stdout([("BB:BB:BB:BB:BB:02", "Speaker Bravo")])
+    )
 
     resp = client.get("/api/bt/paired")
     assert resp.status_code == 200
@@ -79,9 +55,12 @@ def test_paired_enumerates_every_adapter(client, monkeypatch):
     assert set(by_mac) == {"AA:AA:AA:AA:AA:01", "BB:BB:BB:BB:BB:02"}
     assert by_mac["AA:AA:AA:AA:AA:01"]["adapters"] == ["C0:FB:F9:62:D7:D6"]
     assert by_mac["BB:BB:BB:BB:BB:02"]["adapters"] == ["00:15:83:FF:8F:2B"]
+    # Each adapter was enumerated via its own ``select <MAC>`` scope.
+    assert any(c.verb == "devices" for c in installed_bluez.scoped("C0:FB:F9:62:D7:D6"))
+    assert any(c.verb == "devices" for c in installed_bluez.scoped("00:15:83:FF:8F:2B"))
 
 
-def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch):
+def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch, installed_bluez):
     """Same MAC visible on two adapters collapses to one entry with both MACs."""
 
     import sendspin_bridge.web.routes.api_bt as module
@@ -89,14 +68,10 @@ def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch):
     adapters = ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"]
     monkeypatch.setattr(module, "list_bt_adapters", lambda: list(adapters))
 
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        input_text = kw.get("input", "") or ""
-        selected = _extract_selected_adapter(input_text)
-        if selected in adapters:
-            return _FakeCompletedProcess(stdout=_make_paired_stdout([("CC:CC:CC:CC:CC:03", "Shared Speaker")]))
-        return _FakeCompletedProcess()
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    for adapter in adapters:
+        installed_bluez.on_adapter(adapter).on(
+            "devices Paired", stdout=_make_paired_stdout([("CC:CC:CC:CC:CC:03", "Shared Speaker")])
+        )
 
     resp = client.get("/api/bt/paired")
     assert resp.status_code == 200
@@ -108,40 +83,38 @@ def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch):
     assert sorted(entry["adapters"]) == sorted(adapters)
 
 
-def test_paired_falls_back_when_adapter_list_is_empty(client, monkeypatch):
+def test_paired_falls_back_when_adapter_list_is_empty(client, monkeypatch, installed_bluez):
     """Environments where ``bluetoothctl list`` fails still produce a list."""
 
     import sendspin_bridge.web.routes.api_bt as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        return _FakeCompletedProcess(stdout=_make_paired_stdout([("DD:DD:DD:DD:DD:04", "Lone Speaker")]))
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    installed_bluez.on("devices", stdout=_make_paired_stdout([("DD:DD:DD:DD:DD:04", "Lone Speaker")]))
 
     resp = client.get("/api/bt/paired")
     assert resp.status_code == 200
     devices = resp.get_json()["devices"]
     assert any(d["mac"] == "DD:DD:DD:DD:DD:04" for d in devices)
+    # The unscoped fallback runs plain ``devices`` against the default
+    # controller — no select line, and no "Paired" filter (legacy contract).
+    devices_cmds = [c for c in installed_bluez.commands if c.verb == "devices"]
+    assert devices_cmds and devices_cmds[0].script.strip() == "devices"
+    assert devices_cmds[0].adapter_selected == ""
 
 
-def test_paired_filters_unnamed_devices_by_default(client, monkeypatch):
+def test_paired_filters_unnamed_devices_by_default(client, monkeypatch, installed_bluez):
     import sendspin_bridge.web.routes.api_bt as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: ["11:11:11:11:11:11"])
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        return _FakeCompletedProcess(
-            stdout=_make_paired_stdout(
-                [
-                    ("AA:BB:CC:DD:EE:AA", "Real Speaker"),
-                    ("AA:BB:CC:DD:EE:BB", "AA-BB-CC-DD-EE-BB"),  # MAC-as-name → dropped
-                ]
-            )
-        )
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    installed_bluez.on(
+        "devices Paired",
+        stdout=_make_paired_stdout(
+            [
+                ("AA:BB:CC:DD:EE:AA", "Real Speaker"),
+                ("AA:BB:CC:DD:EE:BB", "AA-BB-CC-DD-EE-BB"),  # MAC-as-name → dropped
+            ]
+        ),
+    )
 
     resp = client.get("/api/bt/paired")
     assert resp.status_code == 200

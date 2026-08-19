@@ -25,7 +25,7 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def bt_manager_with_host():
+def bt_manager_with_host(installed_bluez):
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     posted_updates: list[dict] = []
@@ -40,14 +40,14 @@ def bt_manager_with_host():
         enabled=True,
     )
 
-    with patch("subprocess.check_output", return_value=""):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="Kitchen",
-            enable_a2dp_dance=False,
-            enable_pa_module_reload=False,
-            max_reconnect_fails=5,
-        )
+    installed_bluez.on("show", stdout="")
+    mgr = BluetoothManager(
+        mac_address="AA:BB:CC:DD:EE:FF",
+        device_name="Kitchen",
+        enable_a2dp_dance=False,
+        enable_pa_module_reload=False,
+        max_reconnect_fails=5,
+    )
     mgr.host = host
     return mgr, posted_updates
 

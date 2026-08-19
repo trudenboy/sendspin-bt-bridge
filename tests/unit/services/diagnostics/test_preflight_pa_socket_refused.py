@@ -7,6 +7,10 @@ socket" and "socket but refused" into ``system=unknown``; the new behaviour
 is driven by an explicit ``connect_fn(sock_path)`` probe so the check does
 not depend on ``services.pulse.get_server_name`` raising (the real
 implementation swallows connect errors and returns "not available").
+
+Batch 1 (BluezControl migration): the Bluetooth collector's seam moved
+from ``subprocess_module`` to an injected ``bluez`` — these audio-focused
+tests pass the shared fake so no real bluetoothctl runs.
 """
 
 from __future__ import annotations
@@ -18,29 +22,36 @@ def _runtime_version_stub() -> str:
     return "test"
 
 
-def _subprocess_stub():
-    return type("S", (), {"run": lambda *a, **kw: type("R", (), {"stdout": ""})()})()
-
-
 def _open_stub(*_a, **_kw):
     return __import__("io").StringIO("")
 
 
-def test_socket_exists_connection_refused_sets_system_unreachable(monkeypatch):
+def _base_kwargs(fake_bluez, **overrides):
+    kwargs = {
+        "bluez": fake_bluez.control,
+        "daemon_state_fn": lambda: "unknown",
+        "runtime_version_fn": _runtime_version_stub,
+        "machine_fn": lambda: "x86_64",
+        "open_fn": _open_stub,
+    }
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_socket_exists_connection_refused_sets_system_unreachable(monkeypatch, fake_bluez):
     monkeypatch.setenv("PULSE_SERVER", "unix:/run/user/1000/pulse/native")
 
     def _connect_refused(_sock_path):
         raise ConnectionRefusedError("Connection refused")
 
     result = collect_preflight_status(
-        get_server_name_fn=lambda: "should-not-be-called",
-        list_sinks_fn=lambda: ["should-not-be-called"],
-        subprocess_module=_subprocess_stub(),
-        runtime_version_fn=_runtime_version_stub,
-        machine_fn=lambda: "x86_64",
-        exists_fn=lambda path: path == "/run/user/1000/pulse/native",
-        open_fn=_open_stub,
-        connect_fn=_connect_refused,
+        **_base_kwargs(
+            fake_bluez,
+            get_server_name_fn=lambda: "should-not-be-called",
+            list_sinks_fn=lambda: ["should-not-be-called"],
+            exists_fn=lambda path: path == "/run/user/1000/pulse/native",
+            connect_fn=_connect_refused,
+        )
     )
 
     audio = result["audio"]
@@ -52,7 +63,7 @@ def test_socket_exists_connection_refused_sets_system_unreachable(monkeypatch):
     assert "audio" in result["failed_collections"]
 
 
-def test_socket_exists_permission_denied_does_not_mark_linger(monkeypatch):
+def test_socket_exists_permission_denied_does_not_mark_linger(monkeypatch, fake_bluez):
     """PermissionError from the probe must NOT map to the linger-specific path.
 
     The onboarding layer branches on ``last_error`` text containing "refused";
@@ -66,14 +77,13 @@ def test_socket_exists_permission_denied_does_not_mark_linger(monkeypatch):
         raise PermissionError("Permission denied")
 
     result = collect_preflight_status(
-        get_server_name_fn=lambda: "should-not-be-called",
-        list_sinks_fn=lambda: [],
-        subprocess_module=_subprocess_stub(),
-        runtime_version_fn=_runtime_version_stub,
-        machine_fn=lambda: "x86_64",
-        exists_fn=lambda path: True,
-        open_fn=_open_stub,
-        connect_fn=_connect_denied,
+        **_base_kwargs(
+            fake_bluez,
+            get_server_name_fn=lambda: "should-not-be-called",
+            list_sinks_fn=lambda: [],
+            exists_fn=lambda path: True,
+            connect_fn=_connect_denied,
+        )
     )
 
     audio = result["audio"]
@@ -86,7 +96,7 @@ def test_socket_exists_permission_denied_does_not_mark_linger(monkeypatch):
     assert "audio" in result["failed_collections"]
 
 
-def test_no_socket_and_no_server_sets_system_unknown(monkeypatch):
+def test_no_socket_and_no_server_sets_system_unknown(monkeypatch, fake_bluez):
     monkeypatch.delenv("PULSE_SERVER", raising=False)
 
     probe_calls: list[str] = []
@@ -95,14 +105,13 @@ def test_no_socket_and_no_server_sets_system_unknown(monkeypatch):
         probe_calls.append(sock_path)
 
     result = collect_preflight_status(
-        get_server_name_fn=lambda: "not available",
-        list_sinks_fn=lambda: [],
-        subprocess_module=_subprocess_stub(),
-        runtime_version_fn=_runtime_version_stub,
-        machine_fn=lambda: "x86_64",
-        exists_fn=lambda path: False,
-        open_fn=_open_stub,
-        connect_fn=_probe,
+        **_base_kwargs(
+            fake_bluez,
+            get_server_name_fn=lambda: "not available",
+            list_sinks_fn=lambda: [],
+            exists_fn=lambda path: False,
+            connect_fn=_probe,
+        )
     )
 
     audio = result["audio"]
@@ -112,21 +121,20 @@ def test_no_socket_and_no_server_sets_system_unknown(monkeypatch):
     assert probe_calls == []
 
 
-def test_server_responds_sets_system_pipewire(monkeypatch):
+def test_server_responds_sets_system_pipewire(monkeypatch, fake_bluez):
     monkeypatch.setenv("PULSE_SERVER", "unix:/run/user/1000/pulse/native")
 
     def _probe_ok(_sock_path):
         return None
 
     result = collect_preflight_status(
-        get_server_name_fn=lambda: "PulseAudio (on PipeWire 1.4.2)",
-        list_sinks_fn=lambda: [object(), object()],
-        subprocess_module=_subprocess_stub(),
-        runtime_version_fn=_runtime_version_stub,
-        machine_fn=lambda: "x86_64",
-        exists_fn=lambda path: True,
-        open_fn=_open_stub,
-        connect_fn=_probe_ok,
+        **_base_kwargs(
+            fake_bluez,
+            get_server_name_fn=lambda: "PulseAudio (on PipeWire 1.4.2)",
+            list_sinks_fn=lambda: [object(), object()],
+            exists_fn=lambda path: True,
+            connect_fn=_probe_ok,
+        )
     )
 
     audio = result["audio"]

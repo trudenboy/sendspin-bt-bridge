@@ -310,6 +310,15 @@ class BridgeOrchestrator:
 
             install()
 
+        # The bluetoothctl transport is stdlib-only and cannot ask BlueZ
+        # over D-Bus which controller ``hciN`` is; hand it that lookup
+        # before any Bluetooth work starts, or adapter-scoped commands can
+        # resolve to the wrong controller on hosts whose sysfs carries no
+        # adapter address.
+        from sendspin_bridge.bluetooth.manager import install_dbus_hci_resolver
+
+        install_dbus_hci_resolver()
+
         config = load_config()
         server_host = config.get("SENDSPIN_SERVER", "auto")
         server_port = int(config.get("SENDSPIN_PORT") or 8927)

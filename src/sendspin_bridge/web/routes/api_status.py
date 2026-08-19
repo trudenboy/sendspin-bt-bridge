@@ -22,6 +22,7 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
+from sendspin_bridge.bluetooth.bluez import Outcome, get_bluez
 from sendspin_bridge.config import (
     BUILD_DATE,
     CONFIG_SCHEMA_VERSION,
@@ -138,14 +139,6 @@ def _parse_audio_server_name(line: str) -> str | None:
     return value or None
 
 
-def _parse_bluetoothctl_adapter(stdout: str) -> str | None:
-    """Extract the adapter identifier from ``bluetoothctl list`` output."""
-    parts = stdout.split()
-    if len(parts) < 2:
-        return None
-    return parts[1]
-
-
 def _parse_memtotal_mb(line: str) -> int | None:
     """Extract ``MemTotal`` from /proc/meminfo and convert it to MiB."""
     parts = line.split()
@@ -162,7 +155,6 @@ def _collect_preflight_status() -> dict:
     return _shared_collect_preflight_status(
         get_server_name_fn=get_server_name,
         list_sinks_fn=list_sinks,
-        subprocess_module=subprocess,
         runtime_version_fn=get_runtime_version,
         machine_fn=_platform.machine,
         exists_fn=os.path.exists,
@@ -181,34 +173,31 @@ def _collection_status_payload(status: str, *, count: int | None = None, error: 
 
 
 def _collect_bluetooth_daemon_status() -> str:
-    r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-    if r.returncode == 0 and "Controller" in r.stdout:
+    if get_bluez().list_adapters():
         return "active"
-    r2 = subprocess.run(
-        ["systemctl", "is-active", "bluetooth"],
-        capture_output=True,
-        text=True,
-        timeout=3,
-    )
+    try:
+        r2 = subprocess.run(
+            ["systemctl", "is-active", "bluetooth"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        # Non-systemd hosts (LXC, alpine, WSL) — same contract as the
+        # preflight ``_default_daemon_state``: never false-flag, never crash.
+        return "unknown"
     return r2.stdout.strip() or "inactive"
 
 
 def _collect_adapter_diagnostics() -> list[dict]:
-    r = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-    adapters = []
-    for i, line in enumerate(r.stdout.splitlines()):
-        if "Controller" not in line:
-            continue
-        parts = line.split()
-        mac = next((p for p in parts if len(p) == 17 and p.count(":") == 5), "")
-        adapters.append(
-            {
-                "id": f"hci{i}",
-                "mac": mac,
-                "default": "default" in line.lower(),
-            }
-        )
-    return adapters
+    return [
+        {
+            "id": f"hci{i}",
+            "mac": ref.mac,
+            "default": ref.is_default,
+        }
+        for i, ref in enumerate(get_bluez().list_adapters())
+    ]
 
 
 def _collect_sink_input_diagnostics() -> list[dict]:
@@ -1024,7 +1013,6 @@ def api_diagnostics():
 # /api/bugreport — assembled bug report with masked sensitive data
 # ---------------------------------------------------------------------------
 
-_ANSI_RE_STATUS = re.compile(r"\x1b\[[0-9;]*m")
 
 _MAC_RE = re.compile(
     r"([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})"
@@ -1070,11 +1058,7 @@ def _collect_environment() -> dict:
     }
 
     # BlueZ version
-    try:
-        r = subprocess.run(["bluetoothctl", "--version"], capture_output=True, text=True, timeout=3)
-        env["bluez"] = r.stdout.strip()
-    except Exception:
-        env["bluez"] = "unknown"
+    env["bluez"] = get_bluez().version() or "unknown"
 
     # PulseAudio / PipeWire version
     for cmd in [["pulseaudio", "--version"], ["pipewire", "--version"]]:
@@ -1365,25 +1349,14 @@ def _collect_bt_device_info() -> list[dict]:
         if not mac:
             continue
         entry: dict = {"mac": mac, "name": dev.get("name", "?")}
-        try:
-            r = subprocess.run(
-                ["bluetoothctl"],
-                input=f"info {mac}\n",
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            lines = [_ANSI_RE_STATUS.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
-            for ln in lines:
-                if ":" not in ln:
-                    continue
-                key, _, val = ln.partition(":")
-                k = key.strip().lower().replace(" ", "_")
-                if k in ("paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
-                    entry[k] = val.strip()
-        except Exception:
-            logger.exception("Failed to get BT info for %s", mac)
+        info = get_bluez().device_info(mac)
+        if info.outcome is not Outcome.OK:
+            logger.warning("Failed to get BT info for %s: outcome=%s", mac, info.outcome.value)
             entry["error"] = "Failed to retrieve device info"
+        else:
+            for k in ("paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
+                if k in info.fields:
+                    entry[k] = info.fields[k]
         results.append(entry)
     return results
 

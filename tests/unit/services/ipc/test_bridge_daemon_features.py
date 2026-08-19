@@ -976,3 +976,25 @@ class TestConnectionWatchdog:
         except asyncio.CancelledError:
             pass
         assert status.get("last_error") is None
+
+    @pytest.mark.asyncio
+    async def test_watchdog_inbound_mode_reports_waiting_for_ma(self):
+        """Inbound mode (SENDSPIN_SERVER=auto): the daemon listens and waits
+        for MA to dial in — there is no outbound URL, so the error must say
+        *waiting for MA* and point at mDNS/multicast (the VPN case), not a
+        bogus 'Cannot connect to server at unknown' + SENDSPIN_PORT hint."""
+        status = {"server_connected": False}  # no server_url — inbound listener
+        daemon = _make_bridge_daemon(status)
+        task = asyncio.create_task(daemon._connection_watchdog(delay=0.05))
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        err = status.get("last_error") or ""
+        assert err, "watchdog must still surface the stuck state"
+        assert "unknown" not in err
+        assert "SENDSPIN_PORT" not in err
+        assert "Waiting for Music Assistant" in err
+        assert "mDNS" in err

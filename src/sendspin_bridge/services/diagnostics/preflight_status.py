@@ -9,6 +9,7 @@ import socket as _socket
 import subprocess
 from typing import Any
 
+from sendspin_bridge.bluetooth.bluez import Outcome, get_bluez
 from sendspin_bridge.config import get_runtime_version
 from sendspin_bridge.services.audio.pulse import get_server_name, list_sinks
 
@@ -64,13 +65,6 @@ def collection_status_payload(
     if error is not None:
         payload["error"] = error
     return payload
-
-
-def _parse_bluetoothctl_adapter(stdout: str) -> str | None:
-    parts = stdout.split()
-    if len(parts) < 2:
-        return None
-    return parts[1]
 
 
 def _parse_memtotal_mb(line: str) -> int | None:
@@ -169,11 +163,31 @@ def _build_config_writable_payload(config_dir) -> dict[str, Any]:
     return payload
 
 
+def _default_daemon_state() -> str:
+    """``systemctl is-active bluetooth`` — the one non-bluetoothctl probe.
+
+    Answers the issue-#254 question ("is bluetoothd even running on the
+    host?") when no controller surfaces.  Any subprocess failure maps to
+    ``unknown`` so non-systemd hosts are not false-flagged.
+    """
+    try:
+        probe = subprocess.run(
+            ["systemctl", "is-active", "bluetooth"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return (probe.stdout or "").strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def collect_preflight_status(
     *,
     get_server_name_fn=None,
     list_sinks_fn=None,
-    subprocess_module=None,
+    bluez=None,
+    daemon_state_fn=None,
     runtime_version_fn=None,
     machine_fn=None,
     exists_fn=None,
@@ -183,7 +197,8 @@ def collect_preflight_status(
     """Collect preflight runtime checks for reuse across routes and assistants."""
     get_server_name_fn = get_server_name if get_server_name_fn is None else get_server_name_fn
     list_sinks_fn = list_sinks if list_sinks_fn is None else list_sinks_fn
-    subprocess_module = subprocess if subprocess_module is None else subprocess_module
+    bluez = get_bluez() if bluez is None else bluez
+    daemon_state_fn = _default_daemon_state if daemon_state_fn is None else daemon_state_fn
     runtime_version_fn = get_runtime_version if runtime_version_fn is None else runtime_version_fn
     machine_fn = _platform.machine if machine_fn is None else machine_fn
     exists_fn = os.path.exists if exists_fn is None else exists_fn
@@ -261,38 +276,25 @@ def collect_preflight_status(
         "daemon": "",
     }
     try:
-        result = subprocess_module.run(
-            ["bluetoothctl", "list"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if "Controller" in result.stdout:
+        adapters = bluez.list_adapters()
+        if adapters:
             bt_info["controller"] = True
-            bt_info["adapter"] = _parse_bluetoothctl_adapter(result.stdout)
+            bt_info["adapter"] = adapters[0].mac
             bt_info["daemon"] = "active"
         else:
+            # ``list_adapters()`` returns [] on transport failure by
+            # contract — re-probe once with an outcome-carrying call so a
+            # missing/broken bluetoothctl fails the collection instead of
+            # masquerading as "daemon up, zero controllers".
+            probe = bluez.show()
+            if probe.outcome is not Outcome.OK:
+                raise RuntimeError(f"bluetoothctl transport failed: {probe.outcome.value}")
             # No controller surfaced — probe systemd to disambiguate
-            # "daemon down" from "daemon up but no adapter".  Treat any
-            # subprocess failure as "unknown" so we don't false-flag a
-            # non-systemd host.
-            try:
-                daemon_probe = subprocess_module.run(
-                    ["systemctl", "is-active", "bluetooth"],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                bt_info["daemon"] = (daemon_probe.stdout or "").strip() or "unknown"
-            except Exception:
-                bt_info["daemon"] = "unknown"
-        paired = subprocess_module.run(
-            ["bluetoothctl", "devices", "Paired"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        bt_info["paired_devices"] = paired.stdout.strip().count("Device")
+            # "daemon down" from "daemon up but no adapter" (issue #254).
+            bt_info["daemon"] = daemon_state_fn()
+        # Parsed whitelist rows only — async ``[CHG] Device`` noise on the
+        # same stdout must not inflate the count (ghost-row fix).
+        bt_info["paired_devices"] = len(bluez.list_devices())
         collections_status["bluetooth"] = collection_status_payload("ok", count=bt_info["paired_devices"])
     except Exception as exc:
         failed_collections.append("bluetooth")
