@@ -49,75 +49,6 @@ def _scoped_verbs(fake_bluez, mac: str) -> list[str]:
     return [c.verb for c in fake_bluez.scoped(mac) if c.kind == "run"]
 
 
-class _FakePopen:
-    """Minimal Popen stand-in capturing stdin writes and returning canned output."""
-
-    def __init__(self, stdout_text: str = "Pairing successful\n"):
-        self._stdout_lines = list(stdout_text.splitlines(keepends=True))
-        self.stdin = _FakeWriter()
-        self.stdout = _FakeReader(self._stdout_lines)
-        self._closed = False
-
-    def poll(self) -> int | None:
-        return 0 if self._closed else None
-
-    def communicate(self, timeout: float | None = None) -> tuple[str, str]:
-        remaining = "".join(self._stdout_lines[self.stdout._idx :])
-        self._closed = True
-        return remaining, ""
-
-    def kill(self) -> None:
-        self._closed = True
-
-    def wait(self, timeout: float | None = None) -> int:
-        return 0
-
-
-class _FakeWriter:
-    def __init__(self) -> None:
-        self.buffer: list[str] = []
-
-    def write(self, data: str) -> int:
-        self.buffer.append(data)
-        return len(data)
-
-    def flush(self) -> None:
-        pass
-
-
-class _FakeReader:
-    def __init__(self, lines: list[str]) -> None:
-        self._lines = lines
-        self._idx = 0
-
-    def fileno(self) -> int:  # selectors.DefaultSelector needs this
-        return 0
-
-    def readline(self) -> str:
-        if self._idx >= len(self._lines):
-            return ""
-        line = self._lines[self._idx]
-        self._idx += 1
-        return line
-
-
-class _FakeSelector:
-    """Replacement for ``selectors.DefaultSelector`` that skips real I/O waits."""
-
-    def __init__(self) -> None:
-        self._fd: Any = None
-
-    def register(self, fd: Any, _events: int) -> None:
-        self._fd = fd
-
-    def select(self, timeout: float | None = None):
-        del timeout
-        return [("evt",)] if self._fd is not None else []
-
-    def close(self) -> None:
-        self._fd = None
-
-
 def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
     """POST body's ``adapter`` must reach the background job verbatim."""
 
@@ -199,6 +130,21 @@ def test_reset_reconnect_rejects_invalid_adapter(client, monkeypatch):
     assert not called.is_set()
 
 
+def _session_selects(fake_bluez) -> list[str]:
+    """Controllers the interactive pair session scoped itself to."""
+    return [c.adapter_selected for c in fake_bluez.commands if c.kind in ("popen", "send") and c.adapter_selected]
+
+
+def _pair_ok_script(fake_bluez, mac: str) -> None:
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {mac} Speaker"]),
+            (f"pair {mac}", ["Pairing successful"]),
+            (f"connect {mac}", ["Connection successful"]),
+        ]
+    )
+
+
 def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypatch, installed_bluez):
     """Remove, power-cycle *and* the pair/trust/connect session must all be
     scoped to the requested controller — otherwise the power cycle hits the
@@ -207,34 +153,28 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
 
     import sendspin_bridge.web.routes.api_bt as module
 
-    fake_proc = _FakePopen(stdout_text="Pairing successful\n")
-
-    def fake_popen(*_a: Any, **_kw: Any) -> _FakePopen:
-        return fake_proc
-
-    monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
+    mac = "AA:BB:CC:DD:EE:04"
+    _pair_ok_script(installed_bluez, mac)
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
-    monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
-    monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
-
-    import selectors
-
-    monkeypatch.setattr(selectors, "DefaultSelector", _FakeSelector)
 
     job_id = "job-test-1"
     module.create_scan_job(job_id)
-    module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:04", "C0:FB:F9:62:D7:D6")
+    module._run_reset_reconnect(job_id, mac, "C0:FB:F9:62:D7:D6")
 
     # Remove + power-cycle phases, both scoped to the requested controller.
-    assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6") == ["remove", "power"]
+    assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6")[:2] == ["remove", "power"]
 
-    # Pair/trust/connect session: inspect everything written to the Popen stdin.
-    popen_input = "".join(fake_proc.stdin.buffer)
-    assert _extract_select_lines(popen_input) == ["C0:FB:F9:62:D7:D6"]
-    # Sanity: the adapter-scoped session must still actually pair/trust/connect.
-    assert "pair AA:BB:CC:DD:EE:04" in popen_input
-    assert "trust AA:BB:CC:DD:EE:04" in popen_input
-    assert "connect AA:BB:CC:DD:EE:04" in popen_input
+    # The pair session scopes itself to the same controller…
+    assert set(_session_selects(installed_bluez)) == {"C0:FB:F9:62:D7:D6"}
+    # …and still actually pairs, trusts and connects.
+    sent = " ".join(c.script for c in installed_bluez.commands if c.kind == "send")
+    assert f"pair {mac}" in sent
+    assert f"trust {mac}" in sent
+    assert f"connect {mac}" in sent
+
+    result = module.get_scan_job(job_id)
+    assert result["success"] is True
+    assert result["connected"] is True
 
 
 def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, installed_bluez, tmp_path):
@@ -252,15 +192,9 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, 
 
     import sendspin_bridge.web.routes.api_bt as module
 
-    fake_proc = _FakePopen(stdout_text="Pairing successful\n")
-
-    def fake_popen(*_a: Any, **_kw: Any) -> _FakePopen:
-        return fake_proc
-
-    monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
+    mac = "AA:BB:CC:DD:EE:05"
+    _pair_ok_script(installed_bluez, mac)
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
-    monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
-    monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
     # Pretend the host reports two controllers — hci1's MAC listed FIRST
     # (BlueZ registration order diverges from kernel hciN numbering).
     monkeypatch.setattr(
@@ -280,19 +214,15 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, 
 
     set_bluez(BluezControl(spawner=installed_bluez, sysfs_dir=sysfs))
 
-    import selectors
-
-    monkeypatch.setattr(selectors, "DefaultSelector", _FakeSelector)
-
     job_id = "job-test-hci"
     module.create_scan_job(job_id)
-    module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:05", "hci1")
+    module._run_reset_reconnect(job_id, mac, "hci1")
 
     # Every phase must name the resolved MAC, never the hciN alias.
-    assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6") == ["remove", "power"]
-    popen_input = "".join(fake_proc.stdin.buffer)
-    assert _extract_select_lines(popen_input) == ["C0:FB:F9:62:D7:D6"]
-    assert "select hci1" not in popen_input.lower()
+    assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6")[:2] == ["remove", "power"]
+    assert set(_session_selects(installed_bluez)) == {"C0:FB:F9:62:D7:D6"}
+    selected = {c.adapter_selected for c in installed_bluez.commands if c.adapter_selected}
+    assert "hci1" not in selected
 
 
 def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, installed_bluez, tmp_path):
@@ -305,21 +235,18 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, i
 
     import sendspin_bridge.web.routes.api_bt as module
 
-    monkeypatch.setattr(module.subprocess, "Popen", lambda *_a, **_kw: _FakePopen())
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
-    monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
-    monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
     # No sysfs visibility: the kernel map is empty, so nothing can resolve
     # ``hci0`` and it must pass through unchanged.
     monkeypatch.setattr(installed_bluez.control, "_sysfs_dir", tmp_path / "missing")
+    # …and D-Bus can't answer either (the last resolution step before the
+    # pass-through; on a host with a live controller it would resolve).
+    monkeypatch.setattr(module, "build_hci_map", lambda: {})
+    monkeypatch.setattr(module, "_dbus_get_adapter_address", lambda _hci: None)
     # No controllers anywhere: the endpoint keeps ``hci0`` and the transport
     # has nothing to resolve it against either.
     installed_bluez.on("list", stdout="")
-
-    import selectors
-
-    monkeypatch.setattr(selectors, "DefaultSelector", _FakeSelector)
 
     job_id = "job-test-fallback"
     module.create_scan_job(job_id)
@@ -328,3 +255,30 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, i
     removes = [c for c in installed_bluez.commands if c.kind == "run" and c.verb == "remove"]
     assert removes, "remove phase never ran"
     assert removes[0].adapter_selected == "hci0"
+
+
+def test_run_reset_reconnect_retries_the_pin_ladder(monkeypatch, installed_bluez):
+    """Reset-and-reconnect used to give up on the first PIN. Sharing the
+    pairing composite means a legacy speaker gets the same ladder the
+    manual pair flow has always had.
+    """
+
+    import sendspin_bridge.web.routes.api_bt as module
+
+    mac = "AA:BB:CC:DD:EE:07"
+    installed_bluez.session_script(
+        [
+            (f"pair {mac}", ["[agent] Enter PIN code:"]),
+            ("0000", ["Failed to pair: org.bluez.Error.AuthenticationFailed"]),
+            ("1234", ["Pairing successful"]),
+        ]
+    )
+    monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
+
+    job_id = "job-test-pins"
+    module.create_scan_job(job_id)
+    module._run_reset_reconnect(job_id, mac, "C0:FB:F9:62:D7:D6")
+
+    replied = [c.script.strip() for c in installed_bluez.commands if c.kind == "reply"]
+    assert replied == ["0000", "1234"]
+    assert module.get_scan_job(job_id)["success"] is True

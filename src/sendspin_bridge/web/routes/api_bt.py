@@ -8,11 +8,9 @@ import concurrent.futures
 import json
 import logging
 import re
-import subprocess
 import threading
 import time
 import uuid
-from typing import Any
 
 from flask import Blueprint, jsonify, request
 
@@ -31,7 +29,6 @@ from sendspin_bridge.services.bluetooth import (
 from sendspin_bridge.services.bluetooth import bt_remove_device as _bt_remove_device
 from sendspin_bridge.services.bluetooth import persist_device_released as _persist_device_released
 from sendspin_bridge.services.bluetooth.bt_class_of_device import read_device_class as _read_device_class
-from sendspin_bridge.services.bluetooth.pairing_agent import PairingAgent
 from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_peers
 from sendspin_bridge.services.lifecycle.async_job_state import (
     create_scan_job,
@@ -826,159 +823,63 @@ def _run_reset_reconnect(
     no_input_no_output_agent: bool = False,
     allow_hfp_profile: bool = False,
 ) -> None:
-    """Remove device, then pair + trust + connect from scratch."""
+    """Drop the bond, power-cycle the controller, then pair + trust + connect.
+
+    The reset is this path's own contribution; the pairing that follows is
+    the shared choreography, so this flow now gets the popular-PIN ladder
+    and the failure fingerprint it never had.
+    """
     adapter = _resolve_adapter_to_mac(adapter)
     bluez = get_bluez()
     scope = Adapter.of(adapter)
     try:
-        # Step 1: Remove existing pairing
         logger.info("Reset & Reconnect %s: removing…", mac)
         bluez.remove(mac, scope)
         time.sleep(1)
 
-        # Step 2: Power cycle adapter
+        # A controller power cycle clears the kernel-side link state that
+        # survives `remove` and keeps some speakers from bonding again.
         bluez.power(False, scope)
         time.sleep(2)
 
-        # Step 3: Pair from scratch (power on + scan + pair, trust only after success)
         logger.info("Reset & Reconnect %s: pairing…", mac)
-
-        # Native BlueZ agent first — same contract as _run_standalone_pair_inner.
-        # DisplayYesNo is the default because it reached Bonded: yes on Synergy
-        # 65 S in the #168 reproduction where the stdin-yes race kept losing.
-        native_agent: PairingAgent | None = None
-        try:
-            native_agent = PairingAgent(
+        outcome = PairSession(
+            bluez,
+            adapter=scope,
+            mac=mac,
+            options=PairOptions(
+                pins=COMMON_BT_PAIR_PINS,
                 capability="NoInputNoOutput" if no_input_no_output_agent else "DisplayYesNo",
-                pin="0000",
-                allow_hfp=allow_hfp_profile,
-                target_mac=mac,
-            ).__enter__()
-            logger.info("Reset & Reconnect %s: native agent active", mac)
-        except Exception as exc:
-            native_agent = None
-            logger.warning(
-                "Reset & Reconnect %s: native agent unavailable (%s) — falling back to bluetoothctl agent",
-                mac,
-                exc,
-            )
+                allow_hfp=bool(allow_hfp_profile),
+                connect_after_trust=True,
+                timings=PairTimings(
+                    scan_window_s=_PAIR_SCAN_DURATION,
+                    pair_wait_s=_PAIR_WAIT_DURATION,
+                    # The connect result and the closing ``info`` block land
+                    # during this window; without it the job reports
+                    # ``connected: false`` for a speaker that did connect.
+                    post_trust_settle_s=5.0,
+                ),
+            ),
+            label=mac,
+        ).run()
 
-        # Outer try/finally guarantees native_agent cleanup even when
-        # ``subprocess.Popen(["bluetoothctl"])`` below raises before the
-        # inner proc-scoped finally has a chance to run.  Otherwise the
-        # agent thread / SystemBus connection leaks per failed attempt.
-        try:
-            initial_cmds = []
-            if adapter:
-                initial_cmds.append(f"select {adapter}")
-            initial_cmds.append("power on")
-            if native_agent is None:
-                initial_cmds.extend(
-                    ["agent NoInputNoOutput" if no_input_no_output_agent else "agent on", "default-agent"]
-                )
-            initial_cmds.append("scan bredr")
-            pair_cmds = [f"pair {mac}"]
-
-            proc = subprocess.Popen(
-                ["bluetoothctl"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            try:
-                if proc.stdin is None:
-                    raise RuntimeError("bluetoothctl stdin unavailable")
-
-                proc.stdin.write("\n".join(initial_cmds) + "\n")
-                proc.stdin.flush()
-                time.sleep(_PAIR_SCAN_DURATION)
-
-                proc.stdin.write("\n".join(pair_cmds) + "\n")
-                proc.stdin.flush()
-
-                import selectors
-
-                collected: list[str] = []
-                paired_ok = False
-                deadline = time.monotonic() + _PAIR_WAIT_DURATION
-                sel = selectors.DefaultSelector()
-                sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
-                try:
-                    while time.monotonic() < deadline and proc.poll() is None:
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
-                            break
-                        events = sel.select(timeout=min(remaining, 0.5))
-                        if not events:
-                            continue
-                        line = proc.stdout.readline()  # type: ignore[union-attr]
-                        if not line:
-                            break
-                        collected.append(line)
-                        stripped = line.strip().lower()
-                        if "confirm passkey" in stripped or "request confirmation" in stripped:
-                            logger.info("SSP passkey prompt — auto-confirming")
-                            proc.stdin.write("yes\n")
-                            proc.stdin.flush()
-                        if "pairing successful" in stripped or "already paired" in stripped:
-                            paired_ok = True
-                            time.sleep(1)
-                            break
-                finally:
-                    sel.close()
-
-                if paired_ok:
-                    proc.stdin.write(f"trust {mac}\nconnect {mac}\n")
-                proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-                proc.stdin.flush()
-                if paired_ok:
-                    time.sleep(5)
-
-                try:
-                    tail, _ = proc.communicate(timeout=3)
-                    collected.append(tail)
-                except subprocess.TimeoutExpired:
-                    pass
-
-                out = "".join(collected)
-                ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-                connected = "connection successful" in out.lower() or "connected: yes" in out.lower()
-                agent_telemetry: dict[str, Any] | None = None
-                if native_agent is not None:
-                    try:
-                        agent_telemetry = native_agent.telemetry
-                    except Exception as exc:
-                        logger.debug("Reset & Reconnect %s: telemetry read failed: %s", mac, exc)
-                logger.info(
-                    "Reset & Reconnect %s: paired=%s connected=%s agent=%s (last 400: %s)",
-                    mac,
-                    ok,
-                    connected,
-                    agent_telemetry,
-                    out[-400:],
-                )
-                finish_scan_job(
-                    job_id,
-                    {
-                        "success": ok,
-                        "connected": connected,
-                        "mac": mac,
-                        "agent_telemetry": agent_telemetry,
-                    },
-                )
-            finally:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass
-        finally:
-            if native_agent is not None:
-                try:
-                    native_agent.__exit__(None, None, None)
-                except Exception as exc:
-                    logger.debug("Reset & Reconnect %s: agent cleanup error: %s", mac, exc)
+        logger.info(
+            "Reset & Reconnect %s: paired=%s connected=%s agent=%s",
+            mac,
+            outcome.success,
+            outcome.connected,
+            outcome.agent_telemetry,
+        )
+        finish_scan_job(
+            job_id,
+            {
+                "success": outcome.success,
+                "connected": outcome.connected,
+                "mac": mac,
+                "agent_telemetry": outcome.agent_telemetry,
+            },
+        )
     except Exception:
         logger.exception("Reset & Reconnect error for %s", mac)
         finish_scan_job(job_id, {"success": False, "mac": mac, "error": "Reset & reconnect failed"})
