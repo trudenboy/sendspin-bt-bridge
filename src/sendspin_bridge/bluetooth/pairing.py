@@ -31,7 +31,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, LineKind
+from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, LineKind, parse_device_info
 from sendspin_bridge.services.bluetooth import (
     classify_pair_failure,
     describe_pair_failure,
@@ -305,6 +305,9 @@ class PairSession:
         lowered = output.lower()
         success = state.paired_ok or any(marker in lowered for marker in _OUTPUT_SUCCESS_MARKERS)
         connected = any(marker in lowered for marker in _CONNECTED_MARKERS)
+        bond_reason = self._bond_missing_on_adapter(output) if success else ""
+        if bond_reason:
+            success = False
         telemetry = self._read_telemetry(agent)
         logger.info(
             "Pair %s: success=%s connected=%s pin=%s agent=%s",
@@ -324,7 +327,8 @@ class PairSession:
                 agent_telemetry=telemetry,
             )
         reason = (
-            describe_pair_failure(output, pin_attempted=state.pin_attempted, pin_used=state.pin)
+            bond_reason
+            or describe_pair_failure(output, pin_attempted=state.pin_attempted, pin_used=state.pin)
             or "no explicit bluetoothctl reason captured"
         )
         # Read the rejection off the raw output rather than the rendered
@@ -349,6 +353,38 @@ class PairSession:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _bond_missing_on_adapter(self, output: str) -> str:
+        """Reason the claimed pair did not land on the requested controller.
+
+        BlueZ bonds are per-controller.  When the device is already bonded
+        on another local adapter the SSP exchange never fires and the
+        session prints ``Pairing successful`` regardless, so a two-adapter
+        host reports success while every later connect on the requested
+        adapter bounces.  The trailing ``info`` ran under this session's
+        ``select``, which makes it the requested adapter's own view.
+
+        Only meaningful when an adapter was actually selected — under
+        ``Adapter.DEFAULT`` the ``info`` reflects whichever controller
+        BlueZ chose and cannot falsify the pair.  Returns an empty string
+        when the bond is confirmed or unverifiable.
+        """
+        if self._adapter.is_default or not self._adapter.ident:
+            return ""
+        # The raw field, not ``DeviceInfo.paired``: the property is
+        # tri-state and returns None when the info block carries no
+        # ``Device <mac>`` header — exactly the unbonded case.
+        verify = parse_device_info(output, self._mac)
+        if verify.fields.get("paired", "").lower() != "no":
+            return ""
+        logger.warning(
+            "Pair %s: session claimed success but the bond is not on %s (paired=%s present=%s)",
+            self._label,
+            self._adapter.ident,
+            verify.fields.get("paired"),
+            verify.present,
+        )
+        return f"device is not Paired on adapter {self._adapter.ident}; remove it from the other adapter first"
 
     def _clear_stale_agent_and_bond(self) -> None:
         """Drop a lingering agent object and any stale bond for the target.

@@ -290,3 +290,60 @@ def test_before_pair_hook_runs_before_the_pair_command(fake_bluez, agent):
 
     assert len(calls) == 1
     assert calls[0] <= (_sent_pair_at(fake_bluez) or 0.0)
+
+
+def test_success_is_rejected_when_the_bond_is_not_on_the_requested_adapter(fake_bluez, agent):
+    """Live two-adapter failure: the device is already bonded on the other
+    controller, so the SSP exchange never fires and the session prints
+    "Pairing successful" anyway while the bond stays put.  The trailing
+    ``info`` runs under the requested adapter's ``select``, so its raw
+    ``Paired:`` field is the authority."""
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+            (f"info {MAC}", [f"Device {MAC} (public)", "\tPaired: no", "\tTrusted: no"]),
+        ]
+    )
+
+    outcome = _session(fake_bluez, agent).run()
+
+    assert outcome.success is False
+    assert ADAPTER_MAC in outcome.reason
+    assert "remove it from the other adapter" in outcome.reason
+
+
+def test_success_stands_when_the_bond_is_confirmed_on_the_requested_adapter(fake_bluez, agent):
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+            (f"info {MAC}", [f"Device {MAC} (public)", "\tPaired: yes", "\tTrusted: yes"]),
+        ]
+    )
+
+    outcome = _session(fake_bluez, agent).run()
+
+    assert outcome.success is True
+
+
+def test_bond_verification_is_skipped_without_an_adapter_scope(fake_bluez, agent):
+    """With no ``select`` the trailing ``info`` reflects whichever controller
+    BlueZ chose, so it cannot falsify the pair."""
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+            (f"info {MAC}", ["Paired: no"]),
+        ]
+    )
+
+    outcome = PairSession(
+        fake_bluez.control,
+        adapter=Adapter.DEFAULT,
+        mac=MAC,
+        options=PairOptions(timings=PairTimings(scan_window_s=12.0, pair_wait_s=15.0)),
+        agent_factory=lambda **_kw: agent,
+    ).run()
+
+    assert outcome.success is True

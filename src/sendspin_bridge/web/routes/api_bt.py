@@ -16,17 +16,16 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez, parse_device_info
+from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.dbus import _dbus_get_adapter_address
+from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
     COMMON_BT_PAIR_PINS,
     build_hci_map,
     classify_audio_capability,
-    describe_pair_failure,
     get_adapter_alias,
-    is_pin_rejection,
     list_bt_adapters,
 )
 from sendspin_bridge.services.bluetooth import bt_remove_device as _bt_remove_device
@@ -1377,353 +1376,48 @@ def _run_standalone_pair(
     no_input_no_output_agent: bool = False,
     allow_hfp_profile: bool = False,
 ) -> None:
-    """Run pair + trust via bluetoothctl for a device not yet in config.
+    """Pair + trust a device that is not yet in the config.
 
     Compatibility options apply to this pairing job only and are never
-    sourced from persisted global configuration.
-
-    When the device asks for a legacy PIN and rejects our first guess,
-    the orchestrator retries the whole pair flow with the next PIN from
-    ``COMMON_BT_PAIR_PINS``. Non-PIN failures (connection errors,
-    timeouts) stop the loop — they aren't PIN-related and retrying
-    wastes ~20 s per attempt.
+    sourced from persisted global configuration.  The pairing choreography
+    itself — early pair on discovery, SSP auto-confirm, the popular-PIN
+    ladder — lives in :class:`PairSession`, shared with the monitor loop's
+    re-pair and with reset-and-reconnect.
     """
     adapter = _resolve_adapter_to_mac(adapter)
 
-    def _attempt(pin: str):
-        if quiesce and adapter:
-            with quiesce_adapter_peers(adapter, exclude_mac=mac):
-                return _run_standalone_pair_inner(
-                    job_id,
-                    mac,
-                    adapter,
-                    pin=pin,
-                    no_input_no_output_agent=no_input_no_output_agent,
-                    allow_hfp_profile=allow_hfp_profile,
-                )
-        return _run_standalone_pair_inner(
-            job_id,
-            mac,
-            adapter,
-            pin=pin,
-            no_input_no_output_agent=no_input_no_output_agent,
-            allow_hfp_profile=allow_hfp_profile,
-        )
+    attempt_context = None
+    if quiesce and adapter:
 
-    tried_pins: list[str] = []
-    last_reason = ""
-    for pin in COMMON_BT_PAIR_PINS:
-        tried_pins.append(pin)
-        result = _attempt(pin)
-        last_reason = result.get("reason", "") or last_reason
-        if result.get("success"):
-            logger.info("Standalone pair %s: OK", mac)
-            finish_scan_job(job_id, {"success": True, "mac": mac})
-            return
-        if not result.get("pin_rejected"):
-            logger.warning(
-                "Standalone pair %s: FAIL (%s)",
-                mac,
-                result.get("reason") or "no explicit bluetoothctl reason captured",
-            )
-            finish_scan_job(job_id, {"success": False, "mac": mac})
-            return
-        logger.warning(
-            "Standalone pair %s: PIN %s rejected — retrying with next candidate",
-            mac,
-            pin,
-        )
+        def attempt_context():
+            # Single-adapter hosts can't pair while another A2DP ACL is up;
+            # park the peers for the duration of each attempt.
+            return quiesce_adapter_peers(adapter, exclude_mac=mac)
 
-    # All popular PINs exhausted. The device almost certainly requires a
-    # custom PIN that the bridge can't auto-enter — surface that loud so
-    # the operator doesn't have to grep per-attempt warnings.
-    logger.warning(
-        "Standalone pair %s: FAIL — device rejected all popular PINs (%s). "
-        "Likely requires a custom PIN; the bridge cannot auto-enter non-popular PINs. "
-        "Last bluetoothctl reason: %s",
-        mac,
-        ", ".join(tried_pins),
-        last_reason or "no explicit bluetoothctl reason captured",
+    options = PairOptions(
+        pins=COMMON_BT_PAIR_PINS,
+        # NoInputNoOutput forces Just-Works SSP for speakers that cancel a
+        # passkey exchange; opt-in per request (issue #168).
+        capability="NoInputNoOutput" if no_input_no_output_agent else "DisplayYesNo",
+        allow_hfp=bool(allow_hfp_profile),
+        timings=PairTimings(
+            scan_window_s=_PAIR_SCAN_DURATION,
+            pair_wait_s=_PAIR_WAIT_DURATION,
+        ),
     )
-    finish_scan_job(job_id, {"success": False, "mac": mac})
 
-
-def _run_standalone_pair_inner(
-    job_id: str,
-    mac: str,
-    adapter: str,
-    *,
-    pin: str = "0000",
-    no_input_no_output_agent: bool = False,
-    allow_hfp_profile: bool = False,
-) -> dict:
-    """Actual bluetoothctl pair flow — split out so quiesce wraps the whole op.
-
-    Returns a dict ``{success, pin_attempted, pin_rejected, reason, output}``
-    so the outer orchestrator can decide whether to retry with a different
-    PIN or surface the failure to the UI.
-    """
     try:
-        # `agent off` tears down any agent object lingering on the system bus
-        # from a previous bluetoothctl session. Without it, `agent on` below
-        # can return `Failed to register agent object`, leaving the pair
-        # without an authentication agent and producing
-        # `org.bluez.Error.ConnectionAttemptFailed` (issue #162).
-        get_bluez().run(
-            ["agent off", f"remove {mac}"],
+        outcome = PairSession(
+            get_bluez(),
             adapter=Adapter.of(adapter),
-            tier=Deadline.MUTATE,
-        )
-        time.sleep(1)
-
-        # `agent NoInputNoOutput` forces Just-Works SSP (both sides auto-accept
-        # without a passkey exchange). Many consumer BT audio sinks cancel
-        # authentication when the default `KeyboardDisplay` agent negotiates
-        # a passkey; opt-in toggle lets affected users work around it (issue #168).
-        use_no_io_agent = bool(no_input_no_output_agent)
-        agent_cmd = "agent NoInputNoOutput" if use_no_io_agent else "agent on"
-
-        # Native D-Bus agent: exports org.bluez.Agent1 directly so BlueZ calls
-        # RequestConfirmation / RequestPinCode on us without the bluetoothctl
-        # stdin-``yes`` race that loses to SSP agent timeouts on some speakers
-        # (issue #168, Synergy 65 S). Default capability is DisplayYesNo — the
-        # same one manual ``bluetoothctl`` uses, which reached ``Bonded: yes``
-        # in the issue reproduction. Falls back to bluetoothctl's built-in
-        # agent if dbus-fast / SystemBus are unavailable.
-        native_capability = "NoInputNoOutput" if use_no_io_agent else "DisplayYesNo"
-        native_agent: PairingAgent | None = None
-        try:
-            native_agent = PairingAgent(
-                capability=native_capability,
-                pin=pin,
-                allow_hfp=bool(allow_hfp_profile),
-                target_mac=mac,
-            ).__enter__()
-            logger.info(
-                "Standalone pair %s: native agent active (cap=%s)",
-                mac,
-                native_capability,
-            )
-        except Exception as exc:
-            native_agent = None
-            logger.warning(
-                "Standalone pair %s: native pairing agent unavailable (%s) — falling back to bluetoothctl stdin agent",
-                mac,
-                exc,
-            )
-
-        # Outer try/finally guarantees native_agent cleanup even if the
-        # bluetoothctl subprocess fails to launch before the inner
-        # proc-scoped finally has a chance to run.
-        try:
-            initial_cmds: list[str] = []
-            if adapter:
-                initial_cmds.append(f"select {adapter}")
-            initial_cmds.append("power on")
-            if native_agent is None:
-                # No native agent → rely on bluetoothctl's built-in agent as before.
-                initial_cmds.extend([agent_cmd, "default-agent"])
-            initial_cmds.append("scan bredr")
-
-            pair_cmds = [f"pair {mac}"]
-
-            proc = subprocess.Popen(
-                ["bluetoothctl"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            try:
-                if proc.stdin is None:
-                    raise RuntimeError("bluetoothctl stdin unavailable")
-
-                proc.stdin.write("\n".join(initial_cmds) + "\n")
-                proc.stdin.flush()
-
-                # Read stdout to auto-confirm SSP passkey
-                import selectors
-
-                collected: list[str] = []
-                paired_ok = False
-                pair_sent = False
-                pin_attempted = False
-                # Single loop that handles both scan-window observation and pair
-                # outcome parsing. `pair <mac>` fires as soon as `[NEW] Device <mac>`
-                # appears, rather than waiting the full `_PAIR_SCAN_DURATION` fixed
-                # sleep — shaves typical pair-mode window from ~12s to ~1-3s so the
-                # speaker is still accepting when `pair` arrives (issue #168).
-                mac_lower = mac.lower()
-                start = time.monotonic()
-                scan_deadline = start + _PAIR_SCAN_DURATION
-                full_deadline = scan_deadline + _PAIR_WAIT_DURATION
-                sel = selectors.DefaultSelector()
-                sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
-                try:
-                    while proc.poll() is None:
-                        now = time.monotonic()
-                        # Fire `pair` at scan deadline if device never advertised.
-                        if not pair_sent and now >= scan_deadline:
-                            proc.stdin.write("\n".join(pair_cmds) + "\n")
-                            proc.stdin.flush()
-                            pair_sent = True
-                        if now >= full_deadline:
-                            break
-                        end = full_deadline if pair_sent else scan_deadline
-                        remaining = end - now
-                        if remaining <= 0:
-                            continue
-                        events = sel.select(timeout=min(remaining, 0.5))
-                        if not events:
-                            continue
-                        line = proc.stdout.readline()  # type: ignore[union-attr]
-                        if not line:
-                            break
-                        collected.append(line)
-                        low = line.lower()
-                        stripped = line.strip().lower()
-
-                        if not pair_sent and "[new] device" in low and mac_lower in low:
-                            logger.debug("Device %s visible via scan, firing pair early", mac)
-                            proc.stdin.write("\n".join(pair_cmds) + "\n")
-                            proc.stdin.flush()
-                            pair_sent = True
-                            continue
-
-                        if "confirm passkey" in stripped or "request confirmation" in stripped:
-                            logger.info("SSP passkey prompt — auto-confirming: %s", line.strip())
-                            proc.stdin.write("yes\n")
-                            proc.stdin.flush()
-                        elif "enter pin code" in stripped or "enter passkey" in stripped:
-                            # Legacy BT 2.x devices (e.g. HMDX JAM, `LegacyPairing: yes`)
-                            # ask for a numeric PIN. `0000` is the BlueZ-default fallback
-                            # and works for most consumer audio sinks (issue #162). If
-                            # this attempt is a retry, the outer orchestrator supplies
-                            # the next popular PIN from ``COMMON_BT_PAIR_PINS``.
-                            logger.info("Legacy PIN prompt — auto-entering %s: %s", pin, line.strip())
-                            proc.stdin.write(f"{pin}\n")
-                            proc.stdin.flush()
-                            pin_attempted = True
-                        if "pairing successful" in stripped or "already paired" in stripped:
-                            paired_ok = True
-                            break
-                finally:
-                    sel.close()
-
-                # Safety net: ensure `pair` was sent at least once even if the loop
-                # exited via proc.poll() before the scan deadline.
-                if not pair_sent and proc.poll() is None:
-                    proc.stdin.write("\n".join(pair_cmds) + "\n")
-                    proc.stdin.flush()
-
-                if paired_ok:
-                    proc.stdin.write(f"trust {mac}\n")
-                proc.stdin.write(f"info {mac}\nscan off\nquit\n")
-                proc.stdin.flush()
-
-                try:
-                    tail, _ = proc.communicate(timeout=3)
-                    collected.append(tail)
-                except subprocess.TimeoutExpired:
-                    pass
-
-                out = "".join(collected)
-                ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
-                reason = ""
-                if ok and adapter:
-                    # Verify the bond landed on the REQUESTED adapter.  The
-                    # session already ran ``select <adapter>`` … ``info <mac>``,
-                    # so ``out`` carries that adapter's view: BlueZ bonds are
-                    # per-controller, and when the device was already bonded on
-                    # another local adapter the SSP exchange does not fire and
-                    # the session prints "Pairing successful" anyway — a
-                    # verbatim replay of the live two-adapter failure where the
-                    # job reported success while the bond stayed on hci0 and
-                    # every subsequent connect on hci1 bounced.
-                    verify = parse_device_info(out, mac)
-                    # Read the raw ``Paired:`` field, not ``DeviceInfo.paired``
-                    # — the property is tri-state and returns None when the
-                    # trailing info block lacks a ``Device <mac>`` header,
-                    # which is exactly the unbonded-on-this-adapter case.
-                    if verify.fields.get("paired", "").lower() == "no":
-                        ok = False
-                        reason = f"device is not Paired on adapter {adapter}; remove it from the other adapter first"
-                        logger.warning(
-                            "Standalone pair %s: session claimed success but bond is not on %s (paired=%s present=%s)",
-                            mac,
-                            adapter,
-                            verify.fields.get("paired"),
-                            verify.present,
-                        )
-                pin_rejected = False
-                if not ok:
-                    reason = (
-                        describe_pair_failure(out, pin_attempted=pin_attempted, pin_used=pin)
-                        or "no explicit bluetoothctl reason captured"
-                    )
-                    # A PIN rejection means the device asked for a PIN AND the
-                    # attempt failed with AuthenticationFailed — derived from
-                    # the raw bluetoothctl output so the check is independent
-                    # of the human-readable `reason` wording (otherwise a reword
-                    # of `describe_pair_failure` would silently break retry).
-                    pin_rejected = pin_attempted and is_pin_rejection(out)
-                    # Log full captured output (not just a tail) so passkey/agent
-                    # prompts near the start of the session are visible in bug
-                    # reports. bluetoothctl's SSP dialog is typically <4 KB per
-                    # pair attempt (issue #168 diagnostic lost with 800-byte tail).
-                    logger.debug("Standalone pair %s output (pin=%s): %s", mac, pin, out)
-                # Structured pair-agent telemetry: what BlueZ asked us, passkey
-                # shown, authorized/rejected services.  Emitted regardless of
-                # outcome so success telemetry (e.g. "which capability worked")
-                # stays visible alongside failure triage.
-                agent_telemetry: dict[str, Any] | None = None
-                if native_agent is not None:
-                    try:
-                        agent_telemetry = native_agent.telemetry
-                        logger.info(
-                            "Standalone pair %s agent telemetry: outcome=%s capability=%s "
-                            "methods=%s passkey=%s cancelled=%s authorized=%s rejected=%s",
-                            mac,
-                            "success" if ok else "fail",
-                            agent_telemetry.get("capability"),
-                            agent_telemetry.get("method_calls"),
-                            agent_telemetry.get("last_passkey"),
-                            agent_telemetry.get("peer_cancelled"),
-                            agent_telemetry.get("authorized_services"),
-                            agent_telemetry.get("rejected_services"),
-                        )
-                    except Exception as exc:
-                        logger.debug("Standalone pair %s: telemetry read failed: %s", mac, exc)
-                return {
-                    "success": ok,
-                    "pin_attempted": pin_attempted,
-                    "pin_rejected": pin_rejected,
-                    "reason": reason,
-                    "output": out,
-                    "agent_telemetry": agent_telemetry,
-                }
-            finally:
-                try:
-                    proc.kill()
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass
-        finally:
-            if native_agent is not None:
-                try:
-                    native_agent.__exit__(None, None, None)
-                except Exception as exc:
-                    logger.debug(
-                        "Standalone pair %s: native agent cleanup error (non-fatal): %s",
-                        mac,
-                        exc,
-                    )
+            mac=mac,
+            options=options,
+            attempt_context=attempt_context,
+            label=mac,
+        ).run()
     except Exception:
         logger.exception("Standalone pair error for %s", mac)
-        return {
-            "success": False,
-            "pin_attempted": False,
-            "pin_rejected": False,
-            "reason": "Pairing failed",
-            "output": "",
-        }
+        finish_scan_job(job_id, {"success": False, "mac": mac})
+        return
+
+    finish_scan_job(job_id, {"success": outcome.success, "mac": mac})
