@@ -114,6 +114,18 @@ class BluezControl:
         self._sleep = sleeper
 
     # ------------------------------------------------------------------
+    # Clock
+    # ------------------------------------------------------------------
+
+    def now(self) -> float:
+        """The injected monotonic clock — composites must not read their own."""
+        return self._time()
+
+    def sleep(self, seconds: float) -> None:
+        """The injected sleeper (instant under the test fake)."""
+        self._sleep(seconds)
+
+    # ------------------------------------------------------------------
     # Scoping
     # ------------------------------------------------------------------
 
