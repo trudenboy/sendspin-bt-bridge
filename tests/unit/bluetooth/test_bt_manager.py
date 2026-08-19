@@ -149,14 +149,17 @@ def test_resolve_adapter_select_prefers_dbus_over_bluetoothctl_list_order():
     assert mgr._adapter_select == "F0:2F:74:6B:3C:BD"
 
 
-def test_resolve_adapter_select_falls_back_to_bluetoothctl_list_when_dbus_unavailable():
+def test_resolve_adapter_select_falls_back_to_bluetoothctl_list_when_dbus_unavailable(installed_bluez):
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
-    bluetoothctl_list = "Controller AA:AA:AA:AA:AA:AA first [default]\nController BB:BB:BB:BB:BB:BB second \n"
+    installed_bluez.on(
+        "list",
+        stdout="Controller AA:AA:AA:AA:AA:AA first [default]\nController BB:BB:BB:BB:BB:BB second \n",
+    )
 
     with (
         patch("subprocess.check_output", return_value=""),
-        patch("subprocess.run", return_value=MagicMock(stdout=bluetoothctl_list)),
+        patch("subprocess.run", return_value=MagicMock(stdout="")),
         patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address", return_value=None),
     ):
         mgr = BluetoothManager(
@@ -1190,35 +1193,38 @@ def test_resolve_adapter_hci_name_returns_config_adapter_directly():
     assert mgr.adapter_hci_name == "hci1"
 
 
-def test_resolve_adapter_hci_name_bluetoothctl_fallback():
-    """When sysfs is unavailable, falls back to bluetoothctl list output."""
+def test_resolve_adapter_hci_name_bluetoothctl_fallback(installed_bluez):
+    """When sysfs is unavailable, falls back to the bluetoothctl controller list."""
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
-    bt_list_output = "Controller C0:FB:F9:62:D6:9D MyAdapter1 [default]\nController C0:FB:F9:62:D7:D6 MyAdapter2\n"
+    installed_bluez.on(
+        "list",
+        stdout="Controller C0:FB:F9:62:D6:9D MyAdapter1 [default]\nController C0:FB:F9:62:D7:D6 MyAdapter2\n",
+    )
 
     with (
         patch("subprocess.check_output", return_value=""),
         patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value="C0:FB:F9:62:D7:D6"),
         patch("pathlib.Path.iterdir", side_effect=OSError("no sysfs")),
-        patch("subprocess.run") as mock_run,
+        patch("subprocess.run", return_value=MagicMock(stdout="")),
     ):
-        mock_run.return_value = MagicMock(stdout=bt_list_output, returncode=0)
         mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF")
 
     assert mgr.adapter_hci_name == "hci1"
 
 
-def test_resolve_adapter_hci_name_empty_when_all_fail():
-    """Returns empty string when both sysfs and bluetoothctl fail."""
+def test_resolve_adapter_hci_name_empty_when_all_fail(installed_bluez):
+    """Returns empty string when both sysfs and the controller list lack the MAC."""
     from sendspin_bridge.bluetooth.manager import BluetoothManager
+
+    installed_bluez.on("list", stdout="Controller AA:BB:CC:DD:EE:00 Adapter\n")
 
     with (
         patch("subprocess.check_output", return_value=""),
         patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value="FF:FF:FF:FF:FF:FF"),
         patch("pathlib.Path.iterdir", side_effect=OSError("no sysfs")),
-        patch("subprocess.run") as mock_run,
+        patch("subprocess.run", return_value=MagicMock(stdout="")),
     ):
-        mock_run.return_value = MagicMock(stdout="Controller AA:BB:CC:DD:EE:00 Adapter\n", returncode=0)
         mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF")
 
     assert mgr.adapter_hci_name == ""

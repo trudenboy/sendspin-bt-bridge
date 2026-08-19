@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
+from sendspin_bridge.bluetooth.bluez import get_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
@@ -426,21 +427,11 @@ class BluetoothManager:
                         return hci.name
         except Exception as exc:
             logger.debug("sysfs adapter lookup failed: %s", exc)
-        # Fallback: count adapter positions in bluetoothctl output (fragile, but last resort)
-        try:
-            result = subprocess.run(["bluetoothctl", "list"], capture_output=True, text=True, timeout=5)
-            idx = 0
-            for line in result.stdout.splitlines():
-                if "Controller" not in line:
-                    continue
-                for part in line.split():
-                    if len(part) == 17 and part.count(":") == 5:
-                        if part.upper() == effective:
-                            return f"hci{idx}"
-                        idx += 1
-                        break
-        except Exception as exc:
-            logger.debug("bluetoothctl adapter fallback failed: %s", exc)
+        # Fallback: count adapter positions in the controller list (fragile,
+        # but last resort) — the transport/parser live in bluetooth.bluez.
+        for idx, ref in enumerate(get_bluez().list_adapters()):
+            if ref.mac.upper() == effective:
+                return f"hci{idx}"
         return ""
 
     def _resolve_adapter_select(self, adapter: str) -> str:
@@ -462,26 +453,10 @@ class BluetoothManager:
         if dbus_addr:
             logger.info("Resolved adapter %s → %s", adapter, dbus_addr)
             return dbus_addr.upper()
-        try:
-            result = subprocess.run(
-                ["bluetoothctl", "list"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            # Parse "Controller <MAC> description [default]" lines
-            macs = []
-            for line in result.stdout.splitlines():
-                if "Controller" in line:
-                    for part in line.split():
-                        if len(part) == 17 and part.count(":") == 5:
-                            macs.append(part.upper())
-                            break
-            if idx < len(macs):
-                logger.info("Resolved adapter %s → %s", adapter, macs[idx])
-                return macs[idx]
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.debug("Adapter MAC resolution failed: %s", e)
+        macs = [ref.mac.upper() for ref in get_bluez().list_adapters()]
+        if idx < len(macs):
+            logger.info("Resolved adapter %s → %s", adapter, macs[idx])
+            return macs[idx]
         return adapter  # Fall back to hciN name
 
     def _run_bluetoothctl(self, commands: list) -> tuple[bool, str]:

@@ -17,6 +17,23 @@ def fake_bluez():
 
 
 @pytest.fixture
+def installed_bluez(fake_bluez):
+    """Install the fake as the shared ``get_bluez()`` singleton.
+
+    Call sites migrated to BluezControl resolve the transport through
+    ``get_bluez()``; this fixture points the singleton at the fake for
+    the duration of the test and resets it afterwards.
+    """
+    from sendspin_bridge.bluetooth.bluez import set_bluez
+
+    set_bluez(fake_bluez.control)
+    try:
+        yield fake_bluez
+    finally:
+        set_bluez(None)
+
+
+@pytest.fixture
 def tmp_config(tmp_path):
     """Provide a temporary config file and set CONFIG_FILE/CONFIG_DIR."""
     config_file = tmp_path / "config.json"

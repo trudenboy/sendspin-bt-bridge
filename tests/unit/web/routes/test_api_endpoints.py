@@ -3697,7 +3697,6 @@ def test_api_status_parse_helpers_are_defensive():
     """Diagnostics parsers must return None instead of raising on malformed input."""
     from sendspin_bridge.web.routes.api_status import (
         _parse_audio_server_name,
-        _parse_bluetoothctl_adapter,
         _parse_memtotal_mb,
         _parse_sink_input_id,
     )
@@ -3708,15 +3707,12 @@ def test_api_status_parse_helpers_are_defensive():
     assert _parse_audio_server_name("Server Name: PulseAudio") == "PulseAudio"
     assert _parse_audio_server_name("Server Name") is None
 
-    assert _parse_bluetoothctl_adapter("Controller AA:BB:CC:DD:EE:FF adapter") == "AA:BB:CC:DD:EE:FF"
-    assert _parse_bluetoothctl_adapter("Controller") is None
-
     assert _parse_memtotal_mb("MemTotal: 2048000 kB") == 2000
     assert _parse_memtotal_mb("MemTotal:") is None
     assert _parse_memtotal_mb("MemTotal: nope kB") is None
 
 
-def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkeypatch):
+def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkeypatch, installed_bluez):
     """GET /api/diagnostics should expose playing state and parsed sink-input metadata."""
     import sendspin_bridge.bridge.state as state
     import sendspin_bridge.web.routes.api_status as api_status
@@ -3740,12 +3736,8 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
     )
 
     def fake_run(cmd, capture_output=True, text=True, timeout=5):
-        if cmd == ["bluetoothctl", "list"]:
-            return SimpleNamespace(
-                returncode=0,
-                stdout="Controller AA:BB:CC:DD:EE:FF Test [default]\n",
-                stderr="",
-            )
+        # bluetoothctl no longer flows through subprocess here — the
+        # diagnostics collectors use the installed_bluez transport.
         if cmd == ["pactl", "list", "sink-inputs"]:
             return SimpleNamespace(
                 returncode=0,
@@ -3888,7 +3880,7 @@ def test_collect_preflight_status_surfaces_audio_probe_failure(monkeypatch):
     assert payload["audio"]["system"] == "unknown"
 
 
-def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(client, monkeypatch):
+def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(client, monkeypatch, installed_bluez):
     import subprocess
 
     import sendspin_bridge.bridge.state as state
@@ -3905,8 +3897,8 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
     )
 
     def fake_run(cmd, capture_output=True, text=True, timeout=5):
-        if cmd == ["bluetoothctl", "list"]:
-            return SimpleNamespace(returncode=0, stdout="Controller AA:BB:CC:DD:EE:FF Test [default]\n", stderr="")
+        # bluetoothctl no longer flows through subprocess here — the
+        # diagnostics collectors use the installed_bluez transport.
         if cmd == ["systemctl", "is-active", "bluetooth"]:
             return SimpleNamespace(returncode=0, stdout="active\n", stderr="")
         if cmd == ["pactl", "list", "sink-inputs"]:

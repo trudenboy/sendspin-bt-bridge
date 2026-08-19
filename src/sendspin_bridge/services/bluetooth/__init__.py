@@ -13,6 +13,7 @@ import tempfile
 import threading
 from pathlib import Path
 
+from sendspin_bridge.bluetooth.bluez import get_bluez
 from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
 from sendspin_bridge.config import config_lock as _config_lock
 
@@ -60,7 +61,6 @@ _AUDIO_UUIDS = {
     "0000111e",  # Hands-Free
 }
 
-_ADAPTER_RE = re.compile(r"Controller\s+([\dA-F:]{17})\s", re.IGNORECASE)
 _MAC_RE = re.compile(r"^[\dA-Fa-f]{2}(:[\dA-Fa-f]{2}){5}$")
 _BLUEZ_ERROR_RE = re.compile(r"org\.bluez\.Error\.[A-Za-z]+")
 
@@ -232,17 +232,12 @@ def get_adapter_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:
 
 
 def list_bt_adapters(timeout: int = 5) -> list[str]:
-    """Return list of BT adapter MAC addresses from ``bluetoothctl list``."""
-    try:
-        result = subprocess.run(
-            ["bluetoothctl", "list"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return _ADAPTER_RE.findall(result.stdout)
-    except (subprocess.SubprocessError, OSError):
-        return []
+    """Return list of BT adapter MAC addresses from ``bluetoothctl list``.
+
+    Transport and parsing live in ``bluetooth.bluez``; this wrapper stays
+    because the name is a monkeypatch seam across the route/demo tests.
+    """
+    return [ref.mac for ref in get_bluez().list_adapters(timeout=float(timeout))]
 
 
 def extract_pair_failure_reason(output: str, *, tail_chars: int = 400) -> str:
