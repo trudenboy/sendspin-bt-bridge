@@ -93,6 +93,40 @@ def test_bt_remove_device_cache_cleanup_missing_file_does_not_raise(tmp_path, mo
         target_fn()  # must not raise
 
 
+def test_bt_remove_device_cache_cleanup_permission_denied_is_debug_not_warning(
+    tmp_path, monkeypatch, installed_bluez, caplog
+):
+    """Unprivileged environments (LXC without /var/lib/bluetooth write
+    access) make the unlink fail with EACCES.  That is environmental noise,
+    not a malfunction — the stale cache only matters on the next pair and
+    the warning fires on every remove otherwise (12× in one live session).
+    Permission errors log at DEBUG; unexpected OS errors still warn."""
+    import logging
+
+    import sendspin_bridge.services.bluetooth as _bt_mod
+
+    adapter_mac = "C0:FB:F9:62:D6:9D"
+    device_mac = "AA:BB:CC:DD:EE:FF"
+    bluez_root = tmp_path / "var_lib_bluetooth"
+    cache_dir = bluez_root / adapter_mac / "cache"
+    cache_dir.mkdir(parents=True)
+    cache_file = cache_dir / device_mac
+    cache_file.write_text("[ServiceRecords] stale junk")
+    monkeypatch.setattr(_bt_mod, "_BLUEZ_LIB_DIR", bluez_root)
+
+    def _deny(self, *a, **k):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(type(cache_file), "unlink", _deny)
+
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.bluetooth"):
+        _bt_mod._clean_bluez_cache(adapter_mac, device_mac)
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert not warnings, f"EACCES must not warn, got: {[r.getMessage() for r in warnings]}"
+    assert any("cache" in r.getMessage().lower() for r in caplog.records if r.levelno == logging.DEBUG)
+
+
 def test_bt_remove_device_skips_cache_cleanup_without_adapter(tmp_path, monkeypatch, installed_bluez):
     """No adapter MAC → no known cache path → cleanup must not walk the
     BlueZ tree blindly (could match the wrong device if multiple

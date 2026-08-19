@@ -16,7 +16,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez, parse_device_info
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
@@ -1608,6 +1608,31 @@ def _run_standalone_pair_inner(
                 out = "".join(collected)
                 ok = paired_ok or any(s in out.lower() for s in ("pairing successful", "already paired", "paired: yes"))
                 reason = ""
+                if ok and adapter:
+                    # Verify the bond landed on the REQUESTED adapter.  The
+                    # session already ran ``select <adapter>`` … ``info <mac>``,
+                    # so ``out`` carries that adapter's view: BlueZ bonds are
+                    # per-controller, and when the device was already bonded on
+                    # another local adapter the SSP exchange does not fire and
+                    # the session prints "Pairing successful" anyway — a
+                    # verbatim replay of the live two-adapter failure where the
+                    # job reported success while the bond stayed on hci0 and
+                    # every subsequent connect on hci1 bounced.
+                    verify = parse_device_info(out, mac)
+                    # Read the raw ``Paired:`` field, not ``DeviceInfo.paired``
+                    # — the property is tri-state and returns None when the
+                    # trailing info block lacks a ``Device <mac>`` header,
+                    # which is exactly the unbonded-on-this-adapter case.
+                    if verify.fields.get("paired", "").lower() == "no":
+                        ok = False
+                        reason = f"device is not Paired on adapter {adapter}; remove it from the other adapter first"
+                        logger.warning(
+                            "Standalone pair %s: session claimed success but bond is not on %s (paired=%s present=%s)",
+                            mac,
+                            adapter,
+                            verify.fields.get("paired"),
+                            verify.present,
+                        )
                 pin_rejected = False
                 if not ok:
                     reason = (

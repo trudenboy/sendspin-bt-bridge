@@ -73,14 +73,18 @@ _BLUEZ_LIB_DIR: Path = Path("/var/lib/bluetooth")
 def _clean_bluez_cache(adapter_mac: str, device_mac: str) -> None:
     """Best-effort removal of the stale BlueZ cache file for *device_mac*
     under *adapter_mac*. Silent on ``FileNotFoundError`` (already gone);
-    warns on other OS errors but never raises — the caller runs in a
-    daemon thread and must not die."""
+    DEBUG on ``PermissionError`` (unprivileged LXC without write access to
+    /var/lib/bluetooth — environmental noise, not a malfunction); warns on
+    other OS errors but never raises — the caller runs in a daemon thread
+    and must not die."""
     cache_file = _BLUEZ_LIB_DIR / adapter_mac / "cache" / device_mac
     try:
         cache_file.unlink()
         logger.info("BlueZ cache: removed stale %s", cache_file)
     except FileNotFoundError:
         pass
+    except PermissionError as e:
+        logger.debug("BlueZ cache cleanup skipped (no write access) for %s: %s", cache_file, e)
     except OSError as e:
         logger.warning("BlueZ cache cleanup failed for %s: %s", cache_file, e)
 

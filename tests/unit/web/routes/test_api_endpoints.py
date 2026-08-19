@@ -405,6 +405,55 @@ def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(monkeypatch):
     assert "remove AA:BB:CC:DD:EE:FF\n" in cleanup_input
 
 
+def test_run_standalone_pair_fails_when_bond_not_on_requested_adapter(monkeypatch):
+    """Live two-adapter failure (rc.1 stand): device already bonded on hci0,
+    pair requested on hci1 — the SSP exchange never fires, the session prints
+    "Pairing successful" anyway, and the job used to report success while the
+    bond stayed on hci0.  The post-session ``info`` (run after
+    ``select <hci1>``) shows the requested adapter's view; when it lacks
+    ``Paired: yes`` the attempt must fail with an actionable reason."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    # Session claims success, but the trailing `info` (scoped to hci1 via the
+    # in-session ``select``) reports the device as not paired there.
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: no\nTrusted: no\n")
+    finish_job = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"])
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-bond", "AA:BB:CC:DD:EE:FF", "hci1")
+
+    payload = finish_job.call_args[0][1]
+    assert payload["success"] is False
+    assert payload["mac"] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_run_standalone_pair_succeeds_when_bond_confirmed_on_requested_adapter(monkeypatch):
+    """Happy path guard for the new verification: session claims success and
+    the trailing scoped ``info`` shows ``Paired: yes`` → success."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    fake_proc = _FakeProc(stdout_lines=["Pairing successful\n"], tail="Paired: yes\nTrusted: yes\n")
+    finish_job = MagicMock()
+
+    monkeypatch.setattr(api_bt_mod.subprocess, "run", MagicMock())
+    monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
+    monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
+    monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"])
+
+    with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
+        api_bt_mod._run_standalone_pair("job-ok", "AA:BB:CC:DD:EE:FF", "hci1")
+
+    payload = finish_job.call_args[0][1]
+    assert payload["success"] is True
+
+
 def test_run_standalone_pair_passes_mac_through_unchanged(monkeypatch):
     """MAC inputs must never be mutated by ``_resolve_adapter_to_mac``."""
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
