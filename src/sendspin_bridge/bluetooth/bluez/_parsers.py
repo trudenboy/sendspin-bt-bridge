@@ -109,6 +109,10 @@ class DeviceInfo:
     fields: dict[str, str]
     raw: tuple[str, ...]
     outcome: Outcome = Outcome.OK
+    # ``Device <MAC> not available`` — the controller answered and knows
+    # nothing about this device.  Distinct from ``present=False`` alone,
+    # which also covers output that carried no info block at all.
+    not_available: bool = False
 
     def _field_bool(self, key: str) -> bool | None:
         if self.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE) or not self.present:
@@ -276,7 +280,14 @@ def parse_device_info(stdout: str, mac: str, *, outcome: Outcome = Outcome.OK) -
         header = _INFO_HEADER_RE.match(line)
         if header and header.group(1).upper() == mac.upper():
             if "not available" in header.group(2).lower():
-                return DeviceInfo(mac=mac, present=False, fields={}, raw=raw_lines, outcome=outcome)
+                return DeviceInfo(
+                    mac=mac,
+                    present=False,
+                    fields={},
+                    raw=raw_lines,
+                    outcome=outcome,
+                    not_available=True,
+                )
             present = True
     return DeviceInfo(mac=mac, present=present, fields=fields, raw=raw_lines, outcome=outcome)
 

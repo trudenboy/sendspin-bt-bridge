@@ -14,11 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Disconnecting a speaker from the web UI now targets the controller that speaker is paired to, instead of whichever controller Bluetooth happened to have selected. On multi-adapter systems this could disconnect the wrong device.
+- Disconnecting a speaker now reports failure when the Bluetooth command itself failed, instead of treating a command that produced no output as a completed disconnect.
 - Powering a Bluetooth controller on or off from the web UI now works when the controller is picked by its `hci` name, which previously failed on Home Assistant OS and LXC installs.
 - Bluetooth commands aimed at a controller by its `hci` name now reach that controller on hosts where the system does not publish the controller's address, instead of falling back to an ordering that can point at a different adapter. Powering a controller off could switch off the wrong one.
 - Powering a controller on or off now reports the state the controller actually ends up in, instead of reporting a failure whenever Bluetooth confirmed the change too late to be seen.
 - Pairing and reset-and-reconnect now identify the chosen controller through the kernel's own adapter numbering, with the Bluetooth service as a second opinion. On hosts with more than one adapter these paths could otherwise run against the wrong controller, which showed up as a speaker that paired "successfully" and then refused every connection.
-- Pairing a speaker that is still bonded to another controller on the same host now fails with an explanation instead of reporting success while the bond stays where it was.
+- Pairing a speaker that is still bonded to another controller on the same host now fails with an explanation instead of reporting success while the bond stays where it was — including when the chosen controller reports it does not know the speaker at all.
 - Forcing a reconnect from the web UI and disconnecting from Home Assistant now wait for a scan or pairing to finish, so two Bluetooth operations can no longer drive the controller at once and corrupt each other's results.
 - Automatic reconnect now defers to an in-progress scan or pairing instead of competing with it.
 - Automatic re-pairing after a lost bond now starts pairing as soon as the speaker appears instead of always waiting out a fixed discovery window, and honours the pairing options chosen in the web UI. Previously only manual pairing did.

@@ -179,3 +179,17 @@ def test_resolve_unnamed_devices_skips_cache_when_all_named(installed_bluez):
     api_bt._resolve_unnamed_devices({"AA:BB:CC:DD:EE:01"}, {"AA:BB:CC:DD:EE:01": "Known"})
 
     assert installed_bluez.commands == []
+
+
+def test_enrich_scan_device_defaults_to_audio_when_bluetoothctl_exits_nonzero(installed_bluez):
+    """A non-zero exit is a transport failure like any other: the device must
+    be included rather than dropped on the strength of an info block the
+    command itself reported as failed — even when that partial block carries
+    a non-audio Class of Device."""
+    installed_bluez.nonzero("info", stdout=_CLASS_PHONE, stderr="org.bluez.Error.Failed\n")
+
+    device, reason = api_bt._enrich_scan_device("11:22:33:44:55:66", {}, audio_only=True)
+
+    assert device is not None
+    assert device["audio_capable"] is True
+    assert reason is None

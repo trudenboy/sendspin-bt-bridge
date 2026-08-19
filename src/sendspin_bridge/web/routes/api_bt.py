@@ -695,7 +695,10 @@ def api_bt_disconnect():
                 owner = ref.mac
                 break
         result = bluez.disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
-        if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+        if result.outcome is not Outcome.OK:
+            # Any non-OK outcome is a failed disconnect.  A non-zero exit
+            # often carries its error on stderr alone, where the
+            # silence-means-success heuristic below would read it as done.
             logger.error("Failed to disconnect device %s: outcome=%s", mac, result.outcome.value)
             return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
         # BlueZ ≥5.72 prints "Attempting to disconnect…" and stays silent on
@@ -1092,7 +1095,10 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
     if not validate_mac(mac):
         return {"mac": mac, "name": mac, "audio_capable": True}, None
     info = get_bluez().device_info(mac, timeout=4.0)
-    if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+    if info.outcome is not Outcome.OK:
+        # Legacy contract: never drop a scannable speaker on the strength of
+        # an info block the command itself reported as failed — a non-zero
+        # exit can still leave a partial block behind.
         return {"mac": mac, "name": names.get(mac, mac), "audio_capable": True}, None
     if mac not in names and info.name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", info.name):
         names[mac] = info.name

@@ -300,8 +300,9 @@ class FakeBluez:
             _Handler(match=match, adapter=None, exc=subprocess.TimeoutExpired(cmd="bluetoothctl", timeout=5))
         )
 
-    def nonzero(self, match, *, stderr: str = "") -> None:
-        self._handlers.append(_Handler(match=match, adapter=None, returncode=1, stderr=stderr))
+    def nonzero(self, match, *, stdout: str = "", stderr: str = "") -> None:
+        """A non-zero exit, optionally with the partial output it left behind."""
+        self._handlers.append(_Handler(match=match, adapter=None, returncode=1, stdout=stdout, stderr=stderr))
 
     def hang(self, match, *, seconds: float = 30.0) -> None:
         """Advance the fake clock past the deadline, then time out."""

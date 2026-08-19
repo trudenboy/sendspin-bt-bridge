@@ -375,7 +375,11 @@ class PairSession:
         # tri-state and returns None when the info block carries no
         # ``Device <mac>`` header — exactly the unbonded case.
         verify = parse_device_info(output, self._mac)
-        if verify.fields.get("paired", "").lower() != "no":
+        # ``Paired: no`` and ``Device <MAC> not available`` are the same
+        # answer from this controller's point of view: the bond is not
+        # here.  Output with no info block at all is not an answer and
+        # must not turn a confirmed pair into a failure.
+        if verify.fields.get("paired", "").lower() != "no" and not verify.not_available:
             return ""
         logger.warning(
             "Pair %s: session claimed success but the bond is not on %s (paired=%s present=%s)",

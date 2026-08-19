@@ -76,3 +76,16 @@ def test_disconnect_failure_marker_is_not_ok(client, installed_bluez):
     response = client.post("/api/bt/disconnect", json={"mac": ENEBY_MAC})
 
     assert response.get_json()["ok"] is False
+
+
+def test_disconnect_reports_failure_when_bluetoothctl_exits_nonzero(client, installed_bluez):
+    """A non-zero exit whose error text lands on stderr (or nowhere) has no
+    failure marker in stdout, so the silence-means-success heuristic read it
+    as a completed disconnect."""
+    _two_adapters_one_device(installed_bluez)
+    installed_bluez.nonzero("disconnect", stderr="org.bluez.Error.NotConnected\n")
+
+    response = client.post("/api/bt/disconnect", json={"mac": ENEBY_MAC})
+
+    assert response.status_code == 500
+    assert response.get_json()["ok"] is False

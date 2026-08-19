@@ -293,3 +293,20 @@ def test_summarize_connect_output_empty_for_pure_prompt_and_event_noise():
         "[bluetooth]#\n"
     )
     assert summarize_connect_output(lines) == ""
+
+
+def test_parse_device_info_separates_explicit_not_available_from_a_missing_block():
+    """ "Device <MAC> not available" is an answer — the controller knows
+    nothing about this device — while output without an info block at all is
+    simply no answer.  Callers that act on absence must tell them apart."""
+    explicit = parse_device_info(f"Device {ENEBY_MAC} not available\n", ENEBY_MAC)
+    assert explicit.present is False
+    assert explicit.not_available is True
+
+    silent = parse_device_info("Attempting to pair with 6C:5C:3D:35:17:99\n", ENEBY_MAC)
+    assert silent.present is False
+    assert silent.not_available is False
+
+    # Another device's absence says nothing about the one we asked about.
+    other = parse_device_info("Device AA:BB:CC:DD:EE:FF not available\n", ENEBY_MAC)
+    assert other.not_available is False

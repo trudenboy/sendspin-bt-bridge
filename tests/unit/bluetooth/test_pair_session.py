@@ -347,3 +347,37 @@ def test_bond_verification_is_skipped_without_an_adapter_scope(fake_bluez, agent
     ).run()
 
     assert outcome.success is True
+
+
+def test_success_is_rejected_when_the_target_is_unknown_to_the_requested_adapter(fake_bluez, agent):
+    """The requested controller answering ``Device <MAC> not available`` is
+    the normal view when the bond lives on another adapter — the same
+    cross-controller false success as an explicit ``Paired: no``."""
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+            (f"info {MAC}", [f"Device {MAC} not available"]),
+        ]
+    )
+
+    outcome = _session(fake_bluez, agent).run()
+
+    assert outcome.success is False
+    assert ADAPTER_MAC in outcome.reason
+
+
+def test_success_stands_when_the_session_never_reported_the_info_block(fake_bluez, agent):
+    """A missing info block is not evidence against the bond — the session
+    may simply have been drained before it arrived — so it must not turn a
+    confirmed pair into a failure."""
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Lenco LS-500"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+        ]
+    )
+
+    outcome = _session(fake_bluez, agent).run()
+
+    assert outcome.success is True
