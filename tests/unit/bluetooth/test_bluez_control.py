@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from sendspin_bridge.bluetooth.bluez import Adapter, Outcome
+from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome
 
 ADAPTER_MAC = "C0:FB:F9:62:D7:D6"
 ENEBY_MAC = "6C:5C:3D:35:17:99"
@@ -199,3 +199,51 @@ def test_scan_composite_surfaces_refused_discovery(bluez, fake_bluez):
     fake_bluez.session_script([("scan bredr", ["Failed to start discovery: org.bluez.Error.InProgress"])])
     transcript = bluez.scan([ADAPTER_MAC], window_s=1.0)
     assert transcript.discovery_errors == ("org.bluez.Error.InProgress",)
+
+
+# ---------------------------------------------------------------------------
+# hci_map — kernel MAC → hciN enumeration (sysfs canonical; hciconfig fallback)
+# ---------------------------------------------------------------------------
+
+_HCICONFIG_OUT = """hci0:\tType: Primary  Bus: USB
+\tBD Address: C0:FB:F9:62:D7:D6  ACL MTU: 1021:8  SCO MTU: 64:1
+\tUP RUNNING
+\tRX bytes:1024 acl:0 sco:0 events:12 errors:0
+"""
+
+
+def _sysfs_tree(tmp_path, entries):
+    root = tmp_path / "bluetooth"
+    root.mkdir()
+    for name, addr in entries.items():
+        hci = root / name
+        hci.mkdir()
+        (hci / "address").write_text(addr + "\n")
+    return root
+
+
+def test_hci_map_reads_kernel_names_from_sysfs(tmp_path, fake_bluez):
+    sysfs = _sysfs_tree(tmp_path, {"hci0": "A0:AD:9F:6E:B2:D5", "hci1": "88:a2:9e:c0:07:0d"})
+    control = BluezControl(spawner=fake_bluez, sysfs_dir=sysfs)
+
+    # Keys are uppercase, colon-stripped — what resolve_hci_for_mac looks up.
+    # Sysfs is canonical for the kernel hciN label (issue #193).
+    assert control.hci_map() == {"A0AD9F6EB2D5": "hci0", "88A29EC0070D": "hci1"}
+    assert fake_bluez.commands == []  # sysfs answered — no subprocess spawned
+
+
+def test_hci_map_falls_back_to_hciconfig_when_sysfs_missing(tmp_path, fake_bluez):
+    fake_bluez.on("hciconfig", stdout=_HCICONFIG_OUT)
+    control = BluezControl(spawner=fake_bluez, sysfs_dir=tmp_path / "missing")
+
+    # Docker without /sys passthrough: hciconfig talks to the kernel via the
+    # BlueZ control socket and prints the same canonical hciN labels.
+    assert control.hci_map() == {"C0FBF962D7D6": "hci0"}
+    assert fake_bluez.commands[-1].argv == ("hciconfig", "-a")
+
+
+def test_hci_map_empty_when_sysfs_and_hciconfig_both_fail(tmp_path, fake_bluez):
+    fake_bluez.fail("hciconfig")
+    control = BluezControl(spawner=fake_bluez, sysfs_dir=tmp_path / "missing")
+
+    assert control.hci_map() == {}
