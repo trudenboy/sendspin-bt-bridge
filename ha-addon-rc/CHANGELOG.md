@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.1] - 2026-08-19
+
+### Changed
+- Pairing a speaker, repairing it through reset-and-reconnect, and the automatic re-pair after a lost bond now all run the same pairing sequence, so an option or fix that helps one of them helps all three.
+
+### Fixed
+- Disconnecting a speaker from the web UI now targets the controller that speaker is paired to, instead of whichever controller Bluetooth happened to have selected. On multi-adapter systems this could disconnect the wrong device.
+- Powering a Bluetooth controller on or off from the web UI now works when the controller is picked by its `hci` name, which previously failed on Home Assistant OS and LXC installs.
+- Pairing and reset-and-reconnect now identify the chosen controller through the kernel's own adapter numbering, with the Bluetooth service as a second opinion. On hosts with more than one adapter these paths could otherwise run against the wrong controller, which showed up as a speaker that paired "successfully" and then refused every connection.
+- Pairing a speaker that is still bonded to another controller on the same host now fails with an explanation instead of reporting success while the bond stays where it was.
+- Forcing a reconnect from the web UI and disconnecting from Home Assistant now wait for a scan or pairing to finish, so two Bluetooth operations can no longer drive the controller at once and corrupt each other's results.
+- Automatic reconnect now defers to an in-progress scan or pairing instead of competing with it.
+- Automatic re-pairing after a lost bond now starts pairing as soon as the speaker appears instead of always waiting out a fixed discovery window, and honours the pairing options chosen in the web UI. Previously only manual pairing did.
+- Repairing a speaker through reset-and-reconnect now retries the common PINs, answers older speakers' PIN prompts, and reports why pairing failed, matching manual pairing.
+- A controller that refuses to start a scan is now reported as a failure instead of looking like an empty room.
+- The Bluetooth device-info window no longer shows terminal control codes or prompt fragments among the device's properties.
+- Connection-failure log lines no longer quote the command that was sent as if it were the error reported by Bluetooth.
+- Diagnostics no longer break on hosts without systemd, no longer report a device as absent when the Bluetooth tooling itself failed, and distinguish a broken Bluetooth setup from a working one with no controllers.
+- When the bridge is waiting for Music Assistant to connect to it, connection diagnostics now say so and point at network discovery, instead of naming a server address that does not exist and sending the operator to the wrong end of the link.
+- A pairing or scan request that fails to start no longer leaves Bluetooth operations blocked until the next restart.
+- Cleaning up a stale Bluetooth cache entry no longer logs a warning on installs without write access to it; the cleanup is optional and only matters for the next pairing attempt.
+
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)

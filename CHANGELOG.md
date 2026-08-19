@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.1] - 2026-08-19
+
 ### Changed
 - Pairing a speaker, repairing it through reset-and-reconnect, and the automatic re-pair after a lost bond now all run the same pairing sequence, so an option or fix that helps one of them helps all three.
 
