@@ -15,8 +15,6 @@ Two specific regressions guarded here:
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 from flask import Flask
 
@@ -95,31 +93,21 @@ def test_api_bt_adapters_falls_back_to_index_label_without_sysfs(tmp_path, monke
     ]
 
 
-def test_api_bt_adapters_uses_explicit_show_form_for_alias(tmp_path, monkeypatch, client):
+def test_api_bt_adapters_uses_explicit_show_form_for_alias(tmp_path, monkeypatch, client, installed_bluez):
     # Direct end-to-end check that the endpoint goes through
     # ``get_adapter_alias`` (which uses ``show <MAC>``) — not the legacy
     # ``select <MAC>; show`` path that produced the alias swap in #193.
     monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
     monkeypatch.setattr("sendspin_bridge.web.routes.api_bt.list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:FF"])
+    installed_bluez.on("show AA:BB:CC:DD:EE:FF", stdout=_show_output("AA:BB:CC:DD:EE:FF", "Probe"))
 
-    captured: dict[str, object] = {}
-
-    class _Completed:
-        returncode = 0
-        stdout = _show_output("AA:BB:CC:DD:EE:FF", "Probe")
-
-    def _fake_run(cmd, *, input=None, **kwargs):
-        captured["cmd"] = cmd
-        captured["input"] = input
-        return _Completed()
-
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run", side_effect=_fake_run):
-        response = client.get("/api/bt/adapters")
+    response = client.get("/api/bt/adapters")
 
     assert response.status_code == 200
-    assert captured["cmd"] == ["bluetoothctl"]
-    # Critical: the bluetoothctl input is the explicit ``show <MAC>``
-    # form — never ``select <MAC>; show``.  This is the one-line
-    # difference that fixes #193.
-    assert captured["input"] == "show AA:BB:CC:DD:EE:FF\n"
-    assert "select" not in (captured["input"] or "")
+    # The alias came from the addressed ``show <MAC>`` read.
+    assert response.get_json()["adapters"][0]["name"] == "Probe"
+    # Critical: the addressed ``show <MAC>`` form never emits
+    # ``select <MAC>`` — the one-line difference that fixes #193.
+    installed_bluez.assert_never_selected(verb="show")
+    show_cmds = [c for c in installed_bluez.commands if c.verb == "show"]
+    assert show_cmds and "show AA:BB:CC:DD:EE:FF" in show_cmds[0].script

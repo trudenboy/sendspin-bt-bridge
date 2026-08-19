@@ -25,12 +25,12 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def released_manager():
+def released_manager(installed_bluez):
     """A manager in the auto-released state with a connected speaker."""
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
-    with patch("subprocess.check_output", return_value=""):
-        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="TestSpeaker")
+    installed_bluez.on("show", stdout="")
+    mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", device_name="TestSpeaker")
     mgr.management_enabled = False
     mgr.connected = True
     mgr._auto_released_at = 0.0  # released long ago (monotonic origin)

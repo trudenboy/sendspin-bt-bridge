@@ -29,15 +29,20 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def bt_manager():
-    """Create a BluetoothManager with reasonable defaults for testing."""
+def bt_manager(installed_bluez):
+    """Create a BluetoothManager with reasonable defaults for testing.
+
+    The fake reports no default controller (``show`` → empty) so adapter
+    resolution lands on no adapter / no D-Bus path, matching the
+    historical ``check_output("")`` guard.
+    """
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
-    with patch("subprocess.check_output", return_value=""):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-        )
+    installed_bluez.on("show", stdout="")
+    mgr = BluetoothManager(
+        mac_address="AA:BB:CC:DD:EE:FF",
+        device_name="TestSpeaker",
+    )
     mgr._running = True
     mgr.management_enabled = True
     return mgr

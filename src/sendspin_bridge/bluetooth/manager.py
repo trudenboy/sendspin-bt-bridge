@@ -357,17 +357,10 @@ class BluetoothManager:
 
     def _detect_default_adapter_mac(self) -> str:
         """Return the MAC of the default Bluetooth controller, or empty string."""
-        try:
-            out = subprocess.check_output(
-                ["bluetoothctl", "show"],
-                stderr=subprocess.DEVNULL,
-                timeout=5,
-                text=True,
-            )
-            m = re.search(r"Controller\s+([0-9A-Fa-f:]{17})", out)
-            return m.group(1) if m else ""
-        except (OSError, subprocess.SubprocessError):
+        info = get_bluez().show()
+        if info.outcome is not Outcome.OK or not info.present:
             return ""
+        return info.mac
 
     def _maybe_apply_cod_override_pre_pair(self) -> None:
         """Re-apply ``device_class`` to the resolved adapter just before pair.
@@ -492,16 +485,13 @@ class BluetoothManager:
         """Check if Bluetooth is available on the system"""
         try:
             if self.adapter:
-                # Check specific adapter via _run_bluetoothctl (includes select)
-                success, output = self._run_bluetoothctl(["show"])
-                return success and "Controller" in output
+                # Check the specific adapter (scoped via select)
+                info = get_bluez().show(self._bluez_adapter())
+                return info.outcome is Outcome.OK and info.present
             # Default: check for any controller
-            result = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                output_lower = result.stdout.lower()
-                return "controller" in output_lower and "no default controller" not in output_lower
-            return False
-        except (OSError, subprocess.SubprocessError) as e:
+            info = get_bluez().show()
+            return info.outcome is Outcome.OK and info.present and not info.no_default
+        except Exception as e:  # defensive — the transport reports via Outcome
             logger.error("Bluetooth not available: %s", e)
             return False
 

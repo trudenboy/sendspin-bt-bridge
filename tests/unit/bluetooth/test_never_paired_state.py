@@ -24,8 +24,13 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def bt_manager_with_host():
-    """BluetoothManager wired to a host that captures every ``update_status``."""
+def bt_manager_with_host(installed_bluez):
+    """BluetoothManager wired to a host that captures every ``update_status``.
+
+    The fake reports no default controller (``show`` → empty) so adapter
+    resolution lands on no adapter / no D-Bus path, matching the
+    historical ``check_output("")`` guard.
+    """
     from sendspin_bridge.bluetooth.manager import BluetoothManager
 
     posted_updates: list[dict] = []
@@ -45,13 +50,13 @@ def bt_manager_with_host():
         bt_management_enabled=True,
     )
 
-    with patch("subprocess.check_output", return_value=""):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-            enable_a2dp_dance=False,
-            enable_pa_module_reload=False,
-        )
+    installed_bluez.on("show", stdout="")
+    mgr = BluetoothManager(
+        mac_address="AA:BB:CC:DD:EE:FF",
+        device_name="TestSpeaker",
+        enable_a2dp_dance=False,
+        enable_pa_module_reload=False,
+    )
     mgr.host = host
     return mgr, posted_updates
 

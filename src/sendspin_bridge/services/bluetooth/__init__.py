@@ -13,7 +13,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from sendspin_bridge.bluetooth.bluez import DeviceInfo, Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, DeviceInfo, Outcome, get_bluez
 from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
 from sendspin_bridge.config import config_lock as _config_lock
 
@@ -187,48 +187,22 @@ def resolve_hci_for_mac(mac: str) -> str:
 def get_adapter_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:
     """Return ``(alias, powered)`` for *mac* via ``bluetoothctl show <MAC>``.
 
-    Uses the explicit ``show <MAC>`` form rather than ``select <MAC>;
-    show`` — the select-then-show recipe is unreliable in piped-stdin
-    mode (the ``select`` D-Bus call may not propagate before ``show``
-    runs, and the resulting stdout often contains the **default**
-    controller's ``Alias:`` line first plus the selected controller's
-    block second; the original frontend parser picked the first match
-    and surfaced the wrong alias — issue #193).
+    Uses the caller-visible ``Adapter.addressed`` form, which **never**
+    emits ``select`` — the select-then-show recipe was unreliable in
+    piped-stdin mode and surfaced the *default* controller's ``Alias:``
+    for the wrong adapter (issue #193; the rationale now lives on
+    ``bluetooth.bluez.Adapter.addressed``).
 
-    Returns ``("", False)`` on any subprocess / parse failure so callers
+    Returns ``("", False)`` on any transport / parse failure so callers
     can fall back to a synthetic label.
     """
     if not mac:
         return "", False
-    try:
-        result = subprocess.run(
-            ["bluetoothctl"],
-            input=f"show {mac}\n",
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except (subprocess.SubprocessError, OSError) as exc:
-        logger.debug("get_adapter_alias(%s) subprocess failed: %s", mac, exc)
+    info = get_bluez().show(Adapter.addressed(mac), timeout=float(timeout))
+    if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE) or not info.present:
+        logger.debug("get_adapter_alias(%s) failed: outcome=%s present=%s", mac, info.outcome.value, info.present)
         return "", False
-    stdout = result.stdout or ""
-
-    # Anchor on lines that look like "<whitespace>Alias: <value>" — bluetoothctl
-    # nests the property lines under the ``Controller`` block with a leading tab.
-    # Discovery / async events ("[CHG] Controller ... Pairable: yes") never
-    # match because they don't have the bare ``Alias:`` token at the start of
-    # the trimmed line.
-    alias = ""
-    powered = False
-    for raw_line in stdout.splitlines():
-        line = raw_line.strip()
-        if line.startswith("Alias:"):
-            value = line.split("Alias:", 1)[1].strip()
-            if value and not alias:
-                alias = value
-        elif line.startswith("Powered:"):
-            powered = "yes" in line.split("Powered:", 1)[1].lower()
-    return alias, powered
+    return info.alias, info.powered
 
 
 def list_bt_adapters(timeout: int = 5) -> list[str]:

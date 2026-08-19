@@ -1,7 +1,6 @@
 """Tests for services/bluetooth.py — BT helpers that don't require hardware."""
 
 import json
-import subprocess
 from unittest.mock import MagicMock, patch
 
 from sendspin_bridge.services.bluetooth import (
@@ -449,52 +448,49 @@ Controller 88:A2:9E:C0:07:0D (public)
 """
 
 
-def test_get_adapter_alias_returns_alias_and_powered_for_targeted_mac():
+def test_get_adapter_alias_returns_alias_and_powered_for_targeted_mac(installed_bluez):
     # Regression for issue #193: each ``show <MAC>`` call returns ONE
     # ``Alias:`` line for the explicitly addressed adapter — no risk of
     # picking up a stale default-controller line.
-    completed = MagicMock(stdout=_SHOW_OUTPUT_CYPRESS, returncode=0)
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run", return_value=completed) as run_mock:
-        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+    installed_bluez.on("show A0:AD:9F:6E:B2:D5", stdout=_SHOW_OUTPUT_CYPRESS)
+
+    alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
 
     assert alias == "SendSpinEG"
     assert powered is True
-    args, kwargs = run_mock.call_args
-    # Confirm we're using the explicit ``show <MAC>`` form, NOT the
-    # ``select <MAC>; show`` recipe that produced the alias swap in #193.
-    assert args[0] == ["bluetoothctl"]
-    assert kwargs["input"] == "show A0:AD:9F:6E:B2:D5\n"
+    # The #193 regression in one line: the addressed alias read must
+    # never emit ``select <MAC>`` — it passes the MAC as a verb argument.
+    installed_bluez.assert_never_selected(verb="show")
+    show_cmds = [c for c in installed_bluez.commands if c.verb == "show"]
+    assert show_cmds and "show A0:AD:9F:6E:B2:D5" in show_cmds[0].script
 
 
-def test_get_adapter_alias_does_not_pick_up_default_controller_alias():
+def test_get_adapter_alias_does_not_pick_up_default_controller_alias(installed_bluez):
     # Even if bluetoothctl banner / async events sneak a ``Pairable: yes``
     # or unrelated ``[CHG] Controller ...`` lines into stdout before the
     # block we want, the alias parser must still find the right one.
     noisy = "Agent registered\n[CHG] Controller 88:A2:9E:C0:07:0D Pairable: yes\n" + _SHOW_OUTPUT_CYPRESS
-    completed = MagicMock(stdout=noisy, returncode=0)
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run", return_value=completed):
-        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+    installed_bluez.on("show A0:AD:9F:6E:B2:D5", stdout=noisy)
+
+    alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
 
     assert alias == "SendSpinEG"
     assert powered is True
 
 
-def test_get_adapter_alias_returns_empty_when_subprocess_fails():
-    with patch(
-        "sendspin_bridge.services.bluetooth.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="bluetoothctl", timeout=5),
-    ):
-        alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
+def test_get_adapter_alias_returns_empty_when_subprocess_fails(installed_bluez):
+    installed_bluez.timeout("show")
+
+    alias, powered = get_adapter_alias("A0:AD:9F:6E:B2:D5")
 
     assert alias == ""
     assert powered is False
 
 
-def test_get_adapter_alias_empty_mac_returns_empty():
+def test_get_adapter_alias_empty_mac_returns_empty(installed_bluez):
     # Defensive: never call bluetoothctl with an empty MAC.
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run") as run_mock:
-        alias, powered = get_adapter_alias("")
+    alias, powered = get_adapter_alias("")
 
     assert alias == ""
     assert powered is False
-    run_mock.assert_not_called()
+    assert installed_bluez.commands == []
