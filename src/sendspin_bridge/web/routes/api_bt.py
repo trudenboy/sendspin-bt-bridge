@@ -50,7 +50,6 @@ bt_bp = Blueprint("api_bt", __name__)
 # ---------------------------------------------------------------------------
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-_DEV_PAT = re.compile(r"Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
 _NEW_DEV_PAT = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
 _CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
 _CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
@@ -531,42 +530,6 @@ def api_bt_adapters():
         return jsonify({"adapters": [], "error": "Failed to list adapters"}), 500
 
 
-def _parse_paired_stdout(stdout: str) -> "list[tuple[str, str]]":
-    """Extract ``(mac, name)`` pairs from bluetoothctl ``devices [Paired]`` output.
-
-    Interactive ``bluetoothctl`` interleaves async discovery notifications
-    (``[CHG] Device <mac> RSSI: …``, ``[NEW]/[DEL] Device …``, ``[CHG]
-    Device <mac> ManufacturerData.*``) on the same stdout we are parsing.
-    Only lines that begin with a bare ``Device <mac> <rest>`` token — after
-    stripping ANSI colour codes and any leading prompt echo — are genuine
-    responses to ``devices Paired``; everything else is noise.  Without
-    this discrimination the Already-Paired list contained ghost rows
-    whose ``bluetoothctl info`` actually reported ``Paired: no``.
-
-    Names that look like MAC-as-name (``AA:BB:…`` / ``AA-BB-…``) are normalized
-    to an empty string so downstream filters can treat them as unnamed.
-    """
-    results: list[tuple[str, str]] = []
-    for line in stdout.splitlines():
-        clean = _ANSI_RE.sub("", line)
-        # Strip any leading prompt echo like ``[ENEBY20]> ``. Anchored so
-        # bracket-prefixed async notifications (``[CHG] ``/``[NEW] ``/
-        # ``[DEL] ``) survive and fail the ``startswith("Device ")`` check
-        # below.
-        stripped = re.sub(r"^\[[^\]]+\]>\s*", "", clean).lstrip()
-        if not stripped.startswith("Device "):
-            continue
-        m = _DEV_PAT.match(stripped)
-        if not m:
-            continue
-        mac = m.group(1).upper()
-        name = m.group(2).strip()
-        if re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-            name = ""
-        results.append((mac, name))
-    return results
-
-
 @bt_bp.route("/api/bt/paired")
 def api_bt_paired():
     """Return already-paired Bluetooth devices across every known adapter."""
@@ -585,25 +548,14 @@ def api_bt_paired():
                 if adapter_mac:
                     entry["adapters"].add(adapter_mac)
 
+        bluez = get_bluez()
         if adapter_macs:
             for adapter in adapter_macs:
-                res = subprocess.run(
-                    ["bluetoothctl"],
-                    input=f"select {adapter}\ndevices Paired\n",
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                _ingest(_parse_paired_stdout(res.stdout), adapter)
+                _ingest(list(bluez.list_devices(Adapter.select(adapter))), adapter)
         else:
-            res = subprocess.run(
-                ["bluetoothctl"],
-                input="devices\n",
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            _ingest(_parse_paired_stdout(res.stdout))
+            # Legacy fallback contract: plain unfiltered ``devices``
+            # against the default controller, no select line.
+            _ingest(list(bluez.list_devices(filter="")))
 
         devices: list[dict] = []
         for mac, entry in merged.items():
@@ -1310,21 +1262,9 @@ def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> N
     unnamed = {mac for mac in all_macs if mac not in names}
     if not unnamed:
         return
-    db_result = subprocess.run(
-        ["bluetoothctl"],
-        input="devices\n",
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    for line in db_result.stdout.splitlines():
-        clean = _ANSI_RE.sub("", line)
-        db_m = _DEV_PAT.search(clean)
-        if db_m:
-            mac = db_m.group(1).upper()
-            name = db_m.group(2).strip()
-            if mac in unnamed and name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                names[mac] = name
+    for entry in get_bluez().list_devices(filter=""):
+        if entry.mac in unnamed and entry.name:
+            names[entry.mac] = entry.name
 
 
 def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = True) -> "tuple[dict | None, str | None]":

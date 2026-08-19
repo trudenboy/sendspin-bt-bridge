@@ -285,8 +285,9 @@ def collect_preflight_status(
             # No controller surfaced — probe systemd to disambiguate
             # "daemon down" from "daemon up but no adapter" (issue #254).
             bt_info["daemon"] = daemon_state_fn()
-        paired = bluez.run("devices Paired")
-        bt_info["paired_devices"] = paired.stdout.strip().count("Device")
+        # Parsed whitelist rows only — async ``[CHG] Device`` noise on the
+        # same stdout must not inflate the count (ghost-row fix).
+        bt_info["paired_devices"] = len(bluez.list_devices())
         collections_status["bluetooth"] = collection_status_payload("ok", count=bt_info["paired_devices"])
     except Exception as exc:
         failed_collections.append("bluetooth")

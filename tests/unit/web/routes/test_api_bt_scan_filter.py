@@ -152,3 +152,30 @@ def test_enrich_scan_device_picks_up_name_from_info(installed_bluez):
     assert device is not None
     assert device["name"] == "Living Room Speaker"
     assert names["AA:BB:CC:DD:EE:FF"] == "Living Room Speaker"
+
+
+# ── _resolve_unnamed_devices: the bluetoothctl device-cache lookup ──────
+
+
+def test_resolve_unnamed_devices_uses_devices_cache(installed_bluez):
+    """Unnamed scan candidates get their display name from the BlueZ
+    device cache (``devices``); MAC-shaped cache names stay unnamed."""
+    installed_bluez.on(
+        "devices",
+        stdout=(
+            "Device AA:BB:CC:DD:EE:01 Kitchen Speaker\n"
+            "Device AA:BB:CC:DD:EE:02 AA-BB-CC-DD-EE-02\n"  # MAC-as-name stays unnamed
+        ),
+    )
+    names: dict[str, str] = {}
+
+    api_bt._resolve_unnamed_devices({"AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"}, names)
+
+    assert names == {"AA:BB:CC:DD:EE:01": "Kitchen Speaker"}
+
+
+def test_resolve_unnamed_devices_skips_cache_when_all_named(installed_bluez):
+    """No unnamed candidates → no bluetoothctl round-trip at all."""
+    api_bt._resolve_unnamed_devices({"AA:BB:CC:DD:EE:01"}, {"AA:BB:CC:DD:EE:01": "Known"})
+
+    assert installed_bluez.commands == []

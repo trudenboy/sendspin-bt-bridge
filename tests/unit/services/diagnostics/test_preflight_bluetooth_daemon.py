@@ -67,6 +67,26 @@ def test_bluetooth_daemon_active_when_controller_present(fake_bluez):
     assert any(c.argv == ("bluetoothctl", "list") for c in fake_bluez.commands)
 
 
+def test_paired_count_ignores_async_event_noise(fake_bluez):
+    """Async ``[CHG] Device …`` notifications interleaved on stdout must not
+    inflate the paired-device count — only literal ``Device <mac> <name>``
+    response rows count (the ghost-row whitelist from the paired parser).
+    """
+    fake_bluez.on(
+        "devices Paired",
+        stdout=(
+            "[CHG] Device 6C:5C:3D:35:17:99 RSSI: 0xffffffc3 (-61)\n"
+            "Device 6C:5C:3D:35:17:99 ENEBY Portable\n"
+            "Device 30:21:0E:0A:AE:5A Lenco LS-500\n"
+        ),
+    )
+    probe = _DaemonProbe("unused")
+
+    bt = _collect(fake_bluez, probe)["bluetooth"]
+
+    assert bt["paired_devices"] == 2
+
+
 def test_bluetooth_daemon_inactive_when_no_controller_and_systemd_says_inactive(fake_bluez):
     """Issue #254 — bluetoothd inactive on host, no controller surfaces.
 
