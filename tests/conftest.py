@@ -4,6 +4,19 @@ import pytest
 
 
 @pytest.fixture
+def fake_bluez():
+    """The shared bluetoothctl fake (tests/support/fake_bluez.py).
+
+    Substitutes the ``Spawner`` protocol of ``BluezControl`` — never
+    patches ``subprocess``.  ``fake_bluez.control`` is a ready
+    ``BluezControl`` wired to the fake with an instant clock.
+    """
+    from tests.support.fake_bluez import FakeBluez
+
+    return FakeBluez()
+
+
+@pytest.fixture
 def tmp_config(tmp_path):
     """Provide a temporary config file and set CONFIG_FILE/CONFIG_DIR."""
     config_file = tmp_path / "config.json"

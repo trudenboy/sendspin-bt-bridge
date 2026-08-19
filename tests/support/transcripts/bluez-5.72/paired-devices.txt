@@ -1,0 +1,8 @@
+Waiting to connect to bluetoothd...[0;94m[bluetooth][0m#            paired-devices
+[1;39mInvalid command in menu main: paired-devices[0m
+[1;39m
+Use "help" for a list of available commands in a menu.
+Use "menu <submenu>" if you want to enter any submenu.
+Use "back" if you want to return to menu main.[0m
+[0;94m[bluetooth][0m# exit
+[0;94m[bluetooth][0m#                         

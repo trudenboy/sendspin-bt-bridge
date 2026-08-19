@@ -1,0 +1,5 @@
+Waiting to connect to bluetoothd...[0;94m[bluetooth][0m#            info AA:BB:CC:DD:EE:FF
+Device AA:BB:CC:DD:EE:FF not available
+DeviceSet AA:BB:CC:DD:EE:FF not available
+[0;94m[bluetooth][0m# exit
+[0;94m[bluetooth][0m#                         
