@@ -22,7 +22,7 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
-from sendspin_bridge.bluetooth.bluez import get_bluez
+from sendspin_bridge.bluetooth.bluez import Outcome, get_bluez
 from sendspin_bridge.config import (
     BUILD_DATE,
     CONFIG_SCHEMA_VERSION,
@@ -1008,7 +1008,6 @@ def api_diagnostics():
 # /api/bugreport — assembled bug report with masked sensitive data
 # ---------------------------------------------------------------------------
 
-_ANSI_RE_STATUS = re.compile(r"\x1b\[[0-9;]*m")
 
 _MAC_RE = re.compile(
     r"([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2}):([0-9A-Fa-f]{2})"
@@ -1345,25 +1344,14 @@ def _collect_bt_device_info() -> list[dict]:
         if not mac:
             continue
         entry: dict = {"mac": mac, "name": dev.get("name", "?")}
-        try:
-            r = subprocess.run(
-                ["bluetoothctl"],
-                input=f"info {mac}\n",
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            lines = [_ANSI_RE_STATUS.sub("", ln).strip() for ln in r.stdout.splitlines() if ln.strip()]
-            for ln in lines:
-                if ":" not in ln:
-                    continue
-                key, _, val = ln.partition(":")
-                k = key.strip().lower().replace(" ", "_")
-                if k in ("paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
-                    entry[k] = val.strip()
-        except Exception:
-            logger.exception("Failed to get BT info for %s", mac)
+        info = get_bluez().device_info(mac)
+        if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            logger.warning("Failed to get BT info for %s: outcome=%s", mac, info.outcome.value)
             entry["error"] = "Failed to retrieve device info"
+        else:
+            for k in ("paired", "bonded", "trusted", "blocked", "connected", "class", "icon"):
+                if k in info.fields:
+                    entry[k] = info.fields[k]
         results.append(entry)
     return results
 

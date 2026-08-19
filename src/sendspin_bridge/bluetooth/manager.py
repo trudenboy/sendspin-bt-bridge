@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
-from sendspin_bridge.bluetooth.bluez import get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
@@ -505,6 +505,12 @@ class BluetoothManager:
             logger.error("Bluetooth not available: %s", e)
             return False
 
+    def _bluez_adapter(self) -> Adapter:
+        """The configured adapter as a BluezControl scope directive."""
+        if self._adapter_select:
+            return Adapter.select(self._adapter_select)
+        return Adapter.DEFAULT
+
     def is_device_paired(self) -> bool | None:
         """Check if device is paired via D-Bus; falls back to bluetoothctl.
 
@@ -515,19 +521,15 @@ class BluetoothManager:
         val = _dbus_get_device_property(self._dbus_device_path, "Paired")
         if val is not None:
             return bool(val)
-        _success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
-        lowered = output.lower()
-        if "paired: yes" in lowered:
-            return True
-        if "paired: no" in lowered:
-            return False
-        if "not available" in lowered:
+        info = get_bluez().device_info(self.mac_address, self._bluez_adapter())
+        if info.paired is not None:
+            return info.paired
+        if info.outcome not in (Outcome.TIMEOUT, Outcome.UNAVAILABLE) and not info.present:
             logger.info(
                 "[%s] Pairing state unknown: BlueZ has no current device object for %s",
                 self.device_name,
                 self.mac_address,
             )
-            return None
         return None
 
     def is_device_connected(self) -> bool:
@@ -538,8 +540,8 @@ class BluetoothManager:
                 is_connected = bool(val)
             else:
                 # D-Bus unavailable — fall back to bluetoothctl
-                success, output = self._run_bluetoothctl([f"info {self.mac_address}"])
-                is_connected = success and "Connected: yes" in output
+                info = get_bluez().device_info(self.mac_address, self._bluez_adapter())
+                is_connected = info.outcome is Outcome.OK and info.connected is True
 
             if is_connected != self.connected:
                 if is_connected:

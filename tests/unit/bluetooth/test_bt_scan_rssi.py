@@ -7,7 +7,7 @@ without dropping into ``btmgmt`` or ``hcidump``.  Two ingest paths:
 * ``_parse_scan_output`` — reads ``[CHG] Device <MAC> RSSI: <dB>`` lines
   emitted while a scan is running.  The unit covers the multiple
   bluetoothctl line formats (decimal, parenthesised hex, signed).
-* ``_extract_rssi_from_info`` — reads ``RSSI: <dB>`` lines from
+* ``DeviceInfo.rssi`` — reads ``RSSI: <dB>`` lines from
   ``bluetoothctl info <MAC>`` for already-connected devices that don't
   appear in the live scan stream.
 """
@@ -61,7 +61,9 @@ def test_parse_scan_output_keeps_active_mac_set_even_without_rssi_value():
     assert parsed[4].get("AA:BB:CC:DD:EE:FF") in (None,)
 
 
-# ── _extract_rssi_from_info: bluetoothctl info <MAC> ────────────────────
+# ── DeviceInfo.rssi: bluetoothctl info <MAC> ────────────────────────────
+# (batch 2: api_bt's ``_extract_rssi_from_info`` moved into the bluez
+# module as the ``DeviceInfo.rssi`` property — same dual-format grammar)
 
 
 @pytest.mark.parametrize(
@@ -78,9 +80,9 @@ def test_parse_scan_output_keeps_active_mac_set_even_without_rssi_value():
     ],
 )
 def test_extract_rssi_from_info_handles_format_variants(info_text, expected):
-    from sendspin_bridge.web.routes.api_bt import _extract_rssi_from_info
+    from sendspin_bridge.bluetooth.bluez import parse_device_info
 
-    assert _extract_rssi_from_info(info_text) == expected
+    assert parse_device_info(info_text, "AA:BB:CC:DD:EE:FF").rssi == expected
 
 
 # ── DeviceStatus rssi fields ────────────────────────────────────────────

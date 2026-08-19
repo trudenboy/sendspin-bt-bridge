@@ -16,12 +16,13 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
+from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
-    _AUDIO_UUIDS,
     COMMON_BT_PAIR_PINS,
     build_hci_map,
+    classify_audio_capability,
     describe_pair_failure,
     get_adapter_alias,
     is_pin_rejection,
@@ -61,10 +62,6 @@ _CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
 _CHG_RSSI_VALUE_PAT = re.compile(
     r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
     r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
-)
-_INFO_RSSI_PAT = re.compile(
-    r"^\s*RSSI:\s*(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))",
-    re.MULTILINE,
 )
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
@@ -666,66 +663,45 @@ def api_bt_remove():
     return jsonify({"ok": True, "mac": mac})
 
 
-_INFO_FIELDS = frozenset({"name", "alias", "paired", "bonded", "trusted", "blocked", "connected", "class", "icon"})
-
-
-def _parse_bluetoothctl_info(stdout: str, mac: str) -> dict:
-    lines = [_ANSI_RE.sub("", ln).strip() for ln in stdout.splitlines() if ln.strip()]
-    info: dict = {"mac": mac, "raw": lines}
-    for ln in lines:
-        if ":" not in ln:
-            continue
-        key, _, val = ln.partition(":")
-        k = key.strip().lower().replace(" ", "_")
-        if k in _INFO_FIELDS:
-            info[k] = val.strip()
-    return info
-
-
-def _run_bluetoothctl_info(mac: str, adapter: str) -> dict:
-    cmds: list[str] = []
-    if adapter:
-        cmds.append(f"select {adapter}")
-    cmds.append(f"info {mac}")
-    r = subprocess.run(
-        ["bluetoothctl"],
-        input="\n".join(cmds) + "\n",
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    return _parse_bluetoothctl_info(r.stdout, mac)
+def _device_info_payload(info, mac: str) -> dict:
+    """The public ``/api/bt/info`` JSON shape — ``mac`` + ``raw`` stdout
+    lines + the INFO_FIELDS keys, reproduced by ``DeviceInfo`` exactly
+    (``static/app.js`` renders ``raw`` verbatim in the info modal)."""
+    payload = {"mac": mac, "raw": list(info.raw)}
+    payload.update(info.fields)
+    return payload
 
 
 def _get_bt_device_info(mac: str, adapter: str = "") -> dict:
     """Return ``bluetoothctl info`` for ``mac``, adapter-aware.
 
-    With ``adapter`` explicit, ``select <adapter>`` is prefixed (``hciN``
-    is resolved to the controller MAC first — HAOS/LXC reject
-    ``select hciN``). Without ``adapter``, each known controller is
+    With ``adapter`` explicit, the query is scoped by ``select`` (``hciN``
+    is resolved to the controller MAC by the BluezControl chain — HAOS/LXC
+    reject ``select hciN``). Without ``adapter``, each known controller is
     probed in turn and the first response that actually contains device
     fields (``Name:``/``Paired:``/…) wins; this is what lets the info
     modal work for bonds on the non-default radio when older UI call
     sites haven't been updated to pass the adapter yet.
     """
+    bluez = get_bluez()
     if adapter:
-        return _run_bluetoothctl_info(mac, _resolve_adapter_to_mac(adapter))
+        return _device_info_payload(bluez.device_info(mac, Adapter.select(adapter)), mac)
 
     try:
         adapter_macs = [m.upper() for m in list_bt_adapters() if m]
     except Exception:  # pragma: no cover - defensive
         adapter_macs = []
 
-    last_result: dict | None = None
+    last_info = None
     for adapter_mac in adapter_macs:
-        result = _run_bluetoothctl_info(mac, adapter_mac)
-        if any(field in result for field in _INFO_FIELDS):
-            return result
-        last_result = result
+        info = bluez.device_info(mac, Adapter.select(adapter_mac))
+        if info.fields:
+            return _device_info_payload(info, mac)
+        last_info = info
 
-    if last_result is not None:
-        return last_result
-    return _run_bluetoothctl_info(mac, "")
+    if last_info is not None:
+        return _device_info_payload(last_info, mac)
+    return _device_info_payload(bluez.device_info(mac), mac)
 
 
 @bt_bp.route("/api/bt/info", methods=["POST"])
@@ -1219,28 +1195,6 @@ def _estimate_scan_duration(adapter_macs: "list[str]") -> int:
     return _SCAN_BASE_DURATION + max(len(adapter_macs) - 1, 0) * _SCAN_ADAPTER_OVERHEAD
 
 
-def _classify_audio_capability(out: str) -> "tuple[bool, str]":
-    """Return ``(is_audio, reason)`` from bluetoothctl info output.
-
-    Reason is a short machine-readable label used for scan-filter diagnostics:
-    ``audio_class_of_device`` / ``non_audio_class_of_device`` / ``audio_uuid``
-    / ``no_audio_class_no_uuid`` / ``no_class_info_defaults_audio``.
-    """
-    out_lower = out.lower()
-    class_m = re.search(r"\bClass:\s+(0x[0-9A-Fa-f]+)", out)
-    if class_m:
-        cls = int(class_m.group(1), 16)
-        major = (cls >> 8) & 0x1F
-        if major == 4:
-            return True, "audio_class_of_device"
-        return False, "non_audio_class_of_device"
-    if any(u in out_lower for u in _AUDIO_UUIDS):
-        return True, "audio_uuid"
-    if "UUID:" in out:
-        return False, "no_audio_class_no_uuid"
-    return True, "no_class_info_defaults_audio"
-
-
 def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
     """Run a bluetoothctl scan session and return combined stdout."""
     bt_timeout = 12 + len(adapter_macs) * 2
@@ -1292,26 +1246,6 @@ def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
         except Exception:
             logger.debug("Post-scan device enumeration failed for %s", m, exc_info=True)
     return result_stdout
-
-
-def _extract_rssi_from_info(info_text: str) -> "int | None":
-    """Pull the ``RSSI: <dB>`` value from ``bluetoothctl info <MAC>`` output.
-
-    Returns the signed dBm integer or ``None`` when the line is absent
-    or the value is unparseable.  Tolerates both the modern decimal
-    (``RSSI: -43``) and legacy parenthesised hex (``RSSI: 0xff... (-43)``)
-    formats — the same two formats handled in the scan-stream regex.
-    """
-    if not info_text:
-        return None
-    m = _INFO_RSSI_PAT.search(info_text)
-    if not m:
-        return None
-    value = m.group(1) or m.group(2)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _parse_scan_output(
@@ -1402,23 +1336,12 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
     """
     if not validate_mac(mac):
         return {"mac": mac, "name": mac, "audio_capable": True}, None
-    try:
-        r = subprocess.run(
-            ["bluetoothctl", "info", mac],
-            capture_output=True,
-            text=True,
-            timeout=4,
-        )
-        out = r.stdout
-    except Exception:
+    info = get_bluez().device_info(mac, timeout=4.0)
+    if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
         return {"mac": mac, "name": names.get(mac, mac), "audio_capable": True}, None
-    if mac not in names:
-        nm = re.search(r"\bName:\s+(.*)", out)
-        if nm:
-            n = nm.group(1).strip()
-            if n and not re.match(r"^[0-9A-Fa-f]{2}[-:]", n):
-                names[mac] = n
-    audio_capable, reason = _classify_audio_capability(out)
+    if mac not in names and info.name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", info.name):
+        names[mac] = info.name
+    audio_capable, reason = classify_audio_capability(info)
     if audio_only and not audio_capable:
         logger.info(
             "BT scan filter dropped %s (name=%s, reason=%s)",
@@ -1427,7 +1350,7 @@ def _enrich_scan_device(mac: str, names: "dict[str, str]", audio_only: bool = Tr
             reason,
         )
         return None, reason
-    info_rssi = _extract_rssi_from_info(out)
+    info_rssi = info.rssi
     device_info: dict = {"mac": mac, "name": names.get(mac, mac), "audio_capable": audio_capable}
     if info_rssi is not None:
         device_info["rssi_dbm"] = info_rssi

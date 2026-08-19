@@ -15,6 +15,10 @@ The fix mirrors what rc.4 and rc.5 did for reset/reconnect and add-pair:
   turn and returns the first response that actually contains device
   fields (``Name:``, ``Paired:``, …) — so existing UI call sites that
   don't yet pass an adapter still work.
+
+Batch 2: the helper runs on the BluezControl transport; these tests use
+the shared FakeBluez and assert on structured command records instead of
+scraping stdin strings.
 """
 
 from __future__ import annotations
@@ -34,13 +38,6 @@ def client(tmp_config):
     return app.test_client()
 
 
-class _FakeCompletedProcess:
-    def __init__(self, stdout: str = "", stderr: str = "", returncode: int = 0) -> None:
-        self.stdout = stdout
-        self.stderr = stderr
-        self.returncode = returncode
-
-
 _DEVICE_NOT_AVAILABLE = "Device AA:BB:CC:DD:EE:FF not available\n"
 _DEVICE_INFO_FULL = (
     "Device AA:BB:CC:DD:EE:FF (public)\n"
@@ -51,102 +48,70 @@ _DEVICE_INFO_FULL = (
     "\tConnected: yes\n"
 )
 
+_TWO_CONTROLLERS = "Controller C0:FB:F9:62:D6:9D first [default]\nController C0:FB:F9:62:D7:D6 second\n"
 
-def test_get_bt_device_info_issues_select_before_info_when_adapter_provided(monkeypatch):
-    """With an explicit adapter, `select <mac>\\ninfo <mac>\\n` must hit stdin."""
+
+def _info_runs(fake, adapter_mac: str):
+    return [c for c in fake.scoped(adapter_mac) if c.kind == "run" and c.verb == "info"]
+
+
+def test_get_bt_device_info_issues_select_before_info_when_adapter_provided(installed_bluez):
+    """With an explicit adapter, the invocation must be scoped by ``select <mac>``."""
     import sendspin_bridge.web.routes.api_bt as module
 
-    captured: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        captured.append(kw.get("input", "") or "")
-        return _FakeCompletedProcess(stdout=_DEVICE_INFO_FULL)
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    installed_bluez.on_adapter("C0:FB:F9:62:D7:D6").on("info", stdout=_DEVICE_INFO_FULL)
 
     info = module._get_bt_device_info("AA:BB:CC:DD:EE:FF", adapter="C0:FB:F9:62:D7:D6")
 
-    assert len(captured) == 1
-    assert captured[0] == "select C0:FB:F9:62:D7:D6\ninfo AA:BB:CC:DD:EE:FF\n"
+    runs = _info_runs(installed_bluez, "C0:FB:F9:62:D7:D6")
+    assert len(runs) == 1
+    assert "info AA:BB:CC:DD:EE:FF" in runs[0].script
     assert info["name"] == "Yandex mini 2"
     assert info["paired"] == "yes"
 
 
-def test_get_bt_device_info_translates_hci_name_to_controller_mac(monkeypatch):
-    """``hci1`` must be resolved via ``list_bt_adapters`` — raw ``hci1``
+def test_get_bt_device_info_translates_hci_name_to_controller_mac(installed_bluez):
+    """``hci1`` must be resolved to a controller MAC — raw ``hci1``
     fails with ``Controller hci1 not available`` on HAOS/LXC."""
     import sendspin_bridge.web.routes.api_bt as module
 
-    captured: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        captured.append(kw.get("input", "") or "")
-        return _FakeCompletedProcess(stdout=_DEVICE_INFO_FULL)
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        module,
-        "list_bt_adapters",
-        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
-    )
+    installed_bluez.on("list", stdout=_TWO_CONTROLLERS)
 
     module._get_bt_device_info("AA:BB:CC:DD:EE:FF", adapter="hci1")
 
-    assert captured[0] == "select C0:FB:F9:62:D7:D6\ninfo AA:BB:CC:DD:EE:FF\n"
+    assert len(_info_runs(installed_bluez, "C0:FB:F9:62:D7:D6")) == 1
+    assert _info_runs(installed_bluez, "hci1") == []
 
 
-def test_get_bt_device_info_probes_every_adapter_when_none_given(monkeypatch):
+def test_get_bt_device_info_probes_every_adapter_when_none_given(installed_bluez):
     """Without an adapter the helper must try each controller until one
     returns a response with actual device fields (``Name:``/``Paired:``).
     Prior behaviour queried only the default controller."""
     import sendspin_bridge.web.routes.api_bt as module
 
-    captured: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        inp = kw.get("input", "") or ""
-        captured.append(inp)
-        if "C0:FB:F9:62:D6:9D" in inp:
-            return _FakeCompletedProcess(stdout=_DEVICE_NOT_AVAILABLE)
-        return _FakeCompletedProcess(stdout=_DEVICE_INFO_FULL)
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        module,
-        "list_bt_adapters",
-        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
-    )
+    installed_bluez.on("list", stdout=_TWO_CONTROLLERS)
+    installed_bluez.on_adapter("C0:FB:F9:62:D6:9D").on("info", stdout=_DEVICE_NOT_AVAILABLE)
+    installed_bluez.on_adapter("C0:FB:F9:62:D7:D6").on("info", stdout=_DEVICE_INFO_FULL)
 
     info = module._get_bt_device_info("AA:BB:CC:DD:EE:FF")
 
-    # Both adapters probed, hci0 first (empty), hci1 second (hit).
-    assert len(captured) == 2
-    assert "select C0:FB:F9:62:D6:9D" in captured[0]
-    assert "select C0:FB:F9:62:D7:D6" in captured[1]
+    probed = [c.adapter_selected for c in installed_bluez.commands if c.kind == "run" and c.verb == "info"]
+    assert probed == ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"]  # hci0 first (miss), hci1 second (hit)
     assert info["name"] == "Yandex mini 2"
     assert info["paired"] == "yes"
 
 
-def test_get_bt_device_info_stops_at_first_adapter_with_fields(monkeypatch):
+def test_get_bt_device_info_stops_at_first_adapter_with_fields(installed_bluez):
     """If the first adapter already returns a full record, don't keep probing."""
     import sendspin_bridge.web.routes.api_bt as module
 
-    captured: list[str] = []
-
-    def fake_run(args: Any, *_a: Any, **kw: Any) -> _FakeCompletedProcess:
-        captured.append(kw.get("input", "") or "")
-        return _FakeCompletedProcess(stdout=_DEVICE_INFO_FULL)
-
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        module,
-        "list_bt_adapters",
-        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
-    )
+    installed_bluez.on("list", stdout=_TWO_CONTROLLERS)
+    installed_bluez.on("info", stdout=_DEVICE_INFO_FULL)
 
     module._get_bt_device_info("AA:BB:CC:DD:EE:FF")
 
-    assert len(captured) == 1  # second adapter never probed
+    info_runs = [c for c in installed_bluez.commands if c.kind == "run" and c.verb == "info"]
+    assert len(info_runs) == 1  # second adapter never probed
 
 
 def test_api_bt_info_forwards_adapter_field(client, monkeypatch):
@@ -195,10 +160,10 @@ _DEVICE_INFO_FULL_WITH_UUIDS = (
 )
 
 
-def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(monkeypatch):
+def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(installed_bluez):
     """The info modal in the UI now renders ``info["raw"]`` directly so
     operators see everything ``bluetoothctl info`` outputs.  Pin the
-    parser contract: every non-prompt line — including UUIDs (the
+    payload contract: every non-empty stdout line — including UUIDs (the
     A2DP Sink / AVRCP / etc. service UUID list that's load-bearing
     for diagnosing why a speaker won't play), Modalias (vendor /
     product / version), LegacyPairing, and the ``Class`` octet —
@@ -207,11 +172,7 @@ def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(monkey
     reporter for ``bluetoothctl info`` over SSH."""
     import sendspin_bridge.web.routes.api_bt as module
 
-    monkeypatch.setattr(
-        module.subprocess,
-        "run",
-        lambda *_a, **_kw: _FakeCompletedProcess(stdout=_DEVICE_INFO_FULL_WITH_UUIDS),
-    )
+    installed_bluez.on_adapter("C0:FB:F9:62:D7:D6").on("info", stdout=_DEVICE_INFO_FULL_WITH_UUIDS)
 
     info = module._get_bt_device_info("AA:BB:CC:DD:EE:FF", adapter="C0:FB:F9:62:D7:D6")
 

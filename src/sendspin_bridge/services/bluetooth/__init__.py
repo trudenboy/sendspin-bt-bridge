@@ -13,7 +13,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from sendspin_bridge.bluetooth.bluez import get_bluez
+from sendspin_bridge.bluetooth.bluez import DeviceInfo, Outcome, get_bluez
 from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
 from sendspin_bridge.config import config_lock as _config_lock
 
@@ -556,28 +556,40 @@ def persist_device_released(player_name: str, released: bool, *, released_by: st
             logger.debug("Could not sync released flag to options.json: %s", e)
 
 
+def classify_audio_capability(info: DeviceInfo) -> tuple[bool, str]:
+    """Classify a scanned device's audio capability from its ``DeviceInfo``.
+
+    Merged home of the two legacy twins (the ``routes/api_bt`` scan filter
+    and ``is_audio_device`` below).  ``reason`` is a short machine-readable
+    label used for scan-filter diagnostics: ``audio_class_of_device`` /
+    ``non_audio_class_of_device`` / ``audio_uuid`` /
+    ``no_audio_class_no_uuid`` / ``no_class_info_defaults_audio``.
+    """
+    text = info.text
+    # Check Class field: major class 4 = Audio/Video
+    class_m = re.search(r"\bClass:\s+(0x[0-9A-Fa-f]+)", text)
+    if class_m:
+        cls = int(class_m.group(1), 16)
+        major = (cls >> 8) & 0x1F
+        if major == 4:
+            return True, "audio_class_of_device"
+        return False, "non_audio_class_of_device"
+    # No Class — check for any audio profile UUID
+    if any(u in text.lower() for u in _AUDIO_UUIDS):
+        return True, "audio_uuid"
+    # BlueZ has UUID info but no audio profile → definitely not audio
+    if "UUID:" in text:
+        return False, "no_audio_class_no_uuid"
+    # Name only (no Class, no UUID) — device may be in pairing mode, include cautiously
+    return True, "no_class_info_defaults_audio"
+
+
 def is_audio_device(mac: str) -> bool:
     """Return True if the BT device is an audio device (A2DP/HFP)."""
     if not _MAC_RE.match(mac):
         return False
-    try:
-        r = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True, timeout=4)
-        out = r.stdout
-        out_lower = out.lower()
-        # Check Class field: major class 4 = Audio/Video
-        class_m = re.search(r"Class:\s+(0x[0-9A-Fa-f]+)", out)
-        if class_m:
-            cls = int(class_m.group(1), 16)
-            major = (cls >> 8) & 0x1F
-            return major == 4
-        # No Class — check for any audio profile UUID
-        if any(u in out_lower for u in _AUDIO_UUIDS):
-            return True
-        # BlueZ has UUID info but no audio profile → definitely not audio
-        if "UUID:" in out:
-            return False
-        # Name only (no Class, no UUID) — device may be in pairing mode, include cautiously
-        return True
-    except (subprocess.SubprocessError, OSError, ValueError) as exc:
-        logger.debug("is_audio_device(%s) check failed: %s", mac, exc)
-        return True  # on error, include
+    info = get_bluez().device_info(mac, timeout=4.0)
+    if info.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+        logger.debug("is_audio_device(%s) check failed: outcome=%s", mac, info.outcome.value)
+        return True  # on transport failure, include (legacy contract)
+    return classify_audio_capability(info)[0]

@@ -177,30 +177,39 @@ def test_is_audio_device_invalid_mac():
     assert is_audio_device("not-a-mac") is False
 
 
-def test_is_audio_device_valid():
+def test_is_audio_device_valid(installed_bluez):
     """bluetoothctl output with audio major class should return True."""
-    bt_output = (
-        "Device AA:BB:CC:DD:EE:FF Speaker\n"
-        "\tName: Speaker\n"
-        "\tClass: 0x240404\n"  # major class 4 = Audio/Video
-        "\tPaired: yes\n"
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout=(
+            "Device AA:BB:CC:DD:EE:FF Speaker\n"
+            "\tName: Speaker\n"
+            "\tClass: 0x240404\n"  # major class 4 = Audio/Video
+            "\tPaired: yes\n"
+        ),
     )
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(stdout=bt_output)
-        assert is_audio_device("AA:BB:CC:DD:EE:FF") is True
+    assert is_audio_device("AA:BB:CC:DD:EE:FF") is True
 
 
-def test_is_audio_device_not_audio():
+def test_is_audio_device_not_audio(installed_bluez):
     """bluetoothctl output without audio class or UUID should return False."""
-    bt_output = (
-        "Device AA:BB:CC:DD:EE:FF Keyboard\n"
-        "\tName: Keyboard\n"
-        "\tClass: 0x000540\n"  # major class 5 = Peripheral
-        "\tUUID: Human Interface Device (00001124-0000-1000-8000-00805f9b34fb)\n"
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout=(
+            "Device AA:BB:CC:DD:EE:FF Keyboard\n"
+            "\tName: Keyboard\n"
+            "\tClass: 0x000540\n"  # major class 5 = Peripheral
+            "\tUUID: Human Interface Device (00001124-0000-1000-8000-00805f9b34fb)\n"
+        ),
     )
-    with patch("sendspin_bridge.services.bluetooth.subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(stdout=bt_output)
-        assert is_audio_device("AA:BB:CC:DD:EE:FF") is False
+    assert is_audio_device("AA:BB:CC:DD:EE:FF") is False
+
+
+def test_is_audio_device_includes_on_transport_failure(installed_bluez):
+    """Legacy contract: on any bluetoothctl failure the device is included
+    (a transient timeout must not hide a speaker from the scan list)."""
+    installed_bluez.fail("info")
+    assert is_audio_device("AA:BB:CC:DD:EE:FF") is True
 
 
 def test_extract_pair_failure_reason_prefers_failed_to_pair_line():

@@ -83,3 +83,59 @@ def test_collect_adapter_diagnostics_maps_controller_rows(installed_bluez):
         {"id": "hci0", "mac": "11:22:33:44:55:66", "default": True},
         {"id": "hci1", "mac": "AA:BB:CC:DD:EE:00", "default": False},
     ]
+
+
+# ---------------------------------------------------------------------------
+# _collect_bt_device_info (bugreport per-device info, batch 2)
+# ---------------------------------------------------------------------------
+
+
+def _patch_bugreport_devices(monkeypatch, devices):
+    from sendspin_bridge.web.routes import api_status
+
+    monkeypatch.setattr(api_status, "load_config", lambda: {"BLUETOOTH_DEVICES": devices})
+
+
+def test_collect_bt_device_info_maps_fields(installed_bluez, monkeypatch):
+    _patch_bugreport_devices(monkeypatch, [{"mac": "6C:5C:3D:35:17:99", "name": "ENEBY Portable"}])
+
+    from sendspin_bridge.web.routes import api_status
+
+    rows = api_status._collect_bt_device_info()
+
+    assert rows == [
+        {
+            "mac": "6C:5C:3D:35:17:99",
+            "name": "ENEBY Portable",
+            "paired": "yes",
+            "bonded": "yes",
+            "trusted": "yes",
+            "blocked": "no",
+            "connected": "no",
+            "class": "0x00240404 (2360324)",
+            "icon": "audio-headset",
+        }
+    ]
+
+
+def test_collect_bt_device_info_marks_error_on_transport_failure(installed_bluez, monkeypatch):
+    installed_bluez.fail("info")
+    _patch_bugreport_devices(monkeypatch, [{"mac": "6C:5C:3D:35:17:99", "name": "ENEBY Portable"}])
+
+    from sendspin_bridge.web.routes import api_status
+
+    rows = api_status._collect_bt_device_info()
+
+    assert rows[0]["error"] == "Failed to retrieve device info"
+
+
+def test_collect_bt_device_info_unknown_device_yields_bare_row(installed_bluez, monkeypatch):
+    """BlueZ has no object for the MAC → no fields, no error (legacy contract:
+    the error key is reserved for transport-level failures)."""
+    _patch_bugreport_devices(monkeypatch, [{"mac": "DE:AD:BE:EF:00:01", "name": "Ghost"}])
+
+    from sendspin_bridge.web.routes import api_status
+
+    rows = api_status._collect_bt_device_info()
+
+    assert rows == [{"mac": "DE:AD:BE:EF:00:01", "name": "Ghost"}]

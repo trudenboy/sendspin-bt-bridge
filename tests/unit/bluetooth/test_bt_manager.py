@@ -889,12 +889,66 @@ def test_connect_device_aborts_when_release_cancels_active_reconnect(bt_manager)
     disconnect_device.assert_called_once()
 
 
-def test_is_device_paired_returns_none_when_device_not_available(bt_manager):
+def test_is_device_paired_returns_none_when_device_not_available(bt_manager, installed_bluez, caplog):
+    import logging
+
+    installed_bluez.on("info AA:BB:CC:DD:EE:FF", stdout="Device AA:BB:CC:DD:EE:FF not available\n")
     with (
         patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None),
-        patch.object(bt_manager, "_run_bluetoothctl", return_value=(False, "Device AA:BB:CC:DD:EE:FF not available")),
+        caplog.at_level(logging.INFO, logger="sendspin_bridge.bluetooth.manager"),
     ):
         assert bt_manager.is_device_paired() is None
+    assert "no current device object" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# is_device_paired — the BluezControl tri-state contract (batch 2)
+# ``paired`` may collapse to True/False only on an explicit Paired: field;
+# transport failures and a missing device object must all yield None so the
+# monitor never escalates to pair_device() on a transient timeout.
+# ---------------------------------------------------------------------------
+
+
+def test_is_device_paired_true_when_bluez_reports_paired(bt_manager, installed_bluez):
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout="Device AA:BB:CC:DD:EE:FF (public)\n\tName: TestSpeaker\n\tPaired: yes\n",
+    )
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None):
+        assert bt_manager.is_device_paired() is True
+
+
+def test_is_device_paired_false_when_bluez_reports_not_paired(bt_manager, installed_bluez):
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout="Device AA:BB:CC:DD:EE:FF (public)\n\tName: TestSpeaker\n\tPaired: no\n",
+    )
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None):
+        assert bt_manager.is_device_paired() is False
+
+
+def test_is_device_paired_none_on_timeout_without_unknown_device_log(bt_manager, installed_bluez, caplog):
+    import logging
+
+    installed_bluez.timeout("info")
+    with (
+        patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None),
+        caplog.at_level(logging.INFO, logger="sendspin_bridge.bluetooth.manager"),
+    ):
+        assert bt_manager.is_device_paired() is None
+    assert "no current device object" not in caplog.text
+
+
+def test_is_device_paired_none_when_bluetoothctl_unavailable(bt_manager, installed_bluez, caplog):
+    import logging
+
+    installed_bluez.fail("info")
+    with (
+        patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None),
+        caplog.at_level(logging.INFO, logger="sendspin_bridge.bluetooth.manager"),
+    ):
+        assert bt_manager.is_device_paired() is None
+    assert "no current device object" not in caplog.text
 
 
 def test_connect_device_does_not_repair_when_pairing_state_unknown(bt_manager):
@@ -1393,13 +1447,24 @@ def test_is_device_connected_dbus_false(bt_manager):
     assert bt_manager.connected is False
 
 
-def test_is_device_connected_bluetoothctl_fallback(bt_manager):
+def test_is_device_connected_bluetoothctl_fallback(bt_manager, installed_bluez):
     """When D-Bus is unavailable, falls back to bluetoothctl output."""
-    with (
-        patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None),
-        patch.object(bt_manager, "_run_bluetoothctl", return_value=(True, "Connected: yes")),
-    ):
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout="Device AA:BB:CC:DD:EE:FF (public)\n\tName: TestSpeaker\n\tConnected: yes\n",
+    )
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None):
         assert bt_manager.is_device_connected() is True
+
+
+def test_is_device_connected_bluetoothctl_fallback_disconnected(bt_manager, installed_bluez):
+    """The bluetoothctl fallback reports Connected: no as disconnected."""
+    installed_bluez.on(
+        "info AA:BB:CC:DD:EE:FF",
+        stdout="Device AA:BB:CC:DD:EE:FF (public)\n\tName: TestSpeaker\n\tConnected: no\n",
+    )
+    with patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None):
+        assert bt_manager.is_device_connected() is False
 
 
 def test_is_device_connected_exception_returns_false(bt_manager):
