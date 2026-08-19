@@ -77,36 +77,31 @@ def _reset_shared_module_state():
 
     pytest-xdist's `loadfile` distribution puts whole files into one
     worker, but unrelated files can still share a worker — and when one
-    file leaks shared state (BT operation lock, MA API credentials,
-    scan-job dict), the next file's tests see stale values.
+    file leaks shared state (MA API credentials, scan-job dict), the
+    next file's tests see stale values.
 
     Reset the few known leak sites BEFORE each test. Cheap; deterministic.
+
+    The BT operation lock is deliberately NOT force-released here: after
+    the batch-5 lock fixes every entry point releases in ``finally``, so
+    a leaked acquire is a real bug — and without a silent release the
+    leak surfaces as a visible test failure instead of being swept.
     """
-    # 1. Force-release the global BT operation lock. Some test failure
-    #    paths (e.g. pair flow exception before _release_bt_operation)
-    #    leave the threading.Lock acquired.
-    import sendspin_bridge.services.bluetooth.bt_operation_lock as _btlock
-
-    try:
-        _btlock._bt_operation_lock.release()
-    except RuntimeError:
-        pass  # already released — expected
-
-    # 2. Clear MA API credentials so `_build_imageproxy_url` returns the
+    # 1. Clear MA API credentials so `_build_imageproxy_url` returns the
     #    raw path instead of a fully-qualified `http://ma:8095/imageproxy`
     #    URL when the test didn't explicitly opt in.
     import sendspin_bridge.bridge.state as _state
 
     _state.set_ma_api_credentials("", "")
 
-    # 3. Clear in-flight scan jobs so /api/bt/scan doesn't 409 with
+    # 2. Clear in-flight scan jobs so /api/bt/scan doesn't 409 with
     #    "scan already in progress" from a sibling test.
     import sendspin_bridge.services.lifecycle.async_job_state as _ajs
 
     with _ajs._scan_jobs_lock:
         _ajs._scan_jobs.clear()
 
-    # 4. Re-sync the `routes` package's submodule attributes with the
+    # 3. Re-sync the `routes` package's submodule attributes with the
     #    sys.modules entries. test_scan_cooldown's stash/pop fixture
     #    sometimes leaves `routes.api_bt` pointing at a re-imported,
     #    now-popped instance while sys.modules holds the original —
