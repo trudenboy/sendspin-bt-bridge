@@ -803,9 +803,9 @@ def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     [
         ("/api/bt/reconnect", {"player_name": "ENEBY20"}),
         ("/api/bt/pair", {"player_name": "ENEBY20"}),
-        ("/api/bt/reset_reconnect", {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"}),
-        ("/api/bt/pair_new", {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"}),
-        ("/api/bt/scan", {"adapter": "C0:FB:F9:62:D7:D6"}),
+        ("/api/bt/reset_reconnect", {"mac": MAC, "adapter": HCI0_MAC}),
+        ("/api/bt/pair_new", {"mac": MAC, "adapter": HCI0_MAC}),
+        ("/api/bt/scan", {"adapter": HCI0_MAC}),
     ],
 )
 def test_bt_endpoints_release_the_operation_lock_when_the_worker_cannot_start(client, monkeypatch, path, payload):
@@ -827,6 +827,10 @@ def test_bt_endpoints_release_the_operation_lock_when_the_worker_cannot_start(cl
     bt = MagicMock()
     fake_client = SimpleNamespace(player_name="ENEBY20", bt_manager=bt, status={})
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _name: (fake_client, None))
+    # The scan route resolves the requested adapter against the host's real
+    # controllers; pin them so the test asserts lock behaviour, not hardware.
+    monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [HCI0_MAC, HCI1_MAC])
+    monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {HCI0_MAC.replace(":", ""): "hci0"})
 
     resp = client.post(path, json=payload)
 
