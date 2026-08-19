@@ -32,18 +32,55 @@ class LineKind(Enum):
     EMPTY = auto()
 
 
-# All three historical copies of this regex were byte-identical.
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# All three historical copies of this regex covered SGR colour codes only
+# (``\x1b[…m``).  bluetoothctl also redraws its readline prompt with
+# cursor-movement escapes (``\x1b[C``), which then leaked into the device
+# info modal, so the full CSI grammar is stripped here.
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 # ``[name]> `` prompt-echo prefix (the grammar the paired-list whitelist
 # strips).  Anchored so bracketed async notifications (``[CHG] `` etc.)
 # survive the strip and keep failing downstream ``Device `` checks.
 _PROMPT_GT_RE = re.compile(r"^\[[^\]]+\]>\s*")
 
-# Well-known interactive prompts of either grammar (``[bluetooth]#``,
-# ``[bluetoothctl]>``).  Lines led by one of these are prompt output or
-# prompt-echoed input — never command output.
-_KNOWN_PROMPT_RE = re.compile(r"^\[(?:bluetooth|bluetoothctl)\][#>]", re.IGNORECASE)
+# Any interactive prompt token, wherever it lands on the line:
+# ``[bluetooth]#``, ``[bluetoothctl]>``, and the device-named prompts
+# bluetoothctl switches to once a device connects (``[ENEBY Portable]#``).
+# With stdin piped, bluetoothctl glues the startup banner, the prompt and
+# whatever it emits next onto one physical line, so the prompt is a
+# separator inside the line rather than a shape the whole line has.
+# Only the ``#`` grammar behaves this way; under the ``]>`` grammar the
+# prompt is a prefix on real output lines and is stripped, not dropped.
+_PROMPT_TOKEN_RE = re.compile(r"\[[^\[\]]+\]#\s*")
+
+# bluetoothctl echoes the input line after its prompt when stdin is piped.
+# The echo is input, not output, so it must not become the connect
+# summary's last-line fallback.  Recognised by its verb, because the
+# prompt name alone can't distinguish an echo from a real emission that
+# happened to land on the prompt line.
+_ECHOED_VERBS = frozenset(
+    {
+        "agent",
+        "connect",
+        "default-agent",
+        "devices",
+        "disconnect",
+        "discoverable",
+        "info",
+        "list",
+        "menu",
+        "pair",
+        "pairable",
+        "power",
+        "quit",
+        "remove",
+        "scan",
+        "select",
+        "show",
+        "trust",
+        "version",
+    }
+)
 
 _EVENT_RE = re.compile(r"^\[(NEW|CHG|DEL)\]\s+Device\s+([0-9A-Fa-f:]{17})", re.IGNORECASE)
 _EVENT_KINDS = {
@@ -82,19 +119,30 @@ class BluezLine:
 def classify_line(raw: str) -> BluezLine:
     """Classify a single raw bluetoothctl output line."""
     stripped = strip_ansi(raw).strip()
-    text = _PROMPT_GT_RE.sub("", strip_ansi(raw)).strip()
 
     if not stripped:
         return BluezLine(raw=raw, text="", kind=LineKind.EMPTY)
 
-    # Prompt detection runs on the *unstripped-prefix* form so both
-    # grammars are recognised: a line led by ``[bluetooth]#`` /
-    # ``[bluetoothctl]>`` (prompt + optional echoed command), and any
-    # line *ending* in ``]#`` / ``]>`` (bare prompts of any name,
-    # including device-named ones, plus the piped-mode startup line
-    # where the bluetoothd banner is glued to the first prompt).
-    if _KNOWN_PROMPT_RE.match(stripped) or stripped.endswith(("]#", "]>")):
-        return BluezLine(raw=raw, text=text if not stripped.endswith(("]#", "]>")) else "", kind=LineKind.PROMPT)
+    # Everything up to and including the last prompt token is prompt
+    # redraw — banner text, cursor repositioning, the echoed input line.
+    # What follows on the same line is the real emission and is classified
+    # on its own merits; nothing left means the line was only a prompt.
+    prompts = list(_PROMPT_TOKEN_RE.finditer(stripped))
+    if prompts:
+        remainder = stripped[prompts[-1].end() :].strip()
+        is_echo = (
+            remainder.casefold() not in _BANNER_CASEFOLD and remainder.split(maxsplit=1)[0].casefold() in _ECHOED_VERBS
+            if remainder
+            else False
+        )
+        if not remainder or is_echo:
+            return BluezLine(raw=raw, text="", kind=LineKind.PROMPT)
+        stripped = remainder
+
+    text = _PROMPT_GT_RE.sub("", stripped).strip()
+    if not text:
+        # A bare ``[bluetoothctl]>`` prompt: the whole line was the prefix.
+        return BluezLine(raw=raw, text="", kind=LineKind.PROMPT)
 
     event = _EVENT_RE.match(text)
     if event:

@@ -47,13 +47,13 @@ def test_agent_registered_is_banner():
     assert classify_line("agent registered").kind is LineKind.BANNER
 
 
-def test_device_named_prompt_with_echo_stays_content():
-    # A prompt named after the default device is only recognisable as a
-    # prompt when it is bare; with an echoed command glued on, the
-    # historical connect-summary consumer kept the line. BluezLine keeps
-    # that behaviour so the summary fallback is unchanged.
+def test_device_named_prompt_with_echo_is_prompt_kind():
+    # bluetoothctl renames its prompt after the default device once one
+    # connects. The echoed command after it is still input, not output —
+    # a ``connect``/``pair`` echo landing in the connect summary would be
+    # reported to the operator as the diagnosis.
     line = classify_line("[ENEBY20]# show")
-    assert line.kind is LineKind.CONTENT
+    assert line.kind is LineKind.PROMPT
 
 
 def test_async_events_are_classified_with_mac():
@@ -92,3 +92,36 @@ def test_event_lines_keep_bracket_in_text():
 def test_classify_lines_skips_nothing_and_preserves_order():
     out = classify_lines("[NEW] Device 11:22:33:44:55:66 X\n\nDevice 6C:5C:3D:35:17:99 ENEBY\n")
     assert [line.kind for line in out] == [LineKind.EVENT_NEW, LineKind.EMPTY, LineKind.CONTENT]
+
+
+# --- Captured from real bluetoothctl 5.72 with stdin piped (dev stand) -------
+# bluetoothctl redraws its readline prompt with cursor-forward escapes and
+# glues the startup banner, the prompt, and the next emission onto one
+# physical line.  Both shapes below are verbatim captures.
+
+
+def test_cursor_movement_escapes_are_stripped():
+    """Only SGR colour codes were stripped historically, so the cursor
+    escapes of the prompt redraw leaked into the device-info modal."""
+    line = classify_line("Waiting to connect to bluetoothd...\x1b[0;94m[bluetooth]\x1b[0m# \x1b[C\x1b[CENEBY Portable")
+    assert "\x1b" not in line.text
+
+
+def test_banner_glued_to_a_device_named_prompt_is_still_a_banner():
+    """``Agent registered`` is transport noise wherever it lands; when it
+    arrives glued to the prompt the connect summary used to keep it and
+    report it as the diagnosis."""
+    line = classify_line("\x1b[0;94m[ENEBY Portable]\x1b[0m# Agent registered")
+    assert line.kind is LineKind.BANNER
+    assert line.text == "Agent registered"
+
+
+def test_event_glued_to_a_prompt_is_still_an_event():
+    line = classify_line("[bluetooth]# [NEW] Device 6C:5C:3D:35:17:99 ENEBY Portable")
+    assert line.kind is LineKind.EVENT_NEW
+    assert line.event_mac == "6C:5C:3D:35:17:99"
+
+
+def test_text_after_a_prompt_never_keeps_the_prompt_token():
+    line = classify_line("Waiting to connect to bluetoothd...\x1b[0;94m[bluetooth]\x1b[0m# ENEBY Portable")
+    assert line.text == "ENEBY Portable"
