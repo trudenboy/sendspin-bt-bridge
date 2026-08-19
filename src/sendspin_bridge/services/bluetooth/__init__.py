@@ -34,10 +34,6 @@ __all__ = [
     "resolve_hci_for_mac",
 ]
 
-# /sys/class/bluetooth/hciN/address is the canonical kernel mapping from
-# adapter MAC to interface name.  Override for tests.
-_BT_SYSFS_DIR: Path = Path("/sys/class/bluetooth")
-
 # Ordered list of PINs the bridge tries when a device asks for one. `0000`
 # is the BlueZ/consumer default; the rest are the most common fallbacks
 # shipped by BT audio vendors (user guides for Anker, JBL, HMDX, Harman,
@@ -102,65 +98,13 @@ def build_hci_map() -> dict[str, str]:
     adapters and avoids redundant filesystem I/O on hosts with several
     BT controllers.
 
-    Keys are uppercase, colon-stripped MACs (matching what
-    ``resolve_hci_for_mac`` compares internally). Sysfs is the
-    authoritative source — :file:`/sys/class/bluetooth/hciN/address` is
-    what BlueZ itself honours. When sysfs isn't mounted into the
-    process (the typical Docker case unless ``-v /sys:/sys:ro`` is
-    used) we fall back to parsing :command:`hciconfig -a`, which talks
-    to the kernel via the BlueZ control socket and returns the same
-    ``hciN`` labels. Returns an empty dict only when both paths fail.
+    Delegates to :meth:`bluetooth.bluez.BluezControl.hci_map` — the
+    transport module owns both the sysfs walk (the canonical kernel
+    mapping, issue #193) and the ``hciconfig -a`` fallback for hosts
+    without ``/sys`` mounted.  Keys are uppercase, colon-stripped MACs;
+    empty dict only when both paths fail.
     """
-    mapping: dict[str, str] = {}
-    try:
-        entries = sorted(_BT_SYSFS_DIR.iterdir())
-    except OSError as exc:
-        logger.debug("sysfs adapter lookup failed: %s", exc)
-    else:
-        for hci in entries:
-            addr_file = hci / "address"
-            if not addr_file.exists():
-                continue
-            try:
-                addr = addr_file.read_text().strip().upper().replace(":", "")
-            except OSError:
-                continue
-            if addr:
-                mapping[addr] = hci.name
-        if mapping:
-            return mapping
-
-    # Sysfs unmounted (Docker without /sys passthrough). Ask the kernel
-    # via hciconfig — it uses the BlueZ control socket and prints the
-    # canonical hciN labels with their MACs.
-    try:
-        import subprocess
-
-        out = subprocess.run(
-            ["hciconfig", "-a"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-            check=False,
-        ).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("hciconfig fallback failed: %s", exc)
-        return mapping
-
-    current: str | None = None
-    for line in out.splitlines():
-        head = line.split("\t", 1)[0].strip()
-        if head.endswith(":") and head[:-1].startswith("hci") and head[:-1][3:].isdigit():
-            current = head[:-1]
-            continue
-        if current and "BD Address:" in line:
-            # "    BD Address: AA:BB:CC:DD:EE:FF  ACL MTU: ..."
-            tail = line.split("BD Address:", 1)[1].strip()
-            mac = tail.split()[0] if tail else ""
-            if _MAC_RE.match(mac):
-                mapping[mac.upper().replace(":", "")] = current
-            current = None
-    return mapping
+    return get_bluez().hci_map()
 
 
 def resolve_hci_for_mac(mac: str) -> str:

@@ -16,11 +16,12 @@ enforced by ``tests/unit/bluetooth/test_bluez_import_rule.py``.
 from __future__ import annotations
 
 import logging
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ._adapters import Adapter, resolve_select_mac
+from ._adapters import Adapter, enumerate_sysfs_adapters, parse_hciconfig, resolve_select_mac
 from ._lines import BluezLine, LineKind, classify_line, classify_lines, strip_ansi
 from ._parsers import (
     INFO_FIELDS,
@@ -194,6 +195,25 @@ class BluezControl:
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
             return []
         return parse_adapter_list(result.stdout)
+
+    def hci_map(self) -> dict[str, str]:
+        """``{MAC: hciN}`` for every visible controller (colon-stripped keys).
+
+        Sysfs is the authoritative source — ``/sys/class/bluetooth`` is
+        what the kernel and BlueZ honour.  When sysfs is not mounted into
+        the process (Docker without ``/sys`` passthrough) the fallback is
+        ``hciconfig -a`` via the spawner, which reads the same mapping
+        through the BlueZ control socket.  Empty dict when both fail.
+        """
+        mapping = enumerate_sysfs_adapters(self._sysfs_dir)
+        if mapping:
+            return mapping
+        try:
+            proc = self._spawner.run(("hciconfig", "-a"), input=None, timeout=3.0)
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.debug("hciconfig fallback failed: %s", exc)
+            return {}
+        return parse_hciconfig(proc.stdout)
 
     def show(self, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> AdapterInfo:
         """``show`` for one controller; ``Adapter.addressed(mac)`` never selects."""

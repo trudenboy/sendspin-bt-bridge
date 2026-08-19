@@ -405,6 +405,31 @@ def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(monkeypatch):
     assert "remove AA:BB:CC:DD:EE:FF\n" in cleanup_input
 
 
+def test_resolve_adapter_to_mac_uses_kernel_hci_map_not_list_position(monkeypatch):
+    """Issue #340 on the pair path: ``bluetoothctl list`` order is BlueZ
+    registration order, not kernel hciN numbering.  When hci1 is registered
+    first (list position 0) the positional resolver silently paired against
+    hci0 — the live ENEBY pair failure on the two-adapter stand.  Resolution
+    must go through the sysfs-backed kernel map, same as the scan path."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    # bluetoothctl list returns hci1's MAC first (registration order).
+    monkeypatch.setattr(
+        api_bt_mod,
+        "list_bt_adapters",
+        lambda: ["00:02:72:0A:E4:3B", "C0:FB:F9:62:D7:D6"],
+    )
+    # Kernel map (sysfs): hci0=C0:FB…, hci1=00:02….
+    monkeypatch.setattr(
+        api_bt_mod,
+        "build_hci_map",
+        lambda: {"C0FBF962D7D6": "hci0", "0002720AE43B": "hci1"},
+    )
+
+    assert api_bt_mod._resolve_adapter_to_mac("hci1") == "00:02:72:0A:E4:3B"
+    assert api_bt_mod._resolve_adapter_to_mac("hci0") == "C0:FB:F9:62:D7:D6"
+
+
 def test_run_standalone_pair_fails_when_bond_not_on_requested_adapter(monkeypatch):
     """Live two-adapter failure (rc.1 stand): device already bonded on hci0,
     pair requested on hci1 — the SSP exchange never fires, the session prints

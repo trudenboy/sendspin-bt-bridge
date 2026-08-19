@@ -34,6 +34,28 @@ def installed_bluez(fake_bluez):
 
 
 @pytest.fixture
+def bluez_sysfs():
+    """Install a ``BluezControl`` whose sysfs root is a tmp tree.
+
+    The kernel MAC→hciN mapping reads ``BluezControl.sysfs_dir``; tests
+    call ``bluez_sysfs(path)`` to point it at a fake
+    ``/sys/class/bluetooth`` and the singleton is reset afterwards.  A
+    FakeBluez spawner backs the control so the ``hciconfig`` fallback
+    never spawns a real subprocess.
+    """
+    from sendspin_bridge.bluetooth.bluez import BluezControl, set_bluez
+    from tests.support.fake_bluez import FakeBluez
+
+    def _install(sysfs_dir):
+        set_bluez(BluezControl(spawner=FakeBluez(), sysfs_dir=sysfs_dir))
+
+    try:
+        yield _install
+    finally:
+        set_bluez(None)
+
+
+@pytest.fixture
 def tmp_config(tmp_path):
     """Provide a temporary config file and set CONFIG_FILE/CONFIG_DIR."""
     config_file = tmp_path / "config.json"

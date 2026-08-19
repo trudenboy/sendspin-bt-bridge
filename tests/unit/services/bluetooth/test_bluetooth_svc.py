@@ -392,8 +392,8 @@ def _make_fake_sysfs(tmp_path, entries: dict[str, str]) -> "object":
     """Build a fake ``/sys/class/bluetooth`` directory.
 
     ``entries`` maps ``hciN`` → MAC string (with colons, any case).  Returns
-    the root directory ready to monkeypatch onto
-    ``services.bluetooth._BT_SYSFS_DIR``.
+    the root directory ready to install via the ``bluez_sysfs`` fixture
+    (``BluezControl.sysfs_dir``).
     """
     sysfs = tmp_path / "bluetooth"
     sysfs.mkdir()
@@ -404,16 +404,17 @@ def _make_fake_sysfs(tmp_path, entries: dict[str, str]) -> "object":
     return sysfs
 
 
-def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, monkeypatch):
+def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, bluez_sysfs):
     # Pi built-in (Cypress) registered as hci0; USB BT500 plugged in second
     # registered as hci1.  Sysfs is the canonical mapping — bluetoothctl's
     # internal order may differ, but we must surface the kernel name so the
     # frontend label matches `hciconfig` (issue #193).
-    sysfs = _make_fake_sysfs(
-        tmp_path,
-        {"hci0": "A0:AD:9F:6E:B2:D5", "hci1": "88:A2:9E:C0:07:0D"},
+    bluez_sysfs(
+        _make_fake_sysfs(
+            tmp_path,
+            {"hci0": "A0:AD:9F:6E:B2:D5", "hci1": "88:A2:9E:C0:07:0D"},
+        )
     )
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", sysfs)
 
     assert resolve_hci_for_mac("A0:AD:9F:6E:B2:D5") == "hci0"
     assert resolve_hci_for_mac("88:A2:9E:C0:07:0D") == "hci1"
@@ -421,17 +422,16 @@ def test_resolve_hci_for_mac_returns_kernel_hci_via_sysfs(tmp_path, monkeypatch)
     assert resolve_hci_for_mac("a0:ad:9f:6e:b2:d5") == "hci0"
 
 
-def test_resolve_hci_for_mac_returns_empty_when_unknown(tmp_path, monkeypatch):
-    sysfs = _make_fake_sysfs(tmp_path, {"hci0": "AA:BB:CC:DD:EE:FF"})
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", sysfs)
+def test_resolve_hci_for_mac_returns_empty_when_unknown(tmp_path, bluez_sysfs):
+    bluez_sysfs(_make_fake_sysfs(tmp_path, {"hci0": "AA:BB:CC:DD:EE:FF"}))
 
     assert resolve_hci_for_mac("00:00:00:00:00:01") == ""
 
 
-def test_resolve_hci_for_mac_returns_empty_when_sysfs_missing(tmp_path, monkeypatch):
+def test_resolve_hci_for_mac_returns_empty_when_sysfs_missing(tmp_path, bluez_sysfs):
     # /sys/class/bluetooth doesn't exist on macOS dev boxes / containers
     # without /sys mounted.  Caller falls back to a synthetic label.
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth._BT_SYSFS_DIR", tmp_path / "missing")
+    bluez_sysfs(tmp_path / "missing")
 
     assert resolve_hci_for_mac("AA:BB:CC:DD:EE:FF") == ""
 

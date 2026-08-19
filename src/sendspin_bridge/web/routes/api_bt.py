@@ -792,6 +792,21 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
         macs = [m.upper() for m in list_bt_adapters() if m]
     except Exception:  # pragma: no cover - defensive
         return adapter
+    # Resolve through the sysfs-backed kernel map first: ``bluetoothctl
+    # list`` order is BlueZ registration order, not kernel hciN numbering —
+    # positional indexing paired/scanned the wrong physical adapter on
+    # hosts where hci1 registers before hci0 (issue #340, hit live on the
+    # two-adapter stand where a pair for hci1 silently ran against hci0).
+    kernel_hci = adapter.lower()
+    hci_map = build_hci_map()
+    if hci_map:
+        for mac in macs:
+            if hci_map.get(mac.replace(":", "")) == kernel_hci:
+                return mac
+        return adapter  # mapped nowhere — let the failed select surface loudly
+    # No sysfs/hciconfig visibility (Docker without /sys): the adapters
+    # endpoint fell back to synthetic ``hci{i}`` labels in list order, so
+    # mirror that here.
     if 0 <= idx < len(macs):
         return macs[idx]
     return adapter

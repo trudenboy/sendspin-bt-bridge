@@ -237,12 +237,17 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     assert "connect AA:BB:CC:DD:EE:04" in popen_input
 
 
-def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, installed_bluez):
+def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, installed_bluez, tmp_path):
     """``bluetoothctl select hci1`` fails on HAOS / LXC with ``Controller
     hci1 not available`` — only the controller MAC is accepted. The fleet
     row's ``<select>`` sends ``hci0``/``hci1`` as its value, so the reset
     flow must translate it to a MAC before issuing ``select`` or the
     entire sequence silently runs against the default controller.
+
+    The translation uses the sysfs-backed kernel map (issue #340): the two
+    fake controllers are listed with hci1's MAC first (BlueZ registration
+    order), while the kernel labels them hci0=C0:FB:F9:62:D6:9D and
+    hci1=C0:FB:F9:62:D7:D6.
     """
 
     import sendspin_bridge.web.routes.api_bt as module
@@ -256,12 +261,24 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, 
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
     monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
     monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
-    # Pretend the host reports two controllers: hci0 + hci1.
+    # Pretend the host reports two controllers — hci1's MAC listed FIRST
+    # (BlueZ registration order diverges from kernel hciN numbering).
     monkeypatch.setattr(
         module,
         "list_bt_adapters",
-        lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
+        lambda: ["C0:FB:F9:62:D7:D6", "C0:FB:F9:62:D6:9D"],
     )
+    # Kernel hciN map: build the installed fake's control with a fake sysfs
+    # tree (``fake.control`` is a fresh instance per access, so patch the
+    # singleton that get_bluez() actually serves).
+    sysfs = tmp_path / "bluetooth"
+    for hci, addr in (("hci0", "C0:FB:F9:62:D6:9D"), ("hci1", "C0:FB:F9:62:D7:D6")):
+        d = sysfs / hci
+        d.mkdir(parents=True)
+        (d / "address").write_text(addr + "\n")
+    from sendspin_bridge.bluetooth.bluez import BluezControl, set_bluez
+
+    set_bluez(BluezControl(spawner=installed_bluez, sysfs_dir=sysfs))
 
     import selectors
 
@@ -278,7 +295,7 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, 
     assert "select hci1" not in popen_input.lower()
 
 
-def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, installed_bluez):
+def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, installed_bluez, tmp_path):
     """If no controller can be resolved (e.g. all adapters down mid-flow),
     fall back to the supplied ``hciN`` instead of dropping the ``select``
     prefix entirely.  The command may still fail at bluetoothctl layer,
@@ -293,6 +310,9 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, i
     monkeypatch.setattr(module, "_PAIR_SCAN_DURATION", 0)
     monkeypatch.setattr(module, "_PAIR_WAIT_DURATION", 5)
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
+    # No sysfs visibility: the kernel map is empty, so nothing can resolve
+    # ``hci0`` and it must pass through unchanged.
+    monkeypatch.setattr(installed_bluez.control, "_sysfs_dir", tmp_path / "missing")
     # No controllers anywhere: the endpoint keeps ``hci0`` and the transport
     # has nothing to resolve it against either.
     installed_bluez.on("list", stdout="")

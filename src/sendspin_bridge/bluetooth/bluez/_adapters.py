@@ -136,3 +136,58 @@ def resolve_select_mac(
     # the transcript, whereas dropping the prefix would silently run the
     # command against whichever controller is default.
     return ident, True
+
+
+def enumerate_sysfs_adapters(sysfs_dir: Path) -> dict[str, str]:
+    """Walk *sysfs_dir* (``/sys/class/bluetooth``) → ``{MAC: hciN}``.
+
+    Keys are uppercase, colon-stripped MACs.  This is the canonical kernel
+    mapping BlueZ itself honours — ``bluetoothctl list`` enumerates
+    controllers in BlueZ registration order, which can diverge from the
+    kernel ``hciN`` numbering after a hot-plug (issue #193).  Returns an
+    empty dict when the directory is unreadable (non-Linux host, container
+    without ``/sys`` mounted).
+    """
+    mapping: dict[str, str] = {}
+    try:
+        entries = sorted(sysfs_dir.iterdir())
+    except OSError as exc:
+        logger.debug("sysfs adapter lookup failed: %s", exc)
+        return mapping
+    for hci in entries:
+        addr_file = hci / "address"
+        if not addr_file.exists():
+            continue
+        try:
+            addr = addr_file.read_text().strip().upper().replace(":", "")
+        except OSError:
+            continue
+        if addr:
+            mapping[addr] = hci.name
+    return mapping
+
+
+def parse_hciconfig(stdout: str) -> dict[str, str]:
+    """Parse ``hciconfig -a`` output → ``{MAC: hciN}`` (same key shape as
+    :func:`enumerate_sysfs_adapters`).
+
+    Fallback for hosts where ``/sys/class/bluetooth`` is not mounted into
+    the process (the typical Docker case without ``-v /sys:/sys:ro``):
+    ``hciconfig`` talks to the kernel via the BlueZ control socket and
+    prints the canonical ``hciN`` labels with their MACs.
+    """
+    mapping: dict[str, str] = {}
+    current: str | None = None
+    for line in stdout.splitlines():
+        head = line.split("\t", 1)[0].strip()
+        if head.endswith(":") and head[:-1].startswith("hci") and head[:-1][3:].isdigit():
+            current = head[:-1]
+            continue
+        if current and "BD Address:" in line:
+            # "    BD Address: AA:BB:CC:DD:EE:FF  ACL MTU: ..."
+            tail = line.split("BD Address:", 1)[1].strip()
+            mac = tail.split()[0] if tail else ""
+            if _MAC_RE.match(mac):
+                mapping[mac.upper().replace(":", "")] = current
+            current = None
+    return mapping
