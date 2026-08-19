@@ -95,6 +95,13 @@ _EVENT_KINDS = {
 _BANNER_CASEFOLD = frozenset({"agent registered"})
 
 
+def _is_echoed_input(text: str) -> bool:
+    """True when ``text`` is bluetoothctl echoing back the piped input line."""
+    if not text or text.casefold() in _BANNER_CASEFOLD:
+        return False
+    return text.split(maxsplit=1)[0].casefold() in _ECHOED_VERBS
+
+
 def strip_ansi(text: str) -> str:
     """Remove ANSI colour codes from bluetoothctl output."""
     return _ANSI_RE.sub("", text)
@@ -130,19 +137,20 @@ def classify_line(raw: str) -> BluezLine:
     prompts = list(_PROMPT_TOKEN_RE.finditer(stripped))
     if prompts:
         remainder = stripped[prompts[-1].end() :].strip()
-        is_echo = (
-            remainder.casefold() not in _BANNER_CASEFOLD and remainder.split(maxsplit=1)[0].casefold() in _ECHOED_VERBS
-            if remainder
-            else False
-        )
-        if not remainder or is_echo:
+        if not remainder or _is_echoed_input(remainder):
             return BluezLine(raw=raw, text="", kind=LineKind.PROMPT)
         stripped = remainder
 
+    gt_prompt = _PROMPT_GT_RE.match(stripped) is not None
     text = _PROMPT_GT_RE.sub("", stripped).strip()
     if not text:
         # A bare ``[bluetoothctl]>`` prompt: the whole line was the prefix.
         return BluezLine(raw=raw, text="", kind=LineKind.PROMPT)
+    if gt_prompt and _is_echoed_input(text):
+        # ``[bluetoothctl]> connect AA:BB:…`` — input, not output.  The
+        # echoed text is kept for transcripts; the kind is what consumers
+        # filter on, and an echo is never a result.
+        return BluezLine(raw=raw, text=text, kind=LineKind.PROMPT)
 
     event = _EVENT_RE.match(text)
     if event:

@@ -261,3 +261,35 @@ def test_parse_scan_records_refused_discovery():
 def test_parse_scan_reports_no_discovery_errors_for_a_healthy_scan():
     lines = classify_lines("[bluetooth]# scan bredr\nDiscovery started\n[NEW] Device AA:BB:CC:DD:EE:FF Speaker\n")
     assert parse_scan(lines).discovery_errors == ()
+
+
+def test_summarize_connect_output_ignores_prompt_echo_and_async_notifications():
+    """A realistic connect transcript: ANSI-coloured ``]>`` prompt with the
+    echoed command, ``[CHG]`` discovery notifications, then the BlueZ error.
+    The excerpt must be the error, never the echo or a notification."""
+    lines = classify_lines(
+        "[\x1b[0;94mbluetoothctl]> \x1b[0mconnect D0:C9:07:11:C9:DF\n"
+        "Attempting to connect to D0:C9:07:11:C9:DF\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device D0:C9:07:11:C9:DF Connected: no\n"
+        "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout\n"
+        "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
+    )
+    excerpt = summarize_connect_output(lines)
+    assert "br-connection-page-timeout" in excerpt
+    assert "bluetoothctl]" not in excerpt
+    assert "[CHG]" not in excerpt
+
+
+def test_summarize_connect_output_empty_for_pure_prompt_and_event_noise():
+    """Banner + prompts + async notifications carry no diagnosis, so the
+    caller falls back to the bare warning instead of logging a prompt."""
+    lines = classify_lines(
+        "Agent registered\n"
+        "[\x1b[0;94mbluetoothctl]> \x1b[0m\n"
+        "[\x1b[0;93mCHG\x1b[0m] Device 68:3A:48:D3:62:68 RSSI: 0xffffffaa (-86)\n"
+        "[NEW] Device AA:BB:CC:DD:EE:FF Some Speaker\n"
+        "[DEL] Device 11:22:33:44:55:66 Old Speaker\n"
+        "[bluetooth]#\n"
+    )
+    assert summarize_connect_output(lines) == ""

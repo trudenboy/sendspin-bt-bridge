@@ -72,12 +72,6 @@ _CONNECT_CHECK_RETRIES = 5  # status checks after connect before giving up
 # still bouncing: each reclaim needs the speaker to hold a link past
 # this window.
 _AUTO_RECLAIM_QUIET_S = 60.0
-# Strips ANSI colour codes from bluetoothctl stdout before excerpting it
-# into the connect-failure warning line.
-_BCTL_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-# Caps the connect-output excerpt so a chatty `bluetoothctl` transcript
-# can't flood a single log line.
-_BCTL_EXCERPT_MAX_LEN = 200
 # Cadence for live-RSSI refresh via kernel mgmt opcode 0x0031.
 # 5 s feels live to the UI (chip updates while you walk past a
 # speaker) without exceeding the controller's internal averaging
@@ -92,53 +86,6 @@ _RSSI_REFRESH_INTERVAL_S = 5.0
 # device object, force-remove the stale BlueZ entry so the next reconnect cycle
 # can escalate to pair_device (KALLSUP-class loop, #162).
 _PAIRED_UNKNOWN_THRESHOLD = 3
-
-
-def _summarize_bluetoothctl_connect_output(output: str) -> str:
-    """Reduce multi-line bluetoothctl connect stdout to one diagnostic line.
-
-    Prefers a line containing the BlueZ error fingerprint (``Failed to
-    connect: …``); otherwise falls back to the last non-empty content
-    line. Strips ANSI colour codes and discards bluetoothctl's prompt
-    variants (``[bluetooth]#``, ``[bluetoothctl]>``) and its
-    asynchronous discovery notifications (``[CHG]``/``[NEW]``/``[DEL]``)
-    so they can't masquerade as a diagnostic. Returns an empty string
-    when ``output`` carries no usable signal — the caller then falls
-    back to the bare warning.
-    """
-    if not output:
-        return ""
-    cleaned: list[str] = []
-    for raw in output.splitlines():
-        line = _BCTL_ANSI_RE.sub("", raw).strip()
-        if not line:
-            continue
-        # Drop interactive prompt variants:
-        #   [bluetooth]#       — default prompt
-        #   [bluetooth]# foo   — prompt-echoed command (when bluetoothctl
-        #                        is run with stdin piped + a TTY-ish term)
-        #   [bluetoothctl]>    — prompt seen in some BlueZ versions, often
-        #                        with ANSI colour codes already stripped above
-        # And async discovery notifications (``[CHG] Device <mac> …``,
-        # ``[NEW] Device …``, ``[DEL] Device …``) that share the stdout
-        # stream and would otherwise become the last-line fallback.
-        if line.endswith(("]#", "]>")):
-            continue
-        if line.startswith(("[bluetooth]", "[bluetoothctl]")):
-            continue
-        if line.startswith(("[CHG]", "[NEW]", "[DEL]")):
-            continue
-        # bluetoothctl prints this startup banner even when the actual Connect
-        # error is emitted on stderr. It is transport noise, not a diagnosis.
-        if line.casefold() == "agent registered":
-            continue
-        cleaned.append(line)
-    if not cleaned:
-        return ""
-    for line in cleaned:
-        if "failed to connect" in line.lower():
-            return line[:_BCTL_EXCERPT_MAX_LEN]
-    return cleaned[-1][:_BCTL_EXCERPT_MAX_LEN]
 
 
 class BluetoothManager:
@@ -968,7 +915,7 @@ class BluetoothManager:
                     sink_ok = self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
-        excerpt = _summarize_bluetoothctl_connect_output(connect_result.text)
+        excerpt = connect_result.summary
         if excerpt:
             # #302 — surface the underlying BlueZ error (page-timeout,
             # br-connection-already-active, profile-unavailable, …) so the

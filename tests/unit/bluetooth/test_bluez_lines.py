@@ -125,3 +125,19 @@ def test_event_glued_to_a_prompt_is_still_an_event():
 def test_text_after_a_prompt_never_keeps_the_prompt_token():
     line = classify_line("Waiting to connect to bluetoothd...\x1b[0;94m[bluetooth]\x1b[0m# ENEBY Portable")
     assert line.text == "ENEBY Portable"
+
+
+def test_gt_prompt_echoed_verb_is_prompt_kind():
+    """Under the ``]>`` grammar the echoed input line must not be mistaken
+    for output — otherwise the connect summary reports ``connect <mac>``
+    as if it were the BlueZ diagnosis."""
+    line = classify_line("[\x1b[0;94mbluetoothctl]> \x1b[0mconnect D0:C9:07:11:C9:DF")
+    assert line.kind is LineKind.PROMPT
+
+
+def test_gt_prompt_real_output_stays_content():
+    """The ``]>`` prompt is a prefix on real emissions too — only the
+    echoed verbs are dropped."""
+    line = classify_line("[\x1b[0;94mENEBY20]> \x1b[0mFailed to connect: org.bluez.Error.Failed")
+    assert line.kind is LineKind.CONTENT
+    assert line.text == "Failed to connect: org.bluez.Error.Failed"
