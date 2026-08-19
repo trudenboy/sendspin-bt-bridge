@@ -667,11 +667,26 @@ def api_bt_disconnect():
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
     try:
-        result = get_bluez().disconnect(mac)
+        bluez = get_bluez()
+        # Target the adapter the device is bonded to: BlueZ bonds are
+        # per-controller (/org/bluez/hciN/dev_…), so an unscoped disconnect
+        # runs against the default controller — the wrong one on any host
+        # where the bond lives elsewhere (rc.1 checklist item 8).
+        owner = ""
+        for ref in bluez.list_adapters():
+            if any(entry.mac.upper() == mac for entry in bluez.list_devices(Adapter.select(ref.mac))):
+                owner = ref.mac
+                break
+        result = bluez.disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
             logger.error("Failed to disconnect device %s: outcome=%s", mac, result.outcome.value)
             return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
-        ok = "successful" in result.stdout.lower()
+        # BlueZ ≥5.72 prints "Attempting to disconnect…" and stays silent on
+        # success — only an explicit failure marker means the command failed.
+        lowered = result.stdout.lower()
+        ok = "successful" in lowered or not any(
+            marker in lowered for marker in ("failed", "not connected", "not available", "error")
+        )
         return jsonify({"ok": ok, "mac": mac})
     except Exception:
         logger.exception("Failed to disconnect device %s", mac)
