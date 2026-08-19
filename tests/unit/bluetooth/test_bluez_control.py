@@ -190,3 +190,12 @@ def test_scan_composite_collects_events_and_attributes_adapters(bluez, fake_blue
     enums = [c for c in fake_bluez.commands if c.kind == "run" and c.adapter_selected == ADAPTER_MAC]
     assert enums, "expected a scoped show+devices enumeration per adapter"
     assert transcript.device_adapter[ENEBY_MAC] == ADAPTER_MAC
+    assert transcript.discovery_errors == ()
+
+
+def test_scan_composite_surfaces_refused_discovery(bluez, fake_bluez):
+    """A wedged controller refuses ``scan bredr``; the transcript must say so
+    instead of reporting an empty room."""
+    fake_bluez.session_script([("scan bredr", ["Failed to start discovery: org.bluez.Error.InProgress"])])
+    transcript = bluez.scan([ADAPTER_MAC], window_s=1.0)
+    assert transcript.discovery_errors == ("org.bluez.Error.InProgress",)

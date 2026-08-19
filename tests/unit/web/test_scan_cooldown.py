@@ -224,20 +224,19 @@ def test_scan_result_running_includes_metadata(client):
         }
 
 
-def test_cooldown_timestamp_updated_after_scan(client):
+def test_cooldown_timestamp_updated_after_scan(client, installed_bluez):
     """A completed scan immediately activates the cooldown for the next scan request."""
     _mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
 
     _mod._last_scan_completed = 0.0
+    # An empty room: no discovery events, no enumerated devices.
+    installed_bluez.on("devices", stdout="")
 
     fake_time = 500.0
     with (
         patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
         patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
         patch("sendspin_bridge.web.routes.api_bt.list_bt_adapters", return_value=["AA:BB:CC:DD:EE:01"]),
-        patch("sendspin_bridge.web.routes.api_bt._run_bluetoothctl_scan", return_value=""),
-        patch("sendspin_bridge.web.routes.api_bt._parse_scan_output", return_value=(set(), {}, {}, set())),
-        patch("sendspin_bridge.web.routes.api_bt._resolve_unnamed_devices"),
         patch("sendspin_bridge.web.routes.api_bt.finish_scan_job"),
     ):
         mock_time.monotonic.return_value = fake_time

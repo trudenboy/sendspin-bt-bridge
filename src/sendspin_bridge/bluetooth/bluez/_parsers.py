@@ -57,6 +57,10 @@ _INFO_RSSI_PAT = re.compile(
 )
 _SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
 _SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
+# A controller that refuses discovery answers ``scan bredr`` with a D-Bus
+# error and then emits nothing at all — indistinguishable from an empty
+# room unless the refusal itself is captured.
+_DISCOVERY_FAIL_PAT = re.compile(r"^Failed to start discovery:\s*(.+)$", re.IGNORECASE)
 
 # Caps the connect-output excerpt so a chatty transcript can't flood a
 # single log line.
@@ -194,6 +198,7 @@ class ScanTranscript:
     device_adapter: dict[str, str] = field(default_factory=dict)
     active_macs: frozenset[str] = frozenset()
     rssi_by_mac: dict[str, int] = field(default_factory=dict)
+    discovery_errors: tuple[str, ...] = ()
 
 
 def parse_version(stdout: str) -> str:
@@ -307,10 +312,17 @@ def parse_scan(lines: tuple[BluezLine, ...] | list[BluezLine]) -> ScanTranscript
     device_adapter: dict[str, str] = {}
     active_macs: set[str] = set()
     rssi_by_mac: dict[str, int] = {}
+    discovery_errors: list[str] = []
     current_show_adapter = ""
     for line in lines:
         clean = line.text
         if not clean:
+            continue
+        refused = _DISCOVERY_FAIL_PAT.match(clean)
+        if refused:
+            reason = refused.group(1).strip()
+            if reason not in discovery_errors:
+                discovery_errors.append(reason)
             continue
         if not clean.startswith("["):
             ctrl = _SHOW_CTRL_PAT.match(clean)
@@ -352,6 +364,7 @@ def parse_scan(lines: tuple[BluezLine, ...] | list[BluezLine]) -> ScanTranscript
         device_adapter=device_adapter,
         active_macs=frozenset(active_macs),
         rssi_by_mac=rssi_by_mac,
+        discovery_errors=tuple(discovery_errors),
     )
 
 

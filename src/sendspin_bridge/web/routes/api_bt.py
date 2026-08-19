@@ -45,25 +45,6 @@ logger = logging.getLogger(__name__)
 
 bt_bp = Blueprint("api_bt", __name__)
 
-# ---------------------------------------------------------------------------
-# Pre-compiled regex patterns for BT scan output parsing
-# ---------------------------------------------------------------------------
-
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-_NEW_DEV_PAT = re.compile(r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})\s+(.*)")
-_CHG_NAME_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)")
-_CHG_RSSI_PAT = re.compile(r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:")
-# v2.63.0-rc.2: capture the dB value as well so device cards can render
-# signal strength.  bluetoothctl emits two formats — modern decimal
-# (``RSSI: -43``) and legacy parenthesised hex (``RSSI: 0xffffffd5 (-43)``).
-# The parenthesised decimal takes priority; otherwise the trailing signed
-# integer is the value.
-_CHG_RSSI_VALUE_PAT = re.compile(
-    r"\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s*"
-    r"(?:0x[0-9A-Fa-f]+\s*\((-?\d+)\)|(-?\d+))"
-)
-_SHOW_CTRL_PAT = re.compile(r"^Controller\s+([0-9A-Fa-f:]{17})")
-_SHOW_DEV_PAT = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})")
 _scan_lock = threading.Lock()
 
 
@@ -1121,114 +1102,25 @@ def _estimate_scan_duration(adapter_macs: "list[str]") -> int:
     return _SCAN_BASE_DURATION + max(len(adapter_macs) - 1, 0) * _SCAN_ADAPTER_OVERHEAD
 
 
-def _run_bluetoothctl_scan(adapter_macs: "list[str]") -> str:
-    """Run a bluetoothctl scan session and return combined stdout."""
-    bt_timeout = 12 + len(adapter_macs) * 2
+def _describe_discovery_refusal(errors: "tuple[str, ...]") -> str:
+    """Turn ``Failed to start discovery: …`` into operator-facing guidance.
 
-    proc = subprocess.Popen(
-        ["bluetoothctl"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    try:
-        if adapter_macs:
-            init_cmds: list[str] = ["agent on", "default-agent"]
-            for m in adapter_macs:
-                init_cmds.extend([f"select {m}", "power on", "scan bredr"])
-        else:
-            init_cmds = ["power on", "agent on", "default-agent", "scan bredr"]
-        if proc.stdin is None:
-            raise RuntimeError("bluetoothctl subprocess stdin unavailable")
-        proc.stdin.write("\n".join(init_cmds) + "\n")
-        proc.stdin.flush()
-        time.sleep(15)
-        proc.stdin.write("scan off\n")
-        proc.stdin.flush()
-        time.sleep(1)
-        result_stdout, _ = proc.communicate(timeout=bt_timeout + 4)
-    except Exception:
-        proc.kill()
-        proc.wait()
-        raise
-
-    # Per-adapter device enumeration runs in dedicated short sessions.
-    # Inside the long-lived scan session the ``select <MAC>; show``
-    # marker lines interleave with async discovery notifications on
-    # piped stdin — the same unreliability that produced the alias swap
-    # in #193 — so devices could be attributed to whichever controller
-    # happened to be selected when the output flushed (issue #340).
-    for m in adapter_macs:
-        try:
-            enum = subprocess.run(
-                ["bluetoothctl"],
-                input=f"select {m}\nshow\ndevices\n",
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            result_stdout += "\n" + enum.stdout
-        except Exception:
-            logger.debug("Post-scan device enumeration failed for %s", m, exc_info=True)
-    return result_stdout
-
-
-def _parse_scan_output(
-    stdout: str,
-) -> "tuple[set[str], dict[str, str], dict[str, str], set[str], dict[str, int]]":
-    """Parse bluetoothctl scan output.
-
-    Returns ``(seen_macs, names, device_adapter, active_macs, rssi_by_mac)``
-    where ``rssi_by_mac`` maps MAC → most-recent dBm seen during the scan
-    window.  ``active_macs`` keeps the legacy contract (every MAC that
-    emitted ``[CHG] ... RSSI:`` regardless of value parseability).
+    A controller whose firmware has wedged answers every discovery request
+    with an error and then goes quiet, which used to be reported as "no
+    devices found" — the one outcome that hides the actual fault.
     """
-    seen: set[str] = set()
-    names: dict[str, str] = {}
-    device_adapter: dict[str, str] = {}
-    active_macs: set[str] = set()
-    rssi_by_mac: dict[str, int] = {}
-    current_show_adapter: str = ""
-    for line in stdout.splitlines():
-        clean = _ANSI_RE.sub("", line).strip()
-        if not clean.startswith("["):
-            ctrl_m = _SHOW_CTRL_PAT.match(clean)
-            if ctrl_m:
-                current_show_adapter = ctrl_m.group(1).upper()
-                continue
-            if current_show_adapter:
-                dev_m = _SHOW_DEV_PAT.match(clean)
-                if dev_m:
-                    dmac = dev_m.group(1).upper()
-                    if dmac not in device_adapter:
-                        device_adapter[dmac] = current_show_adapter
-                    continue
-        scan_m = _NEW_DEV_PAT.search(clean)
-        if scan_m:
-            mac = scan_m.group(1).upper()
-            name = scan_m.group(2).strip()
-            seen.add(mac)
-            if name and not re.match(r"^[0-9A-Fa-f]{2}[-:]", name):
-                names[mac] = name
-            continue
-        chg_n = _CHG_NAME_PAT.search(clean)
-        if chg_n:
-            mac = chg_n.group(1).upper()
-            names[mac] = chg_n.group(2).strip()
-            continue
-        chg_r = _CHG_RSSI_PAT.search(clean)
-        if chg_r:
-            mac = chg_r.group(1).upper()
-            active_macs.add(mac)
-            chg_v = _CHG_RSSI_VALUE_PAT.search(clean)
-            if chg_v:
-                value = chg_v.group(2) or chg_v.group(3)
-                try:
-                    rssi_by_mac[mac] = int(value)
-                except (TypeError, ValueError):
-                    pass
-    return seen, names, device_adapter, active_macs, rssi_by_mac
+    reason = errors[0]
+    lowered = reason.lower()
+    if "inprogress" in lowered:
+        detail = "the adapter reports a discovery already in progress"
+    elif "notready" in lowered:
+        detail = "the adapter is not ready — it may be powered off or blocked by rfkill"
+    else:
+        detail = f"the adapter refused it ({reason})"
+    return (
+        f"Bluetooth discovery could not be started: {detail}. "
+        "Power-cycle the adapter (Reboot adapter), or unplug and replug the USB dongle, then scan again."
+    )
 
 
 def _resolve_unnamed_devices(all_macs: "set[str]", names: "dict[str, str]") -> None:
@@ -1304,9 +1196,16 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
     try:
         adapter_macs = _resolve_scan_adapter_macs(adapter)
 
-        result_stdout = _run_bluetoothctl_scan(adapter_macs)
-        seen, names, device_adapter, active_macs, rssi_by_mac = _parse_scan_output(result_stdout)
-        all_macs = seen | active_macs
+        # The discovery window is the same number the UI is told to expect
+        # (``_estimate_scan_duration``), so the progress bar can't drift.
+        transcript = get_bluez().scan(adapter_macs, window_s=float(_SCAN_BASE_DURATION))
+        names = dict(transcript.names)
+        device_adapter = transcript.device_adapter
+        rssi_by_mac = transcript.rssi_by_mac
+        discovery_errors = transcript.discovery_errors
+        if discovery_errors:
+            logger.warning("BT scan: adapter refused to start discovery (%s)", "; ".join(discovery_errors))
+        all_macs = set(transcript.seen_macs) | set(transcript.active_macs)
 
         if len(all_macs) > _MAX_SCAN_RESULTS:
             logger.warning("BT scan found %d devices, capping to %d", len(all_macs), _MAX_SCAN_RESULTS)
@@ -1343,19 +1242,23 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
         _annotate_scan_conflicts(devices)
 
         devices.sort(key=lambda d: (d["name"] == d["mac"], d["name"]))
-        finish_scan_job(
-            job_id,
-            {
-                "devices": devices,
-                "stats": {
-                    "total_candidates": len(all_macs),
-                    "returned_candidates": len(devices),
-                    "audio_candidates": sum(1 for d in devices if d.get("audio_capable", True)),
-                    "audio_only": audio_only,
-                    "dropped_reasons": dropped_reasons,
-                },
-            },
-        )
+        if discovery_errors and not devices:
+            # Nothing found *and* discovery never started: report the refusal
+            # instead of an empty result the operator can't act on.
+            finish_scan_job(job_id, {"devices": [], "error": _describe_discovery_refusal(discovery_errors)})
+            return
+        stats: dict = {
+            "total_candidates": len(all_macs),
+            "returned_candidates": len(devices),
+            "audio_candidates": sum(1 for d in devices if d.get("audio_capable", True)),
+            "audio_only": audio_only,
+            "dropped_reasons": dropped_reasons,
+        }
+        if discovery_errors:
+            # Results survive a partial refusal (e.g. one of several
+            # controllers wedged); the refusal rides along as a stat.
+            stats["discovery_error"] = discovery_errors[0]
+        finish_scan_job(job_id, {"devices": devices, "stats": stats})
     except Exception:
         logger.exception("BT scan failed")
         finish_scan_job(job_id, {"devices": [], "error": "Bluetooth scan failed"})

@@ -4,9 +4,11 @@ The bridge surfaces signal strength on each device card so operators can
 diagnose audio-quality complaints rooted in BT range / interference
 without dropping into ``btmgmt`` or ``hcidump``.  Two ingest paths:
 
-* ``_parse_scan_output`` — reads ``[CHG] Device <MAC> RSSI: <dB>`` lines
+* the scan-stream parser — reads ``[CHG] Device <MAC> RSSI: <dB>`` lines
   emitted while a scan is running.  The unit covers the multiple
-  bluetoothctl line formats (decimal, parenthesised hex, signed).
+  bluetoothctl line formats (decimal, parenthesised hex, signed); the
+  active-MAC and mac-shaped-name contracts live in
+  ``test_bluez_parsers.py``.
 * ``DeviceInfo.rssi`` — reads ``RSSI: <dB>`` lines from
   ``bluetoothctl info <MAC>`` for already-connected devices that don't
   appear in the live scan stream.
@@ -16,49 +18,27 @@ from __future__ import annotations
 
 import pytest
 
-# ── _parse_scan_output: dict with rssi_by_mac added ─────────────────────
+from sendspin_bridge.bluetooth.bluez import classify_lines, parse_scan
+
+# ── scan-stream RSSI grammar ────────────────────────────────────────────
 
 
-def test_parse_scan_output_extracts_rssi_decimal():
+def test_parse_scan_extracts_rssi_decimal():
     """Modern bluetoothctl emits ``RSSI: -43`` directly."""
-    from sendspin_bridge.web.routes.api_bt import _parse_scan_output
-
     stdout = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: -43\n[CHG] Device 11:22:33:44:55:66 RSSI: -78\n"
 
-    parsed = _parse_scan_output(stdout)
+    rssi_by_mac = parse_scan(classify_lines(stdout)).rssi_by_mac
 
-    # The legacy 4-tuple shape stays; rssi_by_mac is exposed via the new
-    # 5-element return (mac → int dB).  Tests pin the contract.
-    assert len(parsed) == 5, parsed
-    rssi_by_mac = parsed[4]
     assert rssi_by_mac["AA:BB:CC:DD:EE:FF"] == -43
     assert rssi_by_mac["11:22:33:44:55:66"] == -78
 
 
-def test_parse_scan_output_extracts_rssi_parenthesised_hex():
+def test_parse_scan_extracts_rssi_parenthesised_hex():
     """Older bluetoothctl emits ``RSSI: 0xffffffd5 (-43)`` — the
     parenthesised decimal is what we want."""
-    from sendspin_bridge.web.routes.api_bt import _parse_scan_output
-
     stdout = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI: 0xffffffd5 (-43)\n"
 
-    parsed = _parse_scan_output(stdout)
-
-    assert parsed[4].get("AA:BB:CC:DD:EE:FF") == -43
-
-
-def test_parse_scan_output_keeps_active_mac_set_even_without_rssi_value():
-    """A ``[CHG] ... RSSI:`` line with no numeric tail must still mark the
-    device as active (legacy contract) even though no RSSI is captured."""
-    from sendspin_bridge.web.routes.api_bt import _parse_scan_output
-
-    stdout = "[CHG] Device AA:BB:CC:DD:EE:FF RSSI:\n"
-
-    parsed = _parse_scan_output(stdout)
-
-    assert "AA:BB:CC:DD:EE:FF" in parsed[3]  # active_macs
-    # rssi_by_mac may or may not contain the MAC, but an entry must not be wrong.
-    assert parsed[4].get("AA:BB:CC:DD:EE:FF") in (None,)
+    assert parse_scan(classify_lines(stdout)).rssi_by_mac == {"AA:BB:CC:DD:EE:FF": -43}
 
 
 # ── DeviceInfo.rssi: bluetoothctl info <MAC> ────────────────────────────

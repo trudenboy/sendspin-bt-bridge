@@ -209,3 +209,25 @@ def test_parse_scan_ignores_mac_shaped_names():
     transcript = parse_scan(lines)
     assert transcript.seen_macs == {"AA:BB:CC:DD:EE:FF"}
     assert "AA:BB:CC:DD:EE:FF" not in transcript.names
+
+
+def test_parse_scan_keeps_active_mac_when_rssi_has_no_value():
+    """A bare ``RSSI:`` line still marks the device active (legacy contract)."""
+    transcript = parse_scan(classify_lines("[CHG] Device AA:BB:CC:DD:EE:FF RSSI:\n"))
+    assert transcript.active_macs == {"AA:BB:CC:DD:EE:FF"}
+    assert transcript.rssi_by_mac == {}
+
+
+def test_parse_scan_records_refused_discovery():
+    """A wedged controller answers ``scan bredr`` with a D-Bus error and then
+    stays silent — the scan must not look like "no devices in range"."""
+    lines = classify_lines(
+        "[bluetooth]# scan bredr\nFailed to start discovery: org.bluez.Error.InProgress\n[bluetooth]# \n"
+    )
+    transcript = parse_scan(lines)
+    assert transcript.discovery_errors == ("org.bluez.Error.InProgress",)
+
+
+def test_parse_scan_reports_no_discovery_errors_for_a_healthy_scan():
+    lines = classify_lines("[bluetooth]# scan bredr\nDiscovery started\n[NEW] Device AA:BB:CC:DD:EE:FF Speaker\n")
+    assert parse_scan(lines).discovery_errors == ()
