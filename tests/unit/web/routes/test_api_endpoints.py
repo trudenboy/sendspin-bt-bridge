@@ -790,6 +790,50 @@ def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     assert resp.get_json()["error"] == "Another Bluetooth operation is already in progress"
 
 
+# ---------------------------------------------------------------------------
+# Worker-thread startup failures must not wedge the Bluetooth operation lock.
+# Every endpoint below takes the lock in the request thread and hands the
+# release to a worker; if the thread never starts, the release never runs and
+# every later Bluetooth operation answers 409 until the process restarts.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        ("/api/bt/reconnect", {"player_name": "ENEBY20"}),
+        ("/api/bt/pair", {"player_name": "ENEBY20"}),
+        ("/api/bt/reset_reconnect", {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"}),
+        ("/api/bt/pair_new", {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"}),
+        ("/api/bt/scan", {"adapter": "C0:FB:F9:62:D7:D6"}),
+    ],
+)
+def test_bt_endpoints_release_the_operation_lock_when_the_worker_cannot_start(client, monkeypatch, path, payload):
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    released = []
+    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
+    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(path))
+
+    class _DeadThread:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(api_bt_mod.threading, "Thread", _DeadThread)
+
+    bt = MagicMock()
+    fake_client = SimpleNamespace(player_name="ENEBY20", bt_manager=bt, status={})
+    monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _name: (fake_client, None))
+
+    resp = client.post(path, json=payload)
+
+    assert resp.status_code == 500, f"{path} reported success although the worker never started"
+    assert released == [path], f"{path} kept the Bluetooth operation lock after the worker failed to start"
+
+
 def test_bt_scan_returns_409_when_bt_operation_busy(client, monkeypatch):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 

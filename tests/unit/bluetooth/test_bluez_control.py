@@ -247,3 +247,46 @@ def test_hci_map_empty_when_sysfs_and_hciconfig_both_fail(tmp_path, fake_bluez):
     control = BluezControl(spawner=fake_bluez, sysfs_dir=tmp_path / "missing")
 
     assert control.hci_map() == {}
+
+
+def test_power_reports_the_controller_state_when_the_command_prints_no_confirmation(bluez, fake_bluez):
+    """Live BlueZ 5.72 with piped stdin exits before printing "Changing power
+    on succeeded", so scraping stdout reported a power toggle that plainly
+    happened as a failure.  The controller's own state is the authority."""
+    fake_bluez.on("power off", stdout="")
+    fake_bluez.on(
+        "show",
+        stdout=("Controller C0:FB:F9:62:D7:D6 (public)\n\tName: HP-ProDesk\n\tAlias: HP-ProDesk\n\tPowered: no\n"),
+    )
+
+    off = bluez.power(False, Adapter.select(ADAPTER_MAC))
+
+    assert off.powered is False
+    assert off.changed is True, "a confirmed state change must not read as a failed command"
+
+
+def test_power_reports_failure_when_the_controller_did_not_change(bluez, fake_bluez):
+    fake_bluez.on("power off", stdout="")
+    # The controller stays powered: the toggle did not take.
+    off = bluez.power(False, Adapter.select(ADAPTER_MAC))
+
+    assert off.powered is True
+    assert off.changed is False
+
+
+def test_power_waits_for_bluez_to_apply_the_change(bluez, fake_bluez):
+    """BlueZ applies a power toggle asynchronously: on the live stand the
+    controller still reported the old state for about a second, so a single
+    immediate read called every successful toggle a failure."""
+    fake_bluez.on("power off", stdout="")
+    fake_bluez.on(
+        "show",
+        stdout="Controller C0:FB:F9:62:D7:D6 (public)\n\tName: HP-ProDesk\n\tAlias: HP-ProDesk\n\tPowered: yes\n",
+    )
+
+    off = bluez.power(False, Adapter.select(ADAPTER_MAC))
+
+    shows = [c for c in fake_bluez.commands if c.kind == "run" and "show" in c.script]
+    assert len(shows) > 1, "the controller state was read once and never re-checked"
+    assert off.changed is False
+    assert off.powered is True

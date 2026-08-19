@@ -116,6 +116,24 @@ async def test_initialize_runtime_loads_config_and_updates_progress():
 
 
 @pytest.mark.asyncio
+async def test_initialize_runtime_wires_the_dbus_hci_resolver_into_the_transport(monkeypatch):
+    """Startup must hand the transport the D-Bus ``hciN`` lookup.
+
+    Without it, hosts whose sysfs carries no adapter address fall back to
+    positional ``bluetoothctl list`` indexing and every ``select`` can land
+    on the wrong controller.
+    """
+    from sendspin_bridge.bluetooth import manager as manager_mod
+
+    installed = []
+    monkeypatch.setattr(manager_mod, "install_dbus_hci_resolver", lambda: installed.append(True))
+
+    await BridgeOrchestrator().initialize_runtime()
+
+    assert installed == [True]
+
+
+@pytest.mark.asyncio
 async def test_initialize_runtime_invokes_demo_install_when_enabled(monkeypatch):
     orchestrator = BridgeOrchestrator()
     called: list[str] = []

@@ -88,6 +88,11 @@ __all__ = [
 
 _BLUETOOTHCTL = ("bluetoothctl",)
 
+# How long to wait for BlueZ to apply a power toggle before reporting the
+# controller's state as final, and how often to re-read it meanwhile.
+_POWER_SETTLE_S = 2.0
+_POWER_POLL_S = 0.25
+
 
 class BluezControl:
     """The bluetoothctl transport.
@@ -271,7 +276,15 @@ class BluezControl:
     # ------------------------------------------------------------------
 
     def power(self, on: bool, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> PowerResult:
-        """``power on|off``; ``changed`` reproduces the endpoint's ok-heuristic."""
+        """``power on|off``, reported against the controller's own state.
+
+        bluetoothctl confirms a toggle asynchronously ("Changing power on
+        succeeded"), and with stdin piped it often exits before printing
+        it — scraping stdout then reports a toggle that plainly happened
+        as a failure.  The confirmation line is still honoured when it
+        arrives; otherwise a follow-up ``show`` decides, and only when
+        that cannot answer either does the assumed state stand.
+        """
         result = self.run(
             ["power on" if on else "power off"],
             adapter=adapter,
@@ -279,12 +292,27 @@ class BluezControl:
             timeout=timeout,
         )
         clean = strip_ansi(result.stdout).lower()
-        changed = (
+        confirmed = (
             "succeeded" in clean
             or "changing power" in clean
             or (("powered: yes" in clean) if on else ("powered: no" in clean))
         )
-        return PowerResult(changed=changed, powered=on, result=result)
+        if confirmed:
+            return PowerResult(changed=True, powered=on, result=result)
+        # BlueZ applies the toggle asynchronously — on the live stand the
+        # controller kept reporting the old state for about a second — so
+        # the state is re-read until it settles or the window closes.
+        deadline = self.now() + _POWER_SETTLE_S
+        while True:
+            info = self.show(adapter, timeout=timeout)
+            if info.outcome is not Outcome.OK or not info.present:
+                # No second opinion available: report the command's own verdict.
+                return PowerResult(changed=False, powered=on, result=result)
+            if info.powered is on:
+                return PowerResult(changed=True, powered=on, result=result)
+            if self.now() >= deadline:
+                return PowerResult(changed=False, powered=info.powered, result=result)
+            self.sleep(_POWER_POLL_S)
 
     def connect(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> BluezResult:
         return self.run([f"connect {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout)

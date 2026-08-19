@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
-from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_bluez, set_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
@@ -86,6 +86,25 @@ _RSSI_REFRESH_INTERVAL_S = 5.0
 # device object, force-remove the stale BlueZ entry so the next reconnect cycle
 # can escalate to pair_device (KALLSUP-class loop, #162).
 _PAIRED_UNKNOWN_THRESHOLD = 3
+
+
+def install_dbus_hci_resolver(transport_factory=None) -> None:
+    """Give the shared transport the D-Bus ``hciN`` → MAC lookup.
+
+    The transport package is stdlib-only, so it cannot reach BlueZ over
+    D-Bus itself; its own ladder is sysfs → injected resolver →
+    positional ``bluetoothctl list`` index.  On kernels whose
+    ``/sys/class/bluetooth/hciN`` carries no ``address`` file the sysfs
+    step yields nothing, and the positional step reads BlueZ registration
+    order — which is not kernel numbering, so ``select`` lands on the
+    wrong controller (live: a power-cycle aimed at hci0 powered hci1).
+    Wiring the resolver in at startup closes that gap for every caller.
+
+    ``transport_factory`` is a test seam; production builds the default
+    transport around the resolver.
+    """
+    factory = transport_factory or (lambda resolver: BluezControl(hci_resolver=resolver))
+    set_bluez(factory(_dbus_get_adapter_address))
 
 
 class BluetoothManager:

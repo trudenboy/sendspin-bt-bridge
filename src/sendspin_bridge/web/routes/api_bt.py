@@ -82,6 +82,24 @@ def _release_bt_operation() -> None:
     release_bt_operation()
 
 
+def _start_bt_worker(target, *, name: str | None = None) -> bool:
+    """Start a worker that owns the Bluetooth operation lock's release.
+
+    Every caller takes the lock in the request thread and hands the
+    release to the worker's ``finally``.  When the thread cannot start,
+    that ``finally`` never runs and the lock stays held for the life of
+    the process — every later Bluetooth operation then answers 409.  The
+    release happens here instead, and the caller reports the failure.
+    """
+    try:
+        threading.Thread(target=target, daemon=True, name=name).start()
+    except Exception:
+        logger.exception("Bluetooth worker thread failed to start")
+        _release_bt_operation()
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -165,7 +183,8 @@ def api_bt_reconnect():
             finally:
                 _release_bt_operation()
 
-        threading.Thread(target=_do_reconnect, daemon=True).start()
+        if not _start_bt_worker(_do_reconnect, name="bt-reconnect"):
+            return jsonify({"success": False, "error": "Internal error"}), 500
         return jsonify({"success": True, "message": "Reconnect started"})
     except Exception:
         logger.exception("BT reconnect failed")
@@ -206,7 +225,8 @@ def api_bt_pair():
             finally:
                 _release_bt_operation()
 
-        threading.Thread(target=_do_pair, daemon=True).start()
+        if not _start_bt_worker(_do_pair, name="bt-pair"):
+            return jsonify({"success": False, "error": "Internal error"}), 500
         return jsonify({"success": True, "message": "Pairing started (~25s)"})
     except Exception:
         logger.exception("BT pairing failed")
@@ -747,12 +767,8 @@ def api_bt_reset_reconnect():
         finally:
             _release_bt_operation()
 
-    t = threading.Thread(
-        target=_run_job,
-        daemon=True,
-        name=f"bt-reset-{job_id[:8]}",
-    )
-    t.start()
+    if not _start_bt_worker(_run_job, name=f"bt-reset-{job_id[:8]}"):
+        return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id})
 
 
@@ -924,12 +940,8 @@ def api_bt_scan():
         finally:
             _release_bt_operation()
 
-    t = threading.Thread(
-        target=_run_job,
-        daemon=True,
-        name=f"bt-scan-{job_id[:8]}",
-    )
-    t.start()
+    if not _start_bt_worker(_run_job, name=f"bt-scan-{job_id[:8]}"):
+        return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id, "scan_options": scan_options, "expected_duration": expected_duration})
 
 
@@ -1250,12 +1262,8 @@ def api_bt_pair_new():
         finally:
             _release_bt_operation()
 
-    t = threading.Thread(
-        target=_run_job,
-        daemon=True,
-        name=f"bt-pair-{job_id[:8]}",
-    )
-    t.start()
+    if not _start_bt_worker(_run_job, name=f"bt-pair-{job_id[:8]}"):
+        return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id})
 
 

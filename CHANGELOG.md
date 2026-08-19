@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Disconnecting a speaker from the web UI now targets the controller that speaker is paired to, instead of whichever controller Bluetooth happened to have selected. On multi-adapter systems this could disconnect the wrong device.
 - Powering a Bluetooth controller on or off from the web UI now works when the controller is picked by its `hci` name, which previously failed on Home Assistant OS and LXC installs.
+- Bluetooth commands aimed at a controller by its `hci` name now reach that controller on hosts where the system does not publish the controller's address, instead of falling back to an ordering that can point at a different adapter. Powering a controller off could switch off the wrong one.
+- Powering a controller on or off now reports the state the controller actually ends up in, instead of reporting a failure whenever Bluetooth confirmed the change too late to be seen.
 - Pairing and reset-and-reconnect now identify the chosen controller through the kernel's own adapter numbering, with the Bluetooth service as a second opinion. On hosts with more than one adapter these paths could otherwise run against the wrong controller, which showed up as a speaker that paired "successfully" and then refused every connection.
 - Pairing a speaker that is still bonded to another controller on the same host now fails with an explanation instead of reporting success while the bond stays where it was.
 - Forcing a reconnect from the web UI and disconnecting from Home Assistant now wait for a scan or pairing to finish, so two Bluetooth operations can no longer drive the controller at once and corrupt each other's results.
@@ -26,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Connection-failure log lines no longer quote the command that was sent as if it were the error reported by Bluetooth.
 - Diagnostics no longer break on hosts without systemd, no longer report a device as absent when the Bluetooth tooling itself failed, and distinguish a broken Bluetooth setup from a working one with no controllers.
 - When the bridge is waiting for Music Assistant to connect to it, connection diagnostics now say so and point at network discovery, instead of naming a server address that does not exist and sending the operator to the wrong end of the link.
-- A pairing or scan request that fails to start no longer leaves Bluetooth operations blocked until the next restart.
+- A pairing, scan, reconnect or reset request whose background worker fails to start no longer leaves every later Bluetooth operation reporting "another operation is already in progress" until the bridge restarts.
 - Cleaning up a stale Bluetooth cache entry no longer logs a warning on installs without write access to it; the cleanup is optional and only matters for the next pairing attempt.
 
 ## [2.74.0] - 2026-08-07
