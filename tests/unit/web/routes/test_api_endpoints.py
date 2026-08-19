@@ -354,12 +354,21 @@ def test_run_standalone_pair_cleans_stale_device_before_trusting(monkeypatch):
     monkeypatch.setattr(api_bt_mod.subprocess, "Popen", lambda *args, **kwargs: fake_proc)
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", finish_job)
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
-    # Pretend the host reports two controllers: hci0 + hci1.
+    # Pretend the host reports two controllers: hci0 + hci1.  Pin the kernel
+    # map AND D-Bus so the resolution is deterministic regardless of the host
+    # this suite runs on (the live stand has two real controllers; without
+    # these stubs the test's answer depends on the machine).
     monkeypatch.setattr(
         api_bt_mod,
         "list_bt_adapters",
         lambda: ["C0:FB:F9:62:D6:9D", "C0:FB:F9:62:D7:D6"],
     )
+    monkeypatch.setattr(
+        api_bt_mod,
+        "build_hci_map",
+        lambda: {"C0FBF962D69D": "hci0", "C0FBF962D7D6": "hci1"},
+    )
+    monkeypatch.setattr(api_bt_mod, "_dbus_get_adapter_address", lambda _hci: None)
 
     with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
         api_bt_mod._run_standalone_pair("job-1", "AA:BB:CC:DD:EE:FF", "hci1")
@@ -382,9 +391,10 @@ def test_run_standalone_pair_cleans_stale_device_before_trusting(monkeypatch):
 
 
 def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(monkeypatch):
-    """If ``list_bt_adapters`` returns nothing, keep the supplied ``hciN``
-    rather than dropping the ``select`` prefix — a failed ``select`` is a
-    visible error, silently pairing against the default controller is not.
+    """If ``list_bt_adapters`` returns nothing AND the kernel map AND D-Bus
+    are all empty, keep the supplied ``hciN`` rather than dropping the
+    ``select`` prefix — a failed ``select`` is a visible error, silently
+    pairing against the default controller is not.
     """
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
@@ -396,6 +406,9 @@ def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(monkeypatch):
     monkeypatch.setattr(api_bt_mod, "finish_scan_job", MagicMock())
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [])
+    # Every resolution path dry: no sysfs map, no D-Bus answer.
+    monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {})
+    monkeypatch.setattr(api_bt_mod, "_dbus_get_adapter_address", lambda _hci: None)
 
     with patch("selectors.DefaultSelector", side_effect=lambda: _FakeSelector(fake_proc.stdout)):
         api_bt_mod._run_standalone_pair("job-2", "AA:BB:CC:DD:EE:FF", "hci0")
@@ -426,6 +439,36 @@ def test_resolve_adapter_to_mac_uses_kernel_hci_map_not_list_position(monkeypatc
         lambda: {"C0FBF962D7D6": "hci0", "0002720AE43B": "hci1"},
     )
 
+    assert api_bt_mod._resolve_adapter_to_mac("hci1") == "00:02:72:0A:E4:3B"
+    assert api_bt_mod._resolve_adapter_to_mac("hci0") == "C0:FB:F9:62:D7:D6"
+
+
+def test_resolve_adapter_to_mac_falls_back_to_dbus_when_sysfs_has_no_address(monkeypatch):
+    """Live rc.1 stand finding: some kernels expose /sys/class/bluetooth/hciN
+    WITHOUT an ``address`` file (only device/power/rfkill) — the sysfs map is
+    then empty and positional ``bluetoothctl list`` indexing resolves hciN to
+    the wrong controller (registration order ≠ kernel numbering, issue #340).
+    The D-Bus adapter object path /org/bluez/hciN is keyed by the kernel index
+    unambiguously, so it must be tried before the positional fallback."""
+    import sendspin_bridge.web.routes.api_bt as api_bt_mod
+
+    # No sysfs visibility at all.
+    monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {})
+    # list order: hci1's MAC first (BlueZ registration order).
+    monkeypatch.setattr(
+        api_bt_mod,
+        "list_bt_adapters",
+        lambda: ["00:02:72:0A:E4:3B", "C0:FB:F9:62:D7:D6"],
+    )
+    # D-Bus knows the truth: hci0=C0:FB…, hci1=00:02….
+    monkeypatch.setattr(
+        api_bt_mod,
+        "_dbus_get_adapter_address",
+        lambda hci: {"hci0": "C0:FB:F9:62:D7:D6", "hci1": "00:02:72:0A:E4:3B"}.get(hci),
+    )
+
+    # Without the D-Bus step, hci1 would positionally resolve to 00:02…'s
+    # list-position neighbour — the live mispairing.
     assert api_bt_mod._resolve_adapter_to_mac("hci1") == "00:02:72:0A:E4:3B"
     assert api_bt_mod._resolve_adapter_to_mac("hci0") == "C0:FB:F9:62:D7:D6"
 

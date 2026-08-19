@@ -17,6 +17,7 @@ from typing import Any
 from flask import Blueprint, jsonify, request
 
 from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, get_bluez, parse_device_info
+from sendspin_bridge.bluetooth.dbus import _dbus_get_adapter_address
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
 from sendspin_bridge.services.bluetooth import (
@@ -804,9 +805,15 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
             if hci_map.get(mac.replace(":", "")) == kernel_hci:
                 return mac
         return adapter  # mapped nowhere — let the failed select surface loudly
-    # No sysfs/hciconfig visibility (Docker without /sys): the adapters
-    # endpoint fell back to synthetic ``hci{i}`` labels in list order, so
-    # mirror that here.
+    # Sysfs gave nothing (Docker without /sys, or kernels whose
+    # /sys/class/bluetooth/hciN lacks the ``address`` file — seen live on the
+    # rc.1 stand).  The D-Bus object path /org/bluez/hciN is keyed by the
+    # kernel index unambiguously — prefer it over list position.
+    dbus_addr = _dbus_get_adapter_address(kernel_hci)
+    if dbus_addr:
+        return dbus_addr.upper()
+    # No sysfs/hciconfig/D-Bus visibility: the adapters endpoint fell back
+    # to synthetic ``hci{i}`` labels in list order, so mirror that here.
     if 0 <= idx < len(macs):
         return macs[idx]
     return adapter
