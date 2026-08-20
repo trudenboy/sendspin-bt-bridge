@@ -31,7 +31,8 @@ def _install_fake_dbus(monkeypatch, managed_objects):
         def get_object(self, _service, path):
             return _Object(path)
 
-    fake_dbus.SystemBus = lambda: _Bus()
+    # The helpers ask for a private, per-thread connection.
+    fake_dbus.SystemBus = lambda private=False: _Bus()
     fake_dbus.Interface = _Interface
     monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
 
@@ -113,7 +114,8 @@ def test_media_transport_state_returns_none_on_dbus_error(monkeypatch):
         def get_object(self, *_args, **_kwargs):
             return object()
 
-    fake_dbus.SystemBus = lambda: _Bus()
+    # The helpers ask for a private, per-thread connection.
+    fake_dbus.SystemBus = lambda private=False: _Bus()
     fake_dbus.Interface = _Interface
     monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
     bt_dbus = _reload_bt_dbus()
