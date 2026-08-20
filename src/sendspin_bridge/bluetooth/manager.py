@@ -10,18 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 import subprocess
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
-from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, LinkState
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, LinkState, bt_executor
 from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_bluez, set_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
@@ -62,7 +60,8 @@ logger = logging.getLogger(__name__)
 #: Distinguishes "no override set" from an override of ``None``.
 _UNSET = object()
 
-_bt_executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 4), thread_name_prefix="bt-blocking")
+#: Re-exported from the adapter session so the process has one pool, not two.
+_bt_executor = bt_executor()
 
 # Timing constants for BT operations
 _PAIRING_SCAN_DURATION = 12  # seconds to scan before pairing
@@ -268,6 +267,11 @@ class BluetoothManager:
                 self.effective_adapter_mac or "unknown",
             )
         self.battery_level: int | None = None
+
+    @property
+    def adapter_handle(self) -> AdapterHandle:
+        """The controller this device is managed on, and the lease source."""
+        return self._adapter_handle
 
     @property
     def adapter_hci_name(self) -> str:
