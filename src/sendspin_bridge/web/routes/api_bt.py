@@ -1146,8 +1146,6 @@ def _annotate_scan_conflicts(devices: list[dict]) -> None:
 def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> None:
     """Perform BT scan in a background thread and store result in state."""
     global _last_scan_completed
-    # Apply cooldown to every scan attempt, even if later enrichment fails.
-    _last_scan_completed = time.monotonic()
     try:
         adapter_macs = _resolve_scan_adapter_macs(adapter)
 
@@ -1217,6 +1215,13 @@ def _run_bt_scan(job_id: str, adapter: str = "", audio_only: bool = True) -> Non
     except Exception:
         logger.exception("BT scan failed")
         finish_scan_job(job_id, {"devices": [], "error": "Bluetooth scan failed"})
+    finally:
+        # The cooldown is the adapter's rest period, so it runs from the end
+        # of the scan window.  Stamping it on entry made it expire during the
+        # 15 s discovery window itself — the 10 s gate never held anyone back.
+        # The ``finally`` keeps the original intent that every attempt counts,
+        # even one that failed during enrichment.
+        _last_scan_completed = time.monotonic()
 
 
 # ---------------------------------------------------------------------------
