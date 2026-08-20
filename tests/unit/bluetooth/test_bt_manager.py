@@ -1368,8 +1368,13 @@ def test_purge_stale_bluez_entry_removes_device(bt_manager, installed_bluez):
     assert any(c.verb == "remove" and "AA:BB:CC:DD:EE:FF" in c.script for c in installed_bluez.commands)
 
 
-def test_is_device_connected_exception_returns_false(bt_manager):
-    """Exceptions in connection check should return False."""
+def test_is_device_connected_falls_back_to_the_transport_when_dbus_raises(bt_manager):
+    """A raising D-Bus probe no longer decides the link state.
+
+    The transport answers instead — here BlueZ has no device object for the
+    MAC, which is a genuine "not connected".  A transport that cannot answer
+    at all is covered in test_manager_link_state.py.
+    """
     bt_manager.connected = True
     with patch(
         "sendspin_bridge.bluetooth.manager._dbus_get_device_property", side_effect=RuntimeError("D-Bus exploded")
