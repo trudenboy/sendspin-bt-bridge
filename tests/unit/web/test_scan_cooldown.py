@@ -24,28 +24,17 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _release_bt_operation_lock_after_each_test():
-    """Reset the shared BT operation lock between tests in this file.
+def _release_adapter_lease_after_each_test():
+    """Reset the shared adapter lease between tests in this file.
 
-    ``test_scan_allowed_after_cooldown_expires`` patches
-    ``threading.Thread.start`` to a no-op, so the background ``_run_job``
-    that would normally release the lock never fires — the acquire from
-    the scan endpoint leaks.  The leak was invisible while the lock was
-    private to ``routes/api_bt`` (rc.2-) but rc.3 promotes it to a
-    process-wide singleton in ``services.bt_operation_lock`` (so the
-    background RSSI refresh can also gate on it), and a leaked lock
-    here now blocks the next test's acquire.  Resetting after each
-    test keeps the suite deterministic without changing production
-    semantics.
+    ``test_scan_allowed_after_cooldown_expires`` patches ``Thread.start`` to a
+    no-op, so the background job that would release the lease never runs and
+    the acquire from the scan endpoint leaks into the next test.
     """
     yield
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import _bt_operation_lock
+    from sendspin_bridge.bluetooth.adapter_session import force_release_lease
 
-    if _bt_operation_lock.locked():
-        try:
-            _bt_operation_lock.release()
-        except RuntimeError:
-            pass
+    force_release_lease()
 
 
 @pytest.fixture()

@@ -57,8 +57,7 @@ __all__ = [
     "Lease",
     "LinkState",
     "bt_executor",
-    "release_bt_operation",
-    "try_acquire_bt_operation",
+    "force_release_lease",
 ]
 
 
@@ -87,14 +86,12 @@ class LinkState(Enum):
 # The process-wide exclusive lease
 # ---------------------------------------------------------------------------
 
-#: The single lock every controller operation contends for.  Named for the
-#: legacy shim in ``services.bluetooth.bt_operation_lock``, which re-exports
-#: this very object so a half-migrated call site still serialises correctly.
+#: The single lock every controller operation contends for.  Every lease in
+#: the process is a token handed out by this lock.
 _bt_operation_lock = threading.Lock()
 _lease_state_lock = threading.Lock()
 _active_token: int | None = None
 _active_reason: str = ""
-_legacy_token: int | None = None
 _token_seq = itertools.count(1)
 
 
@@ -135,30 +132,21 @@ def _current_holder() -> str | None:
         return _active_reason if _active_token is not None else None
 
 
-def try_acquire_bt_operation(reason: str = "bluetoothctl operation") -> bool:
-    """Legacy shim: take the lease without a handle.
+def force_release_lease() -> None:
+    """Drop whatever lease is active, if any.
 
-    Kept only while call sites migrate to :meth:`AdapterHandle.try_lease`.
-    The token is remembered so the matching legacy release cannot free a
-    lease taken through the object API.
+    A blunt instrument: nothing in the bridge's normal flow needs it, since
+    every lease is released by its holder.  It exists for test fixtures that
+    must guarantee a clean adapter between cases.
     """
-    global _legacy_token
-    token = _acquire_lease(reason, None)
-    if token is None:
-        return False
-    _legacy_token = token
-    return True
-
-
-def release_bt_operation() -> None:
-    """Legacy shim: release a lease taken by :func:`try_acquire_bt_operation`."""
-    global _legacy_token
-    token, _legacy_token = _legacy_token, None
-    if token is None:
-        logger.debug("Legacy Bluetooth release with no legacy lease held — ignoring")
-        return
-    if not _release_lease(token):
-        logger.error("Legacy Bluetooth release found a different lease active — ignoring")
+    global _active_token, _active_reason
+    with _lease_state_lock:
+        _active_token = None
+        _active_reason = ""
+    try:
+        _bt_operation_lock.release()
+    except RuntimeError:
+        pass
 
 
 class Lease:

@@ -33,7 +33,6 @@ from sendspin_bridge.bluetooth.dbus import (
 )
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS, bt_rssi_mgmt
-from sendspin_bridge.services.bluetooth import bt_operation_lock as _bt_op_lock
 
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
 # socket (``MGMT_OP_GET_CONN_INFO`` opcode 0x0031), wrapped in
@@ -44,7 +43,7 @@ from sendspin_bridge.services.bluetooth import bt_operation_lock as _bt_op_lock
 # This is the only source on Linux that exposes RSSI for an
 # established ACL link.  Refresh runs every ``_RSSI_REFRESH_INTERVAL_S``
 # seconds via ``run_rssi_refresh_loop``, gated by the shared
-# ``bt_operation_lock`` so a pair / scan / reconnect can never starve.
+# the adapter lease so a pair / scan / reconnect can never starve.
 
 
 if TYPE_CHECKING:
@@ -1382,7 +1381,8 @@ class BluetoothManager:
         adapter_index = self._resolve_adapter_index()
         if adapter_index < 0:
             return
-        if not _bt_op_lock.try_acquire_bt_operation():
+        lease = self._adapter_handle.try_lease(f"rssi {self.device_name}")
+        if lease is None:
             return
         try:
             mac = self.mac_address
@@ -1393,7 +1393,7 @@ class BluetoothManager:
                 logger.exception("[%s] RSSI mgmt read raised unexpectedly", self.device_name)
                 rssi = None
         finally:
-            _bt_op_lock.release_bt_operation()
+            lease.release()
 
         if rssi is None:
             return
