@@ -219,6 +219,23 @@ def test_hci_name_is_retried_after_a_failed_resolution(fake_bluez):
     assert handle.hci_name == "hci0"
 
 
+def test_adapter_mac_passes_a_configured_mac_through(fake_bluez):
+    handle = AdapterHandle(adapter=ADAPTER_MAC, bluez=fake_bluez.control)
+
+    assert handle.adapter_mac == ADAPTER_MAC
+
+
+def test_adapter_mac_resolves_an_hci_identity_through_the_kernel_map(fake_bluez):
+    fake_bluez.on("hciconfig", stdout=_hciconfig("hci1", ADAPTER_MAC))
+    handle = AdapterHandle(adapter="hci1", bluez=fake_bluez.control)
+
+    assert handle.adapter_mac == ADAPTER_MAC
+
+
+def test_adapter_mac_is_empty_for_the_default_controller(fake_bluez):
+    assert AdapterHandle(adapter="", bluez=fake_bluez.control).adapter_mac == ""
+
+
 # ── async facade ─────────────────────────────────────────────────────────
 
 

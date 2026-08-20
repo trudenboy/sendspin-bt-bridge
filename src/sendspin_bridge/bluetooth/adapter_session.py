@@ -254,6 +254,19 @@ class AdapterHandle:
         return Adapter.select(self._adapter)
 
     @property
+    def adapter_mac(self) -> str:
+        """The controller's MAC, resolved from an ``hciN`` identity if needed."""
+        if not self._adapter:
+            return ""
+        if not self._adapter.startswith("hci"):
+            return self._adapter.upper()
+        for mac, hci in self.bluez.hci_map().items():
+            if hci == self._adapter:
+                stripped = mac.replace(":", "").upper()
+                return ":".join(stripped[i : i + 2] for i in range(0, 12, 2))
+        return ""
+
+    @property
     def hci_name(self) -> str:
         """The kernel's ``hciN`` name for this controller, or ``""``.
 
@@ -275,12 +288,51 @@ class AdapterHandle:
                 return hci
         return ""
 
+    def pin_hci(self, hci_name: str) -> None:
+        """Pin the controller's ``hciN`` name, skipping resolution."""
+        self._hci_name = (hci_name or "").strip()
+
     def dbus_device_path(self, mac: str) -> str | None:
         """``/org/bluez/hciN/dev_AA_BB_...`` once the controller resolves."""
         hci = self.hci_name
         if not hci:
             return None
         return f"/org/bluez/{hci}/dev_{mac.upper().replace(':', '_')}"
+
+    # -- reads (no lease: a read cannot corrupt another operation) ------
+
+    def link_state(self, mac: str) -> LinkState:
+        """Tri-state ACL link state for *mac* on this controller.
+
+        The injected fast probe answers first when it can; a transport that
+        times out, is unavailable or cannot be parsed yields ``UNKNOWN``,
+        never ``DISCONNECTED``.
+        """
+        if self._link_probe is not None:
+            try:
+                probed = self._link_probe(mac)
+            except Exception as exc:  # a broken fast path must not decide the state
+                logger.debug("Link-state fast probe failed for %s: %s", mac, exc)
+                probed = None
+            if probed is not None:
+                return probed
+        try:
+            info = self.bluez.device_info(mac, self.scope)
+        except Exception as exc:
+            logger.warning("Link-state read failed for %s: %s", mac, exc)
+            return LinkState.UNKNOWN
+        if info.outcome is not Outcome.OK:
+            return LinkState.UNKNOWN
+        if not info.present:
+            # BlueZ has no device object: it is certainly not connected.
+            return LinkState.DISCONNECTED
+        if info.connected is None:
+            return LinkState.UNKNOWN
+        return LinkState.CONNECTED if info.connected else LinkState.DISCONNECTED
+
+    def device_info(self, mac: str):
+        """Raw ``info <MAC>`` for callers that need more than link state."""
+        return self.bluez.device_info(mac, self.scope)
 
     # -- leasing -------------------------------------------------------
 
@@ -323,35 +375,14 @@ class AdapterSession:
     # -- reads ---------------------------------------------------------
 
     def link_state(self, mac: str) -> LinkState:
-        """Tri-state ACL link state for *mac* on this controller."""
+        """Tri-state ACL link state (same read as :meth:`AdapterHandle.link_state`)."""
         self._check()
-        probe = self._handle._link_probe
-        if probe is not None:
-            try:
-                probed = probe(mac)
-            except Exception as exc:  # a broken fast path must not decide the state
-                logger.debug("Link-state fast probe failed for %s: %s", mac, exc)
-                probed = None
-            if probed is not None:
-                return probed
-        try:
-            info = self._handle.bluez.device_info(mac, self._handle.scope)
-        except Exception as exc:
-            logger.warning("Link-state read failed for %s: %s", mac, exc)
-            return LinkState.UNKNOWN
-        if info.outcome is not Outcome.OK:
-            return LinkState.UNKNOWN
-        if not info.present:
-            # BlueZ has no device object: it is certainly not connected.
-            return LinkState.DISCONNECTED
-        if info.connected is None:
-            return LinkState.UNKNOWN
-        return LinkState.CONNECTED if info.connected else LinkState.DISCONNECTED
+        return self._handle.link_state(mac)
 
     def device_info(self, mac: str):
         """Raw ``info <MAC>`` for callers that need more than link state."""
         self._check()
-        return self._handle.bluez.device_info(mac, self._handle.scope)
+        return self._handle.device_info(mac)
 
     # -- mutations -----------------------------------------------------
 

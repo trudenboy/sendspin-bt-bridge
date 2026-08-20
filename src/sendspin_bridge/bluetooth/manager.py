@@ -17,11 +17,11 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, LinkState
 from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_bluez, set_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
@@ -58,6 +58,9 @@ if TYPE_CHECKING:
 UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
+
+#: Distinguishes "no override set" from an override of ``None``.
+_UNSET = object()
 
 _bt_executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 4), thread_name_prefix="bt-blocking")
 
@@ -214,7 +217,10 @@ class BluetoothManager:
         # Resolve adapter name to MAC for reliable 'select' in bridged D-Bus setups.
         # In LXC containers, 'select hci0' fails ("Controller hci0 not available");
         # selecting by MAC address works because D-Bus objects use MACs, not hciN names.
-        self._adapter_select = self._resolve_adapter_select(adapter) if adapter else ""
+        # One ladder for adapter identity: the handle resolves ``hciN`` through
+        # the kernel's own map and scopes every verb at this controller.
+        self._adapter_handle = AdapterHandle(adapter=adapter or "", link_probe=self._dbus_link_probe)
+        self._dbus_path_override: object = _UNSET
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._running: bool = True  # False = shutdown; monitor loops exit
         self.paired: bool | None = None
@@ -250,27 +256,51 @@ class BluetoothManager:
         self._CHURN_THRESHOLD = churn_threshold  # 0 = disabled
 
         # Resolve effective adapter MAC for display (handles empty/default adapter case)
-        if self._adapter_select:
-            self.effective_adapter_mac = self._adapter_select
-        else:
-            self.effective_adapter_mac = self._detect_default_adapter_mac()
+        self.effective_adapter_mac = self._adapter_handle.adapter_mac or self._detect_default_adapter_mac()
 
-        self.adapter_hci_name = self._resolve_adapter_hci_name()
-        # D-Bus device path: /org/bluez/<adapter>/dev_XX_XX_XX_XX_XX_XX
-        _mac_dbus = self.mac_address.upper().replace(":", "_")
-        self._dbus_device_path: str | None = None
-        if self.adapter_hci_name:
-            self._dbus_device_path = f"/org/bluez/{self.adapter_hci_name}/dev_{_mac_dbus}"
-        else:
+        if not self.adapter_hci_name:
             logger.warning(
                 "[%s] Could not resolve Bluetooth adapter to hciN for MAC %s (configured adapter=%s, effective adapter=%s); "
-                "D-Bus monitoring is disabled and bluetoothctl polling fallback will be used",
+                "D-Bus monitoring stays off until the controller appears, and bluetoothctl polling covers it meanwhile",
                 self.device_name,
                 self.mac_address,
                 self.adapter or "default",
                 self.effective_adapter_mac or "unknown",
             )
         self.battery_level: int | None = None
+
+    @property
+    def adapter_hci_name(self) -> str:
+        """The kernel's ``hciN`` name for this controller, or ``""``.
+
+        Resolved lazily and retried: a bridge that started before
+        ``bluetoothd`` used to cache the empty answer and ran without the
+        D-Bus fast path for the rest of the process.
+        """
+        return self._adapter_handle.hci_name
+
+    @adapter_hci_name.setter
+    def adapter_hci_name(self, value: str) -> None:
+        """Pin the resolved controller when the caller already knows it."""
+        self._adapter_handle.pin_hci(value)
+
+    @property
+    def _dbus_device_path(self) -> str | None:
+        """``/org/bluez/hciN/dev_...`` once the controller resolves."""
+        if self._dbus_path_override is not _UNSET:
+            return self._dbus_path_override  # type: ignore[return-value]
+        return self._adapter_handle.dbus_device_path(self.mac_address)
+
+    @_dbus_device_path.setter
+    def _dbus_device_path(self, value: str | None) -> None:
+        self._dbus_path_override = value
+
+    def _dbus_link_probe(self, mac: str) -> LinkState | None:
+        """The D-Bus fast path for link state; ``None`` when it cannot answer."""
+        val = _dbus_get_device_property(self._dbus_device_path, "Connected")
+        if val is None:
+            return None
+        return LinkState.CONNECTED if bool(val) else LinkState.DISCONNECTED
 
     def shutdown(self) -> None:
         """Signal all monitor loops to exit."""
@@ -366,58 +396,6 @@ class BluetoothManager:
                 exc,
             )
 
-    def _resolve_adapter_hci_name(self) -> str:
-        """Return hciN name for the effective adapter MAC (e.g. 'hci0'), or empty string."""
-        if self.adapter.startswith("hci"):
-            return self.adapter  # Already have it from config
-        effective = (self.effective_adapter_mac or "").upper()
-        if not effective:
-            return ""
-        # Prefer sysfs lookup — it maps MACs to hciN names without relying on
-        # the ordering of 'bluetoothctl list' output which may not match hciN indices.
-        mac_norm = effective.replace(":", "").lower()
-        bt_sysfs = Path("/sys/class/bluetooth")
-        try:
-            for hci in sorted(bt_sysfs.iterdir()):
-                addr_file = hci / "address"
-                if addr_file.exists():
-                    addr = addr_file.read_text().strip().replace(":", "").lower()
-                    if addr == mac_norm:
-                        return hci.name
-        except Exception as exc:
-            logger.debug("sysfs adapter lookup failed: %s", exc)
-        # Fallback: count adapter positions in the controller list (fragile,
-        # but last resort) — the transport/parser live in bluetooth.bluez.
-        for idx, ref in enumerate(get_bluez().list_adapters()):
-            if ref.mac.upper() == effective:
-                return f"hci{idx}"
-        return ""
-
-    def _resolve_adapter_select(self, adapter: str) -> str:
-        """Resolve hciN to adapter MAC address for bluetoothctl 'select'.
-        Falls back to the original name if resolution fails."""
-        if not adapter or not adapter.startswith("hci"):
-            return adapter  # Already a MAC or empty string
-        try:
-            idx = int(adapter[3:])  # N from hciN
-        except ValueError:
-            return adapter
-        # BlueZ's D-Bus object path for an adapter is always /org/bluez/<hciN>,
-        # which matches the kernel hci index unambiguously. Prefer this over
-        # counting lines in `bluetoothctl list`, whose ordering reflects
-        # BlueZ's adapter-registration order and is NOT guaranteed to match
-        # ascending hci-index order (e.g. after hot-plugging a second
-        # adapter, the newly-plugged one can be listed first).
-        dbus_addr = _dbus_get_adapter_address(adapter)
-        if dbus_addr:
-            logger.info("Resolved adapter %s → %s", adapter, dbus_addr)
-            return dbus_addr.upper()
-        macs = [ref.mac.upper() for ref in get_bluez().list_adapters()]
-        if idx < len(macs):
-            logger.info("Resolved adapter %s → %s", adapter, macs[idx])
-            return macs[idx]
-        return adapter  # Fall back to hciN name
-
     def check_bluetooth_available(self) -> bool:
         """Check if Bluetooth is available on the system"""
         try:
@@ -434,9 +412,7 @@ class BluetoothManager:
 
     def _bluez_adapter(self) -> Adapter:
         """The configured adapter as a BluezControl scope directive."""
-        if self._adapter_select:
-            return Adapter.select(self._adapter_select)
-        return Adapter.DEFAULT
+        return self._adapter_handle.scope
 
     def is_device_paired(self) -> bool | None:
         """Check if device is paired via D-Bus; falls back to bluetoothctl.
@@ -459,28 +435,41 @@ class BluetoothManager:
             )
         return None
 
-    def is_device_connected(self) -> bool:
-        """Check if device is currently connected via D-Bus; falls back to bluetoothctl."""
-        try:
-            val = _dbus_get_device_property(self._dbus_device_path, "Connected")
-            if val is not None:
-                is_connected = bool(val)
-            else:
-                # D-Bus unavailable — fall back to bluetoothctl
-                info = get_bluez().device_info(self.mac_address, self._bluez_adapter())
-                is_connected = info.outcome is Outcome.OK and info.connected is True
+    def link_state(self) -> LinkState:
+        """Tri-state ACL link state: D-Bus first, then ``bluetoothctl``.
 
-            if is_connected != self.connected:
-                if is_connected:
-                    logger.info("✓ BT device %s (%s) connected", self.device_name, self.mac_address)
-                else:
-                    logger.warning("✗ BT device %s (%s) disconnected", self.device_name, self.mac_address)
-            self._apply_connected_state(is_connected)
+        ``UNKNOWN`` means BlueZ could not answer — a timeout, a dead
+        transport, a parse gap.  It is not evidence of a disconnect and must
+        never be applied as one.
+        """
+        return self._adapter_handle.link_state(self.mac_address)
+
+    def is_device_connected(self) -> bool:
+        """Refresh the connected flag from BlueZ and return it.
+
+        A state BlueZ cannot report leaves the last known value in place:
+        collapsing a transport failure into "disconnected" used to tear down
+        the speaker's MPRIS player, advance the reconnect counter and move
+        churn auto-disable closer, all on a subprocess that did not answer.
+        """
+        state = self.link_state()
+        if state is LinkState.UNKNOWN:
+            logger.debug(
+                "[%s] Link state unknown for %s — keeping the last known state (%s)",
+                self.device_name,
+                self.mac_address,
+                "connected" if self.connected else "disconnected",
+            )
             return self.connected
-        except Exception as e:
-            logger.warning("Error checking Bluetooth connection: %s", e)
-            self._apply_connected_state(False)
-            return False
+
+        is_connected = state is LinkState.CONNECTED
+        if is_connected != self.connected:
+            if is_connected:
+                logger.info("✓ BT device %s (%s) connected", self.device_name, self.mac_address)
+            else:
+                logger.warning("✗ BT device %s (%s) disconnected", self.device_name, self.mac_address)
+        self._apply_connected_state(is_connected)
+        return self.connected
 
     def pair_device(self) -> bool:
         """Pair with the Bluetooth device.

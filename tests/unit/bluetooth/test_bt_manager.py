@@ -58,73 +58,6 @@ def bt_manager(installed_bluez):
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_adapter_select_prefers_dbus_over_bluetoothctl_list_order():
-    """Regression: bluetoothctl list ordering does not always match ascending
-    hci-index order (e.g. after hot-plugging a second adapter, the newer one
-    can be listed first). Resolution must use D-Bus's /org/bluez/<hciN>
-    object path, which matches the kernel index unambiguously, not the
-    position of a MAC within `bluetoothctl list` output."""
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    # bluetoothctl list would (misleadingly) list hci1's real adapter first,
-    # so the old position-counting logic would resolve "hci1" -> hci0's MAC.
-    misleading_bluetoothctl_list = (
-        "Controller F0:2F:74:6B:3C:BD mass #2 [default]\nController 1C:79:2D:E5:AD:68 localhost \n"
-    )
-
-    def fake_dbus_get_adapter_address(hci_name):
-        return {"hci0": "1C:79:2D:E5:AD:68", "hci1": "F0:2F:74:6B:3C:BD"}.get(hci_name)
-
-    with (
-        patch("subprocess.check_output", return_value=""),
-        patch("subprocess.run", return_value=MagicMock(stdout=misleading_bluetoothctl_list)),
-        patch(
-            "sendspin_bridge.bluetooth.manager._dbus_get_adapter_address",
-            side_effect=fake_dbus_get_adapter_address,
-        ),
-    ):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-            adapter="hci1",
-        )
-
-    assert mgr._adapter_select == "F0:2F:74:6B:3C:BD"
-
-
-def test_resolve_adapter_select_falls_back_to_bluetoothctl_list_when_dbus_unavailable(installed_bluez):
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    installed_bluez.on(
-        "list",
-        stdout="Controller AA:AA:AA:AA:AA:AA first [default]\nController BB:BB:BB:BB:BB:BB second \n",
-    )
-
-    with (
-        patch("subprocess.check_output", return_value=""),
-        patch("subprocess.run", return_value=MagicMock(stdout="")),
-        patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address", return_value=None),
-    ):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-            adapter="hci1",
-        )
-
-    assert mgr._adapter_select == "BB:BB:BB:BB:BB:BB"
-
-
-def test_resolve_adapter_select_skips_dbus_for_malformed_hci_name():
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    manager = BluetoothManager.__new__(BluetoothManager)
-    with patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address") as get_address:
-        resolved = manager._resolve_adapter_select("hci-not-an-index")
-
-    assert resolved == "hci-not-an-index"
-    get_address.assert_not_called()
-
-
 def test_bt_executor_pool_size():
     """The module-level thread pool must have at least 4 workers."""
     from sendspin_bridge.bluetooth.manager import _bt_executor
@@ -1174,26 +1107,6 @@ def test_resolve_adapter_hci_name_returns_config_adapter_directly():
 
     with patch("subprocess.check_output", return_value=""):
         mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF", adapter="hci1")
-
-    assert mgr.adapter_hci_name == "hci1"
-
-
-def test_resolve_adapter_hci_name_bluetoothctl_fallback(installed_bluez):
-    """When sysfs is unavailable, falls back to the bluetoothctl controller list."""
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    installed_bluez.on(
-        "list",
-        stdout="Controller C0:FB:F9:62:D6:9D MyAdapter1 [default]\nController C0:FB:F9:62:D7:D6 MyAdapter2\n",
-    )
-
-    with (
-        patch("subprocess.check_output", return_value=""),
-        patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value="C0:FB:F9:62:D7:D6"),
-        patch("pathlib.Path.iterdir", side_effect=OSError("no sysfs")),
-        patch("subprocess.run", return_value=MagicMock(stdout="")),
-    ):
-        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF")
 
     assert mgr.adapter_hci_name == "hci1"
 
