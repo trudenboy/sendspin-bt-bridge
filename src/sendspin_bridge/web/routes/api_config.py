@@ -883,34 +883,49 @@ def api_config():
 
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with config_lock:
-        existing = {}
+        existing: dict = {}
         if CONFIG_FILE.exists():
+            # The preserve loop below is the only thing carrying the password
+            # hash, the session secret and the MA tokens across a settings
+            # save, and ``write_config_file`` replaces the file wholesale.  A
+            # swallowed read error therefore used to mean "silently erase the
+            # operator's credentials and answer 200" — fail the request
+            # instead and leave the file untouched.
             try:
                 with open(CONFIG_FILE) as f:
-                    existing = json.load(f)
-                # Preserve keys that are never submitted via the form
-                for key in (
-                    "LAST_VOLUMES",
-                    "LAST_SINKS",
-                    "HA_ADAPTER_AREA_MAP",
-                    "AUTH_PASSWORD_HASH",
-                    "SECRET_KEY",
-                    "MA_AUTH_PROVIDER",
-                    "MA_TOKEN_INSTANCE_HOSTNAME",
-                    "MA_TOKEN_LABEL",
-                    "MA_ACCESS_TOKEN",
-                    "MA_REFRESH_TOKEN",
-                ):
-                    if key in existing and key not in config:
-                        config[key] = existing[key]
-                # The form pre-fills MA_API_TOKEN with the stored value.
-                # Empty string = user explicitly cleared it → do NOT restore.
-                # (No implicit preserve needed — the field is always submitted.)
-                # Preserve MA_USERNAME if not submitted
-                if not config.get("MA_USERNAME") and existing.get("MA_USERNAME"):
-                    config["MA_USERNAME"] = existing["MA_USERNAME"]
-            except Exception as _exc:
-                logger.debug("Could not read existing config for merge: %s", _exc)
+                    loaded = json.load(f)
+            except OSError as exc:
+                logger.error("Refusing to save config: %s is unreadable (%s)", CONFIG_FILE, exc)
+                return _error_response("Cannot read the existing configuration; refusing to overwrite it", 500)
+            except ValueError as exc:
+                logger.error("Refusing to save config: %s is not valid JSON (%s)", CONFIG_FILE, exc)
+                return _error_response("The existing configuration is corrupted; refusing to overwrite it", 500)
+            if not isinstance(loaded, dict):
+                logger.error("Refusing to save config: %s does not contain a JSON object", CONFIG_FILE)
+                return _error_response("The existing configuration is corrupted; refusing to overwrite it", 500)
+            existing = loaded
+
+            # Preserve keys that are never submitted via the form
+            for key in (
+                "LAST_VOLUMES",
+                "LAST_SINKS",
+                "HA_ADAPTER_AREA_MAP",
+                "AUTH_PASSWORD_HASH",
+                "SECRET_KEY",
+                "MA_AUTH_PROVIDER",
+                "MA_TOKEN_INSTANCE_HOSTNAME",
+                "MA_TOKEN_LABEL",
+                "MA_ACCESS_TOKEN",
+                "MA_REFRESH_TOKEN",
+            ):
+                if key in existing and key not in config:
+                    config[key] = existing[key]
+            # The form pre-fills MA_API_TOKEN with the stored value.
+            # Empty string = user explicitly cleared it → do NOT restore.
+            # (No implicit preserve needed — the field is always submitted.)
+            # Preserve MA_USERNAME if not submitted
+            if not config.get("MA_USERNAME") and existing.get("MA_USERNAME"):
+                config["MA_USERNAME"] = existing["MA_USERNAME"]
 
         # HA_INTEGRATION password round-trip semantics — under the lock so a
         # parallel ``POST /api/config`` from another Waitress thread can't
