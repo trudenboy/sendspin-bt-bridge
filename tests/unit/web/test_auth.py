@@ -133,6 +133,46 @@ def test_rate_limit_client_id_ignores_forwarded_for_from_untrusted_proxy():
         assert _get_rate_limit_client_id() == "10.0.0.10"
 
 
+def test_rate_limit_client_id_honours_cidr_trusted_proxy():
+    """A peer inside a trusted CIDR must not become the lockout bucket key.
+
+    Under HA Supervisor ingress the peer is somewhere in 172.30.32.0/23 —
+    trusted by CIDR, but never equal to the CIDR string itself.  Bucketing by
+    the proxy's own IP puts every ingress user in one bucket, so five failed
+    logins by anyone lock out the whole household.
+    """
+    with (
+        patch(
+            "sendspin_bridge.web.routes.auth.load_config",
+            return_value={"TRUSTED_PROXIES": ["172.30.32.0/23"]},
+        ),
+        _app.test_request_context(
+            "/login",
+            method="POST",
+            data={"username": "alice"},
+            environ_base={"REMOTE_ADDR": "172.30.33.7"},
+            headers={"X-Forwarded-For": "192.168.10.55"},
+        ),
+    ):
+        assert _get_rate_limit_client_id() == "192.168.10.55"
+
+
+def test_rate_limit_client_id_falls_back_to_username_for_cidr_proxy_without_client_ip():
+    with (
+        patch(
+            "sendspin_bridge.web.routes.auth.load_config",
+            return_value={"TRUSTED_PROXIES": ["172.30.32.0/23"]},
+        ),
+        _app.test_request_context(
+            "/login",
+            method="POST",
+            data={"username": "Alice"},
+            environ_base={"REMOTE_ADDR": "172.30.33.7"},
+        ),
+    ):
+        assert _get_rate_limit_client_id() == "proxy-login:alice"
+
+
 def test_rate_limit_client_id_falls_back_to_username_for_trusted_proxy_without_client_ip():
     with (
         patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
