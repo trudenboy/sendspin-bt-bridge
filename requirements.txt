@@ -44,7 +44,7 @@ cffi==2.1.1
     # via
     #   cryptography
     #   sounddevice
-charset-normalizer==3.4.9
+charset-normalizer==3.5.1
     # via requests
 click==8.4.2
     # via flask
