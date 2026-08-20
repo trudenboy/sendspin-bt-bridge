@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.support.fake_lease import FakeLease
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -156,6 +158,7 @@ def test_concurrent_scan_returns_409(client):
 
 def test_scan_accepts_selected_adapter_and_audio_filter(client):
     """POST /api/bt/scan forwards selected adapter and audio-only options."""
+    lease = FakeLease()
     with (
         patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
         patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
@@ -170,7 +173,7 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
             return_value={"AABBCCDDEE01": "hci0", "AABBCCDDEE02": "hci1"},
         ),
         patch("sendspin_bridge.web.routes.api_bt._run_bt_scan") as run_bt_scan,
-        patch("sendspin_bridge.web.routes.api_bt._release_bt_operation") as release_bt_operation,
+        patch("sendspin_bridge.web.routes.api_bt._acquire_bt_lease", side_effect=lambda *a, **kw: lease),
         patch("sendspin_bridge.web.routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
@@ -192,7 +195,7 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
         assert callable(target)
         target()
         run_bt_scan.assert_called_once_with(data["job_id"], "hci1", False)
-        release_bt_operation.assert_called_once()
+        assert lease.released
 
 
 def test_scan_rejects_invalid_adapter_identifier(client):

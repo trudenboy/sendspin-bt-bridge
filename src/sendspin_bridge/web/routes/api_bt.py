@@ -14,6 +14,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.dbus import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
@@ -66,36 +67,33 @@ def _bt_operation_conflict_response():
     return jsonify({"success": False, "error": "Another Bluetooth operation is already in progress"}), 409
 
 
-# Shared BT operation lock — moved to services/bt_operation_lock.py in
-# rc.3 review fixes so background callers (RSSI refresh) can also gate
-# on it without importing routes/api_bt.  These thin wrappers preserve
-# the existing call sites within this file.
-def _try_acquire_bt_operation() -> bool:
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import try_acquire_bt_operation
+def _acquire_bt_lease(reason: str, *, bt_manager=None, adapter: str = ""):
+    """Take the exclusive adapter lease for this request, or ``None``.
 
-    return try_acquire_bt_operation()
-
-
-def _release_bt_operation() -> None:
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation
-
-    release_bt_operation()
+    The lease is taken on the request thread and released by the worker
+    thread that carries out the operation — it is keyed by token, so a late
+    release cannot free whatever operation is running by then.
+    """
+    handle = getattr(bt_manager, "adapter_handle", None) if bt_manager is not None else None
+    if handle is None:
+        handle = AdapterHandle(adapter=adapter)
+    return handle.try_lease(reason)
 
 
-def _start_bt_worker(target, *, name: str | None = None) -> bool:
-    """Start a worker that owns the Bluetooth operation lock's release.
+def _start_bt_worker(target, *, lease, name: str | None = None) -> bool:
+    """Start a worker that owns the adapter lease's release.
 
-    Every caller takes the lock in the request thread and hands the
-    release to the worker's ``finally``.  When the thread cannot start,
-    that ``finally`` never runs and the lock stays held for the life of
-    the process — every later Bluetooth operation then answers 409.  The
-    release happens here instead, and the caller reports the failure.
+    Every caller takes the lease in the request thread and hands the release
+    to the worker's ``finally``.  When the thread cannot start, that
+    ``finally`` never runs and the adapter stays leased for the life of the
+    process — every later Bluetooth operation then answers 409.  The release
+    happens here instead, and the caller reports the failure.
     """
     try:
         threading.Thread(target=target, daemon=True, name=name).start()
     except Exception:
         logger.exception("Bluetooth worker thread failed to start")
-        _release_bt_operation()
+        lease.release()
         return False
     return True
 
@@ -170,7 +168,8 @@ def api_bt_reconnect():
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
         bt = client.bt_manager
-        if not _try_acquire_bt_operation():
+        lease = _acquire_bt_lease(f"reconnect {getattr(client, 'player_name', '')}", bt_manager=bt)
+        if lease is None:
             return _bt_operation_conflict_response()
 
         def _do_reconnect():
@@ -181,9 +180,9 @@ def api_bt_reconnect():
             except Exception as e:
                 logger.error("Force reconnect failed: %s", e)
             finally:
-                _release_bt_operation()
+                lease.release()
 
-        if not _start_bt_worker(_do_reconnect, name="bt-reconnect"):
+        if not _start_bt_worker(_do_reconnect, lease=lease, name="bt-reconnect"):
             return jsonify({"success": False, "error": "Internal error"}), 500
         return jsonify({"success": True, "message": "Reconnect started"})
     except Exception:
@@ -204,7 +203,8 @@ def api_bt_pair():
             return jsonify({"success": False, "error": "No BT manager for this player"}), 503
 
         bt = client.bt_manager
-        if not _try_acquire_bt_operation():
+        lease = _acquire_bt_lease(f"pair {getattr(client, 'player_name', '')}", bt_manager=bt)
+        if lease is None:
             return _bt_operation_conflict_response()
 
         quiesce = bool(data.get("quiesce_adapter"))
@@ -223,9 +223,9 @@ def api_bt_pair():
             except Exception as e:
                 logger.error("Force pair failed: %s", e)
             finally:
-                _release_bt_operation()
+                lease.release()
 
-        if not _start_bt_worker(_do_pair, name="bt-pair"):
+        if not _start_bt_worker(_do_pair, lease=lease, name="bt-pair"):
             return jsonify({"success": False, "error": "Internal error"}), 500
         return jsonify({"success": True, "message": "Pairing started (~25s)"})
     except Exception:
@@ -753,7 +753,8 @@ def api_bt_reset_reconnect():
     no_input_no_output_agent = no_io_raw if isinstance(no_io_raw, bool) else False
     allow_hfp_raw = data.get("allow_hfp_profile")
     allow_hfp_profile = allow_hfp_raw if isinstance(allow_hfp_raw, bool) else False
-    if not _try_acquire_bt_operation():
+    lease = _acquire_bt_lease(f"reset-and-reconnect {mac}", adapter=adapter)
+    if lease is None:
         return _bt_operation_conflict_response()
     job_id = str(uuid.uuid4())
     create_scan_job(job_id)
@@ -768,9 +769,9 @@ def api_bt_reset_reconnect():
                 allow_hfp_profile=allow_hfp_profile,
             )
         finally:
-            _release_bt_operation()
+            lease.release()
 
-    if not _start_bt_worker(_run_job, name=f"bt-reset-{job_id[:8]}"):
+    if not _start_bt_worker(_run_job, lease=lease, name=f"bt-reset-{job_id[:8]}"):
         return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id})
 
@@ -923,7 +924,8 @@ def api_bt_scan():
         if time.monotonic() - _last_scan_completed < _SCAN_COOLDOWN:
             remaining = int(_SCAN_COOLDOWN - (time.monotonic() - _last_scan_completed)) + 1
             return jsonify({"error": "Scan cooldown active", "retry_after": remaining}), 429
-        if not _try_acquire_bt_operation():
+        lease = _acquire_bt_lease(f"scan {adapter}", adapter=adapter)
+        if lease is None:
             return _bt_operation_conflict_response()
         job_id = str(uuid.uuid4())
         scan_options = _build_scan_options(adapter, audio_only, adapter_macs)
@@ -941,9 +943,9 @@ def api_bt_scan():
         try:
             _run_bt_scan(job_id, adapter, audio_only)
         finally:
-            _release_bt_operation()
+            lease.release()
 
-    if not _start_bt_worker(_run_job, name=f"bt-scan-{job_id[:8]}"):
+    if not _start_bt_worker(_run_job, lease=lease, name=f"bt-scan-{job_id[:8]}"):
         return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id, "scan_options": scan_options, "expected_duration": expected_duration})
 
@@ -1247,7 +1249,8 @@ def api_bt_pair_new():
         return jsonify({"success": False, "error": "Invalid adapter identifier"}), 400
     if not validate_mac(mac):
         return jsonify({"success": False, "error": "Invalid MAC"}), 400
-    if not _try_acquire_bt_operation():
+    lease = _acquire_bt_lease(f"pair {mac}", adapter=adapter)
+    if lease is None:
         return _bt_operation_conflict_response()
     quiesce = bool(data.get("quiesce_adapter"))
     # Pairing compatibility options are explicit, one-shot request values.
@@ -1271,9 +1274,9 @@ def api_bt_pair_new():
                 allow_hfp_profile=allow_hfp_profile,
             )
         finally:
-            _release_bt_operation()
+            lease.release()
 
-    if not _start_bt_worker(_run_job, name=f"bt-pair-{job_id[:8]}"):
+    if not _start_bt_worker(_run_job, lease=lease, name=f"bt-pair-{job_id[:8]}"):
         return jsonify({"success": False, "error": "Internal error"}), 500
     return jsonify({"job_id": job_id})
 

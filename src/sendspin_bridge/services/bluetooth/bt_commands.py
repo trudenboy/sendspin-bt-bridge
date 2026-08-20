@@ -130,20 +130,18 @@ def _spawn_thread(target, *args) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _bt_operation_lock_funcs() -> tuple[Any, Any]:
-    """Return ``(try_acquire, release)`` for the shared bt-operation lock.
+def _acquire_bt_lease(client, reason: str):
+    """Take the exclusive adapter lease for *client*'s controller, or ``None``.
 
-    The lock serialises all blocking ``bluetoothctl`` work (scan / RSSI /
-    pair / reconnect) so two operations can't drive the adapter at once.
-    Older builds without the helper module fall through to "always acquire".
+    The lease serialises all blocking ``bluetoothctl`` work (scan / RSSI /
+    pair / reconnect) so two operations can't drive the adapter at once, and
+    names its holder so a refused operation can say who is running.
     """
-    try:
-        from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation as _release
-        from sendspin_bridge.services.bluetooth.bt_operation_lock import try_acquire_bt_operation as _try_acquire
+    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 
-        return _try_acquire, _release
-    except Exception:  # pragma: no cover
-        return (lambda: True), (lambda: None)
+    bt = getattr(client, "bt_manager", None)
+    handle = getattr(bt, "adapter_handle", None) or AdapterHandle()
+    return handle.try_lease(f"{reason} {getattr(client, 'player_name', '')}".strip())
 
 
 def command_reconnect(client) -> CommandResult:
@@ -154,8 +152,8 @@ def command_reconnect(client) -> CommandResult:
 
     # Serialise against scan / RSSI / pair — driving the adapter concurrently
     # corrupts bluetoothctl state.  409 on conflict, matching ``command_pair``.
-    try_acquire, release = _bt_operation_lock_funcs()
-    if not try_acquire():
+    lease = _acquire_bt_lease(client, "reconnect")
+    if lease is None:
         return _err("Bluetooth operation already in progress", code=409)
 
     def _do_reconnect():
@@ -166,14 +164,14 @@ def command_reconnect(client) -> CommandResult:
         except Exception as exc:
             logger.error("[%s] Force reconnect failed: %s", getattr(client, "player_name", ""), exc)
         finally:
-            release()
+            lease.release()
 
     try:
         _spawn_thread(_do_reconnect)
     except Exception:
         # Thread start failed — release the lock now or every later BT
         # operation 409s until the process restarts.
-        release()
+        lease.release()
         logger.exception("[%s] Could not start reconnect worker", getattr(client, "player_name", ""))
         return _err("Could not start reconnect", code=500)
     return _ok("Reconnect started")
@@ -186,8 +184,8 @@ def command_disconnect(client) -> CommandResult:
 
     # Disconnect drives the adapter too — serialise against scan/RSSI/pair,
     # 409 on conflict, matching ``command_reconnect``.
-    try_acquire, release = _bt_operation_lock_funcs()
-    if not try_acquire():
+    lease = _acquire_bt_lease(client, "disconnect")
+    if lease is None:
         return _err("Bluetooth operation already in progress", code=409)
 
     def _do_disconnect():
@@ -196,14 +194,14 @@ def command_disconnect(client) -> CommandResult:
         except Exception as exc:
             logger.error("[%s] Disconnect failed: %s", getattr(client, "player_name", ""), exc)
         finally:
-            release()
+            lease.release()
 
     try:
         _spawn_thread(_do_disconnect)
     except Exception:
         # Thread start failed — release the lock now or every later BT
         # operation 409s until the process restarts.
-        release()
+        lease.release()
         logger.exception("[%s] Could not start disconnect worker", getattr(client, "player_name", ""))
         return _err("Could not start disconnect", code=500)
     return _ok("Disconnect requested")
@@ -216,8 +214,8 @@ def command_pair(client) -> CommandResult:
 
     # Reuse the existing bt-operation lock used by routes/api_bt.py so we
     # don't pair while a scan / RSSI poll holds it.
-    try_acquire, release = _bt_operation_lock_funcs()
-    if not try_acquire():
+    lease = _acquire_bt_lease(client, "pair")
+    if lease is None:
         return _err("Bluetooth operation already in progress", code=409)
 
     def _do_pair():
@@ -227,14 +225,14 @@ def command_pair(client) -> CommandResult:
         except Exception as exc:
             logger.error("[%s] Force pair failed: %s", getattr(client, "player_name", ""), exc)
         finally:
-            release()
+            lease.release()
 
     try:
         _spawn_thread(_do_pair)
     except Exception:
         # Thread start failed — release the lock now or every later BT
         # operation 409s until the process restarts.
-        release()
+        lease.release()
         logger.exception("[%s] Could not start pair worker", getattr(client, "player_name", ""))
         return _err("Could not start pairing", code=500)
     return _ok("Pairing started (~25s)")
@@ -321,8 +319,8 @@ def command_reset_reconnect(client) -> CommandResult:
         return _err("No BT manager for this player", code=503)
 
     # Serialise against scan / RSSI / pair (409 on conflict).
-    try_acquire, release = _bt_operation_lock_funcs()
-    if not try_acquire():
+    lease = _acquire_bt_lease(client, "reset-and-reconnect")
+    if lease is None:
         return _err("Bluetooth operation already in progress", code=409)
 
     # Best-effort kick: disconnect → spawn a thread that pairs again.
@@ -337,14 +335,14 @@ def command_reset_reconnect(client) -> CommandResult:
         except Exception as exc:
             logger.error("[%s] reset_reconnect failed: %s", getattr(client, "player_name", ""), exc)
         finally:
-            release()
+            lease.release()
 
     try:
         _spawn_thread(_do_reset)
     except Exception:
         # Thread start failed — release the lock now or every later BT
         # operation 409s until the process restarts.
-        release()
+        lease.release()
         logger.exception("[%s] Could not start reset worker", getattr(client, "player_name", ""))
         return _err("Could not start reset", code=500)
     return _ok("BT reset started")
