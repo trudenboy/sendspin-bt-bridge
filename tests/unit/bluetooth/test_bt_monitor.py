@@ -560,7 +560,7 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "is_device_paired", return_value=True),
         # After heartbeat detects disconnect, _handle_reconnect_failure → True exits immediately
-        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=True),
     ):
         bt_manager.host = MagicMock()
         bt_manager.host.get_status_value = MagicMock(return_value=False)
@@ -638,7 +638,7 @@ async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
     with (
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
-        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=True),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         # Should return without attempting connect
@@ -671,12 +671,12 @@ async def test_handle_reconnect_failure_runs_off_the_loop(bt_manager):
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_recording_executor),
         patch.object(bt_manager, "is_device_paired", return_value=True),
-        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=True),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), loop)
 
-    assert "_handle_reconnect_failure" in dispatched, "reconnect-failure handling was not offloaded"
+    assert "handle_reconnect_failure" in dispatched, "reconnect-failure handling was not offloaded"
 
 
 # ---------------------------------------------------------------------------

@@ -271,6 +271,48 @@ class BluetoothManager:
             )
         self.battery_level: int | None = None
 
+    # ------------------------------------------------------------------
+    # The monitor-facing interface
+    #
+    # ``bluetooth.monitor`` runs the reconnect loops on this manager's behalf.
+    # Everything it needs is stated here, so the loop is a caller rather than
+    # a friend class reaching into private state.
+    # ------------------------------------------------------------------
+
+    @property
+    def running(self) -> bool:
+        """False once :meth:`shutdown` has been called — loops must exit."""
+        return self._running
+
+    @property
+    def dbus_device_path(self) -> str | None:
+        """BlueZ object path for this device, once the controller resolves."""
+        return self._dbus_device_path
+
+    def attach_standby_wake_event(self, event: asyncio.Event) -> None:
+        """Register the event :meth:`signal_standby_wake` fires."""
+        self._standby_wake_event = event
+
+    @property
+    def standby_wake_event(self) -> asyncio.Event | None:
+        return self._standby_wake_event
+
+    def reconnect_cancelled(self) -> bool:
+        """True when a reconnect in flight should stop."""
+        return self._reconnect_cancelled()
+
+    def apply_connected_state(self, connected: bool) -> None:
+        """Record a confirmed link transition and fire the callbacks."""
+        self._apply_connected_state(connected)
+
+    def handle_reconnect_failure(self, attempt: int) -> bool:
+        """Execute the policy's verdict; True means stop reconnecting."""
+        return self._handle_reconnect_failure(attempt)
+
+    def publish_client_event(self, *args, **kwargs) -> None:
+        """Publish a device event on this manager's behalf."""
+        self._publish_client_event(*args, **kwargs)
+
     @property
     def check_interval(self) -> float:
         """Seconds between connection polls — also the backoff base."""
