@@ -179,6 +179,12 @@ class BluetoothManager:
         # this both could observe the pre-transition state and fire
         # ``on_connected`` twice — duplicate MprisPlayer registrations.
         self._connected_state_lock = threading.Lock()
+        # Transition ordering: the sequence number is taken under the state
+        # lock, the callbacks run under the dispatch lock, so they arrive in
+        # the order the state actually changed.
+        self._transition_dispatch_lock = threading.Lock()
+        self._transition_seq = 0
+        self._transition_dispatched = 0
         self.last_check: float = 0
         # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
@@ -928,21 +934,40 @@ class BluetoothManager:
         ``_connected_state_lock`` so the asyncio D-Bus monitor thread
         and the BT executor thread can't both pass the check, both
         write True, and both fire ``on_connected`` (would surface as
-        duplicate MprisPlayer D-Bus exports).  The callback itself
-        runs OUTSIDE the lock so a slow callback can't block a
-        concurrent disconnect handler from updating state.
+        duplicate MprisPlayer D-Bus exports).  The callback runs outside
+        that lock, so a slow callback never blocks a concurrent handler
+        from updating state.
+
+        Ordered: each transition takes a sequence number under the state
+        lock and dispatches under a second lock, so the callbacks arrive
+        in the order the state changed.  Firing them unordered let a slow
+        ``on_connected`` land after a later disconnect and leave an MPRIS
+        player registered for a speaker that was already gone — the
+        inverse of the duplicate-registration bug the state lock fixed.
+        A transition another one has already overtaken is dropped.
         """
         with self._connected_state_lock:
             if value == self.connected:
                 return
             self.connected = value
+            self._transition_seq += 1
+            sequence = self._transition_seq
         # #260, #263 — a successful Connected=True transition is the canonical
         # "this device exists in BlueZ and works" signal. Flip the session
         # flag and clear the never_paired status push so the recovery banner
         # returns to its normal state and the auto-disable gate stops firing.
-        if value:
-            self._clear_never_paired_evidence()
-        self._fire_connection_transition(value)
+        with self._transition_dispatch_lock:
+            if sequence < self._transition_dispatched:
+                logger.debug(
+                    "[%s] Connection transition #%d overtaken — not dispatching",
+                    self.device_name,
+                    sequence,
+                )
+                return
+            self._transition_dispatched = sequence
+            if value:
+                self._clear_never_paired_evidence()
+            self._fire_connection_transition(value)
 
     def _clear_never_paired_evidence(self) -> None:
         """Mark this session as having had a working BlueZ record and clear the
