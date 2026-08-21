@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entering standby, waking a speaker and the connect at startup no longer freeze the web UI and the status stream for several seconds, and no longer collide with a scan or pairing that is already running.
 - A speaker's controller is now identified through the kernel's own numbering, with a retry if the Bluetooth service starts after the bridge. A bridge that started first used to run without the faster Bluetooth path until it was restarted, and a controller that could not be identified could be addressed by position — which on multi-adapter hosts is a different controller.
 - Bluetooth status reads from different parts of the bridge no longer share one connection to the system service, which was an unguarded source of the intermittent errors above.
+- A speaker that reconnects repeatedly no longer leaks a system connection and an orphaned media registration on every bounce. Bluetooth kept routing the speaker's hard-key presses at a player that no longer existed, and the leak grew until the bridge was restarted.
+- The media controls of a speaker whose link flaps are no longer left registered after it disconnects, which previously made its buttons appear to work while nothing was listening.
 
 ### Security
 - Login lockout is now counted per user behind a Home Assistant ingress or any reverse proxy given as an address range. Previously everyone behind such a proxy shared one lockout counter, so five failed logins by one person locked out the whole household.
