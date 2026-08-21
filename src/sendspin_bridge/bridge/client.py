@@ -56,6 +56,16 @@ from sendspin_bridge.services.infrastructure.config_validation import (
     validate_sendspin_server_format,
 )
 from sendspin_bridge.services.infrastructure.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
+from sendspin_bridge.services.ipc.commands import (
+    Command,
+    Reconnect,
+    SetMinBufferMs,
+    SetRequiredLeadTimeMs,
+    SetStandby,
+    SetStaticDelayMs,
+    Transport,
+    encode_command,
+)
 from sendspin_bridge.services.ipc.ipc_protocol import (
     with_protocol_version,
 )
@@ -75,6 +85,13 @@ _MAX_BIND_FAILURES = 5
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+#: Hot-applied buffer knobs, keyed by the config field they come from.
+_BUFFER_COMMANDS: dict[str, type[SetStaticDelayMs | SetRequiredLeadTimeMs | SetMinBufferMs]] = {
+    "static_delay_ms": SetStaticDelayMs,
+    "required_lead_time_ms": SetRequiredLeadTimeMs,
+    "min_buffer_ms": SetMinBufferMs,
+}
+
 logger = logging.getLogger(__name__)
 
 _CALIBRATION_METRONOME_SAMPLE_RATE = 48000
@@ -1210,7 +1227,7 @@ class SendspinClient:
             if await aensure_null_sink():
                 # Redirect PULSE_SINK so new streams go to null sink (not missing BT sink)
                 try:
-                    await self._send_subprocess_command({"cmd": "set_standby", "sink": STANDBY_SINK_NAME})
+                    await self._send_subprocess_command(SetStandby(sink=STANDBY_SINK_NAME))
                 except IPCError as exc:
                     logger.debug("[%s] set_standby IPC failed (daemon may have exited): %s", self.player_name, exc)
                 moved = await amove_pid_sink_inputs(daemon_pid, STANDBY_SINK_NAME)
@@ -1288,7 +1305,7 @@ class SendspinClient:
 
         # Restore PULSE_SINK to BT sink before rerouting so future streams target it
         try:
-            await self._send_subprocess_command({"cmd": "set_standby"})
+            await self._send_subprocess_command(SetStandby())
         except IPCError as exc:
             logger.debug("[%s] set_standby clear IPC failed: %s", self.player_name, exc)
         moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
@@ -1309,7 +1326,7 @@ class SendspinClient:
         if moved > 0:
             logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
             try:
-                await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
+                await self._send_subprocess_command(Reconnect(delay_s=1.0))
             except IPCError as exc:
                 logger.debug("[%s] reanchor IPC failed after wake: %s", self.player_name, exc)
             else:
@@ -1321,7 +1338,7 @@ class SendspinClient:
         # subprocess restart because it skips process spawn + mDNS registration.
         logger.info("[%s] No streams to reroute — sending MA reconnect to daemon", self.player_name)
         try:
-            await self._send_subprocess_command({"cmd": "reconnect", "delay": 0.5})
+            await self._send_subprocess_command(Reconnect(delay_s=0.5))
         except IPCError as exc:
             logger.debug("[%s] MA reconnect IPC failed: %s", self.player_name, exc)
         return True
@@ -2032,9 +2049,16 @@ class SendspinClient:
         """Compatibility proxy for stderr classification tests and legacy call sites."""
         self._stderr_service.handle_line(line)
 
-    async def _send_subprocess_command(self, cmd: dict) -> None:
-        """Write a JSON command to the daemon subprocess stdin."""
-        await self._command_service.send(self._daemon_proc, cmd)
+    async def _send_subprocess_command(self, cmd: Command | dict) -> None:
+        """Write a command to the daemon subprocess stdin.
+
+        Command objects carry their own payload keys and ranges, so callers
+        stop repeating what the daemon will accept.  Plain dictionaries are
+        still honoured for the routes that forward an action they have
+        already validated.
+        """
+        payload = encode_command(cmd) if not isinstance(cmd, dict) else cmd
+        await self._command_service.send(self._daemon_proc, payload)
 
     async def send_reconnect(self) -> None:
         """Trigger the sendspin subprocess to reconnect to MA server.
@@ -2053,7 +2077,7 @@ class SendspinClient:
             return
         self._mark_ma_reconnecting()
         try:
-            await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
+            await self._send_subprocess_command(Reconnect(delay_s=3.0))
         except IPCError as exc:
             logger.debug("[%s] MA reconnect IPC failed: %s", self.player_name, exc)
             self._clear_ma_reconnecting()
@@ -2065,11 +2089,8 @@ class SendspinClient:
         """
         if self._daemon_proc is None or self._daemon_proc.returncode is not None:
             return False
-        cmd: dict = {"cmd": "transport", "action": action}
-        if value is not None:
-            cmd["value"] = value
         try:
-            await self._send_subprocess_command(cmd)
+            await self._send_subprocess_command(Transport(action=action, value=value))
         except IPCError as exc:
             logger.debug("[%s] transport %s IPC failed: %s", self.player_name, action, exc)
             return False
@@ -2119,7 +2140,7 @@ class SendspinClient:
                     continue
                 if self.is_running():
                     try:
-                        await self._send_subprocess_command({"cmd": f"set_{key}", "value": delay_ms})
+                        await self._send_subprocess_command(_BUFFER_COMMANDS[key](value=delay_ms))
                     except IPCError as exc:
                         logger.warning(
                             "[%s] hot-apply %s IPC failed: %s — parent-state unchanged",

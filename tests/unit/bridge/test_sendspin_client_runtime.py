@@ -14,6 +14,7 @@ import sendspin_bridge.bridge.state as state
 from sendspin_bridge.bridge.client import SendspinClient, _filter_duplicate_bluetooth_devices
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation
 from sendspin_bridge.services.diagnostics.log_analysis import classify_subprocess_stderr_level
+from sendspin_bridge.services.ipc.commands import Reconnect, encode_command
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
 
@@ -266,7 +267,7 @@ async def test_send_reconnect_marks_expected_ma_reconnect_and_clears_on_server_c
     await client.send_reconnect()
 
     assert client.status.get("ma_reconnecting") is True
-    assert fake_service.calls == [(proc, {"cmd": "reconnect", "delay": 3.0})]
+    assert fake_service.calls == [(proc, encode_command(Reconnect(delay_s=3.0)))]
 
     client._update_status({"server_connected": True})
     client._clear_ma_reconnecting()

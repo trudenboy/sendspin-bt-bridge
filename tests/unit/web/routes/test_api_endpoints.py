@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sendspin_bridge.services.ipc.commands import SetLogLevel
 from tests.support.fake_lease import FakeLease
 
 # ---------------------------------------------------------------------------
@@ -2673,7 +2674,7 @@ def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch)
 
     assert resp.status_code == 200
     assert resp.get_json()["level"] == "DEBUG"
-    assert sent == [("Kitchen", {"cmd": "set_log_level", "level": "DEBUG"})]
+    assert sent == [("Kitchen", SetLogLevel(level="DEBUG"))]
 
 
 def test_api_set_log_level_does_not_require_future_result(client, monkeypatch):
@@ -2721,7 +2722,7 @@ def test_api_set_log_level_does_not_require_future_result(client, monkeypatch):
 
     assert resp.status_code == 200
     assert resp.get_json()["level"] == "DEBUG"
-    assert sent == [{"cmd": "set_log_level", "level": "DEBUG"}]
+    assert sent == [SetLogLevel(level="DEBUG")]
 
 
 def test_api_set_password_returns_error_when_config_persist_fails(client, monkeypatch):

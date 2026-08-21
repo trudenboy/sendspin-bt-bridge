@@ -26,6 +26,7 @@ from sendspin_bridge.services.audio.mpris_player import (
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
 from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport
 from sendspin_bridge.services.diagnostics.sendspin_compat import filter_supported_call_kwargs
+from sendspin_bridge.services.ipc.commands import SetVolume
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -262,7 +263,7 @@ def _build_mpris_volume_callback(default_client: Any) -> Callable[[str, int], An
                 default,
             )
         try:
-            await client._send_subprocess_command({"cmd": "set_volume", "value": int(volume_pct)})
+            await client._send_subprocess_command(SetVolume(value=int(volume_pct)))
         except Exception as exc:
             logger.warning(
                 "MPRIS volume->%d for %s failed: %s",

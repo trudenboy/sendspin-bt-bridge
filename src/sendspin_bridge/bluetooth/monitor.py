@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from sendspin_bridge.bluetooth.adapter_session import bt_executor
 from sendspin_bridge.bluetooth.dbus import _dbus_get_battery_level
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
+from sendspin_bridge.services.ipc.commands import Pause
 
 if TYPE_CHECKING:
     from sendspin_bridge.bluetooth.manager import BluetoothManager
@@ -246,7 +247,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                                 logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
                                 is_grouped = bool(mgr.host.get_status_value("group_id"))
                                 if not is_grouped:
-                                    await mgr.host.send_subprocess_command({"cmd": "pause"})
+                                    await mgr.host.send_subprocess_command(Pause())
                                     await asyncio.sleep(0.2)
                                 await mgr.host.stop_subprocess()
 
@@ -576,7 +577,7 @@ async def _inner_dbus_monitor(
                     logger.info("BT disconnected for %s, stopping sendspin daemon...", mgr.device_name)
                     is_grouped = bool(mgr.host.get_status_value("group_id"))
                     if not is_grouped:
-                        await mgr.host.send_subprocess_command({"cmd": "pause"})
+                        await mgr.host.send_subprocess_command(Pause())
                         await asyncio.sleep(0.2)
                     await mgr.host.stop_subprocess()
 

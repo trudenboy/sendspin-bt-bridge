@@ -10,6 +10,7 @@ from sendspin_bridge.services.bluetooth.device_activation import (
     DeviceActivationContext,
     activate_device,
 )
+from sendspin_bridge.services.ipc.commands import SetVolume
 
 
 def _fake_client(player_name: str, *args, **kwargs) -> SimpleNamespace:
@@ -454,7 +455,7 @@ async def test_volume_callback_dispatches_to_resolved_source_client():
         result = await cb("1", 75)
 
     assert result is True
-    source._send_subprocess_command.assert_awaited_once_with({"cmd": "set_volume", "value": 75})
+    source._send_subprocess_command.assert_awaited_once_with(SetVolume(value=75))
     default._send_subprocess_command.assert_not_awaited()
 
 
