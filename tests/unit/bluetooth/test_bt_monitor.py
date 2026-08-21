@@ -9,7 +9,6 @@ so patches must target the *source module*, not ``bt_monitor.<name>``.
 """
 
 import asyncio
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -845,61 +844,6 @@ def test_reconnect_delay_caps_at_300(bt_manager):
 # ---------------------------------------------------------------------------
 # _record_reconnect and _check_reconnect_churn
 # ---------------------------------------------------------------------------
-
-
-def test_record_reconnect_adds_timestamp(bt_manager):
-    """_record_reconnect appends a monotonic timestamp."""
-    assert len(bt_manager._reconnect_timestamps) == 0
-
-    bt_manager._record_reconnect()
-
-    assert len(bt_manager._reconnect_timestamps) == 1
-
-
-def test_record_reconnect_prunes_outside_window(bt_manager):
-    """Timestamps outside the churn window are pruned on record."""
-    bt_manager._CHURN_WINDOW = 10
-    bt_manager._reconnect_timestamps = [time.monotonic() - 20]
-
-    bt_manager._record_reconnect()
-
-    assert len(bt_manager._reconnect_timestamps) == 1
-
-
-def test_check_reconnect_churn_returns_false_below_threshold(bt_manager):
-    """No churn release when reconnect count is below threshold."""
-    bt_manager._CHURN_THRESHOLD = 5
-    bt_manager._CHURN_WINDOW = 60
-    now = time.monotonic()
-    bt_manager._reconnect_timestamps = [now - 1, now - 2]
-
-    assert bt_manager._check_reconnect_churn() is False
-    assert bt_manager.management_enabled is True
-
-
-def test_check_reconnect_churn_disables_management_at_threshold(bt_manager):
-    """Churn detection disables management when threshold is reached."""
-    bt_manager._CHURN_THRESHOLD = 3
-    bt_manager._CHURN_WINDOW = 60
-    bt_manager.host = MagicMock()
-    bt_manager.host.bt_management_enabled = True
-
-    now = time.monotonic()
-    bt_manager._reconnect_timestamps = [now - 2, now - 1, now]
-
-    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
-        result = bt_manager._check_reconnect_churn()
-
-    assert result is True
-    assert bt_manager.management_enabled is False
-
-
-def test_check_reconnect_churn_disabled_threshold_zero(bt_manager):
-    """Churn detection is disabled when threshold is 0."""
-    bt_manager._CHURN_THRESHOLD = 0
-    bt_manager._reconnect_timestamps = [time.monotonic()] * 10
-
-    assert bt_manager._check_reconnect_churn() is False
 
 
 # ---------------------------------------------------------------------------

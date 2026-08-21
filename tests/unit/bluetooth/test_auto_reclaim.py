@@ -84,28 +84,27 @@ def test_explicit_connected_argument_overrides_cached_state(released_manager):
 
 def test_quiet_period_damps_churn_flapping(released_manager):
     mgr = released_manager
-    mgr._auto_released_at = 990.0  # released 10 s ago
-    with patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=1000.0):
-        assert mgr.maybe_auto_reclaim() is False
+    now = [1000.0]
+    mgr.policy._clock = lambda: now[0]
+    mgr.policy.mark_released()  # released just now
+
+    now[0] = 1010.0  # 10 s later
+    assert mgr.maybe_auto_reclaim() is False
     assert mgr.management_enabled is False
 
     # …but reclaim works once the quiet period has elapsed.
-    with (
-        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=1100.0),
-        patch("sendspin_bridge.services.bluetooth.persist_device_released"),
-    ):
+    now[0] = 1100.0
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
         assert mgr.maybe_auto_reclaim() is True
 
 
 def test_reclaim_resets_churn_window(released_manager):
     mgr = released_manager
-    mgr._reconnect_timestamps = [1.0, 2.0, 3.0]
-    with (
-        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=1000.0),
-        patch("sendspin_bridge.services.bluetooth.persist_device_released"),
-    ):
+    for _ in range(3):
+        mgr._record_reconnect()
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
         assert mgr.maybe_auto_reclaim() is True
-    assert mgr._reconnect_timestamps == []
+    assert mgr.policy.reconnect_count() == 0
 
 
 def test_no_reclaim_when_management_already_enabled(released_manager):
@@ -114,36 +113,43 @@ def test_no_reclaim_when_management_already_enabled(released_manager):
     assert mgr.maybe_auto_reclaim() is False
 
 
-def test_auto_release_stamps_quiet_period_origin(released_manager):
-    """Both auto-release paths must stamp _auto_released_at and persist
+def test_auto_release_starts_the_quiet_period(released_manager):
+    """Both auto-release paths must start the quiet period and persist
     released_by="auto" so the reclaim gate can distinguish them from a
     manual release across the round-trip."""
     mgr = released_manager
     mgr.management_enabled = True
-    mgr._auto_released_at = None
+    now = [555.0]
+    mgr.policy._clock = lambda: now[0]
     mgr.max_reconnect_fails = 2
     mgr.paired = True
     mgr._has_ever_paired_since_start = True
-    with (
-        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=555.0),
-        patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released,
-    ):
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released:
         assert mgr._handle_reconnect_failure(3) is True
-    assert mgr._auto_released_at == 555.0
     persist_released.assert_called_once_with("TestSpeaker", True, released_by="auto")
 
+    mgr.host.status["bt_released_by"] = "auto"
+    assert mgr.maybe_auto_reclaim(connected=True) is False  # quiet period running
+    now[0] = 555.0 + 61
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
+        assert mgr.maybe_auto_reclaim(connected=True) is True
 
-def test_churn_release_stamps_quiet_period_origin(released_manager):
+
+def test_churn_release_starts_the_quiet_period(released_manager):
     mgr = released_manager
     mgr.management_enabled = True
-    mgr._auto_released_at = None
-    mgr._CHURN_THRESHOLD = 2
-    mgr._CHURN_WINDOW = 30
-    mgr._reconnect_timestamps = [90.0, 99.0]
-    with (
-        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=100.0),
-        patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released,
-    ):
-        assert mgr._check_reconnect_churn() is True
-    assert mgr._auto_released_at == 100.0
+    now = [100.0]
+    mgr.policy._clock = lambda: now[0]
+    mgr.policy.churn_threshold = 2
+    mgr.policy.churn_window = 30
+    mgr._record_reconnect()
+    mgr._record_reconnect()
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released:
+        assert mgr._handle_reconnect_failure(1) is True
     persist_released.assert_called_once_with("TestSpeaker", True, released_by="auto")
+
+    mgr.host.status["bt_released_by"] = "auto"
+    assert mgr.maybe_auto_reclaim(connected=True) is False
+    now[0] = 100.0 + 61
+    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
+        assert mgr.maybe_auto_reclaim(connected=True) is True

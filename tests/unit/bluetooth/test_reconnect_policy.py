@@ -193,7 +193,9 @@ def test_reclaim_clears_the_churn_history(clock):
     assert isinstance(policy.on_failure(1, paired=True, ever_paired=True), KeepTrying)
 
 
-def test_a_policy_that_never_released_does_not_reclaim(clock):
+def test_a_release_carried_over_from_an_earlier_run_reclaims_at_once(clock):
+    """No quiet period to observe: the churn ended with the previous process."""
     policy = _policy(clock)
 
-    assert policy.may_reclaim(connected=True) is False
+    assert policy.may_reclaim(connected=True) is True
+    assert policy.may_reclaim(connected=False) is False
