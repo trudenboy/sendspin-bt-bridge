@@ -20,11 +20,11 @@ from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.audio.mpris_player import (
     MprisPlayer,
-    _build_player_iface,
     get_registry,
     resolve_avrcp_source_client,
 )
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
+from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport
 from sendspin_bridge.services.diagnostics.sendspin_compat import filter_supported_call_kwargs
 
 if TYPE_CHECKING:
@@ -129,7 +129,11 @@ def _resolve_adapter_device_class(device_adapter: str, adapters: list[dict[str, 
 # step is what BlueZ uses for AVRCP forwarding — system-bus name
 # requests are blocked by default ACL anyway, and BlueZ doesn't scan
 # bus names; it only routes to paths handed to it via Media1.
-_MPRIS_PATH_PREFIX = "/org/sendspin/players/"
+_MPRIS_PATH_PREFIX = MPRIS_PATH_PREFIX
+
+#: One export per MAC, so connect and disconnect act on the same resource
+#: instead of two hooks racing over attributes hung off the player object.
+_EXPORTS: dict[str, MprisExport] = {}
 
 
 def _mpris_dbus_path(mac: str) -> str:
@@ -316,94 +320,25 @@ def _make_mpris_connected_hook(
             logger.debug("MprisPlayer for %s registered without D-Bus export (no main loop)", mac)
             return
 
-        async def _export() -> None:
+        stale = _EXPORTS.pop(mac, None)
+        if stale is not None:
+            # A connect without an intervening disconnect (BlueZ can repeat the
+            # transition on a flapping link): tear the old export down rather
+            # than orphaning its connection and its BlueZ registration.
             try:
-                from dbus_fast import BusType  # type: ignore[import-untyped]
-                from dbus_fast.aio import MessageBus  # type: ignore[import-untyped]
-                from dbus_fast.signature import Variant  # type: ignore[import-untyped]
+                asyncio.run_coroutine_threadsafe(stale.ensure_unexported(), loop)
             except Exception as exc:
-                logger.debug("dbus_fast unavailable, skipping MPRIS export for %s: %s", mac, exc)
-                return
-            path = _mpris_dbus_path(mac)
-            adapter_path = _bluez_adapter_path(client.bt_manager) if client.bt_manager else None
-            try:
-                iface = _build_player_iface(player)
-                bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-                bus.export(path, iface)
-                player._dbus_bus = bus  # type: ignore[attr-defined]
-                player._dbus_iface = iface  # type: ignore[attr-defined]
-                player._dbus_adapter_path = adapter_path  # type: ignore[attr-defined]
-                if adapter_path is None:
-                    logger.warning(
-                        "MPRIS player for %s exported at %s but adapter unknown — AVRCP forwarding inactive",
-                        mac,
-                        path,
-                    )
-                    return
-                # Register with BlueZ Media1 so AVRCP passthrough commands
-                # from the speaker (Play / Pause / Next / Previous / volume)
-                # are routed to our exported player object.  Properties are
-                # the minimum AVRCP advertisement; the speaker reads them
-                # via ``org.bluez.MediaPlayer1`` from BlueZ.
-                props = {
-                    "PlaybackStatus": Variant("s", "Stopped"),
-                    "LoopStatus": Variant("s", "None"),
-                    "Rate": Variant("d", 1.0),
-                    "Shuffle": Variant("b", False),
-                    "Volume": Variant("d", 1.0),
-                    "Position": Variant("x", 0),
-                    "MinimumRate": Variant("d", 1.0),
-                    "MaximumRate": Variant("d", 1.0),
-                    "CanGoNext": Variant("b", True),
-                    "CanGoPrevious": Variant("b", True),
-                    "CanPlay": Variant("b", True),
-                    "CanPause": Variant("b", True),
-                    "CanSeek": Variant("b", False),
-                    "CanControl": Variant("b", True),
-                    "Metadata": Variant(
-                        "a{sv}",
-                        {
-                            "xesam:title": Variant("s", "Sendspin Bridge"),
-                            "xesam:artist": Variant("as", [""]),
-                            "mpris:length": Variant("x", 0),
-                        },
-                    ),
-                }
-                introspect = await bus.introspect("org.bluez", adapter_path)
-                proxy = bus.get_proxy_object("org.bluez", adapter_path, introspect)
-                try:
-                    media = proxy.get_interface("org.bluez.Media1")
-                except Exception as exc:
-                    logger.warning(
-                        "MPRIS register: org.bluez.Media1 not on %s for %s: %s",
-                        adapter_path,
-                        mac,
-                        exc,
-                    )
-                    return
-                try:
-                    await media.call_register_player(path, props)  # type: ignore[attr-defined]
-                    player._dbus_registered = True  # type: ignore[attr-defined]
-                    logger.info(
-                        "MPRIS player registered with BlueZ Media1 for %s at %s on %s",
-                        mac,
-                        path,
-                        adapter_path,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "MPRIS register: Media1.RegisterPlayer(%s) on %s failed for %s: %s",
-                        path,
-                        adapter_path,
-                        mac,
-                        exc,
-                    )
+                logger.debug("Failed to retire the previous MPRIS export for %s: %s", mac, exc)
 
-            except Exception as exc:
-                logger.warning("MPRIS D-Bus export for %s failed: %s", mac, exc)
+        export = MprisExport(
+            mac=mac,
+            player=player,
+            adapter_path_provider=lambda: _bluez_adapter_path(client.bt_manager) if client.bt_manager else None,
+        )
+        _EXPORTS[mac] = export
 
         try:
-            asyncio.run_coroutine_threadsafe(_export(), loop)
+            asyncio.run_coroutine_threadsafe(export.ensure_exported(), loop)
         except Exception as exc:
             logger.debug("Failed to schedule MPRIS export for %s: %s", mac, exc)
 
@@ -427,43 +362,16 @@ def _make_mpris_disconnected_hook(mac: str) -> Callable[[], None]:
         _get_avrcp_source_tracker().clear(mac)
 
         registry = get_registry()
-        player = registry.unregister(mac)
-        if player is None:
+        registry.unregister(mac)
+        export = _EXPORTS.pop(mac, None)
+        if export is None:
             return
         loop = get_main_loop()
         if loop is None:
             return
-        bus = getattr(player, "_dbus_bus", None)
-        path = _mpris_dbus_path(mac)
-        if bus is None:
-            return
-        adapter_path = getattr(player, "_dbus_adapter_path", None)
-        was_registered = getattr(player, "_dbus_registered", False)
-
-        async def _unexport() -> None:
-            # Tell BlueZ to drop the AVRCP forwarding registration
-            # before we unexport the path — otherwise BlueZ keeps the
-            # cached pointer and the next forwarded command races a
-            # gone object.
-            if was_registered and adapter_path is not None:
-                try:
-                    introspect = await bus.introspect("org.bluez", adapter_path)
-                    proxy = bus.get_proxy_object("org.bluez", adapter_path, introspect)
-                    media = proxy.get_interface("org.bluez.Media1")
-                    await media.call_unregister_player(path)
-                except Exception as exc:
-                    logger.debug("MPRIS Media1.UnregisterPlayer(%s) failed: %s", path, exc)
-            try:
-                bus.unexport(path)
-            except Exception as exc:
-                logger.debug("MPRIS unexport for %s failed: %s", mac, exc)
-            try:
-                bus.disconnect()
-            except Exception:
-                pass
 
         try:
-            asyncio.run_coroutine_threadsafe(_unexport(), loop)
+            asyncio.run_coroutine_threadsafe(export.ensure_unexported(), loop)
         except Exception as exc:
             logger.debug("Failed to schedule MPRIS unexport for %s: %s", mac, exc)
 
