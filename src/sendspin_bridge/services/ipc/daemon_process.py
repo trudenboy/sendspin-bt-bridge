@@ -45,8 +45,8 @@ from sendspin_bridge.services.ipc.ipc_protocol import (
     build_error_envelope,
     build_log_envelope,
     build_status_envelope,
+    is_compatible_protocol_version,
     parse_command_envelope,
-    parse_protocol_version,
     with_protocol_version,
 )
 
@@ -717,15 +717,25 @@ async def _run(params: dict) -> None:
     if not resolved.startswith("/tmp/"):
         settings_dir = f"/tmp/sendspin-{safe_id}"
     preferred_format_str: str | None = params.get("preferred_format")
-    protocol_version = parse_protocol_version(params.get(IPC_PROTOCOL_VERSION_KEY))
 
     logger = logging.getLogger(__name__)
-    if params.get(IPC_PROTOCOL_VERSION_KEY) is not None and protocol_version != IPC_PROTOCOL_VERSION:
-        logger.warning(
-            "[%s] Started with protocol_version=%r; attempting compatible runtime behavior",
-            player_name,
-            params.get(IPC_PROTOCOL_VERSION_KEY),
+    # The handshake is the one point where a version mismatch can still be
+    # reported cleanly.  Logging it and running on left a mixed-version pair
+    # talking a contract neither side had agreed to, and the failure surfaced
+    # much later as commands that quietly did nothing.  A parent that omits
+    # the key predates it and stays compatible.
+    if not is_compatible_protocol_version(params.get(IPC_PROTOCOL_VERSION_KEY)):
+        message = (
+            f"parent speaks IPC protocol {params.get(IPC_PROTOCOL_VERSION_KEY)!r}, "
+            f"this daemon speaks {IPC_PROTOCOL_VERSION}"
         )
+        _emit_error(
+            "incompatible_protocol_version",
+            message,
+            details={"parent": params.get(IPC_PROTOCOL_VERSION_KEY), "daemon": IPC_PROTOCOL_VERSION},
+        )
+        logger.error("[%s] Refusing to start: %s", player_name, message)
+        sys.exit(1)
 
     # Route Bluetooth players through the ALSA PulseAudio plugin.  On PipeWire,
     # the ALSA "default" device ignores PULSE_SINK and WirePlumber may restore

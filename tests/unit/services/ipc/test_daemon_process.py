@@ -57,11 +57,12 @@ from sendspin_bridge.services.ipc.daemon_process import (  # noqa: E402
     _observe_structured_reanchor,
     _patch_sendspin_audio_player_runtime_guards,
     _read_commands,
+    _run,
     _select_audio_output_device,
     _startup_sink_routing_watcher,
     _timing_telemetry_watcher,
 )
-from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION, IPC_PROTOCOL_VERSION_KEY  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -1002,3 +1003,58 @@ async def test_a_rejected_command_does_not_stop_the_reader(capsys):
     )
 
     assert daemon._bridge_status["volume"] == 42
+
+
+# ---------------------------------------------------------------------------
+# Protocol handshake
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_incompatible_protocol_version_refuses_to_start(capsys):
+    """A daemon that cannot honour the parent's contract must say so and exit.
+
+    Version was logged and ignored, so a mixed-version pair ran on with a
+    contract neither side had agreed to — the failure surfaced later as
+    commands that quietly did nothing.
+    """
+    params = {
+        "player_name": "TestSpeaker",
+        "client_id": "test",
+        "listen_port": 8927,
+        "url": "ws://ma:8927",
+        IPC_PROTOCOL_VERSION_KEY: IPC_PROTOCOL_VERSION + 1,
+    }
+
+    with pytest.raises(SystemExit) as excinfo:
+        await _run(params)
+
+    assert excinfo.value.code != 0
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert errors, "the daemon exited without reporting why"
+    assert errors[0]["error_code"] == "incompatible_protocol_version"
+    assert str(IPC_PROTOCOL_VERSION) in errors[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_a_missing_protocol_version_is_still_accepted(monkeypatch, capsys):
+    """An older parent that never sends the key stays compatible."""
+    from sendspin_bridge.services.ipc import daemon_process as mod
+
+    class _PastTheHandshake(BaseException):
+        """Not an Exception: the daemon catches RuntimeError from this probe."""
+
+    def _stop_after_handshake(*_args, **_kwargs):
+        raise _PastTheHandshake
+
+    # The audio probe is the first thing past the handshake; stop there so the
+    # test says something about the handshake and nothing about audio.
+    monkeypatch.setattr(mod, "query_audio_devices", _stop_after_handshake)
+
+    with pytest.raises(_PastTheHandshake):
+        await _run({"player_name": "TestSpeaker", "client_id": "test", "listen_port": 8927, "url": "ws://ma:8927"})
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert not errors
