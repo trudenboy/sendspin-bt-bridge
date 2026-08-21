@@ -938,3 +938,67 @@ async def test_read_commands_transport_ignored_when_client_disconnected(monkeypa
     await _run_one_command(daemon, {"cmd": "transport", "action": "play"})
 
     assert send_group.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Unknown and unusable commands are reported, not swallowed
+# ---------------------------------------------------------------------------
+
+
+async def _drive_commands(lines: list[str], daemon_ref=None):
+    """Feed *lines* to the daemon's command reader and return."""
+    stop_event = asyncio.Event()
+    payload = "".join(line + "\n" for line in lines)
+
+    async def _fake_connect_read_pipe(protocol_factory, pipe):
+        protocol = protocol_factory()
+        protocol.connection_made(MagicMock())
+        protocol.data_received(payload.encode())
+        protocol.eof_received()
+
+    with pytest.MonkeyPatch.context() as mp:
+        loop = asyncio.get_running_loop()
+        mp.setattr(loop, "connect_read_pipe", _fake_connect_read_pipe)
+        await asyncio.wait_for(_read_commands(daemon_ref if daemon_ref is not None else [], stop_event), timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_unknown_command_emits_an_error_envelope(capsys):
+    """A verb this build does not implement must not vanish silently."""
+    await _drive_commands([json.dumps({"cmd": "self_destruct"})])
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert errors, "unknown command produced no error envelope"
+    assert errors[0]["error_code"] == "unknown_command"
+    assert "self_destruct" in errors[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_payload_emits_an_error_envelope(capsys):
+    await _drive_commands([json.dumps({"cmd": "set_volume", "value": "loud"})])
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert errors, "an unusable payload produced no error envelope"
+    assert errors[0]["error_code"] == "invalid_command"
+
+
+@pytest.mark.asyncio
+async def test_a_rejected_command_does_not_stop_the_reader(capsys):
+    """The command after a bad one must still be honoured."""
+    daemon = MagicMock()
+    daemon._bridge_status = {"volume": 50}
+    daemon._notify = MagicMock()
+    daemon._client = MagicMock()
+    daemon._client.connected = True
+
+    await _drive_commands(
+        [
+            json.dumps({"cmd": "self_destruct"}),
+            json.dumps({"cmd": "set_volume", "value": 42}),
+        ],
+        daemon_ref=[daemon],
+    )
+
+    assert daemon._bridge_status["volume"] == 42

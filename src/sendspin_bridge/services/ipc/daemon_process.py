@@ -38,6 +38,7 @@ from sendspin_bridge.services.diagnostics.sendspin_compat import (
     query_audio_devices,
     resolve_preferred_audio_format,
 )
+from sendspin_bridge.services.ipc.commands import InvalidCommand, UnknownCommand, decode_command
 from sendspin_bridge.services.ipc.ipc_protocol import (
     IPC_PROTOCOL_VERSION,
     IPC_PROTOCOL_VERSION_KEY,
@@ -483,6 +484,20 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 "Received IPC command with protocol_version=%r; attempting compatible parse",
                 cmd.raw.get(IPC_PROTOCOL_VERSION_KEY),
             )
+
+        # Decoding is where a message becomes a command: the clamps travel
+        # with the value, and a verb this build cannot honour is reported
+        # rather than falling off the end of the dispatch ladder in silence.
+        try:
+            decode_command(cmd.raw)
+        except UnknownCommand as exc:
+            logger.warning("Rejecting IPC command: %s", exc)
+            _emit_error("unknown_command", str(exc), details={"cmd": cmd.cmd})
+            continue
+        except InvalidCommand as exc:
+            logger.warning("Rejecting IPC command: %s", exc)
+            _emit_error("invalid_command", str(exc), details={"cmd": cmd.cmd})
+            continue
 
         if cmd.cmd == "stop":
             stop_event.set()
