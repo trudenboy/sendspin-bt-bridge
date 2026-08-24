@@ -49,6 +49,7 @@ from sendspin_bridge.services.ipc.ipc_protocol import (
     parse_command_envelope,
     with_protocol_version,
 )
+from sendspin_bridge.services.ipc.status_store import StatusStore
 
 
 def _patch_sendspin_audio_player_runtime_guards() -> None:
@@ -172,24 +173,41 @@ logger = logging.getLogger(__name__)
 _reanchor_times: deque[float] = deque(maxlen=1000)
 
 
-def _record_reanchor_status(status: dict, *, sync_error_ms: float | None = None) -> None:
+def _patch_status(status, updates: dict) -> None:
+    """Apply several status keys as one update.
+
+    The store makes this indivisible; plain dicts (built directly by tests)
+    fall back to a plain update.
+    """
+    patch = getattr(status, "patch", None)
+    if callable(patch):
+        patch(updates)
+    else:
+        status.update(updates)
+
+
+def _record_reanchor_status(status: StatusStore | dict, *, sync_error_ms: float | None = None) -> None:
     """Update rolling re-anchor status from a structured or log fallback event."""
     now_mono = time.monotonic()
     _reanchor_times.append(now_mono)
     while _reanchor_times and now_mono - _reanchor_times[0] > 1800:
         _reanchor_times.popleft()
-    status["reanchor_count"] = status.get("reanchor_count", 0) + 1
-    status["reanchor_count_session"] = status["reanchor_count"]
-    status["reanchor_count_5m"] = sum(1 for value in _reanchor_times if now_mono - value <= 300)
-    status["reanchor_count_30m"] = len(_reanchor_times)
-    status["reanchoring"] = True
-    status["last_reanchor_monotonic"] = now_mono
-    status["last_reanchor_at"] = datetime.now(tz=timezone.utc).isoformat()
+    count = status.get("reanchor_count", 0) + 1
+    updates = {
+        "reanchor_count": count,
+        "reanchor_count_session": count,
+        "reanchor_count_5m": sum(1 for value in _reanchor_times if now_mono - value <= 300),
+        "reanchor_count_30m": len(_reanchor_times),
+        "reanchoring": True,
+        "last_reanchor_monotonic": now_mono,
+        "last_reanchor_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
     if sync_error_ms is not None:
-        status["last_sync_error_ms"] = round(abs(float(sync_error_ms)), 3)
+        updates["last_sync_error_ms"] = round(abs(float(sync_error_ms)), 3)
+    _patch_status(status, updates)
 
 
-def _observe_structured_reanchor(audio_handler: object, status: dict) -> bool:
+def _observe_structured_reanchor(audio_handler: object, status: StatusStore | dict) -> bool:
     """Count a new AudioPlayer re-anchor marker without parsing log wording."""
     try:
         marker = int(getattr(audio_handler, "_last_reanchor_loop_time_us", 0) or 0)
@@ -206,8 +224,7 @@ def _observe_structured_reanchor(audio_handler: object, status: dict) -> bool:
         sync_error_ms = float(getattr(audio_handler, "_sync_error_filtered_us", 0.0)) / 1000.0
     except (TypeError, ValueError, OverflowError):
         sync_error_ms = None
-    with _status_lock:
-        _record_reanchor_status(status, sync_error_ms=sync_error_ms)
+    _record_reanchor_status(status, sync_error_ms=sync_error_ms)
     return True
 
 
@@ -216,10 +233,10 @@ class _JsonLineHandler(logging.Handler):
 
     def __init__(self) -> None:
         super().__init__()
-        self._status: dict | None = None
+        self._status: StatusStore | dict | None = None
         self._on_status_change: object = None
 
-    def set_status(self, status: dict, on_status_change) -> None:
+    def set_status(self, status: StatusStore | dict, on_status_change) -> None:
         """Attach the shared status dict so re-anchor events update it."""
         self._status = status
         self._on_status_change = on_status_change
@@ -229,16 +246,15 @@ class _JsonLineHandler(logging.Handler):
             msg = self.format(record)
             # Detect re-anchor log message from sendspin/audio.py
             if self._status is not None and _REANCHOR_MSG in msg:
-                with _status_lock:
-                    # Extract sync error value if present: "Sync error 123.4 ms too large; re-anchoring"
-                    sync_error_ms = None
-                    if _SYNC_ERROR_PREFIX in msg:
-                        try:
-                            after = msg.split(_SYNC_ERROR_PREFIX, 1)[1]
-                            sync_error_ms = float(after.split()[0])
-                        except (IndexError, ValueError):
-                            pass  # best-effort parse inside log handler
-                    _record_reanchor_status(self._status, sync_error_ms=sync_error_ms)
+                # Extract sync error value if present: "Sync error 123.4 ms too large; re-anchoring"
+                sync_error_ms = None
+                if _SYNC_ERROR_PREFIX in msg:
+                    try:
+                        after = msg.split(_SYNC_ERROR_PREFIX, 1)[1]
+                        sync_error_ms = float(after.split()[0])
+                    except (IndexError, ValueError):
+                        pass  # best-effort parse inside log handler
+                _record_reanchor_status(self._status, sync_error_ms=sync_error_ms)
                 if callable(self._on_status_change):
                     try:
                         self._on_status_change()
@@ -267,7 +283,9 @@ def _setup_logging() -> None:
 # ---------------------------------------------------------------------------
 
 _last_status_json: str = ""
-_status_lock = threading.Lock()
+#: Guards the emission de-duplication below.  The status itself is owned by
+#: a :class:`StatusStore` and needs no lock here.
+_emit_dedup_lock = threading.Lock()
 # Serialises EVERY write to stdout.  Status emissions (asyncio callbacks), log
 # lines (any thread) and error envelopes otherwise race and interleave partial
 # lines, corrupting the parent's JSON-line parser.
@@ -293,20 +311,21 @@ def _write_line(payload: str) -> None:
         print(payload, flush=True)
 
 
-def _snapshot_status(status: dict) -> dict:
-    """Return a private copy of the live status dict.
+def _snapshot_status(status) -> dict:
+    """Return a private copy of the live status.
 
-    ``status`` is mutated by the sendspin daemon, the log handler and the
-    command reader on other threads, so serialising it directly can raise
-    ``dictionary changed size during iteration``.  Copy it (retrying on a
-    transient size change) so ``json.dumps`` only ever sees a stable dict.
+    A :class:`StatusStore` answers with a whole state under its own lock.
+    This used to retry five times on ``dictionary changed size during
+    iteration``, which ``dict(some_dict)`` cannot actually raise under the
+    GIL — the loop only ever protected a non-dict mapping, and the tear that
+    did happen (a group of keys written one at a time) it could not have
+    caught.  ``patch`` prevents that one at the source.  Plain dicts are
+    still accepted for the tests that build one directly.
     """
-    for _ in range(5):
-        try:
-            return dict(status)
-        except RuntimeError:
-            continue
-    return {k: status.get(k) for k in tuple(status)}
+    snapshot = getattr(status, "snapshot", None)
+    if callable(snapshot):
+        return snapshot()
+    return dict(status)
 
 
 def _filter_supported_daemon_args_kwargs(daemon_args_cls, kwargs: dict[str, object]) -> dict[str, object]:
@@ -333,7 +352,7 @@ def _str_default(obj) -> str:
     return str(obj)
 
 
-def _emit_status(status: dict) -> None:
+def _emit_status(status: StatusStore | dict) -> None:
     """Serialize status dict and write to stdout as a single JSON line.
 
     De-duplicates: if the serialized payload is identical to the last emission,
@@ -343,7 +362,7 @@ def _emit_status(status: dict) -> None:
     # Serialise a private snapshot so a concurrent daemon mutation can't change
     # the dict's size mid-``json.dumps``.
     payload = json.dumps(build_status_envelope(_snapshot_status(status)), default=_str_default, sort_keys=True)
-    with _status_lock:
+    with _emit_dedup_lock:
         if payload == _last_status_json:
             return
         _last_status_json = payload
@@ -367,7 +386,7 @@ def _emit_error(error_code: str, message: str, *, details: dict[str, object] | N
 # ---------------------------------------------------------------------------
 
 
-async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.Event) -> None:
+async def _reanchor_watcher(status: StatusStore | dict, on_status_change, stop_event: asyncio.Event) -> None:
     """Periodically clear the reanchoring flag once it has been set for long enough.
 
     sendspin logs "re-anchoring" AFTER restarting the stream, so the
@@ -380,8 +399,7 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
         if status.get("reanchoring") and status.get("last_reanchor_monotonic") is not None:
             age = time.monotonic() - status["last_reanchor_monotonic"]
             if age >= _REANCHOR_AUTO_CLEAR_S:
-                with _status_lock:
-                    status["reanchoring"] = False
+                status["reanchoring"] = False
                 if callable(on_status_change):
                     try:
                         on_status_change()
@@ -391,7 +409,7 @@ async def _reanchor_watcher(status: dict, on_status_change, stop_event: asyncio.
 
 async def _timing_telemetry_watcher(
     daemon,
-    status: dict,
+    status: StatusStore | dict,
     on_status_change,
     stop_event: asyncio.Event,
     *,
@@ -412,8 +430,7 @@ async def _timing_telemetry_watcher(
             now = time.monotonic()
             if audio_handler is not None and client is not None and now >= next_metrics_at:
                 snapshot = collect_timing_snapshot(audio_handler, client)
-                with _status_lock:
-                    status.update(snapshot)
+                _patch_status(status, snapshot)
                 changed = True
                 next_metrics_at = now + (5.0 if status.get("playing") else 20.0)
             if changed and callable(on_status_change):
@@ -427,7 +444,7 @@ async def _timing_telemetry_watcher(
 
 
 async def _startup_sink_routing_watcher(
-    status: dict, sink_name: str, stop_event: asyncio.Event, player_name: str
+    status: StatusStore | dict, sink_name: str, stop_event: asyncio.Event, player_name: str
 ) -> None:
     """Correct PA sink routing whenever this daemon starts an audio stream.
 
@@ -520,14 +537,12 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 except (ValueError, TypeError):
                     logger.warning("Invalid volume value: %s", value)
                     continue
-                with _status_lock:
-                    daemon._bridge_status["volume"] = vol
+                daemon._bridge_status["volume"] = vol
                 daemon._notify()
         elif cmd.cmd == "set_mute":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and "muted" in cmd.payload:
-                with _status_lock:
-                    daemon._bridge_status["muted"] = bool(cmd.payload["muted"])
+                daemon._bridge_status["muted"] = bool(cmd.payload["muted"])
                 daemon._notify()
         elif cmd.cmd == "reconnect":
             daemon = daemon_ref[0] if daemon_ref else None
@@ -630,8 +645,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             try:
                 setter(value_ms)
                 setattr(daemon, f"_{attr}", value_ms)
-                with _status_lock:
-                    daemon._bridge_status[attr] = round(value_ms)
+                daemon._bridge_status[attr] = round(value_ms)
                 daemon._notify()
                 if getattr(client, "connected", False):
                     from aiosendspin.models.types import PlayerStateType
@@ -810,48 +824,50 @@ async def _run(params: dict) -> None:
         **daemon_kwargs,
     )
 
-    status: dict = {
-        "player_name": player_name,
-        "connected": False,
-        "playing": False,
-        "server_connected": False,
-        "server_connected_at": None,
-        "server_url": server_url,
-        "current_track": None,
-        "current_artist": None,
-        "volume": initial_volume,
-        "muted": initial_muted,
-        "audio_format": None,
-        "group_name": None,
-        "group_id": None,
-        "connected_server_url": None,
-        "last_error": None,
-        "reanchor_count": 0,
-        "reanchor_count_session": 0,
-        "reanchor_count_5m": 0,
-        "reanchor_count_30m": 0,
-        "reanchoring": False,
-        "last_reanchor_at": None,
-        "last_sync_error_ms": None,
-        "audio_streaming": False,
-        "sink_muted": False,
-        "track_progress_ms": None,
-        "track_duration_ms": None,
-        "playback_speed": None,
-        "current_album": None,
-        "current_album_artist": None,
-        "artwork_url": None,
-        "track_year": None,
-        "track_number": None,
-        "shuffle": None,
-        "repeat_mode": None,
-        "supported_commands": None,
-        "group_volume": None,
-        "group_muted": None,
-        "required_lead_time_ms": round(required_lead_time_ms),
-        "min_buffer_ms": round(min_buffer_ms),
-        "timing_metrics_available": False,
-    }
+    status = StatusStore(
+        {
+            "player_name": player_name,
+            "connected": False,
+            "playing": False,
+            "server_connected": False,
+            "server_connected_at": None,
+            "server_url": server_url,
+            "current_track": None,
+            "current_artist": None,
+            "volume": initial_volume,
+            "muted": initial_muted,
+            "audio_format": None,
+            "group_name": None,
+            "group_id": None,
+            "connected_server_url": None,
+            "last_error": None,
+            "reanchor_count": 0,
+            "reanchor_count_session": 0,
+            "reanchor_count_5m": 0,
+            "reanchor_count_30m": 0,
+            "reanchoring": False,
+            "last_reanchor_at": None,
+            "last_sync_error_ms": None,
+            "audio_streaming": False,
+            "sink_muted": False,
+            "track_progress_ms": None,
+            "track_duration_ms": None,
+            "playback_speed": None,
+            "current_album": None,
+            "current_album_artist": None,
+            "artwork_url": None,
+            "track_year": None,
+            "track_number": None,
+            "shuffle": None,
+            "repeat_mode": None,
+            "supported_commands": None,
+            "group_volume": None,
+            "group_muted": None,
+            "required_lead_time_ms": round(required_lead_time_ms),
+            "min_buffer_ms": round(min_buffer_ms),
+            "timing_metrics_available": False,
+        }
+    )
 
     # Emit initial status so parent knows subprocess is alive
     _emit_status(status)

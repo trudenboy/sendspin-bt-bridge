@@ -436,33 +436,26 @@ def test_snapshot_status_returns_independent_copy():
     assert snap["volume"] == 40  # snapshot is decoupled
 
 
-def test_snapshot_status_retries_when_copy_sees_size_change():
-    """A live status dict can change size mid-copy; the snapshot must retry
-    instead of propagating ``RuntimeError``."""
+def test_snapshot_status_returns_a_whole_state():
+    """The store answers under its own lock, so there is nothing to retry.
+
+    This replaces a test that pinned the five-attempt retry loop in
+    ``_snapshot_status``.  That loop survived "dictionary changed size during
+    iteration" rather than preventing it, and a snapshot that did succeed
+    could still carry half of a multi-key update.  The race is gone at the
+    source, so the workaround it protected has no behaviour left to pin;
+    ``test_status_store.py`` covers the guarantee that replaced it.
+    """
     from sendspin_bridge.services.ipc.daemon_process import _snapshot_status
+    from sendspin_bridge.services.ipc.status_store import StatusStore
 
-    class _FlakyMapping:
-        def __init__(self, data):
-            self._data = dict(data)
-            self._fail = 1
+    store = StatusStore({"player_name": "x", "connected": True})
 
-        def keys(self):
-            if self._fail > 0:
-                self._fail -= 1
-                raise RuntimeError("dictionary changed size during iteration")
-            return self._data.keys()
+    snap = _snapshot_status(store)
 
-        def __getitem__(self, key):
-            return self._data[key]
-
-        def get(self, key, default=None):
-            return self._data.get(key, default)
-
-        def __iter__(self):
-            return iter(self._data)
-
-    snap = _snapshot_status(_FlakyMapping({"player_name": "x", "connected": True}))
     assert snap == {"player_name": "x", "connected": True}
+    snap["connected"] = False
+    assert store["connected"] is True
 
 
 def test_emit_status_serializes_a_snapshot(monkeypatch):
