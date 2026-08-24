@@ -38,7 +38,7 @@ dependencies = [
 # Pin the project resolver used by contributors and CI to the same version as
 # Docker and pre-commit. The armv7 Docker fallback installs this version from
 # PyPI because the GHCR image manifest lacks linux/arm/v7.
-required-version = "==0.12.2"
+required-version = "==0.12.5"
 
 # ``sendspin`` 7.5.0 caps its own ``aiosendspin`` dependency at ``~=6.0.1``
 # (``>=6.0.1,<6.1``), but ``seek_relative`` (advertised by current Music

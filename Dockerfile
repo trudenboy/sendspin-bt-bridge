@@ -9,13 +9,13 @@ ARG UV_STAGE=uv-default
 # Default — pull the static binary directly from the upstream image.
 # This is what amd64/arm64 builds use; the COPY --from below short-
 # circuits to a single layer copy (~50 MB pull amortised across builds).
-FROM ghcr.io/astral-sh/uv:0.12.2 AS uv-default
+FROM ghcr.io/astral-sh/uv:0.12.5 AS uv-default
 
 # armv7 fallback — the upstream image has no linux/arm/v7 manifest, so install
 # the same pinned uv version from its PyPI armv7 wheel instead.
 # Selected by passing --build-arg UV_STAGE=uv-armv7 in the release workflow.
 FROM python:3.13-slim AS uv-armv7
-RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.12.2" && \
+RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.12.5" && \
     cp "$(command -v uv)" /uv
 
 FROM ${UV_STAGE} AS uv-source
