@@ -80,10 +80,14 @@ dev = [
     "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-xdist>=3.6.0,<4.0",
+    # ``[tool.pytest.ini_options].timeout`` is inert without this plugin —
+    # pytest only warns ("Unknown config option: timeout"), so a hung test
+    # used to burn CI's 10-minute job budget without naming a culprit.
+    "pytest-timeout>=2.3,<3.0",
     # CI's _test.yml runs pytest with --cov; keep coverage opt-in via the
     # dev extra so contributors can `uv run pytest --cov=...` locally too.
     "pytest-cov>=5.0,<8.0",
-    "ruff==0.16.1",
+    "ruff==0.16.3",
     "mypy>=1.20.2,<3.0",
 ]
 
@@ -131,6 +135,9 @@ known-first-party = ["sendspin_bridge"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 timeout = 60
+# ``thread`` works with pytest-xdist and does not need signal support;
+# ``signal`` would only fire on the main thread of each worker.
+timeout_method = "thread"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

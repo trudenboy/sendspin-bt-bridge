@@ -58,73 +58,6 @@ def bt_manager(installed_bluez):
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_adapter_select_prefers_dbus_over_bluetoothctl_list_order():
-    """Regression: bluetoothctl list ordering does not always match ascending
-    hci-index order (e.g. after hot-plugging a second adapter, the newer one
-    can be listed first). Resolution must use D-Bus's /org/bluez/<hciN>
-    object path, which matches the kernel index unambiguously, not the
-    position of a MAC within `bluetoothctl list` output."""
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    # bluetoothctl list would (misleadingly) list hci1's real adapter first,
-    # so the old position-counting logic would resolve "hci1" -> hci0's MAC.
-    misleading_bluetoothctl_list = (
-        "Controller F0:2F:74:6B:3C:BD mass #2 [default]\nController 1C:79:2D:E5:AD:68 localhost \n"
-    )
-
-    def fake_dbus_get_adapter_address(hci_name):
-        return {"hci0": "1C:79:2D:E5:AD:68", "hci1": "F0:2F:74:6B:3C:BD"}.get(hci_name)
-
-    with (
-        patch("subprocess.check_output", return_value=""),
-        patch("subprocess.run", return_value=MagicMock(stdout=misleading_bluetoothctl_list)),
-        patch(
-            "sendspin_bridge.bluetooth.manager._dbus_get_adapter_address",
-            side_effect=fake_dbus_get_adapter_address,
-        ),
-    ):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-            adapter="hci1",
-        )
-
-    assert mgr._adapter_select == "F0:2F:74:6B:3C:BD"
-
-
-def test_resolve_adapter_select_falls_back_to_bluetoothctl_list_when_dbus_unavailable(installed_bluez):
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    installed_bluez.on(
-        "list",
-        stdout="Controller AA:AA:AA:AA:AA:AA first [default]\nController BB:BB:BB:BB:BB:BB second \n",
-    )
-
-    with (
-        patch("subprocess.check_output", return_value=""),
-        patch("subprocess.run", return_value=MagicMock(stdout="")),
-        patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address", return_value=None),
-    ):
-        mgr = BluetoothManager(
-            mac_address="AA:BB:CC:DD:EE:FF",
-            device_name="TestSpeaker",
-            adapter="hci1",
-        )
-
-    assert mgr._adapter_select == "BB:BB:BB:BB:BB:BB"
-
-
-def test_resolve_adapter_select_skips_dbus_for_malformed_hci_name():
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    manager = BluetoothManager.__new__(BluetoothManager)
-    with patch("sendspin_bridge.bluetooth.manager._dbus_get_adapter_address") as get_address:
-        resolved = manager._resolve_adapter_select("hci-not-an-index")
-
-    assert resolved == "hci-not-an-index"
-    get_address.assert_not_called()
-
-
 def test_bt_executor_pool_size():
     """The module-level thread pool must have at least 4 workers."""
     from sendspin_bridge.bluetooth.manager import _bt_executor
@@ -768,37 +701,6 @@ async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
         await _monitor_dbus(bt_manager, None, None)
 
 
-def test_record_reconnect_prunes_old_entries(bt_manager):
-    """Only reconnects inside the churn window should be retained."""
-    bt_manager._CHURN_WINDOW = 10
-    with patch("sendspin_bridge.bluetooth.manager.time.monotonic", side_effect=[100.0, 111.0]):
-        bt_manager._record_reconnect()
-        bt_manager._record_reconnect()
-
-    assert bt_manager._reconnect_timestamps == [111.0]
-
-
-def test_check_reconnect_churn_disables_management(bt_manager):
-    """Churn threshold should auto-disable management and update host status."""
-    bt_manager._CHURN_THRESHOLD = 2
-    bt_manager._CHURN_WINDOW = 30
-    bt_manager._reconnect_timestamps = [90.0, 99.0]
-    bt_manager.host = MagicMock()
-    bt_manager.host.bt_management_enabled = True
-
-    with (
-        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=100.0),
-        patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released,
-    ):
-        assert bt_manager._check_reconnect_churn() is True
-
-    assert bt_manager.management_enabled is False
-    assert bt_manager.host.bt_management_enabled is False
-    bt_manager.host.update_status.assert_called_once()
-    # released_by="auto" marks the release as auto-reclaim-eligible (#349/#350)
-    persist_released.assert_called_once_with("TestSpeaker", True, released_by="auto")
-
-
 def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):
     mock_host = MagicMock()
     mock_host.get_status_value = MagicMock(return_value=True)
@@ -1178,26 +1080,6 @@ def test_resolve_adapter_hci_name_returns_config_adapter_directly():
     assert mgr.adapter_hci_name == "hci1"
 
 
-def test_resolve_adapter_hci_name_bluetoothctl_fallback(installed_bluez):
-    """When sysfs is unavailable, falls back to the bluetoothctl controller list."""
-    from sendspin_bridge.bluetooth.manager import BluetoothManager
-
-    installed_bluez.on(
-        "list",
-        stdout="Controller C0:FB:F9:62:D6:9D MyAdapter1 [default]\nController C0:FB:F9:62:D7:D6 MyAdapter2\n",
-    )
-
-    with (
-        patch("subprocess.check_output", return_value=""),
-        patch.object(BluetoothManager, "_detect_default_adapter_mac", return_value="C0:FB:F9:62:D7:D6"),
-        patch("pathlib.Path.iterdir", side_effect=OSError("no sysfs")),
-        patch("subprocess.run", return_value=MagicMock(stdout="")),
-    ):
-        mgr = BluetoothManager(mac_address="AA:BB:CC:DD:EE:FF")
-
-    assert mgr.adapter_hci_name == "hci1"
-
-
 def test_resolve_adapter_hci_name_empty_when_all_fail(installed_bluez):
     """Returns empty string when both sysfs and the controller list lack the MAC."""
     from sendspin_bridge.bluetooth.manager import BluetoothManager
@@ -1455,8 +1337,13 @@ def test_purge_stale_bluez_entry_removes_device(bt_manager, installed_bluez):
     assert any(c.verb == "remove" and "AA:BB:CC:DD:EE:FF" in c.script for c in installed_bluez.commands)
 
 
-def test_is_device_connected_exception_returns_false(bt_manager):
-    """Exceptions in connection check should return False."""
+def test_is_device_connected_falls_back_to_the_transport_when_dbus_raises(bt_manager):
+    """A raising D-Bus probe no longer decides the link state.
+
+    The transport answers instead — here BlueZ has no device object for the
+    MAC, which is a genuine "not connected".  A transport that cannot answer
+    at all is covered in test_manager_link_state.py.
+    """
     bt_manager.connected = True
     with patch(
         "sendspin_bridge.bluetooth.manager._dbus_get_device_property", side_effect=RuntimeError("D-Bus exploded")

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from sendspin_bridge.bridge.client import SendspinClient
+from sendspin_bridge.services.ipc.commands import SetStaticDelayMs, encode_command
 
 
 class _FakeCommandService:
@@ -38,7 +39,7 @@ async def test_apply_hot_config_sends_set_static_delay_ms_ipc():
 
     assert applied == ["static_delay_ms"]
     assert client.static_delay_ms == pytest.approx(450.0)
-    assert client._command_service.calls == [(client._daemon_proc, {"cmd": "set_static_delay_ms", "value": 450.0})]
+    assert client._command_service.calls == [(client._daemon_proc, encode_command(SetStaticDelayMs(value=450.0)))]
 
 
 @pytest.mark.asyncio
@@ -105,7 +106,7 @@ async def test_apply_hot_config_multiple_fields_in_one_call():
     assert client.idle_disconnect_minutes == 5
     assert client.keepalive_enabled is True  # keep_alive implies keepalive_enabled
     # Only one IPC (static_delay_ms); idle/disconnect are parent-only.
-    assert client._command_service.calls == [(client._daemon_proc, {"cmd": "set_static_delay_ms", "value": 200.0})]
+    assert client._command_service.calls == [(client._daemon_proc, encode_command(SetStaticDelayMs(value=200.0)))]
 
 
 @pytest.mark.asyncio

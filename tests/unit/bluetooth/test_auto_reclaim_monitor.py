@@ -32,7 +32,7 @@ async def test_finish_auto_reclaim_configures_audio_and_starts_player():
     assert await _finish_auto_reclaim(mgr, loop) is True
 
     mgr.configure_bluetooth_audio.assert_called_once()
-    mgr._record_reconnect.assert_called_once()
+    mgr.policy.record_reconnect.assert_called_once()
     mgr.host.start_subprocess.assert_awaited_once()
     status_update = mgr.host.update_status.call_args[0][0]
     assert status_update["bluetooth_connected"] is True

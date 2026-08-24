@@ -16,6 +16,7 @@ import uuid
 from flask import Response, jsonify, request
 
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.infrastructure.url_safety import safe_build_opener
 from sendspin_bridge.services.lifecycle.async_job_state import create_async_job, finish_async_job, get_async_job
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
@@ -144,6 +145,36 @@ def _build_ma_prediction_patch(action: str, value) -> dict:
         except (TypeError, ValueError):
             return {}
     return {}
+
+
+class _ArtworkRedirectHandler(_ur.HTTPRedirectHandler):
+    """Follow artwork redirects, but never carry the MA token off-origin.
+
+    ``urllib``'s default handler copies request headers onto the redirected
+    request, and the artwork HMAC only covers the *initial* URL — so a
+    MA-origin URL that 302s to a provider CDN used to deliver the bridge's
+    bearer token to that CDN.  Redirects still work; the credential simply
+    stops at the origin it was issued for.
+    """
+
+    def __init__(self, ma_url: str):
+        self._origin = _origin_of(ma_url)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is None:
+            return None
+        if _origin_of(newurl) != self._origin:
+            new_req.remove_header("Authorization")
+            # ``Request`` lowercases unredirected headers separately.
+            new_req.unredirected_hdrs.pop("Authorization", None)
+        return new_req
+
+
+def _origin_of(url: str) -> tuple[str, str]:
+    """Return the ``(scheme, netloc)`` origin of *url*, case-folded."""
+    parsed = _up.urlparse(url)
+    return (parsed.scheme.lower(), parsed.netloc.lower())
 
 
 def _resolve_ma_artwork_url(raw_url: str) -> tuple[str, bool]:
@@ -319,8 +350,10 @@ def api_ma_artwork():
 
     _ARTWORK_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
+    opener = safe_build_opener(_ArtworkRedirectHandler(_ma_url or ""))
+
     try:
-        with _ur.urlopen(req, timeout=15) as resp:
+        with opener.open(req, timeout=15) as resp:
             cl = resp.headers.get("Content-Length")
             if cl and int(cl) > _ARTWORK_MAX_BYTES:
                 return Response("Artwork too large", status=413)

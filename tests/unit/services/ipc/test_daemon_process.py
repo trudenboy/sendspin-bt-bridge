@@ -57,11 +57,12 @@ from sendspin_bridge.services.ipc.daemon_process import (  # noqa: E402
     _observe_structured_reanchor,
     _patch_sendspin_audio_player_runtime_guards,
     _read_commands,
+    _run,
     _select_audio_output_device,
     _startup_sink_routing_watcher,
     _timing_telemetry_watcher,
 )
-from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION  # noqa: E402
+from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION, IPC_PROTOCOL_VERSION_KEY  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -435,33 +436,26 @@ def test_snapshot_status_returns_independent_copy():
     assert snap["volume"] == 40  # snapshot is decoupled
 
 
-def test_snapshot_status_retries_when_copy_sees_size_change():
-    """A live status dict can change size mid-copy; the snapshot must retry
-    instead of propagating ``RuntimeError``."""
+def test_snapshot_status_returns_a_whole_state():
+    """The store answers under its own lock, so there is nothing to retry.
+
+    This replaces a test that pinned the five-attempt retry loop in
+    ``_snapshot_status``.  That loop survived "dictionary changed size during
+    iteration" rather than preventing it, and a snapshot that did succeed
+    could still carry half of a multi-key update.  The race is gone at the
+    source, so the workaround it protected has no behaviour left to pin;
+    ``test_status_store.py`` covers the guarantee that replaced it.
+    """
     from sendspin_bridge.services.ipc.daemon_process import _snapshot_status
+    from sendspin_bridge.services.ipc.status_store import StatusStore
 
-    class _FlakyMapping:
-        def __init__(self, data):
-            self._data = dict(data)
-            self._fail = 1
+    store = StatusStore({"player_name": "x", "connected": True})
 
-        def keys(self):
-            if self._fail > 0:
-                self._fail -= 1
-                raise RuntimeError("dictionary changed size during iteration")
-            return self._data.keys()
+    snap = _snapshot_status(store)
 
-        def __getitem__(self, key):
-            return self._data[key]
-
-        def get(self, key, default=None):
-            return self._data.get(key, default)
-
-        def __iter__(self):
-            return iter(self._data)
-
-    snap = _snapshot_status(_FlakyMapping({"player_name": "x", "connected": True}))
     assert snap == {"player_name": "x", "connected": True}
+    snap["connected"] = False
+    assert store["connected"] is True
 
 
 def test_emit_status_serializes_a_snapshot(monkeypatch):
@@ -938,3 +932,122 @@ async def test_read_commands_transport_ignored_when_client_disconnected(monkeypa
     await _run_one_command(daemon, {"cmd": "transport", "action": "play"})
 
     assert send_group.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Unknown and unusable commands are reported, not swallowed
+# ---------------------------------------------------------------------------
+
+
+async def _drive_commands(lines: list[str], daemon_ref=None):
+    """Feed *lines* to the daemon's command reader and return."""
+    stop_event = asyncio.Event()
+    payload = "".join(line + "\n" for line in lines)
+
+    async def _fake_connect_read_pipe(protocol_factory, pipe):
+        protocol = protocol_factory()
+        protocol.connection_made(MagicMock())
+        protocol.data_received(payload.encode())
+        protocol.eof_received()
+
+    with pytest.MonkeyPatch.context() as mp:
+        loop = asyncio.get_running_loop()
+        mp.setattr(loop, "connect_read_pipe", _fake_connect_read_pipe)
+        await asyncio.wait_for(_read_commands(daemon_ref if daemon_ref is not None else [], stop_event), timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_unknown_command_emits_an_error_envelope(capsys):
+    """A verb this build does not implement must not vanish silently."""
+    await _drive_commands([json.dumps({"cmd": "self_destruct"})])
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert errors, "unknown command produced no error envelope"
+    assert errors[0]["error_code"] == "unknown_command"
+    assert "self_destruct" in errors[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_payload_emits_an_error_envelope(capsys):
+    await _drive_commands([json.dumps({"cmd": "set_volume", "value": "loud"})])
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert errors, "an unusable payload produced no error envelope"
+    assert errors[0]["error_code"] == "invalid_command"
+
+
+@pytest.mark.asyncio
+async def test_a_rejected_command_does_not_stop_the_reader(capsys):
+    """The command after a bad one must still be honoured."""
+    daemon = MagicMock()
+    daemon._bridge_status = {"volume": 50}
+    daemon._notify = MagicMock()
+    daemon._client = MagicMock()
+    daemon._client.connected = True
+
+    await _drive_commands(
+        [
+            json.dumps({"cmd": "self_destruct"}),
+            json.dumps({"cmd": "set_volume", "value": 42}),
+        ],
+        daemon_ref=[daemon],
+    )
+
+    assert daemon._bridge_status["volume"] == 42
+
+
+# ---------------------------------------------------------------------------
+# Protocol handshake
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_incompatible_protocol_version_refuses_to_start(capsys):
+    """A daemon that cannot honour the parent's contract must say so and exit.
+
+    Version was logged and ignored, so a mixed-version pair ran on with a
+    contract neither side had agreed to — the failure surfaced later as
+    commands that quietly did nothing.
+    """
+    params = {
+        "player_name": "TestSpeaker",
+        "client_id": "test",
+        "listen_port": 8927,
+        "url": "ws://ma:8927",
+        IPC_PROTOCOL_VERSION_KEY: IPC_PROTOCOL_VERSION + 1,
+    }
+
+    with pytest.raises(SystemExit) as excinfo:
+        await _run(params)
+
+    assert excinfo.value.code != 0
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert errors, "the daemon exited without reporting why"
+    assert errors[0]["error_code"] == "incompatible_protocol_version"
+    assert str(IPC_PROTOCOL_VERSION) in errors[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_a_missing_protocol_version_is_still_accepted(monkeypatch, capsys):
+    """An older parent that never sends the key stays compatible."""
+    from sendspin_bridge.services.ipc import daemon_process as mod
+
+    class _PastTheHandshake(BaseException):
+        """Not an Exception: the daemon catches RuntimeError from this probe."""
+
+    def _stop_after_handshake(*_args, **_kwargs):
+        raise _PastTheHandshake
+
+    # The audio probe is the first thing past the handshake; stop there so the
+    # test says something about the handshake and nothing about audio.
+    monkeypatch.setattr(mod, "query_audio_devices", _stop_after_handshake)
+
+    with pytest.raises(_PastTheHandshake):
+        await _run({"player_name": "TestSpeaker", "client_id": "test", "listen_port": 8927, "url": "ws://ma:8927"})
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
+    assert not errors

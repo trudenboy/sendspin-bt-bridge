@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from sendspin_bridge.services.ipc.commands import Reconnect, SetStandby
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
@@ -204,8 +206,8 @@ class TestRerouteToBtSink:
             # Two IPC calls: set_standby (restore PULSE_SINK) + reconnect (reanchor)
             assert client._send_subprocess_command.await_count == 2
             cmds = [c[0][0] for c in client._send_subprocess_command.call_args_list]
-            assert cmds[0]["cmd"] == "set_standby"
-            assert cmds[1]["cmd"] == "reconnect"
+            assert isinstance(cmds[0], SetStandby)
+            assert isinstance(cmds[1], Reconnect)
 
     @pytest.mark.asyncio
     async def test_reroute_no_daemon_noop(self):
@@ -240,8 +242,8 @@ class TestRerouteToBtSink:
             assert result is True
             # set_standby restore + reconnect
             assert client._send_subprocess_command.await_count == 2
-            cmds = [c[0][0]["cmd"] for c in client._send_subprocess_command.call_args_list]
-            assert cmds == ["set_standby", "reconnect"]
+            cmds = [type(c[0][0]) for c in client._send_subprocess_command.call_args_list]
+            assert cmds == [SetStandby, Reconnect]
 
 
 # ── Start sendspin with daemon already alive (standby wake) ──────────────

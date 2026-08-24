@@ -9,7 +9,6 @@ so patches must target the *source module*, not ``bt_monitor.<name>``.
 """
 
 import asyncio
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -348,8 +347,8 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
     """While a UI scan/pair holds the bt-operation lock, the polling monitor
     must NOT contend for the adapter: no paired probe, no connect attempt.
     Once the lock is released the next poll reconnects normally."""
+    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
     from sendspin_bridge.bluetooth.monitor import _monitor_polling
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
 
     bt_manager.management_enabled = True
     bt_manager.check_interval = 0  # poll every iteration
@@ -360,7 +359,8 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
 
     calls = {"paired": 0, "connect": 0}
 
-    assert try_acquire_bt_operation()  # hold the adapter like a UI scan would
+    held = AdapterHandle().try_lease("scan")  # hold the adapter like a UI scan would
+    assert held is not None
 
     original_sleep = asyncio.sleep
     iterations = 0
@@ -369,7 +369,7 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
         nonlocal iterations
         iterations += 1
         if iterations == 1:
-            release_bt_operation()  # scan finished — next poll may proceed
+            held.release()  # scan finished — next poll may proceed
         if iterations >= 4:
             bt_manager._running = False
         await original_sleep(0)
@@ -402,17 +402,18 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
             await _monitor_polling(bt_manager)
 
     assert calls == {"paired": 1, "connect": 1}  # exactly one attempt, after release
-    # The monitor's attempt released the lock behind it.
-    assert try_acquire_bt_operation()
-    release_bt_operation()
+    # The monitor's attempt released its lease behind it.
+    after = AdapterHandle().try_lease("after")
+    assert after is not None
+    after.release()
 
 
 @pytest.mark.asyncio
 async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_manager):
     """D-Bus path: with the lock held, the monitor defers — connect_device is
     never called and the attempt does not feed the auto-disable counter."""
+    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
     from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
 
     bt_manager.connected = False
     bt_manager.management_enabled = True
@@ -429,7 +430,8 @@ async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_ma
         if sleeps["n"] >= 3:
             bt_manager._running = False
 
-    assert try_acquire_bt_operation()  # hold the adapter like a UI scan would
+    held = AdapterHandle().try_lease("scan")  # hold the adapter like a UI scan would
+    assert held is not None
     try:
         with (
             patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
@@ -453,7 +455,7 @@ async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_ma
                 bt_manager, MagicMock(), asyncio.Event(), asyncio.Event(), asyncio.get_running_loop()
             )
     finally:
-        release_bt_operation()
+        held.release()
 
     assert calls == {"paired": 0, "connect": 0, "handle_failure": 0}
     assert sleeps["n"] >= 1  # the defer slept instead of spinning hot
@@ -558,7 +560,7 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "is_device_paired", return_value=True),
         # After heartbeat detects disconnect, _handle_reconnect_failure → True exits immediately
-        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=True),
     ):
         bt_manager.host = MagicMock()
         bt_manager.host.get_status_value = MagicMock(return_value=False)
@@ -636,7 +638,7 @@ async def test_inner_dbus_monitor_handle_reconnect_failure_returns(bt_manager):
     with (
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
-        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=True),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         # Should return without attempting connect
@@ -669,12 +671,12 @@ async def test_handle_reconnect_failure_runs_off_the_loop(bt_manager):
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_recording_executor),
         patch.object(bt_manager, "is_device_paired", return_value=True),
-        patch.object(bt_manager, "_handle_reconnect_failure", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=True),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
     ):
         await _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), loop)
 
-    assert "_handle_reconnect_failure" in dispatched, "reconnect-failure handling was not offloaded"
+    assert "handle_reconnect_failure" in dispatched, "reconnect-failure handling was not offloaded"
 
 
 # ---------------------------------------------------------------------------
@@ -842,61 +844,6 @@ def test_reconnect_delay_caps_at_300(bt_manager):
 # ---------------------------------------------------------------------------
 # _record_reconnect and _check_reconnect_churn
 # ---------------------------------------------------------------------------
-
-
-def test_record_reconnect_adds_timestamp(bt_manager):
-    """_record_reconnect appends a monotonic timestamp."""
-    assert len(bt_manager._reconnect_timestamps) == 0
-
-    bt_manager._record_reconnect()
-
-    assert len(bt_manager._reconnect_timestamps) == 1
-
-
-def test_record_reconnect_prunes_outside_window(bt_manager):
-    """Timestamps outside the churn window are pruned on record."""
-    bt_manager._CHURN_WINDOW = 10
-    bt_manager._reconnect_timestamps = [time.monotonic() - 20]
-
-    bt_manager._record_reconnect()
-
-    assert len(bt_manager._reconnect_timestamps) == 1
-
-
-def test_check_reconnect_churn_returns_false_below_threshold(bt_manager):
-    """No churn release when reconnect count is below threshold."""
-    bt_manager._CHURN_THRESHOLD = 5
-    bt_manager._CHURN_WINDOW = 60
-    now = time.monotonic()
-    bt_manager._reconnect_timestamps = [now - 1, now - 2]
-
-    assert bt_manager._check_reconnect_churn() is False
-    assert bt_manager.management_enabled is True
-
-
-def test_check_reconnect_churn_disables_management_at_threshold(bt_manager):
-    """Churn detection disables management when threshold is reached."""
-    bt_manager._CHURN_THRESHOLD = 3
-    bt_manager._CHURN_WINDOW = 60
-    bt_manager.host = MagicMock()
-    bt_manager.host.bt_management_enabled = True
-
-    now = time.monotonic()
-    bt_manager._reconnect_timestamps = [now - 2, now - 1, now]
-
-    with patch("sendspin_bridge.services.bluetooth.persist_device_released"):
-        result = bt_manager._check_reconnect_churn()
-
-    assert result is True
-    assert bt_manager.management_enabled is False
-
-
-def test_check_reconnect_churn_disabled_threshold_zero(bt_manager):
-    """Churn detection is disabled when threshold is 0."""
-    bt_manager._CHURN_THRESHOLD = 0
-    bt_manager._reconnect_timestamps = [time.monotonic()] * 10
-
-    assert bt_manager._check_reconnect_churn() is False
 
 
 # ---------------------------------------------------------------------------

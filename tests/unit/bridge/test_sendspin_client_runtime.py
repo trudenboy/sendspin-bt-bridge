@@ -14,6 +14,7 @@ import sendspin_bridge.bridge.state as state
 from sendspin_bridge.bridge.client import SendspinClient, _filter_duplicate_bluetooth_devices
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation
 from sendspin_bridge.services.diagnostics.log_analysis import classify_subprocess_stderr_level
+from sendspin_bridge.services.ipc.commands import Reconnect, encode_command
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
 
@@ -266,7 +267,7 @@ async def test_send_reconnect_marks_expected_ma_reconnect_and_clears_on_server_c
     await client.send_reconnect()
 
     assert client.status.get("ma_reconnecting") is True
-    assert fake_service.calls == [(proc, {"cmd": "reconnect", "delay": 3.0})]
+    assert fake_service.calls == [(proc, encode_command(Reconnect(delay_s=3.0)))]
 
     client._update_status({"server_connected": True})
     client._clear_ma_reconnecting()
@@ -522,24 +523,24 @@ async def test_read_subprocess_output_accepts_structured_error_envelope_once():
 
 @pytest.mark.asyncio
 async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
+    """A non-status message goes straight to the service, side effects skipped."""
     client = SendspinClient("Test Player", "localhost", 9000)
 
-    log_line = json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()
+    log_message = {"type": "log", "level": "info", "msg": "hello"}
+    log_line = json.dumps(log_message).encode()
+
+    handled = []
 
     class _FakeService:
-        def __init__(self):
-            self.seen = []
-
-        def parse_line(self, line):
-            self.seen.append(("parse", line))
-            return {"type": "log", "level": "info", "msg": "hello"}
+        async def read_stream(self, stdout, *, idle_timeout=None, on_idle=None, on_message=None):
+            # The loop belongs to the service; drive the client's half of it.
+            await on_message(log_message)
 
         def handle_message(self, msg):
-            self.seen.append(("handle", msg))
+            handled.append(msg)
             return None
 
-    fake_service = _FakeService()
-    client._ipc_service = fake_service
+    client._ipc_service = _FakeService()
     client._daemon_proc = SimpleNamespace(
         returncode=None,
         stdout=_FakeStdoutLines([log_line]),
@@ -547,10 +548,7 @@ async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
 
     await client._read_subprocess_output()
 
-    assert fake_service.seen == [
-        ("parse", log_line + b"\n"),
-        ("handle", {"type": "log", "level": "info", "msg": "hello"}),
-    ]
+    assert handled == [log_message]
 
 
 @pytest.mark.asyncio

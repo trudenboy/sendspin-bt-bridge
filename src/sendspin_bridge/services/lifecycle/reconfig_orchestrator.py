@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.infrastructure.config_diff import ActionKind, ReconfigAction
+from sendspin_bridge.services.ipc.commands import SetLogLevel
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -619,7 +620,7 @@ class ReconfigOrchestrator:
 
             level_upper = apply_log_level(log_level)
             if self._loop is not None:
-                cmd = {"cmd": "set_log_level", "level": level_upper}
+                cmd = SetLogLevel(level=level_upper)
                 for client in clients_by_mac.values():
                     if not getattr(client, "is_running", None):
                         continue

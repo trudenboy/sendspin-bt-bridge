@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from sendspin_bridge.services.ipc.commands import Stop, encode_command
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
@@ -44,7 +46,7 @@ class SubprocessStopService:
         """
         if proc and proc.returncode is None:
             try:
-                await send_stop({"cmd": "stop"})
+                await send_stop(encode_command(Stop()))
                 await asyncio.wait_for(proc.wait(), timeout=3.0)
             except TimeoutError:
                 self._logger.warning("[%s] Daemon subprocess did not exit, killing", player_name)

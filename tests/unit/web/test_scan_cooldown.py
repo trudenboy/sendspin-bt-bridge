@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.support.fake_lease import FakeLease
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -22,28 +24,17 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _release_bt_operation_lock_after_each_test():
-    """Reset the shared BT operation lock between tests in this file.
+def _release_adapter_lease_after_each_test():
+    """Reset the shared adapter lease between tests in this file.
 
-    ``test_scan_allowed_after_cooldown_expires`` patches
-    ``threading.Thread.start`` to a no-op, so the background ``_run_job``
-    that would normally release the lock never fires — the acquire from
-    the scan endpoint leaks.  The leak was invisible while the lock was
-    private to ``routes/api_bt`` (rc.2-) but rc.3 promotes it to a
-    process-wide singleton in ``services.bt_operation_lock`` (so the
-    background RSSI refresh can also gate on it), and a leaked lock
-    here now blocks the next test's acquire.  Resetting after each
-    test keeps the suite deterministic without changing production
-    semantics.
+    ``test_scan_allowed_after_cooldown_expires`` patches ``Thread.start`` to a
+    no-op, so the background job that would release the lease never runs and
+    the acquire from the scan endpoint leaks into the next test.
     """
     yield
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import _bt_operation_lock
+    from sendspin_bridge.bluetooth.adapter_session import force_release_lease
 
-    if _bt_operation_lock.locked():
-        try:
-            _bt_operation_lock.release()
-        except RuntimeError:
-            pass
+    force_release_lease()
 
 
 @pytest.fixture()
@@ -156,6 +147,7 @@ def test_concurrent_scan_returns_409(client):
 
 def test_scan_accepts_selected_adapter_and_audio_filter(client):
     """POST /api/bt/scan forwards selected adapter and audio-only options."""
+    lease = FakeLease()
     with (
         patch("sendspin_bridge.web.routes.api_bt.is_scan_running", return_value=False),
         patch("sendspin_bridge.web.routes.api_bt.time") as mock_time,
@@ -170,7 +162,7 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
             return_value={"AABBCCDDEE01": "hci0", "AABBCCDDEE02": "hci1"},
         ),
         patch("sendspin_bridge.web.routes.api_bt._run_bt_scan") as run_bt_scan,
-        patch("sendspin_bridge.web.routes.api_bt._release_bt_operation") as release_bt_operation,
+        patch("sendspin_bridge.web.routes.api_bt._acquire_bt_lease", side_effect=lambda *a, **kw: lease),
         patch("sendspin_bridge.web.routes.api_bt.threading.Thread") as mock_thread,
     ):
         mock_time.monotonic.return_value = 100.0
@@ -192,7 +184,7 @@ def test_scan_accepts_selected_adapter_and_audio_filter(client):
         assert callable(target)
         target()
         run_bt_scan.assert_called_once_with(data["job_id"], "hci1", False)
-        release_bt_operation.assert_called_once()
+        assert lease.released
 
 
 def test_scan_rejects_invalid_adapter_identifier(client):

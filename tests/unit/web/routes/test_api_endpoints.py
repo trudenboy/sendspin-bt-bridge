@@ -16,6 +16,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sendspin_bridge.services.ipc.commands import SetLogLevel
+from tests.support.fake_lease import FakeLease
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -696,8 +699,7 @@ def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkey
         captured["no_input_no_output_agent"] = no_input_no_output_agent
         captured["allow_hfp_profile"] = allow_hfp_profile
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -734,8 +736,7 @@ def test_bt_pair_new_without_no_io_agent_field_passes_false_to_runner(client, mo
     ):
         captured["no_input_no_output_agent"] = no_input_no_output_agent
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -765,8 +766,7 @@ def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
     ):
         captured["no_input_no_output_agent"] = no_input_no_output_agent
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -782,7 +782,7 @@ def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: None)
 
     resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
 
@@ -812,8 +812,10 @@ def test_bt_endpoints_release_the_operation_lock_when_the_worker_cannot_start(cl
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     released = []
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(path))
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(path)))
+    # The scan route also gates on the post-scan cooldown, which is module
+    # state another test in this file may have stamped.
+    monkeypatch.setattr(api_bt_mod, "_last_scan_completed", 0.0)
 
     class _DeadThread:
         def __init__(self, *_args, **_kwargs):
@@ -842,7 +844,7 @@ def test_bt_scan_returns_409_when_bt_operation_busy(client, monkeypatch):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     monkeypatch.setattr(api_bt_mod, "is_scan_running", lambda: False)
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: None)
     monkeypatch.setattr(api_bt_mod, "_last_scan_completed", 0.0)
     monkeypatch.setattr(api_bt_mod.time, "monotonic", lambda: 1000.0)
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:01"])
@@ -2672,7 +2674,7 @@ def test_api_set_log_level_propagates_via_registry_snapshot(client, monkeypatch)
 
     assert resp.status_code == 200
     assert resp.get_json()["level"] == "DEBUG"
-    assert sent == [("Kitchen", {"cmd": "set_log_level", "level": "DEBUG"})]
+    assert sent == [("Kitchen", SetLogLevel(level="DEBUG"))]
 
 
 def test_api_set_log_level_does_not_require_future_result(client, monkeypatch):
@@ -2720,7 +2722,7 @@ def test_api_set_log_level_does_not_require_future_result(client, monkeypatch):
 
     assert resp.status_code == 200
     assert resp.get_json()["level"] == "DEBUG"
-    assert sent == [{"cmd": "set_log_level", "level": "DEBUG"}]
+    assert sent == [SetLogLevel(level="DEBUG")]
 
 
 def test_api_set_password_returns_error_when_config_persist_fails(client, monkeypatch):
@@ -3863,14 +3865,19 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
             raw_url = "/api/image/123"
             signature = sign_artwork_url(raw_url)
 
-            def _fake_urlopen(req, timeout=0):
-                opened["url"] = req.full_url
-                opened["auth"] = req.headers.get("Authorization")
-                opened["accept"] = req.headers.get("Accept")
-                opened["timeout"] = timeout
-                return _FakeResponse()
+            class _FakeOpener:
+                def open(self, req, timeout=0):
+                    opened["url"] = req.full_url
+                    opened["auth"] = req.headers.get("Authorization")
+                    opened["accept"] = req.headers.get("Accept")
+                    opened["timeout"] = timeout
+                    return _FakeResponse()
 
-            mp.setattr(ma_playback_mod._ur, "urlopen", _fake_urlopen)
+            # The proxy fetches through ``safe_build_opener`` (SSRF re-check
+            # per hop + a redirect handler that strips the MA bearer token
+            # when the origin changes), so the seam is the opener, not
+            # ``urllib.request.urlopen``.
+            mp.setattr(ma_playback_mod, "safe_build_opener", lambda *h, **kw: _FakeOpener())
             resp = client.get(f"/api/ma/artwork?url=%2Fapi%2Fimage%2F123&sig={signature}")
 
         assert resp.status_code == 200
@@ -3923,7 +3930,14 @@ def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_to
     try:
         fake_resp = io.BytesIO(b"\x89PNG\r\n\x1a\n")
         fake_resp.headers = {"Content-Type": "image/png", "Content-Length": "8"}
-        with patch("sendspin_bridge.web.routes.ma_playback._ur.urlopen", return_value=fake_resp) as mock_open:
+        opened_reqs = []
+
+        class _FakeOpener:
+            def open(self, req, timeout=0):
+                opened_reqs.append(req)
+                return fake_resp
+
+        with patch("sendspin_bridge.web.routes.ma_playback.safe_build_opener", lambda *h, **kw: _FakeOpener()):
             resp = client.get(
                 "/api/ma/artwork?url="
                 "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
@@ -3931,7 +3945,7 @@ def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_to
             )
             assert resp.status_code == 200
             # Should NOT include Authorization header for external URLs
-            called_req = mock_open.call_args[0][0]
+            called_req = opened_reqs[0]
             assert "Authorization" not in called_req.headers
     finally:
         state.set_ma_api_credentials("", "")
@@ -4655,7 +4669,7 @@ def test_bt_reconnect_returns_409_when_bt_operation_in_progress(client, monkeypa
     fake_client = SimpleNamespace(bt_manager=fake_bt)
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: None)
     spawned = []
     monkeypatch.setattr(api_bt_mod.threading, "Thread", lambda *a, **kw: spawned.append((a, kw)) or MagicMock())
 
@@ -4684,8 +4698,7 @@ def test_bt_reconnect_releases_lock_after_worker(client, monkeypatch):
             self._target()
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(True))
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
     monkeypatch.setattr(api_bt_mod.threading, "Thread", _SyncThread)
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _s: None)
 
@@ -4709,8 +4722,7 @@ def test_bt_pair_threads_quiesce_flag(client, monkeypatch):
     fake_client = SimpleNamespace(bt_manager=fake_bt)
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
 
     sentinel = _QuiesceSentinel()
     monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
@@ -4738,8 +4750,7 @@ def test_bt_pair_without_flag_does_not_invoke_quiesce(client, monkeypatch):
     fake_client = SimpleNamespace(bt_manager=fake_bt)
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
 
     sentinel = _QuiesceSentinel()
     monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
@@ -4771,8 +4782,7 @@ def test_bt_pair_new_threads_quiesce_flag(client, monkeypatch):
         captured["adapter"] = adapter
         captured["quiesce"] = quiesce
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -4803,8 +4813,7 @@ def test_bt_pair_new_default_has_quiesce_false(client, monkeypatch):
     ):
         captured["quiesce"] = quiesce
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)

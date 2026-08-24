@@ -11,8 +11,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.services.bluetooth import bt_commands as M
 from sendspin_bridge.services.bluetooth.bt_commands import CommandResult
+from tests.support.fake_lease import FakeLease
 
 
 @pytest.fixture
@@ -122,7 +124,7 @@ def test_find_client_by_player_id_case_insensitive(monkeypatch, fake_client):
 def test_command_reconnect_returns_immediately(fake_client, monkeypatch):
     # Stub the bt-operation lock so the test doesn't hold the real singleton
     # (the worker thread would otherwise keep it for ~1s).
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: None)))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease())
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: None)
     result = M.command_reconnect(fake_client)
     assert result.success
@@ -140,7 +142,7 @@ def test_command_reconnect_returns_409_when_bt_operation_in_progress(fake_client
     """Force reconnect must not drive the adapter while a scan/RSSI/pair holds
     the bt-operation lock — it returns 409 and spawns no worker thread."""
     spawned = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: False), (lambda: None)))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: None)
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: spawned.append(target))
     result = M.command_reconnect(fake_client)
     assert not result.success
@@ -150,7 +152,7 @@ def test_command_reconnect_returns_409_when_bt_operation_in_progress(fake_client
 
 def test_command_reconnect_releases_lock_after_worker(fake_client, monkeypatch):
     released = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: target(*a))  # run synchronously
     monkeypatch.setattr(M.threading, "Event", lambda: SimpleNamespace(wait=lambda _t: None))  # no real sleep
     result = M.command_reconnect(fake_client)
@@ -163,7 +165,7 @@ def test_command_disconnect_releases_lock_when_spawn_fails(fake_client, monkeypa
     must not stay held — otherwise every later BT operation 409s until the
     process restarts (Copilot review on PR #424)."""
     released = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
 
     def _boom(target, *a):
         raise RuntimeError("cannot start thread")
@@ -176,7 +178,7 @@ def test_command_disconnect_releases_lock_when_spawn_fails(fake_client, monkeypa
 
 def test_command_reconnect_releases_lock_when_spawn_fails(fake_client, monkeypatch):
     released = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
 
     def _boom(target, *a):
         raise RuntimeError("cannot start thread")
@@ -189,7 +191,7 @@ def test_command_reconnect_releases_lock_when_spawn_fails(fake_client, monkeypat
 
 def test_command_pair_releases_lock_when_spawn_fails(fake_client, monkeypatch):
     released = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
 
     def _boom(target, *a):
         raise RuntimeError("cannot start thread")
@@ -202,7 +204,7 @@ def test_command_pair_releases_lock_when_spawn_fails(fake_client, monkeypatch):
 
 def test_command_reset_reconnect_releases_lock_when_spawn_fails(fake_client, monkeypatch):
     released = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
 
     def _boom(target, *a):
         raise RuntimeError("cannot start thread")
@@ -215,7 +217,7 @@ def test_command_reset_reconnect_releases_lock_when_spawn_fails(fake_client, mon
 
 def test_command_reset_reconnect_returns_409_when_bt_operation_in_progress(fake_client, monkeypatch):
     spawned = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: False), (lambda: None)))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: None)
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: spawned.append(target))
     result = M.command_reset_reconnect(fake_client)
     assert not result.success
@@ -234,7 +236,7 @@ def test_command_disconnect_returns_409_when_bt_operation_in_progress(fake_clien
     scan/pair/reconnect instead of contending (lock-free disconnects were
     part of the wedged-scan contention observed on the demo stand)."""
     spawned = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: False), (lambda: None)))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: None)
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: spawned.append(target))
     result = M.command_disconnect(fake_client)
     assert not result.success
@@ -244,37 +246,53 @@ def test_command_disconnect_returns_409_when_bt_operation_in_progress(fake_clien
 
 def test_command_disconnect_releases_lock_after_worker(fake_client, monkeypatch):
     released = []
-    monkeypatch.setattr(M, "_bt_operation_lock_funcs", lambda: ((lambda: True), (lambda: released.append(True))))
+    monkeypatch.setattr(M, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
     monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: target(*a))  # run synchronously
     result = M.command_disconnect(fake_client)
     assert result.success
     assert released == [True]
 
 
-def test_command_pair_acquires_op_lock(fake_client, monkeypatch):
-    """Pair must call into the BT operation lock so it serialises with
-    the scan path."""
-    acquire_calls: list[bool] = []
-    release_calls: list[bool] = []
+def test_command_pair_takes_a_named_adapter_lease(fake_client, monkeypatch):
+    """Pair must hold the adapter lease so it serialises with the scan path."""
+    monkeypatch.setattr(M, "_spawn_thread", lambda target, *a: None)
+    # The MagicMock bt_manager would hand back a mock handle; use a plain
+    # object so the command falls through to a real handle.
+    fake_client.bt_manager = SimpleNamespace(mac_address="FC:58:FA:EB:08:6C")
 
-    monkeypatch.setattr(
-        "sendspin_bridge.services.bluetooth.bt_operation_lock.try_acquire_bt_operation",
-        lambda: (acquire_calls.append(True), True)[1],
-    )
-    monkeypatch.setattr(
-        "sendspin_bridge.services.bluetooth.bt_operation_lock.release_bt_operation",
-        lambda: release_calls.append(True),
-    )
+    taken = []
+    real_acquire = M._acquire_bt_lease
+
+    def _spy(client, reason):
+        lease = real_acquire(client, reason)
+        taken.append(lease)
+        return lease
+
+    monkeypatch.setattr(M, "_acquire_bt_lease", _spy)
+
     result = M.command_pair(fake_client)
-    assert result.success
-    # acquire_calls populated; release happens in the spawned thread, so we
-    # just assert the lock attempt occurred.
-    assert acquire_calls
+    try:
+        assert result.success
+        assert taken and taken[0] is not None
+        assert taken[0].reason.startswith("pair")
+        assert AdapterHandle.current_holder() == taken[0].reason
+    finally:
+        # The worker owns the release in production; it is stubbed out here.
+        if taken and taken[0] is not None:
+            taken[0].release()
 
 
-def test_command_pair_returns_409_when_lock_held(fake_client, monkeypatch):
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth.bt_operation_lock.try_acquire_bt_operation", lambda: False)
-    result = M.command_pair(fake_client)
+def test_command_pair_returns_409_while_the_adapter_is_leased(fake_client):
+    # A MagicMock bt_manager would hand back a mock handle whose lease always
+    # succeeds; use a plain object so the command reaches the real lease.
+    fake_client.bt_manager = SimpleNamespace(mac_address="FC:58:FA:EB:08:6C")
+    handle = AdapterHandle()
+    held = handle.try_lease("scan")
+    try:
+        result = M.command_pair(fake_client)
+    finally:
+        held.release()
+
     assert not result.success
     assert result.code == 409
 

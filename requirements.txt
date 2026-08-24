@@ -44,7 +44,7 @@ cffi==2.1.1
     # via
     #   cryptography
     #   sounddevice
-charset-normalizer==3.4.9
+charset-normalizer==3.5.1
     # via requests
 click==8.4.2
     # via flask
@@ -102,7 +102,7 @@ music-assistant-client==1.4.3
     # via sendspin-bt-bridge
 music-assistant-models==1.1.152
     # via music-assistant-client
-numpy==2.5.1
+numpy==2.5.2
     # via
     #   aiosendspin
     #   sendspin
@@ -137,13 +137,13 @@ pygments==2.20.0
     #   sendspin-bt-bridge
 pyjwt==2.13.0
     # via sendspin-bt-bridge
-pyobjc-core==12.2.1 ; sys_platform == 'darwin'
+pyobjc-core==12.2.2 ; sys_platform == 'darwin'
     # via
     #   bleak
     #   pyobjc-framework-cocoa
     #   pyobjc-framework-corebluetooth
     #   pyobjc-framework-libdispatch
-pyobjc-framework-cocoa==12.2.1 ; sys_platform == 'darwin'
+pyobjc-framework-cocoa==12.2.2 ; sys_platform == 'darwin'
     # via
     #   pyobjc-framework-corebluetooth
     #   pyobjc-framework-libdispatch
