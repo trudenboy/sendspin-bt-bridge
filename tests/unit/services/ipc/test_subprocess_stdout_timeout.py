@@ -11,11 +11,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
 from sendspin_bridge.bridge.client import SendspinClient
+from sendspin_bridge.services.ipc.subprocess_ipc import SubprocessIpcService
 
 
 class _FakeStdout:
@@ -45,8 +45,16 @@ def _make_client_with(proc) -> SendspinClient:
     client = SendspinClient.__new__(SendspinClient)
     client._daemon_proc = proc  # type: ignore[attr-defined]
     client.player_name = "test-player"
-    client._ipc_service = MagicMock()
-    client._ipc_service.parse_line.return_value = None
+    # The read loop lives in the service now, so the stub must be the real
+    # one — what these tests check is the client's half: the idle decision
+    # and the message side effects.
+    client._ipc_service = SubprocessIpcService(
+        player_name="test-player",
+        protocol_warning_cache=set(),
+        status_updater=lambda _updates: None,
+        log_methods={},
+        allowed_keys=None,
+    )
     return client
 
 

@@ -1874,12 +1874,9 @@ class SendspinClient:
             self._daemon_task = asyncio.create_task(self._read_subprocess_output())
             self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
 
-            def _on_reader_done(t: asyncio.Task) -> None:
-                if not t.cancelled() and t.exception():
-                    logger.error("[%s] stdout reader error: %s", self.player_name, t.exception())
-
-            self._daemon_task.add_done_callback(_on_reader_done)
-            self._stderr_task.add_done_callback(_on_reader_done)
+            handler = self._make_reader_done_handler()
+            self._daemon_task.add_done_callback(handler)
+            self._stderr_task.add_done_callback(handler)
             logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
             # Open a spawn-history entry — the death handler fills the rest.
             self._current_spawn = SpawnRecord(
@@ -1929,75 +1926,112 @@ class SendspinClient:
                 timer.cancel()
             self._persist_timers.clear()
 
-    async def _read_subprocess_output(self) -> None:
-        """Read JSON lines from daemon subprocess stdout and merge into self.status.
+    def _make_reader_done_handler(self):
+        """Build the done-callback for the stdout/stderr reader tasks.
 
-        ``stdout.readline()`` is wrapped in ``asyncio.wait_for`` so that a stalled
-        daemon (e.g. subprocess alive but not writing) does not leave this reader
-        blocked forever.  On timeout, we log at DEBUG and keep polling — only a
-        real EOF (empty line) or a dead subprocess ends the loop.
+        A reader that dies leaves nobody draining the daemon's stdout.  The
+        daemon writes status through a blocking ``print``, so once the 64 KB
+        pipe fills its event loop wedges: no commands, no stop, no reconnect,
+        while audio keeps playing from the audio thread and the speaker looks
+        healthy.  Killing the daemon turns that into a restart the supervisor
+        can act on.
+        """
+
+        def _on_reader_done(task: asyncio.Task) -> None:
+            if task.cancelled() or task.exception() is None:
+                return
+            logger.error("[%s] stdout reader error: %s", self.player_name, task.exception())
+            proc = self._daemon_proc
+            if proc is None or proc.returncode is not None:
+                return
+            logger.error(
+                "[%s] Killing daemon PID %s — its stdout is no longer being read",
+                self.player_name,
+                getattr(proc, "pid", "?"),
+            )
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            except Exception as exc:
+                logger.warning("[%s] Could not kill the unread daemon: %s", self.player_name, exc)
+
+        return _on_reader_done
+
+    async def _read_subprocess_output(self) -> None:
+        """Read daemon stdout and merge status into ``self.status``.
+
+        The loop itself belongs to :class:`SubprocessIpcService` — this
+        supplies the two things it cannot know: when an idle stretch means a
+        dead subprocess, and what a status update should trigger here.
         """
         if self._daemon_proc is None or self._daemon_proc.stdout is None:
             return
-        stdout = self._daemon_proc.stdout
-        while True:
-            try:
-                line = await asyncio.wait_for(stdout.readline(), timeout=self._STDOUT_IDLE_TIMEOUT_SECS)
-            except TimeoutError:
-                if self._daemon_proc.returncode is not None:
-                    return
-                logger.debug(
-                    "[%s] subprocess idle (no stdout for %.0fs)",
-                    self.player_name,
-                    self._STDOUT_IDLE_TIMEOUT_SECS,
-                )
-                continue
-            if not line:
-                return
-            msg = self._ipc_service.parse_line(line)
-            if msg is None:
-                continue
-            if msg.get("type") == "status":
-                # handle_message applies updates atomically via _update_status;
-                # use the returned updates dict to detect volume changes without
-                # separate lock acquisitions that could race.
-                updates = self._ipc_service.handle_message(msg)
-                if updates:
-                    if updates.get("server_connected") is True:
-                        self._clear_ma_reconnecting()
-                    # Auto-wake: MA started playback while daemon is on null sink
-                    if updates.get("playing") is True and self.status.get("bt_standby"):
-                        asyncio.ensure_future(self._on_standby_play_detected())
-                    new_volume = updates.get("volume")
-                    _mac = self.bt_manager.mac_address if self.bt_manager else None
-                    if isinstance(new_volume, int) and _mac:
-                        self._schedule_persist("volume", save_device_volume, _mac, new_volume)
-                    # MA-driven static_delay_ms changes flow through the daemon's
-                    # status mirror (BridgeDaemon._handle_server_command). Persist
-                    # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
-                    # survives restart and the bridge UI repaints from config.
-                    new_delay = updates.get("static_delay_ms")
-                    if isinstance(new_delay, int) and _mac:
-                        self._schedule_persist("static_delay", save_device_static_delay, _mac, new_delay)
-                        # Keep the parent-side cache in sync so a subsequent
-                        # warm_restart doesn't re-spawn the subprocess with a
-                        # stale ctor value.
-                        self.static_delay_ms = float(new_delay)
-                    # Sync unmute to MA after reconnect (#132) and after
-                    # initial spawn (the daemon mutes the PA sink during
-                    # startup to hide format-probe noise; MA polls
-                    # volume_controller.get_state() in that window and
-                    # records volume_muted=True even though the bridge
-                    # never *intended* to be muted).  ``force=True``
-                    # bypasses the "local status says unmuted" early-exit
-                    # because that local flag doesn't reflect MA's view
-                    # at this point.  Only fires once per (re)spawn so
-                    # explicit user mute commands aren't overridden (#155).
-                    if updates.get("sink_muted") is False and self._pending_reconnect_unmute_sync:
-                        self._pending_reconnect_unmute_sync = False
-                        await self._sync_unmute_to_ma(force=True)
-            else:
-                self._ipc_service.handle_message(msg)
+        await self._ipc_service.read_stream(
+            self._daemon_proc.stdout,
+            idle_timeout=self._STDOUT_IDLE_TIMEOUT_SECS,
+            on_idle=self._stdout_idle,
+            on_message=self._handle_daemon_message,
+        )
+
+    def _stdout_idle(self) -> bool:
+        """True when an idle stdout means the subprocess is gone."""
+        proc = self._daemon_proc
+        if proc is None or proc.returncode is not None:
+            return True
+        logger.debug(
+            "[%s] subprocess idle (no stdout for %.0fs)",
+            self.player_name,
+            self._STDOUT_IDLE_TIMEOUT_SECS,
+        )
+        return False
+
+    async def _handle_daemon_message(self, msg: dict) -> None:
+        """Apply one daemon message and run the side effects a status implies."""
+        if msg.get("type") != "status":
+            self._ipc_service.handle_message(msg)
+            return
+
+        # handle_message applies updates atomically via _update_status;
+        # use the returned updates dict to detect volume changes without
+        # separate lock acquisitions that could race.
+        updates = self._ipc_service.handle_message(msg)
+        if not updates:
+            return
+
+        if updates.get("server_connected") is True:
+            self._clear_ma_reconnecting()
+        # Auto-wake: MA started playback while daemon is on null sink
+        if updates.get("playing") is True and self.status.get("bt_standby"):
+            asyncio.ensure_future(self._on_standby_play_detected())
+        new_volume = updates.get("volume")
+        _mac = self.bt_manager.mac_address if self.bt_manager else None
+        if isinstance(new_volume, int) and _mac:
+            self._schedule_persist("volume", save_device_volume, _mac, new_volume)
+        # MA-driven static_delay_ms changes flow through the daemon's
+        # status mirror (BridgeDaemon._handle_server_command). Persist
+        # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
+        # survives restart and the bridge UI repaints from config.
+        new_delay = updates.get("static_delay_ms")
+        if isinstance(new_delay, int) and _mac:
+            self._schedule_persist("static_delay", save_device_static_delay, _mac, new_delay)
+            # Keep the parent-side cache in sync so a subsequent
+            # warm_restart doesn't re-spawn the subprocess with a
+            # stale ctor value.
+            self.static_delay_ms = float(new_delay)
+        # Sync unmute to MA after reconnect (#132) and after
+        # initial spawn (the daemon mutes the PA sink during
+        # startup to hide format-probe noise; MA polls
+        # volume_controller.get_state() in that window and
+        # records volume_muted=True even though the bridge
+        # never *intended* to be muted).  ``force=True``
+        # bypasses the "local status says unmuted" early-exit
+        # because that local flag doesn't reflect MA's view
+        # at this point.  Only fires once per (re)spawn so
+        # explicit user mute commands aren't overridden (#155).
+        if updates.get("sink_muted") is False and self._pending_reconnect_unmute_sync:
+            self._pending_reconnect_unmute_sync = False
+            await self._sync_unmute_to_ma(force=True)
 
     async def _sync_unmute_to_ma(self, *, force: bool = False) -> None:
         """Sync PA sink unmute to MA after the daemon's startup-mute window.

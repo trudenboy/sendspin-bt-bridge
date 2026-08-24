@@ -523,24 +523,24 @@ async def test_read_subprocess_output_accepts_structured_error_envelope_once():
 
 @pytest.mark.asyncio
 async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
+    """A non-status message goes straight to the service, side effects skipped."""
     client = SendspinClient("Test Player", "localhost", 9000)
 
-    log_line = json.dumps({"type": "log", "level": "info", "msg": "hello"}).encode()
+    log_message = {"type": "log", "level": "info", "msg": "hello"}
+    log_line = json.dumps(log_message).encode()
+
+    handled = []
 
     class _FakeService:
-        def __init__(self):
-            self.seen = []
-
-        def parse_line(self, line):
-            self.seen.append(("parse", line))
-            return {"type": "log", "level": "info", "msg": "hello"}
+        async def read_stream(self, stdout, *, idle_timeout=None, on_idle=None, on_message=None):
+            # The loop belongs to the service; drive the client's half of it.
+            await on_message(log_message)
 
         def handle_message(self, msg):
-            self.seen.append(("handle", msg))
+            handled.append(msg)
             return None
 
-    fake_service = _FakeService()
-    client._ipc_service = fake_service
+    client._ipc_service = _FakeService()
     client._daemon_proc = SimpleNamespace(
         returncode=None,
         stdout=_FakeStdoutLines([log_line]),
@@ -548,10 +548,7 @@ async def test_read_subprocess_output_delegates_log_messages_to_ipc_service():
 
     await client._read_subprocess_output()
 
-    assert fake_service.seen == [
-        ("parse", log_line + b"\n"),
-        ("handle", {"type": "log", "level": "info", "msg": "hello"}),
-    ]
+    assert handled == [log_message]
 
 
 @pytest.mark.asyncio

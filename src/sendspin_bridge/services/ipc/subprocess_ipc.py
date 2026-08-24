@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -18,7 +19,7 @@ from sendspin_bridge.services.ipc.ipc_protocol import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
 
 _IPC_MAX_LINE_BYTES = 1_048_576  # 1 MB
@@ -93,12 +94,50 @@ class SubprocessIpcService:
         self._allowed_keys = allowed_keys
         self._log_gate = _LogRateGate(log_rate_per_s, log_burst, log_clock)
 
-    async def read_stream(self, stdout) -> None:
-        """Parse daemon stdout JSON-line messages until EOF."""
+    async def read_stream(
+        self,
+        stdout,
+        *,
+        idle_timeout: float | None = None,
+        on_idle: Callable[[], bool] | None = None,
+        on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> None:
+        """Parse daemon stdout JSON-line messages until EOF.
+
+        This is the only read loop.  The parent used to hand-roll its own so
+        it could add an idle timeout and per-status side effects; the two
+        parameters that gap needed are here instead, because the copy that
+        grew in the parent lacked the oversized-line guard and a single
+        fat status frame could take the reader down with it.
+
+        *idle_timeout* bounds a single ``readline``; *on_idle* decides
+        whether an idle stretch means a dead subprocess (return True to
+        stop) or merely a quiet one.  *on_message* replaces the default
+        dispatch for callers that need the parsed message.
+        """
         if stdout is None:
             return
         while True:
-            line = await stdout.readline()
+            try:
+                if idle_timeout is None:
+                    line = await stdout.readline()
+                else:
+                    line = await asyncio.wait_for(stdout.readline(), timeout=idle_timeout)
+            except TimeoutError:
+                if on_idle is not None and on_idle():
+                    return
+                continue
+            except ValueError:
+                # A line past the stream's limit: the reader raises rather
+                # than returning it.  Dropping the frame keeps the daemon
+                # controllable; killing the reader would wedge it on a pipe
+                # nobody drains.
+                self._logger.warning(
+                    "[%s] Dropping oversized IPC message (over the %d-byte stream limit)",
+                    self.player_name,
+                    _IPC_MAX_LINE_BYTES,
+                )
+                continue
             if not line:
                 break
             if len(line) > _IPC_MAX_LINE_BYTES:
@@ -111,7 +150,10 @@ class SubprocessIpcService:
             msg = self.parse_line(line)
             if msg is None:
                 continue
-            self.handle_message(msg)
+            if on_message is not None:
+                await on_message(msg)
+            else:
+                self.handle_message(msg)
 
     def parse_line(self, line: bytes) -> dict[str, Any] | None:
         """Decode one stdout line into a JSON message if possible."""
