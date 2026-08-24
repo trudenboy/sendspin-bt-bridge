@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.2] - 2026-08-24
+
+### Fixed
+- The live status stream no longer stops working after a monitoring probe or link preview touches it: such requests used to occupy a listener slot they never released, and four of them left the web UI and the Home Assistant integration silently frozen until the bridge restarted.
+- Saving settings while the configuration file is unreadable or corrupted now fails with an explanation instead of reporting success and replacing the file — which previously erased the web UI password, the session secret and the stored Music Assistant tokens.
+- The Bluetooth scan cooldown now starts when a scan finishes rather than when it begins, so the controller actually gets its rest period between scans.
+- A Bluetooth command that times out or cannot reach the controller is no longer reported as the speaker disconnecting. Such a failure used to drop the speaker's media controls, count against the reconnect limit and could eventually disable the device on its own.
+- Entering standby, waking a speaker and the connect at startup no longer freeze the web UI and the status stream for several seconds, and no longer collide with a scan or pairing that is already running.
+- A speaker's controller is now identified through the kernel's own numbering, with a retry if the Bluetooth service starts after the bridge. A bridge that started first used to run without the faster Bluetooth path until it was restarted, and a controller that could not be identified could be addressed by position — which on multi-adapter hosts is a different controller.
+- Bluetooth status reads from different parts of the bridge no longer share one connection to the system service, which was an unguarded source of the intermittent errors above.
+- A speaker that reconnects repeatedly no longer leaks a system connection and an orphaned media registration on every bounce. Bluetooth kept routing the speaker's hard-key presses at a player that no longer existed, and the leak grew until the bridge was restarted.
+- The media controls of a speaker whose link flaps are no longer left registered after it disconnects, which previously made its buttons appear to work while nothing was listening.
+- Speaker processes no longer survive a bridge that was killed outright — by the system running out of memory, by a container stop, or by the Home Assistant watchdog. A survivor held onto its network port and the next start failed with an address-in-use error until someone found and killed it by hand.
+- A speaker no longer becomes silently uncontrollable after an unusually large status update. The bridge stopped reading that speaker's output, its process filled its pipe and froze, and audio kept playing while volume, pause and stop did nothing.
+- Stopping a speaker now lets it say goodbye to Music Assistant and finish playing out its buffer, instead of always being cut off mid-sentence.
+- A speaker's status is now published as a whole. A reader could previously catch a resynchronisation half-recorded and show a count that had gone up while the speaker was still reported as steady.
+- A command the speaker process cannot carry out now reports back instead of being silently dropped, and a bridge and speaker process from mismatched versions refuse to run together rather than pretending to understand each other.
+
+### Security
+- Login lockout is now counted per user behind a Home Assistant ingress or any reverse proxy given as an address range. Previously everyone behind such a proxy shared one lockout counter, so five failed logins by one person locked out the whole household.
+- Album art fetched through the bridge no longer carries the Music Assistant access token to a redirect target on a different host.
+
 ## [2.75.0-rc.1] - 2026-08-19
 
 ### Changed

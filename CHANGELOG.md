@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.2] - 2026-08-24
+
 ### Fixed
 - The live status stream no longer stops working after a monitoring probe or link preview touches it: such requests used to occupy a listener slot they never released, and four of them left the web UI and the Home Assistant integration silently frozen until the bridge restarted.
 - Saving settings while the configuration file is unreadable or corrupted now fails with an explanation instead of reporting success and replacing the file — which previously erased the web UI password, the session secret and the stored Music Assistant tokens.
