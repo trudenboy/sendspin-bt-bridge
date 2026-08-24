@@ -49,6 +49,7 @@ from sendspin_bridge.services.ipc.ipc_protocol import (
     parse_command_envelope,
     with_protocol_version,
 )
+from sendspin_bridge.services.ipc.shutdown import shut_down_tasks
 from sendspin_bridge.services.ipc.status_store import StatusStore
 
 
@@ -286,6 +287,9 @@ _last_status_json: str = ""
 #: Guards the emission de-duplication below.  The status itself is owned by
 #: a :class:`StatusStore` and needs no lock here.
 _emit_dedup_lock = threading.Lock()
+
+#: How long the daemon may take to shut down on its own before it is cancelled.
+_SHUTDOWN_GRACE_S = 3.0
 # Serialises EVERY write to stdout.  Status emissions (asyncio callbacks), log
 # lines (any thread) and error envelopes otherwise race and interleave partial
 # lines, corrupting the parent's JSON-line parser.
@@ -935,31 +939,25 @@ async def _run(params: dict) -> None:
         return_when=asyncio.FIRST_COMPLETED,
     )
 
-    daemon_task.cancel()
-    cmd_task.cancel()
-    watcher_task.cancel()
-    timing_task.cancel()
-    conn_watchdog_task.cancel()
-    if routing_task:
-        routing_task.cancel()
-    for t in pending:
-        t.cancel()
-
-    auxiliary_tasks = [watcher_task, timing_task, conn_watchdog_task]
-    if routing_task:
-        auxiliary_tasks.append(routing_task)
-    await asyncio.gather(*auxiliary_tasks, return_exceptions=True)
-
     # Cancel tracked fire-and-forget tasks
     for t in list(_background_tasks):
         t.cancel()
     _background_tasks.clear()
 
-    # Wait for clean shutdown
-    try:
-        await asyncio.wait_for(asyncio.shield(daemon_task), timeout=3.0)
-    except (asyncio.CancelledError, TimeoutError):
-        pass
+    auxiliary_tasks = [cmd_task, watcher_task, timing_task, conn_watchdog_task]
+    if routing_task:
+        auxiliary_tasks.append(routing_task)
+    auxiliary_tasks.extend(t for t in pending if t not in auxiliary_tasks and t is not daemon_task)
+
+    # The daemon task is given its grace period *before* anyone cancels it, so
+    # it can say goodbye to the server and let PortAudio drain.  Observability
+    # tasks have nothing to flush and go at once.
+    await shut_down_tasks(
+        primary=daemon_task,
+        auxiliary=auxiliary_tasks,
+        grace_s=_SHUTDOWN_GRACE_S,
+        on_error=lambda label, exc: logger.warning("[%s] %s task failed during shutdown: %s", player_name, label, exc),
+    )
 
 
 def main() -> None:
