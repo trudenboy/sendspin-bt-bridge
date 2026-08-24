@@ -24,24 +24,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sendspin_bridge.services.bluetooth import bt_operation_lock
+from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, force_release_lease
 
 
 @pytest.fixture(autouse=True)
 def _reset_bt_operation_lock():
-    """Defensive: ensure the singleton lock starts free in every test
-    (other tests may have leaked it under failure)."""
-    while True:
-        try:
-            bt_operation_lock._bt_operation_lock.release()
-        except RuntimeError:
-            break
+    """Defensive: ensure the adapter starts unleased in every test
+    (other tests may have leaked a lease under failure)."""
+    force_release_lease()
     yield
-    while True:
-        try:
-            bt_operation_lock._bt_operation_lock.release()
-        except RuntimeError:
-            break
+    force_release_lease()
 
 
 @pytest.fixture(autouse=True)
@@ -142,7 +134,7 @@ async def test_tick_skips_when_bt_operation_lock_busy():
     cb = MagicMock()
     mgr.on_rssi_update = cb
 
-    assert bt_operation_lock.try_acquire_bt_operation()  # simulate pair in flight
+    assert AdapterHandle().try_lease("simulated pair") is not None  # simulate pair in flight
 
     with patch("sendspin_bridge.services.bluetooth.bt_rssi_mgmt.read_conn_info") as read:
         await mgr._rssi_refresh_tick()
@@ -180,7 +172,7 @@ async def test_tick_releases_lock_even_when_read_raises():
         await mgr._rssi_refresh_tick()
 
     # Lock is free again — verify by re-acquiring without blocking.
-    assert bt_operation_lock.try_acquire_bt_operation()
+    assert AdapterHandle().try_lease("simulated pair") is not None
 
 
 @pytest.mark.asyncio
@@ -200,7 +192,7 @@ async def test_tick_skips_lock_and_executor_when_no_callback_registered():
 
     read.assert_not_called()
     # Lock must remain free — verify by acquiring without contention.
-    assert bt_operation_lock.try_acquire_bt_operation()
+    assert AdapterHandle().try_lease("simulated pair") is not None
 
 
 @pytest.mark.asyncio
@@ -219,7 +211,7 @@ async def test_tick_skips_lock_and_executor_when_adapter_index_unresolvable():
 
     read.assert_not_called()
     mgr.on_rssi_update.assert_not_called()
-    assert bt_operation_lock.try_acquire_bt_operation()
+    assert AdapterHandle().try_lease("simulated pair") is not None
 
 
 @pytest.mark.asyncio

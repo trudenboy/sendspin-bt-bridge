@@ -348,8 +348,8 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
     """While a UI scan/pair holds the bt-operation lock, the polling monitor
     must NOT contend for the adapter: no paired probe, no connect attempt.
     Once the lock is released the next poll reconnects normally."""
+    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
     from sendspin_bridge.bluetooth.monitor import _monitor_polling
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
 
     bt_manager.management_enabled = True
     bt_manager.check_interval = 0  # poll every iteration
@@ -360,7 +360,8 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
 
     calls = {"paired": 0, "connect": 0}
 
-    assert try_acquire_bt_operation()  # hold the adapter like a UI scan would
+    held = AdapterHandle().try_lease("scan")  # hold the adapter like a UI scan would
+    assert held is not None
 
     original_sleep = asyncio.sleep
     iterations = 0
@@ -369,7 +370,7 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
         nonlocal iterations
         iterations += 1
         if iterations == 1:
-            release_bt_operation()  # scan finished — next poll may proceed
+            held.release()  # scan finished — next poll may proceed
         if iterations >= 4:
             bt_manager._running = False
         await original_sleep(0)
@@ -402,17 +403,18 @@ async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager
             await _monitor_polling(bt_manager)
 
     assert calls == {"paired": 1, "connect": 1}  # exactly one attempt, after release
-    # The monitor's attempt released the lock behind it.
-    assert try_acquire_bt_operation()
-    release_bt_operation()
+    # The monitor's attempt released its lease behind it.
+    after = AdapterHandle().try_lease("after")
+    assert after is not None
+    after.release()
 
 
 @pytest.mark.asyncio
 async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_manager):
     """D-Bus path: with the lock held, the monitor defers — connect_device is
     never called and the attempt does not feed the auto-disable counter."""
+    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
     from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
-    from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
 
     bt_manager.connected = False
     bt_manager.management_enabled = True
@@ -429,7 +431,8 @@ async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_ma
         if sleeps["n"] >= 3:
             bt_manager._running = False
 
-    assert try_acquire_bt_operation()  # hold the adapter like a UI scan would
+    held = AdapterHandle().try_lease("scan")  # hold the adapter like a UI scan would
+    assert held is not None
     try:
         with (
             patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
@@ -453,7 +456,7 @@ async def test_inner_dbus_monitor_defers_reconnect_while_bt_operation_held(bt_ma
                 bt_manager, MagicMock(), asyncio.Event(), asyncio.Event(), asyncio.get_running_loop()
             )
     finally:
-        release_bt_operation()
+        held.release()
 
     assert calls == {"paired": 0, "connect": 0, "handle_failure": 0}
     assert sleeps["n"] >= 1  # the defer slept instead of spinning hot

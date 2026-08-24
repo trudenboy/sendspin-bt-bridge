@@ -9,6 +9,7 @@ unavailable the functions return safe defaults.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import TYPE_CHECKING
 
@@ -22,8 +23,43 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# dbus-python's ``SystemBus()`` hands out one process-wide connection, and
+# concurrent blocking calls on it are only safe once dbus-python's thread
+# support has been initialised — which this process never does.  The helpers
+# below are called from the Bluetooth executor, the event loop and Flask
+# worker threads, so each thread gets its own private connection instead:
+# no global initialisation, and no two threads sharing a socket.
+_thread_state = threading.local()
 
-def _dbus_get_device_property(device_path: str | None, property_name: str, adapter_hci: str = "hci0"):
+
+def _bus():
+    """Return this thread's private system-bus connection, or ``None``."""
+    if dbus is None:
+        return None
+    bus = getattr(_thread_state, "bus", None)
+    if bus is not None:
+        return bus
+    try:
+        bus = dbus.SystemBus(private=True)
+    except Exception as exc:
+        logger.debug("Private system bus unavailable: %s", exc)
+        return None
+    _thread_state.bus = bus
+    return bus
+
+
+def _reset_thread_buses() -> None:
+    """Drop this thread's cached connection (tests, and after a bus error)."""
+    bus = getattr(_thread_state, "bus", None)
+    if bus is not None:
+        try:
+            bus.close()
+        except Exception as exc:
+            logger.debug("Closing the thread's system bus failed: %s", exc)
+    _thread_state.bus = None
+
+
+def _dbus_get_device_property(device_path: str | None, property_name: str):
     """Read a single BlueZ Device1 property synchronously via dbus-python.
 
     Falls back to None on any error (D-Bus unavailable, device not registered, etc.).
@@ -32,7 +68,9 @@ def _dbus_get_device_property(device_path: str | None, property_name: str, adapt
     if not device_path or dbus is None:
         return None
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         device = bus.get_object("org.bluez", device_path)
         props = dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return props.Get("org.bluez.Device1", property_name)
@@ -46,7 +84,9 @@ def _dbus_get_battery_level(device_path: str | None) -> int | None:
     if not device_path or dbus is None:
         return None
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         device = bus.get_object("org.bluez", device_path)
         props = dbus.Interface(device, "org.freedesktop.DBus.Properties")
         return int(props.Get("org.bluez.Battery1", "Percentage"))
@@ -67,7 +107,9 @@ def _dbus_get_adapter_address(hci_name: str) -> str | None:
     if not hci_name or dbus is None:
         return None
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         adapter = bus.get_object("org.bluez", f"/org/bluez/{hci_name}")
         props = dbus.Interface(adapter, "org.freedesktop.DBus.Properties")
         return str(props.Get("org.bluez.Adapter1", "Address"))
@@ -84,7 +126,9 @@ def _dbus_call_device_method(device_path: str | None, method_name: str) -> bool:
     if not device_path or dbus is None:
         return False
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         device = bus.get_object("org.bluez", device_path)
         iface = dbus.Interface(device, "org.bluez.Device1")
         getattr(iface, method_name)()
@@ -104,9 +148,9 @@ HEADSET_UUID = "00001108-0000-1000-8000-00805f9b34fb"
 AUDIO_SINK_UUIDS = frozenset({A2DP_SINK_UUID, HANDSFREE_UUID, HEADSET_UUID})
 
 
-def _dbus_get_device_uuids(device_path: str | None, adapter_hci: str = "hci0") -> list[str]:
+def _dbus_get_device_uuids(device_path: str | None) -> list[str]:
     """Return Device1.UUIDs as a list of lowercase strings, or [] on error."""
-    raw = _dbus_get_device_property(device_path, "UUIDs", adapter_hci=adapter_hci)
+    raw = _dbus_get_device_property(device_path, "UUIDs")
     if raw is None:
         return []
     try:
@@ -174,7 +218,9 @@ def _dbus_get_media_transport_state(device_path: str | None) -> str | None:
     if not device_path or dbus is None:
         return None
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         root = bus.get_object("org.bluez", "/")
         om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
         managed = om.GetManagedObjects()
@@ -214,7 +260,9 @@ def _dbus_has_media_endpoint(device_path: str | None) -> bool | None:
     if not device_path or dbus is None:
         return None
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         root = bus.get_object("org.bluez", "/")
         om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
         managed = om.GetManagedObjects()
@@ -251,7 +299,9 @@ def _dbus_get_media_transport_snapshot(device_path: str | None):
     if not device_path or dbus is None:
         return BluetoothTransportSnapshot()
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         root = bus.get_object("org.bluez", "/")
         om = dbus.Interface(root, "org.freedesktop.DBus.ObjectManager")
         return select_transport_snapshot(om.GetManagedObjects(), device_path)
@@ -273,7 +323,9 @@ def _dbus_connect_profile(device_path: str | None, uuid: str) -> tuple[bool, str
     if not device_path or dbus is None:
         return False, "dbus unavailable"
     try:
-        bus = dbus.SystemBus()
+        bus = _bus()
+        if bus is None:
+            raise RuntimeError("system bus unavailable")
         device = bus.get_object("org.bluez", device_path)
         iface = dbus.Interface(device, "org.bluez.Device1")
         iface.ConnectProfile(uuid)

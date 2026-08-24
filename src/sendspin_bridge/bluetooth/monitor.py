@@ -13,8 +13,8 @@ import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from sendspin_bridge.bluetooth.adapter_session import bt_executor
 from sendspin_bridge.bluetooth.dbus import _dbus_get_battery_level
-from sendspin_bridge.services.bluetooth.bt_operation_lock import release_bt_operation, try_acquire_bt_operation
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 if TYPE_CHECKING:
@@ -116,9 +116,7 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
     """
     if not mgr.maybe_auto_reclaim(connected=connected):
         return False
-    from sendspin_bridge.bluetooth.manager import _bt_executor
-
-    await loop.run_in_executor(_bt_executor, mgr.configure_bluetooth_audio)
+    await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
     mgr._record_reconnect()
     if mgr.host:
         mgr.host.update_status(
@@ -147,9 +145,7 @@ async def _poll_auto_reclaim(mgr: BluetoothManager, loop) -> bool:
     if now - mgr.last_check < mgr.check_interval:
         return False
     mgr.last_check = now
-    from sendspin_bridge.bluetooth.manager import _bt_executor
-
-    connected = await loop.run_in_executor(_bt_executor, mgr.is_device_connected)
+    connected = await loop.run_in_executor(bt_executor(), mgr.is_device_connected)
     if not connected:
         return False
     return await _finish_auto_reclaim(mgr, loop, connected=True)
@@ -177,8 +173,6 @@ async def monitor_and_reconnect(mgr: BluetoothManager) -> None:
 
 async def _monitor_polling(mgr: BluetoothManager) -> None:
     """Legacy bluetoothctl polling-based monitor (fallback)."""
-    from sendspin_bridge.bluetooth.manager import _bt_executor
-
     loop = asyncio.get_running_loop()
     iteration = 0
     reconnect_attempt = 0
@@ -200,7 +194,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                 mgr.last_check = current_time
                 logger.debug("[%s] BT poll #%s", mgr.device_name, iteration)
 
-                connected = await loop.run_in_executor(_bt_executor, mgr.is_device_connected)
+                connected = await loop.run_in_executor(bt_executor(), mgr.is_device_connected)
                 logger.debug("[%s] BT connected=%s", mgr.device_name, connected)
 
                 if mgr.host:
@@ -213,7 +207,8 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                         )
 
                 if not connected:
-                    if not try_acquire_bt_operation():
+                    lease = mgr.adapter_handle.try_lease(f"reconnect {mgr.device_name}")
+                    if lease is None:
                         # A UI scan/pair/reconnect holds the adapter — defer
                         # this poll instead of contending. Lock-free monitor
                         # reconnects were a live-observed source of wedged
@@ -227,7 +222,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                     else:
                         try:
                             mgr.battery_level = None
-                            paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
+                            paired = await loop.run_in_executor(bt_executor(), mgr.is_device_paired)
                             mgr.paired = paired
                             reconnect_attempt += 1
                             if mgr.host:
@@ -242,7 +237,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             # (including a possible USB reset) and a config write — never inline
                             # on the loop.
                             if await loop.run_in_executor(
-                                _bt_executor, mgr._handle_reconnect_failure, reconnect_attempt
+                                bt_executor(), mgr._handle_reconnect_failure, reconnect_attempt
                             ):
                                 reconnect_attempt = 0
                                 continue
@@ -256,9 +251,9 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                                 await mgr.host.stop_subprocess()
 
                             _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
-                            success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
+                            success = await loop.run_in_executor(bt_executor(), mgr.connect_device)
                         finally:
-                            release_bt_operation()
+                            lease.release()
                         if mgr._reconnect_cancelled():
                             reconnect_attempt = 0
                             continue
@@ -296,7 +291,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             "[%s] Device connected but player not running — configuring audio...",
                             mgr.device_name,
                         )
-                        await loop.run_in_executor(_bt_executor, mgr.configure_bluetooth_audio)
+                        await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
                         mgr._record_reconnect()
                         if mgr.host.bluetooth_sink_name:
                             logger.info("[%s] Auto-reconnect: starting player", mgr.device_name)
@@ -480,8 +475,6 @@ async def _inner_dbus_monitor(
     failed-reconnect backoff sleep so audio is configured as soon as
     the link is back. Issue #312.
     """
-    from sendspin_bridge.bluetooth.manager import _bt_executor
-
     reconnect_attempt = 0
     while mgr._running:
         if not mgr.management_enabled:
@@ -546,7 +539,8 @@ async def _inner_dbus_monitor(
                 # bt_waking: reconnect BT but skip daemon kill below
                 logger.info("[%s] Standby wake — reconnecting BT (daemon stays alive)", mgr.device_name)
 
-            if not try_acquire_bt_operation():
+            lease = mgr.adapter_handle.try_lease(f"reconnect {mgr.device_name}")
+            if lease is None:
                 # A UI scan/pair/reconnect holds the adapter — defer instead
                 # of contending (same rationale as the polling path). The
                 # defer is not a device failure and must not feed the
@@ -559,7 +553,7 @@ async def _inner_dbus_monitor(
                 await asyncio.sleep(min(mgr.check_interval, 5))
                 continue
             try:
-                paired = await loop.run_in_executor(_bt_executor, mgr.is_device_paired)
+                paired = await loop.run_in_executor(bt_executor(), mgr.is_device_paired)
                 mgr.paired = paired
                 reconnect_attempt += 1
                 if mgr.host:
@@ -572,7 +566,7 @@ async def _inner_dbus_monitor(
 
                 # Auto-disable after too many failures.  Offload: may run the
                 # adapter-recovery ladder + a config write — never on the loop.
-                if await loop.run_in_executor(_bt_executor, mgr._handle_reconnect_failure, reconnect_attempt):
+                if await loop.run_in_executor(bt_executor(), mgr._handle_reconnect_failure, reconnect_attempt):
                     return
 
                 # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
@@ -587,9 +581,9 @@ async def _inner_dbus_monitor(
                     await mgr.host.stop_subprocess()
 
                 _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
-                success = await loop.run_in_executor(_bt_executor, mgr.connect_device)
+                success = await loop.run_in_executor(bt_executor(), mgr.connect_device)
             finally:
-                release_bt_operation()
+                lease.release()
             if mgr._reconnect_cancelled():
                 reconnect_attempt = 0
                 continue
@@ -637,7 +631,7 @@ async def _inner_dbus_monitor(
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:
                     logger.info("[%s] External reconnect detected, configuring audio...", mgr.device_name)
-                    await loop.run_in_executor(_bt_executor, mgr.configure_bluetooth_audio)
+                    await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
                     reconnect_attempt = 0
                     mgr._record_reconnect()
                     if mgr.host:

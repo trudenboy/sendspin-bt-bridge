@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.support.fake_lease import FakeLease
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -696,8 +698,7 @@ def test_bt_pair_new_endpoint_forwards_no_io_agent_to_pair_runner(client, monkey
         captured["no_input_no_output_agent"] = no_input_no_output_agent
         captured["allow_hfp_profile"] = allow_hfp_profile
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -734,8 +735,7 @@ def test_bt_pair_new_without_no_io_agent_field_passes_false_to_runner(client, mo
     ):
         captured["no_input_no_output_agent"] = no_input_no_output_agent
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -765,8 +765,7 @@ def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
     ):
         captured["no_input_no_output_agent"] = no_input_no_output_agent
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -782,7 +781,7 @@ def test_bt_pair_new_rejects_non_bool_no_io_agent_value(client, monkeypatch):
 def test_bt_pair_new_returns_409_when_bt_operation_busy(client, monkeypatch):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: None)
 
     resp = client.post("/api/bt/pair_new", json={"mac": "AA:BB:CC:DD:EE:FF"})
 
@@ -812,8 +811,10 @@ def test_bt_endpoints_release_the_operation_lock_when_the_worker_cannot_start(cl
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     released = []
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(path))
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(path)))
+    # The scan route also gates on the post-scan cooldown, which is module
+    # state another test in this file may have stamped.
+    monkeypatch.setattr(api_bt_mod, "_last_scan_completed", 0.0)
 
     class _DeadThread:
         def __init__(self, *_args, **_kwargs):
@@ -842,7 +843,7 @@ def test_bt_scan_returns_409_when_bt_operation_busy(client, monkeypatch):
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
     monkeypatch.setattr(api_bt_mod, "is_scan_running", lambda: False)
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: None)
     monkeypatch.setattr(api_bt_mod, "_last_scan_completed", 0.0)
     monkeypatch.setattr(api_bt_mod.time, "monotonic", lambda: 1000.0)
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: ["AA:BB:CC:DD:EE:01"])
@@ -4667,7 +4668,7 @@ def test_bt_reconnect_returns_409_when_bt_operation_in_progress(client, monkeypa
     fake_client = SimpleNamespace(bt_manager=fake_bt)
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: False)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: None)
     spawned = []
     monkeypatch.setattr(api_bt_mod.threading, "Thread", lambda *a, **kw: spawned.append((a, kw)) or MagicMock())
 
@@ -4696,8 +4697,7 @@ def test_bt_reconnect_releases_lock_after_worker(client, monkeypatch):
             self._target()
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: released.append(True))
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: released.append(True)))
     monkeypatch.setattr(api_bt_mod.threading, "Thread", _SyncThread)
     monkeypatch.setattr(api_bt_mod.time, "sleep", lambda _s: None)
 
@@ -4721,8 +4721,7 @@ def test_bt_pair_threads_quiesce_flag(client, monkeypatch):
     fake_client = SimpleNamespace(bt_manager=fake_bt)
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
 
     sentinel = _QuiesceSentinel()
     monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
@@ -4750,8 +4749,7 @@ def test_bt_pair_without_flag_does_not_invoke_quiesce(client, monkeypatch):
     fake_client = SimpleNamespace(bt_manager=fake_bt)
 
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda _n: (fake_client, None))
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
 
     sentinel = _QuiesceSentinel()
     monkeypatch.setattr(api_bt_mod, "quiesce_adapter_peers", sentinel)
@@ -4783,8 +4781,7 @@ def test_bt_pair_new_threads_quiesce_flag(client, monkeypatch):
         captured["adapter"] = adapter
         captured["quiesce"] = quiesce
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)
@@ -4815,8 +4812,7 @@ def test_bt_pair_new_default_has_quiesce_false(client, monkeypatch):
     ):
         captured["quiesce"] = quiesce
 
-    monkeypatch.setattr(api_bt_mod, "_try_acquire_bt_operation", lambda: True)
-    monkeypatch.setattr(api_bt_mod, "_release_bt_operation", lambda: None)
+    monkeypatch.setattr(api_bt_mod, "_acquire_bt_lease", lambda *a, **kw: FakeLease(lambda: None))
     monkeypatch.setattr(api_bt_mod, "_run_standalone_pair", _fake_run)
     monkeypatch.setattr(api_bt_mod, "create_scan_job", lambda _j: None)
     _patch_pair_worker_sync(monkeypatch, api_bt_mod)

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import concurrent.futures
 
 import sendspin_bridge.bridge.state as _state
+from sendspin_bridge.bluetooth.adapter_session import bt_executor
 from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property, _dbus_get_media_transport_snapshot
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
@@ -1140,6 +1141,52 @@ class SendspinClient:
         if hasattr(task, "cancel"):
             task.cancel()
 
+    async def _disconnect_bt_for_standby(self) -> bool:
+        """Drop the BT link for standby, off the loop and under a lease.
+
+        Both properties matter: a ``bluetoothctl`` disconnect can take ten
+        seconds, which used to stall every device's IPC and the status stream,
+        and running it while a UI scan holds the controller corrupts both
+        operations.  A held adapter means standby simply keeps the link.
+        """
+        if not self.bt_manager:
+            return False
+        handle = getattr(self.bt_manager, "adapter_handle", None)
+        lease = handle.try_lease(f"standby {self.player_name}") if handle is not None else None
+        if lease is None:
+            logger.info("[%s] Adapter busy — leaving the BT link up for standby", self.player_name)
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(bt_executor(), self.bt_manager.disconnect_device)
+            return True
+        except Exception as exc:
+            logger.warning("[%s] BT disconnect on standby failed: %s", self.player_name, exc)
+            return False
+        finally:
+            lease.release()
+
+    async def _connect_bt_for_wake(self) -> bool:
+        """Re-establish the BT link on wake, off the loop and under a lease."""
+        if not self.bt_manager:
+            return False
+        handle = getattr(self.bt_manager, "adapter_handle", None)
+        lease = handle.try_lease(f"wake {self.player_name}") if handle is not None else None
+        if lease is None:
+            logger.info(
+                "[%s] Adapter busy — leaving the wake reconnect to the monitor loop",
+                self.player_name,
+            )
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+            return bool(await loop.run_in_executor(bt_executor(), self.bt_manager.connect_device))
+        except Exception as exc:
+            logger.warning("[%s] BT connect on wake failed: %s", self.player_name, exc)
+            return False
+        finally:
+            lease.release()
+
     async def _enter_standby(self) -> None:
         """Disconnect BT and park daemon on null sink to let the speaker save power.
 
@@ -1173,11 +1220,7 @@ class SendspinClient:
                 await self.stop_sendspin()
 
         # Disconnect BT to save speaker battery
-        if self.bt_manager:
-            try:
-                self.bt_manager.disconnect_device()
-            except Exception as exc:
-                logger.warning("[%s] BT disconnect on standby failed: %s", self.player_name, exc)
+        await self._disconnect_bt_for_standby()
         _state.publish_device_event(
             self._event_device_id(),
             DeviceEventType.BLUETOOTH_STANDBY_ENTERED,
@@ -1209,8 +1252,7 @@ class SendspinClient:
             self.bt_manager.allow_reconnect()
             self.bt_manager.signal_standby_wake()
             # Kick off BT connect directly — don't wait for bt_monitor's loop.
-            loop = asyncio.get_running_loop()
-            loop.run_in_executor(None, self.bt_manager.connect_device)
+            await self._connect_bt_for_wake()
         _state.publish_device_event(
             self._event_device_id(),
             DeviceEventType.BLUETOOTH_STANDBY_EXITED,
@@ -2639,10 +2681,25 @@ class SendspinClient:
                     return
                 logger.info("Connecting Bluetooth speaker...")
                 try:
-                    # Run in thread pool to avoid blocking
+                    # The whole ladder — connect plus the link-state read that
+                    # follows it — runs off the loop and under the adapter
+                    # lease.  The state read used to run inline: a five-second
+                    # ``bluetoothctl`` deadline on the shared loop stalled
+                    # every device's IPC and the status stream.
                     loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, self.bt_manager.connect_device)
-                    bt_now = self.bt_manager.is_device_connected()
+                    handle = getattr(self.bt_manager, "adapter_handle", None)
+                    lease = handle.try_lease(f"startup connect {self.player_name}") if handle is not None else None
+                    if lease is None:
+                        logger.info(
+                            "[%s] Adapter busy at startup — leaving the connect to the monitor loop",
+                            self.player_name,
+                        )
+                        return
+                    try:
+                        await loop.run_in_executor(bt_executor(), self.bt_manager.connect_device)
+                        bt_now = await loop.run_in_executor(bt_executor(), self.bt_manager.is_device_connected)
+                    finally:
+                        lease.release()
                     if bt_now != self.status["bluetooth_connected"]:
                         self._update_status(
                             {
@@ -2744,12 +2801,28 @@ class SendspinClient:
                         self._daemon_proc.kill()
                     except Exception as exc:
                         logger.debug("daemon proc kill on BT release failed: %s", exc)
-            # Disconnect BT device (synchronous subprocess call, safe from any thread)
+            # Disconnect BT device (synchronous subprocess call, safe from any
+            # thread) — but under the adapter lease, so releasing a speaker
+            # cannot drive the controller while a scan or pair is running.
             if self.bt_manager:
-                try:
-                    self.bt_manager.disconnect_device()
-                except Exception as e:
-                    logger.warning("[%s] Disconnect on release failed: %s", self.player_name, e)
+                handle = getattr(self.bt_manager, "adapter_handle", None)
+                lease = None
+                if handle is not None:
+                    try:
+                        lease = handle.lease(f"release {self.player_name}", timeout=10.0)
+                    except TimeoutError:
+                        logger.info(
+                            "[%s] Adapter busy — released without dropping the link",
+                            self.player_name,
+                        )
+                if handle is None or lease is not None:
+                    try:
+                        self.bt_manager.disconnect_device()
+                    except Exception as e:
+                        logger.warning("[%s] Disconnect on release failed: %s", self.player_name, e)
+                    finally:
+                        if lease is not None:
+                            lease.release()
             logger.info("[%s] BT adapter released to host", self.player_name)
         else:
             logger.info("[%s] BT adapter reclaimed — monitor will reconnect", self.player_name)
