@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The Home Assistant event stream no longer stops working after a monitoring probe or link preview touches it. Such requests occupied a listener slot they never released — and left a live subscription filling a queue nobody was reading — until the bridge restarted. The same fault was fixed for the status stream in 2.75.0-rc.2; both streams now share one budget.
+- A change to the trusted-proxy setting now takes effect immediately instead of at the next restart. Until then the login page and the sign-in lockout could disagree about who was behind the proxy.
+
+### Security
+- A login lockout now lasts its full configured duration. It was measured from the first failed attempt rather than from the moment the lockout began, so someone who spread their attempts out served a shorter lockout than someone who did not.
+- Logs and bug reports no longer carry Music Assistant access tokens. Three places recorded an entire server response when it arrived in an unexpected shape — the exact case where a token is most likely to be in it — and those records reached the downloadable log and the bug-report bundle intact.
+
 ## [2.75.0-rc.2] - 2026-08-24
 
 ### Fixed
