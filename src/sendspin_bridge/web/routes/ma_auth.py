@@ -35,6 +35,7 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     set_ma_api_credentials,
     set_ma_groups,
 )
+from sendspin_bridge.web.redaction import redact
 from sendspin_bridge.web.routes.api_ma import (
     _bridge_players_snapshot,
     _ma_host_from_sendspin_clients,
@@ -42,6 +43,16 @@ from sendspin_bridge.web.routes.api_ma import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log_unexpected_result(what: str, payload: object) -> None:
+    """Log a response the code did not expect, without its credentials.
+
+    These branches fire exactly when a token arrives in an unanticipated
+    shape, so the payload is the most likely place for one to be sitting.
+    """
+    logger.warning("%s returned an unexpected result: %s", what, redact(str(payload)))
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -151,7 +162,7 @@ def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
             if long_lived and isinstance(long_lived, str):
                 logger.info("Created long-lived MA API token '%s'", _ma_token_name())
                 return long_lived
-            logger.warning("auth/token/create returned unexpected result: %s", create_resp)
+            _log_unexpected_result("auth/token/create", create_resp)
             return session_token
     except Exception as exc:
         logger.warning("Long-lived token exchange failed (%s) — using session token", exc)
@@ -853,7 +864,7 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
                 logger.info("Created long-lived MA token via Ingress for user '%s'", ha_username)
                 return token
 
-        logger.warning("MA Ingress token/create unexpected result: %s", data)
+        _log_unexpected_result("MA Ingress token/create", data)
         return None
     except Exception as exc:
         logger.warning("MA Ingress JSONRPC failed (%s): %s", url, exc)
@@ -934,7 +945,7 @@ def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
         token = data.get("result")
         if isinstance(token, str) and token:
             return token
-    logger.warning("MA ingress proxy token/create unexpected result: %s", data)
+    _log_unexpected_result("MA ingress proxy token/create", data)
     return None
 
 

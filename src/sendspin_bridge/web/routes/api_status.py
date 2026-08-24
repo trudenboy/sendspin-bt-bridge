@@ -82,6 +82,7 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_server_version,
     is_ma_connected,
 )
+from sendspin_bridge.web.redaction import redact
 from sendspin_bridge.web.sse_slots import SseSlotPool
 
 UTC = timezone.utc
@@ -1034,7 +1035,14 @@ def _mask_ip(m: re.Match) -> str:
 
 
 def _mask_text(text: str) -> str:
-    """Mask MAC and IPv4 addresses in arbitrary text."""
+    """Mask addresses and credentials in arbitrary text.
+
+    Addresses are masked because a bug report should not carry someone's
+    network layout; credentials because the log ring this draws from carries
+    whatever the code logged, and a token that reached a log line would
+    otherwise travel intact into an uploaded bundle.
+    """
+    text = redact(text)
     text = _MAC_RE.sub(_mask_mac, text)
     return _IPV4_RE.sub(_mask_ip, text)
 
