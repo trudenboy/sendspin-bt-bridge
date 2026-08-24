@@ -16,7 +16,7 @@ repos:
     # Pin matches the ruff version in [project.optional-dependencies].dev
     # so local pre-commit and CI's `uv run ruff` apply the same rules
     # and formatter. Bump alongside that pin.
-    rev: v0.16.3
+    rev: v0.16.4
     hooks:
       - id: ruff
         args:
