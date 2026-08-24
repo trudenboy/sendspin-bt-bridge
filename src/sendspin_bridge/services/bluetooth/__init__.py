@@ -4,17 +4,13 @@ Bluetooth service helpers for sendspin-bt-bridge.
 Low-level operations shared between web_interface.py routes and other modules.
 """
 
-import json
 import logging
-import os
 import re
-import tempfile
 import threading
 from pathlib import Path
 
 from sendspin_bridge.bluetooth.bluez import Adapter, DeviceInfo, Outcome, get_bluez
 from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
-from sendspin_bridge.config import config_lock as _config_lock
 
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
@@ -353,33 +349,37 @@ def _match_player_name(config_name: str, runtime_name: str) -> bool:
 
 
 def _update_bound_config_file(mutator) -> None:
-    """Atomically mutate the config file bound into this module."""
-    with _config_lock:
-        existing: dict = {}
-        if _CONFIG_FILE.exists():
-            with open(_CONFIG_FILE) as f:
-                existing = json.load(f)
-        mutator(existing)
-        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp_f = tempfile.NamedTemporaryFile(  # noqa: SIM115
-            dir=str(_CONFIG_FILE.parent),
-            delete=False,
-            mode="w",
-            suffix=".tmp",
-        )
-        try:
-            json.dump(existing, tmp_f, indent=2)
-            tmp_f.flush()
-            os.fsync(tmp_f.fileno())
-            tmp_f.close()
-            os.replace(tmp_f.name, str(_CONFIG_FILE))
-        except BaseException:
-            tmp_f.close()
-            try:
-                os.unlink(tmp_f.name)
-            except OSError:
-                pass
-            raise
+    """Atomically mutate the config file.
+
+    This used to carry its own copy of the tempfile/fsync/replace dance —
+    the fourth in the codebase — and bound ``CONFIG_FILE`` at import, so a
+    test that redirected the config still wrote to the real one.  The store
+    resolves the path when asked.
+    """
+    from sendspin_bridge.config import CONFIG_FILE
+    from sendspin_bridge.config.store import ConfigStore
+
+    ConfigStore(CONFIG_FILE).mutate(mutator)
+
+
+def _sync_addon_options(mutator) -> bool:
+    """Mirror a change into the HA addon's options.json, if there is one.
+
+    Best-effort: the addon config page is a convenience mirror, and failing
+    to update it must not fail the operation that already succeeded against
+    config.json.  Uses the same store as the config so the write is atomic
+    and there is one implementation of it rather than five.
+    """
+    if not _OPTIONS_FILE.exists():
+        return False
+    from sendspin_bridge.config.store import ConfigStore
+
+    try:
+        ConfigStore(_OPTIONS_FILE).mutate(mutator)
+    except Exception as exc:
+        logger.debug("Could not sync to options.json: %s", exc)
+        return False
+    return True
 
 
 def persist_device_enabled(player_name: str, enabled: bool) -> None:
@@ -399,22 +399,14 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
         logger.warning("Could not persist enabled flag for '%s': %s", player_name, e)
 
     # Sync to options.json so the HA addon config page reflects the change
-    if _OPTIONS_FILE.exists():
-        try:
-            with _config_lock:
-                with open(_OPTIONS_FILE) as f:
-                    opts = json.load(f)
-                for dev in opts.get("bluetooth_devices", []):
-                    if _match_player_name(dev.get("player_name", ""), player_name):
-                        dev["enabled"] = enabled
-                        break
-                tmp = str(_OPTIONS_FILE) + ".tmp"
-                with open(tmp, "w") as f:
-                    json.dump(opts, f, indent=2)
-                os.replace(tmp, str(_OPTIONS_FILE))
-            logger.debug("Synced enabled=%s for '%s' to options.json", enabled, player_name)
-        except Exception as e:
-            logger.debug("Could not sync enabled flag to options.json: %s", e)
+    def _set_option_enabled(opts: dict) -> None:
+        for dev in opts.get("bluetooth_devices", []):
+            if _match_player_name(dev.get("player_name", ""), player_name):
+                dev["enabled"] = enabled
+                break
+
+    if _sync_addon_options(_set_option_enabled):
+        logger.debug("Synced enabled=%s for '%s' to options.json", enabled, player_name)
 
 
 def persist_device_released(player_name: str, released: bool, *, released_by: str | None = None) -> None:
@@ -443,26 +435,18 @@ def persist_device_released(player_name: str, released: bool, *, released_by: st
     except Exception as e:
         logger.warning("Could not persist released flag for '%s': %s", player_name, e)
 
-    if _OPTIONS_FILE.exists():
-        try:
-            with _config_lock:
-                with open(_OPTIONS_FILE) as f:
-                    opts = json.load(f)
-                for dev in opts.get("bluetooth_devices", []):
-                    if _match_player_name(dev.get("player_name", ""), player_name):
-                        dev["released"] = released
-                        if released and released_by:
-                            dev["released_by"] = released_by
-                        else:
-                            dev.pop("released_by", None)
-                        break
-                tmp = str(_OPTIONS_FILE) + ".tmp"
-                with open(tmp, "w") as f:
-                    json.dump(opts, f, indent=2)
-                os.replace(tmp, str(_OPTIONS_FILE))
-            logger.debug("Synced released=%s for '%s' to options.json", released, player_name)
-        except Exception as e:
-            logger.debug("Could not sync released flag to options.json: %s", e)
+    def _set_option_released(opts: dict) -> None:
+        for dev in opts.get("bluetooth_devices", []):
+            if _match_player_name(dev.get("player_name", ""), player_name):
+                dev["released"] = released
+                if released and released_by:
+                    dev["released_by"] = released_by
+                else:
+                    dev.pop("released_by", None)
+                break
+
+    if _sync_addon_options(_set_option_released):
+        logger.debug("Synced released=%s for '%s' to options.json", released, player_name)
 
 
 def classify_audio_capability(info: DeviceInfo) -> tuple[bool, str]:

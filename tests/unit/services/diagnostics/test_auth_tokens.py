@@ -20,7 +20,6 @@ def isolated_config(tmp_path, monkeypatch):
     import sendspin_bridge.config as config
 
     monkeypatch.setattr(config, "CONFIG_FILE", cfg_file)
-    monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)
     monkeypatch.setattr(
         config,
         "load_config",
