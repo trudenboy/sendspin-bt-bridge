@@ -3863,14 +3863,19 @@ def test_ma_artwork_proxy_fetches_same_origin_ma_artwork(client):
             raw_url = "/api/image/123"
             signature = sign_artwork_url(raw_url)
 
-            def _fake_urlopen(req, timeout=0):
-                opened["url"] = req.full_url
-                opened["auth"] = req.headers.get("Authorization")
-                opened["accept"] = req.headers.get("Accept")
-                opened["timeout"] = timeout
-                return _FakeResponse()
+            class _FakeOpener:
+                def open(self, req, timeout=0):
+                    opened["url"] = req.full_url
+                    opened["auth"] = req.headers.get("Authorization")
+                    opened["accept"] = req.headers.get("Accept")
+                    opened["timeout"] = timeout
+                    return _FakeResponse()
 
-            mp.setattr(ma_playback_mod._ur, "urlopen", _fake_urlopen)
+            # The proxy fetches through ``safe_build_opener`` (SSRF re-check
+            # per hop + a redirect handler that strips the MA bearer token
+            # when the origin changes), so the seam is the opener, not
+            # ``urllib.request.urlopen``.
+            mp.setattr(ma_playback_mod, "safe_build_opener", lambda *h, **kw: _FakeOpener())
             resp = client.get(f"/api/ma/artwork?url=%2Fapi%2Fimage%2F123&sig={signature}")
 
         assert resp.status_code == 200
@@ -3923,7 +3928,14 @@ def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_to
     try:
         fake_resp = io.BytesIO(b"\x89PNG\r\n\x1a\n")
         fake_resp.headers = {"Content-Type": "image/png", "Content-Length": "8"}
-        with patch("sendspin_bridge.web.routes.ma_playback._ur.urlopen", return_value=fake_resp) as mock_open:
+        opened_reqs = []
+
+        class _FakeOpener:
+            def open(self, req, timeout=0):
+                opened_reqs.append(req)
+                return fake_resp
+
+        with patch("sendspin_bridge.web.routes.ma_playback.safe_build_opener", lambda *h, **kw: _FakeOpener()):
             resp = client.get(
                 "/api/ma/artwork?url="
                 "https%3A%2F%2Favatars.yandex.net%2Fget-music-content%2F49876%2Fab027f9c.a.37173-2%2F1000x1000"
@@ -3931,7 +3943,7 @@ def test_ma_artwork_proxy_fetches_signed_external_provider_artwork_without_ma_to
             )
             assert resp.status_code == 200
             # Should NOT include Authorization header for external URLs
-            called_req = mock_open.call_args[0][0]
+            called_req = opened_reqs[0]
             assert "Authorization" not in called_req.headers
     finally:
         state.set_ma_api_credentials("", "")

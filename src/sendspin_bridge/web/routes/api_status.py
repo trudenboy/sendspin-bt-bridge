@@ -571,14 +571,26 @@ def api_status_stream():
     ``notify_status_changed()`` call either happens before we start waiting
     (so ``wait_for`` returns immediately) or wakes us up cleanly.
     """
-    global _sse_count
     with _sse_lock:
         if _sse_count >= _MAX_SSE:
             return 'data: {"error": "too many listeners"}\n\n', 503, {"Content-Type": "text/event-stream"}
-        _sse_count += 1
 
     def _generate():
+        # The listener slot is claimed *inside* the generator, not in the
+        # view.  Flask auto-registers HEAD for every GET rule and Werkzeug
+        # closes a HEAD response's generator without ever iterating it, so a
+        # slot reserved in the view would never reach the ``finally`` below —
+        # ``_MAX_SSE`` HEAD requests used to disable live status permanently.
+        # The check above stays for the 503 status code, which can only be
+        # set before the response body starts.
         global _sse_count
+        with _sse_lock:
+            accepted = _sse_count < _MAX_SSE
+            if accepted:
+                _sse_count += 1
+        if not accepted:
+            yield 'data: {"error": "too many listeners"}\n\n'
+            return
         try:
 
             def _build_snapshot():

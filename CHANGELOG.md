@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The live status stream no longer stops working after a monitoring probe or link preview touches it: such requests used to occupy a listener slot they never released, and four of them left the web UI and the Home Assistant integration silently frozen until the bridge restarted.
+- Saving settings while the configuration file is unreadable or corrupted now fails with an explanation instead of reporting success and replacing the file — which previously erased the web UI password, the session secret and the stored Music Assistant tokens.
+- The Bluetooth scan cooldown now starts when a scan finishes rather than when it begins, so the controller actually gets its rest period between scans.
+
+### Security
+- Login lockout is now counted per user behind a Home Assistant ingress or any reverse proxy given as an address range. Previously everyone behind such a proxy shared one lockout counter, so five failed logins by one person locked out the whole household.
+- Album art fetched through the bridge no longer carries the Music Assistant access token to a redirect target on a different host.
+
 ## [2.75.0-rc.1] - 2026-08-19
 
 ### Changed

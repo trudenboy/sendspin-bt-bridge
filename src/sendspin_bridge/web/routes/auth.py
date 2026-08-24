@@ -180,7 +180,11 @@ def _get_forwarded_client_ip() -> str:
 def _get_rate_limit_client_id() -> str:
     """Return the best-available brute-force bucket key for this request."""
     peer = (request.remote_addr or "").strip()
-    if peer and peer in _get_trusted_proxies():
+    # CIDR-aware: the HA ingress peer lives somewhere in 172.30.32.0/23 and
+    # never equals a trust-set entry literally.  An exact-string test bucketed
+    # every ingress user under the proxy's own IP, so one user's five failed
+    # logins locked out everyone behind the proxy.
+    if peer and _peer_in_trust_set(peer, _get_trusted_proxies()):
         forwarded_ip = _get_forwarded_client_ip()
         if forwarded_ip:
             return forwarded_ip
