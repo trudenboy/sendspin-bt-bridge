@@ -187,12 +187,16 @@ class ReconnectPolicy:
     def may_reclaim(self, *, connected: bool | None) -> bool:
         """True when an established link may reclaim management.
 
-        Requires an actual link (``None`` — "BlueZ could not say" — is not
-        one) and a quiet period since the automatic release, so a speaker
-        that is still bouncing cannot flap management on and off.
+        Requires an actual link — ``None`` ("BlueZ could not say") is not one
+        — and a quiet period since *this run's* automatic release, so a
+        speaker that is still bouncing cannot flap management on and off.
+
+        A release carried over from a previous run has no quiet period to
+        observe: the speaker connecting is the only evidence available, and
+        the churn that caused the release ended with the process.
         """
-        if self._released_at is None:
-            return False
         if connected is not True:
             return False
+        if self._released_at is None:
+            return True
         return (self._clock() - self._released_at) >= AUTO_RECLAIM_QUIET_S

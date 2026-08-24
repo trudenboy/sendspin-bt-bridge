@@ -61,7 +61,7 @@ def _log_reconnect_attempt(device_name: str, attempt: int) -> None:
 
 async def _standby_sleep(mgr: BluetoothManager, seconds: float = 5) -> None:
     """Sleep interruptibly — returns early when ``signal_standby_wake()`` fires."""
-    evt = mgr._standby_wake_event
+    evt = mgr.standby_wake_event
     if evt is None:
         await asyncio.sleep(seconds)
         return
@@ -117,7 +117,7 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
     if not mgr.maybe_auto_reclaim(connected=connected):
         return False
     await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
-    mgr._record_reconnect()
+    mgr.policy.record_reconnect()
     if mgr.host:
         mgr.host.update_status(
             {
@@ -160,7 +160,7 @@ async def monitor_and_reconnect(mgr: BluetoothManager) -> None:
     """
     logger.info("[%s] monitor_and_reconnect task started", mgr.device_name)
     # Create an asyncio.Event in the running loop for standby-wake signaling.
-    mgr._standby_wake_event = asyncio.Event()
+    mgr.attach_standby_wake_event(asyncio.Event())
     try:
         from dbus_fast import BusType
         from dbus_fast.aio import MessageBus
@@ -176,7 +176,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
     loop = asyncio.get_running_loop()
     iteration = 0
     reconnect_attempt = 0
-    while mgr._running:
+    while mgr.running:
         iteration += 1
         try:
             if not mgr.management_enabled:
@@ -237,7 +237,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             # (including a possible USB reset) and a config write — never inline
                             # on the loop.
                             if await loop.run_in_executor(
-                                bt_executor(), mgr._handle_reconnect_failure, reconnect_attempt
+                                bt_executor(), mgr.handle_reconnect_failure, reconnect_attempt
                             ):
                                 reconnect_attempt = 0
                                 continue
@@ -254,15 +254,15 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             success = await loop.run_in_executor(bt_executor(), mgr.connect_device)
                         finally:
                             lease.release()
-                        if mgr._reconnect_cancelled():
+                        if mgr.reconnect_cancelled():
                             reconnect_attempt = 0
                             continue
                         if success and mgr.host:
                             completed_attempt = reconnect_attempt
                             reconnect_attempt = 0
-                            mgr._record_reconnect()
+                            mgr.policy.record_reconnect()
                             mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
-                            mgr._publish_client_event(
+                            mgr.publish_client_event(
                                 DeviceEventType.BLUETOOTH_RECONNECTED,
                                 message="Bluetooth reconnect succeeded",
                                 details={"attempt": completed_attempt},
@@ -271,8 +271,8 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             await mgr.host.start_subprocess()
                             _spawn_background(_correct_other_devices_routing(mgr))
                         else:
-                            delay = mgr._reconnect_delay(reconnect_attempt)
-                            mgr._publish_client_event(
+                            delay = mgr.policy.delay_for(reconnect_attempt)
+                            mgr.publish_client_event(
                                 DeviceEventType.BLUETOOTH_RECONNECT_FAILED,
                                 level="warning",
                                 message="Bluetooth reconnect attempt failed",
@@ -292,7 +292,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
                             mgr.device_name,
                         )
                         await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
-                        mgr._record_reconnect()
+                        mgr.policy.record_reconnect()
                         if mgr.host.bluetooth_sink_name:
                             logger.info("[%s] Auto-reconnect: starting player", mgr.device_name)
                             await mgr.host.start_subprocess()
@@ -300,7 +300,7 @@ async def _monitor_polling(mgr: BluetoothManager) -> None:
 
                     # Read battery level (None if device doesn't support it).
                     # Synchronous D-Bus round-trip → run off the loop.
-                    mgr.battery_level = await loop.run_in_executor(None, _dbus_get_battery_level, mgr._dbus_device_path)
+                    mgr.battery_level = await loop.run_in_executor(None, _dbus_get_battery_level, mgr.dbus_device_path)
 
             await asyncio.sleep(5)
         except Exception:
@@ -314,16 +314,16 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
     Raises RuntimeError after 3 consecutive connection failures so
     monitor_and_reconnect() can fall back to bluetoothctl polling.
     """
-    if not mgr._dbus_device_path:
+    if not mgr.dbus_device_path:
         raise RuntimeError("D-Bus device path unavailable because adapter resolution failed")
     loop = asyncio.get_running_loop()
     connect_failures = 0
     _MAX_CONNECT_FAILURES = 3
-    logger.info("[%s] D-Bus monitor started (path=%s)", mgr.device_name, mgr._dbus_device_path)
+    logger.info("[%s] D-Bus monitor started (path=%s)", mgr.device_name, mgr.dbus_device_path)
 
     bus = None
 
-    while mgr._running:
+    while mgr.running:
         bus_needs_reconnect = bus is None or not bus.connected
         try:
             if bus_needs_reconnect:
@@ -337,8 +337,8 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
             # Introspect the device object
             try:
                 assert bus is not None  # guaranteed by reconnect block above
-                introspection = await bus.introspect("org.bluez", mgr._dbus_device_path)
-                proxy = bus.get_proxy_object("org.bluez", mgr._dbus_device_path, introspection)
+                introspection = await bus.introspect("org.bluez", mgr.dbus_device_path)
+                proxy = bus.get_proxy_object("org.bluez", mgr.dbus_device_path, introspection)
                 device_iface = proxy.get_interface("org.bluez.Device1")
                 props_iface = proxy.get_interface("org.freedesktop.DBus.Properties")
             except Exception as e:
@@ -363,10 +363,10 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
             # (and any other transition-driven hook) lands on the
             # initial D-Bus monitor startup, not just polling cycles.
             try:
-                mgr._apply_connected_state(bool(await device_iface.get_connected()))
+                mgr.apply_connected_state(bool(await device_iface.get_connected()))
             except Exception as exc:
                 logger.debug("get_connected() failed: %s", exc)
-                mgr._apply_connected_state(False)
+                mgr.apply_connected_state(False)
             if mgr.host:
                 mgr.host.update_status(
                     {
@@ -397,7 +397,7 @@ async def _monitor_dbus(mgr: BluetoothManager, MessageBus, BusType) -> None:
                     # callback fire — the primary path that reaches the
                     # MprisPlayer registration on Linux hosts where D-Bus
                     # PropertiesChanged drives the connect detection.
-                    mgr._apply_connected_state(new_connected)
+                    mgr.apply_connected_state(new_connected)
                     ts = datetime.now(tz=UTC).isoformat()
                     if mgr.host:
                         mgr.host.update_status(
@@ -476,7 +476,7 @@ async def _inner_dbus_monitor(
     the link is back. Issue #312.
     """
     reconnect_attempt = 0
-    while mgr._running:
+    while mgr.running:
         if not mgr.management_enabled:
             # ``mgr.connected`` stays fresh here even while released —
             # the PropertiesChanged handler keeps applying state — so an
@@ -511,7 +511,7 @@ async def _inner_dbus_monitor(
                     current_val = bool(await device_iface.get_connected())
                     if not current_val and mgr.connected:
                         logger.warning("[%s] Heartbeat: missed disconnect signal", mgr.device_name)
-                        mgr._apply_connected_state(False)
+                        mgr.apply_connected_state(False)
                         if mgr.host:
                             mgr.host.update_status(
                                 {
@@ -523,7 +523,7 @@ async def _inner_dbus_monitor(
                 except Exception as exc:
                     logger.debug("heartbeat connected-state check failed: %s", exc)
                 # Read battery level during heartbeat
-                mgr.battery_level = await loop.run_in_executor(None, _dbus_get_battery_level, mgr._dbus_device_path)
+                mgr.battery_level = await loop.run_in_executor(None, _dbus_get_battery_level, mgr.dbus_device_path)
         else:
             # Device is disconnected — attempt reconnect
             mgr.battery_level = None
@@ -566,7 +566,7 @@ async def _inner_dbus_monitor(
 
                 # Auto-disable after too many failures.  Offload: may run the
                 # adapter-recovery ladder + a config write — never on the loop.
-                if await loop.run_in_executor(bt_executor(), mgr._handle_reconnect_failure, reconnect_attempt):
+                if await loop.run_in_executor(bt_executor(), mgr.handle_reconnect_failure, reconnect_attempt):
                     return
 
                 # Stop sendspin (BT sink is gone — would flood PortAudioErrors)
@@ -584,14 +584,14 @@ async def _inner_dbus_monitor(
                 success = await loop.run_in_executor(bt_executor(), mgr.connect_device)
             finally:
                 lease.release()
-            if mgr._reconnect_cancelled():
+            if mgr.reconnect_cancelled():
                 reconnect_attempt = 0
                 continue
 
             if success:
                 reconnect_attempt = 0
-                mgr._record_reconnect()
-                mgr._apply_connected_state(True)
+                mgr.policy.record_reconnect()
+                mgr.apply_connected_state(True)
                 if mgr.host:
                     mgr.host.update_status(
                         {
@@ -613,7 +613,7 @@ async def _inner_dbus_monitor(
                 # external PropertiesChanged: Connected interrupts the
                 # sleep so we don't waste the remainder of a saturated
                 # backoff window on a speaker that's already back (#312).
-                delay = mgr._reconnect_delay(reconnect_attempt)
+                delay = mgr.policy.delay_for(reconnect_attempt)
                 logger.debug("[%s] Backoff: next attempt in %.0fs", mgr.device_name, delay)
                 try:
                     await asyncio.wait_for(connect_event.wait(), timeout=delay)
@@ -626,14 +626,14 @@ async def _inner_dbus_monitor(
                 connect_event.clear()
                 # Re-read state in case external reconnect happened
                 try:
-                    mgr._apply_connected_state(bool(await device_iface.get_connected()))
+                    mgr.apply_connected_state(bool(await device_iface.get_connected()))
                 except Exception as exc:
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:
                     logger.info("[%s] External reconnect detected, configuring audio...", mgr.device_name)
                     await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
                     reconnect_attempt = 0
-                    mgr._record_reconnect()
+                    mgr.policy.record_reconnect()
                     if mgr.host:
                         mgr.host.update_status(
                             {

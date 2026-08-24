@@ -701,37 +701,6 @@ async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
         await _monitor_dbus(bt_manager, None, None)
 
 
-def test_record_reconnect_prunes_old_entries(bt_manager):
-    """Only reconnects inside the churn window should be retained."""
-    bt_manager._CHURN_WINDOW = 10
-    with patch("sendspin_bridge.bluetooth.manager.time.monotonic", side_effect=[100.0, 111.0]):
-        bt_manager._record_reconnect()
-        bt_manager._record_reconnect()
-
-    assert bt_manager._reconnect_timestamps == [111.0]
-
-
-def test_check_reconnect_churn_disables_management(bt_manager):
-    """Churn threshold should auto-disable management and update host status."""
-    bt_manager._CHURN_THRESHOLD = 2
-    bt_manager._CHURN_WINDOW = 30
-    bt_manager._reconnect_timestamps = [90.0, 99.0]
-    bt_manager.host = MagicMock()
-    bt_manager.host.bt_management_enabled = True
-
-    with (
-        patch("sendspin_bridge.bluetooth.manager.time.monotonic", return_value=100.0),
-        patch("sendspin_bridge.services.bluetooth.persist_device_released") as persist_released,
-    ):
-        assert bt_manager._check_reconnect_churn() is True
-
-    assert bt_manager.management_enabled is False
-    assert bt_manager.host.bt_management_enabled is False
-    bt_manager.host.update_status.assert_called_once()
-    # released_by="auto" marks the release as auto-reclaim-eligible (#349/#350)
-    persist_released.assert_called_once_with("TestSpeaker", True, released_by="auto")
-
-
 def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):
     mock_host = MagicMock()
     mock_host.get_status_value = MagicMock(return_value=True)

@@ -32,6 +32,14 @@ from sendspin_bridge.bluetooth.dbus import (
     _dbus_wait_services_resolved,
 )
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
+from sendspin_bridge.bluetooth.reconnect_policy import (
+    Churned,
+    DisableNeverPaired,
+    KeepTrying,
+    ReconnectPolicy,
+    ReleaseManagement,
+    TryAdapterRecovery,
+)
 from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS, bt_rssi_mgmt
 
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt
@@ -171,14 +179,13 @@ class BluetoothManager:
         # this both could observe the pre-transition state and fire
         # ``on_connected`` twice — duplicate MprisPlayer registrations.
         self._connected_state_lock = threading.Lock()
+        # Transition ordering: the sequence number is taken under the state
+        # lock, the callbacks run under the dispatch lock, so they arrive in
+        # the order the state actually changed.
+        self._transition_dispatch_lock = threading.Lock()
+        self._transition_seq = 0
+        self._transition_dispatched = 0
         self.last_check: float = 0
-        self.check_interval = check_interval
-        self.max_reconnect_fails = max_reconnect_fails
-        # Monotonic timestamp of the last auto-release; gates the
-        # auto-reclaim quiet period (issues #349/#350).  None = never
-        # auto-released this run (a release persisted from a previous
-        # run may reclaim immediately once the speaker connects).
-        self._auto_released_at: float | None = None
         # Experimental sink-recovery flags (off by default; enabled per-bridge via config)
         self._enable_a2dp_dance = bool(enable_a2dp_dance)
         self._enable_pa_module_reload = bool(enable_pa_module_reload)
@@ -225,7 +232,6 @@ class BluetoothManager:
         self._connect_lock = threading.Lock()  # prevents concurrent connect_device() calls
         self._cancel_reconnect = threading.Event()
         self._standby_wake_event: asyncio.Event | None = None  # set by _wake_from_standby to unblock monitor
-        self._reconnect_timestamps: list[float] = []  # monotonic timestamps of recent reconnects
         # Counts consecutive connect_device() failures where BlueZ has no
         # current device object (is_device_paired() returns None). After
         # _PAIRED_UNKNOWN_THRESHOLD consecutive observations we force-remove
@@ -247,11 +253,15 @@ class BluetoothManager:
         # upstream BlueZ 5.86 regression (bluez/bluez#1922) leaves no A2DP sink
         # exposed no matter how many times we retry.
         self._a2dp_dance_remaining = 1
-        # Guard churn tracking because reconnect decisions can be touched from
-        # multiple execution contexts (polling loop, D-Bus reconnect path).
-        self._reconnect_lock = threading.Lock()
-        self._CHURN_WINDOW = churn_window  # seconds; 0 threshold = disabled
-        self._CHURN_THRESHOLD = churn_threshold  # 0 = disabled
+        # Reconnect decisions — backoff, churn, the release ladder and the
+        # reclaim quiet period — belong to the policy; what stays here is the
+        # execution: status updates, events and persistence.
+        self.policy = ReconnectPolicy(
+            check_interval=check_interval,
+            max_fails=max_reconnect_fails,
+            churn_threshold=churn_threshold,
+            churn_window=churn_window,
+        )
 
         # Resolve effective adapter MAC for display (handles empty/default adapter case)
         self.effective_adapter_mac = self._adapter_handle.adapter_mac or self._detect_default_adapter_mac()
@@ -266,6 +276,66 @@ class BluetoothManager:
                 self.effective_adapter_mac or "unknown",
             )
         self.battery_level: int | None = None
+
+    # ------------------------------------------------------------------
+    # The monitor-facing interface
+    #
+    # ``bluetooth.monitor`` runs the reconnect loops on this manager's behalf.
+    # Everything it needs is stated here, so the loop is a caller rather than
+    # a friend class reaching into private state.
+    # ------------------------------------------------------------------
+
+    @property
+    def running(self) -> bool:
+        """False once :meth:`shutdown` has been called — loops must exit."""
+        return self._running
+
+    @property
+    def dbus_device_path(self) -> str | None:
+        """BlueZ object path for this device, once the controller resolves."""
+        return self._dbus_device_path
+
+    def attach_standby_wake_event(self, event: asyncio.Event) -> None:
+        """Register the event :meth:`signal_standby_wake` fires."""
+        self._standby_wake_event = event
+
+    @property
+    def standby_wake_event(self) -> asyncio.Event | None:
+        return self._standby_wake_event
+
+    def reconnect_cancelled(self) -> bool:
+        """True when a reconnect in flight should stop."""
+        return self._reconnect_cancelled()
+
+    def apply_connected_state(self, connected: bool) -> None:
+        """Record a confirmed link transition and fire the callbacks."""
+        self._apply_connected_state(connected)
+
+    def handle_reconnect_failure(self, attempt: int) -> bool:
+        """Execute the policy's verdict; True means stop reconnecting."""
+        return self._handle_reconnect_failure(attempt)
+
+    def publish_client_event(self, *args, **kwargs) -> None:
+        """Publish a device event on this manager's behalf."""
+        self._publish_client_event(*args, **kwargs)
+
+    @property
+    def check_interval(self) -> float:
+        """Seconds between connection polls — also the backoff base."""
+        return self.policy.check_interval
+
+    @check_interval.setter
+    def check_interval(self, value: float) -> None:
+        self.policy.check_interval = value
+
+    @property
+    def max_reconnect_fails(self) -> int:
+        """Consecutive failures before the adapter is handed back (0 = never)."""
+        return self.policy.max_fails
+
+    @max_reconnect_fails.setter
+    def max_reconnect_fails(self, value: int) -> None:
+        self.policy.max_fails = value
 
     @property
     def adapter_handle(self) -> AdapterHandle:
@@ -864,21 +934,40 @@ class BluetoothManager:
         ``_connected_state_lock`` so the asyncio D-Bus monitor thread
         and the BT executor thread can't both pass the check, both
         write True, and both fire ``on_connected`` (would surface as
-        duplicate MprisPlayer D-Bus exports).  The callback itself
-        runs OUTSIDE the lock so a slow callback can't block a
-        concurrent disconnect handler from updating state.
+        duplicate MprisPlayer D-Bus exports).  The callback runs outside
+        that lock, so a slow callback never blocks a concurrent handler
+        from updating state.
+
+        Ordered: each transition takes a sequence number under the state
+        lock and dispatches under a second lock, so the callbacks arrive
+        in the order the state changed.  Firing them unordered let a slow
+        ``on_connected`` land after a later disconnect and leave an MPRIS
+        player registered for a speaker that was already gone — the
+        inverse of the duplicate-registration bug the state lock fixed.
+        A transition another one has already overtaken is dropped.
         """
         with self._connected_state_lock:
             if value == self.connected:
                 return
             self.connected = value
+            self._transition_seq += 1
+            sequence = self._transition_seq
         # #260, #263 — a successful Connected=True transition is the canonical
         # "this device exists in BlueZ and works" signal. Flip the session
         # flag and clear the never_paired status push so the recovery banner
         # returns to its normal state and the auto-disable gate stops firing.
-        if value:
-            self._clear_never_paired_evidence()
-        self._fire_connection_transition(value)
+        with self._transition_dispatch_lock:
+            if sequence < self._transition_dispatched:
+                logger.debug(
+                    "[%s] Connection transition #%d overtaken — not dispatching",
+                    self.device_name,
+                    sequence,
+                )
+                return
+            self._transition_dispatched = sequence
+            if value:
+                self._clear_never_paired_evidence()
+            self._fire_connection_transition(value)
 
     def _clear_never_paired_evidence(self) -> None:
         """Mark this session as having had a working BlueZ record and clear the
@@ -1020,47 +1109,17 @@ class BluetoothManager:
         return False
 
     def _reconnect_delay(self, attempt: int) -> float:
-        """Exponential backoff delay after a failed reconnect attempt.
-
-        Attempts 1-3 use check_interval; doubles every attempt thereafter,
-        capped at 5 minutes. Reduces BT radio activity (and audio disruption
-        on other devices sharing the same adapter) as failure count grows.
-        """
-        return min(self.check_interval * (2 ** max(0, attempt - 3)), _MAX_RECONNECT_DELAY_S)
+        """Backoff for the next attempt — the policy's arithmetic."""
+        return self.policy.delay_for(attempt)
 
     def _record_reconnect(self) -> None:
-        """Record a BT reconnect event for churn detection."""
-        now = time.monotonic()
-        with self._reconnect_lock:
-            self._reconnect_timestamps.append(now)
-            # Prune old entries while still under the same lock so callers
-            # never observe a partially updated churn window.
-            cutoff = now - self._CHURN_WINDOW
-            self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
+        """Note a reconnect so the policy can spot churn."""
+        self.policy.record_reconnect()
 
-    def _check_reconnect_churn(self) -> bool:
-        """Auto-release device if too many reconnects in the time window.
-
-        Returns True if management was released. Released when threshold <= 0.
-        """
-        if self._CHURN_THRESHOLD <= 0:
-            return False
-        now = time.monotonic()
-        with self._reconnect_lock:
-            cutoff = now - self._CHURN_WINDOW
-            self._reconnect_timestamps = [t for t in self._reconnect_timestamps if t > cutoff]
-            reconnect_count = len(self._reconnect_timestamps)
-            if reconnect_count < self._CHURN_THRESHOLD:
-                return False
-
-        logger.warning(
-            "[%s] BT churn detected: %d reconnects in %.0fs — auto-releasing to protect group",
-            self.device_name,
-            reconnect_count,
-            self._CHURN_WINDOW,
-        )
+    def _release_management(self, reason: str) -> None:
+        """Hand the adapter back to the host and persist that decision."""
         self.management_enabled = False
-        self._auto_released_at = time.monotonic()
+        self.policy.mark_released()
         if self.host:
             self.host.bt_management_enabled = False
             self.host.update_status(
@@ -1068,7 +1127,7 @@ class BluetoothManager:
                     "bt_management_enabled": False,
                     "bt_released_by": "auto",
                     "reconnecting": False,
-                    "last_error": f"Auto-released: {reconnect_count} reconnects in {int(self._CHURN_WINDOW)}s",
+                    "last_error": reason,
                     "last_error_at": datetime.now(tz=UTC).isoformat(),
                 }
             )
@@ -1078,68 +1137,68 @@ class BluetoothManager:
             persist_device_released(self.device_name, True, released_by="auto")
         except Exception as _e:
             logger.debug("persist_device_released failed: %s", _e)
-        return True
 
     def _handle_reconnect_failure(self, attempt: int) -> bool:
-        """Release BT management after too many consecutive failed reconnects.
+        """Execute the policy's verdict on a failed reconnect.
 
-        Returns True if management was released (caller should stop reconnecting).
-        Side-effects: sets self.management_enabled=False, updates client status,
-        calls persist_device_released().
+        Returns True when the caller should stop reconnecting.  The decision
+        is the policy's; the status writes, the event and the persistence are
+        this method's.
         """
-        # Also check time-windowed churn (many successful-then-failed cycles)
-        if self._check_reconnect_churn():
-            return True
-        if self.max_reconnect_fails <= 0 or attempt < self.max_reconnect_fails:
-            return False
-        # Last-ditch adapter recovery before either auto-disable or auto-release.
-        # Gated by the compatibility flag because a USB reset is disruptive.
-        # Needs both the resolved adapter MAC and an hci index to hand to
-        # the bluetooth-auto-recovery library.
-        if self._enable_adapter_auto_recovery and self._try_adapter_auto_recovery():
-            logger.info(
-                "[%s] adapter recovery succeeded after %d failed reconnects — keeping management enabled",
-                self.device_name,
+        recovery_attempted = False
+        while True:
+            decision = self.policy.on_failure(
                 attempt,
+                paired=self.paired,
+                ever_paired=self._has_ever_paired_since_start,
+                recovery_available=self._enable_adapter_auto_recovery,
+                recovery_attempted=recovery_attempted,
             )
-            return False
-        # v2.70.0-rc.2 (#263) — Never-paired auto-disable.
-        # After adapter recovery has had its shot, if BlueZ still has no
-        # record of this device AND we never observed a successful
-        # Connected=True transition in this bridge session, the device is
-        # most likely misconfigured or out of range from the start. Stop
-        # the reconnect storm by flipping enabled=False; the recovery banner
-        # then surfaces a "Re-enable" action so the operator can retry
-        # pairing on their schedule.
-        if self.paired is None and not self._has_ever_paired_since_start:
-            self._auto_disable_never_paired(attempt)
-            return True
-        logger.warning(
-            "[%s] %d consecutive failed reconnects (threshold=%d) — auto-releasing BT management",
-            self.device_name,
-            attempt,
-            self.max_reconnect_fails,
-        )
-        self.management_enabled = False
-        self._auto_released_at = time.monotonic()
-        if self.host:
-            self.host.bt_management_enabled = False
-            self.host.update_status(
-                {
-                    "bt_management_enabled": False,
-                    "bt_released_by": "auto",
-                    "reconnecting": False,
-                    "last_error": f"Auto-released after {attempt} reconnect attempts",
-                    "last_error_at": datetime.now(tz=UTC).isoformat(),
-                }
-            )
-        try:
-            from sendspin_bridge.services.bluetooth import persist_device_released
 
-            persist_device_released(self.device_name, True, released_by="auto")
-        except Exception as _e:
-            logger.debug("persist_device_released failed: %s", _e)
-        return True
+            if isinstance(decision, KeepTrying):
+                return False
+
+            if isinstance(decision, Churned):
+                logger.warning(
+                    "[%s] BT churn detected: %d reconnects in %.0fs — auto-releasing to protect group",
+                    self.device_name,
+                    decision.reconnect_count,
+                    decision.window_s,
+                )
+                self._release_management(
+                    f"Auto-released: {decision.reconnect_count} reconnects in {int(decision.window_s)}s"
+                )
+                return True
+
+            if isinstance(decision, TryAdapterRecovery):
+                # A USB reset is disruptive, so the policy offers it exactly
+                # once before the release ladder continues.
+                if self._try_adapter_auto_recovery():
+                    logger.info(
+                        "[%s] adapter recovery succeeded after %d failed reconnects — keeping management enabled",
+                        self.device_name,
+                        decision.attempt,
+                    )
+                    return False
+                recovery_attempted = True
+                continue
+
+            if isinstance(decision, DisableNeverPaired):
+                self._auto_disable_never_paired(decision.attempt)
+                return True
+
+            if isinstance(decision, ReleaseManagement):
+                logger.warning(
+                    "[%s] %d consecutive failed reconnects (threshold=%d) — auto-releasing BT management",
+                    self.device_name,
+                    decision.attempt,
+                    decision.threshold,
+                )
+                self._release_management(f"Auto-released after {decision.attempt} reconnect attempts")
+                return True
+
+            logger.error("[%s] Unhandled reconnect decision %r", self.device_name, decision)
+            return False
 
     def maybe_auto_reclaim(self, connected: bool | None = None) -> bool:
         """Reclaim BT management after an auto-release once the speaker
@@ -1165,20 +1224,15 @@ class BluetoothManager:
             return False
         if connected is None:
             connected = self.connected
-        if not connected:
-            return False
-        released_at = self._auto_released_at
-        if released_at is not None and time.monotonic() - released_at < _AUTO_RECLAIM_QUIET_S:
+        if not self.policy.may_reclaim(connected=connected):
             return False
         logger.info(
             "[%s] Speaker reconnected on its own after auto-release — reclaiming BT management",
             self.device_name,
         )
-        with self._reconnect_lock:
-            # Fresh churn window: the reconnects that led to the release
-            # must not count against the reclaimed session.
-            self._reconnect_timestamps = []
-        self._auto_released_at = None
+        # Fresh churn window: the reconnects that led to the release must not
+        # count against the reclaimed session.
+        self.policy.mark_reclaimed()
         self.allow_reconnect()
         host.bt_management_enabled = True
         host.update_status(
