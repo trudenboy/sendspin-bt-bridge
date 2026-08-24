@@ -66,6 +66,7 @@ from sendspin_bridge.services.ipc.commands import (
     Transport,
     encode_command,
 )
+from sendspin_bridge.services.ipc.daemon_handle import spawn_kwargs
 from sendspin_bridge.services.ipc.ipc_protocol import (
     with_protocol_version,
 )
@@ -1858,6 +1859,12 @@ class SendspinClient:
                 cwd=os.path.dirname(os.path.abspath(__file__)),
                 limit=1024
                 * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
+                # The kernel reaps the daemon if this process dies outright.
+                # Graceful stop is still the normal path; this covers OOM,
+                # `docker kill` and the Supervisor watchdog, after which a
+                # surviving daemon would hold its listen port against the
+                # next start.
+                **spawn_kwargs(),
             )
             self._update_status({"playing": False})
             self._clear_ma_reconnecting()
