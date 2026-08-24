@@ -31,6 +31,7 @@ from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property, _dbus_get_
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.bridge.calibration_metronome import CalibrationMetronome
+from sendspin_bridge.bridge.daemon_supervisor import DaemonSupervisor, Halted, RestartAfter, SpawnRecord
 from sendspin_bridge.bridge.exceptions import IPCError
 from sendspin_bridge.bridge.idle_machine import (
     ArmIdleTimer,
@@ -341,29 +342,6 @@ def _generate_keepalive_buffer(method: str) -> bytes:
     if method == "none":
         return b""
     return _generate_infrasound_burst()
-
-
-@dataclass
-class SpawnRecord:
-    """One Sendspin daemon subprocess spawn — entry created on spawn, fields filled on exit.
-
-    Captured per device to expose *why* a daemon exited (exit code, signal,
-    lifetime, last stderr lines) so issue-#291-style debugging doesn't require
-    correlating windows of MA logs and bridge logs by hand.
-    """
-
-    pid: int
-    spawn_at: datetime
-    exit_at: datetime | None = None
-    exit_code: int | None = None
-    signal: int | None = None
-    lifetime_s: float | None = None
-    stderr_tail: list[str] = field(default_factory=list)
-    # ``unexpected`` distinguishes daemon deaths driven by ``stop_sendspin``
-    # (graceful release / shutdown — False) from deaths that surprise the
-    # parent (True).  Only unexpected deaths drive ``last_error`` updates and
-    # repeating-interval pattern detection.
-    unexpected: bool = True
 
 
 @dataclass
@@ -695,7 +673,7 @@ class SendspinClient:
         self._monitor_task: asyncio.Task | None = None
         self._ma_reconnect_task: asyncio.Task | None = None
         self._calibration_metronome: CalibrationMetronome | None = None
-        self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
+        self._supervisor = DaemonSupervisor()
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._start_sendspin_requests = 0
         self._start_sendspin_processed = 0
@@ -729,11 +707,9 @@ class SendspinClient:
         self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
         self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
-        self._restart_halted: bool = False  # once True, restart loop skips spawning
         # Ring of recent daemon spawns/exits.  Populated on spawn (entry created)
         # and on death (exit fields filled).  Used for the diagnostics report
         # and for the repeating-interval pattern detector (#291 follow-up).
-        self._spawn_history: deque[SpawnRecord] = deque(maxlen=10)
         self._timing_history: deque[dict[str, object]] = deque(maxlen=360)
         self._current_spawn: SpawnRecord | None = None
         # Set by ``stop_sendspin`` immediately before signalling the daemon so
@@ -1325,44 +1301,9 @@ class SendspinClient:
 
     # ── Spawn history & pattern detection (issue #291 follow-up) ───────────
 
-    def _detect_repeating_lifetime(self, tolerance_s: float = 1.0) -> float | None:
-        """Return mean lifetime when the last 3 unexpected deaths landed within ±tolerance_s.
-
-        Returns ``None`` when fewer than 3 unexpected deaths are recorded or
-        when their lifetimes spread beyond *tolerance_s*.  A non-``None``
-        return value indicates the daemon is hitting a deterministic timeout
-        (e.g. WebSocket open_timeout, handshake deadline, unreachable-host
-        retry budget) — actionable for the operator.
-        """
-        completed = [r.lifetime_s for r in self._spawn_history if r.lifetime_s is not None and r.unexpected]
-        if len(completed) < 3:
-            return None
-        last3 = completed[-3:]
-        if all(abs(x - last3[0]) <= tolerance_s for x in last3):
-            return sum(last3) / 3
-        return None
-
     def recent_spawn_records(self, n: int = 5) -> list[dict[str, Any]]:
-        """Return a JSON-serializable view of the last *n* spawn records.
-
-        Oldest first within the window.  Consumed by the diagnostics report
-        block so operators see daemon lifetime patterns directly in the
-        bundle they upload to GitHub issues.
-        """
-        records = list(self._spawn_history)[-n:]
-        return [
-            {
-                "pid": r.pid,
-                "spawn_at": r.spawn_at.isoformat(),
-                "exit_at": r.exit_at.isoformat() if r.exit_at else None,
-                "lifetime_s": r.lifetime_s,
-                "exit_code": r.exit_code,
-                "signal": r.signal,
-                "unexpected": r.unexpected,
-                "stderr_tail": list(r.stderr_tail),
-            }
-            for r in records
-        ]
+        """A JSON-serialisable view of the last *n* spawns, for diagnostics."""
+        return self._supervisor.recent(n)
 
     async def stop_subprocess(self) -> None:
         """Stop the daemon subprocess (BluetoothManagerHost protocol)."""
@@ -1462,7 +1403,7 @@ class SendspinClient:
                             status_updates["last_error_at"] = datetime.now(tz=UTC).isoformat()
                         self._update_status(status_updates)
 
-                        recurring = self._detect_repeating_lifetime()
+                        recurring = self._supervisor.repeating_lifetime()
                         if recurring is not None:
                             logger.warning(
                                 "[%s] Daemon dies at consistent ~%.1fs intervals over the last 3 spawns "
@@ -1479,9 +1420,12 @@ class SendspinClient:
                         self._daemon_proc = None
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
-                        if self._restart_halted:
-                            await asyncio.sleep(self._restart_delay)
-                        elif not self.bt_manager or self.bt_manager.connected:
+                        decision = self._supervisor.on_death(
+                            bt_connected=self.bt_manager.connected if self.bt_manager else None
+                        )
+                        if isinstance(decision, Halted):
+                            await asyncio.sleep(decision.delay_s)
+                        elif isinstance(decision, RestartAfter):
                             logger.warning(
                                 "[%s] Daemon subprocess exited (PID %d): code=%s signal=%s "
                                 "lifetime=%s; restarting in %.0fs",
@@ -1490,21 +1434,17 @@ class SendspinClient:
                                 exit_code,
                                 sig,
                                 f"{lifetime:.1f}s" if lifetime is not None else "unknown",
-                                self._restart_delay,
+                                decision.delay_s,
                             )
-                            await asyncio.sleep(self._restart_delay)
-                            self._restart_delay = min(self._restart_delay * 2, 30.0)
+                            await asyncio.sleep(decision.delay_s)
                             await self.start_sendspin()
                         else:
-                            self._restart_delay = 1.0  # reset when BT drives the restart
                             logger.info("Daemon subprocess stopped; waiting for BT to reconnect")
                     else:
-                        # Daemon alive — reset backoff + bind-failure state
-                        self._restart_delay = 1.0
+                        # Daemon alive — clear backoff, halt and bind-failure state
+                        self._supervisor.on_alive()
                         if self._bind_failures:
                             self._bind_failures = 0
-                        if self._restart_halted:
-                            self._restart_halted = False
 
                 # Zombie playback watchdog: playing=True but no audio data for too long
                 self._check_zombie_playback()
@@ -1711,7 +1651,7 @@ class SendspinClient:
                         self.player_name,
                         self._bind_failures,
                     )
-                    self._restart_halted = True
+                    self._supervisor.halt()
                 return
             if available_port != requested_port:
                 logger.info(
@@ -1818,7 +1758,7 @@ class SendspinClient:
                 pid=int(self._daemon_proc.pid),
                 spawn_at=datetime.now(tz=UTC),
             )
-            self._spawn_history.append(self._current_spawn)
+            self._supervisor.record(self._current_spawn)
 
         except Exception as e:
             logger.error("Failed to start Sendspin daemon subprocess: %s", e)

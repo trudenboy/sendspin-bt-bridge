@@ -901,7 +901,7 @@ async def test_start_sendspin_inner_halts_after_max_bind_failures(monkeypatch):
             await client._start_sendspin_inner()
 
     assert client._bind_failures == _MAX_BIND_FAILURES
-    assert client._restart_halted is True
+    assert client._supervisor.halted is True
     assert client.status["port_collision"] is True
     assert exec_calls == 0  # never spawned because probe kept failing
 
