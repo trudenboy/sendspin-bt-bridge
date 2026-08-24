@@ -4992,9 +4992,12 @@ def test_calibration_session_explains_and_logs_silent_recording(client, caplog):
 
 def test_status_stream_reserves_waitress_workers(client, monkeypatch):
     import sendspin_bridge.web.routes.api_status as status_mod
+    from sendspin_bridge.web.sse_slots import SseSlotPool
 
     assert status_mod._MAX_SSE == 4
-    monkeypatch.setattr(status_mod, "_sse_count", status_mod._MAX_SSE)
+    # A pool with no capacity: the view must answer 503 before streaming.
+    full = SseSlotPool(0)
+    monkeypatch.setattr(status_mod, "_sse_pool", full)
 
     response = client.get("/api/status/stream", buffered=False)
     try:
