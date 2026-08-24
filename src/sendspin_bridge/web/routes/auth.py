@@ -24,8 +24,6 @@ import logging
 import os
 import re
 import secrets
-import threading
-import time
 import urllib.request as _ur
 from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
@@ -34,6 +32,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from sendspin_bridge.config import check_password, load_config
+from sendspin_bridge.web.login_rate_limiter import LockoutSettings, LoginRateLimiter
 from sendspin_bridge.web.request_identity import current_trust_policy
 from sendspin_bridge.web.trusted_proxies import (
     TRUSTED_PROXY_DEFAULTS,
@@ -87,10 +86,6 @@ _TRUSTED_PROXY_DEFAULTS = TRUSTED_PROXY_DEFAULTS
 # Backward-compatible private aliases (kept for existing internal callers).
 _parse_trusted_entry = parse_trusted_entry
 _peer_in_trust_set = peer_in_trust_set
-
-
-_failed: dict[str, tuple[int, float]] = {}  # client_id → (count, first_failure_ts)
-_failed_lock = threading.Lock()
 
 
 def _coerce_int_setting(value, default: int, min_value: int, max_value: int) -> int:
@@ -186,55 +181,35 @@ def _get_rate_limit_client_id() -> str:
     return peer or "unknown"
 
 
+def _lockout_settings() -> LockoutSettings:
+    """Read the operator's lockout configuration."""
+    enabled, max_attempts, window_secs, duration_secs = _get_lockout_settings()
+    return LockoutSettings(
+        enabled=enabled,
+        max_attempts=max_attempts,
+        window_s=window_secs,
+        lockout_s=duration_secs,
+    )
+
+
+#: One limiter for the process.  It reads settings live, so a config change
+#: takes effect on the next attempt without a restart.
+_rate_limiter = LoginRateLimiter(settings_provider=_lockout_settings)
+
+
 def _check_rate_limit(client_id: str) -> bool:
-    """Return True if the client identifier is currently locked out."""
-    enabled, max_attempts, _, duration_secs = _get_lockout_settings()
-    if not enabled:
-        return False
-    now = time.monotonic()
-    with _failed_lock:
-        entry = _failed.get(client_id)
-        if not entry:
-            return False
-        count, first_ts = entry
-        # Reset window if enough time has passed since first failure
-        if now - first_ts > duration_secs:
-            del _failed[client_id]
-            return False
-        return count >= max_attempts
+    """True when this client is currently locked out."""
+    return _rate_limiter.is_locked_out(client_id)
 
 
 def _record_failure(client_id: str) -> None:
-    enabled, _, window_secs, _ = _get_lockout_settings()
-    if not enabled:
-        return
-    now = time.monotonic()
-    with _failed_lock:
-        entry = _failed.get(client_id)
-        if entry:
-            count, first_ts = entry
-            if now - first_ts > window_secs:
-                _failed[client_id] = (1, now)
-            else:
-                _failed[client_id] = (count + 1, first_ts)
-        else:
-            _failed[client_id] = (1, now)
-        # Periodic sweep: remove expired entries when dict grows large
-        if len(_failed) > 200:
-            _, _, sweep_window, duration = _get_lockout_settings()
-            max_age = max(sweep_window, duration)
-            expired = [k for k, (_, ts) in _failed.items() if now - ts > max_age]
-            for k in expired:
-                del _failed[k]
-            # Hard cap as safety net
-            if len(_failed) > 1000:
-                oldest = min(_failed, key=lambda k: _failed[k][1])
-                del _failed[oldest]
+    """Note one failed login attempt."""
+    _rate_limiter.record_failure(client_id)
 
 
 def _clear_failures(client_id: str) -> None:
-    with _failed_lock:
-        _failed.pop(client_id, None)
+    """Forget a client after a successful login."""
+    _rate_limiter.clear(client_id)
 
 
 def _generate_csrf_token() -> str:

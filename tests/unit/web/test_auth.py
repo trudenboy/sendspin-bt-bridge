@@ -12,7 +12,6 @@ from sendspin_bridge.web.routes.auth import (
     _check_rate_limit,
     _clear_failures,
     _detect_auth_methods,
-    _failed,
     _get_rate_limit_client_id,
     _ma_validate_credentials,
     _record_failure,
@@ -23,9 +22,12 @@ from sendspin_bridge.web.routes.auth import (
 
 @pytest.fixture(autouse=True)
 def _reset_failed():
-    _failed.clear()
+    """Start each test with an empty lockout record."""
+    from sendspin_bridge.web.routes.auth import _rate_limiter
+
+    _rate_limiter._records.clear()
     yield
-    _failed.clear()
+    _rate_limiter._records.clear()
 
 
 # ── Brute-force protection ───────────────────────────────────────────────
