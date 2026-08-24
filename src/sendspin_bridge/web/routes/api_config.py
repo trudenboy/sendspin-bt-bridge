@@ -62,6 +62,7 @@ from sendspin_bridge.services.ha.ha_addon import (
 from sendspin_bridge.services.ha.ha_core_api import HaCoreApiError, fetch_ha_area_catalog
 from sendspin_bridge.services.infrastructure.config_diff import diff_configs
 from sendspin_bridge.services.infrastructure.config_validation import validate_uploaded_config
+from sendspin_bridge.services.ipc.commands import SetLogLevel
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 from sendspin_bridge.services.lifecycle.async_job_state import (
     create_async_job,
@@ -1128,7 +1129,7 @@ def api_set_log_level():
     # Propagate to all running subprocesses via stdin IPC
     loop = get_main_loop()
     if loop is not None:
-        cmd = {"cmd": "set_log_level", "level": level}
+        cmd = SetLogLevel(level=level)
         for client in get_device_registry_snapshot().active_clients:
             if client.is_running():
                 _submit_loop_coroutine(

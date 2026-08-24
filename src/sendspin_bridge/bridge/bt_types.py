@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from sendspin_bridge.services.ipc.commands import Command
 
 
 @runtime_checkable
@@ -37,7 +40,7 @@ class BluetoothManagerHost(Protocol):
         """Start (or restart) the audio daemon subprocess."""
         ...
 
-    async def send_subprocess_command(self, cmd: dict[str, Any]) -> None:
+    async def send_subprocess_command(self, cmd: Command | dict[str, Any]) -> None:
         """Send a JSON command dict to the daemon subprocess stdin."""
         ...
 

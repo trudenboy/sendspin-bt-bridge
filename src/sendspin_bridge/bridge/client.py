@@ -56,6 +56,17 @@ from sendspin_bridge.services.infrastructure.config_validation import (
     validate_sendspin_server_format,
 )
 from sendspin_bridge.services.infrastructure.port_bind_probe import DEFAULT_MAX_ATTEMPTS, find_available_bind_port
+from sendspin_bridge.services.ipc.commands import (
+    Command,
+    Reconnect,
+    SetMinBufferMs,
+    SetRequiredLeadTimeMs,
+    SetStandby,
+    SetStaticDelayMs,
+    Transport,
+    encode_command,
+)
+from sendspin_bridge.services.ipc.daemon_handle import spawn_kwargs
 from sendspin_bridge.services.ipc.ipc_protocol import (
     with_protocol_version,
 )
@@ -75,6 +86,13 @@ _MAX_BIND_FAILURES = 5
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+#: Hot-applied buffer knobs, keyed by the config field they come from.
+_BUFFER_COMMANDS: dict[str, type[SetStaticDelayMs | SetRequiredLeadTimeMs | SetMinBufferMs]] = {
+    "static_delay_ms": SetStaticDelayMs,
+    "required_lead_time_ms": SetRequiredLeadTimeMs,
+    "min_buffer_ms": SetMinBufferMs,
+}
+
 logger = logging.getLogger(__name__)
 
 _CALIBRATION_METRONOME_SAMPLE_RATE = 48000
@@ -1210,7 +1228,7 @@ class SendspinClient:
             if await aensure_null_sink():
                 # Redirect PULSE_SINK so new streams go to null sink (not missing BT sink)
                 try:
-                    await self._send_subprocess_command({"cmd": "set_standby", "sink": STANDBY_SINK_NAME})
+                    await self._send_subprocess_command(SetStandby(sink=STANDBY_SINK_NAME))
                 except IPCError as exc:
                     logger.debug("[%s] set_standby IPC failed (daemon may have exited): %s", self.player_name, exc)
                 moved = await amove_pid_sink_inputs(daemon_pid, STANDBY_SINK_NAME)
@@ -1288,7 +1306,7 @@ class SendspinClient:
 
         # Restore PULSE_SINK to BT sink before rerouting so future streams target it
         try:
-            await self._send_subprocess_command({"cmd": "set_standby"})
+            await self._send_subprocess_command(SetStandby())
         except IPCError as exc:
             logger.debug("[%s] set_standby clear IPC failed: %s", self.player_name, exc)
         moved = await amove_pid_sink_inputs(daemon_pid, self.bluetooth_sink_name)
@@ -1309,7 +1327,7 @@ class SendspinClient:
         if moved > 0:
             logger.info("[%s] Rerouted %d stream(s) to BT sink %s", self.player_name, moved, self.bluetooth_sink_name)
             try:
-                await self._send_subprocess_command({"cmd": "reconnect", "delay": 1.0})
+                await self._send_subprocess_command(Reconnect(delay_s=1.0))
             except IPCError as exc:
                 logger.debug("[%s] reanchor IPC failed after wake: %s", self.player_name, exc)
             else:
@@ -1321,7 +1339,7 @@ class SendspinClient:
         # subprocess restart because it skips process spawn + mDNS registration.
         logger.info("[%s] No streams to reroute — sending MA reconnect to daemon", self.player_name)
         try:
-            await self._send_subprocess_command({"cmd": "reconnect", "delay": 0.5})
+            await self._send_subprocess_command(Reconnect(delay_s=0.5))
         except IPCError as exc:
             logger.debug("[%s] MA reconnect IPC failed: %s", self.player_name, exc)
         return True
@@ -1841,6 +1859,12 @@ class SendspinClient:
                 cwd=os.path.dirname(os.path.abspath(__file__)),
                 limit=1024
                 * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
+                # The kernel reaps the daemon if this process dies outright.
+                # Graceful stop is still the normal path; this covers OOM,
+                # `docker kill` and the Supervisor watchdog, after which a
+                # surviving daemon would hold its listen port against the
+                # next start.
+                **spawn_kwargs(),
             )
             self._update_status({"playing": False})
             self._clear_ma_reconnecting()
@@ -1850,12 +1874,9 @@ class SendspinClient:
             self._daemon_task = asyncio.create_task(self._read_subprocess_output())
             self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
 
-            def _on_reader_done(t: asyncio.Task) -> None:
-                if not t.cancelled() and t.exception():
-                    logger.error("[%s] stdout reader error: %s", self.player_name, t.exception())
-
-            self._daemon_task.add_done_callback(_on_reader_done)
-            self._stderr_task.add_done_callback(_on_reader_done)
+            handler = self._make_reader_done_handler()
+            self._daemon_task.add_done_callback(handler)
+            self._stderr_task.add_done_callback(handler)
             logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
             # Open a spawn-history entry — the death handler fills the rest.
             self._current_spawn = SpawnRecord(
@@ -1905,75 +1926,112 @@ class SendspinClient:
                 timer.cancel()
             self._persist_timers.clear()
 
-    async def _read_subprocess_output(self) -> None:
-        """Read JSON lines from daemon subprocess stdout and merge into self.status.
+    def _make_reader_done_handler(self):
+        """Build the done-callback for the stdout/stderr reader tasks.
 
-        ``stdout.readline()`` is wrapped in ``asyncio.wait_for`` so that a stalled
-        daemon (e.g. subprocess alive but not writing) does not leave this reader
-        blocked forever.  On timeout, we log at DEBUG and keep polling — only a
-        real EOF (empty line) or a dead subprocess ends the loop.
+        A reader that dies leaves nobody draining the daemon's stdout.  The
+        daemon writes status through a blocking ``print``, so once the 64 KB
+        pipe fills its event loop wedges: no commands, no stop, no reconnect,
+        while audio keeps playing from the audio thread and the speaker looks
+        healthy.  Killing the daemon turns that into a restart the supervisor
+        can act on.
+        """
+
+        def _on_reader_done(task: asyncio.Task) -> None:
+            if task.cancelled() or task.exception() is None:
+                return
+            logger.error("[%s] stdout reader error: %s", self.player_name, task.exception())
+            proc = self._daemon_proc
+            if proc is None or proc.returncode is not None:
+                return
+            logger.error(
+                "[%s] Killing daemon PID %s — its stdout is no longer being read",
+                self.player_name,
+                getattr(proc, "pid", "?"),
+            )
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            except Exception as exc:
+                logger.warning("[%s] Could not kill the unread daemon: %s", self.player_name, exc)
+
+        return _on_reader_done
+
+    async def _read_subprocess_output(self) -> None:
+        """Read daemon stdout and merge status into ``self.status``.
+
+        The loop itself belongs to :class:`SubprocessIpcService` — this
+        supplies the two things it cannot know: when an idle stretch means a
+        dead subprocess, and what a status update should trigger here.
         """
         if self._daemon_proc is None or self._daemon_proc.stdout is None:
             return
-        stdout = self._daemon_proc.stdout
-        while True:
-            try:
-                line = await asyncio.wait_for(stdout.readline(), timeout=self._STDOUT_IDLE_TIMEOUT_SECS)
-            except TimeoutError:
-                if self._daemon_proc.returncode is not None:
-                    return
-                logger.debug(
-                    "[%s] subprocess idle (no stdout for %.0fs)",
-                    self.player_name,
-                    self._STDOUT_IDLE_TIMEOUT_SECS,
-                )
-                continue
-            if not line:
-                return
-            msg = self._ipc_service.parse_line(line)
-            if msg is None:
-                continue
-            if msg.get("type") == "status":
-                # handle_message applies updates atomically via _update_status;
-                # use the returned updates dict to detect volume changes without
-                # separate lock acquisitions that could race.
-                updates = self._ipc_service.handle_message(msg)
-                if updates:
-                    if updates.get("server_connected") is True:
-                        self._clear_ma_reconnecting()
-                    # Auto-wake: MA started playback while daemon is on null sink
-                    if updates.get("playing") is True and self.status.get("bt_standby"):
-                        asyncio.ensure_future(self._on_standby_play_detected())
-                    new_volume = updates.get("volume")
-                    _mac = self.bt_manager.mac_address if self.bt_manager else None
-                    if isinstance(new_volume, int) and _mac:
-                        self._schedule_persist("volume", save_device_volume, _mac, new_volume)
-                    # MA-driven static_delay_ms changes flow through the daemon's
-                    # status mirror (BridgeDaemon._handle_server_command). Persist
-                    # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
-                    # survives restart and the bridge UI repaints from config.
-                    new_delay = updates.get("static_delay_ms")
-                    if isinstance(new_delay, int) and _mac:
-                        self._schedule_persist("static_delay", save_device_static_delay, _mac, new_delay)
-                        # Keep the parent-side cache in sync so a subsequent
-                        # warm_restart doesn't re-spawn the subprocess with a
-                        # stale ctor value.
-                        self.static_delay_ms = float(new_delay)
-                    # Sync unmute to MA after reconnect (#132) and after
-                    # initial spawn (the daemon mutes the PA sink during
-                    # startup to hide format-probe noise; MA polls
-                    # volume_controller.get_state() in that window and
-                    # records volume_muted=True even though the bridge
-                    # never *intended* to be muted).  ``force=True``
-                    # bypasses the "local status says unmuted" early-exit
-                    # because that local flag doesn't reflect MA's view
-                    # at this point.  Only fires once per (re)spawn so
-                    # explicit user mute commands aren't overridden (#155).
-                    if updates.get("sink_muted") is False and self._pending_reconnect_unmute_sync:
-                        self._pending_reconnect_unmute_sync = False
-                        await self._sync_unmute_to_ma(force=True)
-            else:
-                self._ipc_service.handle_message(msg)
+        await self._ipc_service.read_stream(
+            self._daemon_proc.stdout,
+            idle_timeout=self._STDOUT_IDLE_TIMEOUT_SECS,
+            on_idle=self._stdout_idle,
+            on_message=self._handle_daemon_message,
+        )
+
+    def _stdout_idle(self) -> bool:
+        """True when an idle stdout means the subprocess is gone."""
+        proc = self._daemon_proc
+        if proc is None or proc.returncode is not None:
+            return True
+        logger.debug(
+            "[%s] subprocess idle (no stdout for %.0fs)",
+            self.player_name,
+            self._STDOUT_IDLE_TIMEOUT_SECS,
+        )
+        return False
+
+    async def _handle_daemon_message(self, msg: dict) -> None:
+        """Apply one daemon message and run the side effects a status implies."""
+        if msg.get("type") != "status":
+            self._ipc_service.handle_message(msg)
+            return
+
+        # handle_message applies updates atomically via _update_status;
+        # use the returned updates dict to detect volume changes without
+        # separate lock acquisitions that could race.
+        updates = self._ipc_service.handle_message(msg)
+        if not updates:
+            return
+
+        if updates.get("server_connected") is True:
+            self._clear_ma_reconnecting()
+        # Auto-wake: MA started playback while daemon is on null sink
+        if updates.get("playing") is True and self.status.get("bt_standby"):
+            asyncio.ensure_future(self._on_standby_play_detected())
+        new_volume = updates.get("volume")
+        _mac = self.bt_manager.mac_address if self.bt_manager else None
+        if isinstance(new_volume, int) and _mac:
+            self._schedule_persist("volume", save_device_volume, _mac, new_volume)
+        # MA-driven static_delay_ms changes flow through the daemon's
+        # status mirror (BridgeDaemon._handle_server_command). Persist
+        # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
+        # survives restart and the bridge UI repaints from config.
+        new_delay = updates.get("static_delay_ms")
+        if isinstance(new_delay, int) and _mac:
+            self._schedule_persist("static_delay", save_device_static_delay, _mac, new_delay)
+            # Keep the parent-side cache in sync so a subsequent
+            # warm_restart doesn't re-spawn the subprocess with a
+            # stale ctor value.
+            self.static_delay_ms = float(new_delay)
+        # Sync unmute to MA after reconnect (#132) and after
+        # initial spawn (the daemon mutes the PA sink during
+        # startup to hide format-probe noise; MA polls
+        # volume_controller.get_state() in that window and
+        # records volume_muted=True even though the bridge
+        # never *intended* to be muted).  ``force=True``
+        # bypasses the "local status says unmuted" early-exit
+        # because that local flag doesn't reflect MA's view
+        # at this point.  Only fires once per (re)spawn so
+        # explicit user mute commands aren't overridden (#155).
+        if updates.get("sink_muted") is False and self._pending_reconnect_unmute_sync:
+            self._pending_reconnect_unmute_sync = False
+            await self._sync_unmute_to_ma(force=True)
 
     async def _sync_unmute_to_ma(self, *, force: bool = False) -> None:
         """Sync PA sink unmute to MA after the daemon's startup-mute window.
@@ -2032,9 +2090,16 @@ class SendspinClient:
         """Compatibility proxy for stderr classification tests and legacy call sites."""
         self._stderr_service.handle_line(line)
 
-    async def _send_subprocess_command(self, cmd: dict) -> None:
-        """Write a JSON command to the daemon subprocess stdin."""
-        await self._command_service.send(self._daemon_proc, cmd)
+    async def _send_subprocess_command(self, cmd: Command | dict) -> None:
+        """Write a command to the daemon subprocess stdin.
+
+        Command objects carry their own payload keys and ranges, so callers
+        stop repeating what the daemon will accept.  Plain dictionaries are
+        still honoured for the routes that forward an action they have
+        already validated.
+        """
+        payload = encode_command(cmd) if not isinstance(cmd, dict) else cmd
+        await self._command_service.send(self._daemon_proc, payload)
 
     async def send_reconnect(self) -> None:
         """Trigger the sendspin subprocess to reconnect to MA server.
@@ -2053,7 +2118,7 @@ class SendspinClient:
             return
         self._mark_ma_reconnecting()
         try:
-            await self._send_subprocess_command({"cmd": "reconnect", "delay": 3.0})
+            await self._send_subprocess_command(Reconnect(delay_s=3.0))
         except IPCError as exc:
             logger.debug("[%s] MA reconnect IPC failed: %s", self.player_name, exc)
             self._clear_ma_reconnecting()
@@ -2065,11 +2130,8 @@ class SendspinClient:
         """
         if self._daemon_proc is None or self._daemon_proc.returncode is not None:
             return False
-        cmd: dict = {"cmd": "transport", "action": action}
-        if value is not None:
-            cmd["value"] = value
         try:
-            await self._send_subprocess_command(cmd)
+            await self._send_subprocess_command(Transport(action=action, value=value))
         except IPCError as exc:
             logger.debug("[%s] transport %s IPC failed: %s", self.player_name, action, exc)
             return False
@@ -2119,7 +2181,7 @@ class SendspinClient:
                     continue
                 if self.is_running():
                     try:
-                        await self._send_subprocess_command({"cmd": f"set_{key}", "value": delay_ms})
+                        await self._send_subprocess_command(_BUFFER_COMMANDS[key](value=delay_ms))
                     except IPCError as exc:
                         logger.warning(
                             "[%s] hot-apply %s IPC failed: %s — parent-state unchanged",

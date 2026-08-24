@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from sendspin_bridge.services.ipc.commands import Stop, encode_command
 from sendspin_bridge.services.ipc.subprocess_stop import SubprocessStopService
 
 
@@ -51,7 +52,7 @@ async def test_stop_process_requests_graceful_stop():
 
     await service.stop_process(proc, send_stop=fake_send, player_name="Kitchen")
 
-    assert sent == [{"cmd": "stop"}]
+    assert sent == [encode_command(Stop())]
     assert proc.kill_called is False
 
 
@@ -67,7 +68,7 @@ async def test_stop_process_kills_when_wait_times_out():
 
     await service.stop_process(proc, send_stop=fake_send, player_name="Kitchen")
 
-    assert sent == [{"cmd": "stop"}]
+    assert sent == [encode_command(Stop())]
     assert proc.kill_called is True
     logger.warning.assert_called_once()
 

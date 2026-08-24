@@ -28,6 +28,7 @@ from sendspin_bridge.services.audio.pulse import (
     set_sink_volume,
 )
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+from sendspin_bridge.services.ipc.commands import Pause, Play, SetMute, SetVolume
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
@@ -515,7 +516,7 @@ def set_volume():
                 if loop:
                     _submit_loop_coroutine(
                         loop,
-                        client._send_subprocess_command({"cmd": "set_volume", "value": volume}),
+                        client._send_subprocess_command(SetVolume(value=volume)),
                         description=f"set_volume for {client.player_name}",
                     )
                 mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
@@ -575,7 +576,7 @@ def set_mute():
                     if loop:
                         _submit_loop_coroutine(
                             loop,
-                            client._send_subprocess_command({"cmd": "set_mute", "muted": muted}),
+                            client._send_subprocess_command(SetMute(muted=muted)),
                             description=f"set_mute for {client.player_name}",
                         )
                     results.append(
@@ -629,7 +630,7 @@ def unmute_sink():
         if loop:
             _submit_loop_coroutine(
                 loop,
-                client._send_subprocess_command({"cmd": "set_mute", "muted": False}),
+                client._send_subprocess_command(SetMute(muted=False)),
                 description=f"unmute_sink for {client.player_name}",
             )
 
@@ -680,7 +681,7 @@ def pause_all():
             try:
                 if _submit_loop_coroutine(
                     loop,
-                    client._send_subprocess_command({"cmd": "pause"}),
+                    client._send_subprocess_command(Pause()),
                     description=f"pause for {client.player_name}",
                 ):
                     count += 1
@@ -725,7 +726,7 @@ def pause_all():
             try:
                 if _submit_loop_coroutine(
                     loop,
-                    client._send_subprocess_command({"cmd": "play"}),
+                    client._send_subprocess_command(Play()),
                     description=f"play for {client.player_name}",
                 ):
                     count += 1

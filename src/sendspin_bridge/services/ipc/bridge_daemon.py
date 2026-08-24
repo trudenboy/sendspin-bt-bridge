@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from sendspin_bridge.services.ipc.status_store import StatusStore
+
 from aiosendspin.models.core import (
     DeviceInfo,
     GroupUpdateServerPayload,
@@ -83,7 +85,7 @@ class BridgeDaemon(SendspinDaemon):
     def __init__(
         self,
         args: DaemonArgs,
-        status: dict,
+        status: StatusStore | dict,
         bluetooth_sink_name: str | None,
         on_status_change: Callable[[], None] | None = None,
         *,
