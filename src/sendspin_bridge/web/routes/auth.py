@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from sendspin_bridge.config import check_password, load_config
+from sendspin_bridge.web.request_identity import current_trust_policy
 from sendspin_bridge.web.trusted_proxies import (
     TRUSTED_PROXY_DEFAULTS,
     parse_trusted_entry,
@@ -140,51 +141,37 @@ def _format_duration(seconds: int) -> str:
     return f"{seconds} seconds"
 
 
-def _get_trusted_proxies() -> set[str]:
-    """Return trusted proxy IPs used for validated forwarded client identity."""
-    trusted = set(_TRUSTED_PROXY_DEFAULTS)
-    config = load_config()
-    extra = config.get("TRUSTED_PROXIES") or []
-    if isinstance(extra, list):
-        trusted.update(value.strip() for value in extra if isinstance(value, str) and value.strip())
-    return trusted
-
-
 def _peer_is_trusted(peer: str) -> bool:
-    """True when *peer* is in the merged trust set (defaults + config)."""
-    return _peer_in_trust_set(peer, _get_trusted_proxies())
+    """True when *peer* is trusted by the request's policy."""
+    return current_trust_policy().is_trusted(peer)
 
 
 def _get_forwarded_client_ip() -> str:
-    """Return the rightmost untrusted hop from X-Forwarded-For.
+    """The forwarded client, or ``""`` when the headers name none.
 
-    Only the proxies we trust (see ``_get_trusted_proxies``) are allowed to
-    append their own addresses to XFF.  The real client is therefore the
-    *rightmost* hop that is NOT a trusted proxy.  Using the leftmost hop is
-    spoofable by any client that sets an XFF header themselves.
+    Distinct from :meth:`TrustPolicy.client_ip`, which always answers with
+    *someone* — this reports only what the headers claim, and the caller
+    decides what an absence means.  The peer-trust gate lives with the
+    caller too, because only it knows whether a spoofed header matters.
     """
-    trusted = _get_trusted_proxies()
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        hops = [p.strip() for p in forwarded_for.split(",") if p.strip()]
-        for hop in reversed(hops):
-            # Match against the merged set of literal IPs and CIDR
-            # ranges so a hassio-network proxy (172.30.32.0/23) is
-            # treated as trusted regardless of which addon container
-            # actually forwarded the request.
-            if not _peer_in_trust_set(hop, trusted):
-                return hop
+    policy = current_trust_policy()
+    hops = [hop.strip() for hop in request.headers.get("X-Forwarded-For", "").split(",") if hop.strip()]
+    for hop in reversed(hops):
+        if not policy.is_trusted(hop):
+            return hop
     return request.headers.get("X-Real-IP", "").strip()
 
 
 def _get_rate_limit_client_id() -> str:
-    """Return the best-available brute-force bucket key for this request."""
+    """The brute-force bucket key for this request.
+
+    Behind a trusted proxy the peer address is the proxy's, so everyone
+    would share one bucket and five failed logins by anyone would lock out
+    the household.  Fall back through the forwarded client, then the
+    submitted username, then a per-session token.
+    """
     peer = (request.remote_addr or "").strip()
-    # CIDR-aware: the HA ingress peer lives somewhere in 172.30.32.0/23 and
-    # never equals a trust-set entry literally.  An exact-string test bucketed
-    # every ingress user under the proxy's own IP, so one user's five failed
-    # logins locked out everyone behind the proxy.
-    if peer and _peer_in_trust_set(peer, _get_trusted_proxies()):
+    if peer and _peer_is_trusted(peer):
         forwarded_ip = _get_forwarded_client_ip()
         if forwarded_ip:
             return forwarded_ip
@@ -1013,9 +1000,8 @@ def api_auth_ha_pair():
         return jsonify({"success": False, "error": "Not allowed from this network"}), 403
 
     peer = (request.remote_addr or "").strip()
-    # ``_get_trusted_proxies`` already merges defaults + the operator
-    # ``TRUSTED_PROXIES`` config key.  Both can be literal IPs or CIDR
-    # ranges.  The hassio Docker network is /23, with addons in the
+    # The request's trust policy merges the defaults with the operator's
+    # ``TRUSTED_PROXIES`` key.  Both can be literal IPs or CIDR ranges.  The hassio Docker network is /23, with addons in the
     # 172.30.33.x half — a literal-IP whitelist would miss them.
     if not _peer_is_trusted(peer):
         return jsonify({"success": False, "error": "Not allowed from this network"}), 403

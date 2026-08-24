@@ -19,6 +19,7 @@ from __future__ import annotations
 import ipaddress
 from typing import TYPE_CHECKING
 
+from sendspin_bridge.config import load_config
 from sendspin_bridge.web.trusted_proxies import (
     TRUSTED_PROXY_DEFAULTS,
     parse_trusted_entry,
@@ -27,7 +28,7 @@ from sendspin_bridge.web.trusted_proxies import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-__all__ = ["TrustPolicy"]
+__all__ = ["TrustPolicy", "current_trust_policy"]
 
 
 class TrustPolicy:
@@ -89,3 +90,31 @@ class TrustPolicy:
             if real:
                 return real
         return peer or "unknown"
+
+
+#: Where the per-request policy is cached.  Several consumers ask during one
+#: request; they should read the config once between them.
+_REQUEST_KEY = "_sendspin_trust_policy"
+
+
+def current_trust_policy() -> TrustPolicy:
+    """The trust policy for the request in flight.
+
+    Built once per request from the live config and cached on ``flask.g``, so
+    every consumer gets the same answer for that request's lifetime — the
+    property the import-time snapshot kept breaking after a settings save.
+    Outside a request context (startup, background tasks) it is built fresh.
+    """
+    try:
+        from flask import g, has_request_context
+    except ImportError:  # pragma: no cover — Flask is a hard dependency
+        return TrustPolicy.from_config(load_config())
+
+    if not has_request_context():
+        return TrustPolicy.from_config(load_config())
+
+    policy = getattr(g, _REQUEST_KEY, None)
+    if policy is None:
+        policy = TrustPolicy.from_config(load_config())
+        setattr(g, _REQUEST_KEY, policy)
+    return policy

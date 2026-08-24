@@ -28,7 +28,7 @@ from sendspin_bridge.config import (
     resolve_web_port,
 )
 from sendspin_bridge.config.logging_setup import apply_log_level
-from sendspin_bridge.web.trusted_proxies import peer_in_trust_set
+from sendspin_bridge.web.request_identity import current_trust_policy
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -78,19 +78,16 @@ if _auth_enabled:
         logger.info("Web UI password protection is enabled (restart required to change)")
 
 
-# Entries may be literal IPs or CIDR networks; matched via the canonical
-# CIDR-aware ``peer_in_trust_set`` from ``routes/auth.py``.  Defaults mirror
-# ``auth._TRUSTED_PROXY_DEFAULTS`` (loopback + the whole hassio 172.30.32.0/23
-# network) so the auth gate and the rate-limiter agree.
-_TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.30.32.0/23"}
-_extra = _startup_config.get("TRUSTED_PROXIES") or []
-if isinstance(_extra, list):
-    _TRUSTED_PROXIES |= {v.strip() for v in _extra if isinstance(v, str) and v.strip()}
-
-
 def _peer_trusted(peer: str) -> bool:
-    """CIDR-aware trust check against ``_TRUSTED_PROXIES`` (shared matcher)."""
-    return peer_in_trust_set(peer, _TRUSTED_PROXIES)
+    """CIDR-aware trust check against the request's policy.
+
+    This used to hold its own trust set, built once at import.
+    ``TRUSTED_PROXIES`` is writable through ``POST /api/config``, so from the
+    first settings save the gate here and the login rate-limiter disagreed
+    about who was trusted until a restart — invisible in testing, because the
+    two halves fail in opposite directions.
+    """
+    return current_trust_policy().is_trusted(peer)
 
 
 class _IngressMiddleware:
