@@ -32,6 +32,17 @@ from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.bridge.calibration_metronome import CalibrationMetronome
 from sendspin_bridge.bridge.exceptions import IPCError
+from sendspin_bridge.bridge.idle_machine import (
+    ArmIdleTimer,
+    ArmPowerSaveTimer,
+    ArmSinkMuteWatchdog,
+    CancelIdleTimer,
+    CancelPowerSaveTimer,
+    CancelSinkMuteWatchdog,
+    ExitPowerSave,
+    IdleMachine,
+)
+from sendspin_bridge.bridge.idle_machine import PlaybackState as IdlePlaybackState
 from sendspin_bridge.bridge.loop_scheduling import schedule_on_bridge_loop
 from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
@@ -821,43 +832,18 @@ class SendspinClient:
         # fire and provide the fastest response on systems where PA events
         # are reliable.  Daemon flags act as a dual authority — overlapping
         # cancel/start calls are harmless (_start_idle_timer cancels first).
-        _idle_mode = getattr(self, "idle_mode", "default")
-        if _idle_mode in ("auto_disconnect", "power_save"):
-            if "playing" in updates or "audio_streaming" in updates:
-                was_active = previous.get("playing", False) or previous.get("audio_streaming", False)
-                now_active = self.status.get("playing", False) or self.status.get("audio_streaming", False)
-                if not was_active and now_active:
-                    self._cancel_idle_timer()
-                    if _idle_mode == "power_save":
-                        self._cancel_power_save_timer()
-                        if self.status.get("bt_power_save"):
-                            schedule_on_bridge_loop(self._exit_power_save(), description="exit power save")
-                elif was_active and not now_active and not self.status.get("bt_standby"):
-                    if _idle_mode == "auto_disconnect":
-                        self._start_idle_timer()
-                    elif _idle_mode == "power_save":
-                        self._start_power_save_timer()
-            # Server-connected fallback: only when SinkMonitor is not
-            # running (otherwise the timer was already started by
-            # SinkMonitor.register → on_idle at registration time).
-            if not self._sink_monitor_active():
-                if (
-                    "server_connected" in updates
-                    and self.status.get("server_connected") is True
-                    and not self.status.get("audio_streaming")
-                    and not self.status.get("playing")
-                    and not self.status.get("bt_standby")
-                ):
-                    if _idle_mode == "auto_disconnect":
-                        self._start_idle_timer()
-                    elif _idle_mode == "power_save":
-                        self._start_power_save_timer()
+        if "playing" in updates or "audio_streaming" in updates:
+            self._apply_idle_actions(
+                self._idle_machine.on_playback_change(
+                    previous=IdlePlaybackState.from_status(previous),
+                    current=IdlePlaybackState.from_status(self.status),
+                )
+            )
+        if "server_connected" in updates:
+            self._apply_idle_actions(self._idle_machine.on_server_connected(IdlePlaybackState.from_status(self.status)))
         # ── Sink mute watchdog ────────────────────────────────────────
         if "sink_muted" in updates:
-            if self.status.get("sink_muted") and not self.status.get("muted"):
-                self._start_sink_mute_watchdog()
-            else:
-                self._cancel_sink_mute_watchdog()
+            self._apply_idle_actions(self._idle_machine.on_sink_mute_change(IdlePlaybackState.from_status(self.status)))
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
@@ -874,51 +860,60 @@ class SendspinClient:
         return sm is not None and sm.available
 
     def _on_sink_active(self) -> None:
-        """Called by SinkMonitor when PA sink enters ``running``.
-
-        Cancels any pending idle/power-save timer — audio is flowing.
-        """
-        mode = getattr(self, "idle_mode", "default")
-        if mode == "auto_disconnect":
-            logger.debug("[%s] PA sink -> running -- cancelling idle timer", self.player_name)
-            self._cancel_idle_timer()
-        elif mode == "power_save":
-            logger.debug("[%s] PA sink -> running -- cancelling power-save timer", self.player_name)
-            self._cancel_power_save_timer()
-            if self.status.get("bt_power_save"):
-                schedule_on_bridge_loop(self._exit_power_save(), description="exit power save")
+        """Called by SinkMonitor when the PA sink enters ``running``."""
+        self._apply_idle_actions(self._idle_machine.on_sink_active(IdlePlaybackState.from_status(self.status)))
 
     def _on_sink_idle(self) -> None:
-        """Called by SinkMonitor when PA sink leaves ``running``.
+        """Called by SinkMonitor when the PA sink leaves ``running``."""
+        self._apply_idle_actions(self._idle_machine.on_sink_idle(IdlePlaybackState.from_status(self.status)))
 
-        Starts the appropriate idle timer based on idle_mode.
-        """
-        mode = getattr(self, "idle_mode", "default")
-        if self.status.get("bt_standby"):
-            return
-        if mode == "auto_disconnect":
-            logger.debug(
-                "[%s] PA sink -> idle -- starting idle timer (%d min)",
-                self.player_name,
-                self.idle_disconnect_minutes,
-            )
-            self._start_idle_timer()
-        elif mode == "power_save":
-            logger.debug(
-                "[%s] PA sink -> idle -- starting power-save timer (%d min)",
-                self.player_name,
-                self.power_save_delay_minutes,
-            )
-            self._start_power_save_timer()
+    # ── Executing what the machine decided ───────────────────────────────
 
-    def _start_idle_timer(self) -> None:
+    @property
+    def _idle_machine(self) -> IdleMachine:
+        """The idle decisions for this device, rebuilt when the mode changes."""
+        signature = (self.idle_mode, self.idle_disconnect_minutes, self.power_save_delay_minutes)
+        cached = getattr(self, "_idle_machine_cache", None)
+        if cached is None or cached[0] != signature:
+            machine = IdleMachine(
+                mode=self.idle_mode,
+                idle_disconnect_minutes=self.idle_disconnect_minutes,
+                power_save_delay_minutes=self.power_save_delay_minutes,
+                sink_monitor_active=self._sink_monitor_active,
+            )
+            self._idle_machine_cache = (signature, machine)
+            return machine
+        return cached[1]
+
+    def _apply_idle_actions(self, actions: list) -> None:
+        """Carry out the machine's decisions — timers, sinks, subprocess."""
+        for action in actions:
+            if isinstance(action, CancelIdleTimer):
+                self._cancel_idle_timer()
+            elif isinstance(action, CancelPowerSaveTimer):
+                self._cancel_power_save_timer()
+            elif isinstance(action, ArmIdleTimer):
+                self._start_idle_timer(action.delay_s)
+            elif isinstance(action, ArmPowerSaveTimer):
+                self._start_power_save_timer(action.delay_s)
+            elif isinstance(action, ExitPowerSave):
+                schedule_on_bridge_loop(self._exit_power_save(), description="exit power save")
+            elif isinstance(action, ArmSinkMuteWatchdog):
+                self._start_sink_mute_watchdog()
+            elif isinstance(action, CancelSinkMuteWatchdog):
+                self._cancel_sink_mute_watchdog()
+            else:  # pragma: no cover — a new action nobody taught the client
+                logger.error("[%s] Unhandled idle action %r", self.player_name, action)
+
+    def _start_idle_timer(self, timeout: float | None = None) -> None:
         """Start (or restart) the idle disconnect timer.
 
         Thread-safe: protected by ``_idle_timer_lock`` to avoid leaked timers
         when called concurrently from the asyncio event loop (sink monitor
         callbacks) and Flask/Waitress threads (``_update_status`` fallback).
         """
-        timeout = self.idle_disconnect_minutes * 60
+        if timeout is None:
+            timeout = self.idle_disconnect_minutes * 60
 
         async def _idle_timeout() -> None:
             try:
@@ -987,9 +982,10 @@ class SendspinClient:
 
     # ── Power save timer ──────────────────────────────────────────────────
 
-    def _start_power_save_timer(self) -> None:
+    def _start_power_save_timer(self, delay: float | None = None) -> None:
         """Schedule PA sink suspend after ``power_save_delay_minutes``."""
-        delay = getattr(self, "power_save_delay_minutes", 1) * 60
+        if delay is None:
+            delay = getattr(self, "power_save_delay_minutes", 1) * 60
 
         async def _ps_timeout() -> None:
             try:
