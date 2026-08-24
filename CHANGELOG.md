@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Changing a speaker's volume or mute from the web interface no longer fails when the bridge is about to wake that speaker from power saving. The web request and the wake-up ran on different threads, and the combination aborted the change.
+
 ## [2.75.0-rc.2] - 2026-08-24
 
 ### Fixed
