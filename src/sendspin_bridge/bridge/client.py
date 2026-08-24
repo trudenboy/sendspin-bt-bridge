@@ -32,6 +32,7 @@ from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property, _dbus_get_
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.bridge.exceptions import IPCError
+from sendspin_bridge.bridge.loop_scheduling import schedule_on_bridge_loop
 from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_FILE,
@@ -871,7 +872,7 @@ class SendspinClient:
                     if _idle_mode == "power_save":
                         self._cancel_power_save_timer()
                         if self.status.get("bt_power_save"):
-                            asyncio.ensure_future(self._exit_power_save())
+                            schedule_on_bridge_loop(self._exit_power_save(), description="exit power save")
                 elif was_active and not now_active and not self.status.get("bt_standby"):
                     if _idle_mode == "auto_disconnect":
                         self._start_idle_timer()
@@ -926,7 +927,7 @@ class SendspinClient:
             logger.debug("[%s] PA sink -> running -- cancelling power-save timer", self.player_name)
             self._cancel_power_save_timer()
             if self.status.get("bt_power_save"):
-                asyncio.ensure_future(self._exit_power_save())
+                schedule_on_bridge_loop(self._exit_power_save(), description="exit power save")
 
     def _on_sink_idle(self) -> None:
         """Called by SinkMonitor when PA sink leaves ``running``.
@@ -1009,14 +1010,7 @@ class SendspinClient:
 
         with self._idle_timer_lock:
             self._cancel_idle_timer_unlocked()
-            loop = _state.get_main_loop()
-            if loop and loop.is_running():
-                self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
-            else:
-                try:
-                    self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
-                except RuntimeError:
-                    pass
+            self._idle_timer_task = schedule_on_bridge_loop(_idle_timeout(), description="idle timer")
 
     def _cancel_idle_timer(self) -> None:
         """Cancel any pending idle disconnect timer (thread-safe)."""
@@ -1053,14 +1047,7 @@ class SendspinClient:
 
         with self._idle_timer_lock:
             self._cancel_power_save_timer_unlocked()
-            loop = _state.get_main_loop()
-            if loop and loop.is_running():
-                self._power_save_timer_task = asyncio.run_coroutine_threadsafe(_ps_timeout(), loop)
-            else:
-                try:
-                    self._power_save_timer_task = asyncio.ensure_future(_ps_timeout())
-                except RuntimeError:
-                    pass
+            self._power_save_timer_task = schedule_on_bridge_loop(_ps_timeout(), description="power-save timer")
 
     def _cancel_power_save_timer(self) -> None:
         """Cancel pending power-save suspend timer (thread-safe)."""
@@ -1138,14 +1125,7 @@ class SendspinClient:
 
         with self._idle_timer_lock:
             self._cancel_sink_mute_watchdog_unlocked()
-            loop = _state.get_main_loop()
-            if loop and loop.is_running():
-                self._sink_mute_watchdog_task = asyncio.run_coroutine_threadsafe(_watchdog(), loop)
-            else:
-                try:
-                    self._sink_mute_watchdog_task = asyncio.ensure_future(_watchdog())
-                except RuntimeError:
-                    pass
+            self._sink_mute_watchdog_task = schedule_on_bridge_loop(_watchdog(), description="sink-mute watchdog")
 
     def _cancel_sink_mute_watchdog(self) -> None:
         with self._idle_timer_lock:
@@ -2003,7 +1983,7 @@ class SendspinClient:
             self._clear_ma_reconnecting()
         # Auto-wake: MA started playback while daemon is on null sink
         if updates.get("playing") is True and self.status.get("bt_standby"):
-            asyncio.ensure_future(self._on_standby_play_detected())
+            schedule_on_bridge_loop(self._on_standby_play_detected(), description="standby play detected")
         new_volume = updates.get("volume")
         _mac = self.bt_manager.mac_address if self.bt_manager else None
         if isinstance(new_volume, int) and _mac:
