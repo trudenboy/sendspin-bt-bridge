@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bluetooth status reads from different parts of the bridge no longer share one connection to the system service, which was an unguarded source of the intermittent errors above.
 - A speaker that reconnects repeatedly no longer leaks a system connection and an orphaned media registration on every bounce. Bluetooth kept routing the speaker's hard-key presses at a player that no longer existed, and the leak grew until the bridge was restarted.
 - The media controls of a speaker whose link flaps are no longer left registered after it disconnects, which previously made its buttons appear to work while nothing was listening.
+- Speaker processes no longer survive a bridge that was killed outright — by the system running out of memory, by a container stop, or by the Home Assistant watchdog. A survivor held onto its network port and the next start failed with an address-in-use error until someone found and killed it by hand.
+- A speaker no longer becomes silently uncontrollable after an unusually large status update. The bridge stopped reading that speaker's output, its process filled its pipe and froze, and audio kept playing while volume, pause and stop did nothing.
+- Stopping a speaker now lets it say goodbye to Music Assistant and finish playing out its buffer, instead of always being cut off mid-sentence.
+- A speaker's status is now published as a whole. A reader could previously catch a resynchronisation half-recorded and show a count that had gone up while the speaker was still reported as steady.
+- A command the speaker process cannot carry out now reports back instead of being silently dropped, and a bridge and speaker process from mismatched versions refuse to run together rather than pretending to understand each other.
 
 ### Security
 - Login lockout is now counted per user behind a Home Assistant ingress or any reverse proxy given as an address range. Previously everyone behind such a proxy shared one lockout counter, so five failed logins by one person locked out the whole household.
