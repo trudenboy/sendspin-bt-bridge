@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A speaker removed from the settings page is now unpaired only once the change has been saved. If saving failed — a full disk, a read-only configuration folder — the speaker was unpaired anyway, so a change reported as failed still had to be undone by hand.
+- A configuration file holding valid JSON that is not a settings object is now backed up before the bridge falls back to defaults, as an unreadable one already was. Previously it was replaced with nothing to recover from.
+
 ## [2.75.0-rc.2] - 2026-08-24
 
 ### Fixed
