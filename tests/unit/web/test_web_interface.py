@@ -308,9 +308,10 @@ def test_ingress_rejects_double_slash():
         return [b"ok"]
 
     import sendspin_bridge.web.interface as web_interface
+    from sendspin_bridge.web.request_identity import TrustPolicy
 
-    original = web_interface._TRUSTED_PROXIES
-    web_interface._TRUSTED_PROXIES = {"127.0.0.1"}
+    original = web_interface.current_trust_policy
+    web_interface.current_trust_policy = lambda: TrustPolicy({"127.0.0.1"})
     try:
         mw = _IngressMiddleware(spy)
         env = {
@@ -325,7 +326,7 @@ def test_ingress_rejects_double_slash():
         mw(env, lambda *a: None)
         assert captured["SCRIPT_NAME"] == ""
     finally:
-        web_interface._TRUSTED_PROXIES = original
+        web_interface.current_trust_policy = original
 
 
 # ── CSP frame-ancestors ──────────────────────────────────────────────────

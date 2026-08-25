@@ -41,10 +41,12 @@ def _mock_config(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def _default_trusted(monkeypatch):
-    """Pin _TRUSTED_PROXIES to the well-known defaults for deterministic tests."""
+    """Pin the trust set so these tests do not depend on the host's config."""
     import sendspin_bridge.web.interface as web_interface
+    from sendspin_bridge.web.request_identity import TrustPolicy
 
-    monkeypatch.setattr(web_interface, "_TRUSTED_PROXIES", {"127.0.0.1", "::1", "172.30.32.2"})
+    policy = TrustPolicy({"127.0.0.1", "::1", "172.30.32.2"})
+    monkeypatch.setattr(web_interface, "current_trust_policy", lambda: policy)
 
 
 def _make_environ(remote_addr="127.0.0.1", path_info="/", ingress_path=None):
