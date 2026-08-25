@@ -26,6 +26,8 @@ from typing import Any
 
 from flask import Blueprint, Response, jsonify, request
 
+from sendspin_bridge.web.routes.api_status import _sse_pool as _status_sse_pool
+
 logger = logging.getLogger(__name__)
 
 ha_bp = Blueprint("ha_integration", __name__)
@@ -79,28 +81,26 @@ def api_ha_state():
 _EVENT_SSE_MAX_LIFETIME = 6 * 60 * 60  # 6 hours
 _EVENT_QUEUE_MAXSIZE = 256
 
+#: The same pool `/api/status/stream` draws on — the Home Assistant
+#: coordinator opens both, so one budget covers the pair.
+_sse_pool = _status_sse_pool
+
 
 @ha_bp.route("/api/status/events", methods=["GET"])
 def api_status_events():
     """Server-Sent Events stream of typed ``InternalEvent`` records.
 
-    Reuses the SSE concurrency budget already enforced by
-    ``routes/api_status.py``.  Each ``InternalEvent`` becomes one SSE
-    event with ``event:<event_type>`` and ``data:<json>``.
+    Shares the listener budget with ``/api/status/stream``: the Home
+    Assistant coordinator opens both, and together they must not eat the
+    pool.  Each ``InternalEvent`` becomes one SSE event with
+    ``event:<event_type>`` and ``data:<json>``.
     """
-    # Borrow the existing budget counter — the HA coordinator opens both
-    # /api/status/stream (snapshots) and /api/status/events (deltas).
-    import sendspin_bridge.web.routes.api_status as status_module
-    from sendspin_bridge.web.routes.api_status import _MAX_SSE, _sse_lock
-
-    with _sse_lock:
-        if status_module._sse_count >= _MAX_SSE:
-            return (
-                'event: error\ndata: {"error": "too many listeners"}\n\n',
-                503,
-                {"Content-Type": "text/event-stream"},
-            )
-        status_module._sse_count += 1
+    if not _sse_pool.has_capacity():
+        return (
+            'event: error\ndata: {"error": "too many listeners"}\n\n',
+            503,
+            {"Content-Type": "text/event-stream"},
+        )
 
     from sendspin_bridge.bridge.state import get_internal_event_publisher
 
@@ -119,41 +119,48 @@ def api_status_events():
             except (queue.Empty, queue.Full):
                 pass
 
-    unsubscribe = publisher.subscribe(_on_event)
-
     def _generate():
-        try:
-            # Warm-up flush so HA ingress + nginx don't buffer.
-            yield ": " + " " * 2048 + "\n\n"
-            yield 'event: ready\ndata: {"ready": true}\n\n'
-
-            started = time.monotonic()
-            while True:
-                if time.monotonic() - started >= _EVENT_SSE_MAX_LIFETIME:
-                    yield 'event: expired\ndata: {"expired": true}\n\n'
-                    break
-                try:
-                    event = msg_q.get(timeout=15)
-                except queue.Empty:
-                    yield ": heartbeat\n\n"
-                    continue
-
-                payload = {
-                    "event_type": getattr(event, "event_type", ""),
-                    "category": getattr(event, "category", ""),
-                    "subject_id": getattr(event, "subject_id", ""),
-                    "payload": dict(getattr(event, "payload", {}) or {}),
-                    "at": getattr(event, "at", ""),
-                }
-                yield f"event: {payload['event_type']}\n"
-                yield f"data: {json.dumps(payload)}\n\n"
-        finally:
+        # Both the slot and the subscription are taken *inside* the
+        # generator.  Flask registers HEAD for every GET rule and Werkzeug
+        # discards a HEAD body without touching the generator, so anything
+        # claimed in the view above would never be released — this endpoint
+        # leaked a listener slot *and* a live subscription per HEAD request,
+        # the latter filling a queue nobody would ever drain.
+        with _sse_pool.claim(label="event stream") as granted:
+            if not granted:
+                yield 'event: error\ndata: {"error": "too many listeners"}\n\n'
+                return
+            unsubscribe = publisher.subscribe(_on_event)
             try:
-                unsubscribe()
-            except Exception:  # pragma: no cover
-                pass
-            with _sse_lock:
-                status_module._sse_count -= 1
+                # Warm-up flush so HA ingress + nginx don't buffer.
+                yield ": " + " " * 2048 + "\n\n"
+                yield 'event: ready\ndata: {"ready": true}\n\n'
+
+                started = time.monotonic()
+                while True:
+                    if time.monotonic() - started >= _EVENT_SSE_MAX_LIFETIME:
+                        yield 'event: expired\ndata: {"expired": true}\n\n'
+                        break
+                    try:
+                        event = msg_q.get(timeout=15)
+                    except queue.Empty:
+                        yield ": heartbeat\n\n"
+                        continue
+
+                    payload = {
+                        "event_type": getattr(event, "event_type", ""),
+                        "category": getattr(event, "category", ""),
+                        "subject_id": getattr(event, "subject_id", ""),
+                        "payload": dict(getattr(event, "payload", {}) or {}),
+                        "at": getattr(event, "at", ""),
+                    }
+                    yield f"event: {payload['event_type']}\n"
+                    yield f"data: {json.dumps(payload)}\n\n"
+            finally:
+                try:
+                    unsubscribe()
+                except Exception:  # pragma: no cover
+                    pass
 
     return Response(
         _generate(),

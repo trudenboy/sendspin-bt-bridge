@@ -7,6 +7,7 @@ import json
 import pytest
 from flask import Blueprint, Flask, abort
 
+from sendspin_bridge.web.request_identity import TrustPolicy
 from sendspin_bridge.web.routes.auth import _get_forwarded_client_ip, auth_bp
 
 
@@ -38,7 +39,10 @@ def client(app):
 
 class TestForwardedClientIp:
     def test_single_hop_proxy_returns_real_client(self, app, monkeypatch):
-        monkeypatch.setattr("sendspin_bridge.web.routes.auth._get_trusted_proxies", lambda: {"127.0.0.1"})
+        monkeypatch.setattr(
+            "sendspin_bridge.web.routes.auth.current_trust_policy",
+            lambda: TrustPolicy({"127.0.0.1"}),
+        )
         with app.test_request_context(
             "/",
             headers={"X-Forwarded-For": "evil, 127.0.0.1"},
@@ -47,7 +51,10 @@ class TestForwardedClientIp:
 
     def test_spoofed_leftmost_ignored(self, app, monkeypatch):
         """Spoofed client-set XFF entry should not win over the real hop."""
-        monkeypatch.setattr("sendspin_bridge.web.routes.auth._get_trusted_proxies", lambda: {"127.0.0.1"})
+        monkeypatch.setattr(
+            "sendspin_bridge.web.routes.auth.current_trust_policy",
+            lambda: TrustPolicy({"127.0.0.1"}),
+        )
         with app.test_request_context(
             "/",
             headers={"X-Forwarded-For": "spoofed, real-client, 127.0.0.1"},
@@ -55,7 +62,10 @@ class TestForwardedClientIp:
             assert _get_forwarded_client_ip() == "real-client"
 
     def test_all_trusted_returns_empty(self, app, monkeypatch):
-        monkeypatch.setattr("sendspin_bridge.web.routes.auth._get_trusted_proxies", lambda: {"127.0.0.1", "::1"})
+        monkeypatch.setattr(
+            "sendspin_bridge.web.routes.auth.current_trust_policy",
+            lambda: TrustPolicy({"127.0.0.1", "::1"}),
+        )
         with app.test_request_context(
             "/",
             headers={"X-Forwarded-For": "127.0.0.1, ::1"},
@@ -63,7 +73,10 @@ class TestForwardedClientIp:
             assert _get_forwarded_client_ip() == ""
 
     def test_x_real_ip_fallback(self, app, monkeypatch):
-        monkeypatch.setattr("sendspin_bridge.web.routes.auth._get_trusted_proxies", lambda: {"127.0.0.1"})
+        monkeypatch.setattr(
+            "sendspin_bridge.web.routes.auth.current_trust_policy",
+            lambda: TrustPolicy({"127.0.0.1"}),
+        )
         with app.test_request_context("/", headers={"X-Real-IP": "1.2.3.4"}):
             assert _get_forwarded_client_ip() == "1.2.3.4"
 

@@ -12,7 +12,6 @@ from sendspin_bridge.web.routes.auth import (
     _check_rate_limit,
     _clear_failures,
     _detect_auth_methods,
-    _failed,
     _get_rate_limit_client_id,
     _ma_validate_credentials,
     _record_failure,
@@ -23,9 +22,12 @@ from sendspin_bridge.web.routes.auth import (
 
 @pytest.fixture(autouse=True)
 def _reset_failed():
-    _failed.clear()
+    """Start each test with an empty lockout record."""
+    from sendspin_bridge.web.routes.auth import _rate_limiter
+
+    _rate_limiter._records.clear()
     yield
-    _failed.clear()
+    _rate_limiter._records.clear()
 
 
 # ── Brute-force protection ───────────────────────────────────────────────
@@ -107,7 +109,7 @@ def test_custom_max_attempts_applied():
 
 def test_rate_limit_client_id_uses_forwarded_for_from_trusted_proxy():
     with (
-        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
+        patch("sendspin_bridge.web.request_identity.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
         _app.test_request_context(
             "/login",
             method="POST",
@@ -121,7 +123,7 @@ def test_rate_limit_client_id_uses_forwarded_for_from_trusted_proxy():
 
 def test_rate_limit_client_id_ignores_forwarded_for_from_untrusted_proxy():
     with (
-        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": []}),
+        patch("sendspin_bridge.web.request_identity.load_config", return_value={"TRUSTED_PROXIES": []}),
         _app.test_request_context(
             "/login",
             method="POST",
@@ -175,7 +177,7 @@ def test_rate_limit_client_id_falls_back_to_username_for_cidr_proxy_without_clie
 
 def test_rate_limit_client_id_falls_back_to_username_for_trusted_proxy_without_client_ip():
     with (
-        patch("sendspin_bridge.web.routes.auth.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
+        patch("sendspin_bridge.web.request_identity.load_config", return_value={"TRUSTED_PROXIES": ["10.0.0.10"]}),
         _app.test_request_context(
             "/login",
             method="POST",
