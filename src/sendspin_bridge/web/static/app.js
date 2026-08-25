@@ -671,6 +671,7 @@ function _capabilityDependencyLabels(dependsOn) {
         sendspin_connected: 'Sendspin transport',
         audio_sink: 'Resolved audio sink',
         ma_connected: 'Music Assistant link',
+        ma_player_registered: 'Music Assistant player registration',
     };
     return (dependsOn || []).map(function(key) {
         var normalized = String(key || '').trim();

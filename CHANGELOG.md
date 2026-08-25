@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a speaker was connected and streaming.
 - Two restarts arriving together can no longer leave a second audio daemon
   running unwatched, holding the speaker's audio sink and its port.
+- A speaker Music Assistant has no queue for is now described as exactly
+  that, with an action that can help. It used to be reported as "Music
+  Assistant API is not connected" — on a bridge whose connection was fine —
+  and offered a settings page that could not fix it.
 - Queue controls work for a speaker that is not in a Music Assistant sync
   group. The bridge used to guess that speaker's queue address instead of
   asking Music Assistant for it, so every queue command reached nothing and
