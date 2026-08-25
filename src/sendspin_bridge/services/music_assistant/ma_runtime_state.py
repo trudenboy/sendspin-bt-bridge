@@ -28,6 +28,33 @@ _MA_SYNC_META_KEY = "_sync_meta"
 _duplicate_device_warnings: list[Any] = []
 _duplicate_device_warnings_lock = threading.Lock()
 
+#: ``{bridge client id → MA player id}``, learned from ``players/all``.  MA
+#: numbers its own players, so the id a queue command must carry is looked up
+#: here rather than derived from our client id.
+_ma_player_ids: dict[str, str] = {}
+_ma_player_ids_lock = threading.Lock()
+
+
+def set_ma_player_ids(mapping: dict[str, str]) -> None:
+    """Store the learned bridge-client → MA-player mapping."""
+    with _ma_player_ids_lock:
+        changed = _ma_player_ids != mapping
+        _ma_player_ids.clear()
+        _ma_player_ids.update(mapping)
+    if changed:
+        logger.info("MA player id cache updated: %d bridge player(s) resolved", len(mapping))
+
+
+def get_ma_player_id(client_id: str) -> str:
+    """The MA player id for *client_id*, or ``""`` when MA has not named one."""
+    with _ma_player_ids_lock:
+        return _ma_player_ids.get(str(client_id or "").strip(), "")
+
+
+def get_ma_player_ids() -> dict[str, str]:
+    with _ma_player_ids_lock:
+        return dict(_ma_player_ids)
+
 
 def set_duplicate_device_warnings(warnings: list[Any]) -> None:
     """Store the latest cross-bridge duplicate device warnings."""

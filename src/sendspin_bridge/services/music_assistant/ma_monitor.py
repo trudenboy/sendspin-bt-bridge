@@ -24,6 +24,7 @@ import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.music_assistant.ma_artwork import build_artwork_proxy_url
+from sendspin_bridge.services.music_assistant.ma_player_map import learn_ma_player_ids
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -144,7 +145,14 @@ async def push_now_playing_to_mpris(fresh: dict, clients: list, registry) -> Non
 
 
 def solo_queue_candidates(player_id: str | None) -> list[str]:
-    """Return ordered MA solo queue IDs compatible with current and legacy players."""
+    """Return ordered MA solo queue IDs, the learned one first.
+
+    Music Assistant numbers its own players, so the id a queue command has to
+    carry is the one MA published for us — looked up in the cache the monitor
+    fills from ``players/all``.  The derived forms below are what older
+    servers used and stay as a fallback for them; on a current server they
+    address a queue that does not exist.
+    """
     raw_player_id = str(player_id or "").strip()
     if not raw_player_id:
         return []
@@ -152,11 +160,19 @@ def solo_queue_candidates(player_id: str | None) -> list[str]:
     if raw_player_id.startswith(("media_player.", "ma_", "syncgroup_")):
         return [raw_player_id]
 
-    legacy_queue_id = "up" + raw_player_id.replace("-", "")
-    if raw_player_id.startswith("sendspin-"):
-        return [raw_player_id, legacy_queue_id]
+    candidates: list[str] = []
+    learned = _state.get_ma_player_id(raw_player_id)
+    if learned:
+        candidates.append(learned)
 
-    return [legacy_queue_id, raw_player_id]
+    legacy_queue_id = "up" + raw_player_id.replace("-", "")
+    derived = (
+        [raw_player_id, legacy_queue_id] if raw_player_id.startswith("sendspin-") else [legacy_queue_id, raw_player_id]
+    )
+    for candidate in derived:
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
 
 
 class _AuthFailed(Exception):
@@ -745,6 +761,11 @@ class MaMonitor:
                 for c in clients
                 if getattr(c, "player_id", "")
             ]
+
+            # The same answer says which MA player fronts each of our
+            # speakers.  Without it a queue command for an ungrouped speaker
+            # is aimed at an id MA does not have.
+            _state.set_ma_player_ids(learn_ma_player_ids(players, bridge_info))
 
             member_set_by_group: dict[str, set[str]] = {}
 
