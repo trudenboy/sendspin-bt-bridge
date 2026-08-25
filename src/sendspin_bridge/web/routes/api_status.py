@@ -919,12 +919,32 @@ def api_diagnostics():
                 fallback={"error": "Failed to collect event hooks"},
                 log_message="Failed to collect event hooks for diagnostics",
             )
+        # The normalised device state, built once and shared with everything
+        # below.  `/api/status` has always passed it; this endpoint did not,
+        # so the same speaker produced different issues, traces and timeline
+        # entries depending on which page the operator opened — and the
+        # bundle attached to a bug report was the one built the other way.
+        diagnostics_config = load_config()
+        diagnostics_devices = [device for _client, device in snapshot_pairs]
         try:
-            onboarding_assistant = _build_onboarding_assistant_payload(
-                config=load_config(),
-                devices=[device for _client, device in snapshot_pairs],
+            diagnostics_state = build_bridge_state_model(
+                config=diagnostics_config,
+                devices=diagnostics_devices,
                 runtime_mode=diag["runtime_info"].get("mode", "unknown"),
                 ma_connected=is_ma_connected(),
+                preflight=diag.get("preflight") or {},
+            )
+        except Exception:
+            logger.warning("Could not build the state model for diagnostics", exc_info=True)
+            diagnostics_state = None
+
+        try:
+            onboarding_assistant = _build_onboarding_assistant_payload(
+                config=diagnostics_config,
+                devices=diagnostics_devices,
+                runtime_mode=diag["runtime_info"].get("mode", "unknown"),
+                ma_connected=is_ma_connected(),
+                bridge_state=diagnostics_state,
             )
             diag["onboarding_assistant"] = onboarding_assistant
             _record_success("onboarding_assistant")
@@ -938,10 +958,11 @@ def api_diagnostics():
             )
         try:
             diag["recovery_assistant"] = _build_recovery_assistant_payload(
-                config=load_config(),
-                devices=[device for _client, device in snapshot_pairs],
+                config=diagnostics_config,
+                devices=diagnostics_devices,
                 onboarding_assistant=onboarding_assistant,
                 startup_progress=diag["startup_progress"],
+                bridge_state=diagnostics_state,
             )
             _record_success("recovery_assistant")
         except Exception as exc:
