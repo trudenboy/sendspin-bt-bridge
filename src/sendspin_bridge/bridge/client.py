@@ -12,7 +12,6 @@ import logging
 import math
 import os
 import random
-import shutil
 import socket
 import struct
 import sys
@@ -31,7 +30,21 @@ from sendspin_bridge.bluetooth.adapter_session import bt_executor
 from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property, _dbus_get_media_transport_snapshot
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
+from sendspin_bridge.bridge.calibration_metronome import CalibrationMetronome
+from sendspin_bridge.bridge.daemon_supervisor import DaemonSupervisor, Halted, RestartAfter, SpawnRecord
 from sendspin_bridge.bridge.exceptions import IPCError
+from sendspin_bridge.bridge.idle_machine import (
+    ArmIdleTimer,
+    ArmPowerSaveTimer,
+    ArmSinkMuteWatchdog,
+    CancelIdleTimer,
+    CancelPowerSaveTimer,
+    CancelSinkMuteWatchdog,
+    ExitPowerSave,
+    IdleMachine,
+)
+from sendspin_bridge.bridge.idle_machine import PlaybackState as IdlePlaybackState
+from sendspin_bridge.bridge.loop_scheduling import schedule_on_bridge_loop
 from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
     CONFIG_FILE,
@@ -44,9 +57,6 @@ from sendspin_bridge.config import (
 )
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
-    build_metronome_beat_pcm,
-    build_subsonic_carrier_pcm,
-    calculate_metronome_lead_frames,
 )
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
@@ -94,43 +104,6 @@ _BUFFER_COMMANDS: dict[str, type[SetStaticDelayMs | SetRequiredLeadTimeMs | SetM
 }
 
 logger = logging.getLogger(__name__)
-
-_CALIBRATION_METRONOME_SAMPLE_RATE = 48000
-_CALIBRATION_METRONOME_BPM = 120
-_CALIBRATION_METRONOME_CLICK_MS = 40
-_CALIBRATION_METRONOME_GATE_PREROLL_MS = 80
-_CALIBRATION_METRONOME_EPOCH = time.monotonic()
-
-
-def _calibration_metronome_paplay_args(sink_name: str) -> tuple[str, ...]:
-    """Return paplay arguments with a small fixed scheduling quantum."""
-    return (
-        "paplay",
-        f"--device={sink_name}",
-        "--raw",
-        "--format=s16le",
-        f"--rate={_CALIBRATION_METRONOME_SAMPLE_RATE}",
-        "--channels=2",
-        "--latency-msec=20",
-        "--process-time-msec=5",
-    )
-
-
-def _calibration_metronome_player_args(sink_name: str) -> tuple[str, ...]:
-    """Select the native low-latency player for the active audio backend."""
-    pw_play = shutil.which("pw-play")
-    if sink_name.startswith("bluez_output.") and pw_play:
-        return (
-            pw_play,
-            f"--target={sink_name}",
-            "--latency=20ms",
-            f"--rate={_CALIBRATION_METRONOME_SAMPLE_RATE}",
-            "--channels=2",
-            "--channel-map=stereo",
-            "--format=s16",
-            "-",
-        )
-    return _calibration_metronome_paplay_args(sink_name)
 
 
 # In-memory ring buffer so the web UI can read logs even when docker CLI
@@ -369,29 +342,6 @@ def _generate_keepalive_buffer(method: str) -> bytes:
     if method == "none":
         return b""
     return _generate_infrasound_burst()
-
-
-@dataclass
-class SpawnRecord:
-    """One Sendspin daemon subprocess spawn — entry created on spawn, fields filled on exit.
-
-    Captured per device to expose *why* a daemon exited (exit code, signal,
-    lifetime, last stderr lines) so issue-#291-style debugging doesn't require
-    correlating windows of MA logs and bridge logs by hand.
-    """
-
-    pid: int
-    spawn_at: datetime
-    exit_at: datetime | None = None
-    exit_code: int | None = None
-    signal: int | None = None
-    lifetime_s: float | None = None
-    stderr_tail: list[str] = field(default_factory=list)
-    # ``unexpected`` distinguishes daemon deaths driven by ``stop_sendspin``
-    # (graceful release / shutdown — False) from deaths that surprise the
-    # parent (True).  Only unexpected deaths drive ``last_error`` updates and
-    # repeating-interval pattern detection.
-    unexpected: bool = True
 
 
 @dataclass
@@ -722,9 +672,8 @@ class SendspinClient:
         self._stderr_task: asyncio.Task | None = None  # stderr reader task
         self._monitor_task: asyncio.Task | None = None
         self._ma_reconnect_task: asyncio.Task | None = None
-        self._calibration_metronome_process: asyncio.subprocess.Process | None = None
-        self._calibration_metronome_task: asyncio.Task | None = None
-        self._restart_delay: float = 1.0  # exponential backoff for unexpected daemon restarts
+        self._calibration_metronome: CalibrationMetronome | None = None
+        self._supervisor = DaemonSupervisor()
         self._start_sendspin_lock: asyncio.Lock | None = None  # set in run(), guards concurrent starts
         self._start_sendspin_requests = 0
         self._start_sendspin_processed = 0
@@ -758,11 +707,9 @@ class SendspinClient:
         self._power_save_timer_task: asyncio.Task | concurrent.futures.Future | None = None
         self._sink_monitor: object | None = None  # set by main() after SinkMonitor.start()
         self._bind_failures: int = 0  # consecutive failures of find_available_bind_port
-        self._restart_halted: bool = False  # once True, restart loop skips spawning
         # Ring of recent daemon spawns/exits.  Populated on spawn (entry created)
         # and on death (exit fields filled).  Used for the diagnostics report
         # and for the repeating-interval pattern detector (#291 follow-up).
-        self._spawn_history: deque[SpawnRecord] = deque(maxlen=10)
         self._timing_history: deque[dict[str, object]] = deque(maxlen=360)
         self._current_spawn: SpawnRecord | None = None
         # Set by ``stop_sendspin`` immediately before signalling the daemon so
@@ -861,43 +808,18 @@ class SendspinClient:
         # fire and provide the fastest response on systems where PA events
         # are reliable.  Daemon flags act as a dual authority — overlapping
         # cancel/start calls are harmless (_start_idle_timer cancels first).
-        _idle_mode = getattr(self, "idle_mode", "default")
-        if _idle_mode in ("auto_disconnect", "power_save"):
-            if "playing" in updates or "audio_streaming" in updates:
-                was_active = previous.get("playing", False) or previous.get("audio_streaming", False)
-                now_active = self.status.get("playing", False) or self.status.get("audio_streaming", False)
-                if not was_active and now_active:
-                    self._cancel_idle_timer()
-                    if _idle_mode == "power_save":
-                        self._cancel_power_save_timer()
-                        if self.status.get("bt_power_save"):
-                            asyncio.ensure_future(self._exit_power_save())
-                elif was_active and not now_active and not self.status.get("bt_standby"):
-                    if _idle_mode == "auto_disconnect":
-                        self._start_idle_timer()
-                    elif _idle_mode == "power_save":
-                        self._start_power_save_timer()
-            # Server-connected fallback: only when SinkMonitor is not
-            # running (otherwise the timer was already started by
-            # SinkMonitor.register → on_idle at registration time).
-            if not self._sink_monitor_active():
-                if (
-                    "server_connected" in updates
-                    and self.status.get("server_connected") is True
-                    and not self.status.get("audio_streaming")
-                    and not self.status.get("playing")
-                    and not self.status.get("bt_standby")
-                ):
-                    if _idle_mode == "auto_disconnect":
-                        self._start_idle_timer()
-                    elif _idle_mode == "power_save":
-                        self._start_power_save_timer()
+        if "playing" in updates or "audio_streaming" in updates:
+            self._apply_idle_actions(
+                self._idle_machine.on_playback_change(
+                    previous=IdlePlaybackState.from_status(previous),
+                    current=IdlePlaybackState.from_status(self.status),
+                )
+            )
+        if "server_connected" in updates:
+            self._apply_idle_actions(self._idle_machine.on_server_connected(IdlePlaybackState.from_status(self.status)))
         # ── Sink mute watchdog ────────────────────────────────────────
         if "sink_muted" in updates:
-            if self.status.get("sink_muted") and not self.status.get("muted"):
-                self._start_sink_mute_watchdog()
-            else:
-                self._cancel_sink_mute_watchdog()
+            self._apply_idle_actions(self._idle_machine.on_sink_mute_change(IdlePlaybackState.from_status(self.status)))
 
     # ── Idle disconnect timer ────────────────────────────────────────────
 
@@ -914,51 +836,60 @@ class SendspinClient:
         return sm is not None and sm.available
 
     def _on_sink_active(self) -> None:
-        """Called by SinkMonitor when PA sink enters ``running``.
-
-        Cancels any pending idle/power-save timer — audio is flowing.
-        """
-        mode = getattr(self, "idle_mode", "default")
-        if mode == "auto_disconnect":
-            logger.debug("[%s] PA sink -> running -- cancelling idle timer", self.player_name)
-            self._cancel_idle_timer()
-        elif mode == "power_save":
-            logger.debug("[%s] PA sink -> running -- cancelling power-save timer", self.player_name)
-            self._cancel_power_save_timer()
-            if self.status.get("bt_power_save"):
-                asyncio.ensure_future(self._exit_power_save())
+        """Called by SinkMonitor when the PA sink enters ``running``."""
+        self._apply_idle_actions(self._idle_machine.on_sink_active(IdlePlaybackState.from_status(self.status)))
 
     def _on_sink_idle(self) -> None:
-        """Called by SinkMonitor when PA sink leaves ``running``.
+        """Called by SinkMonitor when the PA sink leaves ``running``."""
+        self._apply_idle_actions(self._idle_machine.on_sink_idle(IdlePlaybackState.from_status(self.status)))
 
-        Starts the appropriate idle timer based on idle_mode.
-        """
-        mode = getattr(self, "idle_mode", "default")
-        if self.status.get("bt_standby"):
-            return
-        if mode == "auto_disconnect":
-            logger.debug(
-                "[%s] PA sink -> idle -- starting idle timer (%d min)",
-                self.player_name,
-                self.idle_disconnect_minutes,
-            )
-            self._start_idle_timer()
-        elif mode == "power_save":
-            logger.debug(
-                "[%s] PA sink -> idle -- starting power-save timer (%d min)",
-                self.player_name,
-                self.power_save_delay_minutes,
-            )
-            self._start_power_save_timer()
+    # ── Executing what the machine decided ───────────────────────────────
 
-    def _start_idle_timer(self) -> None:
+    @property
+    def _idle_machine(self) -> IdleMachine:
+        """The idle decisions for this device, rebuilt when the mode changes."""
+        signature = (self.idle_mode, self.idle_disconnect_minutes, self.power_save_delay_minutes)
+        cached = getattr(self, "_idle_machine_cache", None)
+        if cached is None or cached[0] != signature:
+            machine = IdleMachine(
+                mode=self.idle_mode,
+                idle_disconnect_minutes=self.idle_disconnect_minutes,
+                power_save_delay_minutes=self.power_save_delay_minutes,
+                sink_monitor_active=self._sink_monitor_active,
+            )
+            self._idle_machine_cache = (signature, machine)
+            return machine
+        return cached[1]
+
+    def _apply_idle_actions(self, actions: list) -> None:
+        """Carry out the machine's decisions — timers, sinks, subprocess."""
+        for action in actions:
+            if isinstance(action, CancelIdleTimer):
+                self._cancel_idle_timer()
+            elif isinstance(action, CancelPowerSaveTimer):
+                self._cancel_power_save_timer()
+            elif isinstance(action, ArmIdleTimer):
+                self._start_idle_timer(action.delay_s)
+            elif isinstance(action, ArmPowerSaveTimer):
+                self._start_power_save_timer(action.delay_s)
+            elif isinstance(action, ExitPowerSave):
+                schedule_on_bridge_loop(self._exit_power_save(), description="exit power save")
+            elif isinstance(action, ArmSinkMuteWatchdog):
+                self._start_sink_mute_watchdog()
+            elif isinstance(action, CancelSinkMuteWatchdog):
+                self._cancel_sink_mute_watchdog()
+            else:  # pragma: no cover — a new action nobody taught the client
+                logger.error("[%s] Unhandled idle action %r", self.player_name, action)
+
+    def _start_idle_timer(self, timeout: float | None = None) -> None:
         """Start (or restart) the idle disconnect timer.
 
         Thread-safe: protected by ``_idle_timer_lock`` to avoid leaked timers
         when called concurrently from the asyncio event loop (sink monitor
         callbacks) and Flask/Waitress threads (``_update_status`` fallback).
         """
-        timeout = self.idle_disconnect_minutes * 60
+        if timeout is None:
+            timeout = self.idle_disconnect_minutes * 60
 
         async def _idle_timeout() -> None:
             try:
@@ -1009,14 +940,7 @@ class SendspinClient:
 
         with self._idle_timer_lock:
             self._cancel_idle_timer_unlocked()
-            loop = _state.get_main_loop()
-            if loop and loop.is_running():
-                self._idle_timer_task = asyncio.run_coroutine_threadsafe(_idle_timeout(), loop)
-            else:
-                try:
-                    self._idle_timer_task = asyncio.ensure_future(_idle_timeout())
-                except RuntimeError:
-                    pass
+            self._idle_timer_task = schedule_on_bridge_loop(_idle_timeout(), description="idle timer")
 
     def _cancel_idle_timer(self) -> None:
         """Cancel any pending idle disconnect timer (thread-safe)."""
@@ -1034,9 +958,10 @@ class SendspinClient:
 
     # ── Power save timer ──────────────────────────────────────────────────
 
-    def _start_power_save_timer(self) -> None:
+    def _start_power_save_timer(self, delay: float | None = None) -> None:
         """Schedule PA sink suspend after ``power_save_delay_minutes``."""
-        delay = getattr(self, "power_save_delay_minutes", 1) * 60
+        if delay is None:
+            delay = getattr(self, "power_save_delay_minutes", 1) * 60
 
         async def _ps_timeout() -> None:
             try:
@@ -1053,14 +978,7 @@ class SendspinClient:
 
         with self._idle_timer_lock:
             self._cancel_power_save_timer_unlocked()
-            loop = _state.get_main_loop()
-            if loop and loop.is_running():
-                self._power_save_timer_task = asyncio.run_coroutine_threadsafe(_ps_timeout(), loop)
-            else:
-                try:
-                    self._power_save_timer_task = asyncio.ensure_future(_ps_timeout())
-                except RuntimeError:
-                    pass
+            self._power_save_timer_task = schedule_on_bridge_loop(_ps_timeout(), description="power-save timer")
 
     def _cancel_power_save_timer(self) -> None:
         """Cancel pending power-save suspend timer (thread-safe)."""
@@ -1138,14 +1056,7 @@ class SendspinClient:
 
         with self._idle_timer_lock:
             self._cancel_sink_mute_watchdog_unlocked()
-            loop = _state.get_main_loop()
-            if loop and loop.is_running():
-                self._sink_mute_watchdog_task = asyncio.run_coroutine_threadsafe(_watchdog(), loop)
-            else:
-                try:
-                    self._sink_mute_watchdog_task = asyncio.ensure_future(_watchdog())
-                except RuntimeError:
-                    pass
+            self._sink_mute_watchdog_task = schedule_on_bridge_loop(_watchdog(), description="sink-mute watchdog")
 
     def _cancel_sink_mute_watchdog(self) -> None:
         with self._idle_timer_lock:
@@ -1390,44 +1301,19 @@ class SendspinClient:
 
     # ── Spawn history & pattern detection (issue #291 follow-up) ───────────
 
-    def _detect_repeating_lifetime(self, tolerance_s: float = 1.0) -> float | None:
-        """Return mean lifetime when the last 3 unexpected deaths landed within ±tolerance_s.
-
-        Returns ``None`` when fewer than 3 unexpected deaths are recorded or
-        when their lifetimes spread beyond *tolerance_s*.  A non-``None``
-        return value indicates the daemon is hitting a deterministic timeout
-        (e.g. WebSocket open_timeout, handshake deadline, unreachable-host
-        retry budget) — actionable for the operator.
-        """
-        completed = [r.lifetime_s for r in self._spawn_history if r.lifetime_s is not None and r.unexpected]
-        if len(completed) < 3:
-            return None
-        last3 = completed[-3:]
-        if all(abs(x - last3[0]) <= tolerance_s for x in last3):
-            return sum(last3) / 3
-        return None
-
     def recent_spawn_records(self, n: int = 5) -> list[dict[str, Any]]:
-        """Return a JSON-serializable view of the last *n* spawn records.
+        """A JSON-serialisable view of the last *n* spawns, for diagnostics."""
+        return self._supervisor.recent(n)
 
-        Oldest first within the window.  Consumed by the diagnostics report
-        block so operators see daemon lifetime patterns directly in the
-        bundle they upload to GitHub issues.
+    @property
+    def restart_delay(self) -> float:
+        """The backoff the next daemon restart would wait, in seconds.
+
+        Read by the diagnostics bundle and the demo dashboard: they used to
+        reach for the client's own attribute, and reported the default rather
+        than the delay actually in force once the supervisor took it over.
         """
-        records = list(self._spawn_history)[-n:]
-        return [
-            {
-                "pid": r.pid,
-                "spawn_at": r.spawn_at.isoformat(),
-                "exit_at": r.exit_at.isoformat() if r.exit_at else None,
-                "lifetime_s": r.lifetime_s,
-                "exit_code": r.exit_code,
-                "signal": r.signal,
-                "unexpected": r.unexpected,
-                "stderr_tail": list(r.stderr_tail),
-            }
-            for r in records
-        ]
+        return self._supervisor.restart_delay
 
     async def stop_subprocess(self) -> None:
         """Stop the daemon subprocess (BluetoothManagerHost protocol)."""
@@ -1527,7 +1413,7 @@ class SendspinClient:
                             status_updates["last_error_at"] = datetime.now(tz=UTC).isoformat()
                         self._update_status(status_updates)
 
-                        recurring = self._detect_repeating_lifetime()
+                        recurring = self._supervisor.repeating_lifetime()
                         if recurring is not None:
                             logger.warning(
                                 "[%s] Daemon dies at consistent ~%.1fs intervals over the last 3 spawns "
@@ -1544,9 +1430,12 @@ class SendspinClient:
                         self._daemon_proc = None
                         # Don't restart if BT is disconnected — monitor_and_reconnect
                         # will call start_sendspin() once BT reconnects.
-                        if self._restart_halted:
-                            await asyncio.sleep(self._restart_delay)
-                        elif not self.bt_manager or self.bt_manager.connected:
+                        decision = self._supervisor.on_death(
+                            bt_connected=self.bt_manager.connected if self.bt_manager else None
+                        )
+                        if isinstance(decision, Halted):
+                            await asyncio.sleep(decision.delay_s)
+                        elif isinstance(decision, RestartAfter):
                             logger.warning(
                                 "[%s] Daemon subprocess exited (PID %d): code=%s signal=%s "
                                 "lifetime=%s; restarting in %.0fs",
@@ -1555,21 +1444,17 @@ class SendspinClient:
                                 exit_code,
                                 sig,
                                 f"{lifetime:.1f}s" if lifetime is not None else "unknown",
-                                self._restart_delay,
+                                decision.delay_s,
                             )
-                            await asyncio.sleep(self._restart_delay)
-                            self._restart_delay = min(self._restart_delay * 2, 30.0)
+                            await asyncio.sleep(decision.delay_s)
                             await self.start_sendspin()
                         else:
-                            self._restart_delay = 1.0  # reset when BT drives the restart
                             logger.info("Daemon subprocess stopped; waiting for BT to reconnect")
                     else:
-                        # Daemon alive — reset backoff + bind-failure state
-                        self._restart_delay = 1.0
+                        # Daemon alive — clear backoff, halt and bind-failure state
+                        self._supervisor.on_alive()
                         if self._bind_failures:
                             self._bind_failures = 0
-                        if self._restart_halted:
-                            self._restart_halted = False
 
                 # Zombie playback watchdog: playing=True but no audio data for too long
                 self._check_zombie_playback()
@@ -1776,7 +1661,7 @@ class SendspinClient:
                         self.player_name,
                         self._bind_failures,
                     )
-                    self._restart_halted = True
+                    self._supervisor.halt()
                 return
             if available_port != requested_port:
                 logger.info(
@@ -1883,7 +1768,7 @@ class SendspinClient:
                 pid=int(self._daemon_proc.pid),
                 spawn_at=datetime.now(tz=UTC),
             )
-            self._spawn_history.append(self._current_spawn)
+            self._supervisor.record(self._current_spawn)
 
         except Exception as e:
             logger.error("Failed to start Sendspin daemon subprocess: %s", e)
@@ -2003,7 +1888,7 @@ class SendspinClient:
             self._clear_ma_reconnecting()
         # Auto-wake: MA started playback while daemon is on null sink
         if updates.get("playing") is True and self.status.get("bt_standby"):
-            asyncio.ensure_future(self._on_standby_play_detected())
+            schedule_on_bridge_loop(self._on_standby_play_detected(), description="standby play detected")
         new_volume = updates.get("volume")
         _mac = self.bt_manager.mac_address if self.bt_manager else None
         if isinstance(new_volume, int) and _mac:
@@ -2494,134 +2379,40 @@ class SendspinClient:
             logger.warning("[%s] Calibration tone failed: %s", self.player_name, exc)
             return False
 
-    async def _feed_calibration_metronome(
-        self,
-        proc: asyncio.subprocess.Process,
-        lead_pcm: bytes,
-        beat_pcm: bytes,
-    ) -> None:
-        """Feed one phase-aligned click period repeatedly until cancelled."""
-        try:
-            if proc.stdin is None:
-                return
-            proc.stdin.write(lead_pcm)
-            await proc.stdin.drain()
-            while proc.returncode is None:
-                proc.stdin.write(beat_pcm)
-                await proc.stdin.drain()
-        except asyncio.CancelledError:
-            raise
-        except (BrokenPipeError, ConnectionResetError) as exc:
-            logger.debug("[%s] Calibration metronome pipe closed: %s", self.player_name, exc)
-        except Exception as exc:
-            logger.warning("[%s] Calibration metronome failed: %s", self.player_name, exc)
-        finally:
-            if proc.stdin is not None:
-                try:
-                    proc.stdin.close()
-                except Exception:
-                    pass
-            await self._terminate_calibration_metronome_process(proc)
-            if self._calibration_metronome_process is proc:
-                self._calibration_metronome_process = None
-                self._calibration_metronome_task = None
-                self._update_status({"calibration_metronome_active": False})
+    async def _metronome_for_current_sink(self) -> CalibrationMetronome:
+        """This device's click train, rebuilt when the sink changes.
 
-    async def _terminate_calibration_metronome_process(self, proc: asyncio.subprocess.Process) -> None:
-        """Terminate paplay and escalate to SIGKILL if it does not exit."""
-        if proc.returncode is None:
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                return
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=2.0)
-            return
-        except TimeoutError:
-            logger.warning("[%s] Calibration metronome ignored terminate; killing paplay", self.player_name)
-        except Exception:
-            return
-        if proc.returncode is None:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                return
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=2.0)
-        except Exception:
-            logger.warning("[%s] Calibration metronome paplay could not be reaped", self.player_name)
+        A running train owns a player process, so the one built for the old
+        sink has to be stopped rather than dropped: letting go of the only
+        reference leaves that player clicking with nothing able to stop it,
+        and the next start puts a second one on top of it.
+        """
+        sink = self.bluetooth_sink_name or ""
+        existing = self._calibration_metronome
+        if existing is not None and existing.sink_name == sink:
+            return existing
+        if existing is not None:
+            await existing.stop()
+        metronome = CalibrationMetronome(
+            sink_name=sink,
+            player_name=self.player_name,
+            static_delay_ms=lambda: float(self.status.get("static_delay_ms") or 0.0),
+            on_active_change=lambda active: self._update_status({"calibration_metronome_active": active}),
+        )
+        self._calibration_metronome = metronome
+        return metronome
 
     async def start_calibration_metronome(self) -> bool:
         """Start a phase-aligned continuous metronome on this device's BT sink."""
-        current = self._calibration_metronome_process
-        if current is not None and current.returncode is None:
-            return True
-        if not self.bluetooth_sink_name or not self.status.get("bluetooth_connected"):
+        if not self.status.get("bluetooth_connected"):
             return False
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *_calibration_metronome_player_args(self.bluetooth_sink_name),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-        except Exception as exc:
-            logger.warning("[%s] Could not start calibration metronome: %s", self.player_name, exc)
-            return False
-
-        started_at = time.monotonic()
-        lead_frames = calculate_metronome_lead_frames(
-            started_at,
-            sample_rate=_CALIBRATION_METRONOME_SAMPLE_RATE,
-            bpm=_CALIBRATION_METRONOME_BPM,
-            epoch_seconds=(_CALIBRATION_METRONOME_EPOCH - float(self.status.get("static_delay_ms") or 0.0) / 1000.0),
-        )
-        # Keep the A2DP stream non-silent before and between clicks.  Some
-        # speakers (notably Lenco LS-500) close their input gate during the
-        # otherwise-silent gap and only reproduce an occasional probe.
-        lead_pcm = build_subsonic_carrier_pcm(
-            lead_frames,
-            sample_rate=_CALIBRATION_METRONOME_SAMPLE_RATE,
-        )
-        beat_pcm = build_metronome_beat_pcm(
-            sample_rate=_CALIBRATION_METRONOME_SAMPLE_RATE,
-            bpm=_CALIBRATION_METRONOME_BPM,
-            keepalive_amplitude=100,
-            click_duration_ms=_CALIBRATION_METRONOME_CLICK_MS,
-            gate_preroll_ms=_CALIBRATION_METRONOME_GATE_PREROLL_MS,
-        )
-        self._calibration_metronome_process = proc
-        self._calibration_metronome_task = asyncio.create_task(
-            self._feed_calibration_metronome(proc, lead_pcm, beat_pcm)
-        )
-        self._update_status({"calibration_metronome_active": True})
-        logger.info(
-            "[%s] Calibration metronome started on %s (shared phase, %.0f ms lead)",
-            self.player_name,
-            self.bluetooth_sink_name,
-            lead_frames * 1000.0 / _CALIBRATION_METRONOME_SAMPLE_RATE,
-        )
-        return True
+        metronome = await self._metronome_for_current_sink()
+        return await metronome.start()
 
     async def stop_calibration_metronome(self) -> None:
         """Stop this device's continuous calibration metronome immediately."""
-        proc = self._calibration_metronome_process
-        task = self._calibration_metronome_task
-        if task is not None and task is not asyncio.current_task():
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-        if proc is not None:
-            if proc.stdin is not None:
-                try:
-                    proc.stdin.close()
-                except Exception:
-                    pass
-            await self._terminate_calibration_metronome_process(proc)
-        self._calibration_metronome_process = None
-        self._calibration_metronome_task = None
-        self._update_status({"calibration_metronome_active": False})
-        if proc is not None:
-            logger.info("[%s] Calibration metronome stopped", self.player_name)
+        if self._calibration_metronome is not None:
+            await self._calibration_metronome.stop()
 
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""

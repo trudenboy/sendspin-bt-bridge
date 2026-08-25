@@ -1129,7 +1129,7 @@ def _collect_subprocess_info() -> list[dict]:
             "pid": proc.pid if proc else None,
             "alive": proc is not None and proc.returncode is None if proc else False,
             "running": getattr(client, "running", False),
-            "restart_delay": getattr(client, "_restart_delay", 1.0),
+            "restart_delay": getattr(client, "restart_delay", 1.0),
             "zombie_restarts": getattr(client, "_zombie_restart_count", 0),
         }
         # Reconnect info from status
