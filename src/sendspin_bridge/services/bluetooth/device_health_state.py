@@ -300,8 +300,13 @@ def _capability_domain_payload(*capabilities: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_device_capabilities(device: Any) -> dict[str, Any]:
-    ma_connected = bool((getattr(device, "ma_now_playing", None) or {}).get("connected"))
     extra = _device_extra(device)
+    # Two different states used to share one answer.  Whether Music Assistant
+    # is reachable is a property of the bridge; whether it has a queue for
+    # *this* speaker is a property of the speaker.  Reading the second and
+    # calling it the first told operators to check settings that were fine.
+    ma_queue_known = bool((getattr(device, "ma_now_playing", None) or {}).get("connected"))
+    ma_connected = bool(extra.get("ma_connected", ma_queue_known))
     reconnecting = bool(extra.get("reconnecting"))
     ma_reconnecting = _device_ma_reconnecting(device)
     stopping = bool(extra.get("stopping"))
@@ -489,11 +494,26 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             depends_on=["ma_connected"],
             recommended_action="open_ma_settings",
         )
+    elif not ma_queue_known:
+        queue_blocked_reason = _block_reason_payload(
+            code="ma_queue_unknown",
+            message="Music Assistant has no queue for this speaker yet.",
+            remediation=["reconnect", "open_diagnostics"],
+            depends_on=["ma_player_registered"],
+            recommended_action="reconnect",
+        )
+    queue_available = bool(getattr(device, "server_connected", False) and ma_connected and ma_queue_known)
+    if not ma_connected:
+        queue_safe_actions = ["open_ma_settings", "open_diagnostics"]
+    elif not ma_queue_known:
+        queue_safe_actions = ["reconnect", "open_diagnostics"]
+    else:
+        queue_safe_actions = ["queue_control"]
     queue_control = _capability_payload(
         supported=bool(getattr(device, "server_connected", False)),
-        currently_available=bool(getattr(device, "server_connected", False) and ma_connected),
+        currently_available=queue_available,
         blocked_reason=queue_blocked_reason,
-        safe_actions=["open_ma_settings", "open_diagnostics"] if not ma_connected else ["queue_control"],
+        safe_actions=queue_safe_actions,
     )
 
     diagnostics = _capability_payload(
