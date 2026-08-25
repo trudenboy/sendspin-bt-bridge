@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.3] - 2026-08-25
+
 ### Fixed
 - The recovery card and the guidance card no longer describe the same speaker differently. Each had its own copy of the reconnect sentence reading a different source, so one screen could report a different attempt count from the other.
 - The diagnostics page and the downloadable bug report now describe a speaker the same way the status page does. They took a different path through the same code and could list different problems, a different history and a different explanation for one device.
