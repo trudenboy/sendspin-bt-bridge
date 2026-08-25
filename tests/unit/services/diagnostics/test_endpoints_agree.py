@@ -139,3 +139,55 @@ def test_the_status_endpoint_passes_the_state_model(monkeypatch, tmp_path):
     api_status._build_status_payload()
 
     assert seen and seen[0] is not None
+
+
+def _spy_on_the_snapshot_builder(monkeypatch, tmp_path) -> list[object]:
+    """Record the ``bridge_state`` every recovery payload is built with."""
+    import json
+
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({}))
+
+    import sendspin_bridge.web.routes.api_status as api_status
+
+    seen: list[object] = []
+
+    def _spy(**kwargs):
+        seen.append(kwargs.get("bridge_state"))
+        return SimpleNamespace(to_dict=dict)
+
+    monkeypatch.setattr(api_status, "build_recovery_assistant_snapshot", _spy)
+    monkeypatch.setattr(api_status, "_build_onboarding_assistant_payload", lambda **kw: {})
+    monkeypatch.setattr(api_status, "_collect_preflight_status", lambda: {})
+    return seen
+
+
+def test_a_caller_that_names_no_state_still_gets_one(monkeypatch, tmp_path):
+    """`/api/recovery/*` and `/api/latency/*` never passed a state model.
+
+    Rather than asking five call sites to remember, the payload builder
+    builds the state itself when it was handed none — the same shape the
+    onboarding payload builder already has.
+    """
+    seen = _spy_on_the_snapshot_builder(monkeypatch, tmp_path)
+
+    import sendspin_bridge.web.routes.api_status as api_status
+
+    api_status._build_recovery_assistant_payload()
+
+    assert seen, "the recovery snapshot was never built"
+    assert seen[0] is not None, "a caller with no state model still takes the divergent branch"
+
+
+def test_a_caller_that_names_a_state_keeps_it(monkeypatch, tmp_path):
+    seen = _spy_on_the_snapshot_builder(monkeypatch, tmp_path)
+
+    import sendspin_bridge.web.routes.api_status as api_status
+
+    sentinel = object()
+    api_status._build_recovery_assistant_payload(bridge_state=sentinel)
+
+    assert seen[0] is sentinel

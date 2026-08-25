@@ -309,6 +309,19 @@ def _build_recovery_assistant_payload(
         )
     if startup_progress is None:
         startup_progress = build_startup_progress_snapshot().to_dict()
+    # A caller that names no state model would otherwise take the branch that
+    # rebuilds its answers from the raw extras and disagrees with `/api/status`
+    # about the same device.  Build the state here rather than asking every
+    # recovery, timeline and latency route to remember.
+    if bridge_state is None:
+        bridge_state = build_bridge_state_model(
+            config=config,
+            preflight=preflight,
+            devices=devices,
+            ma_connected=is_ma_connected(),
+            runtime_mode=build_mock_runtime_snapshot().mode,
+            startup_progress=startup_progress,
+        )
     recovery = build_recovery_assistant_snapshot(
         config=config,
         devices=devices,

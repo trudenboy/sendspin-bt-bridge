@@ -117,7 +117,13 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
     bluetooth_mac = _obj_get(device, "bluetooth_mac")
     player_name = str(_obj_get(device, "player_name", "") or "")
     reconnect_attempt = extra.get("reconnect_attempt")
-    max_reconnect_fails = extra.get("bt_max_reconnect_fails")
+    # The device snapshot writes the configured limit as "max_reconnect_fails";
+    # "bt_max_reconnect_fails" is the spelling the config layer uses.  Read
+    # both, or the limit arrives as None and every screen reading this state
+    # loses the "3/10, 7 remain" half of the sentence.
+    max_reconnect_fails = extra.get("max_reconnect_fails")
+    if max_reconnect_fails is None:
+        max_reconnect_fails = extra.get("bt_max_reconnect_fails")
     reconnect_attempts_remaining = None
     if isinstance(reconnect_attempt, int) and isinstance(max_reconnect_fails, int):
         reconnect_attempts_remaining = max(max_reconnect_fails - reconnect_attempt, 0)
