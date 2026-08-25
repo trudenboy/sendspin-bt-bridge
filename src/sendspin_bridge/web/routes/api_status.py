@@ -153,8 +153,14 @@ def _parse_memtotal_mb(line: str) -> int | None:
         return None
 
 
-def _probe_host() -> dict:
-    """Ask the host what it looks like — two bluetoothctl calls and the rest."""
+def _collect_preflight_status() -> dict:
+    """Measure the host now — two bluetoothctl calls and the rest.
+
+    Called directly where somebody is looking precisely because something may
+    have just changed: diagnostics, the setup verification endpoint, the
+    operator checks.  The status path reads a sample of it instead — see
+    ``_sampled_preflight_status``.
+    """
     return _shared_collect_preflight_status(
         get_server_name_fn=get_server_name,
         list_sinks_fn=list_sinks,
@@ -168,7 +174,12 @@ def _probe_host() -> dict:
 #: The probe is the expensive half of a status build (~56 ms of ~62 ms,
 #: measured), and the host it describes does not change per tick.  Everything
 #: derived from it is still rebuilt every time.
-_preflight_probe: StatusDerivation[dict] = StatusDerivation(_probe_host, label="preflight probe")
+_preflight_probe: StatusDerivation[dict] = StatusDerivation(
+    # Late-bound on purpose: the measurement is one function, and everything
+    # that reaches for it — including tests — reaches for the same one.
+    lambda: _collect_preflight_status(),
+    label="preflight probe",
+)
 
 
 def invalidate_preflight_probe() -> None:
@@ -183,18 +194,6 @@ def invalidate_preflight_probe() -> None:
 def reset_preflight_probe() -> None:
     """Drop the cached probe entirely (tests, and a fresh runtime)."""
     _preflight_probe.invalidate()
-
-
-def _collect_preflight_status() -> dict:
-    """Measure the host now.
-
-    For the places somebody is looking precisely because something may have
-    just changed: diagnostics, the setup verification endpoint, the operator
-    checks.  The status path reads the sample instead — see
-    ``_sampled_preflight_status``.
-    """
-    _preflight_probe.invalidate()
-    return _preflight_probe.current()
 
 
 def _sampled_preflight_status() -> dict:
