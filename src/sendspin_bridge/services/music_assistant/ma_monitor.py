@@ -933,9 +933,13 @@ class MaMonitor:
                     await _hydrate_missing_queue_neighbors(fetch_items, q, np)
                     np["syncgroup_id"] = player_id
                     fresh[player_id] = np
-                # Atomically replace to clear stale entries
+                # Atomically replace to clear stale entries.  An answer with
+                # no queues in it is an answer: a speaker whose queue was
+                # removed used to keep reporting the queue it once had,
+                # because the cache was only replaced when there was
+                # something to put in it.
+                _state.replace_ma_now_playing(fresh)
                 if fresh:
-                    _state.replace_ma_now_playing(fresh)
                     # Reverse-bridge: push playback state to per-device MprisPlayer
                     # so AVRCP-capable speakers (Bose, Sony WH-1000XM, Yandex
                     # mini) reflect MA's now-playing on their display/LEDs.
