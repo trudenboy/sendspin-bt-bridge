@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.4] - 2026-08-25
+
 ### Fixed
 
 - The diagnostics bundle no longer reports that the bridge cannot reach
@@ -26,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   asking Music Assistant for it, so every queue command reached nothing and
   the device card claimed Music Assistant was disconnected while it was
   connected.
+- A Music Assistant queue that is removed stops being reported. The bridge
+  kept the last snapshot it had seen, so a speaker went on showing a queue it
+  no longer had and offering controls for it.
 
 ## [2.75.0-rc.3] - 2026-08-25
 

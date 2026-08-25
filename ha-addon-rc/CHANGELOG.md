@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.4] - 2026-08-25
+
+### Fixed
+
+- The diagnostics bundle no longer reports that the bridge cannot reach
+  D-Bus on a host where Bluetooth is working; it now measures the runtime it
+  describes, so the bundle and the dashboard agree.
+- A speaker paired on a second Bluetooth controller is counted again: setup
+  guidance used to announce that no paired speakers were available while such
+  a speaker was connected and streaming.
+- Two restarts arriving together can no longer leave a second audio daemon
+  running unwatched, holding the speaker's audio sink and its port.
+- A speaker Music Assistant has no queue for is now described as exactly
+  that, with an action that can help. It used to be reported as "Music
+  Assistant API is not connected" — on a bridge whose connection was fine —
+  and offered a settings page that could not fix it.
+- Queue controls work for a speaker that is not in a Music Assistant sync
+  group. The bridge used to guess that speaker's queue address instead of
+  asking Music Assistant for it, so every queue command reached nothing and
+  the device card claimed Music Assistant was disconnected while it was
+  connected.
+- A Music Assistant queue that is removed stops being reported. The bridge
+  kept the last snapshot it had seen, so a speaker went on showing a queue it
+  no longer had and offering controls for it.
+
 ## [2.75.0-rc.3] - 2026-08-25
 
 ### Fixed
