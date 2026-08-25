@@ -3743,34 +3743,30 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
 
 def test_device_enabled_toggle(client, tmp_path, monkeypatch):
     """POST /api/device/enabled returns success with restart_required."""
-    import sendspin_bridge.services.bluetooth as _bt_mod
+    import sendspin_bridge.config as _config
     import sendspin_bridge.web.routes.api_bt as api_bt_mod
 
-    # Seed config with a device and patch _CONFIG_FILE for persist
+    # Seed config with a device; the persist helpers read the live path.
     cfg = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Test", "enabled": True}]}
     (tmp_path / "config.json").write_text(json.dumps(cfg))
     monkeypatch.setattr(api_bt_mod, "CONFIG_FILE", tmp_path / "config.json")
     monkeypatch.setattr(api_bt_mod, "get_client_or_error", lambda player_name: (None, None))
-    _orig = _bt_mod._CONFIG_FILE
-    _bt_mod._CONFIG_FILE = tmp_path / "config.json"
-    try:
-        resp = client.post(
-            "/api/device/enabled",
-            data=json.dumps({"player_name": "Test", "enabled": False}),
-            content_type="application/json",
-        )
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["success"] is True
-        assert data["restart_required"] is True
-        assert data["enabled"] is False
+    monkeypatch.setattr(_config, "CONFIG_FILE", tmp_path / "config.json")
+    resp = client.post(
+        "/api/device/enabled",
+        data=json.dumps({"player_name": "Test", "enabled": False}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["restart_required"] is True
+    assert data["enabled"] is False
 
-        # Verify config was updated
-        saved = json.loads((tmp_path / "config.json").read_text())
-        dev = saved["BLUETOOTH_DEVICES"][0]
-        assert dev["enabled"] is False
-    finally:
-        _bt_mod._CONFIG_FILE = _orig
+    # Verify config was updated
+    saved = json.loads((tmp_path / "config.json").read_text())
+    dev = saved["BLUETOOTH_DEVICES"][0]
+    assert dev["enabled"] is False
 
 
 def test_device_enabled_missing_fields(client):

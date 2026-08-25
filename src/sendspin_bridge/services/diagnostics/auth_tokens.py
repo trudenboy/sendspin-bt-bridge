@@ -32,15 +32,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import logging
-import os
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
+from sendspin_bridge.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -129,18 +127,19 @@ def _load_tokens() -> list[dict[str, Any]]:
 
 
 def _save_tokens(tokens: list[dict[str, Any]]) -> None:
-    """Persist ``AUTH_TOKENS`` under ``config_lock`` without disturbing other keys."""
-    with config_lock:
-        try:
-            with open(CONFIG_FILE) as fh:
-                config = json.load(fh)
-        except FileNotFoundError:
-            config = dict(load_config())
+    """Persist ``AUTH_TOKENS`` without disturbing the other keys.
+
+    This used to carry its own read-modify-write, including a temp file that
+    was not cleaned up if the write failed part-way.  The store owns that
+    now, so there is one implementation of it.
+    """
+    from sendspin_bridge.config import CONFIG_FILE as _live_config_file
+    from sendspin_bridge.config.store import ConfigStore
+
+    def _set_tokens(config: dict) -> None:
         config["AUTH_TOKENS"] = list(tokens)
-        tmp_path = f"{CONFIG_FILE}.tmp"
-        with open(tmp_path, "w") as fh:
-            json.dump(config, fh, indent=2)
-        os.replace(tmp_path, CONFIG_FILE)
+
+    ConfigStore(_live_config_file).mutate(_set_tokens)
 
 
 def _now_iso() -> str:

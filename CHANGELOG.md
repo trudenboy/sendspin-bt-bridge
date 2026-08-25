@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- A speaker removed from the settings page is now unpaired only once the change has been saved. If saving failed — a full disk, a read-only configuration folder — the speaker was unpaired anyway, so a change reported as failed still had to be undone by hand.
+- A configuration file holding valid JSON that is not a settings object is now backed up before the bridge falls back to defaults, as an unreadable one already was. Previously it was replaced with nothing to recover from.
 - The Home Assistant event stream no longer stops working after a monitoring probe or link preview touches it. Such requests occupied a listener slot they never released — and left a live subscription filling a queue nobody was reading — until the bridge restarted. The same fault was fixed for the status stream in 2.75.0-rc.2; both streams now share one budget.
 - A change to the trusted-proxy setting now takes effect immediately instead of at the next restart. Until then the login page and the sign-in lockout could disagree about who was behind the proxy.
 

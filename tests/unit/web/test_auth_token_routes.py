@@ -26,7 +26,6 @@ def client(tmp_path, monkeypatch):
 
     import sendspin_bridge.services.diagnostics.auth_tokens as M
 
-    monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)
     monkeypatch.setattr(M, "load_config", lambda: json.loads(cfg_file.read_text()))
 
     from sendspin_bridge.web.routes.auth import auth_bp
@@ -206,7 +205,6 @@ def test_token_endpoints_open_when_global_auth_disabled(tmp_path, monkeypatch):
 
     import sendspin_bridge.services.diagnostics.auth_tokens as M
 
-    monkeypatch.setattr(M, "CONFIG_FILE", cfg_file)
     monkeypatch.setattr(M, "load_config", lambda: json.loads(cfg_file.read_text()))
 
     from sendspin_bridge.web.routes.auth import auth_bp
