@@ -26,8 +26,11 @@ def _poll_answering(monkeypatch, queues: list[dict]) -> None:
     async def _recv(*_a, **_kw):
         return {"message_id": 1, "result": queues}
 
-    monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_monitor._send", lambda *_a, **_kw: asyncio.sleep(0))
+    monkeypatch.setattr(
+        "sendspin_bridge.services.music_assistant.ma_monitor._send", lambda *_a, **_kw: asyncio.sleep(0)
+    )
     monkeypatch.setattr("sendspin_bridge.services.music_assistant.ma_monitor._recv", _recv)
+
     async def _no_syncgroup_queues(_q):
         return []
 
