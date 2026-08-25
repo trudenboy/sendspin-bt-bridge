@@ -68,6 +68,7 @@ __all__ = [
     "get_ma_groups",
     "get_ma_now_playing",
     "get_ma_now_playing_for_group",
+    "get_ma_player_id",
     "get_ma_server_version",
     "get_main_loop",
     "get_runtime_mode_info",
@@ -92,6 +93,7 @@ __all__ = [
     "set_ma_groups",
     "set_ma_now_playing",
     "set_ma_now_playing_for_group",
+    "set_ma_player_ids",
     "set_ma_server_version",
     "set_main_loop",
     "set_runtime_mode_info",
@@ -549,6 +551,16 @@ def get_duplicate_device_warnings() -> list:
 def is_ma_connected() -> bool:
     """Return True if MA API integration is active and discovery succeeded."""
     return _ma_runtime_state.is_ma_connected()
+
+
+def set_ma_player_ids(mapping: dict[str, str]) -> None:
+    """Store the learned bridge-client → MA-player mapping."""
+    _ma_runtime_state.set_ma_player_ids(mapping)
+
+
+def get_ma_player_id(client_id: str) -> str:
+    """The MA player id for *client_id*, or ``""`` when MA has not named one."""
+    return _ma_runtime_state.get_ma_player_id(client_id)
 
 
 def set_ma_connected(value: bool) -> None:
