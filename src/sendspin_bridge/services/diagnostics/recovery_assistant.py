@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
 
+from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 from sendspin_bridge.services.diagnostics.recovery_timeline import build_recovery_timeline
 from sendspin_bridge.services.infrastructure._helpers import (
@@ -42,21 +43,8 @@ def _device_state_model(device: Any) -> dict[str, Any]:
 
 
 def _reconnect_attempt_summary(device: Any) -> str:
-    state_model = _device_state_model(device)
-    bluetooth = state_model.get("bluetooth") or {}
-    if bluetooth:
-        attempt = int(bluetooth.get("reconnect_attempt") or 0)
-        threshold = int(bluetooth.get("max_reconnect_fails") or 0)
-    else:
-        extra = _device_extra(device)
-        attempt = int(extra.get("reconnect_attempt") or 0)
-        threshold = int(extra.get("max_reconnect_fails") or 0)
-    if attempt <= 0:
-        return ""
-    if threshold > 0:
-        remaining = max(threshold - attempt, 0)
-        return f"Reconnect attempt {attempt}/{threshold}. {remaining} attempts remain before auto-release."
-    return f"Reconnect attempt {attempt} is in progress."
+    """The shared sentence — see ``device_phrasing``."""
+    return reconnect_attempt_summary(device)
 
 
 @dataclass

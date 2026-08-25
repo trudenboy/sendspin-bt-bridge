@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sendspin_bridge.config.network import is_ha_addon_runtime
+from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.guidance_issue_registry import build_issue_context, issue_sort_priority
 from sendspin_bridge.services.diagnostics.recovery_assistant import RecoveryAction, build_recovery_issue_actions
 from sendspin_bridge.services.infrastructure._helpers import (
@@ -242,15 +243,8 @@ def _recovery_banner_cooldown_active(startup_progress: dict[str, Any], config: d
 
 
 def _reconnect_attempt_summary(device: Any) -> str:
-    extra = _device_extra(device)
-    attempt = int(extra.get("reconnect_attempt") or 0)
-    if attempt <= 0:
-        return ""
-    threshold = int(extra.get("max_reconnect_fails") or 0)
-    if threshold > 0:
-        remaining = max(threshold - attempt, 0)
-        return f"Reconnect attempt {attempt}/{threshold}; {remaining} attempts remain before auto-release."
-    return f"Reconnect attempt {attempt} is in progress."
+    """The shared sentence — see ``device_phrasing``."""
+    return reconnect_attempt_summary(device)
 
 
 def _has_active_reconnect_attempt(device: Any) -> bool:
