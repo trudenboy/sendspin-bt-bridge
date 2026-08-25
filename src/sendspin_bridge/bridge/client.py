@@ -2149,12 +2149,16 @@ class SendspinClient:
                 await self._start_sendspin_inner()
             return
         async with lock:
-            # This restart satisfies whatever start requests queued behind it.
-            self._start_sendspin_processed = self._start_sendspin_requests
             await self.stop_sendspin()
             if settle_s:
                 await asyncio.sleep(settle_s)
             if self.running:
+                # Every start request raised up to this point is served by the
+                # spawn below — including the ones that queued while we were
+                # stopping.  Stamped here rather than on entry so those are
+                # counted, and not at all when nothing is spawned: a stopped
+                # client has served nobody.
+                self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 
     def _apply_warm_restart_fields(self, device: dict[str, object]) -> None:
