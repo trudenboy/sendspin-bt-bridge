@@ -104,7 +104,7 @@ def test_an_invalidation_makes_the_next_tick_probe_again(api_status):
 # ── the moments that cannot wait for the window ──────────────────────────
 
 
-def test_powering_an_adapter_makes_the_next_status_measure_again(api_status, monkeypatch):
+def test_powering_an_adapter_makes_the_next_status_measure_again(api_status, installed_bluez):
     """The operator flips a controller and looks straight at the screen."""
     module, probes = api_status
     module._build_status_payload()
@@ -113,10 +113,11 @@ def test_powering_an_adapter_makes_the_next_status_measure_again(api_status, mon
 
     import sendspin_bridge.web.routes.api_bt as api_bt
 
-    monkeypatch.setattr(api_bt, "_power_adapter", lambda *a, **kw: (True, "ok"), raising=False)
+    installed_bluez.on("power on", stdout="Changing power on succeeded\n")
     app = Flask(__name__)
     app.register_blueprint(api_bt.bt_bp)
-    app.test_client().post("/api/bt/adapter/power", json={"adapter": "hci0", "power": True})
+    response = app.test_client().post("/api/bt/adapter/power", json={"adapter": "hci0", "power": True})
+    assert response.status_code == 200
 
     module._build_status_payload()
 
@@ -136,7 +137,8 @@ def test_saving_the_config_makes_the_next_status_measure_again(api_status, monke
     app = Flask(__name__)
     app.secret_key = "testing"
     app.register_blueprint(api_config.config_bp)
-    app.test_client().post("/api/config", json={"BRIDGE_NAME": "Renamed", "BLUETOOTH_DEVICES": []})
+    response = app.test_client().post("/api/config", json={"BRIDGE_NAME": "Renamed", "BLUETOOTH_DEVICES": []})
+    assert response.status_code == 200
 
     module._build_status_payload()
 
