@@ -105,3 +105,21 @@ def test_the_device_snapshot_carries_the_runtime_music_assistant_flag(monkeypatc
     snapshot = status_snapshot.build_device_snapshot(client)
 
     assert snapshot.extra["ma_connected"] is True
+
+
+# ── the offered action must match the reason ─────────────────────────────
+
+
+def test_a_blocked_capability_never_offers_the_control_it_blocks():
+    """With the daemon down, "use the queue" is not an action that can run."""
+    capability = _queue(_device(ma_connected=True, queue_known=True, server_connected=False))
+
+    assert capability["currently_available"] is False
+    assert "queue_control" not in capability["safe_actions"]
+
+
+def test_a_daemon_that_is_down_is_the_action_offered():
+    capability = _queue(_device(ma_connected=True, queue_known=True, server_connected=False))
+
+    assert capability["blocked_reason_detail"]["recommended_action"] == "reconnect"
+    assert capability["safe_actions"][0] == "reconnect"

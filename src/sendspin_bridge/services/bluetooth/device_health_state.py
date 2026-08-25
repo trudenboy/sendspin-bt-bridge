@@ -503,10 +503,11 @@ def build_device_capabilities(device: Any) -> dict[str, Any]:
             recommended_action="reconnect",
         )
     queue_available = bool(getattr(device, "server_connected", False) and ma_connected and ma_queue_known)
-    if not ma_connected:
-        queue_safe_actions = ["open_ma_settings", "open_diagnostics"]
-    elif not ma_queue_known:
-        queue_safe_actions = ["reconnect", "open_diagnostics"]
+    # The offered actions follow the reason above, in the same order: an
+    # action a caller cannot run is worse than none, and "use the queue" is
+    # not runnable while the thing that serves it is down.
+    if queue_blocked_reason is not None:
+        queue_safe_actions = list(queue_blocked_reason.remediation or ["open_diagnostics"])
     else:
         queue_safe_actions = ["queue_control"]
     queue_control = _capability_payload(
