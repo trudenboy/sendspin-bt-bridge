@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Live status updates no longer re-probe the host on every tick. The
+  Bluetooth, audio and D-Bus checks behind the status payload are now sampled
+  at a bounded rate and shared between listeners, which takes a status update
+  from about 62 ms to about 6 ms — the saving multiplies by every open browser
+  tab. Diagnostics, the setup verification page and the operator checks still
+  measure the host when asked, and a saved config or an adapter power toggle
+  makes the next update measure again.
+
 ## [2.75.0-rc.4] - 2026-08-25
 
 ### Fixed

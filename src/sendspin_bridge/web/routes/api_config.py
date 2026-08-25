@@ -75,6 +75,7 @@ from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_activati
 from sendspin_bridge.services.lifecycle.reconfig_orchestrator import ReconfigOrchestrator
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot
 from sendspin_bridge.services.music_assistant.ma_client import fetch_all_players_snapshot
+from sendspin_bridge.web.routes.api_status import invalidate_preflight_probe
 
 logger = logging.getLogger(__name__)
 
@@ -1019,6 +1020,11 @@ def api_config():
 
     # Invalidate adapter name cache so next status poll picks up changes
     refresh_adapter_name_cache()
+    # A saved setting can change what the host looks like to the bridge — a
+    # different adapter, a different audio target.  The operator is watching
+    # the screen they just saved from, so the next build measures rather than
+    # reporting the sample taken before the save.
+    invalidate_preflight_probe()
 
     _sync_ha_options(config)
 
