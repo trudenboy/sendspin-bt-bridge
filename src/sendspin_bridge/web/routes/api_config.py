@@ -606,32 +606,22 @@ def api_config_upload():
     uploaded = validation.normalized_config
     warnings = _append_ma_duplicate_device_warnings(uploaded, warnings)
 
-    # Preserve sensitive keys from existing config
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with config_lock:
-        existing = {}
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE) as ef:
-                    existing = json.load(ef)
-            except (json.JSONDecodeError, OSError):
-                pass
+    # The sensitive keys belong to the file, not to the upload: they are
+    # taken from what is stored, and a value the uploaded file carries for one
+    # of them is dropped.  The store refuses rather than writing when the
+    # existing file cannot be read — this used to swallow that read and
+    # answer 200 having replaced the operator's credentials with nothing.
+    from sendspin_bridge.config.store import ConfigStore
 
-        for key in _PRESERVED_KEYS:
-            if key in existing:
-                uploaded[key] = existing[key]
+    try:
+        ConfigStore(CONFIG_FILE).replace(uploaded, preserve=(), owned=_PRESERVED_KEYS)
+    except ValueError as exc:
+        logger.error("Refusing to save uploaded config: %s is unreadable (%s)", CONFIG_FILE, exc)
+        return _error_response("The existing configuration is corrupted; refusing to overwrite it", 500)
+    except OSError as exc:
+        from sendspin_bridge.web.routes._helpers import config_write_error_response
 
-        # Remove sensitive keys that leaked into the uploaded file
-        for key in _PRESERVED_KEYS:
-            if key not in existing:
-                uploaded.pop(key, None)
-
-        try:
-            write_config_file(uploaded, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
-        except OSError as exc:
-            from sendspin_bridge.web.routes._helpers import config_write_error_response
-
-            return config_write_error_response(exc, context="Cannot save uploaded config")
+        return config_write_error_response(exc, context="Cannot save uploaded config")
 
     payload: dict[str, object] = {"success": True}
     if warnings:
@@ -892,19 +882,20 @@ def api_config():
             # swallowed read error therefore used to mean "silently erase the
             # operator's credentials and answer 200" — fail the request
             # instead and leave the file untouched.
+            from sendspin_bridge.config.store import ConfigStore
+
             try:
-                with open(CONFIG_FILE) as f:
-                    loaded = json.load(f)
+                # Backed up before we refuse: the operator is left with a copy
+                # of whatever their settings had become, rather than a file
+                # they cannot save over and cannot read either.
+                loaded = ConfigStore(CONFIG_FILE).read_stored(backup_corrupt=True)
             except OSError as exc:
                 logger.error("Refusing to save config: %s is unreadable (%s)", CONFIG_FILE, exc)
                 return _error_response("Cannot read the existing configuration; refusing to overwrite it", 500)
             except ValueError as exc:
-                logger.error("Refusing to save config: %s is not valid JSON (%s)", CONFIG_FILE, exc)
+                logger.error("Refusing to save config: %s is corrupted (%s)", CONFIG_FILE, exc)
                 return _error_response("The existing configuration is corrupted; refusing to overwrite it", 500)
-            if not isinstance(loaded, dict):
-                logger.error("Refusing to save config: %s does not contain a JSON object", CONFIG_FILE)
-                return _error_response("The existing configuration is corrupted; refusing to overwrite it", 500)
-            existing = loaded
+            existing = loaded or {}
 
             # Preserve keys that are never submitted via the form
             for key in (

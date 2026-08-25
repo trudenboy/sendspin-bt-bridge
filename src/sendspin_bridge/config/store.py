@@ -69,12 +69,15 @@ class ConfigStore:
         _normalize_loaded_config(config, defaults=DEFAULT_CONFIG)
         return config
 
-    def read_stored(self) -> dict[str, Any] | None:
+    def read_stored(self, *, backup_corrupt: bool = False) -> dict[str, Any] | None:
         """Exactly what is on disk, or ``None`` when there is no file.
 
         Raises ``ValueError`` when the file exists but is not a JSON object —
         callers that are about to overwrite it need to know the difference
         between "nothing there yet" and "something there I could not read".
+        A caller that is about to refuse a save can ask for the unusable file
+        to be backed up first, so the operator still has something to recover
+        their settings from.
         """
         with config_lock:
             raw = self._read_raw()
@@ -82,6 +85,8 @@ class ConfigStore:
                 return None
             stored = self._parse(raw)
             if stored is None:
+                if backup_corrupt:
+                    self._backup_corrupt()
                 raise ValueError(f"{self.path} does not contain a JSON object")
             return stored
 
@@ -105,6 +110,7 @@ class ConfigStore:
         new_config: dict[str, Any],
         *,
         preserve: Iterable[str],
+        owned: Iterable[str] = (),
         backup_corrupt: bool = True,
     ) -> dict[str, Any]:
         """Write *new_config*, carrying *preserve* forward from what is there.
@@ -116,6 +122,12 @@ class ConfigStore:
         hash, the session secret, the stored tokens.  If the existing file
         cannot be read, this raises rather than writing: a save that quietly
         dropped those keys would take the operator's credentials with it.
+
+        *owned* is the stronger claim: those keys belong to the file, so an
+        incoming value for one of them is never trusted — it is replaced by
+        what is stored, or dropped when nothing is.  That is what an uploaded
+        config needs, where a password hash in the upload is not the
+        uploader's to set.
         """
         with config_lock:
             raw = self._read_raw()
@@ -132,6 +144,11 @@ class ConfigStore:
             for key in preserve:
                 if key in previous and key not in merged:
                     merged[key] = copy.deepcopy(previous[key])
+            for key in owned:
+                if key in previous:
+                    merged[key] = copy.deepcopy(previous[key])
+                else:
+                    merged.pop(key, None)
             self._write(merged)
             return previous
 

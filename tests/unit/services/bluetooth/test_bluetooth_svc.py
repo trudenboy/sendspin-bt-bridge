@@ -339,10 +339,11 @@ def test_describe_pair_failure_empty_output_returns_fallback():
 def test_persist_device_enabled(tmp_config, monkeypatch):
     """persist_device_enabled should update the enabled flag in config.json."""
 
-    import sendspin_bridge.services.bluetooth as _bt_mod
+    import sendspin_bridge.config as _config
 
-    # _CONFIG_FILE is bound at import time; redirect it to the tmp file.
-    monkeypatch.setattr(_bt_mod, "_CONFIG_FILE", tmp_config)
+    # The persist helpers resolve the config path when asked, so redirecting
+    # the config module is enough — they used to hold a path bound at import.
+    monkeypatch.setattr(_config, "CONFIG_FILE", tmp_config)
 
     data = {
         "BLUETOOTH_DEVICES": [
@@ -363,9 +364,9 @@ def test_persist_device_enabled(tmp_config, monkeypatch):
 def test_persist_device_released(tmp_config, monkeypatch):
     """persist_device_released should update the released flag in config.json."""
 
-    import sendspin_bridge.services.bluetooth as _bt_mod
+    import sendspin_bridge.config as _config
 
-    monkeypatch.setattr(_bt_mod, "_CONFIG_FILE", tmp_config)
+    monkeypatch.setattr(_config, "CONFIG_FILE", tmp_config)
 
     data = {
         "BLUETOOTH_DEVICES": [

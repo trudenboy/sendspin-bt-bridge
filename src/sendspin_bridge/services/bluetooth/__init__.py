@@ -10,7 +10,6 @@ import threading
 from pathlib import Path
 
 from sendspin_bridge.bluetooth.bluez import Adapter, DeviceInfo, Outcome, get_bluez
-from sendspin_bridge.config import CONFIG_FILE as _CONFIG_FILE
 
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
@@ -348,6 +347,18 @@ def _match_player_name(config_name: str, runtime_name: str) -> bool:
     return runtime_name == config_name or runtime_name.startswith(config_name + " @ ")
 
 
+def _config_file_exists() -> bool:
+    """Whether the config file *currently* in use is there.
+
+    The module-level import binds the path once; a runtime or a test that
+    redirects ``CONFIG_FILE`` afterwards would otherwise be asked about a
+    file nobody is writing to, and every persist would return early.
+    """
+    from sendspin_bridge.config import CONFIG_FILE
+
+    return CONFIG_FILE.exists()
+
+
 def _update_bound_config_file(mutator) -> None:
     """Atomically mutate the config file.
 
@@ -384,7 +395,7 @@ def _sync_addon_options(mutator) -> bool:
 
 def persist_device_enabled(player_name: str, enabled: bool) -> None:
     """Persist the enabled flag to config.json and (in HA mode) to options.json."""
-    if not _CONFIG_FILE.exists():
+    if not _config_file_exists():
         return
 
     def _set_enabled(cfg: dict) -> None:
@@ -417,7 +428,7 @@ def persist_device_released(player_name: str, released: bool, *, released_by: st
     deliberate release from an automatic one across a bridge restart.
     Cleared whenever the device is un-released.
     """
-    if not _CONFIG_FILE.exists():
+    if not _config_file_exists():
         return
 
     def _set_released(cfg: dict) -> None:

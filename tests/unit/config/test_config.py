@@ -594,3 +594,20 @@ def test_config_default_has_ma_username():
 
     assert "MA_USERNAME" in DEFAULT_CONFIG
     assert DEFAULT_CONFIG["MA_USERNAME"] == ""
+
+
+def test_load_backs_up_a_file_that_is_not_a_json_object(tmp_path):
+    """`[1, 2, 3]` is corruption too, and used to be discarded silently.
+
+    A file that fails to parse is backed up before the defaults take over.
+    One that parses into something that is not an object took a different
+    branch: a warning, no backup — and the next write replaced the
+    operator's settings with defaults, with nothing left to recover from.
+    """
+    (tmp_path / "config.json").write_text("[1, 2, 3]")
+    from sendspin_bridge.config import DEFAULT_CONFIG, load_config
+
+    assert load_config() == DEFAULT_CONFIG
+    backups = sorted(tmp_path.glob("config.json.corrupt-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == "[1, 2, 3]"
