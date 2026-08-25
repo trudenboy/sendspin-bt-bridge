@@ -24,8 +24,6 @@ import logging
 import os
 import re
 import secrets
-import threading
-import time
 import urllib.request as _ur
 from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
@@ -34,6 +32,8 @@ from urllib.parse import urlparse
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from sendspin_bridge.config import check_password, load_config
+from sendspin_bridge.web.login_rate_limiter import LockoutSettings, LoginRateLimiter
+from sendspin_bridge.web.request_identity import current_trust_policy
 from sendspin_bridge.web.trusted_proxies import (
     TRUSTED_PROXY_DEFAULTS,
     parse_trusted_entry,
@@ -88,10 +88,6 @@ _parse_trusted_entry = parse_trusted_entry
 _peer_in_trust_set = peer_in_trust_set
 
 
-_failed: dict[str, tuple[int, float]] = {}  # client_id → (count, first_failure_ts)
-_failed_lock = threading.Lock()
-
-
 def _coerce_int_setting(value, default: int, min_value: int, max_value: int) -> int:
     try:
         coerced = int(value)
@@ -140,51 +136,37 @@ def _format_duration(seconds: int) -> str:
     return f"{seconds} seconds"
 
 
-def _get_trusted_proxies() -> set[str]:
-    """Return trusted proxy IPs used for validated forwarded client identity."""
-    trusted = set(_TRUSTED_PROXY_DEFAULTS)
-    config = load_config()
-    extra = config.get("TRUSTED_PROXIES") or []
-    if isinstance(extra, list):
-        trusted.update(value.strip() for value in extra if isinstance(value, str) and value.strip())
-    return trusted
-
-
 def _peer_is_trusted(peer: str) -> bool:
-    """True when *peer* is in the merged trust set (defaults + config)."""
-    return _peer_in_trust_set(peer, _get_trusted_proxies())
+    """True when *peer* is trusted by the request's policy."""
+    return current_trust_policy().is_trusted(peer)
 
 
 def _get_forwarded_client_ip() -> str:
-    """Return the rightmost untrusted hop from X-Forwarded-For.
+    """The forwarded client, or ``""`` when the headers name none.
 
-    Only the proxies we trust (see ``_get_trusted_proxies``) are allowed to
-    append their own addresses to XFF.  The real client is therefore the
-    *rightmost* hop that is NOT a trusted proxy.  Using the leftmost hop is
-    spoofable by any client that sets an XFF header themselves.
+    Distinct from :meth:`TrustPolicy.client_ip`, which always answers with
+    *someone* — this reports only what the headers claim, and the caller
+    decides what an absence means.  The peer-trust gate lives with the
+    caller too, because only it knows whether a spoofed header matters.
     """
-    trusted = _get_trusted_proxies()
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        hops = [p.strip() for p in forwarded_for.split(",") if p.strip()]
-        for hop in reversed(hops):
-            # Match against the merged set of literal IPs and CIDR
-            # ranges so a hassio-network proxy (172.30.32.0/23) is
-            # treated as trusted regardless of which addon container
-            # actually forwarded the request.
-            if not _peer_in_trust_set(hop, trusted):
-                return hop
+    policy = current_trust_policy()
+    hops = [hop.strip() for hop in request.headers.get("X-Forwarded-For", "").split(",") if hop.strip()]
+    for hop in reversed(hops):
+        if not policy.is_trusted(hop):
+            return hop
     return request.headers.get("X-Real-IP", "").strip()
 
 
 def _get_rate_limit_client_id() -> str:
-    """Return the best-available brute-force bucket key for this request."""
+    """The brute-force bucket key for this request.
+
+    Behind a trusted proxy the peer address is the proxy's, so everyone
+    would share one bucket and five failed logins by anyone would lock out
+    the household.  Fall back through the forwarded client, then the
+    submitted username, then a per-session token.
+    """
     peer = (request.remote_addr or "").strip()
-    # CIDR-aware: the HA ingress peer lives somewhere in 172.30.32.0/23 and
-    # never equals a trust-set entry literally.  An exact-string test bucketed
-    # every ingress user under the proxy's own IP, so one user's five failed
-    # logins locked out everyone behind the proxy.
-    if peer and _peer_in_trust_set(peer, _get_trusted_proxies()):
+    if peer and _peer_is_trusted(peer):
         forwarded_ip = _get_forwarded_client_ip()
         if forwarded_ip:
             return forwarded_ip
@@ -199,55 +181,35 @@ def _get_rate_limit_client_id() -> str:
     return peer or "unknown"
 
 
+def _lockout_settings() -> LockoutSettings:
+    """Read the operator's lockout configuration."""
+    enabled, max_attempts, window_secs, duration_secs = _get_lockout_settings()
+    return LockoutSettings(
+        enabled=enabled,
+        max_attempts=max_attempts,
+        window_s=window_secs,
+        lockout_s=duration_secs,
+    )
+
+
+#: One limiter for the process.  It reads settings live, so a config change
+#: takes effect on the next attempt without a restart.
+_rate_limiter = LoginRateLimiter(settings_provider=_lockout_settings)
+
+
 def _check_rate_limit(client_id: str) -> bool:
-    """Return True if the client identifier is currently locked out."""
-    enabled, max_attempts, _, duration_secs = _get_lockout_settings()
-    if not enabled:
-        return False
-    now = time.monotonic()
-    with _failed_lock:
-        entry = _failed.get(client_id)
-        if not entry:
-            return False
-        count, first_ts = entry
-        # Reset window if enough time has passed since first failure
-        if now - first_ts > duration_secs:
-            del _failed[client_id]
-            return False
-        return count >= max_attempts
+    """True when this client is currently locked out."""
+    return _rate_limiter.is_locked_out(client_id)
 
 
 def _record_failure(client_id: str) -> None:
-    enabled, _, window_secs, _ = _get_lockout_settings()
-    if not enabled:
-        return
-    now = time.monotonic()
-    with _failed_lock:
-        entry = _failed.get(client_id)
-        if entry:
-            count, first_ts = entry
-            if now - first_ts > window_secs:
-                _failed[client_id] = (1, now)
-            else:
-                _failed[client_id] = (count + 1, first_ts)
-        else:
-            _failed[client_id] = (1, now)
-        # Periodic sweep: remove expired entries when dict grows large
-        if len(_failed) > 200:
-            _, _, sweep_window, duration = _get_lockout_settings()
-            max_age = max(sweep_window, duration)
-            expired = [k for k, (_, ts) in _failed.items() if now - ts > max_age]
-            for k in expired:
-                del _failed[k]
-            # Hard cap as safety net
-            if len(_failed) > 1000:
-                oldest = min(_failed, key=lambda k: _failed[k][1])
-                del _failed[oldest]
+    """Note one failed login attempt."""
+    _rate_limiter.record_failure(client_id)
 
 
 def _clear_failures(client_id: str) -> None:
-    with _failed_lock:
-        _failed.pop(client_id, None)
+    """Forget a client after a successful login."""
+    _rate_limiter.clear(client_id)
 
 
 def _generate_csrf_token() -> str:
@@ -1013,9 +975,8 @@ def api_auth_ha_pair():
         return jsonify({"success": False, "error": "Not allowed from this network"}), 403
 
     peer = (request.remote_addr or "").strip()
-    # ``_get_trusted_proxies`` already merges defaults + the operator
-    # ``TRUSTED_PROXIES`` config key.  Both can be literal IPs or CIDR
-    # ranges.  The hassio Docker network is /23, with addons in the
+    # The request's trust policy merges the defaults with the operator's
+    # ``TRUSTED_PROXIES`` key.  Both can be literal IPs or CIDR ranges.  The hassio Docker network is /23, with addons in the
     # 172.30.33.x half — a literal-IP whitelist would miss them.
     if not _peer_is_trusted(peer):
         return jsonify({"success": False, "error": "Not allowed from this network"}), 403

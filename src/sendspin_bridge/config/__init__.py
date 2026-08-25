@@ -506,7 +506,24 @@ def load_config() -> dict:
             else:
                 logger.error("Config file %s is corrupted (%s); using defaults", CONFIG_FILE, e)
             _needs_migration = False
-        except (OSError, ValueError) as e:
+        except ValueError as e:
+            # A file that parses into something that is not an object — a
+            # list, a string, ``null`` — is corruption just as much as one
+            # that does not parse at all.  It used to be warned about and
+            # dropped, so the next write replaced the operator's settings
+            # with defaults and left nothing to recover from.
+            backup_path = _backup_corrupt_config()
+            if backup_path is not None:
+                logger.error(
+                    "Config file %s is unusable (%s); backup saved to %s; using defaults",
+                    CONFIG_FILE,
+                    e,
+                    backup_path,
+                )
+            else:
+                logger.error("Config file %s is unusable (%s); using defaults", CONFIG_FILE, e)
+            _needs_migration = False
+        except OSError as e:
             logger.warning("Error loading config: %s, using defaults", e)
         else:
             if migrated.needs_persist:

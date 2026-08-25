@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sendspin_bridge.bridge.client import SendspinClient, SpawnRecord
+from sendspin_bridge.bridge.client import SendspinClient
+from sendspin_bridge.bridge.daemon_supervisor import SpawnRecord
 
 UTC = timezone.utc
 
@@ -42,25 +43,25 @@ def _client_with_history(*lifetimes_unexpected: tuple[float, bool]) -> SendspinC
             lifetime_s=lifetime,
             unexpected=unexpected,
         )
-        client._spawn_history.append(rec)
+        client._supervisor.record(rec)
     return client
 
 
 def test_detect_repeating_lifetime_returns_none_when_fewer_than_three_deaths():
     client = _client_with_history((10.0, True), (10.0, True))
-    assert client._detect_repeating_lifetime() is None
+    assert client._supervisor.repeating_lifetime() is None
 
 
 def test_detect_repeating_lifetime_returns_mean_for_three_within_tolerance():
     client = _client_with_history((10.0, True), (10.1, True), (9.95, True))
-    result = client._detect_repeating_lifetime()
+    result = client._supervisor.repeating_lifetime()
     assert result is not None
     assert abs(result - 10.017) < 0.01
 
 
 def test_detect_repeating_lifetime_returns_none_for_varied_intervals():
     client = _client_with_history((10.0, True), (5.0, True), (10.0, True))
-    assert client._detect_repeating_lifetime() is None
+    assert client._supervisor.repeating_lifetime() is None
 
 
 def test_detect_repeating_lifetime_ignores_explicit_stops():
@@ -71,7 +72,7 @@ def test_detect_repeating_lifetime_ignores_explicit_stops():
         (10.0, True),
         (10.0, True),
     )
-    result = client._detect_repeating_lifetime()
+    result = client._supervisor.repeating_lifetime()
     assert result is not None
     assert abs(result - 10.0) < 0.01
 
@@ -85,7 +86,7 @@ def test_detect_repeating_lifetime_uses_last_three_unexpected_only():
         (3.0, True),
     )
     # Last 3 unexpected = [10.0, 10.0, 3.0] → not within tolerance
-    assert client._detect_repeating_lifetime() is None
+    assert client._supervisor.repeating_lifetime() is None
 
 
 # ---------------------------------------------------------------------------

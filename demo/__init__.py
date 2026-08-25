@@ -915,7 +915,7 @@ def install() -> None:
                     "pid": getattr(getattr(client, "_daemon_proc", None), "pid", 9000 + idx),
                     "alive": bool(is_running),
                     "running": bool(is_running),
-                    "restart_delay": getattr(client, "_restart_delay", 1.0),
+                    "restart_delay": getattr(client, "restart_delay", 1.0),
                     "zombie_restarts": getattr(client, "_zombie_restart_count", 0),
                     "reconnecting": status.get("reconnecting", False),
                     "reconnect_attempt": status.get("reconnect_attempt", 0),

@@ -14,7 +14,6 @@ import platform as _platform
 import re
 import subprocess
 import sys
-import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,6 +82,9 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_server_version,
     is_ma_connected,
 )
+from sendspin_bridge.web.redaction import redact
+from sendspin_bridge.web.request_identity import current_trust_policy
+from sendspin_bridge.web.sse_slots import SseSlotPool
 
 UTC = timezone.utc
 
@@ -95,12 +97,12 @@ VERSION = _CONFIG_VERSION
 # SSE connection limiting — prevent resource exhaustion
 # ---------------------------------------------------------------------------
 
-_sse_count = 0
-_sse_lock = threading.Lock()
 # Keep half of Waitress' default eight-worker pool available for ordinary API
 # requests.  HA may use both streams, so four listeners still accommodate a
 # browser plus one HA host without letting idle streams starve the web UI.
 _MAX_SSE = 4
+#: Shared with ``/api/status/events`` — the HA coordinator opens both.
+_sse_pool = SseSlotPool(_MAX_SSE)
 _SSE_MAX_LIFETIME = 1800  # 30 minutes
 
 
@@ -584,27 +586,20 @@ def api_status_stream():
     ``notify_status_changed()`` call either happens before we start waiting
     (so ``wait_for`` returns immediately) or wakes us up cleanly.
     """
-    with _sse_lock:
-        if _sse_count >= _MAX_SSE:
-            return 'data: {"error": "too many listeners"}\n\n', 503, {"Content-Type": "text/event-stream"}
+    if not _sse_pool.has_capacity():
+        return 'data: {"error": "too many listeners"}\n\n', 503, {"Content-Type": "text/event-stream"}
 
     def _generate():
-        # The listener slot is claimed *inside* the generator, not in the
-        # view.  Flask auto-registers HEAD for every GET rule and Werkzeug
-        # closes a HEAD response's generator without ever iterating it, so a
-        # slot reserved in the view would never reach the ``finally`` below —
-        # ``_MAX_SSE`` HEAD requests used to disable live status permanently.
-        # The check above stays for the 503 status code, which can only be
-        # set before the response body starts.
-        global _sse_count
-        with _sse_lock:
-            accepted = _sse_count < _MAX_SSE
-            if accepted:
-                _sse_count += 1
-        if not accepted:
-            yield 'data: {"error": "too many listeners"}\n\n'
-            return
-        try:
+        # The slot is claimed *inside* the generator.  Flask registers HEAD
+        # for every GET rule and Werkzeug discards a HEAD body without
+        # touching the generator, so a slot taken in the view would never be
+        # released — four HEAD requests used to disable live status for the
+        # life of the process.  The check above only picks the status code,
+        # which cannot be changed once the body has started.
+        with _sse_pool.claim(label="status stream") as granted:
+            if not granted:
+                yield 'data: {"error": "too many listeners"}\n\n'
+                return
 
             def _build_snapshot():
                 return _build_status_payload()
@@ -637,9 +632,6 @@ def api_status_stream():
                 else:
                     # 15 s timeout — send a keepalive comment so proxies don't close
                     yield ": heartbeat\n\n"
-        finally:
-            with _sse_lock:
-                _sse_count -= 1
 
     return Response(
         _generate(),
@@ -1078,7 +1070,14 @@ def _mask_ip(m: re.Match) -> str:
 
 
 def _mask_text(text: str) -> str:
-    """Mask MAC and IPv4 addresses in arbitrary text."""
+    """Mask addresses and credentials in arbitrary text.
+
+    Addresses are masked because a bug report should not carry someone's
+    network layout; credentials because the log ring this draws from carries
+    whatever the code logged, and a token that reached a log line would
+    otherwise travel intact into an uploaded bundle.
+    """
+    text = redact(text)
     text = _MAC_RE.sub(_mask_mac, text)
     return _IPV4_RE.sub(_mask_ip, text)
 
@@ -1164,7 +1163,7 @@ def _collect_subprocess_info() -> list[dict]:
             "pid": proc.pid if proc else None,
             "alive": proc is not None and proc.returncode is None if proc else False,
             "running": getattr(client, "running", False),
-            "restart_delay": getattr(client, "_restart_delay", 1.0),
+            "restart_delay": getattr(client, "restart_delay", 1.0),
             "zombie_restarts": getattr(client, "_zombie_restart_count", 0),
         }
         # Reconnect info from status
@@ -2153,17 +2152,10 @@ def api_bugreport_submit():
     # Rate limit — resolve the client IP trusting ``X-Forwarded-For`` only
     # when the immediate peer is a trusted proxy, otherwise the header is
     # client-spoofable and the per-IP limit is trivially bypassed.
-    from sendspin_bridge.web.trusted_proxies import TRUSTED_PROXY_DEFAULTS, resolve_client_ip
-
-    trust_set = set(TRUSTED_PROXY_DEFAULTS)
-    extra_proxies = load_config().get("TRUSTED_PROXIES") or []
-    if isinstance(extra_proxies, list):
-        trust_set.update(v.strip() for v in extra_proxies if isinstance(v, str) and v.strip())
-    client_ip = resolve_client_ip(
+    client_ip = current_trust_policy().client_ip(
         request.remote_addr or "",
         request.headers.get("X-Forwarded-For", ""),
         request.headers.get("X-Real-IP", ""),
-        trust_set,
     )
     rate_error = proxy.check_rate_limit(client_ip)
     if rate_error:
