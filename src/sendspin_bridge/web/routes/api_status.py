@@ -931,13 +931,19 @@ def api_diagnostics():
         # bundle attached to a bug report was the one built the other way.
         diagnostics_config = load_config()
         diagnostics_devices = [device for _client, device in snapshot_pairs]
+        # Measured, not guessed: the bundle has no "preflight" key, so this
+        # used to hand the state model an empty one.  An empty preflight reads
+        # as "D-Bus unavailable", and the recovery card in the bundle then
+        # reported a runtime that cannot reach D-Bus on a host that was
+        # paired, connected and playing.
+        diagnostics_preflight = _collect_preflight_status()
         try:
             diagnostics_state = build_bridge_state_model(
                 config=diagnostics_config,
                 devices=diagnostics_devices,
                 runtime_mode=diag["runtime_info"].get("mode", "unknown"),
                 ma_connected=is_ma_connected(),
-                preflight=diag.get("preflight") or {},
+                preflight=diagnostics_preflight,
             )
         except Exception:
             logger.warning("Could not build the state model for diagnostics", exc_info=True)
@@ -945,6 +951,7 @@ def api_diagnostics():
 
         try:
             onboarding_assistant = _build_onboarding_assistant_payload(
+                preflight=diagnostics_preflight,
                 config=diagnostics_config,
                 devices=diagnostics_devices,
                 runtime_mode=diag["runtime_info"].get("mode", "unknown"),
@@ -963,6 +970,7 @@ def api_diagnostics():
             )
         try:
             diag["recovery_assistant"] = _build_recovery_assistant_payload(
+                preflight=diagnostics_preflight,
                 config=diagnostics_config,
                 devices=diagnostics_devices,
                 onboarding_assistant=onboarding_assistant,

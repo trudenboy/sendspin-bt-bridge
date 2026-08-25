@@ -1499,9 +1499,7 @@ class SendspinClient:
 
     async def _zombie_restart(self) -> None:
         """Restart subprocess to recover from zombie playback."""
-        await self.stop_sendspin()
-        await asyncio.sleep(1)
-        await self.start_sendspin()
+        await self._restart_daemon(settle_s=1.0)
 
     async def start_sendspin(self) -> None:
         """Start the sendspin daemon as an isolated subprocess with PULSE_SINK routing."""
@@ -2129,11 +2127,35 @@ class SendspinClient:
         self._update_status({"reloading": True})
         try:
             self._apply_warm_restart_fields(new_device)
-            await self.stop_sendspin()
-            if self.running:
-                await self._start_sendspin_inner()
+            await self._restart_daemon()
         finally:
             self._update_status({"reloading": False})
+
+    async def _restart_daemon(self, *, settle_s: float = 0.0) -> None:
+        """Stop the daemon and spawn its replacement as one operation.
+
+        The spawn path coalesces concurrent starts behind a lock; a restart
+        that stopped and spawned outside it could neither see a start in
+        flight nor be seen by one.  Two spawns then landed a millisecond
+        apart, the second overwrote the tracked handle, and the first daemon
+        kept the Bluetooth sink and the listen port with nothing watching it.
+        """
+        lock = self._start_sendspin_lock
+        if lock is None:
+            await self.stop_sendspin()
+            if settle_s:
+                await asyncio.sleep(settle_s)
+            if self.running:
+                await self._start_sendspin_inner()
+            return
+        async with lock:
+            # This restart satisfies whatever start requests queued behind it.
+            self._start_sendspin_processed = self._start_sendspin_requests
+            await self.stop_sendspin()
+            if settle_s:
+                await asyncio.sleep(settle_s)
+            if self.running:
+                await self._start_sendspin_inner()
 
     def _apply_warm_restart_fields(self, device: dict[str, object]) -> None:
         """Mutate self.<field> from the new device config before respawn."""

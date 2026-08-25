@@ -140,3 +140,26 @@ def test_bluetooth_collection_errors_when_transport_unavailable(fake_bluez):
     assert "bluetooth" in result["failed_collections"]
     assert result["collections_status"]["bluetooth"]["status"] == "error"
     assert probe.calls == 0
+
+
+# ── more than one controller ─────────────────────────────────────────────
+
+
+def test_paired_devices_are_counted_across_every_controller(fake_bluez):
+    """Found on a two-adapter host: the speaker was paired on the second one.
+
+    The probe asked only the first controller, counted zero, and onboarding
+    announced "No paired Bluetooth speakers are currently available to the
+    bridge" while that speaker was connected and streaming.
+    """
+    first, second = "C0:FB:F9:62:D7:D6", "00:02:72:0A:E4:3B"
+    fake_bluez.on(
+        "list",
+        stdout=f"Controller {first} HP-ProDesk [default]\nController {second} HP-ProDesk #2\n",
+    )
+    fake_bluez.on("devices Paired", stdout="")
+    fake_bluez.on_adapter(second).on("devices Paired", stdout="Device 6C:5C:3D:35:17:99 ENEBY Portable\n")
+
+    bt = _collect(fake_bluez, _DaemonProbe("unused"))["bluetooth"]
+
+    assert bt["paired_devices"] == 1, "a speaker paired on the second controller was not counted"

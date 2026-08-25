@@ -9,7 +9,7 @@ import socket as _socket
 import subprocess
 from typing import Any
 
-from sendspin_bridge.bluetooth.bluez import Outcome, get_bluez
+from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.config import get_runtime_version
 from sendspin_bridge.services.audio.pulse import get_server_name, list_sinks
 
@@ -294,7 +294,19 @@ def collect_preflight_status(
             bt_info["daemon"] = daemon_state_fn()
         # Parsed whitelist rows only — async ``[CHG] Device`` noise on the
         # same stdout must not inflate the count (ghost-row fix).
-        bt_info["paired_devices"] = len(bluez.list_devices())
+        #
+        # Every controller is asked, not just the default one: on a host with
+        # two adapters the speaker is often bonded to the second, and counting
+        # only the first reported "no paired speakers" while that speaker was
+        # connected and streaming.  A MAC bonded to two controllers is one
+        # speaker, so the union is by address.
+        paired_macs: set[str] = set()
+        for adapter_ref in adapters or []:
+            scope = Adapter.select(adapter_ref.mac) if adapter_ref.mac else Adapter.DEFAULT
+            paired_macs.update(entry.mac for entry in bluez.list_devices(scope) if entry.mac)
+        if not adapters:
+            paired_macs.update(entry.mac for entry in bluez.list_devices() if entry.mac)
+        bt_info["paired_devices"] = len(paired_macs)
         collections_status["bluetooth"] = collection_status_payload("ok", count=bt_info["paired_devices"])
     except Exception as exc:
         failed_collections.append("bluetooth")
