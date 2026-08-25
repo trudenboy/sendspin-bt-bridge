@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The diagnostics bundle no longer reports that the bridge cannot reach
+  D-Bus on a host where Bluetooth is working; it now measures the runtime it
+  describes, so the bundle and the dashboard agree.
+- A speaker paired on a second Bluetooth controller is counted again: setup
+  guidance used to announce that no paired speakers were available while such
+  a speaker was connected and streaming.
+- Two restarts arriving together can no longer leave a second audio daemon
+  running unwatched, holding the speaker's audio sink and its port.
+
 ## [2.75.0-rc.3] - 2026-08-25
 
 ### Fixed
