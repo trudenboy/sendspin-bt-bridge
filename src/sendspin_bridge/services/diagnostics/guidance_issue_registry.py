@@ -23,13 +23,6 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("runtime_access_unavailable",),
     ),
-    "runtime-access": GuidanceIssueDefinition(
-        key="runtime-access",
-        layer="runtime_access",
-        priority=10,
-        severity="error",
-        default_reason_codes=("runtime_access_unavailable",),
-    ),
     "config_dir_not_writable": GuidanceIssueDefinition(
         # Issue #190 — bind-mount target left as ``root:root`` while the
         # bridge runs as a dropped UID.  Surfaces in the recovery
@@ -97,21 +90,21 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("sink_muted_at_system_level",),
     ),
-    "device-disconnected": GuidanceIssueDefinition(
+    "device_disconnected": GuidanceIssueDefinition(
         key="device-disconnected",
         layer="sink_verification",
         priority=40,
         severity="warning",
         default_reason_codes=("bluetooth_disconnected",),
     ),
-    "playback-degraded": GuidanceIssueDefinition(
+    "playback_degraded": GuidanceIssueDefinition(
         key="playback-degraded",
         layer="sink_verification",
         priority=45,
         severity="warning",
         default_reason_codes=("playback_without_audio", "recent_audio_stall"),
     ),
-    "daemon-disconnected": GuidanceIssueDefinition(
+    "daemon_disconnected": GuidanceIssueDefinition(
         key="daemon-disconnected",
         layer="sink_verification",
         priority=50,
@@ -218,7 +211,7 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("bt_management_disabled", "management_auto_disabled"),
     ),
-    "device-released": GuidanceIssueDefinition(
+    "device_released": GuidanceIssueDefinition(
         key="device-released",
         layer="bridge_control",
         priority=60,
@@ -239,7 +232,7 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("duplicate_player_id",),
     ),
-    "all-disabled": GuidanceIssueDefinition(
+    "all_disabled": GuidanceIssueDefinition(
         key="all-disabled",
         layer="bridge_control",
         priority=70,
@@ -253,19 +246,33 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("ma_disconnected",),
     ),
-    "ma-auth": GuidanceIssueDefinition(
-        key="ma-auth",
-        layer="ma_auth",
-        priority=80,
-        severity="warning",
-        default_reason_codes=("ma_disconnected",),
-    ),
 }
 
 
+#: Sorts after everything the bridge recognises, so an issue it has no
+#: opinion about still renders — at the bottom.
+UNCLASSIFIED_PRIORITY = 999
+
+
+def _canonical(key: str) -> str:
+    """Issue keys arrived in two spellings; the underscore one is canonical."""
+    return (key or "").strip().replace("-", "_")
+
+
+def issue_definition(key: str) -> GuidanceIssueDefinition | None:
+    """The registry entry for *key*, however its separators are spelled.
+
+    Returns ``None`` for a key the bridge does not recognise, so a caller
+    that wants to insist on knowing can — the rendering path deliberately
+    does not, because a card that fails to draw is worse than one that sorts
+    in the wrong place.
+    """
+    return ISSUE_REGISTRY.get(_canonical(key))
+
+
 def issue_sort_priority(key: str) -> int:
-    definition = ISSUE_REGISTRY.get(key)
-    return definition.priority if definition else 999
+    definition = issue_definition(key)
+    return definition.priority if definition else UNCLASSIFIED_PRIORITY
 
 
 def build_issue_context(
@@ -276,7 +283,7 @@ def build_issue_context(
     reason_codes: list[str] | None = None,
     all_devices_affected: bool | None = None,
 ) -> dict[str, Any]:
-    definition = ISSUE_REGISTRY.get(key)
+    definition = issue_definition(key)
     return {
         "layer": definition.layer if definition else "unclassified",
         "priority": issue_sort_priority(key),
