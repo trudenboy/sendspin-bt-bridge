@@ -146,3 +146,26 @@ def test_update_status_from_a_worker_thread_does_not_raise(tmp_path, monkeypatch
         assert failures == [], f"a status write from a worker thread raised: {failures[0]!r}"
     finally:
         _stop(loop, thread)
+
+
+def test_a_loop_that_closes_between_the_check_and_the_submit_is_not_an_error(monkeypatch):
+    """Shutdown can close the loop after `is_running()` has already said yes.
+
+    `run_coroutine_threadsafe` then raises `RuntimeError` and leaves the
+    coroutine unawaited — the exact failure on WSGI and D-Bus callers this
+    helper exists to absorb.
+    """
+    import sendspin_bridge.bridge.state as state
+
+    loop = asyncio.new_event_loop()
+    loop.close()
+    monkeypatch.setattr(loop, "is_running", lambda: True)
+    monkeypatch.setattr(state, "get_main_loop", lambda: loop)
+
+    async def _work():
+        return "never runs"
+
+    coro = _work()
+
+    assert schedule_on_bridge_loop(coro, description="status write") is None
+    assert coro.cr_frame is None, "the coroutine was left unclosed"

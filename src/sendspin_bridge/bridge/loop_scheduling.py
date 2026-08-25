@@ -47,7 +47,15 @@ def schedule_on_bridge_loop(
 
     loop = _state.get_main_loop()
     if loop is not None and loop.is_running():
-        return asyncio.run_coroutine_threadsafe(coro, loop)
+        try:
+            return asyncio.run_coroutine_threadsafe(coro, loop)
+        except RuntimeError as exc:
+            # Shutdown can close the loop between the check above and the
+            # submission below.  That is the same "no loop to schedule onto"
+            # this helper promises to absorb, not an error for the caller.
+            logger.debug("Could not schedule %s on the bridge loop: %s", label, exc)
+            coro.close()
+            return None
 
     # No registered loop: we may still be *on* one (tests, early startup).
     try:

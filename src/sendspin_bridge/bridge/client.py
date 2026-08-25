@@ -1305,6 +1305,16 @@ class SendspinClient:
         """A JSON-serialisable view of the last *n* spawns, for diagnostics."""
         return self._supervisor.recent(n)
 
+    @property
+    def restart_delay(self) -> float:
+        """The backoff the next daemon restart would wait, in seconds.
+
+        Read by the diagnostics bundle and the demo dashboard: they used to
+        reach for the client's own attribute, and reported the default rather
+        than the delay actually in force once the supervisor took it over.
+        """
+        return self._supervisor.restart_delay
+
     async def stop_subprocess(self) -> None:
         """Stop the daemon subprocess (BluetoothManagerHost protocol)."""
         await self.stop_sendspin()
@@ -2369,26 +2379,35 @@ class SendspinClient:
             logger.warning("[%s] Calibration tone failed: %s", self.player_name, exc)
             return False
 
-    @property
-    def _metronome(self) -> CalibrationMetronome:
-        """This device's click train, rebuilt when the sink changes."""
+    async def _metronome_for_current_sink(self) -> CalibrationMetronome:
+        """This device's click train, rebuilt when the sink changes.
+
+        A running train owns a player process, so the one built for the old
+        sink has to be stopped rather than dropped: letting go of the only
+        reference leaves that player clicking with nothing able to stop it,
+        and the next start puts a second one on top of it.
+        """
         sink = self.bluetooth_sink_name or ""
         existing = self._calibration_metronome
-        if existing is None or existing.sink_name != sink:
-            existing = CalibrationMetronome(
-                sink_name=sink,
-                player_name=self.player_name,
-                static_delay_ms=lambda: float(self.status.get("static_delay_ms") or 0.0),
-                on_active_change=lambda active: self._update_status({"calibration_metronome_active": active}),
-            )
-            self._calibration_metronome = existing
-        return existing
+        if existing is not None and existing.sink_name == sink:
+            return existing
+        if existing is not None:
+            await existing.stop()
+        metronome = CalibrationMetronome(
+            sink_name=sink,
+            player_name=self.player_name,
+            static_delay_ms=lambda: float(self.status.get("static_delay_ms") or 0.0),
+            on_active_change=lambda active: self._update_status({"calibration_metronome_active": active}),
+        )
+        self._calibration_metronome = metronome
+        return metronome
 
     async def start_calibration_metronome(self) -> bool:
         """Start a phase-aligned continuous metronome on this device's BT sink."""
         if not self.status.get("bluetooth_connected"):
             return False
-        return await self._metronome.start()
+        metronome = await self._metronome_for_current_sink()
+        return await metronome.start()
 
     async def stop_calibration_metronome(self) -> None:
         """Stop this device's continuous calibration metronome immediately."""

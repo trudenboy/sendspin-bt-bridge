@@ -102,6 +102,11 @@ class DaemonSupervisor:
     def halted(self) -> bool:
         return self._halted
 
+    @property
+    def restart_delay(self) -> float:
+        """How long the next restart would wait, for diagnostics to report."""
+        return self._backoff
+
     def halt(self) -> None:
         """Stop respawning until a daemon comes up again."""
         self._halted = True
