@@ -41,8 +41,12 @@ _KEY_ALTERNATION = "|".join(sorted(_SECRET_KEYS, key=len, reverse=True))
 
 #: ``"access_token": "…"`` and ``'access_token': '…'`` — JSON and the repr of
 #: a dict, which is what a ``%s`` of a response produces.
+#: Each quoting style is matched on its own so a value may contain the
+#: other quote — `{"token": "ab'cd"}` is ordinary JSON, and a single pattern
+#: that banned both characters simply failed to match and let it through.
 _QUOTED_FIELD_RE = re.compile(
-    rf"""(?P<prefix>['"](?:{_KEY_ALTERNATION})['"]\s*:\s*)(?P<quote>['"])(?P<value>(?:[^'"\\]|\\.)*)(?P=quote)""",
+    rf"""(?P<prefix>['"](?:{_KEY_ALTERNATION})['"]\s*:\s*)"""
+    rf"""(?:"(?P<dq>(?:[^"\\]|\\.)*)"|'(?P<sq>(?:[^'\\]|\\.)*)')""",
     re.IGNORECASE,
 )
 
@@ -66,9 +70,11 @@ def _replace_value(match: re.Match) -> str:
 
 
 def _replace_quoted(match: re.Match) -> str:
-    if match.group("value") == REDACTED:
+    quote = '"' if match.group("dq") is not None else "'"
+    value = match.group("dq") if quote == '"' else match.group("sq")
+    if value == REDACTED:
         return match.group(0)
-    return f"{match.group('prefix')}{match.group('quote')}{REDACTED}{match.group('quote')}"
+    return f"{match.group('prefix')}{quote}{REDACTED}{quote}"
 
 
 def redact(text: str | None) -> str:

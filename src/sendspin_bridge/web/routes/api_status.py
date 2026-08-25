@@ -83,6 +83,7 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     is_ma_connected,
 )
 from sendspin_bridge.web.redaction import redact
+from sendspin_bridge.web.request_identity import current_trust_policy
 from sendspin_bridge.web.sse_slots import SseSlotPool
 
 UTC = timezone.utc
@@ -2117,17 +2118,10 @@ def api_bugreport_submit():
     # Rate limit — resolve the client IP trusting ``X-Forwarded-For`` only
     # when the immediate peer is a trusted proxy, otherwise the header is
     # client-spoofable and the per-IP limit is trivially bypassed.
-    from sendspin_bridge.web.trusted_proxies import TRUSTED_PROXY_DEFAULTS, resolve_client_ip
-
-    trust_set = set(TRUSTED_PROXY_DEFAULTS)
-    extra_proxies = load_config().get("TRUSTED_PROXIES") or []
-    if isinstance(extra_proxies, list):
-        trust_set.update(v.strip() for v in extra_proxies if isinstance(v, str) and v.strip())
-    client_ip = resolve_client_ip(
+    client_ip = current_trust_policy().client_ip(
         request.remote_addr or "",
         request.headers.get("X-Forwarded-For", ""),
         request.headers.get("X-Real-IP", ""),
-        trust_set,
     )
     rate_error = proxy.check_rate_limit(client_ip)
     if rate_error:

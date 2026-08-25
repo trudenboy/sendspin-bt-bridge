@@ -28,7 +28,7 @@ from sendspin_bridge.config import (
     resolve_web_port,
 )
 from sendspin_bridge.config.logging_setup import apply_log_level
-from sendspin_bridge.web.request_identity import current_trust_policy
+from sendspin_bridge.web.request_identity import current_trust_policy, trust_policy_for_environ
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -103,7 +103,10 @@ class _IngressMiddleware:
 
     def __call__(self, environ, start_response):
         peer = environ.get("REMOTE_ADDR", "")
-        if _peer_trusted(peer):
+        # Built here and cached on the environ, so the auth gate and the
+        # rate-limiter later in the same request reuse this exact policy
+        # instead of re-reading a config that may have been saved meanwhile.
+        if trust_policy_for_environ(environ).is_trusted(peer):
             ingress_path = environ.get("HTTP_X_INGRESS_PATH", "").rstrip("/")
             # Only accept a single-leading-slash absolute path (no //, no scheme)
             if ingress_path and ingress_path.startswith("/") and not ingress_path.startswith("//"):

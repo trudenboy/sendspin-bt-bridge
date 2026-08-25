@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from sendspin_bridge.web.redaction import redact
+from sendspin_bridge.web.redaction import REDACTED, redact
 
 TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 
@@ -112,3 +112,30 @@ def test_the_unexpected_result_branches_redact_before_logging(caplog):
 
     assert TOKEN not in caplog.text
     assert "auth/token/create" in caplog.text
+
+
+# ── a value containing the other quote character ─────────────────────────
+
+
+def test_a_json_value_may_contain_an_apostrophe():
+    """The value pattern rejected both quotes, not just its own delimiter."""
+    line = '{"access_token": "abc\'def"}'
+
+    assert "abc'def" not in redact(line)
+    assert REDACTED in redact(line)
+
+
+def test_a_dict_repr_value_may_contain_a_double_quote():
+    line = "{'access_token': 'ab\"cd'}"
+
+    assert 'ab"cd' not in redact(line)
+    assert REDACTED in redact(line)
+
+
+def test_the_neighbouring_fields_survive_either_way():
+    line = '{"user": "kim", "password": "p\'ss", "state": "ok"}'
+    masked = redact(line)
+
+    assert '"user": "kim"' in masked
+    assert '"state": "ok"' in masked
+    assert "p'ss" not in masked
