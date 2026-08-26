@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Device state reports the audio sink a speaker is actually playing through.
+  It read the sink name from a field nothing ever filled, so every device
+  showed no sink name while reporting, in the same breath, that it had one.
 - The sink name WirePlumber publishes on Ubuntu 26.04 is understood
   everywhere it appears. The bridge already selected that name when
   connecting a speaker, but the code that reads sink names back did not
