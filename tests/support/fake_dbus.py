@@ -190,3 +190,55 @@ class FakeDeviceInterface:
         self._bluez.calls.append((self._path, "DisconnectProfile", (uuid,)))
         if "DisconnectProfile" in self._bluez.fail:
             raise self._bluez.fail["DisconnectProfile"]
+
+
+# -- wiring a manager to a fake BlueZ -------------------------------------
+
+
+def device_module(manager, bluez: FakeBlueZ | None = None, *, controller: str = "hci0"):
+    """A device module for *manager*'s speaker, reading from *bluez*.
+
+    With no *bluez*, BlueZ knows nothing about the speaker — which is how a
+    caller sees an unresolvable device object, and the state the bluetoothctl
+    fallback exists for.
+    """
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
+
+    address = DeviceAddress.require(manager.mac_address)
+    return BluetoothDevice(address, controller=controller, bus_factory=(bluez or FakeBlueZ()).bus)
+
+
+def bluez_knowing(manager, *, controller: str = "hci0", path: str | None = None, **device) -> FakeBlueZ:
+    """A FakeBlueZ that knows *manager*'s speaker, with the given properties."""
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+
+    address = DeviceAddress.require(manager.mac_address)
+    bluez = FakeBlueZ()
+    bluez.add_device(path or f"/org/bluez/{controller}/{address.dbus_node}", address.colons, **device)
+    return bluez
+
+
+def attach(manager, bluez: FakeBlueZ | None = None, *, controller: str = "hci0"):
+    """Give *manager* a device module reading from *bluez*, and return it.
+
+    Pins the manager's controller to match: the manager rebuilds its module
+    when the controller it resolved differs from the one the module was built
+    for, which would quietly drop the fake.
+    """
+    manager.adapter_hci_name = controller
+    module = device_module(manager, bluez, controller=controller)
+    manager.device = module
+    return module
+
+
+def silent(manager, *, controller: str = "hci0"):
+    """Attach a module whose BlueZ answers nothing — the fallback's condition."""
+    return attach(manager, FakeBlueZ(), controller=controller)
+
+
+def unreachable(manager, error: Exception | None = None, *, controller: str = "hci0"):
+    """Attach a module whose bus raises — a transport failure, not an answer."""
+    bluez = FakeBlueZ()
+    bluez.fail["GetManagedObjects"] = error or RuntimeError("D-Bus exploded")
+    return attach(manager, bluez, controller=controller)

@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -265,6 +266,37 @@ class BluetoothDevice:
 
     def state_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> DeviceState | None:
         return self._blocking(self.state(), timeout=timeout, default=None)
+
+    def wait_for_services_blocking(
+        self,
+        *,
+        is_connected_check: Callable[[], bool],
+        wait_with_cancel: Callable[[float], bool],
+        timeout: float = 10.0,
+        poll_interval: float = 0.5,
+    ) -> bool | None:
+        """Wait for SDP resolution from a thread, three answers deep.
+
+        ``True`` — resolved. ``False`` — we watched and it did not: timed out,
+        the speaker went away, or the caller cancelled. ``None`` — we could not
+        watch at all, and the caller should proceed without a warning it cannot
+        act on. The caller supplies both the "is it still here" check and the
+        cancellable wait, because both belong to whatever is driving the
+        connect, not to this module.
+        """
+        if self.state_blocking() is None:
+            return None
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            if self.services_resolved_blocking():
+                return True
+            if not is_connected_check():
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if not wait_with_cancel(min(poll_interval, remaining)):
+                return False
 
     def connect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
         return bool(self._blocking(self.connect_profile(uuid), timeout=timeout, default=False))

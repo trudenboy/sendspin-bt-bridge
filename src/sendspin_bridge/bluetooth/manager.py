@@ -20,17 +20,15 @@ from typing import TYPE_CHECKING
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, LinkState, bt_executor
+from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_bluez, set_bluez
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
     _dbus_call_device_method,
-    _dbus_connect_profile,
     _dbus_get_adapter_address,
-    _dbus_get_device_property,
-    _dbus_get_device_uuids,
-    _dbus_wait_services_resolved,
 )
+from sendspin_bridge.bluetooth.device import BluetoothDevice
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.bluetooth.reconnect_policy import (
     Churned,
@@ -226,6 +224,7 @@ class BluetoothManager:
         # the kernel's own map and scopes every verb at this controller.
         self._adapter_handle = AdapterHandle(adapter=adapter or "", link_probe=self._dbus_link_probe)
         self._dbus_path_override: object = _UNSET
+        self._device: BluetoothDevice | None = None
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._running: bool = True  # False = shutdown; monitor loops exit
         self.paired: bool | None = None
@@ -358,6 +357,29 @@ class BluetoothManager:
         self._adapter_handle.pin_hci(value)
 
     @property
+    def device(self) -> BluetoothDevice:
+        """This speaker's life on the D-Bus, built once and kept.
+
+        Built for the controller the adapter handle resolved: a speaker paired
+        on two controllers is two objects, and which one an operation means is
+        the handle's decision, not this module's.
+        """
+        existing = self._device
+        controller = self.adapter_hci_name or ""
+        if existing is not None and existing.controller == controller:
+            return existing
+        address = DeviceAddress.parse(self.mac_address)
+        if address is None:
+            raise ValueError(f"{self.mac_address!r} is not a Bluetooth device address")
+        self._device = BluetoothDevice(address, controller=controller)
+        return self._device
+
+    @device.setter
+    def device(self, value: BluetoothDevice) -> None:
+        """Substitution point for tests; production builds its own."""
+        self._device = value
+
+    @property
     def _dbus_device_path(self) -> str | None:
         """``/org/bluez/hciN/dev_...`` once the controller resolves."""
         if self._dbus_path_override is not _UNSET:
@@ -370,10 +392,10 @@ class BluetoothManager:
 
     def _dbus_link_probe(self, mac: str) -> LinkState | None:
         """The D-Bus fast path for link state; ``None`` when it cannot answer."""
-        val = _dbus_get_device_property(self._dbus_device_path, "Connected")
-        if val is None:
+        state = self.device.state_blocking()
+        if state is None or state.object_path is None:
             return None
-        return LinkState.CONNECTED if bool(val) else LinkState.DISCONNECTED
+        return LinkState.CONNECTED if state.connected else LinkState.DISCONNECTED
 
     def shutdown(self) -> None:
         """Signal all monitor loops to exit."""
@@ -494,7 +516,7 @@ class BluetoothManager:
         That state is common immediately after disconnect/restart for some
         speakers and must not be treated as a hard "not paired" signal.
         """
-        val = _dbus_get_device_property(self._dbus_device_path, "Paired")
+        val = self.device.is_paired_blocking()
         if val is not None:
             return bool(val)
         info = get_bluez().device_info(self.mac_address, self._bluez_adapter())
@@ -656,7 +678,7 @@ class BluetoothManager:
         profiles" banner instead of a generic sink-not-found error.
         """
         try:
-            uuids = {u.lower() for u in _dbus_get_device_uuids(self._dbus_device_path)}
+            uuids = {u.lower() for u in self.device.uuids_blocking()}
         except Exception as exc:  # pragma: no cover — defensive
             logger.debug("[%s] Post-pair UUID read failed: %s", self.device_name, exc)
             return
@@ -778,8 +800,7 @@ class BluetoothManager:
                 # poking audio. Prevents all downstream profile/sink work from
                 # racing an uninitialized Device1. Non-blocking: we proceed
                 # even on timeout — this is a timing hint, not a hard gate.
-                resolved = _dbus_wait_services_resolved(
-                    self._dbus_device_path,
+                resolved = self.device.wait_for_services_blocking(
                     is_connected_check=self.is_device_connected,
                     wait_with_cancel=self._wait_with_cancel,
                     timeout=10.0,
@@ -1095,7 +1116,8 @@ class BluetoothManager:
         ``AlreadyConnected`` errors on a healthy stack stay silent; any other
         failure is logged at info level as a potential bluez/bluez#1922 signal.
         """
-        ok, reason = _dbus_connect_profile(self._dbus_device_path, A2DP_SINK_UUID)
+        ok = self.device.connect_profile_blocking(A2DP_SINK_UUID)
+        reason = self.device.last_error
         if ok:
             logger.debug("[%s] A2DP Sink profile explicitly connected", self.device_name)
             return True
