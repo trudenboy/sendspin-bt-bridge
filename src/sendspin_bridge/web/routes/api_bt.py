@@ -38,6 +38,7 @@ from sendspin_bridge.services.lifecycle.async_job_state import (
     is_scan_running,
 )
 from sendspin_bridge.web.routes._helpers import get_client_or_error, validate_adapter, validate_mac
+from sendspin_bridge.web.routes.api_status import invalidate_preflight_probe
 
 logger = logging.getLogger(__name__)
 
@@ -727,6 +728,9 @@ def api_bt_adapter_power():
         if result.result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
             logger.error("Failed to toggle adapter power: outcome=%s", result.result.outcome.value)
             return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
+        # The host just changed under us; the next status build must measure
+        # it rather than report the sample taken before the toggle.
+        invalidate_preflight_probe()
         # ``changed`` reproduces the historical ok-heuristic (succeeded /
         # changing power / powered: marker) exactly.
         return jsonify({"ok": result.changed, "power": power})

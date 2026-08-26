@@ -58,6 +58,7 @@ from sendspin_bridge.services.diagnostics.recovery_timeline import (
     build_recovery_timeline_text,
 )
 from sendspin_bridge.services.diagnostics.sendspin_compat import get_runtime_dependency_versions, query_audio_devices
+from sendspin_bridge.services.diagnostics.status_derivation import StatusDerivation
 from sendspin_bridge.services.ipc.bridge_state_model import build_bridge_state_model
 from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import (
@@ -153,7 +154,13 @@ def _parse_memtotal_mb(line: str) -> int | None:
 
 
 def _collect_preflight_status() -> dict:
-    """Collect preflight runtime checks for reuse across helper routes."""
+    """Measure the host now — two bluetoothctl calls and the rest.
+
+    Called directly where somebody is looking precisely because something may
+    have just changed: diagnostics, the setup verification endpoint, the
+    operator checks.  The status path reads a sample of it instead — see
+    ``_sampled_preflight_status``.
+    """
     return _shared_collect_preflight_status(
         get_server_name_fn=get_server_name,
         list_sinks_fn=list_sinks,
@@ -162,6 +169,40 @@ def _collect_preflight_status() -> dict:
         exists_fn=os.path.exists,
         open_fn=open,
     )
+
+
+#: The probe is the expensive half of a status build (~56 ms of ~62 ms,
+#: measured), and the host it describes does not change per tick.  Everything
+#: derived from it is still rebuilt every time.
+_preflight_probe: StatusDerivation[dict] = StatusDerivation(
+    # Late-bound on purpose: the measurement is one function, and everything
+    # that reaches for it — including tests — reaches for the same one.
+    lambda: _collect_preflight_status(),
+    label="preflight probe",
+)
+
+
+def invalidate_preflight_probe() -> None:
+    """Make the next status build re-measure the host.
+
+    For the moments an operator acts on the host itself — a saved config, an
+    adapter powered back on — and expects the next screen to be true.
+    """
+    _preflight_probe.invalidate()
+
+
+def reset_preflight_probe() -> None:
+    """Drop the sampled probe entirely (tests, and a fresh runtime)."""
+    _preflight_probe.reset()
+
+
+def _sampled_preflight_status() -> dict:
+    """The host's state as of the last measurement, taken at a bounded rate.
+
+    A status tick is driven by runtime state changing, which happens far
+    faster than anything this describes.
+    """
+    return _preflight_probe.current()
 
 
 def _collection_error_payload(exc: Exception) -> dict[str, str]:
@@ -255,7 +296,7 @@ def _build_onboarding_assistant_payload(
 ) -> dict:
     """Build the operator-facing onboarding assistant payload."""
     if preflight is None:
-        preflight = _collect_preflight_status()
+        preflight = _sampled_preflight_status()
     if config is None:
         config = load_config()
     if devices is None:
@@ -396,7 +437,7 @@ def _build_status_payload() -> dict:
     bridge_snapshot = build_bridge_snapshot(registry.active_clients)
     payload = bridge_snapshot.to_status_payload()
     config = load_config()
-    preflight = _collect_preflight_status()
+    preflight = _sampled_preflight_status()
     startup_progress = bridge_snapshot.startup_progress.to_dict() if bridge_snapshot.startup_progress else {}
     bridge_state = build_bridge_state_model(
         config=config,
@@ -936,6 +977,8 @@ def api_diagnostics():
         # as "D-Bus unavailable", and the recovery card in the bundle then
         # reported a runtime that cannot reach D-Bus on a host that was
         # paired, connected and playing.
+        # A bug report is taken because something looks wrong, so this one
+        # measures the host rather than reading the sampled value.
         diagnostics_preflight = _collect_preflight_status()
         try:
             diagnostics_state = build_bridge_state_model(
@@ -2110,6 +2153,8 @@ def api_preflight():
     quick troubleshooting without exposing device details.
     """
 
+    # Setup verification: the operator has just changed something and is
+    # asking whether it took.
     payload = _collect_preflight_status()
     payload["ok"] = True
     return jsonify(payload)

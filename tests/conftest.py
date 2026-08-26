@@ -3,6 +3,21 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _unsampled_host_probe():
+    """Each test measures the host for itself.
+
+    The status path samples the host probe at a bounded rate through a
+    process-wide cache, so without this a probe stubbed by one test would be
+    served to the next one that builds a status payload.
+    """
+    from sendspin_bridge.web.routes.api_status import reset_preflight_probe
+
+    reset_preflight_probe()
+    yield
+    reset_preflight_probe()
+
+
 @pytest.fixture
 def fake_bluez():
     """The shared bluetoothctl fake (tests/support/fake_bluez.py).
