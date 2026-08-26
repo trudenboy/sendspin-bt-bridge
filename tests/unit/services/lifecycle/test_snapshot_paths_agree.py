@@ -127,56 +127,39 @@ def test_the_two_reads_of_one_client_describe_it_identically():
     assert _volatile(atomic.to_dict()) == _volatile(by_attribute.to_dict())
 
 
-def test_a_client_whose_atomic_read_is_not_callable_is_read_by_attribute():
-    """`snapshot = None` on a class used to crash the whole status build.
+class _ClientWithBrokenSnapshot(_Client):
+    """A class carrying `snapshot = None` — the shape that used to crash.
 
-    The old guard asked whether the *class* had the attribute, which a
-    ``None`` placeholder satisfies, and then called it.
+    It has to be on the *class*: the old guard asked `hasattr(type(client),
+    "snapshot")`, which an instance attribute does not satisfy, so a
+    `SimpleNamespace` would have taken the attribute path and proved nothing.
     """
-    client = _Client()
-    broken = SimpleNamespace(
-        snapshot=None,
-        status=client.status,
-        _status_lock=client._status_lock,
-        player_name=client.player_name,
-        player_id=client.player_id,
-        listen_port=client.listen_port,
-        server_host=client.server_host,
-        server_port=client.server_port,
-        static_delay_ms=client.static_delay_ms,
-        connected_server_url=client.connected_server_url,
-        bluetooth_sink_name=client.bluetooth_sink_name,
-        bt_management_enabled=client.bt_management_enabled,
-        bt_manager=client.bt_manager,
-        is_running=client.is_running,
-    )
 
-    snapshot = build_device_snapshot(broken, configured_enabled={})
+    snapshot = None  # type: ignore[assignment]
+
+
+class _ClientAnsweringSomethingElse(_Client):
+    """A stub whose atomic read answers with something that is not a mapping."""
+
+    def snapshot(self):  # type: ignore[override]
+        return "not a mapping"
+
+
+def test_a_client_whose_atomic_read_is_not_callable_is_read_by_attribute():
+    """`snapshot = None` on a class used to take down the whole status build.
+
+    The old guard asked whether the class had the attribute, which a `None`
+    placeholder satisfies, and then called it.
+    """
+    snapshot = build_device_snapshot(_ClientWithBrokenSnapshot(), configured_enabled={})
 
     assert snapshot.player_name == "Kitchen"
     assert snapshot.sink_name == "bluez_output.AA_BB_CC_DD_EE_FF.1"
 
 
 def test_a_client_that_answers_with_something_else_is_read_by_attribute():
-    """A stub returning a Mock must not become the snapshot's facts."""
-    client = _Client()
-    odd = SimpleNamespace(
-        snapshot=lambda: "not a mapping",
-        status=client.status,
-        _status_lock=client._status_lock,
-        player_name=client.player_name,
-        player_id=client.player_id,
-        listen_port=client.listen_port,
-        server_host=client.server_host,
-        server_port=client.server_port,
-        static_delay_ms=client.static_delay_ms,
-        connected_server_url=client.connected_server_url,
-        bluetooth_sink_name=client.bluetooth_sink_name,
-        bt_management_enabled=client.bt_management_enabled,
-        bt_manager=client.bt_manager,
-        is_running=client.is_running,
-    )
-
-    snapshot = build_device_snapshot(odd, configured_enabled={})
+    """A stub returning a string must not become the snapshot's facts."""
+    snapshot = build_device_snapshot(_ClientAnsweringSomethingElse(), configured_enabled={})
 
     assert snapshot.player_name == "Kitchen"
+    assert snapshot.sink_name == "bluez_output.AA_BB_CC_DD_EE_FF.1"
