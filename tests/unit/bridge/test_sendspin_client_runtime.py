@@ -1157,3 +1157,46 @@ async def test_start_sendspin_inner_falls_back_to_empty_bt_identity(monkeypatch)
     payload = json.loads(captured_params[0])
     assert payload["bt_product_name"] == ""
     assert payload["bt_manufacturer"] == ""
+
+
+@pytest.mark.asyncio
+async def test_start_sendspin_inner_tells_the_daemon_where_bluez_has_the_speaker(monkeypatch):
+    """The daemon's params carry the object path, resolved rather than guessed.
+
+    Seen on the stand: a spawn recorded no path at all, so neither the daemon's
+    log nor a bug report could say which controller the speaker was on — the
+    question issue #340 exists to answer.
+    """
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
+    from tests.support.fake_dbus import FakeBlueZ
+
+    address = DeviceAddress.require("FC:58:FA:EB:08:6C")
+    path = f"/org/bluez/hci0/{address.dbus_node}"
+    bluez = FakeBlueZ()
+    bluez.add_device(path, address.colons, connected=True, Alias="ENEBY20")
+
+    client = SendspinClient("ENEBY20", "localhost", 9000)
+    client._start_sendspin_lock = asyncio.Lock()
+    client.bt_manager = SimpleNamespace(
+        connected=True,
+        configure_bluetooth_audio=lambda: True,
+        # The controller is not pinned yet — which is how the stand spawned it,
+        # and why the path came out empty before.
+        device=BluetoothDevice(address, controller="", bus_factory=bluez.bus),
+    )
+    client.bluetooth_sink_name = "bluez_output.FC_58_FA_EB_08_6C.1"
+    monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8928)
+
+    captured: list[str] = []
+
+    async def _fake_subprocess_exec(*args, **_kw):
+        captured.append(args[3])
+        raise RuntimeError("intentional short-circuit")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess_exec)
+
+    await client._start_sendspin_inner()
+
+    assert captured, "the daemon was never spawned"
+    assert json.loads(captured[0])["bluetooth_device_path"] == path

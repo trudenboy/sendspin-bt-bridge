@@ -280,3 +280,36 @@ async def test_a_speaker_without_a_transport_still_answers_a_snapshot():
 
     assert snapshot is not None
     assert snapshot.state is None
+
+
+# ── before the controller is known ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_is_found_before_the_controller_resolves():
+    """The handle pins `hciN` on its own schedule; the speaker exists meanwhile.
+
+    Seen on the stand: a daemon spawned while the controller was still
+    unresolved recorded no object path at all, so its logs and the bug report
+    could not say where BlueZ had the speaker.
+    """
+    bluez = FakeBlueZ()
+    bluez.add_device(PATH, ADDRESS.colons, connected=True)
+
+    device = BluetoothDevice(ADDRESS, controller="", bus_factory=bluez.bus)
+
+    assert await device.is_connected() is True
+    assert device.object_path == PATH
+
+
+@pytest.mark.asyncio
+async def test_with_no_controller_and_two_candidates_it_refuses_to_choose():
+    """Which controller a speaker is on is the adapter handle's decision."""
+    bluez = FakeBlueZ()
+    bluez.add_device("/org/bluez/hci0/dev_FC_58_FA_EB_08_6C", ADDRESS.colons, connected=False)
+    bluez.add_device("/org/bluez/hci1/dev_FC_58_FA_EB_08_6C", ADDRESS.colons, connected=True)
+
+    device = BluetoothDevice(ADDRESS, controller="", bus_factory=bluez.bus)
+
+    assert await device.is_connected() is False
+    assert device.object_path is None

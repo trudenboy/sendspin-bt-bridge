@@ -470,17 +470,25 @@ class BluetoothDevice:
         return objects
 
     def _find_path(self, objects: dict[str, dict[str, dict[str, Any]]]) -> str | None:
-        """This speaker's object on our controller, by address rather than shape."""
-        prefix = f"/org/bluez/{self.controller}/"
-        for path, interfaces in objects.items():
-            device = interfaces.get(DEVICE_INTERFACE)
-            if not device or not path.startswith(prefix):
-                continue
-            from sendspin_bridge.bluetooth.address import DeviceAddress
+        """This speaker's object on our controller, by address rather than shape.
 
-            if DeviceAddress.parse(_unwrap(device.get("Address"))) == self.address:
-                return path
-        return None
+        Until the adapter handle has pinned ``hciN`` the controller is unknown,
+        and the speaker still exists: a single match is taken. Several matches
+        with no controller named is exactly the question the handle answers, so
+        this refuses rather than guessing between them.
+        """
+        from sendspin_bridge.bluetooth.address import DeviceAddress
+
+        matches = [
+            path
+            for path, interfaces in objects.items()
+            if (device := interfaces.get(DEVICE_INTERFACE))
+            and DeviceAddress.parse(_unwrap(device.get("Address"))) == self.address
+        ]
+        if self.controller:
+            prefix = f"/org/bluez/{self.controller}/"
+            return next((path for path in matches if path.startswith(prefix)), None)
+        return matches[0] if len(matches) == 1 else None
 
     async def _device_interface(self, interface: str = DEVICE_INTERFACE) -> Any:
         await self._managed_objects()
