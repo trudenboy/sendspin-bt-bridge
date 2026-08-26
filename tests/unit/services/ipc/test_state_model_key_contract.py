@@ -19,7 +19,6 @@ import ast
 import pathlib
 
 SRC = pathlib.Path(__file__).parents[4] / "src" / "sendspin_bridge"
-SNAPSHOT = SRC / "services" / "lifecycle" / "status_snapshot.py"
 CLIENT = SRC / "bridge" / "client.py"
 
 #: Keys read from ``extra`` that no producer writes, on purpose.  Empty, and

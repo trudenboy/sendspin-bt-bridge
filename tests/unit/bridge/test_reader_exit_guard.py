@@ -48,8 +48,8 @@ async def test_a_reader_that_returns_quietly_still_frees_the_daemon():
 
     task = asyncio.ensure_future(_reader_that_gives_up())
     task.add_done_callback(client._make_reader_done_handler())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    await asyncio.gather(task, return_exceptions=True)
+    await asyncio.sleep(0)  # done callbacks run on the next tick
 
     assert proc.killed, "the daemon was left writing into a pipe nobody reads"
 
@@ -65,8 +65,8 @@ async def test_a_reader_that_raises_still_frees_the_daemon():
 
     task = asyncio.ensure_future(_reader_that_breaks())
     task.add_done_callback(client._make_reader_done_handler())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    await asyncio.gather(task, return_exceptions=True)
+    await asyncio.sleep(0)  # done callbacks run on the next tick
 
     assert proc.killed
 
@@ -84,8 +84,8 @@ async def test_a_daemon_that_has_already_exited_is_left_alone():
 
     task = asyncio.ensure_future(_reader())
     task.add_done_callback(client._make_reader_done_handler())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    await asyncio.gather(task, return_exceptions=True)
+    await asyncio.sleep(0)  # done callbacks run on the next tick
 
     assert not proc.killed
 
