@@ -420,6 +420,50 @@ def build_device_snapshot_pairs(
     return [(client, build_device_snapshot(client, configured_enabled=resolved_enabled)) for client in clients]
 
 
+def _client_facts(client) -> dict:
+    """The facts a snapshot is built from, read once.
+
+    A client that can read itself atomically does so — that is what keeps a
+    status build free of TOCTOU across twenty-one separate attribute reads.
+    One that cannot (a partially built client, a test double) is read by
+    attribute into the same shape, so the unpacking below exists once rather
+    than in two versions that have to be kept in step by hand.
+    """
+    reader = getattr(type(client), "snapshot", None)
+    if callable(reader):
+        facts = client.snapshot()
+        if isinstance(facts, dict):
+            return facts
+
+    if hasattr(client, "_status_lock"):
+        with client._status_lock:
+            status = client.status.copy()
+    else:
+        status = client.status.copy()
+    bt_mgr = getattr(client, "bt_manager", None)
+    return {
+        "status": status,
+        "bluetooth_sink_name": getattr(client, "bluetooth_sink_name", None),
+        "bt_management_enabled": getattr(client, "bt_management_enabled", True),
+        "connected_server_url": getattr(client, "connected_server_url", ""),
+        "is_running": client.is_running() if hasattr(client, "is_running") else None,
+        "player_name": getattr(client, "player_name", None),
+        "player_id": getattr(client, "player_id", ""),
+        "listen_port": getattr(client, "listen_port", None),
+        "server_host": getattr(client, "server_host", None),
+        "server_port": getattr(client, "server_port", None),
+        "static_delay_ms": getattr(client, "static_delay_ms", None),
+        "bt_manager": bt_mgr,
+        "bluetooth_mac": getattr(bt_mgr, "mac_address", None) if bt_mgr else None,
+        "effective_adapter_mac": getattr(bt_mgr, "effective_adapter_mac", None) if bt_mgr else None,
+        "adapter": getattr(bt_mgr, "adapter", None) if bt_mgr else None,
+        "adapter_hci_name": getattr(bt_mgr, "adapter_hci_name", "") if bt_mgr else "",
+        "battery_level": getattr(bt_mgr, "battery_level", None) if bt_mgr else None,
+        "paired": getattr(bt_mgr, "paired", None) if bt_mgr else None,
+        "max_reconnect_fails": int(getattr(bt_mgr, "max_reconnect_fails", 0) or 0) if bt_mgr else 0,
+    }
+
+
 def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None = None) -> DeviceSnapshot:
     """Build a typed device snapshot from a runtime client object."""
     if client is None:
@@ -428,53 +472,26 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     if not hasattr(client, "status"):
         return DeviceSnapshot(error="Client initializing")
 
-    # Prefer atomic snapshot() to avoid TOCTOU across separate lock acquisitions.
-    # Check type(client) to avoid false positives with MagicMock in tests.
-    _snap = client.snapshot() if hasattr(type(client), "snapshot") else None
-    if _snap is not None:
-        status = _snap["status"]
-        _snap_bt_mgr = _snap["bt_manager"]
-        _snap_sink = _snap["bluetooth_sink_name"]
-        _snap_bt_mgmt = _snap["bt_management_enabled"]
-        _snap_server_url = _snap["connected_server_url"]
-        _snap_is_running = _snap["is_running"]
-        _snap_player_name = _snap["player_name"]
-        _snap_player_id = _snap["player_id"]
-        _snap_listen_port = _snap["listen_port"]
-        _snap_server_host = _snap["server_host"]
-        _snap_server_port = _snap["server_port"]
-        _snap_delay = _snap["static_delay_ms"]
-        _snap_mac = _snap["bluetooth_mac"]
-        _snap_eff_adapter = _snap["effective_adapter_mac"]
-        _snap_adapter = _snap["adapter"]
-        _snap_hci = _snap["adapter_hci_name"]
-        _snap_battery = _snap["battery_level"]
-        _snap_paired = _snap["paired"]
-        _snap_max_reconn = _snap["max_reconnect_fails"]
-    else:
-        if hasattr(client, "_status_lock"):
-            with client._status_lock:
-                status = client.status.copy()
-        else:
-            status = client.status.copy()
-        _snap_bt_mgr = getattr(client, "bt_manager", None)
-        _snap_sink = getattr(client, "bluetooth_sink_name", None)
-        _snap_bt_mgmt = getattr(client, "bt_management_enabled", True)
-        _snap_server_url = getattr(client, "connected_server_url", "")
-        _snap_is_running = client.is_running() if hasattr(client, "is_running") else None
-        _snap_player_name = getattr(client, "player_name", None)
-        _snap_player_id = getattr(client, "player_id", "")
-        _snap_listen_port = getattr(client, "listen_port", None)
-        _snap_server_host = getattr(client, "server_host", None)
-        _snap_server_port = getattr(client, "server_port", None)
-        _snap_delay = getattr(client, "static_delay_ms", None)
-        _snap_mac = _snap_bt_mgr.mac_address if _snap_bt_mgr else None
-        _snap_eff_adapter = getattr(_snap_bt_mgr, "effective_adapter_mac", None) if _snap_bt_mgr else None
-        _snap_adapter = getattr(_snap_bt_mgr, "adapter", None) if _snap_bt_mgr else None
-        _snap_hci = getattr(_snap_bt_mgr, "adapter_hci_name", "") if _snap_bt_mgr else ""
-        _snap_battery = getattr(_snap_bt_mgr, "battery_level", None) if _snap_bt_mgr else None
-        _snap_paired = getattr(_snap_bt_mgr, "paired", None) if _snap_bt_mgr else None
-        _snap_max_reconn = int(getattr(_snap_bt_mgr, "max_reconnect_fails", 0) or 0) if _snap_bt_mgr else 0
+    _snap = _client_facts(client)
+    status = _snap["status"]
+    _snap_bt_mgr = _snap["bt_manager"]
+    _snap_sink = _snap["bluetooth_sink_name"]
+    _snap_bt_mgmt = _snap["bt_management_enabled"]
+    _snap_server_url = _snap["connected_server_url"]
+    _snap_is_running = _snap["is_running"]
+    _snap_player_name = _snap["player_name"]
+    _snap_player_id = _snap["player_id"]
+    _snap_listen_port = _snap["listen_port"]
+    _snap_server_host = _snap["server_host"]
+    _snap_server_port = _snap["server_port"]
+    _snap_delay = _snap["static_delay_ms"]
+    _snap_mac = _snap["bluetooth_mac"]
+    _snap_eff_adapter = _snap["effective_adapter_mac"]
+    _snap_adapter = _snap["adapter"]
+    _snap_hci = _snap["adapter_hci_name"]
+    _snap_battery = _snap["battery_level"]
+    _snap_paired = _snap["paired"]
+    _snap_max_reconn = _snap["max_reconnect_fails"]
 
     bt_mgr = _snap_bt_mgr
     resolved_enabled = configured_enabled if configured_enabled is not None else _configured_enabled_by_player_name()
