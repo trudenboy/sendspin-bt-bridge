@@ -101,3 +101,21 @@ def test_the_bluetooth_block_matches_what_the_state_model_publishes():
     assert bluetooth["max_reconnect_fails"] == facts.max_reconnect_fails
     assert bluetooth["reconnect_attempts_remaining"] == facts.reconnect_attempts_remaining
     assert bluetooth["paired"] == facts.bluetooth_paired
+
+
+# ── absent is not the same as false ──────────────────────────────────────
+
+
+def test_a_fact_that_was_never_carried_is_distinguishable_from_a_false_one():
+    """Callers with a fallback need to tell "no" from "nothing said"."""
+    said_no = DeviceFacts(_snapshot(ma_connected=False))
+    said_nothing = DeviceFacts(_snapshot())
+
+    assert said_no.ma_connected is False
+    assert said_nothing.ma_connected is False
+    assert said_no.knows("ma_connected") is True
+    assert said_nothing.knows("ma_connected") is False
+
+
+def test_a_carried_true_is_known():
+    assert DeviceFacts(_snapshot(ma_connected=True)).knows("ma_connected") is True

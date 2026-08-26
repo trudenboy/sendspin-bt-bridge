@@ -47,6 +47,15 @@ class DeviceFacts:
             value = self._snapshot.get(name)
         return default if value is None else value
 
+    def knows(self, name: str) -> bool:
+        """Whether this snapshot carried *name* at all.
+
+        Absent and false are different answers for a fact a caller has a
+        fallback for — a bridge that reports Music Assistant as unreachable is
+        not the same as one that said nothing about it.
+        """
+        return name in self._extra
+
     def _fact(self, name: str, default: Any = None) -> Any:
         value = self._extra.get(name)
         return default if value is None else value
@@ -169,4 +178,26 @@ class DeviceFacts:
 
     @property
     def ma_connected(self) -> bool:
+        """Whether the *bridge* can reach Music Assistant at all.
+
+        Bridge-wide rather than per-device, and carried on the snapshot so the
+        device card can tell "Music Assistant is down" apart from "Music
+        Assistant has no queue for this speaker".
+        """
         return bool(self._fact("ma_connected", False))
+
+    @property
+    def muted(self) -> bool:
+        return bool(self._fact("muted", False))
+
+    @property
+    def sink_muted(self) -> bool:
+        return bool(self._fact("sink_muted", False))
+
+    @property
+    def last_error(self) -> str | None:
+        return self._fact("last_error")
+
+    @property
+    def last_error_at(self) -> Any:
+        return self._fact("last_error_at")

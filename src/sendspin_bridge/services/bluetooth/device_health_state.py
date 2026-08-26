@@ -7,9 +7,9 @@ from typing import Any
 
 from sendspin_bridge.services.infrastructure._helpers import (
     _device_audio_streaming,
-    _device_extra,
     _device_ma_reconnecting,
 )
+from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
@@ -67,7 +67,7 @@ class DeviceHealthState:
 
 def compute_device_health_state(device: Any) -> DeviceHealthState:
     reasons: list[str] = []
-    extra = _device_extra(device)
+    facts = DeviceFacts(device)
     audio_streaming = _device_audio_streaming(device)
     ma_reconnecting = _device_ma_reconnecting(device)
     recent_events = list(getattr(device, "recent_events", []) or [])
@@ -83,19 +83,19 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
-    if extra.get("last_error"):
+    if facts.last_error:
         _append_reason(reasons, "last_error")
         for reason in event_reasons:
             _append_reason(reasons, reason)
         return DeviceHealthState(
             state="degraded",
             severity="error",
-            summary=str(extra["last_error"]),
+            summary=str(facts.last_error),
             reasons=reasons,
-            last_event_at=extra.get("last_error_at") or last_event_at,
+            last_event_at=facts.last_error_at or last_event_at,
         )
 
-    if extra.get("stopping"):
+    if facts.stopping:
         _append_reason(reasons, "stopping")
         for reason in event_reasons:
             _append_reason(reasons, reason)
@@ -107,7 +107,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
-    if extra.get("reconnecting"):
+    if facts.reconnecting:
         _append_reason(reasons, "reconnecting")
         for reason in event_reasons:
             _append_reason(reasons, reason)
@@ -119,7 +119,7 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
-    if extra.get("reanchoring"):
+    if facts.reanchoring:
         _append_reason(reasons, "reanchoring")
         for reason in event_reasons:
             _append_reason(reasons, reason)
@@ -177,8 +177,8 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
         )
 
     if (
-        extra.get("sink_muted")
-        and not extra.get("muted")
+        facts.sink_muted
+        and not facts.muted
         and getattr(device, "bluetooth_connected", False)
         and getattr(device, "bluetooth_sink_name", None)
     ):
@@ -300,19 +300,22 @@ def _capability_domain_payload(*capabilities: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_device_capabilities(device: Any) -> dict[str, Any]:
-    extra = _device_extra(device)
+    facts = DeviceFacts(device)
     # Two different states used to share one answer.  Whether Music Assistant
     # is reachable is a property of the bridge; whether it has a queue for
     # *this* speaker is a property of the speaker.  Reading the second and
     # calling it the first told operators to check settings that were fine.
     ma_queue_known = bool((getattr(device, "ma_now_playing", None) or {}).get("connected"))
-    ma_connected = bool(extra.get("ma_connected", ma_queue_known))
-    reconnecting = bool(extra.get("reconnecting"))
+    # Absent and false are different: a snapshot that says nothing about the
+    # bridge's Music Assistant link falls back to whether this speaker has a
+    # queue, but one that says the link is down is believed.
+    ma_connected = facts.ma_connected if facts.knows("ma_connected") else ma_queue_known
+    reconnecting = facts.reconnecting
     ma_reconnecting = _device_ma_reconnecting(device)
-    stopping = bool(extra.get("stopping"))
+    stopping = facts.stopping
     released = getattr(device, "bt_management_enabled", True) is False
     has_sink = bool(getattr(device, "has_sink", False))
-    bluetooth_paired = extra.get("bluetooth_paired")
+    bluetooth_paired = facts.bluetooth_paired
 
     reconnect_blocked_reason: BlockReason | None = None
     if released:
