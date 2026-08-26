@@ -117,13 +117,11 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
     bluetooth_mac = _obj_get(device, "bluetooth_mac")
     player_name = str(_obj_get(device, "player_name", "") or "")
     reconnect_attempt = extra.get("reconnect_attempt")
-    # The device snapshot writes the configured limit as "max_reconnect_fails";
-    # "bt_max_reconnect_fails" is the spelling the config layer uses.  Read
-    # both, or the limit arrives as None and every screen reading this state
-    # loses the "3/10, 7 remain" half of the sentence.
+    # The device snapshot writes the configured limit as "max_reconnect_fails".
+    # (The config layer spells it BT_MAX_RECONNECT_FAILS, which is where the
+    # dead "bt_max_reconnect_fails" read here came from; nothing ever put that
+    # spelling into a snapshot.)
     max_reconnect_fails = extra.get("max_reconnect_fails")
-    if max_reconnect_fails is None:
-        max_reconnect_fails = extra.get("bt_max_reconnect_fails")
     reconnect_attempts_remaining = None
     if isinstance(reconnect_attempt, int) and isinstance(max_reconnect_fails, int):
         reconnect_attempts_remaining = max(max_reconnect_fails - reconnect_attempt, 0)
@@ -156,7 +154,10 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
         },
         audio={
             "has_sink": bool(_obj_get(device, "has_sink", False)),
-            "sink_name": extra.get("resolved_sink_name"),
+            # The snapshot names this "sink_name"; asking for a key nothing
+            # writes reported every device as having no sink while saying in
+            # the same breath that it had one.
+            "sink_name": _obj_get(device, "sink_name") or extra.get("sink_name"),
             "streaming": bool(extra.get("audio_streaming")),
         },
         transport={
