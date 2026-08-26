@@ -230,7 +230,7 @@ def _enrich_device_snapshot_with_ma(device: DeviceSnapshot, client_or_player_id=
     # the device card needs it to tell "MA is down" apart from "MA has no
     # queue for this speaker" — two states that used to share one answer.
     device.extra["ma_connected"] = bool(is_ma_connected())
-    player_id = device.extra.get("player_id") or (
+    player_id = device.player_id or (
         client_or_player_id if isinstance(client_or_player_id, str) else getattr(client_or_player_id, "player_id", "")
     )
     if not player_id:
@@ -253,7 +253,7 @@ def _enrich_device_snapshot_with_ma(device: DeviceSnapshot, client_or_player_id=
 
 def _get_device_event_id(client_or_player_id, device: DeviceSnapshot) -> str:
     player_id = str(
-        device.extra.get("player_id")
+        device.player_id
         or (
             client_or_player_id
             if isinstance(client_or_player_id, str)

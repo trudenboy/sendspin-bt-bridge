@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from sendspin_bridge.services.bluetooth.device_health_state import compute_device_health_state
-from sendspin_bridge.services.infrastructure._helpers import _device_extra
+from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
 
 def _obj_get(source: Any, name: str, default: Any = None) -> Any:
@@ -110,54 +110,43 @@ def build_runtime_substrate_status(preflight: dict[str, Any] | None) -> RuntimeS
 
 
 def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
-    extra = _device_extra(device)
+    # Read through the named facts rather than the untyped bag: a question
+    # this device cannot answer is an error at the ask, not a None on screen.
+    facts = DeviceFacts(device)
     health = _obj_get(device, "health_summary") or compute_device_health_state(device).to_dict()
     ma_now_playing = _obj_get(device, "ma_now_playing") or {}
     recent_events = list(_obj_get(device, "recent_events", []) or [])
-    bluetooth_mac = _obj_get(device, "bluetooth_mac")
-    player_name = str(_obj_get(device, "player_name", "") or "")
-    reconnect_attempt = extra.get("reconnect_attempt")
-    # The device snapshot writes the configured limit as "max_reconnect_fails";
-    # "bt_max_reconnect_fails" is the spelling the config layer uses.  Read
-    # both, or the limit arrives as None and every screen reading this state
-    # loses the "3/10, 7 remain" half of the sentence.
-    max_reconnect_fails = extra.get("max_reconnect_fails")
-    if max_reconnect_fails is None:
-        max_reconnect_fails = extra.get("bt_max_reconnect_fails")
-    reconnect_attempts_remaining = None
-    if isinstance(reconnect_attempt, int) and isinstance(max_reconnect_fails, int):
-        reconnect_attempts_remaining = max(max_reconnect_fails - reconnect_attempt, 0)
     return NormalizedDeviceState(
-        player_name=player_name,
-        enabled=bool(_obj_get(device, "enabled", True)),
+        player_name=facts.player_name,
+        enabled=facts.enabled,
         management={
             "bridge_managed": bool(_obj_get(device, "bt_management_enabled", True)),
             "released": _obj_get(device, "bt_management_enabled", True) is False,
-            "release_reason": extra.get("bt_released_by"),
+            "release_reason": facts.released_by,
         },
         bluetooth={
-            "mac": bluetooth_mac,
-            "connected": bool(_obj_get(device, "bluetooth_connected", False)),
-            "paired": extra.get("bluetooth_paired"),
-            "adapter": extra.get("bluetooth_adapter"),
-            "adapter_hci": extra.get("bluetooth_adapter_hci"),
-            "adapter_name": extra.get("bluetooth_adapter_name"),
-            "reconnect_attempt": reconnect_attempt,
-            "max_reconnect_fails": max_reconnect_fails,
-            "reconnect_attempts_remaining": reconnect_attempts_remaining,
-            "standby": bool(extra.get("bt_standby")),
-            "pair_failure_kind": extra.get("pair_failure_kind"),
-            "pair_failure_adapter_mac": extra.get("pair_failure_adapter_mac"),
-            "pair_failure_at": extra.get("pair_failure_at"),
+            "mac": facts.bluetooth_mac,
+            "connected": facts.bluetooth_connected,
+            "paired": facts.bluetooth_paired,
+            "adapter": facts.bluetooth_adapter,
+            "adapter_hci": facts.bluetooth_adapter_hci,
+            "adapter_name": facts.bluetooth_adapter_name,
+            "reconnect_attempt": facts.reconnect_attempt,
+            "max_reconnect_fails": facts.max_reconnect_fails,
+            "reconnect_attempts_remaining": facts.reconnect_attempts_remaining,
+            "standby": facts.standby,
+            "pair_failure_kind": facts.pair_failure_kind,
+            "pair_failure_adapter_mac": facts.pair_failure_adapter_mac,
+            "pair_failure_at": facts.pair_failure_at,
             # v2.70.0-rc.2 (#260, #263) — never_paired drives the recovery
             # banner branch + Start pairing device-card button + auto-disable.
-            "never_paired": bool(extra.get("never_paired", False)),
-            "never_paired_since": extra.get("never_paired_since"),
+            "never_paired": facts.never_paired,
+            "never_paired_since": facts.never_paired_since,
         },
         audio={
-            "has_sink": bool(_obj_get(device, "has_sink", False)),
-            "sink_name": extra.get("resolved_sink_name"),
-            "streaming": bool(extra.get("audio_streaming")),
+            "has_sink": facts.has_sink,
+            "sink_name": facts.sink_name,
+            "streaming": facts.audio_streaming,
         },
         transport={
             "daemon_connected": bool(_obj_get(device, "server_connected", False)),
@@ -168,10 +157,10 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
             "playing": bool(_obj_get(device, "playing", False)),
         },
         async_ops={
-            "reconnecting": bool(extra.get("reconnecting")),
-            "ma_reconnecting": bool(extra.get("ma_reconnecting")),
-            "stopping": bool(extra.get("stopping")),
-            "reanchoring": bool(extra.get("reanchoring")),
+            "reconnecting": facts.reconnecting,
+            "ma_reconnecting": facts.ma_reconnecting,
+            "stopping": facts.stopping,
+            "reanchoring": facts.reanchoring,
         },
         music_assistant={
             "connected": bool(ma_now_playing.get("connected")),
