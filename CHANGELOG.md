@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.6] - 2026-08-26
+
 ### Fixed
 
 - Queue commands are no longer reported as failed when Music Assistant is
