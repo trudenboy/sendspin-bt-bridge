@@ -16,8 +16,6 @@ speaker's queue, so it belongs before that poll, not after it.
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from sendspin_bridge.services.music_assistant.ma_monitor import MaMonitor
@@ -53,7 +51,7 @@ async def test_a_failing_refresh_does_not_stop_the_session(monkeypatch):
     polled: list[str] = []
 
     async def _groups(_ws):
-        raise asyncio.TimeoutError
+        raise TimeoutError
 
     async def _poll(_ws):
         polled.append("poll")
