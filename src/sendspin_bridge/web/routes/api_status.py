@@ -192,8 +192,8 @@ def invalidate_preflight_probe() -> None:
 
 
 def reset_preflight_probe() -> None:
-    """Drop the cached probe entirely (tests, and a fresh runtime)."""
-    _preflight_probe.invalidate()
+    """Drop the sampled probe entirely (tests, and a fresh runtime)."""
+    _preflight_probe.reset()
 
 
 def _sampled_preflight_status() -> dict:

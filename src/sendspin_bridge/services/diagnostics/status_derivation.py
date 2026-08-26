@@ -60,6 +60,7 @@ class StatusDerivation[T]:
         self._building = False
         self._value: T | None = None
         self._has_value = False
+        self._stale = False
         self._built_at = 0.0
 
     def invalidate(self) -> None:
@@ -68,9 +69,25 @@ class StatusDerivation[T]:
         For the changes an operator makes and expects to see at once — a saved
         config, a speaker added or released.  Costs nothing on its own: the
         rebuild happens when somebody actually reads.
+
+        The previous value is kept, not dropped: a reader arriving while that
+        rebuild is running is still served it.  Dropping it would make a burst
+        of saves put the probe's cost back on every tick — the thing this
+        exists to prevent.
+        """
+        with self._state:
+            self._stale = True
+
+    def reset(self) -> None:
+        """Forget the value entirely, as if nothing had ever been built.
+
+        For a test that must not be served the answer a previous one stubbed,
+        and for a runtime starting over.
         """
         with self._state:
             self._has_value = False
+            self._stale = False
+            self._value = None
 
     def current(self) -> T:
         """The derived half, rebuilt only when it is due.
@@ -102,6 +119,11 @@ class StatusDerivation[T]:
                 self._building = False
                 self._state.notify_all()
                 if self._has_value:
+                    # The failure counts as an attempt: without this the next
+                    # read is due again and every tick during an outage would
+                    # retry the probe it just watched fail.
+                    self._built_at = self._clock()
+                    self._stale = False
                     logger.warning("%s failed; serving the last known state", self._label, exc_info=True)
                     return self._value  # type: ignore[return-value]
             raise
@@ -109,6 +131,7 @@ class StatusDerivation[T]:
         with self._state:
             self._value = value
             self._has_value = True
+            self._stale = False
             self._built_at = self._clock()
             self._building = False
             self._state.notify_all()
@@ -116,6 +139,6 @@ class StatusDerivation[T]:
 
     def _is_due(self) -> bool:
         """Caller holds the condition."""
-        if not self._has_value:
+        if not self._has_value or self._stale:
             return True
         return (self._clock() - self._built_at) >= self._min_interval_s

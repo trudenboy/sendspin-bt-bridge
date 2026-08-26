@@ -220,3 +220,78 @@ def test_a_failure_does_not_pin_the_window_open():
     clock.advance(3.0)
 
     assert derivation.current() == "value-3"
+
+
+# ── invalidation must not cost the readers ───────────────────────────────
+
+
+def test_an_invalidated_value_is_still_served_while_the_rebuild_runs():
+    """Otherwise a config save puts the probe's cost back on the next tick.
+
+    A burst of saves would then make every listener wait on `bluetoothctl`,
+    which is the thing this class exists to prevent.
+    """
+    started = threading.Event()
+    release = threading.Event()
+    values = iter(["first", "second"])
+    calls: list[int] = []
+
+    def _build():
+        calls.append(len(calls) + 1)
+        value = next(values)
+        if value == "second":
+            started.set()
+            release.wait(timeout=5)
+        return value
+
+    derivation = StatusDerivation(_build, min_interval_s=60.0, clock=_Clock())
+    assert derivation.current() == "first"
+
+    derivation.invalidate()
+    rebuild = threading.Thread(target=derivation.current)
+    rebuild.start()
+    started.wait(timeout=5)
+
+    assert derivation.current() == "first", "a reader waited on the probe instead of being served"
+    assert len(calls) == 2, "a reader started a second probe of its own"
+
+    release.set()
+    rebuild.join(timeout=5)
+    assert derivation.current() == "second"
+
+
+def test_a_reset_drops_the_value_rather_than_marking_it_stale():
+    """Tests need the previous answer gone, not merely due."""
+    build, calls = _counting_build(["first", "second"])
+    derivation = StatusDerivation(build, min_interval_s=60.0, clock=_Clock())
+    derivation.current()
+
+    derivation.reset()
+
+    assert derivation.current() == "second"
+    assert len(calls) == 2
+
+
+# ── a failing probe must not be retried on every tick ─────────────────────
+
+
+def test_a_failed_rebuild_does_not_retry_until_the_next_window():
+    """An outage would otherwise put the probe back on every single tick."""
+    clock = _Clock()
+    calls: list[int] = []
+
+    def _build():
+        calls.append(len(calls) + 1)
+        if len(calls) > 1:
+            raise RuntimeError("bluetoothctl vanished")
+        return "value"
+
+    derivation = StatusDerivation(_build, min_interval_s=2.0, clock=clock)
+    derivation.current()
+
+    clock.advance(3.0)
+    derivation.current()  # fails, serves "value"
+    derivation.current()
+    derivation.current()
+
+    assert len(calls) == 2, "the failing probe was retried on every read"
