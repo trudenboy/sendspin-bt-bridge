@@ -1821,12 +1821,22 @@ class SendspinClient:
         """
 
         def _on_reader_done(task: asyncio.Task) -> None:
-            if task.cancelled() or task.exception() is None:
+            # A cancelled reader is the bridge stopping it; that path owns the
+            # daemon.  Anything else — an exception *or* a quiet return, which
+            # the reader does when its process handle is already gone — means
+            # the daemon has nobody reading it any more.  Only the exception
+            # used to count, and a daemon whose reader simply returned sat
+            # blocked in a full pipe with nothing in the log to say so.
+            if task.cancelled():
                 return
-            logger.error("[%s] stdout reader error: %s", self.player_name, task.exception())
             proc = self._daemon_proc
             if proc is None or proc.returncode is not None:
                 return
+            error = task.exception()
+            if error is not None:
+                logger.error("[%s] stdout reader error: %s", self.player_name, error)
+            else:
+                logger.error("[%s] stdout reader stopped while the daemon is still running", self.player_name)
             logger.error(
                 "[%s] Killing daemon PID %s — its stdout is no longer being read",
                 self.player_name,
@@ -1849,6 +1859,10 @@ class SendspinClient:
         dead subprocess, and what a status update should trigger here.
         """
         if self._daemon_proc is None or self._daemon_proc.stdout is None:
+            # Nothing to read: the handle went away between the spawn and this
+            # task's first run.  Said out loud, because a daemon left with no
+            # reader blocks in a full pipe and looks healthy from outside.
+            logger.warning("[%s] stdout reader started with no daemon handle", self.player_name)
             return
         await self._ipc_service.read_stream(
             self._daemon_proc.stdout,

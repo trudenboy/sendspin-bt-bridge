@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A speaker whose audio daemon lost its log reader is restarted instead of
+  wedging. The daemon blocks once nothing drains its output, which stopped it
+  responding to volume, stop and reconnect while it still looked healthy —
+  seen on a live bridge, where one sat blocked for eleven minutes with nothing
+  in the log.
 - Device state reports the audio sink a speaker is actually playing through.
   It read the sink name from a field nothing ever filled, so every device
   showed no sink name while reporting, in the same breath, that it had one.
