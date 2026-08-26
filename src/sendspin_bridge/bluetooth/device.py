@@ -44,6 +44,10 @@ OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
 #: The same three that used to drop the monitor into bluetoothctl polling.
 UNAVAILABLE_AFTER_FAILURES = 3
 
+#: How long a synchronous caller waits for the loop before calling it unknown.
+#: A Waitress worker must not be pinned by a wedged bus.
+_BLOCKING_TIMEOUT_S = 5.0
+
 
 @dataclass(frozen=True, slots=True)
 class DeviceState:
@@ -230,6 +234,73 @@ class BluetoothDevice:
             return False
         self._remember(None)
         return True
+
+    # -- the same questions, for callers with no loop of their own --------
+    #
+    # Thirty-six of the call sites this module replaces are plain synchronous
+    # functions: the manager is driven from Waitress workers and from D-Bus
+    # callbacks.  They hand the work to the bridge loop and wait, so "which
+    # thread am I on" is answered here rather than at each of them.
+
+    def is_connected_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
+        return bool(self._blocking(self.is_connected(), timeout=timeout, default=False))
+
+    def is_paired_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool | None:
+        return self._blocking(self.is_paired(), timeout=timeout, default=None)
+
+    def services_resolved_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool | None:
+        return self._blocking(self.services_resolved(), timeout=timeout, default=None)
+
+    def uuids_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> list[str]:
+        return self._blocking(self.uuids(), timeout=timeout, default=[]) or []
+
+    def battery_level_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> int | None:
+        return self._blocking(self.battery_level(), timeout=timeout, default=None)
+
+    def transport_state_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> str | None:
+        return self._blocking(self.transport_state(), timeout=timeout, default=None)
+
+    def has_media_endpoint_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool | None:
+        return self._blocking(self.has_media_endpoint(), timeout=timeout, default=None)
+
+    def state_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> DeviceState | None:
+        return self._blocking(self.state(), timeout=timeout, default=None)
+
+    def connect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
+        return bool(self._blocking(self.connect_profile(uuid), timeout=timeout, default=False))
+
+    def _blocking(self, coro: Any, *, timeout: float, default: Any) -> Any:
+        """Run *coro* on the bridge loop and wait for it.
+
+        Returns *default* when there is no loop to run it on — startup and
+        shutdown both have such windows, and the callers this replaces have
+        always read them as "don't know".  Raises when called *from* the loop:
+        waiting there is a deadlock, and a deadlock is a programming error.
+        """
+        from sendspin_bridge.bridge import state as _state
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            coro.close()
+            raise RuntimeError(
+                f"{type(self).__name__}.*_blocking() called from the event loop — await the async method instead"
+            )
+
+        loop = _state.get_main_loop()
+        if loop is None or not loop.is_running():
+            coro.close()
+            return default
+        try:
+            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
+        except TimeoutError:
+            logger.debug("[%s] blocking read timed out after %.1fs", self.address, timeout)
+            return default
+        except Exception as exc:
+            logger.debug("[%s] blocking read failed: %s", self.address, exc)
+            return default
 
     # -- signals ----------------------------------------------------------
 
