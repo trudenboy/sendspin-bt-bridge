@@ -879,11 +879,7 @@ class MaMonitor:
             self._ws = ws  # type: ignore[assignment]
 
             try:
-                # Check and refresh stale player metadata (once per connect session)
-                await self._refresh_stale_player_metadata(ws)
-
-                # Initial poll
-                await self._poll_queues(ws)
+                await self._prime_session(ws)
 
                 # Subscribe to events
                 events_ok = False
@@ -906,6 +902,22 @@ class MaMonitor:
             finally:
                 self._cancel_pending_cmd_futures()
                 self._ws = None
+
+    async def _prime_session(self, ws) -> None:
+        """Everything a fresh connection needs before it starts listening.
+
+        The player map is learned here rather than waiting for the sixty-second
+        refresh timer: until it exists, a queue command for a speaker in no
+        sync group is aimed at an id no current server knows, and the first
+        queue poll cannot recognise that speaker's queue either.  A server
+        that will not answer costs us the map, not the session.
+        """
+        await self._refresh_stale_player_metadata(ws)
+        try:
+            await self._refresh_groups_via_ws(ws)
+        except Exception as exc:
+            logger.debug("MA monitor: could not learn players at connect: %s", exc)
+        await self._poll_queues(ws)
 
     async def _poll_queues(self, ws) -> None:
         """Fetch player_queues/all and update now-playing cache per syncgroup and solo player."""
