@@ -24,6 +24,7 @@ import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.music_assistant.ma_artwork import build_artwork_proxy_url
+from sendspin_bridge.services.music_assistant.ma_dispatch import MessageDispatcher
 from sendspin_bridge.services.music_assistant.ma_player_map import learn_ma_player_ids
 
 if TYPE_CHECKING:
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 15  # seconds between polling cycles when events unavailable
+#: How long a single request may wait for its answer before we call it lost.
+_REQUEST_TIMEOUT_S = 15.0
 _GROUPS_REFRESH_INTERVAL = 60  # seconds between syncgroup cache refreshes
 _RECONNECT_BASE = 2  # seconds — first reconnect delay
 _RECONNECT_MAX = 60  # seconds — max reconnect delay
@@ -573,24 +576,14 @@ class MaMonitor:
             except asyncio.QueueEmpty:
                 break
             try:
-                mid = self._next_id()
-                await _send(ws, mid, command, args)
-                # Match response by message_id; forward interleaved events
-                for _ in range(10):
-                    resp = await _recv(ws, timeout=5.0)
-                    if str(resp.get("message_id")) == str(mid):
-                        if not fut.done():
-                            fut.set_result(resp)
-                        break
-                    evt = resp.get("event")
-                    if evt:
-                        logger.debug("MA monitor: interleaved event '%s' during cmd drain", evt)
-                        self._defer_incoming_event(evt)
+                # The same routed round-trip every other caller uses: the wait
+                # ends on the answer or the timeout, not after ten messages.
+                resp = await self._request_command(ws, command, args, flush=False)
+                if not fut.done():
+                    if resp:
+                        fut.set_result(resp)
                     else:
-                        logger.debug("MA monitor: non-matching msg (id=%s) during cmd drain", resp.get("message_id"))
-                else:
-                    if not fut.done():
-                        fut.set_exception(TimeoutError(f"No matching response for {command}"))
+                        fut.set_exception(TimeoutError(f"No answer to {command}"))
             except Exception as e:
                 if not fut.done():
                     fut.set_exception(e)
@@ -603,25 +596,43 @@ class MaMonitor:
     async def _send_queue_cmd(self, ws, command: str, args: dict) -> dict:
         return await self._request_command(ws, command, args)
 
-    async def _request_command(self, ws, command: str, args: dict) -> dict:
-        """Send a WS command and return the matching response payload."""
+    async def _request_command(
+        self,
+        ws,
+        command: str,
+        args: dict,
+        *,
+        timeout: float = _REQUEST_TIMEOUT_S,
+        flush: bool = True,
+    ) -> dict:
+        """Send a WS command and return its answer.
+
+        The wait ends on the answer or on *timeout* — never on a number of
+        intervening messages.  This used to read at most ten and give up,
+        which a household with several speakers can exceed between a command
+        and its acknowledgement: the bridge then reported a command as failed
+        that the server had carried out.
+        """
+        dispatcher = MessageDispatcher(
+            lambda: _recv(ws, timeout=timeout),
+            on_event=self._defer_incoming_event,
+        )
         mid = self._next_id()
-        await _send(ws, mid, command, args)
-        # Read messages until we get the one with our message_id
-        for _ in range(10):
-            resp = await _recv(ws, timeout=5.0)
-            if str(resp.get("message_id")) == str(mid):
-                await self._flush_deferred_updates(ws)
-                return resp
-            evt = resp.get("event")
-            if evt:
-                logger.debug("MA monitor: interleaved event '%s' during queue cmd", evt)
-                self._defer_incoming_event(evt)
-            else:
-                logger.debug("MA monitor: non-matching msg (id=%s) during queue cmd", resp.get("message_id"))
-        logger.warning("No matching response for command %s after %d messages", command, 10)
-        await self._flush_deferred_updates(ws)
-        return {}
+        try:
+            response = await dispatcher.request(
+                lambda _key: _send(ws, mid, command, args),
+                message_id=mid,
+                timeout=timeout,
+                pump=True,
+            )
+        except TimeoutError:
+            logger.warning("No answer to %s within %.0fs", command, timeout)
+            response = {}
+        if flush:
+            # The refreshers below are themselves what a flush runs; asking
+            # for one from inside them would call them again.
+            await self._flush_deferred_updates(ws)
+        return response
 
     async def _fetch_queue_items(self, ws, queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
         """Fetch a slice of queue items for a queue via MA WebSocket API."""
@@ -631,6 +642,7 @@ class MaMonitor:
             ws,
             "player_queues/items",
             {"queue_id": queue_id, "limit": limit, "offset": offset},
+            flush=False,
         )
         result = resp.get("result")
         return result if isinstance(result, list) else []
@@ -736,17 +748,9 @@ class MaMonitor:
     async def _refresh_groups_via_ws(self, ws) -> None:
         """Fetch players/all via WS and rebuild the syncgroup cache in state."""
         try:
-            mid = self._next_id()
-            await _send(ws, mid, "players/all", {})
-            for _ in range(30):
-                resp = await _recv(ws, timeout=10.0)
-                if str(resp.get("message_id")) == str(mid):
-                    players = resp.get("result") or []
-                    break
-                evt = resp.get("event")
-                if evt:
-                    self._defer_incoming_event(evt)
-            else:
+            resp = await self._request_command(ws, "players/all", {}, flush=False)
+            players = resp.get("result") or []
+            if not players:
                 return
 
             id_to_name: dict[str, str] = {
@@ -906,55 +910,47 @@ class MaMonitor:
     async def _poll_queues(self, ws) -> None:
         """Fetch player_queues/all and update now-playing cache per syncgroup and solo player."""
         try:
-            mid = self._next_id()
-            await _send(ws, mid, "player_queues/all", {})
-            for _ in range(20):
-                resp = await _recv(ws, timeout=10.0)
-                if str(resp.get("message_id")) != str(mid):
-                    evt = resp.get("event")
-                    if evt:
-                        self._defer_incoming_event(evt)
-                    continue
-                queues = resp.get("result") or []
-                fresh: dict[str, dict] = {}
+            resp = await self._request_command(ws, "player_queues/all", {}, flush=False)
+            queues = resp.get("result") or []
+            fresh: dict[str, dict] = {}
 
-                async def fetch_items(queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
-                    return await self._fetch_queue_items(ws, queue_id, limit=limit, offset=offset)
+            async def fetch_items(queue_id: str, limit: int = 1, offset: int = 0) -> list[dict]:
+                return await self._fetch_queue_items(ws, queue_id, limit=limit, offset=offset)
 
-                # Syncgroup players
-                syncgroup_queues = await _find_syncgroup_queues(queues)
-                for q in syncgroup_queues:
-                    np = _build_now_playing(q)
-                    await _hydrate_missing_queue_neighbors(fetch_items, q, np)
-                    fresh[np["syncgroup_id"]] = np
-                # Solo (ungrouped) players — keyed by their own player_id
-                for player_id, q in _find_solo_player_queues(queues):
-                    np = _build_now_playing(q)
-                    await _hydrate_missing_queue_neighbors(fetch_items, q, np)
-                    np["syncgroup_id"] = player_id
-                    fresh[player_id] = np
-                # Atomically replace to clear stale entries.  An answer with
-                # no queues in it is an answer: a speaker whose queue was
-                # removed used to keep reporting the queue it once had,
-                # because the cache was only replaced when there was
-                # something to put in it.
-                _state.replace_ma_now_playing(fresh)
-                if fresh:
-                    # Reverse-bridge: push playback state to per-device MprisPlayer
-                    # so AVRCP-capable speakers (Bose, Sony WH-1000XM, Yandex
-                    # mini) reflect MA's now-playing on their display/LEDs.
-                    # Best-effort — failures here must not stop polling.
-                    try:
-                        from sendspin_bridge.services.audio.mpris_player import get_registry as _get_mpris_registry
+            # Syncgroup players
+            syncgroup_queues = await _find_syncgroup_queues(queues)
+            for q in syncgroup_queues:
+                np = _build_now_playing(q)
+                await _hydrate_missing_queue_neighbors(fetch_items, q, np)
+                fresh[np["syncgroup_id"]] = np
+            # Solo (ungrouped) players — keyed by their own player_id
+            for player_id, q in _find_solo_player_queues(queues):
+                np = _build_now_playing(q)
+                await _hydrate_missing_queue_neighbors(fetch_items, q, np)
+                np["syncgroup_id"] = player_id
+                fresh[player_id] = np
+            # Atomically replace to clear stale entries.  An answer with
+            # no queues in it is an answer: a speaker whose queue was
+            # removed used to keep reporting the queue it once had,
+            # because the cache was only replaced when there was
+            # something to put in it.
+            _state.replace_ma_now_playing(fresh)
+            if fresh:
+                # Reverse-bridge: push playback state to per-device MprisPlayer
+                # so AVRCP-capable speakers (Bose, Sony WH-1000XM, Yandex
+                # mini) reflect MA's now-playing on their display/LEDs.
+                # Best-effort — failures here must not stop polling.
+                try:
+                    from sendspin_bridge.services.audio.mpris_player import get_registry as _get_mpris_registry
 
-                        await push_now_playing_to_mpris(
-                            fresh,
-                            _active_bridge_clients(),
-                            _get_mpris_registry(),
-                        )
-                    except Exception as exc:
-                        logger.debug("MPRIS reverse-push failed: %s", exc)
-                return
+                    await push_now_playing_to_mpris(
+                        fresh,
+                        _active_bridge_clients(),
+                        _get_mpris_registry(),
+                    )
+                except Exception as exc:
+                    logger.debug("MPRIS reverse-push failed: %s", exc)
+            return
         except Exception as exc:
             logger.debug("MA monitor poll error: %s", exc)
 
