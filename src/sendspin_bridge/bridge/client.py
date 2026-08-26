@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 import sendspin_bridge.bridge.state as _state
 from sendspin_bridge.bluetooth.adapter_session import bt_executor
-from sendspin_bridge.bluetooth.dbus import _dbus_get_device_property, _dbus_get_media_transport_snapshot
 from sendspin_bridge.bluetooth.manager import BluetoothManager
 from sendspin_bridge.bluetooth.vendor_map import vendor_from_modalias
 from sendspin_bridge.bridge.calibration_metronome import CalibrationMetronome
@@ -1682,19 +1681,13 @@ class SendspinClient:
             # Empty strings on read failure → daemon falls back to bridge identity.
             bt_product_name = ""
             bt_manufacturer = ""
-            bt_dbus_path = getattr(self.bt_manager, "_dbus_device_path", None) if self.bt_manager else None
-            if bt_dbus_path:
-                # These are synchronous D-Bus round-trips (dbus-python); run all
-                # three off the event loop in a single executor hop so a slow BlueZ
-                # can't stall every other device's IPC during a spawn.
-                def _read_bt_identity(path: str) -> tuple[str, str]:
-                    # Alias is user-renamable in HAOS BT UI / bluetoothctl; prefer it.
-                    name = _dbus_get_device_property(path, "Alias") or _dbus_get_device_property(path, "Name") or ""
-                    manufacturer = vendor_from_modalias(_dbus_get_device_property(path, "Modalias"))
-                    return name, manufacturer
-
-                loop = asyncio.get_running_loop()
-                bt_product_name, bt_manufacturer = await loop.run_in_executor(None, _read_bt_identity, bt_dbus_path)
+            device = self.bt_manager.device if self.bt_manager else None
+            if device is not None:
+                # One round trip for both facts: the alias an operator may have
+                # given the speaker, and the vendor id behind its modalias.
+                identity = await device.identity()
+                bt_product_name = identity.name
+                bt_manufacturer = vendor_from_modalias(identity.modalias)
 
             params = json.dumps(
                 with_protocol_version(
@@ -1707,7 +1700,9 @@ class SendspinClient:
                         "required_lead_time_ms": self.required_lead_time_ms,
                         "min_buffer_ms": self.min_buffer_ms,
                         "bluetooth_sink_name": self.bluetooth_sink_name,
-                        "bluetooth_device_path": bt_dbus_path,
+                        # Where BlueZ actually has this speaker, for the daemon's
+                        # own logs and for a bug report to name the controller.
+                        "bluetooth_device_path": device.object_path if device is not None else None,
                         "volume": self.status.get("volume", 100),
                         "muted": bool(self.status.get("muted", False)),
                         "settings_dir": f"/tmp/sendspin-{self._safe_id}",
@@ -2251,11 +2246,9 @@ class SendspinClient:
         if not self.bt_manager:
             return
         while self.running:
-            path = getattr(self.bt_manager, "_dbus_device_path", None)
-            if path:
-                snapshot = await asyncio.get_running_loop().run_in_executor(
-                    None, _dbus_get_media_transport_snapshot, path
-                )
+            device = self.bt_manager.device if self.bt_manager else None
+            if device is not None:
+                snapshot = await device.transport_snapshot()
                 codec_name = (
                     snapshot.codec_name
                     or ("sbc" if getattr(self.bt_manager, "prefer_sbc", False) else None)

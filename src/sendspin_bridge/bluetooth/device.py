@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["BluetoothDevice", "DeviceState"]
+__all__ = ["BluetoothDevice", "DeviceIdentity", "DeviceState"]
 
 BLUEZ = "org.bluez"
 DEVICE_INTERFACE = "org.bluez.Device1"
@@ -48,6 +48,14 @@ UNAVAILABLE_AFTER_FAILURES = 3
 #: How long a synchronous caller waits for the loop before calling it unknown.
 #: A Waitress worker must not be pinned by a wedged bus.
 _BLOCKING_TIMEOUT_S = 5.0
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceIdentity:
+    """What a speaker calls itself, and what its vendor id says."""
+
+    name: str
+    modalias: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +214,41 @@ class BluetoothDevice:
             object_path=path,
         )
 
+    async def identity(self) -> DeviceIdentity:
+        """What this speaker calls itself, in one round trip.
+
+        The alias wins over the name: it is what an operator renamed the
+        speaker to in the Home Assistant Bluetooth page or bluetoothctl.
+        """
+        objects = await self._managed_objects()
+        path = self._object_path
+        device = (objects.get(path) or {}).get(DEVICE_INTERFACE, {}) if objects and path else {}
+        alias = _unwrap(device.get("Alias")) or ""
+        name = _unwrap(device.get("Name")) or ""
+        modalias = _unwrap(device.get("Modalias"))
+        return DeviceIdentity(name=str(alias or name or ""), modalias=modalias)
+
+    async def transport_snapshot(self):
+        """Codec, delay and state for this speaker's A2DP transport.
+
+        Always answers: an absent ``Delay`` is a capability outcome, not a
+        failure, and the empty snapshot says exactly that.
+        """
+        from sendspin_bridge.services.bluetooth.transport_telemetry import (
+            BluetoothTransportSnapshot,
+            select_transport_snapshot,
+        )
+
+        objects = await self._managed_objects()
+        path = self._object_path
+        if not objects or not path:
+            return BluetoothTransportSnapshot()
+        plain = {
+            candidate: {iface: {k: _unwrap(v) for k, v in props.items()} for iface, props in interfaces.items()}
+            for candidate, interfaces in objects.items()
+        }
+        return select_transport_snapshot(plain, path)
+
     async def wait_for_services(self, timeout: float = 10.0) -> bool:
         """Wait until BlueZ says this speaker's services are resolved.
 
@@ -300,6 +343,14 @@ class BluetoothDevice:
 
     def connect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
         return bool(self._blocking(self.connect_profile(uuid), timeout=timeout, default=False))
+
+    def identity_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> DeviceIdentity:
+        return self._blocking(self.identity(), timeout=timeout, default=DeviceIdentity(name="", modalias=None))
+
+    def transport_snapshot_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S):
+        from sendspin_bridge.services.bluetooth.transport_telemetry import BluetoothTransportSnapshot
+
+        return self._blocking(self.transport_snapshot(), timeout=timeout, default=BluetoothTransportSnapshot())
 
     def disconnect_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
         return bool(self._blocking(self.disconnect(), timeout=timeout, default=False))

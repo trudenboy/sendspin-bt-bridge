@@ -64,9 +64,13 @@ class FakeBlueZ:
             interfaces["org.bluez.Battery1"] = {"Percentage": battery}
         self.objects[path] = interfaces
 
-    def add_transport(self, path: str, state: str) -> None:
-        """A MediaTransport1 under a device — what A2DP is doing."""
-        self.objects[path] = {"org.bluez.MediaTransport1": {"State": state}}
+    def add_transport(self, path: str, state: str, *, device: str | None = None) -> None:
+        """A MediaTransport1 under a device — what A2DP is doing.
+
+        BlueZ names the owning device on the transport; the telemetry selector
+        matches on it, so the fake carries it too. Defaults to the parent path.
+        """
+        self.objects[path] = {"org.bluez.MediaTransport1": {"State": state, "Device": device or path.rsplit("/", 1)[0]}}
 
     def add_media_endpoint(self, path: str) -> None:
         self.objects[path] = {"org.bluez.MediaEndpoint1": {"UUID": "0000110b-0000-1000-8000-00805f9b34fb"}}

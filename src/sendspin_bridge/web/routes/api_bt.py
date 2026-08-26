@@ -14,10 +14,10 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from sendspin_bridge.bluetooth.adapter_address import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
-from sendspin_bridge.bluetooth.dbus import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled

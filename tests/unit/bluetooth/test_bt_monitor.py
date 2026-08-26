@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.support.fake_dbus import FakeBlueZ, attach, bluez_knowing
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -183,48 +185,41 @@ async def test_correct_other_devices_routing_handles_none_bt_manager(bt_manager)
 
 
 # ---------------------------------------------------------------------------
-# monitor_and_reconnect — D-Bus vs polling fallback
+# monitor_and_reconnect — one transport, and what it says when it fails
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_monitor_and_reconnect_falls_back_to_polling_on_import_error(bt_manager):
-    """When dbus_fast is unavailable, monitor_and_reconnect uses polling fallback."""
-    from sendspin_bridge.bluetooth.monitor import monitor_and_reconnect
+async def test_a_bus_that_cannot_be_reached_is_said_on_the_device_card(bt_manager):
+    """There is no polling path behind it any more, so it must be reported.
 
-    with (
-        patch(
-            "sendspin_bridge.bluetooth.monitor._monitor_dbus",
-            new_callable=AsyncMock,
-            side_effect=ImportError("no dbus_fast"),
-        ),
-        patch("sendspin_bridge.bluetooth.monitor._monitor_polling", new_callable=AsyncMock) as mock_polling,
-        patch.dict("sys.modules", {"dbus_fast": None, "dbus_fast.aio": None}),
-    ):
-        await monitor_and_reconnect(bt_manager)
+    Three failed attempts is what used to drop the monitor into bluetoothctl
+    polling; now it marks the speaker's Bluetooth as unavailable and says why,
+    instead of asking a second transport the same question every five seconds.
+    """
+    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
+    from tests.support.fake_dbus import attach
 
-    mock_polling.assert_awaited_once_with(bt_manager)
+    updates: list[dict] = []
+    bt_manager.host = MagicMock()
+    bt_manager.host.update_status.side_effect = lambda payload: updates.append(payload)
 
+    bluez = FakeBlueZ()
+    bluez.connected = False  # the system bus is not there
+    device = attach(bt_manager, bluez)
+    for _ in range(3):
+        await device.state()  # three failed attempts is the threshold
 
-@pytest.mark.asyncio
-async def test_monitor_and_reconnect_falls_back_on_runtime_error(bt_manager):
-    """RuntimeError from D-Bus monitor triggers polling fallback."""
-    from sendspin_bridge.bluetooth.monitor import monitor_and_reconnect
+    async def _stop_soon():
+        await asyncio.sleep(0.05)
+        bt_manager.shutdown()
 
-    mock_dbus_fast = MagicMock()
+    asyncio.ensure_future(_stop_soon())
+    await _monitor_dbus(bt_manager)
 
-    with (
-        patch.dict("sys.modules", {"dbus_fast": mock_dbus_fast, "dbus_fast.aio": mock_dbus_fast}),
-        patch(
-            "sendspin_bridge.bluetooth.monitor._monitor_dbus",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("D-Bus fail"),
-        ),
-        patch("sendspin_bridge.bluetooth.monitor._monitor_polling", new_callable=AsyncMock) as mock_polling,
-    ):
-        await monitor_and_reconnect(bt_manager)
-
-    mock_polling.assert_awaited_once_with(bt_manager)
+    reported = [u for u in updates if u.get("bluetooth_available") is False]
+    assert reported, f"nothing told the card the bus is unreachable: {updates}"
+    assert reported[0]["last_error"] == "bluetooth_transport_unavailable"
 
 
 # ---------------------------------------------------------------------------
@@ -232,180 +227,9 @@ async def test_monitor_and_reconnect_falls_back_on_runtime_error(bt_manager):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_monitor_dbus_raises_when_no_device_path(bt_manager):
-    """_monitor_dbus raises RuntimeError if _dbus_device_path is None."""
-    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
-
-    bt_manager._dbus_device_path = None
-
-    with pytest.raises(RuntimeError, match="adapter resolution failed"):
-        await _monitor_dbus(bt_manager, MagicMock(), MagicMock())
-
-
-@pytest.mark.asyncio
-async def test_monitor_dbus_raises_after_max_introspection_failures(bt_manager):
-    """Three consecutive introspection failures trigger RuntimeError."""
-    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
-
-    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-
-    mock_bus = AsyncMock()
-    mock_bus.connected = True
-    mock_bus.introspect = AsyncMock(side_effect=Exception("introspection failed"))
-
-    MockMessageBus = MagicMock()
-    MockMessageBus.return_value.connect = AsyncMock(return_value=mock_bus)
-    MockBusType = MagicMock()
-    MockBusType.SYSTEM = "system"
-
-    with (
-        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
-        pytest.raises(RuntimeError, match="introspection failed 3 times"),
-    ):
-        await _monitor_dbus(bt_manager, MockMessageBus, MockBusType)
-
-
-@pytest.mark.asyncio
-async def test_monitor_dbus_removes_handler_before_resubscribe(bt_manager):
-    """Each reconnect cycle must remove its PropertiesChanged handler, or they
-    accumulate on the bus and every signal fires (re-registering MPRIS) N times."""
-    from sendspin_bridge.bluetooth import monitor as M
-
-    bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    bt_manager._apply_connected_state = MagicMock()
-    bt_manager.host = None
-
-    registered = []
-    removed = []
-    props_iface = MagicMock()
-    props_iface.on_properties_changed = lambda h: registered.append(h)
-    props_iface.off_properties_changed = lambda h: removed.append(h)
-
-    device_iface = AsyncMock()
-    device_iface.get_connected = AsyncMock(return_value=True)
-
-    proxy = MagicMock()
-    proxy.get_interface = lambda name: props_iface if name == "org.freedesktop.DBus.Properties" else device_iface
-
-    mock_bus = AsyncMock()
-    mock_bus.connected = True
-    mock_bus.introspect = AsyncMock(return_value=MagicMock())
-    mock_bus.get_proxy_object = MagicMock(return_value=proxy)
-
-    MockMessageBus = MagicMock()
-    MockMessageBus.return_value.connect = AsyncMock(return_value=mock_bus)
-    MockBusType = MagicMock()
-    MockBusType.SYSTEM = "system"
-
-    async def _fake_inner(mgr, *_a):
-        mgr._running = False  # exit after a single re-subscription cycle
-
-    with (
-        patch.object(M, "_inner_dbus_monitor", side_effect=_fake_inner),
-        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
-    ):
-        await M._monitor_dbus(bt_manager, MockMessageBus, MockBusType)
-
-    assert len(registered) == 1
-    assert removed == registered  # the exact handler was removed before re-subscribe
-
-
 # ---------------------------------------------------------------------------
 # _monitor_polling — management_enabled gating
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_monitor_polling_skips_when_management_disabled(bt_manager):
-    """When management_enabled is False, polling sleeps without checking BT state."""
-    from sendspin_bridge.bluetooth.monitor import _monitor_polling
-
-    bt_manager.management_enabled = False
-    iteration_count = 0
-
-    original_sleep = asyncio.sleep
-
-    async def _counting_sleep(duration):
-        nonlocal iteration_count
-        iteration_count += 1
-        if iteration_count >= 2:
-            bt_manager._running = False
-        await original_sleep(0)
-
-    with (
-        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
-        patch("sendspin_bridge.bluetooth.manager._bt_executor"),
-    ):
-        await _monitor_polling(bt_manager)
-
-    assert iteration_count >= 2
-
-
-@pytest.mark.asyncio
-async def test_monitor_polling_defers_then_retries_after_lock_release(bt_manager):
-    """While a UI scan/pair holds the bt-operation lock, the polling monitor
-    must NOT contend for the adapter: no paired probe, no connect attempt.
-    Once the lock is released the next poll reconnects normally."""
-    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
-    from sendspin_bridge.bluetooth.monitor import _monitor_polling
-
-    bt_manager.management_enabled = True
-    bt_manager.check_interval = 0  # poll every iteration
-    bt_manager.last_check = 0.0
-    bt_manager.host = MagicMock()
-    bt_manager.host.get_status_value = MagicMock(return_value=False)
-    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
-
-    calls = {"paired": 0, "connect": 0}
-
-    held = AdapterHandle().try_lease("scan")  # hold the adapter like a UI scan would
-    assert held is not None
-
-    original_sleep = asyncio.sleep
-    iterations = 0
-
-    async def _counting_sleep(duration):
-        nonlocal iterations
-        iterations += 1
-        if iterations == 1:
-            held.release()  # scan finished — next poll may proceed
-        if iterations >= 4:
-            bt_manager._running = False
-        await original_sleep(0)
-
-    with (
-        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_counting_sleep),
-        patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
-        patch.object(bt_manager, "is_device_connected", return_value=False),
-        patch.object(
-            bt_manager,
-            "is_device_paired",
-            side_effect=lambda: (calls.__setitem__("paired", calls["paired"] + 1), True)[1],
-        ),
-        patch.object(
-            bt_manager,
-            "connect_device",
-            side_effect=lambda: (
-                calls.__setitem__("connect", calls["connect"] + 1),
-                setattr(bt_manager, "_running", False),  # stop after the first post-release attempt
-                False,
-            )[2],
-        ),
-    ):
-        loop = asyncio.get_running_loop()
-
-        async def _mock_run_in_executor(executor, fn, *args):
-            return fn(*args) if args else fn()
-
-        with patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor):
-            await _monitor_polling(bt_manager)
-
-    assert calls == {"paired": 1, "connect": 1}  # exactly one attempt, after release
-    # The monitor's attempt released its lease behind it.
-    after = AdapterHandle().try_lease("after")
-    assert after is not None
-    after.release()
 
 
 @pytest.mark.asyncio
@@ -527,8 +351,9 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
     bt_manager.management_enabled = True
     bt_manager.check_interval = 0.01
 
-    device_iface = AsyncMock()
-    device_iface.get_connected = AsyncMock(return_value=False)
+    # BlueZ says the speaker is gone; the signal that should have said so
+    # never arrived, which is what the heartbeat exists to catch.
+    device = attach(bt_manager, bluez_knowing(bt_manager, connected=False))
 
     disconnect_event = asyncio.Event()
 
@@ -556,7 +381,6 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
     with (
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_fake_wait_for),
-        patch("sendspin_bridge.bluetooth.monitor._dbus_get_battery_level", return_value=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "is_device_paired", return_value=True),
         # After heartbeat detects disconnect, _handle_reconnect_failure → True exits immediately
@@ -568,7 +392,7 @@ async def test_inner_dbus_monitor_heartbeat_detects_missed_disconnect(bt_manager
         bt_manager.host.send_subprocess_command = AsyncMock()
         bt_manager.host.stop_subprocess = AsyncMock()
 
-        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, asyncio.Event(), loop)
+        await _inner_dbus_monitor(bt_manager, device, disconnect_event, asyncio.Event(), loop)
 
     assert bt_manager.connected is False
     assert disconnect_detected is True
@@ -738,7 +562,13 @@ async def test_inner_dbus_monitor_connect_event_wakes_backoff(bt_manager):
         patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_track_sleep),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
     ):
-        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, connect_event, loop)
+        await _inner_dbus_monitor(
+            bt_manager,
+            attach(bt_manager, bluez_knowing(bt_manager, connected=True)),
+            disconnect_event,
+            connect_event,
+            loop,
+        )
 
     # The function must have configured audio and started the subprocess
     # (the "External reconnect detected" path), which only happens when
@@ -800,6 +630,9 @@ async def test_inner_dbus_monitor_backoff_falls_through_on_timeout(bt_manager):
         patch("sendspin_bridge.bluetooth.manager._bt_executor", new=None),
         patch.object(loop, "run_in_executor", side_effect=_mock_run_in_executor),
         patch.object(bt_manager, "is_device_paired", side_effect=_is_paired_and_maybe_stop),
+        # The real connect ladder is what makes this test's backoff happen; it
+        # now reaches the audio server on its way, which a unit test has none of.
+        patch.object(bt_manager, "configure_bluetooth_audio", return_value=False),
         patch.object(bt_manager, "connect_device", return_value=False),
         patch.object(bt_manager, "_handle_reconnect_failure", return_value=False),
         patch.object(bt_manager, "_reconnect_cancelled", return_value=False),
@@ -810,7 +643,13 @@ async def test_inner_dbus_monitor_backoff_falls_through_on_timeout(bt_manager):
         patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_instant_wait_for),
         patch("sendspin_bridge.bluetooth.monitor.asyncio.ensure_future"),
     ):
-        await _inner_dbus_monitor(bt_manager, device_iface, disconnect_event, connect_event, loop)
+        await _inner_dbus_monitor(
+            bt_manager,
+            attach(bt_manager, bluez_knowing(bt_manager, connected=False)),
+            disconnect_event,
+            connect_event,
+            loop,
+        )
 
     # No external connect arrived → audio configuration must NOT have
     # been called via the backoff-wake path (the loop exits via

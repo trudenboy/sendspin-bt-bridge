@@ -231,3 +231,52 @@ async def test_disconnecting_a_speaker_bluez_does_not_know_is_false_not_an_error
     device = _device(FakeBlueZ())
 
     assert await device.disconnect() is False
+
+
+# ── what the daemon is told about the speaker ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_the_identity_a_speaker_advertises_is_read_in_one_trip():
+    """Alias wins over Name: it is what an operator renamed the speaker to."""
+    bluez = _bluez(connected=True, Alias="Kitchen speaker", Name="ENEBY 20", Modalias="bluetooth:v000ApFFFFdFFFF")
+
+    identity = await _device(bluez).identity()
+
+    assert identity.name == "Kitchen speaker"
+    assert identity.modalias == "bluetooth:v000ApFFFFdFFFF"
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_with_no_alias_answers_with_its_name():
+    bluez = _bluez(connected=True, Name="ENEBY 20")
+
+    assert (await _device(bluez).identity()).name == "ENEBY 20"
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_speaker_has_an_empty_identity():
+    identity = await _device(FakeBlueZ()).identity()
+
+    assert identity.name == ""
+    assert identity.modalias is None
+
+
+@pytest.mark.asyncio
+async def test_the_transport_snapshot_comes_from_the_speaker_s_transport():
+    bluez = _bluez(connected=True)
+    bluez.add_transport(f"{PATH}/fd0", "active")
+
+    snapshot = await _device(bluez).transport_snapshot()
+
+    assert snapshot is not None
+    assert snapshot.state == "active"
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_without_a_transport_still_answers_a_snapshot():
+    """An absent Delay is a capability outcome, not a failure."""
+    snapshot = await _device(_bluez(connected=True)).transport_snapshot()
+
+    assert snapshot is not None
+    assert snapshot.state is None

@@ -15,7 +15,6 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
-from sendspin_bridge.bluetooth.device import BluetoothDevice
 from sendspin_bridge.config import CONFIG_FILE, save_device_sink
 from sendspin_bridge.config import config_lock as config_lock
 from sendspin_bridge.services.audio.pulse import (
@@ -32,6 +31,7 @@ from sendspin_bridge.services.audio.sink_names import is_bluez_sink_name, sink_n
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
     from sendspin_bridge.bridge.bt_types import BluetoothManagerHost
 
 logger = logging.getLogger(__name__)

@@ -19,14 +19,10 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
+from sendspin_bridge.bluetooth.adapter_address import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, LinkState, bt_executor
 from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_bluez, set_bluez
-from sendspin_bridge.bluetooth.dbus import (
-    A2DP_SINK_UUID,
-    AUDIO_SINK_UUIDS,
-    _dbus_get_adapter_address,
-)
 from sendspin_bridge.bluetooth.device import BluetoothDevice
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.bluetooth.reconnect_policy import (
@@ -37,6 +33,7 @@ from sendspin_bridge.bluetooth.reconnect_policy import (
     ReleaseManagement,
     TryAdapterRecovery,
 )
+from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID, AUDIO_SINK_UUIDS
 from sendspin_bridge.services.bluetooth import COMMON_BT_PAIR_PINS, bt_rssi_mgmt
 
 # v2.63.0-rc.7 — RSSI background refresh restored via the kernel mgmt

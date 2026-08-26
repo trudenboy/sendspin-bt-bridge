@@ -1,131 +1,69 @@
-"""Tests for MediaTransport1.State lookup used by the audio fast-path gate.
+"""What A2DP is doing, as the audio fast-path gate reads it.
 
-Backs the issue #269 fix where the LAST_SINKS fast-path now consults
-``org.bluez.MediaTransport1.State`` before skipping the A2DP delay.
+Backs the issue #269 fix: the cached-sink fast path consults the speaker's
+`MediaTransport1.State` before skipping the A2DP settle delay, because taking
+it while the peer already has the transport active races the anti-pop mute.
+
+These used to reload the D-Bus module with a hand-built `dbus` stand-in; the
+question they ask now goes to the speaker's device module, over the fake bus.
 """
 
 from __future__ import annotations
 
-import importlib
-import sys
-import types
+import pytest
+
+from sendspin_bridge.bluetooth.address import DeviceAddress
+from sendspin_bridge.bluetooth.device import BluetoothDevice
+from tests.support.fake_dbus import FakeBlueZ
+
+ADDRESS = DeviceAddress.require("AA:BB:CC:DD:EE:FF")
+PATH = f"/org/bluez/hci0/{ADDRESS.dbus_node}"
 
 
-def _install_fake_dbus(monkeypatch, managed_objects):
-    """Install a minimal fake ``dbus`` module exposing a ManagedObjects payload."""
-    fake_dbus = types.ModuleType("dbus")
-
-    class _Interface:
-        def __init__(self, obj, iface):
-            self._obj = obj
-            self._iface = iface
-
-        def GetManagedObjects(self):
-            return managed_objects
-
-    class _Object:
-        def __init__(self, path):
-            self._path = path
-
-    class _Bus:
-        def get_object(self, _service, path):
-            return _Object(path)
-
-    # The helpers ask for a private, per-thread connection.
-    fake_dbus.SystemBus = lambda private=False: _Bus()
-    fake_dbus.Interface = _Interface
-    monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
+def _device(bluez: FakeBlueZ) -> BluetoothDevice:
+    return BluetoothDevice(ADDRESS, controller="hci0", bus_factory=bluez.bus)
 
 
-def _reload_bt_dbus():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    importlib.reload(bt_dbus)
-    return bt_dbus
-
-
-def test_media_transport_state_active(monkeypatch):
-    """Returns 'active' when a MediaTransport1 for the device is active."""
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    managed = {
-        f"{device_path}/sep1/fd0": {
-            "org.bluez.MediaTransport1": {
-                "Device": device_path,
-                "State": "active",
-            }
-        }
-    }
-    _install_fake_dbus(monkeypatch, managed)
-    bt_dbus = _reload_bt_dbus()
-
-    assert bt_dbus._dbus_get_media_transport_state(device_path) == "active"
+def _bluez_with_device() -> FakeBlueZ:
+    bluez = FakeBlueZ()
+    bluez.add_device(PATH, ADDRESS.colons, connected=True)
+    return bluez
 
 
-def test_media_transport_state_idle(monkeypatch):
-    """Returns 'idle' when a MediaTransport1 for the device is idle."""
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    managed = {
-        f"{device_path}/sep1/fd0": {
-            "org.bluez.MediaTransport1": {
-                "Device": device_path,
-                "State": "idle",
-            }
-        }
-    }
-    _install_fake_dbus(monkeypatch, managed)
-    bt_dbus = _reload_bt_dbus()
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["active", "idle", "pending"])
+async def test_the_state_of_the_speaker_s_transport_is_reported(state):
+    bluez = _bluez_with_device()
+    bluez.add_transport(f"{PATH}/sep1/fd0", state, device=PATH)
 
-    assert bt_dbus._dbus_get_media_transport_state(device_path) == "idle"
+    assert await _device(bluez).transport_state() == state
 
 
-def test_media_transport_state_no_transport(monkeypatch):
-    """Returns None when no MediaTransport1 exists for the device."""
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    _install_fake_dbus(monkeypatch, {})
-    bt_dbus = _reload_bt_dbus()
-
-    assert bt_dbus._dbus_get_media_transport_state(device_path) is None
+@pytest.mark.asyncio
+async def test_a_speaker_with_no_transport_reports_nothing():
+    assert await _device(_bluez_with_device()).transport_state() is None
 
 
-def test_media_transport_state_filters_by_device(monkeypatch):
-    """Ignores MediaTransport1 objects that belong to a different device."""
-    our_device = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    other_device = "/org/bluez/hci0/dev_11_22_33_44_55_66"
-    managed = {f"{other_device}/sep1/fd0": {"org.bluez.MediaTransport1": {"Device": other_device, "State": "active"}}}
-    _install_fake_dbus(monkeypatch, managed)
-    bt_dbus = _reload_bt_dbus()
+@pytest.mark.asyncio
+async def test_another_speaker_s_transport_is_not_ours():
+    """The filter that keeps one speaker's A2DP state out of another's gate."""
+    other = "/org/bluez/hci0/dev_11_22_33_44_55_66"
+    bluez = _bluez_with_device()
+    bluez.add_device(other, "11:22:33:44:55:66", connected=True)
+    bluez.add_transport(f"{other}/sep1/fd0", "active", device=other)
 
-    assert bt_dbus._dbus_get_media_transport_state(our_device) is None
-
-
-def test_media_transport_state_returns_none_on_dbus_error(monkeypatch):
-    """When GetManagedObjects raises, the helper degrades to None."""
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    fake_dbus = types.ModuleType("dbus")
-
-    class _Interface:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def GetManagedObjects(self):
-            raise RuntimeError("boom")
-
-    class _Bus:
-        def get_object(self, *_args, **_kwargs):
-            return object()
-
-    # The helpers ask for a private, per-thread connection.
-    fake_dbus.SystemBus = lambda private=False: _Bus()
-    fake_dbus.Interface = _Interface
-    monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
-    bt_dbus = _reload_bt_dbus()
-
-    assert bt_dbus._dbus_get_media_transport_state(device_path) is None
+    assert await _device(bluez).transport_state() is None
 
 
-def test_media_transport_state_handles_missing_path():
-    """Returns None gracefully when device_path is None or empty."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
+@pytest.mark.asyncio
+async def test_a_bus_that_raises_reports_nothing_rather_than_failing():
+    """The gate is a timing hint; it must not take the connect down with it."""
+    bluez = _bluez_with_device()
+    bluez.fail["GetManagedObjects"] = RuntimeError("boom")
 
-    assert bt_dbus._dbus_get_media_transport_state(None) is None
-    assert bt_dbus._dbus_get_media_transport_state("") is None
+    assert await _device(bluez).transport_state() is None
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_bluez_does_not_know_reports_nothing():
+    assert await _device(FakeBlueZ()).transport_state() is None

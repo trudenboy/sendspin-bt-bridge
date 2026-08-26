@@ -83,13 +83,30 @@ def test_a_blocking_read_gives_up_rather_than_holding_the_caller(monkeypatch):
     try:
         bluez = _bluez(connected=True)
 
-        async def _never(*_a, **_kw):
+        device = _device(bluez)
+        started: list[asyncio.Task] = []
+
+        async def _never_but_cancellable():
+            task = asyncio.current_task()
+            if task is not None:
+                started.append(task)
             await asyncio.sleep(30)
 
-        device = _device(bluez)
-        monkeypatch.setattr(device, "is_connected", _never)
+        monkeypatch.setattr(device, "is_connected", _never_but_cancellable)
 
         assert device.is_connected_blocking(timeout=0.1) is False
+
+        # The caller gave up; the work it abandoned must not outlive the test.
+        done = threading.Event()
+
+        async def _cancel_and_settle():
+            for task in started:
+                task.cancel()
+            await asyncio.gather(*started, return_exceptions=True)
+            done.set()
+
+        asyncio.run_coroutine_threadsafe(_cancel_and_settle(), loop)
+        done.wait(timeout=5)
     finally:
         _stop(loop, thread)
 

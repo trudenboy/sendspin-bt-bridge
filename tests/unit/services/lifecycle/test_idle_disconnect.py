@@ -310,15 +310,6 @@ class TestWakeFromStandby:
 class TestBtMonitorStandbyCheck:
     """bt_monitor skips reconnect when device is in standby."""
 
-    def test_standby_skips_reconnect_in_polling(self):
-        """Verify the standby check exists in _monitor_polling logic."""
-        import inspect
-
-        import sendspin_bridge.bluetooth.monitor as bt_monitor
-
-        src = inspect.getsource(bt_monitor._monitor_polling)
-        assert "bt_standby" in src, "_monitor_polling should check bt_standby"
-
     def test_standby_skips_reconnect_in_dbus(self):
         """Verify the standby check exists in _inner_dbus_monitor logic."""
         import inspect

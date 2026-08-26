@@ -700,16 +700,6 @@ def test_unresolved_adapter_disables_dbus_path():
     assert mgr._dbus_device_path is None
 
 
-@pytest.mark.asyncio
-async def test_monitor_dbus_raises_when_device_path_unavailable(bt_manager):
-    bt_manager._dbus_device_path = None
-
-    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
-
-    with pytest.raises(RuntimeError, match="adapter resolution failed"):
-        await _monitor_dbus(bt_manager, None, None)
-
-
 def test_cancel_reconnect_clears_runtime_reconnect_status(bt_manager):
     mock_host = MagicMock()
     mock_host.get_status_value = MagicMock(return_value=True)
@@ -1564,7 +1554,7 @@ def test_handle_reconnect_failure_runs_adapter_recovery_for_default_adapter_devi
 
 def test_force_a2dp_sink_profile_calls_connect_profile_with_sink_uuid(bt_manager):
     """The A2DP Sink UUID is what reaches BlueZ."""
-    from sendspin_bridge.bluetooth.dbus import A2DP_SINK_UUID
+    from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID
 
     bluez = bluez_knowing(bt_manager, connected=True)
     attach(bt_manager, bluez)
@@ -1876,7 +1866,7 @@ def test_check_audio_profiles_after_pair_warns_when_no_audio_uuid_advertised(bt_
 
 def test_check_audio_profiles_after_pair_no_warn_for_audio_device(bt_manager):
     """A2DP-capable peer must not trigger the no-audio warning on status."""
-    from sendspin_bridge.bluetooth.dbus import A2DP_SINK_UUID
+    from sendspin_bridge.bluetooth.uuids import A2DP_SINK_UUID
 
     bt_manager.host = MagicMock()
 
@@ -1897,44 +1887,23 @@ def test_check_audio_profiles_after_pair_no_warn_when_uuid_read_empty(bt_manager
 
 
 # ---------------------------------------------------------------------------
-# bt_dbus._dbus_connect_profile — low-level D-Bus wrapper
 # ---------------------------------------------------------------------------
 
 
-def test_dbus_connect_profile_returns_false_when_dbus_module_missing():
-    """With dbus-python unavailable the helper reports dbus-unavailable reason."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "dbus", None):
-        ok, reason = bt_dbus._dbus_connect_profile("/org/bluez/hci0/dev_X", "uuid")
-
-    assert ok is False
-    assert "dbus" in reason.lower()
-
-
-def test_dbus_connect_profile_returns_false_for_empty_device_path():
-    """Empty device path short-circuits to False without touching the bus."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    ok, reason = bt_dbus._dbus_connect_profile(None, bt_dbus.A2DP_SINK_UUID)
-    assert ok is False
-    assert reason
-
-
 # ---------------------------------------------------------------------------
-# bt_dbus._dbus_get_adapter_address — hciN -> MAC resolution
+# adapter_address._dbus_get_adapter_address — hciN -> MAC resolution
 # ---------------------------------------------------------------------------
 
 
 def test_dbus_get_adapter_address_returns_none_when_dbus_module_missing():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
+    import sendspin_bridge.bluetooth.adapter_address as bt_dbus
 
     with patch.object(bt_dbus, "dbus", None):
         assert bt_dbus._dbus_get_adapter_address("hci1") is None
 
 
 def test_dbus_get_adapter_address_returns_none_for_empty_name():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
+    import sendspin_bridge.bluetooth.adapter_address as bt_dbus
 
     assert bt_dbus._dbus_get_adapter_address("") is None
 
@@ -1942,7 +1911,7 @@ def test_dbus_get_adapter_address_returns_none_for_empty_name():
 def test_dbus_get_adapter_address_reads_address_property_at_hci_path():
     """The BlueZ object path /org/bluez/<hciN> matches the kernel hci index
     exactly, unlike bluetoothctl list's registration-order output."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
+    import sendspin_bridge.bluetooth.adapter_address as bt_dbus
 
     fake_dbus = MagicMock()
     fake_bus = MagicMock()
@@ -1964,201 +1933,11 @@ def test_dbus_get_adapter_address_reads_address_property_at_hci_path():
 
 
 # ---------------------------------------------------------------------------
-# bt_dbus._dbus_has_media_endpoint — BlueZ MediaEndpoint1 registration check
 # ---------------------------------------------------------------------------
 
 
-def test_dbus_has_media_endpoint_returns_none_when_dbus_module_missing():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "dbus", None):
-        assert bt_dbus._dbus_has_media_endpoint("/org/bluez/hci0/dev_AA_BB") is None
-
-
-def test_dbus_has_media_endpoint_returns_none_for_empty_device_path():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    assert bt_dbus._dbus_has_media_endpoint(None) is None
-
-
-def test_dbus_has_media_endpoint_returns_true_when_sep_object_present():
-    """A <device_path>/sepN object implementing MediaEndpoint1 means BlueZ
-    successfully matched the peer's AVDTP capabilities against a locally
-    registered audio backend endpoint."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    fake_dbus = MagicMock()
-    fake_bus = MagicMock()
-    fake_om = MagicMock()
-    fake_om.GetManagedObjects.return_value = {
-        device_path: {"org.bluez.Device1": {"ServicesResolved": True}},
-        f"{device_path}/sep1": {"org.bluez.MediaEndpoint1": {"UUID": "0000110b-..."}},
-    }
-    fake_dbus.SystemBus.return_value = fake_bus
-    fake_dbus.Interface.return_value = fake_om
-
-    with patch.object(bt_dbus, "dbus", fake_dbus):
-        assert bt_dbus._dbus_has_media_endpoint(device_path) is True
-
-    fake_om.GetManagedObjects.assert_called_once_with()
-
-
-def test_dbus_has_media_endpoint_returns_none_until_services_resolved():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    fake_dbus = MagicMock()
-    fake_om = MagicMock()
-    fake_om.GetManagedObjects.return_value = {
-        device_path: {"org.bluez.Device1": {"ServicesResolved": False}},
-    }
-    fake_dbus.Interface.return_value = fake_om
-
-    with patch.object(bt_dbus, "dbus", fake_dbus):
-        assert bt_dbus._dbus_has_media_endpoint(device_path) is None
-
-    fake_om.GetManagedObjects.assert_called_once_with()
-
-
-def test_dbus_has_media_endpoint_returns_none_when_device_missing_from_snapshot():
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    fake_dbus = MagicMock()
-    fake_om = MagicMock()
-    fake_om.GetManagedObjects.return_value = {}
-    fake_dbus.Interface.return_value = fake_om
-
-    with patch.object(bt_dbus, "dbus", fake_dbus):
-        assert bt_dbus._dbus_has_media_endpoint(device_path) is None
-
-    fake_om.GetManagedObjects.assert_called_once_with()
-
-
-def test_dbus_has_media_endpoint_returns_false_when_resolved_device_has_no_sep_objects():
-    """An endpoint for another device must not affect the requested device."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-    fake_dbus = MagicMock()
-    fake_bus = MagicMock()
-    fake_om = MagicMock()
-    fake_om.GetManagedObjects.return_value = {
-        device_path: {"org.bluez.Device1": {"Connected": True, "ServicesResolved": True}},
-        "/org/bluez/hci0/dev_11_22_33_44_55_66/sep1": {"org.bluez.MediaEndpoint1": {}},
-    }
-    fake_dbus.SystemBus.return_value = fake_bus
-    fake_dbus.Interface.return_value = fake_om
-
-    with patch.object(bt_dbus, "dbus", fake_dbus):
-        assert bt_dbus._dbus_has_media_endpoint(device_path) is False
-
-    fake_om.GetManagedObjects.assert_called_once_with()
-
-
 # ---------------------------------------------------------------------------
-# bt_dbus._dbus_wait_services_resolved — ServicesResolved polling helper
 # ---------------------------------------------------------------------------
-
-
-def test_dbus_wait_services_resolved_returns_true_when_property_already_set():
-    """When ServicesResolved is already True, the helper returns immediately.
-
-    ``wait_with_cancel`` contract matches ``BluetoothManager._wait_with_cancel``:
-    True = waited uninterrupted, False = cancelled.
-    """
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=True):
-        ok = bt_dbus._dbus_wait_services_resolved(
-            "/org/bluez/hci0/dev_X",
-            is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: True,
-            timeout=1.0,
-            poll_interval=0.01,
-        )
-    assert ok is True
-
-
-def test_dbus_wait_services_resolved_bails_out_on_disconnect():
-    """If is_connected_check returns False the helper reports failure."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
-        ok = bt_dbus._dbus_wait_services_resolved(
-            "/org/bluez/hci0/dev_X",
-            is_connected_check=lambda: False,
-            wait_with_cancel=lambda _: True,
-            timeout=1.0,
-            poll_interval=0.01,
-        )
-    assert ok is False
-
-
-def test_dbus_wait_services_resolved_returns_false_on_timeout():
-    """With timeout=0 and property not resolved, helper returns False without blocking."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
-        ok = bt_dbus._dbus_wait_services_resolved(
-            "/org/bluez/hci0/dev_X",
-            is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: True,
-            timeout=0.0,
-            poll_interval=0.01,
-        )
-    assert ok is False
-
-
-def test_dbus_wait_services_resolved_respects_cancellation():
-    """Caller-driven cancellation (wait_with_cancel returns False) exits with False."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=False):
-        ok = bt_dbus._dbus_wait_services_resolved(
-            "/org/bluez/hci0/dev_X",
-            is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: False,
-            timeout=10.0,
-            poll_interval=0.01,
-        )
-    assert ok is False
-
-
-def test_dbus_wait_services_resolved_returns_none_when_dbus_unavailable():
-    """When ``dbus`` module isn't importable, helper must return ``None`` (not False).
-
-    Returning False would look indistinguishable from a real 10s timeout and
-    caused misleading "did not reach True within 10s" warnings on systems
-    without dbus-python. The caller distinguishes "could not check" from
-    "checked and timed out" by the ``None`` sentinel.
-    """
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    with patch.object(bt_dbus, "dbus", None):
-        result = bt_dbus._dbus_wait_services_resolved(
-            "/org/bluez/hci0/dev_X",
-            is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: True,
-            timeout=1.0,
-            poll_interval=0.01,
-        )
-    assert result is None
-
-
-def test_dbus_wait_services_resolved_returns_none_when_device_path_missing():
-    """Missing device_path is a not-actually-checked case — must be ``None``."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    result = bt_dbus._dbus_wait_services_resolved(
-        None,
-        is_connected_check=lambda: True,
-        wait_with_cancel=lambda _: True,
-        timeout=1.0,
-        poll_interval=0.01,
-    )
-    assert result is None
 
 
 def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manager):
@@ -2184,55 +1963,9 @@ def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manage
     )
 
 
-def test_dbus_wait_services_resolved_polls_multiple_times_until_resolved():
-    """Uninterrupted wait (wait_with_cancel returns True) must keep polling.
-
-    Regression test: previously the contract was inverted and the helper exited
-    after the first non-True property read, even when the caller had not
-    cancelled. This verifies the loop actually iterates until ServicesResolved
-    flips to True.
-    """
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    property_calls = {"count": 0}
-
-    def _fake_property(_path, _name, adapter_hci="hci0"):
-        property_calls["count"] += 1
-        # Flip to True on the 3rd read — forcing the loop to iterate twice.
-        return property_calls["count"] >= 3
-
-    with patch.object(bt_dbus, "_dbus_get_device_property", side_effect=_fake_property):
-        ok = bt_dbus._dbus_wait_services_resolved(
-            "/org/bluez/hci0/dev_X",
-            is_connected_check=lambda: True,
-            wait_with_cancel=lambda _: True,
-            timeout=5.0,
-            poll_interval=0.01,
-        )
-    assert ok is True
-    assert property_calls["count"] >= 3
-
-
 # ---------------------------------------------------------------------------
 # bt_dbus._dbus_get_device_uuids — UUID listing helper
 # ---------------------------------------------------------------------------
-
-
-def test_dbus_get_device_uuids_normalizes_to_lowercase():
-    """UUIDs from BlueZ are lowercased so set intersection with AUDIO_SINK_UUIDS works."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    raw = ["0000110B-0000-1000-8000-00805F9B34FB", "0000180F-0000-1000-8000-00805F9B34FB"]
-    with patch.object(bt_dbus, "_dbus_get_device_property", return_value=raw):
-        uuids = bt_dbus._dbus_get_device_uuids("/org/bluez/hci0/dev_X")
-    assert uuids == [u.lower() for u in raw]
-
-
-def test_dbus_get_device_uuids_returns_empty_on_missing_path():
-    """Empty path → empty list; no dbus interaction."""
-    import sendspin_bridge.bluetooth.dbus as bt_dbus
-
-    assert bt_dbus._dbus_get_device_uuids(None) == []
 
 
 # ---------------------------------------------------------------------------
@@ -2492,8 +2225,8 @@ def test_apply_connected_state_called_by_dbus_props_changed_path():
                 direct.append(f"line {node.lineno}: {ast.dump(node)[:120]}")
 
     assert direct == [], f"bt_monitor still has direct mgr.connected assignments: {direct}"
-    assert "_apply_connected_state" in Path(bt_monitor.__file__).read_text(), (
-        "bt_monitor must call _apply_connected_state for the on_connected hook to fire"
+    assert "apply_connected_state" in Path(bt_monitor.__file__).read_text(), (
+        "bt_monitor must route connected through apply_connected_state, or the on_connected hook never fires"
     )
 
 

@@ -1065,23 +1065,29 @@ async def test_start_sendspin_inner_passes_bt_identity_in_subprocess_params(monk
     client = SendspinClient("ENEBY20", "localhost", 9000)
     client._start_sendspin_lock = asyncio.Lock()
 
-    # BluetoothManager exposes the D-Bus path; the parent walks Alias/Modalias.
+    # The manager's device module answers what the speaker calls itself.
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
+    from tests.support.fake_dbus import FakeBlueZ
+
+    address = DeviceAddress.require("FC:58:FA:EB:08:6C")
+    bluez = FakeBlueZ()
+    bluez.add_device(
+        f"/org/bluez/hci0/{address.dbus_node}",
+        address.colons,
+        connected=True,
+        Alias="ENEBY20",
+        Name="ENEBY20",
+        # Sony vendor (0x009E) — picked up by vendor_from_modalias.
+        Modalias="bluetooth:v009Ep4020d0001",
+    )
     client.bt_manager = SimpleNamespace(
         connected=True,
         configure_bluetooth_audio=lambda: True,
-        _dbus_device_path="/org/bluez/hci0/dev_FC_58_FA_EB_08_6C",
+        device=BluetoothDevice(address, controller="hci0", bus_factory=bluez.bus),
     )
     client.bluetooth_sink_name = "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"
 
-    def _fake_dbus_prop(_path, prop, **_kw):
-        return {
-            "Alias": "ENEBY20",
-            "Name": "ENEBY20",
-            # Sony vendor (0x009E) — picked up by vendor_from_modalias.
-            "Modalias": "bluetooth:v009Ep4020d0001",
-        }.get(prop)
-
-    monkeypatch.setattr("sendspin_bridge.bridge.client._dbus_get_device_property", _fake_dbus_prop)
     # Find an available port immediately so we don't probe the network.
     monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8928)
 
@@ -1116,17 +1122,19 @@ async def test_start_sendspin_inner_falls_back_to_empty_bt_identity(monkeypatch)
     strings so the daemon falls back to the bridge-wide identity."""
     client = SendspinClient("Unknown Speaker", "localhost", 9000)
     client._start_sendspin_lock = asyncio.Lock()
+    # BlueZ knows nothing about this speaker: no alias, no modalias, no object.
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
+    from tests.support.fake_dbus import FakeBlueZ
+
+    address = DeviceAddress.require("AA:BB:CC:DD:EE:FF")
     client.bt_manager = SimpleNamespace(
         connected=True,
         configure_bluetooth_audio=lambda: True,
-        _dbus_device_path="/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF",
+        device=BluetoothDevice(address, controller="hci0", bus_factory=FakeBlueZ().bus),
     )
     client.bluetooth_sink_name = "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
 
-    monkeypatch.setattr(
-        "sendspin_bridge.bridge.client._dbus_get_device_property",
-        lambda _path, _prop, **_kw: None,
-    )
     monkeypatch.setattr("sendspin_bridge.bridge.client.find_available_bind_port", lambda *a, **kw: 8928)
 
     captured_params: list[str] = []
