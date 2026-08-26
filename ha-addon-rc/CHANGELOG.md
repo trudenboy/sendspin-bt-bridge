@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.0-rc.5] - 2026-08-26
+
+### Changed
+
+- Live status updates no longer re-probe the host on every tick. The
+  Bluetooth, audio and D-Bus checks behind the status payload are now sampled
+  at a bounded rate and shared between listeners, which takes a status update
+  from about 62 ms to about 6 ms — the saving multiplies by every open browser
+  tab. Diagnostics, the setup verification page and the operator checks still
+  measure the host when asked, and a saved config or an adapter power toggle
+  makes the next update measure again.
+
+### Fixed
+
+- A speaker whose audio daemon lost its log reader is restarted instead of
+  wedging. The daemon blocks once nothing drains its output, which stopped it
+  responding to volume, stop and reconnect while it still looked healthy —
+  seen on a live bridge, where one sat blocked for eleven minutes with nothing
+  in the log.
+- Device state reports the audio sink a speaker is actually playing through.
+  It read the sink name from a field nothing ever filled, so every device
+  showed no sink name while reporting, in the same breath, that it had one.
+- The sink name WirePlumber publishes on Ubuntu 26.04 is understood
+  everywhere it appears. The bridge already selected that name when
+  connecting a speaker, but the code that reads sink names back did not
+  recognise it.
+
 ## [2.75.0-rc.4] - 2026-08-25
 
 ### Fixed
