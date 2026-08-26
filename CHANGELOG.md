@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Queue commands are no longer reported as failed when Music Assistant is
+  busy. The bridge waited for an answer through at most ten messages, and a
+  household with several speakers can put more than ten update notifications
+  on the wire between a command and its acknowledgement; the command had in
+  fact been carried out.
+- Queue controls work immediately after the bridge connects to Music
+  Assistant, rather than after the first minute. Which Music Assistant player
+  belongs to which speaker is now learned as part of connecting.
+
 ## [2.75.0-rc.5] - 2026-08-26
 
 ### Changed
