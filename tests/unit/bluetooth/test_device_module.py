@@ -201,3 +201,33 @@ async def test_a_successful_operation_clears_the_previous_reason():
     await device.connect_profile("uuid")
 
     assert device.last_error is None
+
+
+# ── the verb that belongs to the device ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_disconnecting_reaches_the_speaker():
+    """`Disconnect` is a Device1 method: the speaker's own verb, not the controller's."""
+    bluez = _bluez(connected=True)
+
+    assert await _device(bluez).disconnect() is True
+    assert bluez.calls == [(PATH, "Disconnect", ())]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_disconnect_reports_false_and_keeps_the_reason():
+    bluez = _bluez(connected=True)
+    bluez.fail["Disconnect"] = RuntimeError("org.bluez.Error.NotConnected")
+    device = _device(bluez)
+
+    assert await device.disconnect() is False
+    assert "NotConnected" in (device.last_error or "")
+
+
+@pytest.mark.asyncio
+async def test_disconnecting_a_speaker_bluez_does_not_know_is_false_not_an_error():
+    """The caller falls back to the controller's own disconnect."""
+    device = _device(FakeBlueZ())
+
+    assert await device.disconnect() is False

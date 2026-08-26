@@ -31,8 +31,8 @@ resolves the speaker's object through `ObjectManager` on a named controller,
 owns the bus connection and the `PropertiesChanged` subscription, answers
 named questions about the speaker (`is_connected`, `is_paired`, `uuids`,
 `battery_level`, `transport_state`, `services_resolved`), returns a whole
-consistent `state()` when a caller needs several at once, and connects a
-profile. It does not pair, connect, trust or remove — those are the
+consistent `state()` when a caller needs several at once, connects a profile
+and drops the link. It does not pair, connect, trust or remove — those are the
 controller's verbs and live behind the bluetoothctl transport.
 
 **Pairing agent** — the `org.bluez.Agent1` this bridge registers for the

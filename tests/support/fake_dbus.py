@@ -186,6 +186,11 @@ class FakeDeviceInterface:
         if "ConnectProfile" in self._bluez.fail:
             raise self._bluez.fail["ConnectProfile"]
 
+    async def call_disconnect(self) -> None:
+        self._bluez.calls.append((self._path, "Disconnect", ()))
+        if "Disconnect" in self._bluez.fail:
+            raise self._bluez.fail["Disconnect"]
+
     async def call_disconnect_profile(self, uuid: str) -> None:
         self._bluez.calls.append((self._path, "DisconnectProfile", (uuid,)))
         if "DisconnectProfile" in self._bluez.fail:

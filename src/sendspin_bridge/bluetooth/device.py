@@ -301,6 +301,9 @@ class BluetoothDevice:
     def connect_profile_blocking(self, uuid: str, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
         return bool(self._blocking(self.connect_profile(uuid), timeout=timeout, default=False))
 
+    def disconnect_blocking(self, *, timeout: float = _BLOCKING_TIMEOUT_S) -> bool:
+        return bool(self._blocking(self.disconnect(), timeout=timeout, default=False))
+
     def _blocking(self, coro: Any, *, timeout: float, default: Any) -> Any:
         """Run *coro* on the bridge loop and wait for it.
 
@@ -333,6 +336,25 @@ class BluetoothDevice:
         except Exception as exc:
             logger.debug("[%s] blocking read failed: %s", self.address, exc)
             return default
+
+    async def disconnect(self) -> bool:
+        """Drop this speaker's link, the speaker's own way.
+
+        `Disconnect` is a `Device1` method: it belongs to the speaker, as
+        `ConnectProfile` does. Connecting, trusting, pairing and removing are
+        the controller's verbs and stay behind the bluetoothctl transport.
+        """
+        interface = await self._device_interface()
+        if interface is None:
+            self._remember("device not on the bus")
+            return False
+        try:
+            await interface.call_disconnect()
+        except Exception as exc:
+            self._remember(str(exc))
+            return False
+        self._remember(None)
+        return True
 
     # -- signals ----------------------------------------------------------
 

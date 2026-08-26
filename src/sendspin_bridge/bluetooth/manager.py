@@ -25,7 +25,6 @@ from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_
 from sendspin_bridge.bluetooth.dbus import (
     A2DP_SINK_UUID,
     AUDIO_SINK_UUIDS,
-    _dbus_call_device_method,
     _dbus_get_adapter_address,
 )
 from sendspin_bridge.bluetooth.device import BluetoothDevice
@@ -717,7 +716,7 @@ class BluetoothManager:
             on_sink_found=self.on_sink_found,
             host=self.host,
             wait_with_cancel=self._wait_with_cancel,
-            device_path=self._dbus_device_path,
+            device=self.device,
             logger=logger,
         )
 
@@ -928,7 +927,7 @@ class BluetoothManager:
 
     def disconnect_device(self) -> bool:
         """Disconnect from the Bluetooth device via D-Bus; falls back to bluetoothctl."""
-        if _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
+        if self.device.disconnect_blocking():
             self._apply_connected_state(False)
             return True
         result = get_bluez().disconnect(self.mac_address, self._bluez_adapter())
@@ -1062,7 +1061,7 @@ class BluetoothManager:
         # re-creates it; otherwise the dance would leave a dangling
         # object on the bus and the reconnect's on_connected fire would
         # clash with it.
-        if not _dbus_call_device_method(self._dbus_device_path, "Disconnect"):
+        if not self.device.disconnect_blocking():
             get_bluez().disconnect(self.mac_address, self._bluez_adapter())
         self._apply_connected_state(False)
         # Short settle period — BlueZ needs a moment to tear down ACL state.

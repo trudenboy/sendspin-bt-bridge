@@ -310,15 +310,14 @@ def test_fast_path_falls_back_when_transport_active(bt_manager, monkeypatch, tmp
         return True
 
     fake_sinks = [{"name": sink_name, "description": "BT Speaker"}]
+    bluez = bluez_knowing(bt_manager, connected=True)
+    bluez.add_transport("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF/fd0", "active")
+    attach(bt_manager, bluez)
     with (
         patch("sendspin_bridge.bluetooth.audio.list_sinks", return_value=fake_sinks),
         patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
         patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
         patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
-        patch(
-            "sendspin_bridge.bluetooth.audio._dbus_get_media_transport_state",
-            return_value="active",
-        ),
         patch.object(bt_manager, "_wait_with_cancel", side_effect=_wait_with_cancel),
     ):
         result = bt_manager.configure_bluetooth_audio()
@@ -350,10 +349,7 @@ def test_fast_path_taken_when_transport_idle(bt_manager, monkeypatch, tmp_path):
         patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
         patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
         patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
-        patch(
-            "sendspin_bridge.bluetooth.audio._dbus_get_media_transport_state",
-            return_value="idle",
-        ),
+        # BlueZ reports the transport as "idle".
         patch.object(
             bt_manager,
             "_wait_with_cancel",
@@ -387,10 +383,6 @@ def test_fast_path_taken_when_transport_unknown(bt_manager, monkeypatch, tmp_pat
         patch("sendspin_bridge.bluetooth.audio.get_sink_volume", return_value=50),
         patch("sendspin_bridge.bluetooth.audio.set_sink_mute", return_value=True),
         patch("sendspin_bridge.bluetooth.audio.set_sink_volume", return_value=True),
-        patch(
-            "sendspin_bridge.bluetooth.audio._dbus_get_media_transport_state",
-            return_value=None,
-        ),
         patch.object(
             bt_manager,
             "_wait_with_cancel",
@@ -445,6 +437,18 @@ def test_warn_pipewire_session_silent_when_bt_sinks_present():
     mock_warn.assert_not_called()
 
 
+def _device_without_endpoint():
+    """A speaker BlueZ knows, with no local A2DP endpoint registered for it."""
+    from sendspin_bridge.bluetooth.address import DeviceAddress
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
+    from tests.support.fake_dbus import FakeBlueZ
+
+    address = DeviceAddress.require("AA:BB:CC:DD:EE:FF")
+    bluez = FakeBlueZ()
+    bluez.add_device(f"/org/bluez/hci0/{address.dbus_node}", address.colons, connected=True)
+    return BluetoothDevice(address, controller="hci0", bus_factory=bluez.bus)
+
+
 def test_warn_pipewire_session_emits_definitive_message_when_no_media_endpoint():
     """When BlueZ confirms no MediaEndpoint1 is registered for the device,
     the warning should say so directly rather than guessing "WirePlumber
@@ -455,10 +459,9 @@ def test_warn_pipewire_session_emits_definitive_message_when_no_media_endpoint()
 
     with (
         patch("sendspin_bridge.services.audio.pulse.get_server_name", return_value="PulseAudio (on PipeWire 1.0.5)"),
-        patch.object(bt_audio, "_dbus_has_media_endpoint", return_value=False),
         patch.object(bt_audio.logger, "warning") as mock_warn,
     ):
-        bt_audio._warn_pipewire_session({"sendspin_fallback"}, "/org/bluez/hci0/dev_AA_BB")
+        bt_audio._warn_pipewire_session({"sendspin_fallback"}, _device_without_endpoint())
 
     messages = [call.args[0] for call in mock_warn.call_args_list]
     assert any("no registered Bluetooth audio" in m for m in messages)
@@ -1318,8 +1321,7 @@ def test_disconnect_device_bluetoothctl_fallback_success(bt_manager, installed_b
     """D-Bus Disconnect unavailable → the scoped ``disconnect`` verb runs and
     the connected state flips to False."""
     bt_manager.connected = True
-    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=False):
-        assert bt_manager.disconnect_device() is True
+    assert bt_manager.disconnect_device() is True
     assert bt_manager.connected is False
     assert any(c.verb == "disconnect" for c in installed_bluez.commands)
 
@@ -1327,8 +1329,7 @@ def test_disconnect_device_bluetoothctl_fallback_success(bt_manager, installed_b
 def test_disconnect_device_false_on_transport_failure(bt_manager, installed_bluez):
     bt_manager.connected = True
     installed_bluez.fail("disconnect")
-    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=False):
-        assert bt_manager.disconnect_device() is False
+    assert bt_manager.disconnect_device() is False
     assert bt_manager.connected is True  # state untouched on failure
 
 
@@ -1695,7 +1696,6 @@ def test_a2dp_recovery_dance_returns_true_on_successful_reconnect(bt_manager):
 
     attach(bt_manager, bluez_knowing(bt_manager, connected=True, paired=True, services_resolved=True))
     with (
-        patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True),
         patch.object(bt_manager, "is_device_connected", side_effect=lambda: next(is_connected_results)),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile") as mock_force,
@@ -1711,7 +1711,6 @@ def test_a2dp_recovery_dance_returns_true_on_successful_reconnect(bt_manager):
 def test_a2dp_recovery_dance_returns_false_when_reconnect_never_succeeds(bt_manager):
     """If the link never comes back up, the dance reports failure."""
     with (
-        patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True),
         patch.object(bt_manager, "is_device_connected", return_value=False),
         patch.object(bt_manager, "_wait_with_cancel", return_value=True),
         patch.object(bt_manager, "_force_a2dp_sink_profile"),
@@ -2329,8 +2328,8 @@ def test_disconnect_device_fires_on_disconnected(make_transition_manager):
         on_disconnected=lambda: fired.append("down"),
     )
     mgr.connected = True
-    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True):
-        assert mgr.disconnect_device() is True
+    attach(mgr, bluez_knowing(mgr, connected=True))
+    assert mgr.disconnect_device() is True
 
     assert fired == ["down"]
 
@@ -2344,8 +2343,8 @@ def test_disconnect_device_does_not_refire_when_already_disconnected(make_transi
         on_disconnected=lambda: fired.append("down"),
     )
     # mgr.connected starts False (already disconnected)
-    with patch("sendspin_bridge.bluetooth.manager._dbus_call_device_method", return_value=True):
-        mgr.disconnect_device()
+    attach(mgr, bluez_knowing(mgr, connected=True))
+    mgr.disconnect_device()
 
     assert fired == []
 
