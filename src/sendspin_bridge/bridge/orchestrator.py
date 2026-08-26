@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Coroutine
 
+from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.config import (
     CONFIG_FILE,
     detect_ha_addon_channel,
@@ -193,7 +194,7 @@ def _apply_adapter_device_class_overrides(adapters: list[dict[str, Any]]) -> Non
                 continue
             if hci_map is None:
                 hci_map = build_hci_map()
-            hci_label = hci_map.get(mac.upper().replace(":", ""), "")
+            hci_label = hci_for(hci_map, mac)
             if not hci_label:
                 logger.warning(
                     "CoD: cannot apply device_class=%s — sysfs has no hci entry for adapter %s",

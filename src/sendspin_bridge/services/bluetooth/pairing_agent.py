@@ -21,6 +21,8 @@ import logging
 import threading
 from typing import Any
 
+from sendspin_bridge.bluetooth.address import DeviceAddress
+
 logger = logging.getLogger(__name__)
 
 AGENT_PATH = "/io/sendspin/bridge/PairingAgent"
@@ -114,7 +116,8 @@ def _build_agent_iface(pin: str, allow_hfp: bool = False, *, target_mac: str = "
     for the gate's rationale.
     """
     authorized_uuids = _AUTHORIZED_SERVICE_UUIDS | (_HFP_SERVICE_UUIDS if allow_hfp else frozenset())
-    target_suffix = f"/dev_{target_mac.strip().upper().replace(':', '_')}" if target_mac else ""
+    target_address = DeviceAddress.parse(target_mac)
+    target_suffix = f"/{target_address.dbus_node}" if target_address else ""
     from dbus_fast import DBusError  # type: ignore
     from dbus_fast.service import ServiceInterface, method  # type: ignore
 

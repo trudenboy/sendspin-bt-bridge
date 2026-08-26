@@ -9,6 +9,7 @@ import re
 import threading
 from pathlib import Path
 
+from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.bluez import Adapter, DeviceInfo, Outcome, get_bluez
 
 logger = logging.getLogger(__name__)
@@ -122,8 +123,7 @@ def resolve_hci_for_mac(mac: str) -> str:
     """
     if not mac:
         return ""
-    target = mac.upper().replace(":", "")
-    return build_hci_map().get(target, "")
+    return hci_for(build_hci_map(), mac)
 
 
 def get_adapter_alias(mac: str, *, timeout: int = 5) -> tuple[str, bool]:

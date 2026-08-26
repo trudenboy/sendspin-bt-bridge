@@ -23,6 +23,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from sendspin_bridge.bluetooth.address import DeviceAddress
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -34,8 +36,12 @@ MPRIS_PATH_PREFIX = "/org/sendspin/players/"
 
 
 def mpris_dbus_path(mac: str) -> str:
-    """The object path this bridge exports a device's player at."""
-    return MPRIS_PATH_PREFIX + mac.upper().replace(":", "_")
+    """The object path this bridge exports a device's player at.
+
+    Raises ``ValueError`` for anything that is not an address: a player
+    exported at a path built from garbage is a player nothing can find again.
+    """
+    return MPRIS_PATH_PREFIX + DeviceAddress.require(mac).underscores
 
 
 def _default_bus_factory():
