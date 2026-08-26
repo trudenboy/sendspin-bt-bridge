@@ -14,6 +14,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
+from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.dbus import _dbus_get_adapter_address
@@ -504,7 +505,7 @@ def api_bt_adapters():
             # after a USB stick hotplug.  Falls back to the synthetic
             # ``hci{i}`` label only when /sys/class/bluetooth isn't mounted
             # (non-Linux dev box, container missing /sys).
-            kernel_hci_sysfs = hci_map.get(mac.upper().replace(":", ""))
+            kernel_hci_sysfs = hci_for(hci_map, mac) or None
             kernel_hci = kernel_hci_sysfs or f"hci{i}"
             # Use ``show <MAC>`` instead of ``select <MAC>; show`` — the
             # latter is unreliable in piped-stdin mode and surfaced the wrong
@@ -822,7 +823,7 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
     hci_map = build_hci_map()
     if hci_map:
         for mac in macs:
-            if hci_map.get(mac.replace(":", "")) == kernel_hci:
+            if hci_for(hci_map, mac) == kernel_hci:
                 return mac
         return adapter  # mapped nowhere — let the failed select surface loudly
     # Sysfs gave nothing (Docker without /sys, or kernels whose
@@ -1031,7 +1032,7 @@ def _resolve_scan_adapter_macs(adapter: str) -> "list[str]":
         hci_map = build_hci_map()
         if hci_map:
             for mac in adapter_macs:
-                if hci_map.get(mac.upper().replace(":", "")) == kernel_hci:
+                if hci_for(hci_map, mac) == kernel_hci:
                     return [mac.upper()]
             raise ValueError("Selected adapter is not available")
         # No sysfs/hciconfig visibility: the adapters endpoint fell back

@@ -18,13 +18,14 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.services.audio.mpris_player import (
     MprisPlayer,
     get_registry,
     resolve_avrcp_source_client,
 )
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
-from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport
+from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport, mpris_dbus_path
 from sendspin_bridge.services.diagnostics.sendspin_compat import filter_supported_call_kwargs
 from sendspin_bridge.services.ipc.commands import SetVolume
 
@@ -99,7 +100,7 @@ def _resolve_adapter_device_class(device_adapter: str, adapters: list[dict[str, 
     if not device_adapter or not adapters:
         return ""
     target = device_adapter.strip()
-    target_normalized = target.upper().replace(":", "")
+    target_address = DeviceAddress.parse(target)
     for entry in adapters:
         if not isinstance(entry, dict):
             continue
@@ -107,11 +108,10 @@ def _resolve_adapter_device_class(device_adapter: str, adapters: list[dict[str, 
         if not hex_value:
             continue
         hci_label = str(entry.get("hci") or "").strip()
-        mac = str(entry.get("mac") or "").strip()
-        mac_normalized = mac.upper().replace(":", "")
+        entry_address = DeviceAddress.parse(entry.get("mac"))
         if hci_label and hci_label == target:
             return hex_value
-        if mac_normalized and mac_normalized == target_normalized:
+        if entry_address is not None and entry_address == target_address:
             return hex_value
     return ""
 
@@ -140,12 +140,13 @@ _EXPORTS: dict[str, MprisExport] = {}
 def _mpris_dbus_path(mac: str) -> str:
     """Per-device MPRIS object path on the system bus.
 
-    BlueZ's ``Media1.RegisterPlayer`` expects a unique path per
-    registration on a given adapter — multiple speakers on the same
-    adapter must each get a distinct player object.  MAC colons map
-    to ``_`` because D-Bus paths must be ``[A-Za-z0-9_/]``.
+    BlueZ's ``Media1.RegisterPlayer`` expects a unique path per registration
+    on a given adapter — multiple speakers on the same adapter must each get a
+    distinct player object.  Built by the export module rather than here: a
+    player registered under one spelling and looked up under another is a
+    player that cannot be found.
     """
-    return _MPRIS_PATH_PREFIX + mac.upper().replace(":", "_")
+    return mpris_dbus_path(mac)
 
 
 def _bluez_adapter_path(bt_manager: Any) -> str | None:

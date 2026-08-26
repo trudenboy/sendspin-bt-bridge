@@ -14,6 +14,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
+from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.dbus import _dbus_get_media_transport_state, _dbus_has_media_endpoint
 from sendspin_bridge.config import CONFIG_FILE, save_device_sink
 from sendspin_bridge.config import config_lock as config_lock
@@ -26,6 +27,7 @@ from sendspin_bridge.services.audio.pulse import (
     set_sink_mute,
     set_sink_volume,
 )
+from sendspin_bridge.services.audio.sink_names import is_bluez_sink_name, sink_name_candidates
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -195,7 +197,8 @@ def configure_bluetooth_audio(
     AVDTP collision window.
     """
     try:
-        pa_mac = mac_address.replace(":", "_")
+        address = DeviceAddress.require(mac_address)
+        pa_mac = address.underscores
 
         # Try cached sink name first — avoids 3s A2DP delay on service restart
         cached_sink = None
@@ -249,18 +252,9 @@ def configure_bluetooth_audio(
             # Find the Bluetooth sink
             # CRITICAL: Audio routing — sink discovery with bounded retries (_SINK_RETRY_COUNT).
             # If no sink found after retries, BT speaker will connect but play no audio.
-            # Sink naming differs between PipeWire and PulseAudio — order matters.
-            # The raw-colon `bluez_output.{mac_address}` variant is what
-            # WirePlumber publishes on Ubuntu 26.04+; kept last so the
-            # more specific PipeWire/PulseAudio patterns win when both
-            # exist. Issue #314.
-            sink_names = [
-                f"bluez_output.{pa_mac}.1",  # PipeWire format
-                f"bluez_output.{pa_mac}.a2dp-sink",
-                f"bluez_sink.{pa_mac}.a2dp_sink",  # Legacy PulseAudio format
-                f"bluez_sink.{pa_mac}",
-                f"bluez_output.{mac_address}",  # PipeWire / WirePlumber (Ubuntu 26.04, raw MAC)
-            ]
+            # The names come from the shared grammar, which is also what reads
+            # them back, so the two cannot drift apart again.
+            sink_names = sink_name_candidates(address)
             known_names = {s["name"] for s in sinks}
 
             success = False
@@ -392,7 +386,7 @@ def _warn_pipewire_session(known_sink_names: set[str], device_path: str | None =
     if not server or "pipewire" not in str(server).lower():
         return
 
-    has_bt_sink = any(n.startswith(("bluez_output.", "bluez_sink.")) for n in known_sink_names)
+    has_bt_sink = any(is_bluez_sink_name(n) for n in known_sink_names)
     if has_bt_sink:
         return
 

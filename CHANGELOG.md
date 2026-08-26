@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   measure the host when asked, and a saved config or an adapter power toggle
   makes the next update measure again.
 
+### Fixed
+
+- The sink name WirePlumber publishes on Ubuntu 26.04 is understood
+  everywhere it appears. The bridge already selected that name when
+  connecting a speaker, but the code that reads sink names back did not
+  recognise it.
+
 ## [2.75.0-rc.4] - 2026-08-25
 
 ### Fixed

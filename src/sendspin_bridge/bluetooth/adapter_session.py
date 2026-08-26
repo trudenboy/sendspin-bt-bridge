@@ -41,6 +41,7 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 
 if TYPE_CHECKING:
@@ -250,8 +251,8 @@ class AdapterHandle:
             return self._adapter.upper()
         for mac, hci in self.bluez.hci_map().items():
             if hci == self._adapter:
-                stripped = mac.replace(":", "").upper()
-                return ":".join(stripped[i : i + 2] for i in range(0, 12, 2))
+                address = DeviceAddress.parse(mac)
+                return address.colons if address else ""
         return ""
 
     @property
@@ -269,9 +270,11 @@ class AdapterHandle:
             return self._hci_name
         if not self._adapter:
             return ""
-        wanted = self._adapter.replace(":", "").upper()
+        wanted = DeviceAddress.parse(self._adapter)
+        if wanted is None:
+            return ""
         for mac, hci in self.bluez.hci_map().items():
-            if mac.replace(":", "").upper() == wanted:
+            if DeviceAddress.parse(mac) == wanted:
                 self._hci_name = hci
                 return hci
         return ""
@@ -285,7 +288,10 @@ class AdapterHandle:
         hci = self.hci_name
         if not hci:
             return None
-        return f"/org/bluez/{hci}/dev_{mac.upper().replace(':', '_')}"
+        address = DeviceAddress.parse(mac)
+        if address is None:
+            return None
+        return f"/org/bluez/{hci}/{address.dbus_node}"
 
     # -- reads (no lease: a read cannot corrupt another operation) ------
 

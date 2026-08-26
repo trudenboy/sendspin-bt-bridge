@@ -28,10 +28,10 @@ import contextlib
 import errno
 import logging
 import os
-import re
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.audio.pulse import _PULSECTL_AVAILABLE
+from sendspin_bridge.services.audio.sink_names import address_from_sink_name, is_bluez_sink_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,9 +48,6 @@ __all__ = ["SinkMonitor", "extract_mac_from_sink"]
 _PA_SINK_RUNNING = 0
 _PA_SINK_IDLE = 1
 _PA_SINK_SUSPENDED = 2
-
-# Regex: extract the 17-char underscore-delimited MAC from a bluez sink name.
-_BLUEZ_MAC_RE = re.compile(r"^bluez_(?:sink|output)\.([0-9A-Fa-f]{2}(?:_[0-9A-Fa-f]{2}){5})")
 
 # Reconnect tuning. Public for tests.
 _INITIAL_FAILURE_THRESHOLD = 3
@@ -107,19 +104,14 @@ def _describe_pa_failure(exc: BaseException) -> tuple[str, str]:
 def extract_mac_from_sink(sink_name: str) -> str | None:
     """Extract a colon-delimited MAC address from a bluez sink name.
 
-    Supported patterns::
-
-        bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink
-        bluez_sink.FC_58_FA_EB_08_6C
-        bluez_output.FC_58_FA_EB_08_6C.a2dp-sink
-        bluez_output.FC_58_FA_EB_08_6C.1
+    Reads through the shared grammar, which is also what writes these names
+    in the connect path — the two used to be described separately and had
+    drifted apart on the raw-colon form WirePlumber publishes.
 
     Returns ``None`` for non-bluez or malformed names.
     """
-    m = _BLUEZ_MAC_RE.match(sink_name)
-    if not m:
-        return None
-    return m.group(1).replace("_", ":").upper()
+    address = address_from_sink_name(sink_name)
+    return address.colons if address else None
 
 
 class SinkMonitor:
@@ -312,7 +304,7 @@ class SinkMonitor:
         self._sink_index_to_name[sink_index] = sink_name
 
         # Only track bluez sinks (Bluetooth audio)
-        if not _BLUEZ_MAC_RE.match(sink_name):
+        if not is_bluez_sink_name(sink_name):
             return
 
         new_state = self._classify_state(sink_info.state)
@@ -377,7 +369,7 @@ class SinkMonitor:
             sink_name: str = sink_info.name
             self._sink_index_to_name[sink_info.index] = sink_name
 
-            if not _BLUEZ_MAC_RE.match(sink_name):
+            if not is_bluez_sink_name(sink_name):
                 continue
 
             new_state = self._classify_state(sink_info.state)
