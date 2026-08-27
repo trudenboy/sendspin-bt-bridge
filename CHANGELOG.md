@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.1] - 2026-08-27
+
+### Changed
+
+- A bridge that cannot reach the system Bluetooth service now says so on the
+  speaker's card instead of quietly falling back to a slower way of asking the
+  same question. A speaker the service simply does not know is reported as
+  that, which is a different thing and no longer looks like a broken setup.
+
+### Fixed
+
+- The warning that says no local audio backend has claimed Bluetooth audio is
+  no longer shown when the bridge could not check at all. It is an actionable
+  claim, and it used to be made on the strength of an unreachable service.
+- A speaker whose link flaps no longer has each reconnect processed more than
+  once. Repeated attempts left listeners behind, so one reconnect could
+  correct the audio routing of every other speaker several times over.
+
 ## [2.75.0] - 2026-08-26
 
 ### Changed
