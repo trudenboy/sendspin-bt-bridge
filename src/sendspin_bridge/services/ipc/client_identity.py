@@ -22,16 +22,19 @@ def load_or_create_identity(path: Path):
             while backup.exists():
                 backup = path.with_name(f"{path.name}.corrupt.{suffix}")
                 suffix += 1
-            path.chmod(0o600)
+            _best_effort_chmod(path)
             os.replace(path, backup)
         else:
-            path.chmod(0o600)
+            _best_effort_chmod(path)
             return identity
     identity = Identity.generate()
     fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = path.with_name(os.path.basename(temporary_name))
     try:
-        os.fchmod(fd, 0o600)
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError:
+            pass
         with os.fdopen(fd, "wb") as temporary:
             temporary.write(identity.private_bytes)
             temporary.flush()
@@ -40,3 +43,11 @@ def load_or_create_identity(path: Path):
     finally:
         temporary_path.unlink(missing_ok=True)
     return identity
+
+
+def _best_effort_chmod(path: Path) -> None:
+    """Restrict identity permissions where the filesystem supports it."""
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass

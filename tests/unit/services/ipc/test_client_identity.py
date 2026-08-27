@@ -60,3 +60,31 @@ def test_identity_creation_uses_atomic_replace(tmp_path: Path, monkeypatch: pyte
     assert replacements
     assert replacements[-1][1] == path
     assert not replacements[-1][0].exists()
+
+
+def test_identity_creation_survives_filesystem_without_fchmod(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("aiosendspin.noise.keys")
+    path = tmp_path / "id.key"
+
+    def unsupported_fchmod(_fd, _mode):
+        raise OSError("chmod is not supported")
+
+    monkeypatch.setattr(os, "fchmod", unsupported_fchmod)
+
+    identity = load_or_create_identity(path)
+
+    assert path.read_bytes() == identity.private_bytes
+
+
+def test_existing_identity_survives_filesystem_without_chmod(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("aiosendspin.noise.keys")
+    path = tmp_path / "id.key"
+    original = load_or_create_identity(path)
+
+    def unsupported_chmod(self, _mode):
+        if self == path:
+            raise OSError("chmod is not supported")
+
+    monkeypatch.setattr(Path, "chmod", unsupported_chmod)
+
+    assert load_or_create_identity(path).private_bytes == original.private_bytes

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
-from time import CLOCK_MONOTONIC_RAW, clock_gettime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -244,7 +244,8 @@ class StreamPlayer:
 
 
 def _raw_now_us() -> int:
-    return int(clock_gettime(CLOCK_MONOTONIC_RAW) * 1_000_000)
+    clock_id = getattr(time, "CLOCK_MONOTONIC_RAW", time.CLOCK_MONOTONIC)
+    return int(time.clock_gettime(clock_id) * 1_000_000)
 
 
 def _ns_to_ms(value_ns: int | None) -> float | None:

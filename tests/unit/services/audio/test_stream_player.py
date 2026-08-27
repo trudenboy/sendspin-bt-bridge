@@ -1,6 +1,7 @@
 import pytest
 
-from sendspin_bridge.services.audio.player.player import PcmFormat, StreamPlayer, gst_pts_ns
+import sendspin_bridge.services.audio.player.player as player_module
+from sendspin_bridge.services.audio.player.player import PcmFormat, StreamPlayer, _raw_now_us, gst_pts_ns
 
 PCM_S16_STEREO_48K = PcmFormat(sample_rate=48000, channels=2, bit_depth=16)
 
@@ -10,6 +11,15 @@ def test_maps_play_time_onto_gst_clock():
     raw_now_us = 1_500_000
     gst_now_ns = 10_000_000_000
     assert gst_pts_ns(play_time_us, raw_now_us, gst_now_ns) == 10_500_000_000
+
+
+def test_raw_clock_falls_back_when_monotonic_raw_is_unavailable(monkeypatch):
+    observed: list[int] = []
+    monkeypatch.delattr(player_module.time, "CLOCK_MONOTONIC_RAW", raising=False)
+    monkeypatch.setattr(player_module.time, "clock_gettime", lambda clock_id: observed.append(clock_id) or 1.25)
+
+    assert _raw_now_us() == 1_250_000
+    assert observed == [player_module.time.CLOCK_MONOTONIC]
 
 
 def _gst_available() -> bool:
