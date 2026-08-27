@@ -17,7 +17,7 @@
 # 6.0.x, while the bridge intentionally uses 6.1.1 for current MA server/state.
 # Its transitive dependencies must therefore remain explicit in this file.
 
-aiosendspin[server]==6.1.1
+aiosendspin[server]==9.1.0
 aiosendspin-mpris==2.1.1
 qrcode>=8.0
 readchar>=4.0.0
