@@ -701,7 +701,7 @@ class BluetoothManager:
 
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
-        return get_bluez().trust(self.mac_address, self._bluez_adapter()).outcome is Outcome.OK
+        return get_bluez().trust(self.mac_address, self._bluez_adapter()).ok
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
@@ -846,7 +846,7 @@ class BluetoothManager:
                     sink_ok = self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
-        excerpt = connect_result.summary
+        excerpt = connect_result.detail
         if excerpt:
             # #302 — surface the underlying BlueZ error (page-timeout,
             # br-connection-already-active, profile-unavailable, …) so the
@@ -928,7 +928,7 @@ class BluetoothManager:
             self._apply_connected_state(False)
             return True
         result = get_bluez().disconnect(self.mac_address, self._bluez_adapter())
-        if result.outcome is Outcome.OK:
+        if result.ok:
             self._apply_connected_state(False)
             return True
         return False

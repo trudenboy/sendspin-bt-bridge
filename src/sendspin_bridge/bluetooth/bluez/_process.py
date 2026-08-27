@@ -26,17 +26,26 @@ __all__ = [
     "PowerResult",
     "RemoveResult",
     "SubprocessSpawner",
+    "VerbResult",
     "run_bluetoothctl",
 ]
 
 
 class Outcome(Enum):
-    """How a bluetoothctl invocation ended."""
+    """How an operation ended.
+
+    The first four describe an invocation: it worked, the command exited
+    non-zero, it never returned, or there was nothing to invoke.  ``FAILED``
+    describes the operation instead — the transport was fine and BlueZ said
+    no.  A caller that only wants to know whether to try a different
+    transport looks at ``UNAVAILABLE``; the rest are answers.
+    """
 
     OK = "ok"
     NONZERO = "nonzero"
     TIMEOUT = "timeout"
     UNAVAILABLE = "unavailable"
+    FAILED = "failed"
 
 
 class Deadline(float, Enum):
@@ -98,21 +107,58 @@ class BluezResult:
 
 
 @dataclass(frozen=True, slots=True)
+class VerbResult:
+    """What a controller verb did, in the terms its caller acts on.
+
+    ``detail`` is the one line worth logging or showing an operator — the
+    BlueZ error behind a refusal — and is empty when there is nothing to
+    say.  Callers used to derive both of these from a subprocess
+    transcript, which only one of the two transports has.
+    """
+
+    outcome: Outcome
+    detail: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.outcome is Outcome.OK
+
+    @property
+    def unavailable(self) -> bool:
+        """No transport answered — the reason to try another one."""
+        return self.outcome is Outcome.UNAVAILABLE
+
+
+@dataclass(frozen=True, slots=True)
 class PowerResult:
-    """``power on/off`` outcome with the endpoint's ok-heuristic preserved."""
+    """Whether a controller changed power state, and what state it is in."""
 
     changed: bool
     powered: bool
-    result: BluezResult
+    outcome: Outcome = Outcome.OK
+    detail: str = ""
+
+    @property
+    def unavailable(self) -> bool:
+        return self.outcome is Outcome.UNAVAILABLE
 
 
 @dataclass(frozen=True, slots=True)
 class RemoveResult:
-    """``remove <MAC>`` outcome; bluetoothctl exits 0 even when remove fails."""
+    """Whether a speaker was forgotten, and why it was not.
+
+    ``not_available`` is its own answer rather than a failure: BlueZ has no
+    such device, so the caller's goal is already met.
+    """
 
     removed: bool
     not_available: bool
-    result: BluezResult
+    outcome: Outcome = Outcome.OK
+    detail: str = ""
+
+    @property
+    def unavailable(self) -> bool:
+        return self.outcome is Outcome.UNAVAILABLE
 
 
 class SubprocessSpawner:

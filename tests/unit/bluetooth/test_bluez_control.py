@@ -102,15 +102,17 @@ def test_remove_result_types_the_stdout_marker(bluez, fake_bluez):
     assert ok.not_available is False
 
 
-def test_connect_result_summary(bluez, fake_bluez):
+def test_connect_reads_the_refusal_bluetoothctl_exits_zero_on(bluez, fake_bluez):
+    # bluetoothctl exits 0 whether or not the connect worked, so the verdict
+    # comes from what BlueZ printed — and carries that line with it.
     fake_bluez.on(
         "connect",
         stdout="[CHG] Device 6C:5C:3D:35:17:99 Connected: no\nFailed to connect: org.bluez.Error.Failed br-connection-page-timeout\n",
         returncode=0,
     )
     result = bluez.connect(ENEBY_MAC, Adapter.select(ADAPTER_MAC))
-    assert result.ok is True  # bluetoothctl exits 0 even on connect failure
-    assert result.summary == "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout"
+    assert result.ok is False
+    assert result.detail == "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout"
 
 
 def test_timeout_outcome_via_injection(bluez, fake_bluez):
@@ -137,7 +139,6 @@ def test_nonzero_outcome(bluez, fake_bluez):
     result = bluez.trust(ENEBY_MAC, Adapter.select(ADAPTER_MAC))
     assert result.outcome is Outcome.NONZERO
     assert result.ok is False
-    assert result.text.endswith("boom")
 
 
 def test_per_call_timeout_override_is_recorded(bluez, fake_bluez):
@@ -147,7 +148,7 @@ def test_per_call_timeout_override_is_recorded(bluez, fake_bluez):
 
 def test_run_merges_stdout_and_stderr_like_legacy_runner(bluez, fake_bluez):
     fake_bluez.on("disconnect", stdout="out-line\n", stderr="err-line\n")
-    result = bluez.disconnect(ENEBY_MAC, Adapter.select(ADAPTER_MAC))
+    result = bluez.run([f"disconnect {ENEBY_MAC}"], adapter=Adapter.select(ADAPTER_MAC))
     assert result.text == "out-line\nerr-line"
 
 

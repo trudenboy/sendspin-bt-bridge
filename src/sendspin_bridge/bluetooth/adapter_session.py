@@ -47,7 +47,7 @@ from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.bluetooth.bluez import BluezControl, BluezResult, PowerResult, ScanTranscript
+    from sendspin_bridge.bluetooth.bluez import BluezControl, PowerResult, ScanTranscript, VerbResult
 
 logger = logging.getLogger(__name__)
 
@@ -380,15 +380,15 @@ class AdapterSession:
 
     # -- mutations -----------------------------------------------------
 
-    def connect(self, mac: str) -> BluezResult:
+    def connect(self, mac: str) -> VerbResult:
         self._check()
         return self._handle.bluez.connect(mac, self._handle.scope)
 
-    def disconnect(self, mac: str) -> BluezResult:
+    def disconnect(self, mac: str) -> VerbResult:
         self._check()
         return self._handle.bluez.disconnect(mac, self._handle.scope)
 
-    def trust(self, mac: str) -> BluezResult:
+    def trust(self, mac: str) -> VerbResult:
         self._check()
         return self._handle.bluez.trust(mac, self._handle.scope)
 
@@ -438,13 +438,13 @@ class AsyncAdapterSession:
     async def device_info(self, mac: str):
         return await self._call(self._session.device_info, mac)
 
-    async def connect(self, mac: str) -> BluezResult:
+    async def connect(self, mac: str) -> VerbResult:
         return await self._call(self._session.connect, mac)
 
-    async def disconnect(self, mac: str) -> BluezResult:
+    async def disconnect(self, mac: str) -> VerbResult:
         return await self._call(self._session.disconnect, mac)
 
-    async def trust(self, mac: str) -> BluezResult:
+    async def trust(self, mac: str) -> VerbResult:
         return await self._call(self._session.trust, mac)
 
     async def remove(self, mac: str):

@@ -697,19 +697,10 @@ def api_bt_disconnect():
                 owner = ref.mac
                 break
         result = bluez.disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
-        if result.outcome is not Outcome.OK:
-            # Any non-OK outcome is a failed disconnect.  A non-zero exit
-            # often carries its error on stderr alone, where the
-            # silence-means-success heuristic below would read it as done.
-            logger.error("Failed to disconnect device %s: outcome=%s", mac, result.outcome.value)
+        if not result.ok:
+            logger.error("Failed to disconnect device %s: %s", mac, result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
-        # BlueZ ≥5.72 prints "Attempting to disconnect…" and stays silent on
-        # success — only an explicit failure marker means the command failed.
-        lowered = result.stdout.lower()
-        ok = "successful" in lowered or not any(
-            marker in lowered for marker in ("failed", "not connected", "not available", "error")
-        )
-        return jsonify({"ok": ok, "mac": mac})
+        return jsonify({"ok": True, "mac": mac})
     except Exception:
         logger.exception("Failed to disconnect device %s", mac)
         return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
@@ -726,14 +717,12 @@ def api_bt_adapter_power():
     power = data.get("power", True)
     try:
         result = get_bluez().power(bool(power), Adapter.of(adapter))
-        if result.result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
-            logger.error("Failed to toggle adapter power: outcome=%s", result.result.outcome.value)
+        if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            logger.error("Failed to toggle adapter power: %s", result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
         # The host just changed under us; the next status build must measure
         # it rather than report the sample taken before the toggle.
         invalidate_preflight_probe()
-        # ``changed`` reproduces the historical ok-heuristic (succeeded /
-        # changing power / powered: marker) exactly.
         return jsonify({"ok": result.changed, "power": power})
     except Exception:
         logger.exception("Failed to toggle adapter power")

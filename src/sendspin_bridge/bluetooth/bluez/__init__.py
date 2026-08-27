@@ -37,6 +37,8 @@ from ._parsers import (
     parse_show,
     parse_version,
     summarize_connect_output,
+    verdict_of,
+    verdict_of_remove,
 )
 from ._process import (
     BluezResult,
@@ -45,6 +47,7 @@ from ._process import (
     PowerResult,
     RemoveResult,
     SubprocessSpawner,
+    VerbResult,
     run_bluetoothctl,
 )
 from ._session import BluezSession
@@ -72,6 +75,7 @@ __all__ = [
     "RemoveResult",
     "ScanTranscript",
     "SubprocessSpawner",
+    "VerbResult",
     "classify_line",
     "classify_lines",
     "get_bluez",
@@ -84,6 +88,8 @@ __all__ = [
     "set_bluez",
     "strip_ansi",
     "summarize_connect_output",
+    "verdict_of",
+    "verdict_of_remove",
 ]
 
 _BLUETOOTHCTL = ("bluetoothctl",)
@@ -292,13 +298,16 @@ class BluezControl:
             timeout=timeout,
         )
         clean = strip_ansi(result.stdout).lower()
+        detail = strip_ansi(result.text).strip().splitlines()[-1] if result.text.strip() else ""
+        if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            return PowerResult(changed=False, powered=not on, outcome=result.outcome, detail=detail)
         confirmed = (
             "succeeded" in clean
             or "changing power" in clean
             or (("powered: yes" in clean) if on else ("powered: no" in clean))
         )
         if confirmed:
-            return PowerResult(changed=True, powered=on, result=result)
+            return PowerResult(changed=True, powered=on, detail=detail)
         # BlueZ applies the toggle asynchronously — on the live stand the
         # controller kept reporting the old state for about a second — so
         # the state is re-read until it settles or the window closes.
@@ -307,30 +316,28 @@ class BluezControl:
             info = self.show(adapter, timeout=timeout)
             if info.outcome is not Outcome.OK or not info.present:
                 # No second opinion available: report the command's own verdict.
-                return PowerResult(changed=False, powered=on, result=result)
+                return PowerResult(changed=False, powered=on, outcome=Outcome.FAILED, detail=detail)
             if info.powered is on:
-                return PowerResult(changed=True, powered=on, result=result)
+                return PowerResult(changed=True, powered=on, detail=detail)
             if self.now() >= deadline:
-                return PowerResult(changed=False, powered=info.powered, result=result)
+                return PowerResult(changed=False, powered=info.powered, outcome=Outcome.FAILED, detail=detail)
             self.sleep(_POWER_POLL_S)
 
-    def connect(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> BluezResult:
-        return self.run([f"connect {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout)
+    def connect(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> VerbResult:
+        """Bring up the link to a speaker through this controller."""
+        return verdict_of(self.run([f"connect {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout))
 
-    def disconnect(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> BluezResult:
-        return self.run([f"disconnect {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout)
+    def disconnect(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> VerbResult:
+        """Drop the link to a speaker."""
+        return verdict_of(self.run([f"disconnect {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout))
 
-    def trust(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> BluezResult:
-        return self.run([f"trust {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout)
+    def trust(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> VerbResult:
+        """Let a speaker reconnect to this controller on its own."""
+        return verdict_of(self.run([f"trust {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout))
 
     def remove(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> RemoveResult:
-        """``remove <MAC>``; bluetoothctl exits 0 even on failure, so the
-        stdout marker is the source of truth."""
-        result = self.run([f"remove {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout)
-        out = result.text.lower()
-        not_available = "not available" in out or "failed to remove" in out
-        removed = result.outcome is Outcome.OK and not not_available
-        return RemoveResult(removed=removed, not_available=not_available, result=result)
+        """Forget a speaker: drop the bond and BlueZ's object for it."""
+        return verdict_of_remove(self.run([f"remove {mac}"], adapter=adapter, tier=Deadline.MUTATE, timeout=timeout))
 
     # ------------------------------------------------------------------
     # Composites + sessions

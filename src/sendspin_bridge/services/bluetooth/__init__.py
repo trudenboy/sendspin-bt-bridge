@@ -317,15 +317,12 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
     def _run():
         try:
             result = get_bluez().remove(mac, Adapter.of(adapter_mac))
-            # `bluetoothctl` returns 0 even when `remove <mac>` fails with
-            # "Device not available" (device not in the BlueZ object tree) —
-            # RemoveResult reads the stdout marker, not the returncode.
             if result.not_available:
                 logger.warning(
                     "BT stack: remove %s reported failure (adapter: %s): %s",
                     mac,
                     adapter_mac or "default",
-                    result.result.text.strip() or "no output",
+                    result.detail or "no output",
                 )
             else:
                 logger.info("BT stack: removed %s (adapter: %s)", mac, adapter_mac or "default")
