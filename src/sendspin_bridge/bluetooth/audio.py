@@ -15,7 +15,6 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
-from sendspin_bridge.bluetooth.dbus import _dbus_get_media_transport_state, _dbus_has_media_endpoint
 from sendspin_bridge.config import CONFIG_FILE, save_device_sink
 from sendspin_bridge.config import config_lock as config_lock
 from sendspin_bridge.services.audio.pulse import (
@@ -32,6 +31,7 @@ from sendspin_bridge.services.audio.sink_names import is_bluez_sink_name, sink_n
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from sendspin_bridge.bluetooth.device import BluetoothDevice
     from sendspin_bridge.bridge.bt_types import BluetoothManagerHost
 
 logger = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ def configure_bluetooth_audio(
     host: BluetoothManagerHost | None,
     wait_with_cancel: Callable[[float], bool],
     *,
-    device_path: str | None = None,
+    device: BluetoothDevice | None = None,
     logger: logging.Logger = logger,
 ) -> bool:
     """Configure PipeWire/PulseAudio to use a Bluetooth device as audio output.
@@ -192,8 +192,8 @@ def configure_bluetooth_audio(
     The *wait_with_cancel* callback should sleep for the given duration while
     checking for reconnect cancellation; it returns ``True`` when the full
     duration elapsed normally, ``False`` if cancelled. *device_path* is the
-    BlueZ Device1 object path; when provided, it gates the LAST_SINKS
-    fast-path on ``MediaTransport1.State`` to avoid the issue #269
+    speaker's device module; when provided, it gates the
+    LAST_SINKS fast-path on the A2DP transport state to avoid the issue #269
     AVDTP collision window.
     """
     try:
@@ -221,7 +221,7 @@ def configure_bluetooth_audio(
             # fast-path here races with the anti-pop mute and triggers
             # AVDTP-Suspend from the peer → cancel_request collision in
             # bluetoothd. See issue #269.
-            transport_state = _dbus_get_media_transport_state(device_path)
+            transport_state = device.transport_state_blocking() if device else None
             if transport_state == "active":
                 logger.info(
                     "Cached sink %s present but MediaTransport1 is active — "
@@ -351,7 +351,7 @@ def configure_bluetooth_audio(
         elif not success:
             logger.warning("Could not find Bluetooth sink for %s", mac_address)
             logger.warning("Audio may play from default device instead of Bluetooth")
-            _warn_pipewire_session(known_names, device_path)
+            _warn_pipewire_session(known_names, device)
 
         return success
 
@@ -360,7 +360,7 @@ def configure_bluetooth_audio(
         return False
 
 
-def _warn_pipewire_session(known_sink_names: set[str], device_path: str | None = None) -> None:
+def _warn_pipewire_session(known_sink_names: set[str], device: BluetoothDevice | None = None) -> None:
     """Log a targeted warning when sink discovery fails on PipeWire.
 
     On PipeWire, Bluetooth audio sinks are managed by WirePlumber which
@@ -393,12 +393,12 @@ def _warn_pipewire_session(known_sink_names: set[str], device_path: str | None =
     # The file-path checks below (_warn_wireplumber_logind /
     # _warn_wireplumber_seat_monitoring) read host config files that are
     # invisible from inside a Docker container — they only ever fire on
-    # bare-metal/LXC installs. _dbus_has_media_endpoint() instead asks
+    # bare-metal/LXC installs. The device module instead asks
     # BlueZ directly whether *any* local audio backend has registered
     # A2DP support for this device — a signal that works the same way
     # inside a container and is independent of audio server or
     # WirePlumber version.
-    has_endpoint = _dbus_has_media_endpoint(device_path)
+    has_endpoint = device.has_media_endpoint_blocking() if device else None
     if has_endpoint is False:
         logger.warning(
             "BlueZ has no registered Bluetooth audio (A2DP) endpoint for this device at all — "

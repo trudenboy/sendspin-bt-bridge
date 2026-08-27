@@ -9,12 +9,13 @@ subprocess did not answer in five seconds.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import contextlib
 
 import pytest
 
 from sendspin_bridge.bluetooth.adapter_session import LinkState
 from sendspin_bridge.bluetooth.manager import BluetoothManager
+from tests.support.fake_dbus import silent, unreachable
 
 MAC = "AA:BB:CC:DD:EE:FF"
 
@@ -43,14 +44,17 @@ def bt_manager(installed_bluez, transitions):
     )
 
 
-def _no_dbus():
-    return patch("sendspin_bridge.bluetooth.manager._dbus_get_device_property", return_value=None)
+@contextlib.contextmanager
+def _no_dbus(manager):
+    """BlueZ cannot resolve the device object — the fallback's condition."""
+    silent(manager)
+    yield
 
 
 def test_timed_out_transport_leaves_the_link_state_unknown(bt_manager, installed_bluez):
     installed_bluez.timeout(f"info {MAC}")
 
-    with _no_dbus():
+    with _no_dbus(bt_manager):
         assert bt_manager.link_state() is LinkState.UNKNOWN
 
 
@@ -58,7 +62,7 @@ def test_timed_out_transport_does_not_fire_a_disconnect(bt_manager, installed_bl
     bt_manager.connected = True
     installed_bluez.timeout(f"info {MAC}")
 
-    with _no_dbus():
+    with _no_dbus(bt_manager):
         assert bt_manager.is_device_connected() is True
 
     assert bt_manager.connected is True
@@ -69,7 +73,7 @@ def test_unavailable_transport_does_not_fire_a_disconnect(bt_manager, installed_
     bt_manager.connected = True
     installed_bluez.fail(f"info {MAC}")
 
-    with _no_dbus():
+    with _no_dbus(bt_manager):
         assert bt_manager.is_device_connected() is True
 
     assert bt_manager.connected is True
@@ -80,11 +84,8 @@ def test_a_raising_dbus_probe_falls_back_to_the_transport(bt_manager, installed_
     bt_manager.connected = True
     installed_bluez.timeout(f"info {MAC}")
 
-    with patch(
-        "sendspin_bridge.bluetooth.manager._dbus_get_device_property",
-        side_effect=RuntimeError("D-Bus exploded"),
-    ):
-        assert bt_manager.is_device_connected() is True
+    unreachable(bt_manager)
+    assert bt_manager.is_device_connected() is True
 
     assert bt_manager.connected is True
     assert transitions["disconnected"] == []
@@ -97,7 +98,7 @@ def test_a_real_disconnect_is_still_applied(bt_manager, installed_bluez, transit
         stdout=f"Device {MAC} (public)\n\tPaired: yes\n\tConnected: no\n",
     )
 
-    with _no_dbus():
+    with _no_dbus(bt_manager):
         assert bt_manager.is_device_connected() is False
 
     assert bt_manager.connected is False
@@ -110,7 +111,7 @@ def test_a_real_connect_is_still_applied(bt_manager, installed_bluez, transition
         stdout=f"Device {MAC} (public)\n\tPaired: yes\n\tConnected: yes\n",
     )
 
-    with _no_dbus():
+    with _no_dbus(bt_manager):
         assert bt_manager.is_device_connected() is True
 
     assert bt_manager.connected is True
@@ -120,7 +121,7 @@ def test_a_real_connect_is_still_applied(bt_manager, installed_bluez, transition
 def test_a_device_bluez_does_not_know_counts_as_disconnected(bt_manager, installed_bluez):
     bt_manager.connected = True
 
-    with _no_dbus():
+    with _no_dbus(bt_manager):
         assert bt_manager.is_device_connected() is False
 
     assert bt_manager.connected is False

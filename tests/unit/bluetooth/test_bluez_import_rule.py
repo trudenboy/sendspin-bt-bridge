@@ -3,7 +3,7 @@
 The module is the lowest layer of the Bluetooth stack — it must stay
 importable from ``services.*``, ``bluetooth.manager`` and ``web.*``
 without a cycle, so it may not import anything from the project itself
-(no ``services.*``, no ``bluetooth.manager``/``bluetooth.dbus``, no
+(no ``services.*``, no ``bluetooth.manager``/``bluetooth.device``, no
 ``config``, no ``web``, no Flask).  ``bluetooth/__init__.py`` stays empty
 for the same reason.
 """

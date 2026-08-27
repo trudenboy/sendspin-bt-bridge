@@ -82,7 +82,7 @@ def test_monitor_releases_the_lease_when_the_connect_ladder_raises(bt_manager, m
 
     async def _one_pass():
         # The loop logs and keeps going, so stop it after the first poll.
-        task = asyncio.ensure_future(monitor_mod._monitor_polling(bt_manager))
+        task = asyncio.ensure_future(monitor_mod._monitor_dbus(bt_manager))
         await asyncio.sleep(0.2)
         bt_manager._running = False
         task.cancel()
