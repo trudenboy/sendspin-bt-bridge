@@ -11,6 +11,7 @@ from pathlib import Path
 
 from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.bluez import Adapter, DeviceInfo, Outcome, get_bluez
+from sendspin_bridge.bluetooth.controller import get_controller
 
 logger = logging.getLogger(__name__)
 _OPTIONS_FILE = Path("/data/options.json")
@@ -316,7 +317,7 @@ def bt_remove_device(mac: str, adapter_mac: str = "") -> None:
 
     def _run():
         try:
-            result = get_bluez().remove(mac, Adapter.of(adapter_mac))
+            result = get_controller().remove(mac, Adapter.of(adapter_mac))
             if result.not_available:
                 logger.warning(
                     "BT stack: remove %s reported failure (adapter: %s): %s",

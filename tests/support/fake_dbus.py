@@ -64,6 +64,12 @@ class FakeBlueZ:
             interfaces["org.bluez.Battery1"] = {"Percentage": battery}
         self.objects[path] = interfaces
 
+    def add_adapter(self, path: str, address: str, *, powered: bool = False, **extra: Any) -> None:
+        """Register a controller object the way ObjectManager reports one."""
+        self.objects[path] = {
+            "org.bluez.Adapter1": {"Address": address, "Powered": powered, **extra},
+        }
+
     def add_transport(self, path: str, state: str, *, device: str | None = None) -> None:
         """A MediaTransport1 under a device — what A2DP is doing.
 
@@ -142,6 +148,8 @@ class FakeProxy:
             return FakeObjectManager(self._bluez)
         if name == "org.freedesktop.DBus.Properties":
             return FakeProperties(self._bluez, self._path)
+        if name == "org.bluez.Adapter1":
+            return FakeAdapterInterface(self._bluez, self._path)
         return FakeDeviceInterface(self._bluez, self._path)
 
 
@@ -169,6 +177,13 @@ class FakeProperties:
             raise LookupError(f"no such property: {name}")
         return FakeVariant(props[name])
 
+    async def call_set(self, interface: str, name: str, variant: Any) -> None:
+        """Properties.Set, as BlueZ applies it: the value lands and listeners hear."""
+        self._bluez.calls.append((self._path, f"Set {name}", (interface,)))
+        if f"Set {name}" in self._bluez.fail:
+            raise self._bluez.fail[f"Set {name}"]
+        self._bluez.set_property(self._path, name, getattr(variant, "value", variant), interface=interface)
+
     async def call_get_all(self, interface: str) -> dict:
         props = self._bluez.objects.get(self._path, {}).get(interface, {})
         return {k: FakeVariant(v) for k, v in props.items()}
@@ -180,6 +195,18 @@ class FakeProperties:
         self._bluez.unsubscribe(self._path, handler)
 
 
+class FakeAdapterInterface:
+    def __init__(self, bluez: FakeBlueZ, path: str):
+        self._bluez = bluez
+        self._path = path
+
+    async def call_remove_device(self, device_path: str) -> None:
+        self._bluez.calls.append((self._path, "RemoveDevice", (device_path,)))
+        if "RemoveDevice" in self._bluez.fail:
+            raise self._bluez.fail["RemoveDevice"]
+        self._bluez.remove(device_path)
+
+
 class FakeDeviceInterface:
     def __init__(self, bluez: FakeBlueZ, path: str):
         self._bluez = bluez
@@ -189,6 +216,12 @@ class FakeDeviceInterface:
         self._bluez.calls.append((self._path, "ConnectProfile", (uuid,)))
         if "ConnectProfile" in self._bluez.fail:
             raise self._bluez.fail["ConnectProfile"]
+
+    async def call_connect(self) -> None:
+        self._bluez.calls.append((self._path, "Connect", ()))
+        if "Connect" in self._bluez.fail:
+            raise self._bluez.fail["Connect"]
+        self._bluez.set_property(self._path, "Connected", True)
 
     async def call_disconnect(self) -> None:
         self._bluez.calls.append((self._path, "Disconnect", ()))
@@ -251,3 +284,19 @@ def unreachable(manager, error: Exception | None = None, *, controller: str = "h
     bluez = FakeBlueZ()
     bluez.fail["GetManagedObjects"] = error or RuntimeError("D-Bus exploded")
     return attach(manager, bluez, controller=controller)
+
+
+def controller_knowing_adapters(mapping: dict[str, str]):
+    """A controller whose bus knows these ``hciN -> address`` controllers.
+
+    For tests about how an ``hciN`` name is resolved: the object path is the
+    kernel's own numbering, which is the whole reason the read exists.
+    Install it with ``set_controller`` and it answers for the process.
+    """
+    from sendspin_bridge.bluetooth.bluez import get_bluez
+    from sendspin_bridge.bluetooth.controller import DbusController, PreferredController
+
+    bluez = FakeBlueZ()
+    for hci, address in mapping.items():
+        bluez.add_adapter(f"/org/bluez/{hci}", address, powered=True)
+    return PreferredController(DbusController(bus_factory=bluez.bus), get_bluez)

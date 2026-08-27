@@ -14,10 +14,10 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from sendspin_bridge.bluetooth.adapter_address import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
+from sendspin_bridge.bluetooth.controller import get_controller
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
@@ -696,7 +696,7 @@ def api_bt_disconnect():
             if any(entry.mac.upper() == mac for entry in bluez.list_devices(Adapter.select(ref.mac))):
                 owner = ref.mac
                 break
-        result = bluez.disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
+        result = get_controller().disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
         if not result.ok:
             logger.error("Failed to disconnect device %s: %s", mac, result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
@@ -716,7 +716,7 @@ def api_bt_adapter_power():
         return jsonify({"error": "Invalid adapter identifier"}), 400
     power = data.get("power", True)
     try:
-        result = get_bluez().power(bool(power), Adapter.of(adapter))
+        result = get_controller().power(bool(power), Adapter.of(adapter))
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
             logger.error("Failed to toggle adapter power: %s", result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
@@ -819,7 +819,7 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
     # /sys/class/bluetooth/hciN lacks the ``address`` file — seen live on the
     # rc.1 stand).  The D-Bus object path /org/bluez/hciN is keyed by the
     # kernel index unambiguously — prefer it over list position.
-    dbus_addr = _dbus_get_adapter_address(kernel_hci)
+    dbus_addr = get_controller().adapter_address(kernel_hci)
     if dbus_addr:
         return dbus_addr.upper()
     # No sysfs/hciconfig/D-Bus visibility: the adapters endpoint fell back
@@ -848,12 +848,12 @@ def _run_reset_reconnect(
     scope = Adapter.of(adapter)
     try:
         logger.info("Reset & Reconnect %s: removing…", mac)
-        bluez.remove(mac, scope)
+        get_controller().remove(mac, scope)
         time.sleep(1)
 
         # A controller power cycle clears the kernel-side link state that
         # survives `remove` and keeps some speakers from bonding again.
-        bluez.power(False, scope)
+        get_controller().power(False, scope)
         time.sleep(2)
 
         logger.info("Reset & Reconnect %s: pairing…", mac)

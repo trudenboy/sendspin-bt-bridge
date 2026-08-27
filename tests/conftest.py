@@ -18,6 +18,63 @@ def _unsampled_host_probe():
     reset_preflight_probe()
 
 
+@pytest.fixture(scope="session")
+def _bridge_loop_thread():
+    """One background event loop for the whole session.
+
+    Work that crosses to the bridge loop — the device module's blocking
+    reads, the controller's verbs over D-Bus — answers "don't know" without
+    one, which is right in production and useless in a test that wants an
+    answer.  Registering it is left to whoever asks for ``bridge_loop``.
+    """
+    import asyncio
+    import threading
+
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True, name="test-bridge-loop")
+    thread.start()
+    try:
+        yield loop
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=5)
+        loop.close()
+
+
+@pytest.fixture
+def bridge_loop(_bridge_loop_thread):
+    """Register the session loop as the bridge loop, and put it back after."""
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state as runtime
+
+    previous = runtime.get_main_loop()
+    runtime.set_main_loop(_bridge_loop_thread)
+    try:
+        yield _bridge_loop_thread
+    finally:
+        runtime.set_main_loop(previous)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_system_bus(monkeypatch):
+    """No test reaches the host's own BlueZ.
+
+    The controller's verbs prefer BlueZ's bus and fall back to bluetoothctl
+    when it cannot answer.  On a developer machine that bus is real, with
+    real controllers and a real speaker behind it — a test that means to
+    exercise the fallback would power an adapter instead.  Tests that want
+    the D-Bus path hand the controller a bus of their own.
+    """
+    from sendspin_bridge.bluetooth import controller as controller_mod
+
+    def _no_bus():
+        raise ConnectionError("the system bus is not available to tests")
+
+    monkeypatch.setattr(controller_mod, "_system_bus", _no_bus)
+    controller_mod.set_controller(None)
+    yield
+    controller_mod.set_controller(None)
+
+
 @pytest.fixture
 def fake_bluez():
     """The shared bluetoothctl fake (tests/support/fake_bluez.py).

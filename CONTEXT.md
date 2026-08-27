@@ -32,8 +32,16 @@ owns the bus connection and the `PropertiesChanged` subscription, answers
 named questions about the speaker (`is_connected`, `is_paired`, `uuids`,
 `battery_level`, `transport_state`, `services_resolved`), returns a whole
 consistent `state()` when a caller needs several at once, connects a profile
-and drops the link. It does not pair, connect, trust or remove — those are the
-controller's verbs and live behind the bluetoothctl transport.
+and drops the link. It does not pair, connect, trust or remove — those are
+the controller verbs.
+
+**Controller verbs** — power a controller up or down, and connect, trust or
+forget a speaker through it. Each answers with a verdict — it worked, BlueZ
+refused and here is why, nothing answered — never with the transcript of the
+command that ran. Two transports satisfy them: BlueZ's own bus, which names
+the controller by object path so an operation cannot land on the wrong one,
+and `bluetoothctl`, which runs when the bus could not answer at all. A
+refusal is an answer, and is never retried through the other transport.
 
 **Pairing agent** — the `org.bluez.Agent1` this bridge registers for the
 duration of one pair attempt, bound to the target address. Auto-confirms

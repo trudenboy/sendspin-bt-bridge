@@ -243,7 +243,6 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, i
     # …and D-Bus can't answer either (the last resolution step before the
     # pass-through; on a host with a live controller it would resolve).
     monkeypatch.setattr(module, "build_hci_map", lambda: {})
-    monkeypatch.setattr(module, "_dbus_get_adapter_address", lambda _hci: None)
     # No controllers anywhere: the endpoint keeps ``hci0`` and the transport
     # has nothing to resolve it against either.
     installed_bluez.on("list", stdout="")

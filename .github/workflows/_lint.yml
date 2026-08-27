@@ -40,13 +40,6 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
-      - name: Install system build dependencies
-        # dbus-python ships sdist-only on PyPI; building requires the
-        # libdbus headers. The full ``uv sync --locked --extra dev`` pulls
-        # the bridge package + all runtime deps so mypy sees the same
-        # import surface as production.
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libdbus-1-dev libglib2.0-dev
-
       - name: Install dependencies (sync from uv.lock)
         run: uv sync --locked --extra dev
 
@@ -97,6 +90,5 @@ jobs:
         continue-on-error: true
 
       # Dependency CVE audit moved to ``_test.yml`` so it runs against
-      # the already-installed venv (no need to rebuild ``dbus-python``
-      # in a sandboxed virtualenv just to resolve metadata, which used
-      # to fail in this lint job for lack of ``libdbus-1-dev``).
+      # the already-installed venv rather than resolving metadata in a
+      # sandboxed virtualenv of its own.
