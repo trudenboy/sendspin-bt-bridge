@@ -239,12 +239,8 @@ def test_analyze_audio_api_compatibility_warns_when_preferred_format_cannot_be_p
 
 
 def test_check_sendspin_version_compatibility_accepts_pinned_version():
-    """The version installed by the bridge's own requirements pin
-    (currently 7.3.1) must satisfy the runtime check — otherwise CI is
-    a permanent red light. Uses the real importlib.metadata lookup, no
-    mocking."""
-    ok, err = check_sendspin_version_compatibility()
-    assert ok, f"installed sendspin failed compat check: {err}"
+    ok, err = check_sendspin_version_compatibility(installed_version="7.5.0")
+    assert ok, f"sendspin 7.5.0 failed compat check: {err}"
     assert err is None
 
 

@@ -414,33 +414,23 @@ def test_lxc_scripts_sync_repo_snapshot_recursively():
         assert ".release-ref" in text
 
 
-def test_lxc_scripts_install_pinned_sendspin_without_resolving_stale_metadata():
-    """pip cannot represent uv's intentional aiosendspin override.
-
-    Both non-ARM LXC paths must exclude sendspin from the requirements pass
-    and install its exported exact pin separately with ``--no-deps``. This
-    prevents the resolver conflict reported in #393 without downgrading
-    aiosendspin and breaking Music Assistant controller-state updates.
-    """
+def test_lxc_scripts_install_requirements_txt_as_the_pinset():
     repo_root = Path(__file__).resolve().parents[4]
     install_text = (repo_root / "deployment/lxc/install.sh").read_text()
     upgrade_text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
 
-    install_non_arm = install_text[
-        install_text.index("else\n", install_text.index("ARCH=$(uname -m)")) : install_text.index(
-            "fi\n# Install the bridge package", install_text.index("ARCH=$(uname -m)")
-        )
-    ]
-    assert "grep -v '^sendspin=='" in install_non_arm
-    assert "--no-deps" in install_non_arm
-    assert '"${SENDSPIN_REQUIREMENT}"' in install_non_arm
+    assert (
+        "pip3 install --break-system-packages --ignore-installed -q -r /opt/sendspin-client/requirements.txt"
+        in install_text
+    )
+    assert "grep -v '^sendspin=='" not in install_text
+    assert "sendspin>=" not in install_text
 
     upgrade_function = upgrade_text[
         upgrade_text.index("update_python_dependencies() {") : upgrade_text.index("\n}\n\nregister_editable_install()")
     ]
-    upgrade_non_arm = upgrade_function[upgrade_function.index("  else\n") :]
-    assert "grep -v '^sendspin=='" in upgrade_non_arm
-    assert '--no-deps -U "${sendspin_requirement}"' in upgrade_non_arm
+    assert "pip3 install --break-system-packages -q -r" in upgrade_function
+    assert "grep -v '^sendspin=='" not in upgrade_function
 
 
 def test_resolve_upgrade_script_prefers_deployment_lxc_path(monkeypatch):

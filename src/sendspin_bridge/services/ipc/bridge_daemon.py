@@ -1,19 +1,13 @@
-"""In-process SendspinDaemon subclass that exposes status callbacks for the bridge.
-
-Replaces the subprocess + stdout-parsing approach: BridgeDaemon subclasses
-SendspinDaemon and overrides key methods to update the bridge status dict
-directly via typed callbacks instead of fragile log-line parsing.
-
-When running inside a subprocess spawned by SendspinClient, PULSE_SINK is
-already set in the subprocess environment before any PA connection is made,
-so audio routes to the correct BT sink from the first sample.
-"""
+"""Per-speaker daemon: aiosendspin client + GStreamer player + status callbacks."""
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import signal
 import socket
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
@@ -31,9 +25,10 @@ from aiosendspin.models.core import (
     ServerStatePayload,
 )
 from aiosendspin.models.types import PlayerCommand, UndefinedField
-from sendspin.daemon.daemon import DaemonArgs, SendspinDaemon
 
 from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
+from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory
+from sendspin_bridge.services.audio.player.player import PcmFormat, StreamPlayer
 
 UTC = timezone.utc
 
@@ -50,26 +45,26 @@ logger = logging.getLogger(__name__)
 _SET_STATIC_DELAY_CMD: Any = getattr(PlayerCommand, "SET_STATIC_DELAY", None)
 
 
-class BridgeDaemon(SendspinDaemon):
-    """SendspinDaemon subclass that mirrors status into the bridge status dict.
+@dataclass(frozen=True, slots=True)
+class DaemonArgs:
+    client_id: str
+    client_name: str
+    url: str | None = None
+    listen_port: int = 8928
+    static_delay_ms: float = 0.0
+    initial_volume: int = 100
+    initial_muted: bool = False
+    interface: str | None = None
+    sink_name: str | None = None
+    pulse_latency_msec: int = 600
+    slave_method: str = "skew"
+    identity_path: str | None = None
+    pairing_store_path: str | None = None
+    require_pairing: bool = False
 
-    Args:
-        args: Standard DaemonArgs for SendspinDaemon.
-        status: Shared status dict owned by SendspinClient (updated in-place).
-        bluetooth_sink_name: PulseAudio/PipeWire sink name for volume sync.
-        on_status_change: Optional callback() called whenever status is mutated.
-                          Used by daemon_process.py to flush status to parent.
-        bt_product_name: BT-derived friendly speaker name (Alias / Name) read
-                         by the parent from BlueZ at spawn. Surfaced as
-                         `client/hello.device_info.product_name` so MA's
-                         player card shows each bridged speaker distinctly.
-                         Empty string falls back to the bridge-wide identity
-                         (`Sendspin BT Bridge vX`) for backward compatibility.
-        bt_manufacturer: BT vendor name resolved from `org.bluez.Device1.Modalias`
-                         via `bluetooth.vendor_map.vendor_from_modalias`.
-                         Surfaced as `client/hello.device_info.manufacturer`.
-                         Empty string falls back to the bridge host name.
-    """
+
+class BridgeDaemon:
+    """Mirrors aiosendspin + Player status into the bridge status dict."""
 
     # Single source of truth for the player state advertised in client/state
     # messages we emit (e.g. when pushing a Web-UI-driven static_delay_ms back
@@ -94,7 +89,21 @@ class BridgeDaemon(SendspinDaemon):
         required_lead_time_ms: float = 250.0,
         min_buffer_ms: float = 250.0,
     ) -> None:
-        super().__init__(args)
+        self._args = args
+        self._client: Any = None
+        self._listener: Any = None
+        self._connection_lock: asyncio.Lock | None = None
+        self._player: StreamPlayer | None = None
+        self._audio_handler: Any = None
+        self._decoder: Any = None
+        self._decoder_format: tuple[str, int, int, int, bytes | None] | None = None
+        self._next_play_time_us: int | None = None
+        self._pending_play_time_us: int | None = None
+        self._pairing_window_task: asyncio.Task[None] | None = None
+        self._volume = args.initial_volume
+        self._muted = args.initial_muted
+        self._volume_controller: Any = None
+        self._static_delay_ms = max(0.0, min(5000.0, args.static_delay_ms))
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
@@ -106,14 +115,6 @@ class BridgeDaemon(SendspinDaemon):
         self._bt_manufacturer = bt_manufacturer
         self._required_lead_time_ms = required_lead_time_ms
         self._min_buffer_ms = min_buffer_ms
-        # Initialise the synchronized state lazily so test fixtures that
-        # build a BridgeDaemon without aiosendspin installed still work.
-        try:
-            from aiosendspin.models.types import PlayerStateType
-
-            self._last_player_state = PlayerStateType.SYNCHRONIZED
-        except Exception:
-            self._last_player_state = None
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -123,6 +124,209 @@ class BridgeDaemon(SendspinDaemon):
             except Exception as exc:
                 logger.warning("on_status_change callback failed: %s", exc)
 
+    async def run(self) -> int:
+        logger.info("Starting daemon: %s", self._args.client_id)
+        loop = asyncio.get_running_loop()
+        main_task = asyncio.current_task()
+        assert main_task is not None
+
+        def signal_handler() -> None:
+            main_task.cancel()
+
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(signal.SIGINT, signal_handler)
+            loop.add_signal_handler(signal.SIGTERM, signal_handler)
+
+        self._static_delay_ms = max(0.0, min(5000.0, self._args.static_delay_ms))
+        await self._load_identity_and_pairing_store()
+        self._client = self._create_client(self._static_delay_ms)
+        sink_name = self._args.sink_name or self._bluetooth_sink_name
+        self._player = StreamPlayer(
+            sink_factory=default_pulsesink_factory(
+                device=sink_name,
+                client_name=self._args.client_name,
+                buffer_time_us=max(1, int(self._args.pulse_latency_msec)) * 1000,
+                slave_method=self._args.slave_method,
+            )
+        )
+        self._audio_handler = self._player
+        if self._bluetooth_sink_name:
+            try:
+                from sendspin_bridge.services.audio.pa_volume_controller import PulseVolumeController
+
+                self._volume_controller = PulseVolumeController(self._bluetooth_sink_name)
+                await self._volume_controller.start_monitoring(self._on_external_volume)
+            except Exception as exc:
+                logger.warning("PulseVolumeController unavailable: %s", exc)
+
+        try:
+            if self._args.url is not None:
+                await self._run_client_initiated()
+            else:
+                await self._run_server_initiated()
+        except asyncio.CancelledError:
+            logger.debug("Daemon cancelled")
+        finally:
+            if self._pairing_window_task is not None:
+                self._pairing_window_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._pairing_window_task
+                self._pairing_window_task = None
+            if self._volume_controller is not None:
+                with contextlib.suppress(Exception):
+                    await self._volume_controller.stop_monitoring()
+            if self._player is not None:
+                self._player.stop()
+                self._player = None
+            if self._client is not None:
+                await self._client.disconnect()
+                self._client = None
+            if self._listener is not None:
+                await self._listener.stop()
+                self._listener = None
+            logger.info("Daemon stopped")
+        return 0
+
+    async def _run_client_initiated(self) -> None:
+        assert self._args.url is not None
+        await self._connection_loop(self._args.url)
+
+    async def _connection_loop(self, url: str) -> None:
+        from aiohttp import ClientError
+
+        assert self._client is not None
+        error_backoff = 1.0
+        max_backoff = 300.0
+        while True:
+            try:
+                await self._client.connect(url)
+                error_backoff = 1.0
+                disconnect_event = asyncio.Event()
+                unsubscribe = self._client.add_disconnect_listener(disconnect_event.set)
+                await disconnect_event.wait()
+                unsubscribe()
+                logger.info("Disconnected from server")
+                await self._handle_disconnect()
+                logger.info("Reconnecting to %s", url)
+            except (TimeoutError, OSError, ClientError) as e:
+                logger.warning("Connection error (%s), retrying in %.0fs", type(e).__name__, error_backoff)
+                await asyncio.sleep(error_backoff)
+                error_backoff = min(error_backoff * 2, max_backoff)
+            except Exception:
+                logger.exception("Unexpected error during connection")
+                break
+
+    async def _load_identity_and_pairing_store(self) -> None:
+        identity_path = getattr(self._args, "identity_path", None)
+        pairing_path = getattr(self._args, "pairing_store_path", None)
+        if identity_path:
+            from pathlib import Path
+
+            from sendspin_bridge.services.ipc.client_identity import load_or_create_identity
+
+            self._identity = load_or_create_identity(Path(identity_path))
+        if pairing_path:
+            from aiosendspin.noise.trust_store import FileClientPairingStore
+
+            self._pairing_store = await FileClientPairingStore.open(pairing_path)
+            await self._apply_pairing_policy()
+        await self._refresh_pairing_state()
+
+    async def _refresh_pairing_state(self) -> None:
+        if not bool(getattr(self._args, "require_pairing", False)):
+            self._bridge_status["pairing_state"] = "disabled"
+            self._notify()
+            return
+        store = getattr(self, "_pairing_store", None)
+        records = await store.list_records() if store is not None else ()
+        self._bridge_status["pairing_state"] = (
+            "paired" if any(getattr(record, "server_id", None) for record in records) else "unpaired"
+        )
+        self._notify()
+
+    async def _apply_pairing_policy(self) -> None:
+        store = getattr(self, "_pairing_store", None)
+        if store is None:
+            return
+        from dataclasses import replace
+
+        require_pairing = bool(getattr(self._args, "require_pairing", False))
+        current = await store.get_pairing_config()
+        desired = replace(
+            current,
+            unpaired_access_enabled=not require_pairing,
+            dynamic_pin_enabled=require_pairing,
+            pairing_psk_enabled=require_pairing,
+            static_pin_enabled=False,
+        )
+        if desired != current:
+            await store.store_pairing_config(desired)
+            logger.info(
+                "Sendspin pairing %s (unpaired access %s)",
+                "required" if require_pairing else "disabled",
+                "off" if require_pairing else "on",
+            )
+
+    def _pairing_support(self):
+        if not bool(getattr(self._args, "require_pairing", False)):
+            return None
+        try:
+            from aiosendspin.client.models import PairingSupport
+        except Exception:
+            return None
+
+        async def _pin_display(pin: str | None) -> None:
+            self._bridge_status["pairing_pin"] = pin
+            if pin:
+                logger.debug("Sendspin pairing PIN is ready for display")
+                self._bridge_status["pairing_state"] = "pin_displayed"
+            else:
+                self._bridge_status["pairing_window_open"] = False
+                await self._refresh_pairing_state()
+            self._notify()
+
+        return PairingSupport(pin_display=_pin_display)
+
+    def open_pairing_window(self) -> None:
+        client = getattr(self, "_client", None)
+        opener = getattr(client, "open_pairing_window", None) if client is not None else None
+        if callable(opener):
+            opener()
+            self._bridge_status["pairing_window_open"] = bool(getattr(client, "pairing_window_open", True))
+            self._bridge_status["pairing_state"] = "window_open"
+            self._notify()
+            if self._pairing_window_task is None or self._pairing_window_task.done():
+                self._pairing_window_task = asyncio.create_task(self._watch_pairing_window(client))
+
+    async def _watch_pairing_window(self, client: object) -> None:
+        while bool(getattr(client, "pairing_window_open", False)):
+            await asyncio.sleep(0.05)
+        self._bridge_status["pairing_window_open"] = False
+        if not self._bridge_status.get("pairing_pin"):
+            await self._refresh_pairing_state()
+        self._notify()
+
+    def _on_external_volume(self, volume: int, muted: bool) -> None:
+        self._volume = volume
+        self._muted = muted
+        self._bridge_status["volume"] = volume
+        self._bridge_status["muted"] = muted
+        self._notify()
+
+    def retarget_sink(self, sink_name: str | None) -> None:
+        if self._player is None:
+            return
+        self._player.stop()
+        self._player = StreamPlayer(
+            sink_factory=default_pulsesink_factory(
+                device=sink_name,
+                client_name=self._args.client_name,
+                buffer_time_us=max(1, int(self._args.pulse_latency_msec)) * 1000,
+                slave_method=self._args.slave_method,
+            )
+        )
+        self._audio_handler = self._player
+
     # ── Client creation ──────────────────────────────────────────────────────
 
     def _create_client(self, static_delay_ms: float = 0.0):
@@ -130,10 +334,7 @@ class BridgeDaemon(SendspinDaemon):
         from aiosendspin.models.player import ClientHelloPlayerSupport
         from aiosendspin.models.types import Roles
 
-        from sendspin_bridge.services.diagnostics.sendspin_compat import (
-            detect_supported_audio_formats_for_device,
-            filter_supported_call_kwargs,
-        )
+        from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
 
         try:
             sw_ver = f"aiosendspin {_pkg_version('aiosendspin')}"
@@ -152,14 +353,8 @@ class BridgeDaemon(SendspinDaemon):
             software_version=f"sendspin-bt-bridge {_BRIDGE_VERSION} ({sw_ver})",
         )
 
-        if self._audio_handler is None:
-            raise RuntimeError("BridgeDaemon: audio handler not initialised")
         client_roles = [Roles.PLAYER, Roles.METADATA, Roles.CONTROLLER]
-
-        supported_formats = detect_supported_audio_formats_for_device(self._args.audio_device)
-        if self._args.preferred_format is not None:
-            supported_formats = [f for f in supported_formats if f != self._args.preferred_format]
-            supported_formats.insert(0, self._args.preferred_format)
+        supported_formats = _declared_formats()
 
         from aiosendspin.client import SendspinClient as _AioSendspinClient
 
@@ -173,6 +368,9 @@ class BridgeDaemon(SendspinDaemon):
         client_kwargs = filter_supported_call_kwargs(
             _AioSendspinClient,
             {
+                "identity": getattr(self, "_identity", None),
+                "pairing_store": getattr(self, "_pairing_store", None),
+                "pairing_support": self._pairing_support(),
                 "client_id": self._args.client_id,
                 "client_name": self._args.client_name,
                 "roles": client_roles,
@@ -185,8 +383,8 @@ class BridgeDaemon(SendspinDaemon):
                 "static_delay_ms": static_delay_ms,
                 "required_lead_time_ms": getattr(self, "_required_lead_time_ms", 250.0),
                 "min_buffer_ms": getattr(self, "_min_buffer_ms", 250.0),
-                "initial_volume": self._audio_handler.volume,
-                "initial_muted": self._audio_handler.muted,
+                "initial_volume": getattr(self, "_volume", 100),
+                "initial_muted": getattr(self, "_muted", False),
                 # client/state advertises SET_STATIC_DELAY so MA can drive the
                 # per-player delay slider. On aiosendspin <5.1 the enum value
                 # itself doesn't exist (resolved at module import as None);
@@ -203,10 +401,19 @@ class BridgeDaemon(SendspinDaemon):
         client.add_metadata_listener(self._on_metadata_update)
         client.add_controller_state_listener(self._on_controller_state)
         client.add_disconnect_listener(self._on_server_disconnect)
+        client.add_server_command_listener(self._handle_server_command)
 
         # Register visualizer listener if available
         if hasattr(client, "add_visualizer_listener"):
             client.add_visualizer_listener(self._on_visualizer_frames)
+        if hasattr(client, "add_audio_chunk_listener"):
+            client.add_audio_chunk_listener(self._on_audio_chunk)
+        if hasattr(client, "add_stream_start_listener"):
+            client.add_stream_start_listener(self._on_stream_start)
+        if hasattr(client, "add_stream_end_listener"):
+            client.add_stream_end_listener(self._on_stream_end)
+        if hasattr(client, "add_stream_clear_listener"):
+            client.add_stream_clear_listener(self._on_stream_clear)
 
         return client
 
@@ -234,17 +441,7 @@ class BridgeDaemon(SendspinDaemon):
         self._notify()
 
     async def _handle_disconnect(self) -> None:
-        """Disconnect cleanup — delegate to parent or fall back to local handler.
-
-        Older ``aiosendspin`` versions (< 5.x, e.g. armv7 builds) do not
-        provide ``_handle_disconnect`` on ``SendspinDaemon``.  Fall back to
-        the synchronous ``_on_server_disconnect`` to clear bridge status.
-        """
-        parent = getattr(super(), "_handle_disconnect", None)
-        if parent is not None:
-            await parent()
-        else:
-            self._on_server_disconnect()
+        self._on_server_disconnect()
 
     async def _run_server_initiated(self) -> None:
         """Override upstream to add WebSocket heartbeat on the listener side.
@@ -302,7 +499,7 @@ class BridgeDaemon(SendspinDaemon):
         interface = getattr(self._args, "interface", None)
         host = interface if interface is not None else "0.0.0.0"
         self._listener = _HeartbeatListener(
-            client_id=self._args.client_id,
+            client_id=self._identity.peer_id,
             on_connection=self._handle_server_connection,
             port=self._args.listen_port,
             client_name=self._args.client_name,
@@ -314,67 +511,52 @@ class BridgeDaemon(SendspinDaemon):
             await asyncio.sleep(3600)
 
     async def _handle_server_connection(self, ws) -> None:
-        """Mirror the upstream connect flow without stale disconnect status races."""
+        """Give an inbound socket to the persistent client's admission machinery."""
         logger.info("Server connected")
-        assert self._audio_handler is not None
-        assert self._connection_lock is not None
-        assert self._settings is not None
+        client = self._client
+        if client is None:
+            raise RuntimeError("Sendspin client is not initialized")
 
-        async with self._connection_lock:
-            previous_client: Any = getattr(self, "_client", None)
-            if previous_client is not None:
-                logger.info("Disconnecting from previous server")
-                await self._handle_disconnect()
-                if previous_client.connected:
-                    try:
-                        from aiosendspin.models.core import ClientGoodbyeMessage, ClientGoodbyePayload
-                        from aiosendspin.models.types import GoodbyeReason
+        async def _publish_when_connected() -> None:
+            while True:
+                admitted = getattr(client, "_admitted_connection", None)
+                transport = getattr(admitted, "_ws", None)
+                raw_socket = getattr(transport, "_ws", transport)
+                owns_socket = admitted is None or raw_socket is ws
+                if getattr(client, "connected", False) and owns_socket:
+                    self._mark_server_connected(ws)
+                    return
+                await asyncio.sleep(0.05)
 
-                        await previous_client._send_message(
-                            ClientGoodbyeMessage(
-                                payload=ClientGoodbyePayload(reason=GoodbyeReason.ANOTHER_SERVER)
-                            ).to_json()
-                        )
-                    except Exception:
-                        logger.debug("Failed to send goodbye message", exc_info=True)
-                await previous_client.disconnect()
-
-            client = self._create_client(self._static_delay_ms)
-            self._client = client
-            self._audio_handler.attach_client(client)
-            client.add_server_command_listener(self._handle_server_command)
-
-            try:
-                await client.attach_websocket(ws)
-            except TimeoutError:
-                logger.warning("Handshake with server timed out")
-                await self._handle_disconnect()
-                if self._client is client:
-                    self._client = None
-                return
-            except Exception:
-                logger.exception("Error during server handshake")
-                await self._handle_disconnect()
-                if self._client is client:
-                    self._client = None
-                return
-
-            self._mark_server_connected(ws)
-
+        publisher = asyncio.create_task(_publish_when_connected())
         try:
-            disconnect_event = asyncio.Event()
-            unsubscribe = client.add_disconnect_listener(disconnect_event.set)
-            await disconnect_event.wait()
-            unsubscribe()
-            logger.info("Server disconnected")
+            await client.attach_websocket(ws)
         except Exception:
-            logger.exception("Error waiting for server disconnect")
+            logger.exception("Error serving inbound server connection")
         finally:
-            if self._client is client:
-                await self._handle_disconnect()
+            publisher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await publisher
 
     def _on_server_disconnect(self) -> None:
         """Clear connection + group state on disconnect."""
+        already_disconnected = (
+            not self._bridge_status.get("server_connected")
+            and not self._bridge_status.get("connected")
+            and self._bridge_status.get("group_id") is None
+            and self._decoder is None
+            and self._next_play_time_us is None
+            and self._pending_play_time_us is None
+            and not self._bridge_status.get("audio_streaming")
+        )
+        if already_disconnected:
+            return
+        if self._player is not None:
+            self._player.clear()
+        self._decoder = None
+        self._decoder_format = None
+        self._next_play_time_us = None
+        self._pending_play_time_us = None
         self._bridge_status["server_connected"] = False
         self._bridge_status["connected"] = False
         self._bridge_status["group_name"] = None
@@ -424,7 +606,6 @@ class BridgeDaemon(SendspinDaemon):
     # ── Audio / stream events ────────────────────────────────────────────────
 
     def _handle_format_change(self, codec: str | None, sample_rate: int, bit_depth: int, channels: int) -> None:
-        super()._handle_format_change(codec, sample_rate, bit_depth, channels)
         self._bridge_status["audio_format"] = f"{codec or 'PCM'} {sample_rate}Hz/{bit_depth}-bit/{channels}ch"
         self._bridge_status["audio_streaming"] = True  # actual audio data arrived
         self._bridge_status["reanchor_count"] = 0  # reset per-stream re-anchor counter
@@ -433,7 +614,6 @@ class BridgeDaemon(SendspinDaemon):
         self._notify()
 
     def _on_stream_event(self, event: str) -> None:
-        super()._on_stream_event(event)
         is_playing = event == "start"
         if self._bridge_status.get("playing") != is_playing:
             self._bridge_status["playing"] = is_playing
@@ -459,16 +639,19 @@ class BridgeDaemon(SendspinDaemon):
         # always provides the controller — the legacy <5.5.0 fallback that
         # called ``aset_sink_volume`` from inside this method was dropped
         # in 2.62.0-rc.9.
-        super()._handle_server_command(payload)
         if payload.player is None:
             return
         cmd = payload.player
         if cmd.command == PlayerCommand.VOLUME and cmd.volume is not None:
-            self._bridge_status["volume"] = max(0, min(100, cmd.volume))
+            self._volume = max(0, min(100, cmd.volume))
+            self._bridge_status["volume"] = self._volume
             self._notify()
+            self._apply_sink_volume()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
+            self._muted = cmd.mute
             self._bridge_status["muted"] = cmd.mute
             self._notify()
+            self._apply_sink_volume()
         elif (
             _SET_STATIC_DELAY_CMD is not None
             and cmd.command == _SET_STATIC_DELAY_CMD
@@ -615,3 +798,159 @@ class BridgeDaemon(SendspinDaemon):
             viz["spectrum"] = latest.spectrum
         if viz:
             self._bridge_status["visualizer"] = viz
+
+    def _apply_sink_volume(self) -> None:
+        controller = getattr(self, "_volume_controller", None)
+        if controller is None:
+            return
+        task = asyncio.get_running_loop().create_task(controller.set_state(self._volume, muted=self._muted))
+
+        def _done(done: asyncio.Task) -> None:
+            if done.cancelled():
+                return
+            exc = done.exception()
+            if exc is not None:
+                logger.warning("sink volume apply failed: %s", exc)
+
+        task.add_done_callback(_done)
+
+    def _on_stream_start(self, message) -> None:
+        player_cfg = getattr(getattr(message, "payload", message), "player", None)
+        if player_cfg is None:
+            player_cfg = getattr(message, "player", None)
+        if player_cfg is None:
+            self._on_stream_event("start")
+            return
+        codec = getattr(player_cfg, "codec", None)
+        codec_name = str(getattr(codec, "value", codec or "PCM"))
+        sample_rate = int(getattr(player_cfg, "sample_rate", 48000))
+        bit_depth = int(getattr(player_cfg, "bit_depth", 16))
+        channels = int(getattr(player_cfg, "channels", 2))
+        header = getattr(player_cfg, "codec_header", None)
+        self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
+        self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
+        if self._player is not None:
+            self._player.start(PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth))
+        self._on_stream_event("start")
+
+    def _reset_decoder(
+        self,
+        codec_name: str,
+        sample_rate: int,
+        bit_depth: int,
+        channels: int,
+        codec_header: object,
+    ) -> None:
+        from aiosendspin.audio.codecs import create_decoder
+
+        header = codec_header
+        if isinstance(header, str):
+            import base64
+
+            try:
+                header = base64.b64decode(header)
+            except Exception:
+                header = None
+        codec = str(codec_name or "pcm").split(".")[-1].lower()
+        header_bytes = bytes(header) if isinstance(header, (bytes, bytearray)) else None
+        signature = (codec, sample_rate, bit_depth, channels, header_bytes)
+        if signature == self._decoder_format:
+            return
+        self._decoder_format = signature
+        self._decoder = None
+        if codec == "pcm":
+            return
+        try:
+            self._decoder = create_decoder(
+                codec,
+                sample_rate=sample_rate,
+                bit_depth=bit_depth,
+                channels=channels,
+                codec_header=header_bytes,
+            )
+        except Exception as exc:
+            logger.error("Cannot decode %s: %s", codec, exc)
+            self._decoder = None
+
+    def _on_audio_chunk(self, server_timestamp_us: int, payload: bytes, audio_format) -> None:
+        if self._player is None:
+            return
+        pcm = getattr(audio_format, "pcm_format", audio_format)
+        fmt = PcmFormat(
+            sample_rate=int(getattr(pcm, "sample_rate", 48000)),
+            channels=int(getattr(pcm, "channels", 2)),
+            bit_depth=int(getattr(pcm, "bit_depth", 16)),
+        )
+        codec = getattr(audio_format, "codec", None)
+        codec_name = str(getattr(codec, "value", codec or "pcm")).lower()
+        header = getattr(audio_format, "codec_header", None)
+        self._reset_decoder(codec_name, fmt.sample_rate, fmt.bit_depth, fmt.channels, header)
+        client = self._client
+        play_time_us = (
+            client.compute_play_time(server_timestamp_us)
+            if client is not None and hasattr(client, "compute_play_time")
+            else server_timestamp_us
+        )
+        if codec_name != "pcm":
+            if self._decoder is None:
+                return
+            if self._pending_play_time_us is None:
+                self._pending_play_time_us = play_time_us
+            try:
+                payload = self._decoder.decode(payload)
+            except Exception:
+                logger.exception("audio decode failed")
+                return
+            if not payload:
+                return
+            play_time_us = self._pending_play_time_us
+            self._pending_play_time_us = None
+        else:
+            self._pending_play_time_us = None
+        self._player.start(fmt)
+        self._player.submit(play_time_us, payload)
+        frame_bytes = fmt.frame_bytes()
+        duration_us = (len(payload) // frame_bytes) * 1_000_000 // fmt.sample_rate if frame_bytes else 0
+        self._next_play_time_us = play_time_us + duration_us
+
+    def _on_stream_clear(self, _roles: object = None) -> None:
+        self._decoder = None
+        self._decoder_format = None
+        self._next_play_time_us = None
+        self._pending_play_time_us = None
+        if self._player is not None:
+            self._player.clear()
+
+    def _on_stream_end(self, _roles: object = None) -> None:
+        if self._player is not None and self._decoder is not None:
+            try:
+                trailing = self._decoder.flush()
+            except Exception:
+                logger.exception("audio decoder flush failed")
+            else:
+                trailing_play_time = self._next_play_time_us or self._pending_play_time_us
+                if trailing and trailing_play_time is not None:
+                    self._player.submit(trailing_play_time, trailing)
+        self._decoder = None
+        self._decoder_format = None
+        self._next_play_time_us = None
+        self._pending_play_time_us = None
+        if self._player is not None:
+            self._player.close_stream()
+        self._on_stream_event("stop")
+
+    def metrics(self) -> dict[str, object]:
+        if self._player is None:
+            return {}
+        return self._player.metrics()
+
+
+def _declared_formats():
+    from aiosendspin.models.player import SupportedAudioFormat
+    from aiosendspin.models.types import AudioCodec
+
+    formats = []
+    for sample_rate in (48000, 44100):
+        for codec in (AudioCodec.FLAC, AudioCodec.PCM):
+            formats.append(SupportedAudioFormat(codec=codec, channels=2, sample_rate=sample_rate, bit_depth=16))
+    return formats

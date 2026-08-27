@@ -12,6 +12,7 @@ import pytest
 
 from sendspin_bridge.services.ipc.commands import (
     InvalidCommand,
+    OpenPairingWindow,
     Pause,
     Play,
     Reconnect,
@@ -50,6 +51,7 @@ def _roundtrip(command):
         Transport(action="next", value=None),
         SetStandby(sink="bluez_sink.AA_BB"),
         SetStandby(sink=None),
+        OpenPairingWindow(),
     ],
 )
 def test_every_command_survives_a_roundtrip(command):

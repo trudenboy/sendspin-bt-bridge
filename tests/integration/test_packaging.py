@@ -26,17 +26,15 @@ def test_dockerfile_installs_bridge_package_in_builder():
     assert "COPY src/ /app/src/" not in dockerfile
 
 
-def test_dockerfile_installs_ffmpeg_runtime_libraries():
+def test_dockerfile_installs_gstreamer_runtime_libraries():
     dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
 
     for package in (
-        "libavcodec61",
-        "libavdevice61",
-        "libavfilter10",
-        "libavformat61",
-        "libavutil59",
-        "libswresample5",
-        "libswscale8",
+        "gstreamer1.0-plugins-base",
+        "gstreamer1.0-pulseaudio",
+        "gir1.2-gstreamer-1.0",
+        "libcairo2",
+        "libgirepository-2.0-0",
     ):
         assert package in dockerfile
 
@@ -104,11 +102,9 @@ def test_rpi_check_mentions_container_uid_audio_troubleshooting():
     assert "docker logs --tail 80 sendspin-client" in script
 
 
-def test_armv7_publish_workflow_builds_pinned_sendspin_and_smoke_tests_import():
+def test_armv7_publish_workflow_builds_pinned_aiosendspin_and_smoke_tests_import():
     workflow = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml").read_text()
 
-    assert "sendspin_version" in workflow
-    assert "SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}" in workflow
     assert "scripts/check_sendspin_compat.py" in workflow
     assert "aiosendspin_version" in workflow
     assert workflow.count('--expect-aiosendspin "${{ needs.prepare.outputs.aiosendspin_version }}"') == 2
@@ -123,33 +119,26 @@ def test_requirements_pin_aiosendspin_for_all_architectures():
     )
 
 
-def test_dockerfile_preserves_requirements_pin_when_installing_sendspin():
+def test_dockerfile_installs_requirements_without_sendspin_package():
     dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
 
     assert '"aiosendspin~=4.3"' not in dockerfile
-    sendspin_layer = dockerfile.split("# Layer 2: sendspin package only", 1)[1].split(
-        "# Layer 3: the bridge package itself", 1
-    )[0]
-    install_lines = [line for line in sendspin_layer.splitlines() if "uv pip install" in line]
-    assert len(install_lines) == 2
-    assert all("--no-deps" in line for line in install_lines)
-    assert "NO_DEPS" not in sendspin_layer
+    assert "gstreamer1.0-pulseaudio" in dockerfile
+    assert "sendspin==" not in dockerfile
+    assert "SENDSPIN_VERSION" not in dockerfile
 
 
-def test_render_demo_preserves_runtime_dependency_override():
+def test_render_demo_pins_aiosendspin_without_sendspin():
     root = Path(__file__).resolve().parents[2]
     pyproject = tomllib.loads((root / "pyproject.toml").read_text())
     runtime = pyproject["project"]["dependencies"]
-    sendspin = next(requirement for requirement in runtime if requirement.startswith("sendspin=="))
-    aiosendspin = next(requirement for requirement in runtime if requirement.startswith("aiosendspin[server]=="))
+    aiosendspin = next(requirement for requirement in runtime if requirement.startswith("aiosendspin=="))
     demo = (root / "requirements-demo.txt").read_text()
     render = (root / "render.yaml").read_text()
 
     assert not re.search(r"^sendspin(?:\[.*\])?[=<>~]", demo, re.MULTILINE)
     assert aiosendspin in demo
-    assert f"pip install --no-deps {sendspin}" in render
-    for dependency in ("aiosendspin-mpris", "qrcode", "readchar", "rich", "sounddevice", "textual-image"):
-        assert re.search(rf"^{re.escape(dependency)}[=<>~]", demo, re.MULTILINE)
+    assert "pip install --no-deps sendspin" not in render
 
 
 def test_ci_verifies_locked_dev_tool_versions():
@@ -163,11 +152,18 @@ def test_ci_verifies_locked_dev_tool_versions():
         assert "uv sync --frozen --extra dev" not in workflow
 
 
+def test_lint_ci_installs_native_pygobject_build_dependencies():
+    lint = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "_lint.yml").read_text()
+
+    assert lint.index("Install system dependencies") < lint.index("uv sync --locked --extra dev")
+    for package in ("libcairo2-dev", "libgirepository-2.0-dev", "pkg-config"):
+        assert package in lint
+
+
 def test_dependency_prs_build_and_smoke_test_the_docker_image():
     workflow = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "docker-smoke.yml").read_text()
 
     assert "docker build" in workflow
-    assert "SENDSPIN_VERSION=${{ steps.versions.outputs.sendspin }}" in workflow
     assert "scripts/check_sendspin_compat.py" in workflow
     assert '--expect-aiosendspin "${{ steps.versions.outputs.aiosendspin }}"' in workflow
     assert "scripts/check_container_runtime.py" in workflow

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.3] - 2026-08-27
+
+### Added
+
+- Speakers play through GStreamer to a named PulseAudio sink. Music Assistant
+  pairing is optional and off by default, so a speaker plays as soon as Music
+  Assistant finds it. Turn on Require Sendspin pairing to ask for a PIN.
+- FLAC from Music Assistant is decoded before it reaches the speaker.
+
+### Changed
+
+- The Sendspin client library is 9.1.1. Players that Music Assistant already
+  knows from an older bridge are orphans after this upgrade and should be
+  removed; the next pairing creates a new player.
+
+### Removed
+
+- The `sendspin` application package is no longer installed or used.
+
+### Fixed
+
+- Consecutive tracks continue playing after the previous stream finishes.
+- Stopping or restarting the bridge now closes each speaker process promptly
+  instead of waiting for a timeout and forcibly killing it.
+
+### Security
+
+- Debug logging no longer includes Music Assistant authentication payloads.
+
 ## [2.76.0-rc.2] - 2026-08-27
 
 ### Changed

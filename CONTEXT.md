@@ -55,9 +55,26 @@ WirePlumber and PulseAudio each spell it differently, so the bridge tries
 several candidates when connecting and must be able to read any of them back.
 Written and parsed by one grammar.
 
-**Daemon** — the per-speaker subprocess that runs the Sendspin client with
-that speaker's sink in its environment. One speaker, one daemon, one audio
-context.
+**Daemon** — the per-speaker subprocess that runs the Sendspin client.
+One speaker, one daemon, one Player.
+
+**Player** — the daemon's audio output. It takes PCM chunks with a play
+time and renders them through GStreamer to a named sink. The GStreamer
+`pulsesink` receives that sink through its explicit `device` property; routing
+does not depend on the process-wide `PULSE_SINK` environment variable.
+
+**Decoder** — bridge-owned conversion from Sendspin audio chunks to PCM. For
+FLAC, the daemon creates and drives the codec decoder before handing PCM to the
+Player; aiosendspin does not decode chunks on the bridge's behalf.
+
+**Identity** — the long-term X25519 keypair a daemon presents on the
+aiosendspin 9 Noise wire. Persisted per speaker so Music Assistant sees the
+same client after a restart.
+
+**Pairing store** — the credentials a daemon keeps for servers it has
+paired with, plus the last playback server. Persisted next to the identity.
+PIN pairing is optional and off by default; unpaired access still uses Noise
+transport encryption.
 
 ## Music Assistant
 

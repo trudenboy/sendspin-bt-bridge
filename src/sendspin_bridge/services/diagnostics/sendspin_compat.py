@@ -9,15 +9,16 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Protocol, cast
 
+from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
 _RUNTIME_DEPENDENCIES = (
-    "sendspin",
     "aiosendspin",
-    "av",
+    "PyGObject",
     "music-assistant-client",
 )
 
@@ -48,17 +49,6 @@ class AudioDeviceLike(Protocol):
     name: str
     output_channels: int
     is_default: bool
-
-
-def filter_supported_call_kwargs(callable_obj, kwargs: dict[str, object]) -> dict[str, object]:
-    """Keep only kwargs supported by the inspected callable signature."""
-    try:
-        supported = inspect.signature(callable_obj).parameters
-    except (TypeError, ValueError):
-        return dict(kwargs)
-    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in supported.values()):
-        return dict(kwargs)
-    return {key: value for key, value in kwargs.items() if key in supported}
 
 
 def analyze_daemon_args_compatibility(daemon_args_cls, candidate_kwargs: dict[str, object]) -> dict[str, object]:

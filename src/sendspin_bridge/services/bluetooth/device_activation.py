@@ -26,7 +26,7 @@ from sendspin_bridge.services.audio.mpris_player import (
 )
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
 from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport, mpris_dbus_path
-from sendspin_bridge.services.diagnostics.sendspin_compat import filter_supported_call_kwargs
+from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
 from sendspin_bridge.services.ipc.commands import SetVolume
 
 if TYPE_CHECKING:

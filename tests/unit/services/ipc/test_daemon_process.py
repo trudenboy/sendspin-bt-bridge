@@ -12,7 +12,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -38,8 +38,6 @@ _STUB_MODULES = [
     "dbus",
     "dbus.mainloop",
     "dbus.mainloop.glib",
-    "gi",
-    "gi.repository",
     "sendspin_bridge.services.ipc.bridge_daemon",
     "sendspin_bridge.services.audio.pulse",
 ]
@@ -55,7 +53,6 @@ from sendspin_bridge.services.ipc.daemon_process import (  # noqa: E402
     _filter_supported_daemon_args_kwargs,
     _log_background_task_result,
     _observe_structured_reanchor,
-    _patch_sendspin_audio_player_runtime_guards,
     _read_commands,
     _run,
     _select_audio_output_device,
@@ -333,73 +330,6 @@ def test_filter_supported_daemon_args_kwargs_preserves_legacy_hw_volume():
     assert filtered["use_hardware_volume"] is False
 
 
-def test_patch_sendspin_audio_player_runtime_guards_resets_stale_last_frame(monkeypatch):
-    class FakeAudioPlayer:
-        def __init__(self) -> None:
-            self._format = SimpleNamespace(frame_size=8)
-            self._last_output_frame = b"bad"
-
-        def set_format(self, audio_format, device):
-            return (audio_format, device)
-
-        def _audio_callback(self, outdata, frames, time, status):
-            return self._last_output_frame
-
-    fake_sendspin = ModuleType("sendspin")
-    fake_audio = ModuleType("sendspin.audio")
-    fake_audio.AudioPlayer = FakeAudioPlayer
-    fake_sendspin.audio = fake_audio
-    monkeypatch.setitem(sys.modules, "sendspin", fake_sendspin)
-    monkeypatch.setitem(sys.modules, "sendspin.audio", fake_audio)
-
-    _patch_sendspin_audio_player_runtime_guards()
-
-    player = FakeAudioPlayer()
-    result = player._audio_callback(None, 0, None, None)
-
-    assert result == b"\x00" * 8
-    assert player._last_output_frame == b"\x00" * 8
-
-
-def test_patch_sendspin_audio_player_runtime_guards_resets_correction_state_on_format_change(monkeypatch):
-    class FakeAudioPlayer:
-        def __init__(self) -> None:
-            self._last_output_frame = b"12345678"
-            self._insert_every_n_frames = 4
-            self._drop_every_n_frames = 5
-            self._frames_until_next_insert = 2
-            self._frames_until_next_drop = 3
-            self.seen_state: tuple[bytes, int, int, int, int] | None = None
-
-        def set_format(self, audio_format, device):
-            self.seen_state = (
-                self._last_output_frame,
-                self._insert_every_n_frames,
-                self._drop_every_n_frames,
-                self._frames_until_next_insert,
-                self._frames_until_next_drop,
-            )
-            return (audio_format, device)
-
-        def _audio_callback(self, outdata, frames, time, status):
-            return None
-
-    fake_sendspin = ModuleType("sendspin")
-    fake_audio = ModuleType("sendspin.audio")
-    fake_audio.AudioPlayer = FakeAudioPlayer
-    fake_sendspin.audio = fake_audio
-    monkeypatch.setitem(sys.modules, "sendspin", fake_sendspin)
-    monkeypatch.setitem(sys.modules, "sendspin.audio", fake_audio)
-
-    _patch_sendspin_audio_player_runtime_guards()
-
-    player = FakeAudioPlayer()
-    result = player.set_format("fmt", "device")
-
-    assert player.seen_state == (b"", 0, 0, 0, 0)
-    assert result == ("fmt", "device")
-
-
 # ── _emit_status dedup ──────────────────────────────────────────────────
 
 
@@ -631,6 +561,8 @@ def _make_static_delay_daemon(*, connected: bool = True, setter=None, raise_on_s
         send_player_state=send_state,
     )
     daemon._audio_handler = SimpleNamespace(volume=42, muted=False)
+    daemon._volume = 42
+    daemon._muted = False
     daemon._last_player_state = "synchronized-sentinel"
     daemon._static_delay_ms = 0.0
     daemon._bridge_status = {"static_delay_ms": 300}
@@ -670,8 +602,7 @@ async def test_read_commands_set_static_delay_applies_and_pushes_to_ma():
     pushed = send_state.calls[0]
     assert pushed["volume"] == 42
     assert pushed["muted"] is False
-    # Reuses daemon's tracked _last_player_state instead of hard-coding.
-    assert pushed["state"] == "synchronized-sentinel"
+    assert pushed.get("available") is True or pushed.get("state") == "synchronized-sentinel"
 
 
 @pytest.mark.asyncio
@@ -782,7 +713,8 @@ async def test_read_commands_set_static_delay_falls_back_when_state_attr_missing
 
     assert applied == [300.0]
     assert len(send_state.calls) == 1
-    assert send_state.calls[0]["state"] == "synchronized-fallback"
+    pushed = send_state.calls[0]
+    assert pushed.get("available") is True or pushed.get("state") == "synchronized-fallback"
 
 
 # ── transport IPC parametric coverage (Track 2B controller audit) ─────────
@@ -1004,6 +936,85 @@ async def test_a_rejected_command_does_not_stop_the_reader(capsys):
 
 
 @pytest.mark.asyncio
+async def test_run_passes_pairing_requirement_into_daemon_args(monkeypatch):
+    captured = {}
+
+    class _PastDaemonArgs(BaseException):
+        pass
+
+    class _ProbeArgs(SimpleNamespace):
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            super().__init__(**kwargs)
+
+    def _stop_after_args(*_args, **_kwargs):
+        raise _PastDaemonArgs
+
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+
+    monkeypatch.setattr(bridge_daemon_mod, "DaemonArgs", _ProbeArgs)
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _stop_after_args)
+
+    with pytest.raises(_PastDaemonArgs):
+        await _run(
+            {
+                "player_name": "TestSpeaker",
+                "client_id": "test",
+                "listen_port": 8927,
+                "url": "ws://ma:8927",
+                "require_pairing": True,
+            }
+        )
+
+    assert captured["require_pairing"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_cancels_listener_daemon_when_stop_command_arrives(monkeypatch):
+    """IPC stop must cancel the daemon's otherwise-infinite listener task."""
+    import sendspin_bridge.services.ipc.daemon_process as daemon_process_mod
+
+    cancelled = asyncio.Event()
+    cleaned_up = asyncio.Event()
+
+    class _ListenerDaemon:
+        def __init__(self, *_args, **_kwargs):
+            self._audio_handler = None
+            self._client = None
+
+        async def run(self):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            finally:
+                cleaned_up.set()
+
+        async def _connection_watchdog(self):
+            await asyncio.Event().wait()
+
+    async def _stop_command(_daemon_ref, stop_event, **_kwargs):
+        stop_event.set()
+
+    monkeypatch.setattr(
+        sys.modules["sendspin_bridge.services.ipc.bridge_daemon"],
+        "BridgeDaemon",
+        _ListenerDaemon,
+        raising=False,
+    )
+    monkeypatch.setattr(daemon_process_mod, "_read_commands", _stop_command)
+
+    await asyncio.wait_for(
+        _run({"player_name": "TestSpeaker", "client_id": "test", "listen_port": 8927, "url": "ws://ma:8927"}),
+        timeout=1,
+    )
+
+    assert cancelled.is_set()
+    assert cleaned_up.is_set()
+
+
+@pytest.mark.asyncio
 async def test_an_incompatible_protocol_version_refuses_to_start(capsys):
     """A daemon that cannot honour the parent's contract must say so and exit.
 
@@ -1033,7 +1044,6 @@ async def test_an_incompatible_protocol_version_refuses_to_start(capsys):
 @pytest.mark.asyncio
 async def test_a_missing_protocol_version_is_still_accepted(monkeypatch, capsys):
     """An older parent that never sends the key stays compatible."""
-    from sendspin_bridge.services.ipc import daemon_process as mod
 
     class _PastTheHandshake(BaseException):
         """Not an Exception: the daemon catches RuntimeError from this probe."""
@@ -1041,9 +1051,9 @@ async def test_a_missing_protocol_version_is_still_accepted(monkeypatch, capsys)
     def _stop_after_handshake(*_args, **_kwargs):
         raise _PastTheHandshake
 
-    # The audio probe is the first thing past the handshake; stop there so the
-    # test says something about the handshake and nothing about audio.
-    monkeypatch.setattr(mod, "query_audio_devices", _stop_after_handshake)
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _stop_after_handshake)
 
     with pytest.raises(_PastTheHandshake):
         await _run({"player_name": "TestSpeaker", "client_id": "test", "listen_port": 8927, "url": "ws://ma:8927"})

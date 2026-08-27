@@ -71,6 +71,38 @@ def test_find_duplicate_devices_detects_conflict(mock_fetch):
 
 
 @patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
+def test_find_duplicate_devices_matches_output_protocol_id(mock_fetch):
+    from sendspin_bridge.config import _player_id_from_mac
+
+    mac = "AA:BB:CC:DD:EE:FF"
+    pid = _player_id_from_mac(mac)
+    mock_fetch.return_value = [
+        {
+            "player_id": "ma-generated-id",
+            "display_name": "ENEBY20 @ Other Bridge",
+            "output_protocols": [{"output_protocol_id": pid}],
+        }
+    ]
+
+    cfg = _make_config(devices=[{"mac": mac, "name": "ENEBY20"}])
+    warnings = find_duplicate_devices(cfg, "HAOS")
+
+    assert len(warnings) == 1
+    assert warnings[0].other_bridge_name == "ENEBY20 @ Other Bridge"
+
+
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
+def test_find_duplicate_devices_matches_display_name_on_another_bridge(mock_fetch):
+    mock_fetch.return_value = [{"player_id": "ma-generated-id", "display_name": "ENEBY20 @ Other Bridge"}]
+
+    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "name": "ENEBY20"}])
+    warnings = find_duplicate_devices(cfg, "HAOS")
+
+    assert len(warnings) == 1
+    assert warnings[0].mac == "AA:BB:CC:DD:EE:FF"
+
+
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
 def test_find_duplicate_devices_no_conflict_own_bridge(mock_fetch):
     from sendspin_bridge.config import _player_id_from_mac
 

@@ -176,6 +176,7 @@ def main() -> None:
         "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
         "SENDSPIN_PORT": _int_opt(opts, "sendspin_port", 9000),
+        "SENDSPIN_PAIRING": False,
         "WEB_PORT": None,
         "BASE_LISTEN_PORT": _optional_int_opt(opts, "base_listen_port"),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
@@ -236,6 +237,7 @@ def main() -> None:
         # save".  Includes every EXPERIMENTAL_* flag plus the broader
         # auth / update / sync / proxy family.
         web_ui_only_keys = (
+            "SENDSPIN_PAIRING",
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
             "EXPERIMENTAL_PA_MODULE_RELOAD",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",

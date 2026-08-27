@@ -113,6 +113,21 @@ def test_build_device_snapshot_includes_global_enabled_flag(monkeypatch):
     assert snapshot.enabled is False
 
 
+def test_build_device_snapshot_exposes_pairing_config_and_runtime_status(monkeypatch):
+    client = _make_client()
+    client.status.update({"pairing_window_open": True, "pairing_pin": "123456"})
+    monkeypatch.setattr(
+        "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
+        lambda: {"SENDSPIN_PAIRING": True, "BLUETOOTH_DEVICES": []},
+    )
+
+    data = build_device_snapshot(client).to_dict()
+
+    assert data["sendspin_pairing"] is True
+    assert data["pairing_window_open"] is True
+    assert data["pairing_pin"] == "123456"
+
+
 def test_build_device_snapshot_includes_room_context_and_transfer_readiness(monkeypatch):
     client = _make_client()
     client.status.update({"reconnecting": True})

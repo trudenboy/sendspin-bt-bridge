@@ -89,14 +89,14 @@ Additionally, use this manual checklist when testing changes:
 - [ ] Recovery guidance and release/reclaim actions appear for disconnected or released speakers
 - [ ] The bug-report flow downloads diagnostics and opens a prefilled GitHub issue description
 
-For HA addon changes, additionally test via the HA Addon Store dev workflow (local repository). For documentation changes that include screenshots, prefer the built-in demo stack (`DEMO_MODE=true python sendspin_client.py`) as the repeatable local capture environment and stable screenshot/test stand for onboarding, recovery, diagnostics, and bug-report UX before resorting to live HA-only screenshots.
+For HA addon changes, additionally test via the HA Addon Store dev workflow (local repository). For documentation changes that include screenshots, prefer the built-in demo stack (`DEMO_MODE=true python -m sendspin_bridge`) as the repeatable local capture environment and stable screenshot/test stand for onboarding, recovery, diagnostics, and bug-report UX before resorting to live HA-only screenshots.
 
 ## Demo mode for docs, screenshots, and UX review
 
 The built-in demo mode is the canonical no-hardware environment for documentation work and most UI validation:
 
 ```bash
-DEMO_MODE=true python sendspin_client.py
+DEMO_MODE=true python -m sendspin_bridge
 ```
 
 Open `http://127.0.0.1:8080/` after startup. Demo mode ships a stable nine-player stand with:
@@ -125,7 +125,7 @@ Still use a non-demo environment for:
 The single `Dockerfile` builds published multi-arch images for `linux/amd64` and `linux/arm64` on every release channel, while `linux/arm/v7` is published only for stable releases.
 
 **S6 overlay** (v3.2.0.2) provides PID 1 process supervision:
-- `/init` → S6 boot → `rootfs/etc/s6-overlay/s6-rc.d/sendspin/run` → `/app/entrypoint.sh` → `python3 sendspin_client.py`
+- `/init` → S6 boot → `rootfs/etc/s6-overlay/s6-rc.d/sendspin/run` → `/app/entrypoint.sh` → `python -m sendspin_bridge`
 - Handles zombie reaping, signal forwarding (SIGTERM → graceful shutdown), and automatic restarts on crash
 
 **HA addon** (`ha-addon/Dockerfile`) is a thin `FROM` wrapper — no additional layers. HA Supervisor pulls the pre-built image via the `image:` field in `config.yaml`.
@@ -139,11 +139,12 @@ The single `Dockerfile` builds published multi-arch images for `linux/amd64` and
 
 Keep the current runtime layering in mind when making code or docs changes:
 
-- `entrypoint.sh` prepares D-Bus/audio, translates Home Assistant add-on options, and then `exec`s `python3 sendspin_client.py`.
-- `sendspin_client.py` is now the thin runtime entrypoint; bridge-wide startup sequencing lives in `bridge_orchestrator.py`.
+- `entrypoint.sh` prepares D-Bus/audio, translates Home Assistant add-on options, and then `exec`s `python -m sendspin_bridge`.
+- `sendspin_bridge.__main__` is the thin runtime entrypoint; bridge-wide startup sequencing lives in the bridge orchestrator.
 - `BridgeOrchestrator` owns runtime bootstrap, channel-aware port defaults, lifecycle publication, web startup, Music Assistant bootstrap, and long-running task assembly.
 - `SendspinClient` still owns one speaker lifecycle, but focused subprocess concerns live in `services.subprocess_command`, `services.subprocess_ipc`, `services.subprocess_stderr`, and `services.subprocess_stop`.
-- `services/daemon_process.py` + `services/bridge_daemon.py` run one isolated Sendspin daemon per speaker with `PULSE_SINK` preselected before audio starts.
+- The IPC daemon and bridge daemon run one isolated Sendspin client per speaker. aiosendspin 9 owns Noise transport, persistent identity, and optional pairing; the bridge decodes FLAC to PCM and routes GStreamer through an explicit `pulsesink device=<sink name>`.
+- Sendspin PIN pairing is optional and off by default (`SENDSPIN_PAIRING=false`); unpaired access does not disable Noise encryption.
 - `state.py` plus the newer lifecycle/read-side services publish startup progress, snapshots, update info, onboarding guidance, recovery guidance, operator guidance, and SSE payloads to the UI/API.
 - Treat `/api/diagnostics`, `/api/bridge/telemetry`, `/api/hooks`, `/api/onboarding/assistant`, `/api/recovery/assistant`, and `/api/operator/guidance` as operator-facing contracts when updating docs, support flows, or dashboard UI.
 - `DEMO_MODE=true` swaps the hardware/runtime layers for deterministic mocks; use it when you need repeatable screenshot states or to exercise guidance/diagnostics flows without Bluetooth hardware.

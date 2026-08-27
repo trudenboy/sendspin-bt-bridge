@@ -32,17 +32,13 @@ jobs:
       - name: Resolve pinned runtime versions
         id: versions
         run: |
-          sendspin_version="$(sed -n -E 's/^sendspin==//p' requirements.txt | head -n 1)"
           aiosendspin_version="$(sed -n -E 's/^aiosendspin(\[server\])?==//p' requirements.txt | head -n 1)"
-          test -n "${sendspin_version}"
           test -n "${aiosendspin_version}"
-          echo "sendspin=${sendspin_version}" >> "$GITHUB_OUTPUT"
           echo "aiosendspin=${aiosendspin_version}" >> "$GITHUB_OUTPUT"
 
       - name: Build image
         run: |
           docker build \
-            --build-arg "SENDSPIN_VERSION=${{ steps.versions.outputs.sendspin }}" \
             --tag sendspin-pr-smoke:local \
             .
 

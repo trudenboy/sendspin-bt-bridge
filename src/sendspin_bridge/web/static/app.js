@@ -2658,6 +2658,11 @@ function _actionButtonIconSvg(kind, className) {
             '<path d="M8.5 15.5l7-7"/>' +
         '</svg>';
     }
+    if (kind === 'key') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="7.5" cy="15.5" r="3.5"/><path d="M10.2 13.2 21 2.5"/><path d="M16 3h5v5"/>' +
+        '</svg>';
+    }
     return '';
 }
 
@@ -3115,6 +3120,7 @@ function _getListArtworkHtml(mediaState) {
 }
 
 function buildListView(entries, hiddenCount) {
+    entries.forEach(function(entry) { _updatePairingModalFromDevice(entry.dev); });
     if (!entries.length) {
         return '<div class="list-view-shell">' +
             _renderEmptyStateHtml({
@@ -3196,6 +3202,9 @@ function buildListView(entries, hiddenCount) {
             ? 'Wake from standby — reconnect Bluetooth and resume audio'
             : 'Enter standby — disconnect Bluetooth to save speaker battery';
         var detailActions = '<div class="list-detail-actions" data-action="noop">' +
+            (dev.sendspin_pairing
+                ? '<button type="button" class="action-btn list-action-btn accent" id="dbtn-ss-pair-' + i + '" data-action="open-sendspin-pairing" data-arg="' + i + '" title="Open a Music Assistant pairing window"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('key', 'Pair with MA') + '</button>'
+                : '') +
             (mgmtEnabled
                 ? '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>'
                 : '<button type="button" class="action-btn list-action-btn success" id="dbtn-release-' + i + '" data-action="bt-toggle-management" data-arg="' + i + '" title="Resume BT management and auto-reconnect">' + _actionButtonInnerHtml('release', 'Reclaim') + '</button>') +
@@ -3551,6 +3560,7 @@ function buildDeviceCard(i) {
           '<span id="dbattery-' + i + '" style="display:none"></span>' +
           '<span id="drssi-' + i + '" style="display:none"></span>' +
           '<span id="dlatency-chip-' + i + '" style="display:none"></span>' +
+          '<span class="chip meta-badge is-neutral" id="dpin-' + i + '" style="display:none"></span>' +
         '</div>' +
         '<div class="card-controls">' +
           _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
@@ -3594,6 +3604,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-pair-' + i + '" data-action="bt-start-pairing" data-arg="' + i + '" style="display:none" title="Put speaker in pairing mode, then click here">' + _actionButtonInnerHtml('reconnect', 'Start pairing') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-ss-pair-' + i + '" data-action="open-sendspin-pairing" data-arg="' + i + '" style="display:none" title="Open a Music Assistant pairing window for this speaker">' + _actionButtonInnerHtml('key', 'Pair with MA') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-claim-' + i + '" data-action="bt-claim-audio" data-arg="' + i + '" title="Claim audio source on multipoint speaker (push Playing via AVRCP)">' + _actionButtonInnerHtml('play', 'Claim') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" data-action="wake-device" data-arg="' + i + '" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
@@ -3644,6 +3655,15 @@ function populateDeviceCard(i, dev) {
         return peer.enabled !== false && dev.group_id && peer.group_id === dev.group_id;
     }).map(function(peer) { return Number(peer.static_delay_ms || 0); });
     var latencyUi = _getLatencyUiState(dev, peerDelays);
+    var pinChip = document.getElementById('dpin-' + i);
+    if (pinChip) {
+        var pin = dev.pairing_pin ? String(dev.pairing_pin) : '';
+        pinChip.style.display = pin ? '' : 'none';
+        pinChip.textContent = pin ? ('PIN ' + pin) : '';
+        pinChip.title = pin ? 'Enter this PIN in Music Assistant to pair' : '';
+    }
+    _updatePairingModalFromDevice(dev);
+
     if (latencyChip) {
         latencyChip.style.display = latencyUi.chipVisible ? '' : 'none';
         latencyChip.className = 'chip meta-badge is-neutral';
@@ -4035,6 +4055,11 @@ function populateDeviceCard(i, dev) {
             } else {
                 pairBtn.style.display = 'none';
             }
+        }
+        var ssPairBtn = document.getElementById('dbtn-ss-pair-' + i);
+        if (ssPairBtn) {
+            ssPairBtn.style.display = dev.sendspin_pairing ? '' : 'none';
+            ssPairBtn.disabled = !dev.sendspin_pairing || _isDeviceDisabled(dev);
         }
     }
 
@@ -4645,6 +4670,130 @@ function onDevicePause(i, btnId) {
             }
         }
     }).finally(function() { _unlockBtn(pauseBtnId); });
+}
+
+var _pairingModal = {overlay: null, pinEl: null, hintEl: null, playerId: null};
+
+function _pairingModalBody(pin, windowOpen) {
+    if (pin) return 'Enter this PIN in Music Assistant';
+    if (windowOpen) return 'Window is open for 5 minutes. In Music Assistant, pair this player — the PIN appears here when MA starts the exchange.';
+    return 'Opening pairing window\u2026';
+}
+
+function _updatePairingModalFromDevice(dev) {
+    if (!_pairingModal.overlay || !dev) return;
+    if (_pairingModal.playerId && dev.player_id !== _pairingModal.playerId) return;
+    if (!dev.sendspin_pairing || dev.enabled === false) {
+        _closePairingModal();
+        return;
+    }
+    var pin = dev.pairing_pin ? String(dev.pairing_pin) : '';
+    if (_pairingModal.pinEl) _pairingModal.pinEl.textContent = pin || '\u2014';
+    if (_pairingModal.hintEl) _pairingModal.hintEl.textContent = _pairingModalBody(pin, !!dev.pairing_window_open);
+}
+
+function _closePairingModal() {
+    if (_pairingModal.overlay) _pairingModal.overlay.remove();
+    _pairingModal = {overlay: null, pinEl: null, hintEl: null, playerId: null};
+}
+
+function _showPairingModal(playerId, playerName, pin, windowOpen) {
+    _closePairingModal();
+    var overlay = document.createElement('div');
+    overlay.className = 'bugreport-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) _closePairingModal(); };
+
+    var modal = document.createElement('div');
+    modal.className = 'bugreport-modal';
+    modal.style.maxWidth = '420px';
+
+    var header = document.createElement('div');
+    header.className = 'bugreport-header';
+    header.innerHTML = '<span class="bugreport-header-title">Pair with Music Assistant</span>';
+    var closeX = document.createElement('button');
+    closeX.className = 'bugreport-close';
+    closeX.innerHTML = '\u00d7';
+    closeX.title = 'Close';
+    closeX.onclick = _closePairingModal;
+    header.appendChild(closeX);
+    modal.appendChild(header);
+
+    var body = document.createElement('div');
+    body.className = 'bugreport-body';
+    var nameEl = document.createElement('p');
+    nameEl.style.cssText = 'margin:0 0 8px;opacity:.8';
+    nameEl.textContent = playerName || '';
+    var hintEl = document.createElement('p');
+    hintEl.style.cssText = 'margin:0 0 16px';
+    hintEl.textContent = _pairingModalBody(pin, windowOpen);
+    var pinEl = document.createElement('div');
+    pinEl.style.cssText = 'font-size:32px;letter-spacing:.28em;font-weight:700;text-align:center;padding:12px 0';
+    pinEl.textContent = pin || '\u2014';
+    body.appendChild(nameEl);
+    body.appendChild(hintEl);
+    body.appendChild(pinEl);
+    modal.appendChild(body);
+
+    var footer = document.createElement('div');
+    footer.className = 'bugreport-footer';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'bugreport-btn primary';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = _closePairingModal;
+    footer.appendChild(closeBtn);
+    modal.appendChild(footer);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    _pairingModal = {overlay: overlay, pinEl: pinEl, hintEl: hintEl, playerId: playerId};
+}
+
+async function openSendspinPairing(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return;
+    if (!dev.sendspin_pairing || dev.enabled === false) {
+        showToast(dev.sendspin_pairing ? 'This player is disabled' : 'Sendspin pairing is disabled', 'error');
+        return;
+    }
+    var playerId = dev.player_id || null;
+    var playerName = dev.player_name || null;
+    if (!playerId) {
+        showToast('Player identity is unavailable', 'error');
+        return;
+    }
+    var status = document.getElementById('dbt-action-status-' + i);
+    var btn = document.getElementById('dbtn-ss-pair-' + i);
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Opening pairing window\u2026';
+    _showPairingModal(playerId, playerName, dev.pairing_pin, true);
+    try {
+        var resp = await fetch(API_BASE + '/api/pairing/window', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_id: playerId})
+        });
+        var data = await resp.json();
+        if (data && data.success) {
+            if (status) status.textContent = 'Pairing window open';
+            _updatePairingModalFromDevice({
+                player_id: playerId,
+                pairing_window_open: true,
+                pairing_pin: dev.pairing_pin,
+                sendspin_pairing: true,
+                enabled: dev.enabled
+            });
+        } else {
+            showToast((data && data.error) || 'Could not open pairing window', 'error');
+            if (status) status.textContent = '';
+            _closePairingModal();
+        }
+    } catch (e) {
+        showToast('Could not open pairing window', 'error');
+        if (status) status.textContent = '';
+        _closePairingModal();
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 // ---- BT Actions (reconnect / pair) ----
@@ -9147,6 +9296,7 @@ function _buildConfigPayload(options) {
     config.EXPERIMENTAL_PA_MODULE_RELOAD = !!(document.getElementById('experimental-pa-module-reload') || {}).checked;
     config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY = !!(document.getElementById('experimental-adapter-auto-recovery') || {}).checked;
     config.RSSI_BADGE = !!(document.getElementById('rssi-badge') || {}).checked;
+    config.SENDSPIN_PAIRING = !!(document.getElementById('sendspin-pairing') || {}).checked;
     config.AUTH_ENABLED = !!(document.getElementById('auth-enabled') || {}).checked;
     config.BRUTE_FORCE_PROTECTION = !!(document.getElementById('brute-force-protection') || {}).checked;
     config.HA_AREA_NAME_ASSIST_ENABLED = !!(document.getElementById('ha-area-name-assist-enabled') || {}).checked;
@@ -12096,6 +12246,8 @@ async function loadConfig(options) {
         var expAdapterRecoveryCheck = document.getElementById('experimental-adapter-auto-recovery');
         if (expAdapterRecoveryCheck) expAdapterRecoveryCheck.checked = !!config.EXPERIMENTAL_ADAPTER_AUTO_RECOVERY;
         _applyCompatibilityCapabilities(config);
+        var sendspinPairingCheck = document.getElementById('sendspin-pairing');
+        if (sendspinPairingCheck) sendspinPairingCheck.checked = !!config.SENDSPIN_PAIRING;
         var rssiBadgeCheck = document.getElementById('rssi-badge');
         if (rssiBadgeCheck) {
             // Default ON when key absent (fresh / migrated config); honour
@@ -15381,6 +15533,7 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'open-sendspin-pairing':    (_el, _ev, arg) => openSendspinPairing(Number(arg)),
     'config-latency-nudge':     (el, ev, arg) => nudgeConfigDeviceLatency(el, ev, arg),
     'toggle-config-latency-step': toggleConfigLatencyStep,
     'config-latency-test-tone': (el) => playConfigDeviceCalibrationTone(el),

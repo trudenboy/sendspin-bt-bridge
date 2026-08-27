@@ -37,6 +37,47 @@ def _is_own_bridge_player(display_name: str, own_bridge_name: str) -> bool:
     return display_name.rstrip().endswith(suffix)
 
 
+def _player_display_name(player: dict[str, Any]) -> str:
+    return str(player.get("display_name") or player.get("name") or "").strip()
+
+
+def _output_protocol_ids(player: dict[str, Any]) -> set[str]:
+    protocols = player.get("output_protocols") or []
+    if not isinstance(protocols, list):
+        return set()
+    return {
+        str(entry.get("output_protocol_id") or "").strip()
+        for entry in protocols
+        if isinstance(entry, dict) and entry.get("output_protocol_id")
+    }
+
+
+def _matching_ma_name(
+    players: list[Any],
+    *,
+    mac: str,
+    device_name: str,
+    own_bridge_name: str,
+) -> str | None:
+    """Return the MA display name if this speaker is already on another bridge."""
+    legacy_id = _player_id_from_mac(mac)
+    name_prefix = f"{device_name} @ " if device_name else ""
+    for player in players:
+        if not isinstance(player, dict):
+            continue
+        display = _player_display_name(player)
+        player_id = str(player.get("player_id") or "").strip()
+        matched = player_id == legacy_id or legacy_id in _output_protocol_ids(player)
+        if not matched and name_prefix and display.startswith(name_prefix):
+            matched = True
+        if not matched or not display:
+            continue
+        if _is_own_bridge_player(display, own_bridge_name):
+            continue
+        return display
+    return None
+
+
 def find_duplicate_devices(
     config: dict[str, Any],
     bridge_name: str,
@@ -66,12 +107,6 @@ def find_duplicate_devices(
         logger.debug("Duplicate device check: MA API unavailable: %s", exc)
         return []
 
-    players_by_id: dict[str, str] = {
-        str(p.get("player_id") or "").strip(): str(p.get("display_name") or p.get("name") or "").strip()
-        for p in players
-        if isinstance(p, dict)
-    }
-
     warnings: list[DuplicateDeviceWarning] = []
     for dev in devices:
         if not isinstance(dev, dict):
@@ -79,19 +114,16 @@ def find_duplicate_devices(
         mac = _normalize_mac(dev.get("mac"))
         if not mac:
             continue
-        player_id = _player_id_from_mac(mac)
-        existing_name = players_by_id.get(player_id)
+        device_name = str(dev.get("name") or mac)
+        existing_name = _matching_ma_name(players, mac=mac, device_name=device_name, own_bridge_name=bridge_name)
         if not existing_name:
             continue
-        if _is_own_bridge_player(existing_name, bridge_name):
-            continue
-        device_name = str(dev.get("name") or mac)
         warnings.append(
             DuplicateDeviceWarning(
                 mac=mac,
                 device_name=device_name,
                 other_bridge_name=existing_name,
-                player_id=player_id,
+                player_id=_player_id_from_mac(mac),
             )
         )
 
@@ -116,22 +148,13 @@ def find_scan_device_conflicts(
         logger.debug("Scan conflict check: MA API unavailable: %s", exc)
         return {}
 
-    players_by_id: dict[str, str] = {
-        str(p.get("player_id") or "").strip(): str(p.get("display_name") or p.get("name") or "").strip()
-        for p in players
-        if isinstance(p, dict)
-    }
-
     conflicts: dict[str, str] = {}
     for raw_mac in macs:
         mac = _normalize_mac(raw_mac)
         if not mac:
             continue
-        player_id = _player_id_from_mac(mac)
-        existing_name = players_by_id.get(player_id)
+        existing_name = _matching_ma_name(players, mac=mac, device_name="", own_bridge_name=own_bridge_name)
         if not existing_name:
-            continue
-        if _is_own_bridge_player(existing_name, own_bridge_name):
             continue
         conflicts[mac] = f"Already registered as '{existing_name}' in Music Assistant"
 

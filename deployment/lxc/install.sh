@@ -100,7 +100,9 @@ apt-get install -y -qq \
   python3 python3-pip python3-venv python3-full \
   bluez-tools \
   pulseaudio pulseaudio-module-bluetooth \
-  alsa-utils dbus libportaudio2 \
+  gstreamer1.0-plugins-base gstreamer1.0-pulseaudio gir1.2-gstreamer-1.0 \
+  libcairo2-dev libgirepository-2.0-dev \
+  alsa-utils dbus \
   avahi-daemon avahi-utils libnss-mdns \
   curl wget ca-certificates git jq tzdata procps \
   gcc python3-dev \
@@ -126,40 +128,7 @@ msg "Installing Python dependencies..."
 # whole class of bug disappear — pip writes to /usr/local/lib/.../site-packages/
 # which sits ahead of /usr/lib/python3/dist-packages/ on sys.path.
 
-ARCH=$(uname -m)
-if [[ "$ARCH" == "armv7l" || "$ARCH" == "armhf" ]]; then
-  warn "ARM 32-bit detected — applying av compatibility workaround"
-  # av>=14 (required by sendspin) fails to compile on armhf: AV_HWDEVICE_TYPE_D3D12VA
-  # is absent in Ubuntu 24.04's ffmpeg 6.1. av==12.3.0 is the latest compatible version.
-  # The FLAC decoder API difference (nb_channels missing in av<13) is handled by
-  # a monkey-patch in services/daemon_process.py at startup.
-  pip3 install --break-system-packages --ignore-installed -q av==12.3.0
-
-  # Install sendspin without its av>=14 dependency
-  pip3 install --break-system-packages --ignore-installed -q --no-deps 'sendspin>=5.3.0,<6'
-
-  # Install sendspin's other transitive dependencies
-  pip3 install --break-system-packages --ignore-installed -q \
-    aiosendspin pychromecast qrcode readchar sounddevice \
-    numpy pillow zeroconf casttube protobuf ifaddr
-
-  # Install remaining requirements.txt deps (exclude sendspin line)
-  grep -v '^sendspin' /opt/sendspin-client/requirements.txt | \
-    pip3 install --break-system-packages --ignore-installed -q -r /dev/stdin
-else
-  # requirements.txt cannot represent uv's intentional aiosendspin override:
-  # sendspin 7.5.0 still declares aiosendspin~=6.0.1, while the bridge needs
-  # aiosendspin 6.1.1 for Music Assistant's seek_relative controller state.
-  # Install the fully pinned dependency set first, then install sendspin
-  # without re-resolving its stale dependency metadata (same as Docker).
-  SENDSPIN_REQUIREMENT="$(sed -n '/^sendspin==/{p;q;}' /opt/sendspin-client/requirements.txt)"
-  [[ -n "${SENDSPIN_REQUIREMENT}" ]] \
-    || die "Pinned sendspin requirement missing from requirements.txt"
-  grep -v '^sendspin==' /opt/sendspin-client/requirements.txt | \
-    pip3 install --break-system-packages --ignore-installed -q -r /dev/stdin
-  pip3 install --break-system-packages --ignore-installed -q --no-deps \
-    "${SENDSPIN_REQUIREMENT}"
-fi
+pip3 install --break-system-packages --ignore-installed -q -r /opt/sendspin-client/requirements.txt
 # Install the bridge package itself so `python3 -m sendspin_bridge` resolves.
 pip3 install --break-system-packages -q --no-deps -e /opt/sendspin-client
 ok "Python dependencies installed"

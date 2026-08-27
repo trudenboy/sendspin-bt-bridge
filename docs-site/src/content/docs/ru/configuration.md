@@ -374,12 +374,13 @@ Bridge читает переменные окружения при запуск�
 |---|---|---|
 | `PULSE_SERVER` | *(автоопределение)* | Путь к сокету PulseAudio / PipeWire (например, `unix:/run/audio/pulse.sock`) |
 | `PULSE_LATENCY_MSEC` | из конфига (`600`) | Подсказка задержки PulseAudio в миллисекундах; берётся из ключа конфига `PULSE_LATENCY_MSEC` |
-| `PULSE_SINK` | *(на подпроцесс)* | PulseAudio-sink по умолчанию; задаётся отдельно для каждого подпроцесса устройства для маршрутизации звука на нужную колонку |
 | `AUDIO_UID` | `1000` | User ID для доступа к сокету PulseAudio |
 | `AUDIO_GID` | *(из сокета)* | Group ID для доступа к сокету PulseAudio |
 | `DBUS_SYSTEM_BUS_ADDRESS` | *(автоопределение)* | Путь к системному сокету D-Bus |
 | `STARTUP_DEPENDENCY_WAIT_ATTEMPTS` | `45` | Максимальное число попыток ожидания D-Bus, Bluetooth и аудио при старте |
 | `STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS` | `1` | Задержка в секундах между проверками зависимостей при старте |
+
+Маршрутизация синка конкретного устройства не является контрактом переменной окружения: daemon передаёт найденный sink напрямую в свойство GStreamer `pulsesink device`.
 
 ### Переменные аддона Home Assistant
 

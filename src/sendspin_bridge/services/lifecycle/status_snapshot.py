@@ -594,6 +594,7 @@ def build_device_snapshot(client, *, configured_enabled: dict[str, bool] | None 
     # threshold, and the bug-report classifier.
     device.extra["never_paired"] = bool(status.get("never_paired", False))
     device.extra["never_paired_since"] = status.get("never_paired_since")
+    device.extra["sendspin_pairing"] = bool(current_config.get("SENDSPIN_PAIRING", False))
     if bt_mgr:
         device.extra["max_reconnect_fails"] = _snap_max_reconn
         threshold = _snap_max_reconn

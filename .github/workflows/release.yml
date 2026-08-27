@@ -48,7 +48,6 @@ jobs:
       channel: ${{ steps.resolve.outputs.channel }}
       is_stable: ${{ steps.resolve.outputs.is_stable }}
       metadata_tags: ${{ steps.resolve.outputs.metadata_tags }}
-      sendspin_version: ${{ steps.resolve.outputs.sendspin_version }}
       aiosendspin_version: ${{ steps.resolve.outputs.aiosendspin_version }}
       source_branch: ${{ steps.resolve.outputs.source_branch }}
     steps:
@@ -106,8 +105,6 @@ jobs:
             exit 1
           fi
 
-          # Extract sendspin version from requirements.txt
-          SENDSPIN_VERSION="$(grep '^sendspin==' requirements.txt | sed 's/sendspin==//' || echo '')"
           AIOSENDSPIN_VERSION="$(sed -n -E 's/^aiosendspin(\[server\])?==//p' requirements.txt | head -n 1)"
           if [ -z "${AIOSENDSPIN_VERSION}" ]; then
             echo "::error::Pinned aiosendspin version not found in requirements.txt"
@@ -121,7 +118,6 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
           echo "is_stable=${IS_STABLE}" >> "$GITHUB_OUTPUT"
-          echo "sendspin_version=${SENDSPIN_VERSION}" >> "$GITHUB_OUTPUT"
           echo "aiosendspin_version=${AIOSENDSPIN_VERSION}" >> "$GITHUB_OUTPUT"
           echo "source_branch=${SOURCE_BRANCH}" >> "$GITHUB_OUTPUT"
           {
@@ -137,7 +133,6 @@ jobs:
             echo "- Tag: \`${TAG}\`"
             echo "- Channel: \`${CHANNEL}\`"
             echo "- Branch: \`${SOURCE_BRANCH}\`"
-            echo "- Sendspin: \`${SENDSPIN_VERSION}\`"
             echo "- aiosendspin: \`${AIOSENDSPIN_VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -264,7 +259,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
             BUGREPORTER_PRIVATE_KEY=${{ secrets.BUGREPORTER_PRIVATE_KEY }}
           sbom: true
           provenance: mode=max
@@ -565,7 +559,6 @@ jobs:
           platforms: linux/arm/v7
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            SENDSPIN_VERSION=${{ needs.prepare.outputs.sendspin_version }}
             BUGREPORTER_PRIVATE_KEY=${{ secrets.BUGREPORTER_PRIVATE_KEY }}
             UV_STAGE=uv-armv7
           cache-from: type=gha,scope=build-linux/arm/v7

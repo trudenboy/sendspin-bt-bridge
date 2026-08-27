@@ -59,7 +59,7 @@ The project now has two practical runtime modes:
 Run the local demo from the repository root:
 
 ```bash
-DEMO_MODE=true python sendspin_client.py
+DEMO_MODE=true python -m sendspin_bridge
 ```
 
 Then open `http://127.0.0.1:8080/`. Demo mode ships a stable nine-player fixture with onboarding, diagnostics, logs, group state, and MA metadata preloaded, so contributors can document and review the UI without live hardware.
@@ -99,12 +99,14 @@ Open `http://<host-ip>:8080/` and follow the onboarding checklist. Full Docker g
 ## Key capabilities
 
 - **Synchronized streaming** — uses the [Sendspin](https://www.music-assistant.io/player-support/sendspin/) protocol to deliver lossless audio with time-aligned playback, so grouped speakers stay in sync across rooms.
+- **Modern audio path** — aiosendspin 9 provides the Noise-encrypted connection and persistent per-speaker identity; the bridge decodes FLAC to PCM and sends it through GStreamer with `pulsesink device=<speaker sink>` routing.
+- **Optional Sendspin pairing** — PIN pairing is off by default for automatic discovery and playback. It can be required in Configuration without disabling Noise transport encryption when it is off.
 - **No console required** — scan for Bluetooth devices, pair them, and connect to Music Assistant entirely from the web UI. No `bluetoothctl`, no config files, no SSH.
 - **Deep Music Assistant integration** — now playing, album art, transport controls, group volume, shuffle and repeat — all synced in real time through a persistent connection to the MA server.
 - **Home Assistant automations** — every Bluetooth speaker becomes a Music Assistant player entity visible in HA. Use it in automations, scripts, scenes, dashboards, and with voice assistants.
 - **Reliable Bluetooth** — automatic reconnection, disconnect detection, and device health monitoring keep your speakers connected without manual intervention.
 - **Guided setup and recovery** — built-in onboarding, recovery guidance, and diagnostics-driven bug reporting reduce the amount of trial-and-error during setup and troubleshooting.
-- **Stable demo stand** — the public live demo and `DEMO_MODE=true python sendspin_client.py` provide a repeatable UI, screenshot, and test environment without Bluetooth hardware.
+- **Stable demo stand** — the public live demo and `DEMO_MODE=true python -m sendspin_bridge` provide a repeatable UI, screenshot, and test environment without Bluetooth hardware.
 - **Multi-room ready** — run one bridge per room or one bridge with many speakers. Multiple bridges share the same Music Assistant server for whole-home audio.
 - **Five deployment options** — Home Assistant addon, Docker, Raspberry Pi, Proxmox VE LXC, and OpenWrt LXC — same bridge, same web UI, same features everywhere.
 - **REST API and live updates** — 60+ automation-friendly endpoints with real-time SSE status stream for custom dashboards and integrations.

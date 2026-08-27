@@ -7,17 +7,13 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import aiosendspin.client
+import aiosendspin.models.player
+import aiosendspin.models.types  # noqa: F401
 import pytest
 
 # Ensure aiosendspin/sendspin stubs are available for import
 _MOCK_MODULES = [
-    "aiosendspin",
-    "aiosendspin.client",
-    "aiosendspin.models",
-    "aiosendspin.models.core",
-    "aiosendspin.models.player",
-    "aiosendspin.models.types",
-    "aiosendspin.models.visualizer",
     "sendspin",
     "sendspin.audio",
     "sendspin.audio_devices",
@@ -114,11 +110,16 @@ def _make_bridge_daemon(status: dict | None = None) -> BridgeDaemon:
     daemon._client = None
     daemon._listener = None  # type: ignore[assignment]
     daemon._audio_handler = None
+    daemon._player = None
+    daemon._decoder = None
+    daemon._decoder_format = None
+    daemon._next_play_time_us = None
     daemon._settings = mock_args.settings
     daemon._mpris = None
     daemon._static_delay_ms = 0.0
     daemon._connection_lock = None  # type: ignore[assignment]
     daemon._server_url = None
+    daemon._identity = SimpleNamespace(peer_id="test-peer-id")
     # Per-device BT identity (empty = fall back to bridge identity in DeviceInfo).
     daemon._bt_product_name = ""
     daemon._bt_manufacturer = ""
@@ -166,10 +167,10 @@ class TestVisualizerCallback:
 
 class TestConnectionLifecycle:
     @pytest.mark.asyncio
-    async def test_handle_server_connection_keeps_status_true_after_replacing_previous_client(self):
+    async def test_handle_server_connection_keeps_status_true_for_admitted_client(self):
         status = {
-            "server_connected": True,
-            "connected": True,
+            "server_connected": False,
+            "connected": False,
             "group_id": "old-group",
             "group_name": "Old Group",
             "server_port": 9000,
@@ -179,30 +180,14 @@ class TestConnectionLifecycle:
         daemon._audio_handler = MagicMock()
         daemon._handle_disconnect = AsyncMock()
 
-        class OldClient:
-            connected = True
-
-            async def _send_message(self, _payload):
-                return None
-
-            async def disconnect(self):
-                daemon._on_server_disconnect()
-
         class NewClient:
             connected = True
 
-            def add_server_command_listener(self, _listener):
-                return None
-
             async def attach_websocket(self, _ws):
+                daemon._mark_server_connected(_ws)
                 return None
 
-            def add_disconnect_listener(self, callback):
-                callback()
-                return lambda: None
-
-        daemon._client = OldClient()
-        daemon._create_client = MagicMock(return_value=NewClient())
+        daemon._client = NewClient()
         ws = SimpleNamespace(_req=SimpleNamespace(remote="192.168.10.10"))
 
         await daemon._handle_server_connection(ws)
@@ -213,6 +198,42 @@ class TestConnectionLifecycle:
         assert daemon._bridge_status["group_name"] is None
         assert daemon._bridge_status["connected_server_url"] == "192.168.10.10:9000"
         assert daemon._bridge_status["server_connected_at"]
+
+    @pytest.mark.asyncio
+    async def test_handle_server_connection_marks_connected_while_attach_blocks(self):
+        status = {"server_connected": False, "connected": False, "server_port": 8927}
+        daemon = _make_bridge_daemon(status)
+        daemon._connection_lock = asyncio.Lock()
+        daemon._handle_disconnect = AsyncMock()
+        admitted = asyncio.Event()
+        closed = asyncio.Event()
+
+        class BlockingClient:
+            connected = False
+
+            def add_server_command_listener(self, _listener):
+                return None
+
+            async def attach_websocket(self, _ws):
+                self.connected = True
+                admitted.set()
+                await closed.wait()
+                self.connected = False
+
+            def add_disconnect_listener(self, callback):
+                return lambda: None
+
+        daemon._client = BlockingClient()
+        ws = SimpleNamespace(_req=SimpleNamespace(remote="192.168.10.10"))
+        task = asyncio.create_task(daemon._handle_server_connection(ws))
+        await asyncio.wait_for(admitted.wait(), timeout=1)
+        await asyncio.sleep(0.1)
+        assert daemon._bridge_status["server_connected"] is True
+        closed.set()
+        await asyncio.wait_for(task, timeout=1)
+        # aiosendspin attach_websocket owns teardown and dispatches the one
+        # registered disconnect callback; the bridge must not tear down again.
+        assert daemon._handle_disconnect.await_count == 0
 
 
 class TestClientHelloRoles:
@@ -258,6 +279,9 @@ class TestClientHelloRoles:
                 return None
 
             def add_disconnect_listener(self, _listener):
+                return None
+
+            def add_server_command_listener(self, _listener):
                 return None
 
         client_mod = sys.modules["aiosendspin.client"]
@@ -335,6 +359,9 @@ class TestClientHelloRoles:
             def add_disconnect_listener(self, _l):
                 return None
 
+            def add_server_command_listener(self, _l):
+                return None
+
         sys.modules["aiosendspin.client"].SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]
         monkeypatch.setattr(
             compat_mod,
@@ -406,6 +433,9 @@ class TestClientHelloRoles:
             def add_disconnect_listener(self, _l):
                 return None
 
+            def add_server_command_listener(self, _l):
+                return None
+
         sys.modules["aiosendspin.client"].SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]
         monkeypatch.setattr(
             compat_mod,
@@ -469,6 +499,9 @@ class TestClientHelloRoles:
                 return None
 
             def add_disconnect_listener(self, _l):
+                return None
+
+            def add_server_command_listener(self, _l):
                 return None
 
         sys.modules["aiosendspin.client"].SendspinClient = FakeSendspinClient  # type: ignore[attr-defined]

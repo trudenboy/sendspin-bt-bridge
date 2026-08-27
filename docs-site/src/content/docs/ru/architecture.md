@@ -5,7 +5,7 @@ description: Подробная техническая архитектура se
 
 ## Обзор
 
-`sendspin-bt-bridge` — это **многопроцессный Python-бридж**, который соединяет аудиопротокол Sendspin Music Assistant с Bluetooth-колонками. Основной процесс теперь загружается через `BridgeOrchestrator`, который отвечает за bridge-wide runtime setup (загрузка конфига, channel-aware дефолты, публикацию lifecycle-state, bootstrap MA, запуск веб-сервера и сборку долгоживущих задач). Каждая настроенная колонка по-прежнему работает в собственном **изолированном подпроцессе** с выделенным контекстом PulseAudio, что обеспечивает корректную маршрутизацию аудио без взаимных помех между устройствами.
+`sendspin-bt-bridge` — это **многопроцессный Python-бридж**, который соединяет аудиопротокол Sendspin Music Assistant с Bluetooth-колонками. Основной процесс загружается через `BridgeOrchestrator`, который отвечает за bridge-wide runtime setup. Каждая настроенная колонка работает в собственном **изолированном подпроцессе**: aiosendspin 9 ведёт Noise-зашифрованное соединение и постоянную identity, bridge декодирует FLAC в PCM, а GStreamer направляет звук через `pulsesink device=<sink name>`. PIN-сопряжение Sendspin опционально и по умолчанию выключено; Noise-шифрование при unpaired access остаётся включённым.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -13,7 +13,7 @@ description: Подробная техническая архитектура se
 │                                                                 │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │              Main Python Process                         │   │
-│  │  sendspin_client.py  ·  asyncio event loop               │   │
+│  │  python -m sendspin_bridge · asyncio event loop          │   │
 │  │  Flask/Waitress API  ·  BluetoothManager × N             │   │
 │  │  MaMonitor  ·  state.py                                   │   │
 │  └───────────────┬──────────────────────────────────────────┘   │
@@ -21,8 +21,8 @@ description: Подробная техническая архитектура se
 │        ┌─────────┼─────────┐                                    │
 │        ▼         ▼         ▼                                    │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐                        │
-│  │ daemon   │ │ daemon   │ │ daemon   │  PULSE_SINK=bluez_sink… │
-│  │ process  │ │ process  │ │ process  │  per subprocess         │
+│  │ daemon   │ │ daemon   │ │ daemon   │  GStreamer pulsesink    │
+│  │ process  │ │ process  │ │ process  │  device=bluez_sink…     │
 │  │ ENEBY20  │ │ Yandex   │ │ Lenco    │                        │
 │  └────┬─────┘ └────┬─────┘ └────┬─────┘                        │
 │       │             │             │                              │
@@ -45,7 +45,7 @@ graph TD
         EP[entrypoint.sh<br/>D-Bus · Audio · HA config]
         EP --> MP
 
-        subgraph "Main Process — sendspin_client.py"
+        subgraph "Main Process — python -m sendspin_bridge"
             MP[main&#40;&#41;<br/>asyncio event loop]
             MP --> BO[BridgeOrchestrator]
             BO --> CFG[config.py<br/>load_config · port/channel defaults]
@@ -80,9 +80,10 @@ graph TD
         subgraph "Subprocess per Device"
             DP[daemon_process.py<br/>asyncio event loop]
             DP --> BD[BridgeDaemon<br/>services/bridge_daemon.py]
-            BD --> SD[SendspinDaemon<br/>sendspin-cli]
-            SD <-->|WebSocket| MA[Music Assistant]
-            BD --> PA[PulseAudio context<br/>PULSE_SINK=bluez_sink…]
+            BD --> AS[aiosendspin 9<br/>Noise · identity · pairing]
+            AS <-->|WebSocket| MA[Music Assistant]
+            BD --> DEC[Bridge FLAC decoder<br/>encoded chunks → PCM]
+            DEC --> PA[GStreamer pulsesink<br/>device=bluez_sink…]
         end
 
         subgraph "services/"
@@ -122,7 +123,7 @@ graph TD
 
 ### Основной процесс
 
-Точка входа runtime (`sendspin_client.py` `main()`) теперь остаётся намеренно тонкой. Основная последовательность запуска вынесена в `BridgeOrchestrator`: он загружает конфиг, рассчитывает channel-aware дефолты, публикует lifecycle-state, поднимает веб-сервер, инициализирует опциональную интеграцию с MA и собирает долгоживущие runtime-задачи.
+Точка входа runtime (`python -m sendspin_bridge`) остаётся намеренно тонкой. Основная последовательность запуска вынесена в `BridgeOrchestrator`: он загружает конфиг, рассчитывает channel-aware дефолты, публикует lifecycle-state, поднимает веб-сервер, инициализирует опциональную интеграцию с MA и собирает долгоживущие runtime-задачи.
 
 ```mermaid
 sequenceDiagram
@@ -137,7 +138,7 @@ sequenceDiagram
     participant UC as UpdateChecker
 
     SH->>SH: D-Bus setup · audio detect · HA config translate
-    SH->>MP: exec python3 sendspin_client.py
+    SH->>MP: exec python -m sendspin_bridge
     MP->>BO: initialize_runtime()
     BO->>LS: begin_startup()
     BO->>BO: load_config() · resolve channel/web/listen defaults
@@ -165,7 +166,7 @@ sequenceDiagram
 
 ### Подпроцесс для каждого устройства
 
-Каждый `SendspinClient.run()` порождает `daemon_process.py` как **изолированный подпроцесс**. Подпроцесс получает `PULSE_SINK=bluez_sink.<MAC>.a2dp_sink` внедрённым в своё окружение ещё до того, как установлено соединение с PulseAudio — это гарантирует корректную маршрутизацию звука с самого первого семпла, без необходимости вызова `move-sink-input`.
+Каждый `SendspinClient.run()` порождает `daemon_process.py` как **изолированный подпроцесс** и передаёт найденное имя синка в аргументах демона. Демон создаёт GStreamer `pulsesink` с `device=bluez_sink.<MAC>.a2dp_sink`, поэтому маршрутизация задана явно и не зависит от process-wide default sink.
 
 ```mermaid
 sequenceDiagram
@@ -175,7 +176,7 @@ sequenceDiagram
     participant MA as Music Assistant
 
     SC->>SC: configure_bluetooth_audio() → find sink
-    SC->>DP: asyncio.create_subprocess_exec(<br/>env={PULSE_SINK: bluez_sink.MAC.a2dp_sink})
+    SC->>DP: asyncio.create_subprocess_exec(daemon_process.py,<br/>args={sink_name: bluez_sink.MAC.a2dp_sink})
     DP->>DP: _setup_logging() — JSON lines on stdout
     DP->>BD: BridgeDaemon(args, status, sink_name)
     BD->>MA: WebSocket connect (Sendspin protocol)
@@ -234,15 +235,15 @@ sequenceDiagram
 
 ## Маршрутизация аудио
 
-Ключевой принцип: **каждый подпроцесс получает собственный клиентский контекст PulseAudio** с предустановленным `PULSE_SINK`. Это устраняет состояние гонки, при котором аудио могло начать воспроизводиться через синк по умолчанию до того, как бридж успевал его переключить.
+Ключевое правило маршрутизации задано на границе GStreamer: **каждый демон создаёт собственный `pulsesink`, в `device` которого записано имя синка этой колонки**. `BridgeDaemon` декодирует FLAC до передачи PCM в GStreamer, поэтому ни декодирование, ни маршрутизация не зависят от неявного состояния процесса.
 
 ```mermaid
 graph LR
     subgraph "Subprocess ENEBY20"
-        A1[aiosendspin<br/>Sendspin decoder] -->|PCM frames| PA1[libpulse<br/>PULSE_SINK=bluez_sink.FC_58…]
+        A1[aiosendspin 9<br/>encoded chunks] --> D1[Bridge FLAC decoder] -->|PCM frames| PA1[GStreamer pulsesink<br/>device=bluez_sink.FC_58…]
     end
     subgraph "Subprocess Yandex"
-        A2[aiosendspin<br/>Sendspin decoder] -->|PCM frames| PA2[libpulse<br/>PULSE_SINK=bluez_sink.2C_D2…]
+        A2[aiosendspin 9<br/>encoded chunks] --> D2[Bridge FLAC decoder] -->|PCM frames| PA2[GStreamer pulsesink<br/>device=bluez_sink.2C_D2…]
     end
 
     PA1 --> PAS[PulseAudio / PipeWire server]
@@ -385,7 +386,7 @@ pactl send-message /card/<card>/bluez5/set_codec a2dp_sink SBC
 
 ### Протокол Sendspin (для каждого подпроцесса)
 
-Каждый подпроцесс подключается к MA как **Sendspin-плеер** через WebSocket. `BridgeDaemon` переопределяет ключевые методы `SendspinDaemon` для перехвата обратных вызовов и обновления общего словаря состояния.
+Каждый подпроцесс подключается к MA как **Sendspin-плеер** через aiosendspin 9. `BridgeDaemon` композирует клиент, регистрирует protocol callbacks, владеет FLAC-декодированием и обновляет общее хранилище статуса. aiosendspin также предоставляет постоянную Noise identity и опциональный pairing store; `SENDSPIN_PAIRING=false` по умолчанию разрешает зашифрованный unpaired access.
 
 ```mermaid
 graph LR
@@ -667,7 +668,7 @@ flowchart TD
 
     SC1 --> RUN1[SC.run&#40;&#41;<br/>asyncio loop]
     RUN1 --> MON1[monitor_and_reconnect&#40;&#41;<br/>asyncio loop]
-    RUN1 --> SUB1[daemon subprocess<br/>PULSE_SINK=…]
+    RUN1 --> SUB1[daemon subprocess<br/>pulsesink device=…]
 ```
 
 ---
@@ -679,7 +680,7 @@ sequenceDiagram
     participant SH as entrypoint.sh
     participant HA as HA Supervisor
     participant TR as translate_ha_config.py
-    participant PY as sendspin_client.py main()
+    participant PY as python -m sendspin_bridge
     participant DB as D-Bus session
     participant PA as PulseAudio
     participant BM as BluetoothManager
@@ -697,7 +698,7 @@ sequenceDiagram
     SH->>SH: detect PA / PipeWire socket → export PULSE_SERVER
     SH->>DB: dbus-daemon --session → DBUS_SESSION_BUS_ADDRESS
 
-    SH->>PY: exec python3 sendspin_client.py
+    SH->>PY: exec python -m sendspin_bridge
     PY->>PY: load_config()
     PY->>PY: configure logging (LOG_LEVEL)
 
@@ -717,7 +718,7 @@ sequenceDiagram
         BM->>BM: poll is_device_connected()
         BM->>PA: configure_bluetooth_audio() → bluez_sink name
         SC->>SC: _start_sendspin_inner()
-        SC->>SC: asyncio.create_subprocess_exec(daemon_process.py, env={PULSE_SINK})
+        SC->>SC: asyncio.create_subprocess_exec(daemon_process.py, args={sink_name})
     end
 ```
 
@@ -962,7 +963,7 @@ sequenceDiagram
         SC->>PA: aensure_null_sink()
         PA-->>SC: sendspin_fallback ready
         SC->>DP: {"cmd":"set_standby","sink":"sendspin_fallback"}
-        DP->>DP: PULSE_SINK = sendspin_fallback
+        DP->>DP: retarget GStreamer pulsesink<br/>device=sendspin_fallback
         SC->>PA: amove_pid_sink_inputs(pid, sendspin_fallback)
         SC->>BM: disconnect_device()
         BM->>SPK: BT disconnect
@@ -981,7 +982,7 @@ sequenceDiagram
         BM->>SPK: connect_device()
         SPK-->>BM: BT connected
         SC->>DP: {"cmd":"set_standby"} (no sink → restore)
-        DP->>DP: PULSE_SINK = bluez_sink…
+        DP->>DP: retarget GStreamer pulsesink<br/>device=bluez_sink…
         SC->>PA: amove_pid_sink_inputs(pid, bluez_sink…)
         Note over SC: bt_standby = false
     end
@@ -991,10 +992,10 @@ sequenceDiagram
 
 | Компонент | Ответственность |
 |---|---|
-| `sendspin_client._enter_standby()` | Оркестрирует создание null-синка, перенаправление демона, отключение BT |
-| `sendspin_client._wake_from_standby()` | Устанавливает `bt_waking`, сигнализирует BT-монитору, инициирует reconnect |
-| `sendspin_client._reroute_to_bt_sink()` | После пробуждения: восстанавливает PULSE_SINK, перемещает потоки, сбрасывает флаги standby |
-| `daemon_process` обработчик `set_standby` | Переключает переменную `PULSE_SINK` между null-синком и BT-синком |
+| `SendspinClient._enter_standby()` | Оркестрирует создание null-синка, перенаправление демона, отключение BT |
+| `SendspinClient._wake_from_standby()` | Устанавливает `bt_waking`, сигнализирует BT-монитору, инициирует reconnect |
+| `SendspinClient._reroute_to_bt_sink()` | После пробуждения: перенастраивает Player, перемещает существующие потоки, сбрасывает флаги standby |
+| `daemon_process` обработчик `set_standby` | Пересоздаёт Player с явным `device` null-синка или BT-синка |
 | `bluetooth_manager.signal_standby_wake()` | Устанавливает `_standby_wake_event`, чтобы цикл BT-монитора проснулся немедленно |
 | `bt_monitor._standby_sleep()` | Прерываемый sleep — возвращается досрочно при срабатывании wake-события |
 | `services/pulse.aensure_null_sink()` | Создаёт `module-null-sink` с именем синка `sendspin_fallback` |
@@ -1060,7 +1061,7 @@ flowchart TD
 
 ```mermaid
 graph LR
-    SC[sendspin_client.py] --> BM[bluetooth_manager.py]
+    SC[bridge/client.py] --> BM[bluetooth/manager.py]
     SC --> ST[state.py]
     SC --> CFG[config.py]
     SC --> SVC_BD[services/bridge_daemon.py]
@@ -1083,7 +1084,8 @@ graph LR
     BM --> SVC_BT
 
     SVC_BD --> SVC_PA
-    SVC_BD --> SENDSPIN[sendspin-cli<br/>aiosendspin]
+    SVC_BD --> SENDSPIN[aiosendspin 9<br/>Noise protocol]
+    SVC_BD --> GST[GStreamer<br/>bridge decode → pulsesink]
 
     DP[services/daemon_process.py] --> SVC_BD
     DP --> SENDSPIN
@@ -1116,8 +1118,8 @@ graph LR
 
 | Пакет | Роль |
 |---|---|
-| `aiosendspin` | Асинхронная клиентская библиотека Sendspin WebSocket |
-| `sendspin` (local) | CLI + средство запуска демона (`SendspinDaemon`) |
+| `aiosendspin` 9 | Async-клиент Sendspin, Noise transport, постоянная identity/pairing store и codec helpers для bridge decoder |
+| `PyGObject` / GStreamer | PCM-пайплайн с timestamps и явный вывод `pulsesink device=<sink>` |
 | `Flask` + `Waitress` | Веб-интерфейс и REST API сервер |
 | `pulsectl_asyncio` | Асинхронное управление PulseAudio (маршрутизация синков, громкость) |
 | `dbus-fast` | Async D-Bus для мгновенного обнаружения отключения BT |

@@ -8,7 +8,7 @@ description: Референсная топология развёртывани�
 Для документационных скриншотов и детерминированного UI-review предпочтительнее встроенный **demo mode**, а не физический стенд:
 
 ```bash
-DEMO_MODE=true python sendspin_client.py
+DEMO_MODE=true python -m sendspin_bridge
 ```
 
 После запуска откройте `http://127.0.0.1:8080/`. Demo mode поднимает стабильный six-player fixture с representative diagnostics, logs, onboarding и состоянием Music Assistant, поэтому именно он считается канонической средой для captures в docs-site.
@@ -100,17 +100,17 @@ graph TB
 graph LR
     subgraph haos_bridge["HAOS Addon (stable track) — hci0 + hci1"]
         direction TB
-        H_MA["MA :9000"] -->|FLAC 44100/16/2| H_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.FC_58_FA_EB_08_6C<br/>.a2dp_sink"]
-        H_MA -->|FLAC 44100/16/2| H_D2["daemon :8929<br/>PULSE_SINK=bluez_sink<br/>.2C_D2_6B_B8_EC_5B<br/>.a2dp_sink"]
-        H_MA -->|FLAC 44100/16/2| H_D3["daemon :8932<br/>PULSE_SINK=bluez_sink<br/>.30_21_0E_0A_AE_5A<br/>.a2dp_sink"]
+        H_MA["MA :9000"] -->|FLAC 44100/16/2| H_D1["daemon :8928<br/>bridge FLAC→PCM<br/>pulsesink device=bluez_sink<br/>.FC_58_FA_EB_08_6C.a2dp_sink"]
+        H_MA -->|FLAC 44100/16/2| H_D2["daemon :8929<br/>bridge FLAC→PCM<br/>pulsesink device=bluez_sink<br/>.2C_D2_6B_B8_EC_5B.a2dp_sink"]
+        H_MA -->|FLAC 44100/16/2| H_D3["daemon :8932<br/>bridge FLAC→PCM<br/>pulsesink device=bluez_sink<br/>.30_21_0E_0A_AE_5A.a2dp_sink"]
     end
 
     subgraph proxmox_bridge["Proxmox LXC — hci0 00:15:83:FF:8F:2B"]
-        P_MA["MA :9000"] -->|FLAC 44100/16/2| P_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.6C_5C_3D_35_17_99<br/>.a2dp_sink"]
+        P_MA["MA :9000"] -->|FLAC 44100/16/2| P_D1["daemon :8928<br/>bridge FLAC→PCM<br/>pulsesink device=bluez_sink<br/>.6C_5C_3D_35_17_99.a2dp_sink"]
     end
 
     subgraph turris_bridge["Turris LXC — hci0 C0:FB:F9:62:D7:D6"]
-        T_MA["MA :9000"] -->|FLAC 44100/16/2| T_D1["daemon :8928<br/>PULSE_SINK=bluez_sink<br/>.20_74_CF_61_FB_D8<br/>.a2dp_sink"]
+        T_MA["MA :9000"] -->|FLAC 44100/16/2| T_D1["daemon :8928<br/>bridge FLAC→PCM<br/>pulsesink device=bluez_sink<br/>.20_74_CF_61_FB_D8.a2dp_sink"]
     end
 
     H_D1 -->|"A2DP / 0ms"| S1["ENEBY20<br/>58%"]
