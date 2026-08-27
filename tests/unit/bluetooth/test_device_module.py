@@ -313,3 +313,88 @@ async def test_with_no_controller_and_two_candidates_it_refuses_to_choose():
 
     assert await device.is_connected() is False
     assert device.object_path is None
+
+
+# ── unknown is not the same as no ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_bus_cannot_say_there_is_no_endpoint():
+    """ "No local A2DP endpoint" is an actionable claim; not knowing is not.
+
+    The warning built on this tells an operator their audio server never
+    claimed Bluetooth audio. Saying that because the bus was unreachable sends
+    them after a fault they do not have.
+    """
+    bluez = _bluez(connected=True)
+    bluez.fail["GetManagedObjects"] = RuntimeError("bus gone")
+
+    assert await _device(bluez).has_media_endpoint() is None
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_bluez_does_not_know_gives_no_endpoint_answer():
+    assert await _device(FakeBlueZ()).has_media_endpoint() is None
+
+
+@pytest.mark.asyncio
+async def test_a_resolved_speaker_with_no_endpoint_says_no():
+    assert await _device(_bluez(connected=True)).has_media_endpoint() is False
+
+
+# ── one subscription, however many readers ───────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_concurrent_reads_leave_exactly_one_subscription():
+    """The handler stacking this module exists to end, from its own side."""
+    bluez = _bluez(connected=True)
+    device = _device(bluez)
+
+    await asyncio.gather(*(device.state() for _ in range(6)))
+
+    assert bluez.subscriber_count == 1
+
+
+@pytest.mark.asyncio
+async def test_closing_takes_the_subscription_with_it():
+    bluez = _bluez(connected=True)
+    device = _device(bluez)
+    await device.state()
+
+    await device.close()
+
+    assert bluez.subscriber_count == 0
+
+
+# ── watchers come off again ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_a_watcher_can_be_taken_off_again():
+    """A caller that retries must not have its handler counted twice."""
+    device = _device(_bluez(connected=True))
+    seen: list[str] = []
+
+    def _handler(name: str, _value: object) -> None:
+        seen.append(name)
+
+    device.watch(_handler)
+    device.unwatch(_handler)
+    await device.state()
+    _bluez_notify = None
+
+    assert device.watcher_count == 0
+
+
+@pytest.mark.asyncio
+async def test_watching_twice_with_the_same_handler_counts_once():
+    device = _device(_bluez(connected=True))
+
+    def _handler(_name: str, _value: object) -> None:
+        pass
+
+    device.watch(_handler)
+    device.watch(_handler)
+
+    assert device.watcher_count == 1

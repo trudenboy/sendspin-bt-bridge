@@ -167,16 +167,18 @@ class BluetoothDevice:
                 return str(state) if state is not None else None
         return None
 
-    async def has_media_endpoint(self) -> bool:
+    async def has_media_endpoint(self) -> bool | None:
         """Whether a local audio backend registered an endpoint for this speaker.
 
-        The distinction the sink-not-found guidance rests on: no endpoint means
-        the audio server never offered A2DP, not that the speaker is silent.
+        Three answers, because the guidance built on this is actionable: ``False``
+        says the audio server never claimed Bluetooth audio, and sending an
+        operator after that fault because the bus was unreachable would be
+        worse than saying nothing. ``None`` is "could not check".
         """
         objects = await self._managed_objects()
         path = self._object_path
         if not objects or not path:
-            return False
+            return None
         return any(
             candidate.startswith(f"{path}/") and ENDPOINT_INTERFACE in interfaces
             for candidate, interfaces in objects.items()
@@ -379,9 +381,14 @@ class BluetoothDevice:
         if loop is None or not loop.is_running():
             coro.close()
             return default
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
         try:
-            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
+            return future.result(timeout=timeout)
         except TimeoutError:
+            # Cancel rather than abandon: a wedged bus is precisely when every
+            # worker that gives up would otherwise leave another read behind,
+            # still asking the questions nobody is waiting for.
+            future.cancel()
             logger.debug("[%s] blocking read timed out after %.1fs", self.address, timeout)
             return default
         except Exception as exc:
@@ -410,8 +417,22 @@ class BluetoothDevice:
     # -- signals ----------------------------------------------------------
 
     def watch(self, handler: Callable[[str, Any], None]) -> None:
-        """Call *handler(property_name, value)* whenever BlueZ changes one."""
-        self._watchers.append(handler)
+        """Call *handler(property_name, value)* whenever BlueZ changes one.
+
+        Registering the same handler twice keeps one: a caller that retries a
+        cycle must not have its work done twice per signal.
+        """
+        if handler not in self._watchers:
+            self._watchers.append(handler)
+
+    def unwatch(self, handler: Callable[[str, Any], None]) -> None:
+        """Stop calling *handler*; unknown handlers are ignored."""
+        if handler in self._watchers:
+            self._watchers.remove(handler)
+
+    @property
+    def watcher_count(self) -> int:
+        return len(self._watchers)
 
     async def close(self) -> None:
         """Drop the subscription and the bus.
@@ -514,9 +535,21 @@ class BluetoothDevice:
         return _unwrap(props[name])
 
     async def _subscribe(self) -> None:
-        """Listen for property changes, once per resolved object."""
+        """Listen for property changes, once per resolved object.
+
+        Under the lock: several readers resolve the object concurrently, and
+        each of them checking "is there a handler yet" before any of them
+        registers one is how handlers stack.
+        """
         if self._props_handler is not None or not self._object_path or self._bus is None:
             return
+        async with self._lock:
+            if self._props_handler is not None or not self._object_path or self._bus is None:
+                return
+            await self._subscribe_locked()
+
+    async def _subscribe_locked(self) -> None:
+        """Caller holds the lock."""
         try:
             introspection = await self._bus.introspect(BLUEZ, self._object_path)
             proxy = self._bus.get_proxy_object(BLUEZ, self._object_path, introspection)

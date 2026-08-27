@@ -731,3 +731,32 @@ def test_reconnect_attempt_logging_downgrades_after_first(caplog):
     assert levels[0] == logging.WARNING  # first attempt is visible
     assert levels[1] == logging.DEBUG  # subsequent attempts are quiet
     assert levels[2] == logging.DEBUG
+
+
+@pytest.mark.asyncio
+async def test_a_retried_monitor_cycle_does_not_stack_watchers(bt_manager):
+    """Each cycle registers a fresh handler bound to that cycle's events.
+
+    Without taking the last one off, a cycle that fails and retries would have
+    every Connected change processed once per attempt — including a duplicate
+    routing correction for every other speaker.
+    """
+    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
+
+    device = attach(bt_manager, bluez_knowing(bt_manager, connected=False))
+    cycles = {"n": 0}
+
+    async def _one_cycle_then_stop(*_args, **_kwargs):
+        cycles["n"] += 1
+        if cycles["n"] >= 3:
+            bt_manager.shutdown()
+        raise RuntimeError("cycle failed")
+
+    with (
+        patch("sendspin_bridge.bluetooth.monitor._inner_dbus_monitor", side_effect=_one_cycle_then_stop),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        await _monitor_dbus(bt_manager)
+
+    assert cycles["n"] >= 3, "the loop did not retry"
+    assert device.watcher_count == 0, "each retried cycle left its handler behind"

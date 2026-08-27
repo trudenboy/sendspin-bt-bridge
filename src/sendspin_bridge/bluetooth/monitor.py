@@ -260,7 +260,13 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
 
             device.watch(_on_property)
             logger.info("[%s] D-Bus monitoring active (connected=%s)", mgr.device_name, mgr.connected)
-            await _inner_dbus_monitor(mgr, device, disconnect_event, connect_event, loop)
+            try:
+                await _inner_dbus_monitor(mgr, device, disconnect_event, connect_event, loop)
+            finally:
+                # This cycle's handler is bound to this cycle's events; leaving
+                # it on would have the next cycle's signals processed twice —
+                # including a duplicate routing correction per other speaker.
+                device.unwatch(_on_property)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

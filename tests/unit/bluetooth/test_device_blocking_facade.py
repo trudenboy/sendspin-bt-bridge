@@ -114,6 +114,35 @@ def test_a_blocking_read_gives_up_rather_than_holding_the_caller(monkeypatch):
 # ── from the loop itself ─────────────────────────────────────────────────
 
 
+def test_a_read_that_timed_out_is_cancelled_not_abandoned(monkeypatch):
+    """A caller that gave up must not leave D-Bus work running behind it.
+
+    A wedged bus is exactly when this matters: every worker that times out
+    would otherwise add another task still asking the same questions.
+    """
+    import sendspin_bridge.bridge.state as state
+
+    loop, thread = _loop_in_thread()
+    monkeypatch.setattr(state, "get_main_loop", lambda: loop)
+    try:
+        cancelled = threading.Event()
+
+        async def _never():
+            try:
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        device = _device(_bluez(connected=True))
+        monkeypatch.setattr(device, "is_connected", _never)
+
+        assert device.is_connected_blocking(timeout=0.1) is False
+        assert cancelled.wait(timeout=5), "the abandoned read was left running"
+    finally:
+        _stop(loop, thread)
+
+
 def test_calling_the_facade_from_the_loop_is_refused(monkeypatch):
     """Waiting on the loop from the loop is a deadlock, not a slow call."""
     import sendspin_bridge.bridge.state as state
