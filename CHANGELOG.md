@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Speakers play through GStreamer to a named PulseAudio sink. Music Assistant
+  pairing uses the current encrypted Sendspin protocol; open a pairing window
+  from the bridge when a speaker first joins.
+
+### Changed
+
+- The Sendspin client library is 9.1.1. Players that Music Assistant already
+  knows from an older bridge are orphans after this upgrade and should be
+  removed; the next pairing creates a new player.
+
+### Removed
+
+- The `sendspin` application package is no longer installed or used.
+
 ## [2.76.0-rc.2] - 2026-08-27
 
 ### Changed

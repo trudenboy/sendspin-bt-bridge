@@ -1,5 +1,8 @@
 # Phase 1 — drop the `sendspin` package: implementation plan
 
+> **Superseded** by [`2026-08-27-rc3-gstreamer-aiosendspin-9.md`](2026-08-27-rc3-gstreamer-aiosendspin-9.md).
+> That plan ships GStreamer **and** aiosendspin 9.1.1 in 2.76.0-rc.3. This document kept aiosendspin at 6.1.1 and assumed encoded FLAC into GStreamer; neither is true of the rc.3 cut.
+
 > **For Claude:** Use superpowers:executing-plans for task-by-task execution.
 
 **Goal:** Remove the `sendspin` client application from the dependency tree. The daemon

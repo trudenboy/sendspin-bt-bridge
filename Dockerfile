@@ -31,71 +31,38 @@ ARG TARGETVARIANT
 # Source stage is chosen above based on the target platform.
 COPY --from=uv-source /uv /usr/local/bin/uv
 
-# Build-time system dependencies (needed to compile the portaudio bindings
-# and PyAV on architectures without pre-built wheels)
+# Build-time system dependencies (PyGObject / cairo; dbus-fast on armv7)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     pkg-config \
     python3-dev \
-    libbluetooth-dev \
-    portaudio19-dev \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libswresample-dev \
+    libcairo2-dev \
+    libgirepository-2.0-dev \
     libjpeg-dev \
     zlib1g-dev \
     libtiff-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Layer 1: All dependencies except sendspin — cached across releases.
-# SENDSPIN_VERSION is intentionally declared later so version bumps never
-# invalidate this expensive layer (numpy/PyAV compile from source on armv7).
-#
-# Wheel preference (was `pip install --prefer-binary` pre-uv migration):
-# uv prefers wheels over sdists by default, so no equivalent flag is
-# needed — see https://docs.astral.sh/uv/pip/compatibility/#prefer-binary.
-# On the armv7 path we additionally pass `--only-binary :all:` so the
-# build fails FAST if any dep lacks a piwheels wheel, instead of silently
-# spending 30+ minutes compiling numpy / PyAV from source. piwheels
-# coverage is comprehensive for our pinned versions; if a future bump
-# adds an sdist-only package, drop the flag for that one package.
+# Layer 1: Python dependencies from the exported pinset.
 COPY requirements.txt /tmp/
-# `--no-binary` whitelist for armv7: these three ship no `linux_armv7l`
-# wheel anywhere (PyPI nor piwheels) so under `--only-binary :all:` the
-# resolver would error out. Two are sdist-only (mpris-api, pyric) and
-# dbus-fast publishes wheels for x86_64/aarch64 only. Source compile is
-# fast (~3 min total — Cython for dbus-fast dominates; the others are
-# pure-Python or small C). Lift entries when upstream starts shipping
-# armv7 wheels or piwheels backfills them.
-RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
-    if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
+# `--no-binary` whitelist for armv7: these ship no `linux_armv7l` wheel
+# anywhere (PyPI nor piwheels) so under `--only-binary :all:` the resolver
+# would error out. PyGObject is built from source against the GIR in this
+# stage. Lift entries when upstream starts shipping armv7 wheels.
+RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
         uv pip install --system --no-cache --prefix=/install \
             --only-binary :all: \
             --no-binary dbus-fast \
             --no-binary mpris-api \
             --no-binary pyric \
+            --no-binary pygobject \
+            --no-binary pycairo \
             --extra-index-url https://www.piwheels.org/simple \
             --index-strategy unsafe-best-match \
-            -r /tmp/requirements-deps.txt; \
+            -r /tmp/requirements.txt; \
     else \
-        uv pip install --system --no-cache --prefix=/install -r /tmp/requirements-deps.txt; \
-    fi
-
-# Layer 2: sendspin package only — lightweight, rebuilt each release.
-# Every transitive dependency (including aiosendspin-mpris) is pinned and
-# installed in layer 1. Always use --no-deps here: sendspin 7.5.0 still
-# declares aiosendspin~=6.0.1, while the bridge intentionally overrides it to
-# 6.1.1 for Music Assistant's seek_relative controller-state support.
-ARG SENDSPIN_VERSION=""
-RUN if [ -n "${SENDSPIN_VERSION}" ]; then \
-        uv pip install --system --no-cache --no-deps --prefix=/install "sendspin==${SENDSPIN_VERSION}"; \
-    else \
-        uv pip install --system --no-cache --no-deps --prefix=/install "sendspin>=5.3.0,<6.0.0"; \
+        uv pip install --system --no-cache --prefix=/install -r /tmp/requirements.txt; \
     fi
 
 # Layer 3: the bridge package itself (sendspin_bridge). Install into the same
@@ -142,7 +109,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     pulseaudio \
     pulseaudio-module-bluetooth \
-    libportaudio2 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-pulseaudio \
+    gir1.2-gstreamer-1.0 \
+    libcairo2 \
+    libgirepository-2.0-0 \
     dbus \
     libdbus-1-3 \
     libdbus-glib-1-2 \
@@ -151,28 +122,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     curl \
     && if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
-        # piwheels' numpy / pillow wheels link against the distro's BLAS
-        # and image libs (no bundled libs/ directory like PyPI's manylinux
-        # wheels), so install the matching runtime sonames here.
         apt-get install -y --no-install-recommends \
-            libavcodec61 libavdevice61 libavfilter10 libavformat61 \
-            libavutil59 libswresample5 libswscale8 \
-            libopenblas0 \
             libjpeg62-turbo libpng16-16t64 libtiff6 libwebp7 libfreetype6; \
-    else \
-        # On amd64/arm64 PyAV bundles its own FFmpeg in av.libs/.
-        # Remove transitive FFmpeg/GStreamer/codec deps pulled by pulseaudio
-        # (~107 MB) — pactl/paplay work fine without them.
-        # Keep libasound2-plugins — it provides the ALSA→PulseAudio bridge
-        # (libasound_module_pcm_pulse.so) required by sounddevice/PortAudio.
-        dpkg --force-depends -r \
-            iso-codes \
-            libavcodec61 libavfilter10 libavformat61 libavdevice61 \
-            libavutil59 libswresample5 libswscale8 \
-            libx265-215 libx264-164 libaom3 libsvtav1enc2 \
-            libdav1d7 libvpx9 librsvg2-2 libcodec2-1.2 \
-            libgstreamer-plugins-base1.0-0 \
-            2>/dev/null || true; \
     fi \
     && rm -rf /var/lib/apt/lists/*
 

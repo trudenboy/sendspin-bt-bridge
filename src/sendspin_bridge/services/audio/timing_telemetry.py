@@ -32,8 +32,14 @@ def collect_timing_snapshot(audio_handler: object, client: object) -> dict[str, 
     callers receive ``None`` rather than a failed telemetry task.
     """
     getter = getattr(audio_handler, "get_timing_metrics", None)
+    metrics_fn = getattr(audio_handler, "metrics", None)
     try:
-        metrics = getter() if callable(getter) else {}
+        if callable(getter):
+            metrics = getter()
+        elif callable(metrics_fn):
+            metrics = metrics_fn()
+        else:
+            metrics = {}
     except Exception:
         metrics = {}
     if not isinstance(metrics, dict):
@@ -65,13 +71,23 @@ def collect_timing_snapshot(audio_handler: object, client: object) -> dict[str, 
     clock_offset = _safe_attr(time_filter, "offset") if clock_synchronized else None
     clock_uncertainty = _safe_attr(time_filter, "error") if clock_synchronized else None
 
+    latency_ms = metrics.get("backend_output_latency_ms")
+    if latency_ms is None:
+        latency_ms = _milliseconds(metrics.get("output_latency_us"))
+    buffered_ms = metrics.get("buffered_audio_ms")
+    if buffered_ms is None:
+        buffered_ms = _milliseconds(metrics.get("buffered_audio_us"))
+    sync_error_ms = metrics.get("playback_sync_error_ms")
+    if sync_error_ms is None:
+        sync_error_ms = _milliseconds(getattr(audio_handler, "_sync_error_filtered_us", None))
+
     return {
         "timing_metrics_available": bool(metrics),
-        "backend_output_latency_ms": _milliseconds(metrics.get("output_latency_us")),
-        "buffered_audio_ms": _milliseconds(metrics.get("buffered_audio_us")),
+        "backend_output_latency_ms": latency_ms,
+        "buffered_audio_ms": buffered_ms,
         "playback_position_us": playback_position,
         "dac_samples_recorded": dac_samples,
-        "playback_sync_error_ms": _milliseconds(getattr(audio_handler, "_sync_error_filtered_us", None)),
+        "playback_sync_error_ms": sync_error_ms,
         "clock_synchronized": clock_synchronized,
         "clock_offset_ms": _milliseconds(clock_offset),
         "clock_uncertainty_ms": _milliseconds(clock_uncertainty),

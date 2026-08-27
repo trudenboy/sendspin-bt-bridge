@@ -55,9 +55,18 @@ WirePlumber and PulseAudio each spell it differently, so the bridge tries
 several candidates when connecting and must be able to read any of them back.
 Written and parsed by one grammar.
 
-**Daemon** — the per-speaker subprocess that runs the Sendspin client with
-that speaker's sink in its environment. One speaker, one daemon, one audio
-context.
+**Daemon** — the per-speaker subprocess that runs the Sendspin client.
+One speaker, one daemon, one Player.
+
+**Player** — the daemon's audio output. It takes PCM chunks with a play
+time and renders them through GStreamer to a named sink.
+
+**Identity** — the long-term X25519 keypair a daemon presents on the
+Sendspin wire. Persisted per speaker so Music Assistant sees the same
+client after a restart.
+
+**Pairing store** — the credentials a daemon keeps for servers it has
+paired with, plus the last playback server. Persisted next to the identity.
 
 ## Music Assistant
 

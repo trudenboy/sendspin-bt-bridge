@@ -278,9 +278,13 @@ def _collect_sink_input_diagnostics() -> list[dict]:
 
 
 def _collect_portaudio_device_diagnostics() -> list[dict]:
+    try:
+        devices = query_audio_devices()
+    except Exception:
+        return []
     return [
         {"index": d.index, "name": d.name, "is_default": d.is_default}
-        for d in query_audio_devices()
+        for d in devices
         if d.output_channels > 0
     ]
 

@@ -150,39 +150,10 @@ record_release_ref() {
 }
 
 update_python_dependencies() {
-  # CRITICAL: pip failures here are the root cause of #324 — silently
-  # swallowing them leaves a stale ``sendspin`` package on disk while
-  # the bridge code expects the newer API. Always surface non-zero
-  # exit codes via die().
   local requirements_file="$1"
-  local arch
-  local sendspin_requirement
 
-  arch=$(uname -m)
-  if [[ "${arch}" == "armv7l" || "${arch}" == "armhf" ]]; then
-    # armv7l: sendspin requires av>=14 which doesn't compile on armhf.
-    # Keep av==12.3.0 and install sendspin with --no-deps.
-    # The FLAC decoder API difference (nb_channels missing in av<13) is handled by
-    # a monkey-patch in src/sendspin_bridge/services/ipc/daemon_process.py at startup.
-    # The 5.x ceiling is intentional — av<13 + sendspin 7.x is unsupported.
-    pip3 install --break-system-packages -q --no-deps -U 'sendspin>=5.3.0,<6' \
-      || die "pip3 install of sendspin (armv7 --no-deps branch) failed; aborting upgrade"
-    grep -v '^sendspin' "${requirements_file}" | \
-      pip3 install --break-system-packages -q -r /dev/stdin \
-        || die "pip3 install of remaining requirements (armv7 branch) failed; aborting upgrade"
-  else
-    # requirements.txt cannot encode uv's aiosendspin override. Keep the
-    # pinned dependency set, but prevent pip from re-resolving sendspin's
-    # stale aiosendspin~=6.0.1 metadata (same split used by Docker).
-    sendspin_requirement="$(sed -n '/^sendspin==/{p;q;}' "${requirements_file}")"
-    [[ -n "${sendspin_requirement}" ]] \
-      || die "Pinned sendspin requirement missing from requirements.txt; aborting upgrade"
-    grep -v '^sendspin==' "${requirements_file}" | \
-      pip3 install --break-system-packages -q -r /dev/stdin \
-        || die "pip3 install of requirements excluding sendspin failed; aborting upgrade. Check that the host has network access."
-    pip3 install --break-system-packages -q --no-deps -U "${sendspin_requirement}" \
-      || die "pip3 install of pinned sendspin (--no-deps) failed; aborting upgrade"
-  fi
+  pip3 install --break-system-packages -q -r "${requirements_file}" \
+    || die "pip3 install of requirements failed; aborting upgrade. Check that the host has network access."
 }
 
 register_editable_install() {

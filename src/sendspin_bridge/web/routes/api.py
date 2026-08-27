@@ -28,7 +28,7 @@ from sendspin_bridge.services.audio.pulse import (
     set_sink_volume,
 )
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
-from sendspin_bridge.services.ipc.commands import Pause, Play, SetMute, SetVolume
+from sendspin_bridge.services.ipc.commands import OpenPairingWindow, Pause, Play, SetMute, SetVolume
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
@@ -473,6 +473,26 @@ def api_restart():
     except Exception:
         logger.exception("Restart failed")
         return jsonify({"success": False, "error": "Internal error"}), 500
+
+
+@api_bp.route("/api/pairing/window", methods=["POST"])
+def open_pairing_window():
+    data = request.get_json() or {}
+    player_name = data.get("player_name")
+    if not player_name:
+        return jsonify({"success": False, "error": "player_name required"}), 400
+    snapshot = get_device_registry_snapshot().active_clients
+    target = next((client for client in snapshot if client.player_name == player_name), None)
+    if target is None:
+        return jsonify({"success": False, "error": "player not found"}), 404
+    loop = get_main_loop()
+    if loop:
+        _submit_loop_coroutine(
+            loop,
+            target._send_subprocess_command(OpenPairingWindow()),
+            description=f"open_pairing_window for {target.player_name}",
+        )
+    return jsonify({"success": True})
 
 
 @api_bp.route("/api/volume", methods=["POST"])

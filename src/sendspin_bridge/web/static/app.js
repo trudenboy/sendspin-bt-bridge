@@ -2658,6 +2658,11 @@ function _actionButtonIconSvg(kind, className) {
             '<path d="M8.5 15.5l7-7"/>' +
         '</svg>';
     }
+    if (kind === 'key') {
+        return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="7.5" cy="15.5" r="3.5"/><path d="M10.2 13.2 21 2.5"/><path d="M16 3h5v5"/>' +
+        '</svg>';
+    }
     return '';
 }
 
@@ -3196,6 +3201,7 @@ function buildListView(entries, hiddenCount) {
             ? 'Wake from standby — reconnect Bluetooth and resume audio'
             : 'Enter standby — disconnect Bluetooth to save speaker battery';
         var detailActions = '<div class="list-detail-actions" data-action="noop">' +
+            '<button type="button" class="action-btn list-action-btn accent" id="dbtn-ss-pair-' + i + '" data-action="open-sendspin-pairing" data-arg="' + i + '" title="Open a Music Assistant pairing window"' + (cardDisabled ? ' disabled' : '') + '>' + _actionButtonInnerHtml('key', 'Pair with MA') + '</button>' +
             (mgmtEnabled
                 ? '<button type="button" class="action-btn list-action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '" title="' + escHtmlAttr(reconnectTitle) + '"' + (reconnectAvailable && !cardDisabled ? '' : ' disabled') + '>' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>'
                 : '<button type="button" class="action-btn list-action-btn success" id="dbtn-release-' + i + '" data-action="bt-toggle-management" data-arg="' + i + '" title="Resume BT management and auto-reconnect">' + _actionButtonInnerHtml('release', 'Reclaim') + '</button>') +
@@ -3551,6 +3557,7 @@ function buildDeviceCard(i) {
           '<span id="dbattery-' + i + '" style="display:none"></span>' +
           '<span id="drssi-' + i + '" style="display:none"></span>' +
           '<span id="dlatency-chip-' + i + '" style="display:none"></span>' +
+          '<span class="chip meta-badge is-neutral" id="dpin-' + i + '" style="display:none"></span>' +
         '</div>' +
         '<div class="card-controls">' +
           _renderPlaybackTransportButtonsHtml(i, placeholderTransport, {
@@ -3594,6 +3601,7 @@ function buildDeviceCard(i) {
           '<span class="bt-action-status" id="dbt-action-status-' + i + '"></span>' +
           '<div class="card-action-buttons">' +
             '<button type="button" class="action-btn accent" id="dbtn-pair-' + i + '" data-action="bt-start-pairing" data-arg="' + i + '" style="display:none" title="Put speaker in pairing mode, then click here">' + _actionButtonInnerHtml('reconnect', 'Start pairing') + '</button>' +
+            '<button type="button" class="action-btn accent" id="dbtn-ss-pair-' + i + '" data-action="open-sendspin-pairing" data-arg="' + i + '" title="Open a Music Assistant pairing window for this speaker">' + _actionButtonInnerHtml('key', 'Pair with MA') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-reconnect-' + i + '" data-action="bt-reconnect" data-arg="' + i + '">' + _actionButtonInnerHtml('reconnect', 'Reconnect') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-claim-' + i + '" data-action="bt-claim-audio" data-arg="' + i + '" title="Claim audio source on multipoint speaker (push Playing via AVRCP)">' + _actionButtonInnerHtml('play', 'Claim') + '</button>' +
             '<button type="button" class="action-btn accent" id="dbtn-wake-' + i + '" data-action="wake-device" data-arg="' + i + '" style="display:none">' + _actionButtonInnerHtml('sunrise', 'Wake') + '</button>' +
@@ -3644,6 +3652,14 @@ function populateDeviceCard(i, dev) {
         return peer.enabled !== false && dev.group_id && peer.group_id === dev.group_id;
     }).map(function(peer) { return Number(peer.static_delay_ms || 0); });
     var latencyUi = _getLatencyUiState(dev, peerDelays);
+    var pinChip = document.getElementById('dpin-' + i);
+    if (pinChip) {
+        var pin = dev.pairing_pin ? String(dev.pairing_pin) : '';
+        pinChip.style.display = pin ? '' : 'none';
+        pinChip.textContent = pin ? ('PIN ' + pin) : '';
+        pinChip.title = pin ? 'Enter this PIN in Music Assistant to pair' : '';
+    }
+
     if (latencyChip) {
         latencyChip.style.display = latencyUi.chipVisible ? '' : 'none';
         latencyChip.className = 'chip meta-badge is-neutral';
@@ -4645,6 +4661,36 @@ function onDevicePause(i, btnId) {
             }
         }
     }).finally(function() { _unlockBtn(pauseBtnId); });
+}
+
+async function openSendspinPairing(i) {
+    var dev = lastDevices && lastDevices[i];
+    if (!dev) return;
+    var playerName = dev.player_name || null;
+    var status = document.getElementById('dbt-action-status-' + i);
+    var btn = document.getElementById('dbtn-ss-pair-' + i);
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Opening pairing window\u2026';
+    try {
+        var resp = await fetch(API_BASE + '/api/pairing/window', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({player_name: playerName})
+        });
+        var data = await resp.json();
+        if (data && data.success) {
+            showToast('Pairing window open — enter the PIN in Music Assistant', 'success');
+            if (status) status.textContent = 'Pairing window open';
+        } else {
+            showToast((data && data.error) || 'Could not open pairing window', 'error');
+            if (status) status.textContent = '';
+        }
+    } catch (e) {
+        showToast('Could not open pairing window', 'error');
+        if (status) status.textContent = '';
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 // ---- BT Actions (reconnect / pair) ----
@@ -15381,6 +15427,7 @@ const _ACTION_REGISTRY = {
     'artwork-preview-keydown':  (el, ev) => onArtworkPreviewKeydown(ev, el),
     'sort-list-by':             (_el, _ev, arg) => sortListBy(arg),
     'bt-reconnect':             (_el, _ev, arg) => btReconnect(Number(arg)),
+    'open-sendspin-pairing':    (_el, _ev, arg) => openSendspinPairing(Number(arg)),
     'config-latency-nudge':     (el, ev, arg) => nudgeConfigDeviceLatency(el, ev, arg),
     'toggle-config-latency-step': toggleConfigLatencyStep,
     'config-latency-test-tone': (el) => playConfigDeviceCalibrationTone(el),

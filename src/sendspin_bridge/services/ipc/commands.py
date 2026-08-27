@@ -26,6 +26,7 @@ __all__ = [
     "Command",
     "CommandError",
     "InvalidCommand",
+    "OpenPairingWindow",
     "Pause",
     "Play",
     "Reconnect",
@@ -129,6 +130,11 @@ class SetStandby:
     sink: str | None = None
 
 
+@dataclass(frozen=True)
+class OpenPairingWindow:
+    """Admit one Sendspin pairing attempt."""
+
+
 Command = (
     Stop
     | Pause
@@ -142,6 +148,7 @@ Command = (
     | SetMinBufferMs
     | Transport
     | SetStandby
+    | OpenPairingWindow
 )
 
 
@@ -203,6 +210,8 @@ def decode_command(message: Any) -> Command:
     if name == "set_standby":
         sink = message.get("sink")
         return SetStandby(sink=str(sink) if sink else None)
+    if name == "open_pairing_window":
+        return OpenPairingWindow()
 
     raise UnknownCommand(f"unknown command: {name}")
 
@@ -233,5 +242,7 @@ def encode_command(command: Command) -> dict:
         return build_command_envelope("transport", action=command.action, value=command.value)
     if isinstance(command, SetStandby):
         return build_command_envelope("set_standby", sink=command.sink)
+    if isinstance(command, OpenPairingWindow):
+        return build_command_envelope("open_pairing_window")
 
     raise InvalidCommand(f"cannot encode {type(command).__name__}")

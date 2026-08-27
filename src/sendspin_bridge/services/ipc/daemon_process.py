@@ -33,11 +33,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sendspin_bridge.services.diagnostics.sendspin_compat import (
-    filter_supported_call_kwargs,
-    query_audio_devices,
-    resolve_preferred_audio_format,
-)
+from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
 from sendspin_bridge.services.ipc.commands import InvalidCommand, UnknownCommand, decode_command
 from sendspin_bridge.services.ipc.ipc_protocol import (
     IPC_PROTOCOL_VERSION,
@@ -51,108 +47,6 @@ from sendspin_bridge.services.ipc.ipc_protocol import (
 )
 from sendspin_bridge.services.ipc.shutdown import shut_down_tasks
 from sendspin_bridge.services.ipc.status_store import StatusStore
-
-
-def _patch_sendspin_audio_player_runtime_guards() -> None:
-    """Patch sendspin AudioPlayer to survive stale frame-reuse state.
-
-    After underruns/re-anchor or mid-stream format changes, sendspin's
-    sync-correction path can reuse ``_last_output_frame`` from an older
-    frame size. That later explodes inside the PortAudio callback with
-    ``memoryview assignment: lvalue and rvalue have different structures``.
-    Reset the reusable frame and correction cadence on format changes, and
-    guard the callback against mismatched cached frame lengths.
-    """
-
-    try:
-        import sendspin.audio as _sa
-    except ImportError:
-        return
-
-    player_cls = getattr(_sa, "AudioPlayer", None)
-    if not isinstance(player_cls, type):
-        return
-    if getattr(player_cls, "_sendspin_bt_bridge_runtime_guarded", False):
-        return
-
-    original_set_format = getattr(player_cls, "set_format", None)
-    original_audio_callback = getattr(player_cls, "_audio_callback", None)
-    if not callable(original_set_format) or not callable(original_audio_callback):
-        return
-
-    def _guarded_set_format(self, audio_format, device):  # type: ignore[no-untyped-def]
-        self._last_output_frame = b""
-        self._insert_every_n_frames = 0
-        self._drop_every_n_frames = 0
-        self._frames_until_next_insert = 0
-        self._frames_until_next_drop = 0
-        return original_set_format(self, audio_format, device)
-
-    def _guarded_audio_callback(self, outdata, frames, time, status):  # type: ignore[no-untyped-def]
-        frame_size = getattr(getattr(self, "_format", None), "frame_size", 0) or 0
-        if frame_size > 0:
-            last_output_frame = getattr(self, "_last_output_frame", b"")
-            if last_output_frame and len(last_output_frame) != frame_size:
-                logger.warning(
-                    "Resetting stale AudioPlayer last frame (%d bytes) for frame_size=%d",
-                    len(last_output_frame),
-                    frame_size,
-                )
-                self._last_output_frame = b"\x00" * frame_size
-        return original_audio_callback(self, outdata, frames, time, status)
-
-    for attr_name, value in (
-        ("set_format", _guarded_set_format),
-        ("_audio_callback", _guarded_audio_callback),
-        ("_sendspin_bt_bridge_runtime_guarded", True),
-    ):
-        setattr(player_cls, attr_name, value)
-
-
-# ---------------------------------------------------------------------------
-# PyAV compatibility: older PyAV (<13) has no AudioLayout.nb_channels.
-# The sendspin decoder uses frame.layout.nb_channels, so we monkey-patch
-# the decoder's _append_frame_to_pcm to use len(layout.channels) instead.
-# AudioLayout is a C extension type (immutable), so we replace the method.
-# ---------------------------------------------------------------------------
-_patch_sendspin_audio_player_runtime_guards()
-
-try:
-    import av.audio.layout as _av_layout
-
-    if not hasattr(_av_layout.AudioLayout("stereo"), "nb_channels"):
-        import sendspin.decoder as _sd
-
-        def _append_compat(self, frame, output):  # type: ignore[no-untyped-def]
-            """Patched: len(layout.channels) instead of layout.nb_channels."""
-            src_bits = frame.format.bits
-            src_bytes_per_sample = frame.format.bytes
-            samples_per_channel = frame.samples
-            channel_count = len(frame.layout.channels)  # <-- patched line
-            total_samples = samples_per_channel * channel_count
-            exact_src_bytes = total_samples * src_bytes_per_sample
-
-            if src_bits not in (16, 32):
-                _sd.logger.warning("Unsupported FLAC sample format: %s", frame.format.name)
-                output.extend(memoryview(frame.planes[0])[:exact_src_bytes])
-                return
-
-            self._samples_decoded += total_samples
-
-            if not frame.format.is_planar:
-                self._append_packed_frame(
-                    output,
-                    memoryview(frame.planes[0])[:exact_src_bytes],
-                    total_samples,
-                    src_bits,
-                )
-                return
-
-            self._append_planar_frame(output, frame, samples_per_channel, channel_count, src_bits)
-
-        _sd.FlacDecoder._append_frame_to_pcm = _append_compat  # type: ignore[assignment]
-except (ImportError, AttributeError):
-    pass
 
 # ---------------------------------------------------------------------------
 # Minimal JSON-line log handler (forwarded to parent via stdout)
@@ -615,15 +509,21 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 try:
                     from aiosendspin.models.types import PlayerStateType
 
-                    audio_handler = getattr(daemon, "_audio_handler", None)
-                    cur_volume = int(getattr(audio_handler, "volume", 100)) if audio_handler else 100
-                    cur_muted = bool(getattr(audio_handler, "muted", False)) if audio_handler else False
+                    cur_volume = int(getattr(daemon, "_volume", 100))
+                    cur_muted = bool(getattr(daemon, "_muted", False))
                     cur_state = getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED
-                    await client.send_player_state(
-                        state=cur_state,
-                        volume=cur_volume,
-                        muted=cur_muted,
-                    )
+                    try:
+                        await client.send_player_state(
+                            available=True,
+                            volume=cur_volume,
+                            muted=cur_muted,
+                        )
+                    except TypeError:
+                        await client.send_player_state(
+                            state=cur_state,
+                            volume=cur_volume,
+                            muted=cur_muted,
+                        )
                 except Exception as exc:
                     logger.warning("Failed to push static_delay_ms to MA: %s", exc)
         elif cmd.cmd in ("set_required_lead_time_ms", "set_min_buffer_ms"):
@@ -654,12 +554,16 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 if getattr(client, "connected", False):
                     from aiosendspin.models.types import PlayerStateType
 
-                    audio_handler = getattr(daemon, "_audio_handler", None)
-                    await client.send_player_state(
-                        state=getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED,
-                        volume=int(getattr(audio_handler, "volume", 100)),
-                        muted=bool(getattr(audio_handler, "muted", False)),
-                    )
+                    volume = int(getattr(daemon, "_volume", 100))
+                    muted = bool(getattr(daemon, "_muted", False))
+                    try:
+                        await client.send_player_state(available=True, volume=volume, muted=muted)
+                    except TypeError:
+                        await client.send_player_state(
+                            state=getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED,
+                            volume=volume,
+                            muted=muted,
+                        )
             except Exception as exc:
                 logger.warning("%s failed: %s", cmd.cmd, exc)
         elif cmd.cmd == "transport":
@@ -690,13 +594,17 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             _task.add_done_callback(_background_tasks.discard)
             _task.add_done_callback(lambda t, _a=action: _log_background_task_result(t, f"transport {_a}"))
         elif cmd.cmd == "set_standby":
+            daemon = daemon_ref[0] if daemon_ref else None
             sink = cmd.payload.get("sink")
-            if sink:
-                os.environ["PULSE_SINK"] = sink
-                logger.info("PULSE_SINK redirected to %s (standby)", sink)
-            elif "PULSE_SINK" in os.environ and bt_sink_name:
-                os.environ["PULSE_SINK"] = bt_sink_name
-                logger.info("PULSE_SINK restored to %s (wake)", bt_sink_name)
+            target = sink or bt_sink_name
+            if daemon is not None and hasattr(daemon, "retarget_sink"):
+                daemon.retarget_sink(target)
+                logger.info("Player sink retargeted to %s", target)
+        elif cmd.cmd == "open_pairing_window":
+            daemon = daemon_ref[0] if daemon_ref else None
+            if daemon is not None and hasattr(daemon, "open_pairing_window"):
+                daemon.open_pairing_window()
+                logger.info("Opened Sendspin pairing window")
 
 
 # ---------------------------------------------------------------------------
@@ -705,10 +613,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
 
 
 async def _run(params: dict) -> None:
-    from sendspin.daemon.daemon import DaemonArgs
-    from sendspin.settings import get_client_settings
-
-    from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon
+    from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon, DaemonArgs
 
     player_name: str = params["player_name"]
     client_id: str = params["client_id"]
@@ -734,8 +639,6 @@ async def _run(params: dict) -> None:
     resolved = str(Path(settings_dir).resolve())
     if not resolved.startswith("/tmp/"):
         settings_dir = f"/tmp/sendspin-{safe_id}"
-    preferred_format_str: str | None = params.get("preferred_format")
-
     logger = logging.getLogger(__name__)
     # The handshake is the one point where a version mismatch can still be
     # reported cleanly.  Logging it and running on left a mixed-version pair
@@ -755,77 +658,28 @@ async def _run(params: dict) -> None:
         logger.error("[%s] Refusing to start: %s", player_name, message)
         sys.exit(1)
 
-    # Route Bluetooth players through the ALSA PulseAudio plugin.  On PipeWire,
-    # the ALSA "default" device ignores PULSE_SINK and WirePlumber may restore
-    # another speaker as its target; the "pulse" device honors PULSE_SINK.
-    try:
-        devices = query_audio_devices()
-    except RuntimeError:
-        _emit_error("audio_api_missing", "sendspin.audio.query_devices is unavailable")
-        logger.error("sendspin.audio.query_devices is unavailable")
-        sys.exit(1)
-    audio_device = _select_audio_output_device(devices, target_sink=bluetooth_sink_name)
-    if audio_device is None:
-        _emit_error("audio_output_missing", "No audio output device found")
-        logger.error("No audio output device found")
-        sys.exit(1)
+    logger.info("[%s] Player sink=%s", player_name, bluetooth_sink_name or "default")
 
-    logger.info(
-        "[%s] Using audio device %r (index %s) — PULSE_SINK=%s",
-        player_name,
-        audio_device.name,
-        audio_device.index,
-        os.environ.get("PULSE_SINK", "not set"),
-    )
+    config_dir = Path(os.environ.get("CONFIG_DIR", "/config")).resolve()
+    identity_path = (config_dir / "identity" / f"{safe_id}.key").resolve()
+    pairing_path = (config_dir / "pairing" / f"{safe_id}.json").resolve()
+    if not str(identity_path).startswith(str(config_dir)):
+        identity_path = config_dir / "identity" / "default.key"
+    if not str(pairing_path).startswith(str(config_dir)):
+        pairing_path = config_dir / "pairing" / "default.json"
 
-    settings = await get_client_settings("daemon", config_dir=settings_dir)
-    settings.player_volume = initial_volume
-
-    preferred_fmt = None
-    if preferred_format_str:
-        try:
-            preferred_fmt = resolve_preferred_audio_format(preferred_format_str, audio_device)
-        except Exception as e:
-            logger.warning("[%s] Invalid preferred_format %r: %s", player_name, preferred_format_str, e)
-
-    # Build a PulseVolumeController when we have a BT sink and DaemonArgs accepts it
-    pa_volume_controller = None
-    if bluetooth_sink_name:
-        try:
-            from sendspin_bridge.services.audio.pa_volume_controller import PulseVolumeController
-
-            pa_volume_controller = PulseVolumeController(bluetooth_sink_name)
-            logger.info("[%s] Created PulseVolumeController for sink %s", player_name, bluetooth_sink_name)
-        except Exception as exc:
-            logger.warning("[%s] Could not create PulseVolumeController: %s", player_name, exc)
-
-    # ``sendspin==7.0.0`` is pinned in requirements.txt — DaemonArgs always
-    # accepts ``volume_controller``.  The legacy ``use_hardware_volume``
-    # fallback for sendspin <5.5.0 was removed in 2.62.0-rc.9.
-    daemon_kwargs = _filter_supported_daemon_args_kwargs(
-        DaemonArgs,
-        {
-            "audio_device": audio_device,
-            "client_id": client_id,
-            "client_name": player_name,
-            "settings": settings,
-            "url": server_url,
-            "static_delay_ms": static_delay_ms,
-            "listen_port": listen_port,
-            "use_mpris": False,
-            "volume_controller": pa_volume_controller,
-            "preferred_format": preferred_fmt,
-        },
-    )
-    if "volume_controller" not in daemon_kwargs:
-        logger.warning(
-            "[%s] DaemonArgs does not accept ``volume_controller`` — "
-            "MA volume will not propagate to the BT sink.  Pinned sendspin "
-            "==7.0.0 should always provide it; investigate the runtime env.",
-            player_name,
-        )
     args = DaemonArgs(
-        **daemon_kwargs,
+        client_id=client_id,
+        client_name=player_name,
+        url=server_url,
+        listen_port=listen_port,
+        static_delay_ms=static_delay_ms,
+        initial_volume=initial_volume,
+        initial_muted=initial_muted,
+        sink_name=bluetooth_sink_name,
+        pulse_latency_msec=int(os.environ.get("PULSE_LATENCY_MSEC", "600") or 600),
+        identity_path=str(identity_path),
+        pairing_store_path=str(pairing_path),
     )
 
     status = StatusStore(
@@ -896,25 +750,6 @@ async def _run(params: dict) -> None:
         min_buffer_ms=min_buffer_ms,
     )
     daemon_ref.append(daemon)
-
-    # Mirror external sink-state changes (speaker physical volume knob →
-    # BlueZ-PA module → PA sink) into bridge status so the web UI slider
-    # tracks the speaker.  Sendspin lib owns ``_callback`` and forwards
-    # to MA; the tap is parallel and isolated from sendspin's path.
-    if pa_volume_controller is not None:
-
-        def _mirror_external_volume_to_bridge(vol: int, muted: bool) -> None:
-            updates: dict = {}
-            if status.get("volume") != vol:
-                status["volume"] = max(0, min(100, int(vol)))
-                updates["volume"] = status["volume"]
-            if status.get("muted") != muted:
-                status["muted"] = bool(muted)
-                updates["muted"] = status["muted"]
-            if updates:
-                _on_status_change()
-
-        pa_volume_controller.set_external_change_tap(_mirror_external_volume_to_bridge)
 
     cmd_task = asyncio.create_task(_read_commands(daemon_ref, stop_event, bt_sink_name=bluetooth_sink_name))
     daemon_task = asyncio.create_task(daemon.run())
