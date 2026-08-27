@@ -61,8 +61,6 @@ dbus-fast==5.0.22
     #   sendspin-bt-bridge
 dbus-next==0.2.3 ; sys_platform == 'linux'
     # via mpris-api
-dbus-python==1.4.0
-    # via sendspin-bt-bridge
 flask==3.1.3
     # via sendspin-bt-bridge
 frozenlist==1.8.0

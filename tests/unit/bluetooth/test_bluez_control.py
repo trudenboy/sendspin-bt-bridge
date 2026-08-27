@@ -85,10 +85,10 @@ def test_list_devices(bluez):
 
 def test_power_result_reproduces_endpoint_heuristic(bluez):
     on = bluez.power(True, Adapter.select(ADAPTER_MAC))
-    assert on.changed is True
+    assert on.applied is True
     assert on.powered is True
     off = bluez.power(False, Adapter.select(ADAPTER_MAC))
-    assert off.changed is True
+    assert off.applied is True
     assert off.powered is False
 
 
@@ -102,15 +102,17 @@ def test_remove_result_types_the_stdout_marker(bluez, fake_bluez):
     assert ok.not_available is False
 
 
-def test_connect_result_summary(bluez, fake_bluez):
+def test_connect_reads_the_refusal_bluetoothctl_exits_zero_on(bluez, fake_bluez):
+    # bluetoothctl exits 0 whether or not the connect worked, so the verdict
+    # comes from what BlueZ printed — and carries that line with it.
     fake_bluez.on(
         "connect",
         stdout="[CHG] Device 6C:5C:3D:35:17:99 Connected: no\nFailed to connect: org.bluez.Error.Failed br-connection-page-timeout\n",
         returncode=0,
     )
     result = bluez.connect(ENEBY_MAC, Adapter.select(ADAPTER_MAC))
-    assert result.ok is True  # bluetoothctl exits 0 even on connect failure
-    assert result.summary == "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout"
+    assert result.ok is False
+    assert result.detail == "Failed to connect: org.bluez.Error.Failed br-connection-page-timeout"
 
 
 def test_timeout_outcome_via_injection(bluez, fake_bluez):
@@ -137,7 +139,6 @@ def test_nonzero_outcome(bluez, fake_bluez):
     result = bluez.trust(ENEBY_MAC, Adapter.select(ADAPTER_MAC))
     assert result.outcome is Outcome.NONZERO
     assert result.ok is False
-    assert result.text.endswith("boom")
 
 
 def test_per_call_timeout_override_is_recorded(bluez, fake_bluez):
@@ -147,7 +148,7 @@ def test_per_call_timeout_override_is_recorded(bluez, fake_bluez):
 
 def test_run_merges_stdout_and_stderr_like_legacy_runner(bluez, fake_bluez):
     fake_bluez.on("disconnect", stdout="out-line\n", stderr="err-line\n")
-    result = bluez.disconnect(ENEBY_MAC, Adapter.select(ADAPTER_MAC))
+    result = bluez.run([f"disconnect {ENEBY_MAC}"], adapter=Adapter.select(ADAPTER_MAC))
     assert result.text == "out-line\nerr-line"
 
 
@@ -262,7 +263,7 @@ def test_power_reports_the_controller_state_when_the_command_prints_no_confirmat
     off = bluez.power(False, Adapter.select(ADAPTER_MAC))
 
     assert off.powered is False
-    assert off.changed is True, "a confirmed state change must not read as a failed command"
+    assert off.applied is True, "a confirmed state change must not read as a failed command"
 
 
 def test_power_reports_failure_when_the_controller_did_not_change(bluez, fake_bluez):
@@ -271,7 +272,7 @@ def test_power_reports_failure_when_the_controller_did_not_change(bluez, fake_bl
     off = bluez.power(False, Adapter.select(ADAPTER_MAC))
 
     assert off.powered is True
-    assert off.changed is False
+    assert off.applied is False
 
 
 def test_power_waits_for_bluez_to_apply_the_change(bluez, fake_bluez):
@@ -288,5 +289,5 @@ def test_power_waits_for_bluez_to_apply_the_change(bluez, fake_bluez):
 
     shows = [c for c in fake_bluez.commands if c.kind == "run" and "show" in c.script]
     assert len(shows) > 1, "the controller state was read once and never re-checked"
-    assert off.changed is False
+    assert off.applied is False
     assert off.powered is True

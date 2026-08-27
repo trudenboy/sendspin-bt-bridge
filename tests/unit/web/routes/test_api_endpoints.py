@@ -16,7 +16,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sendspin_bridge.bluetooth.controller import set_controller
 from sendspin_bridge.services.ipc.commands import SetLogLevel
+from tests.support.fake_dbus import controller_knowing_adapters
 from tests.support.fake_lease import FakeLease
 
 # ---------------------------------------------------------------------------
@@ -351,7 +353,6 @@ def _pin_hci_map(monkeypatch, api_bt_mod):
         "build_hci_map",
         lambda: {HCI0_MAC.replace(":", ""): "hci0", HCI1_MAC.replace(":", ""): "hci1"},
     )
-    monkeypatch.setattr(api_bt_mod, "_dbus_get_adapter_address", lambda _hci: None)
 
 
 def _selected_adapters(fake_bluez) -> list[str]:
@@ -389,7 +390,6 @@ def test_run_standalone_pair_keeps_hci_name_when_resolution_fails(installed_blue
     monkeypatch.setattr(api_bt_mod, "list_bt_adapters", lambda: [])
     # Every resolution path dry: no sysfs map, no D-Bus answer.
     monkeypatch.setattr(api_bt_mod, "build_hci_map", lambda: {})
-    monkeypatch.setattr(api_bt_mod, "_dbus_get_adapter_address", lambda _hci: None)
 
     api_bt_mod._run_standalone_pair("job-2", MAC, "hci0")
 
@@ -421,7 +421,7 @@ def test_resolve_adapter_to_mac_uses_kernel_hci_map_not_list_position(monkeypatc
     assert api_bt_mod._resolve_adapter_to_mac("hci0") == "C0:FB:F9:62:D7:D6"
 
 
-def test_resolve_adapter_to_mac_falls_back_to_dbus_when_sysfs_has_no_address(monkeypatch):
+def test_resolve_adapter_to_mac_falls_back_to_dbus_when_sysfs_has_no_address(monkeypatch, bridge_loop):
     """Live rc.1 stand finding: some kernels expose /sys/class/bluetooth/hciN
     WITHOUT an ``address`` file (only device/power/rfkill) — the sysfs map is
     then empty and positional ``bluetoothctl list`` indexing resolves hciN to
@@ -438,12 +438,8 @@ def test_resolve_adapter_to_mac_falls_back_to_dbus_when_sysfs_has_no_address(mon
         "list_bt_adapters",
         lambda: ["00:02:72:0A:E4:3B", "C0:FB:F9:62:D7:D6"],
     )
-    # D-Bus knows the truth: hci0=C0:FB…, hci1=00:02….
-    monkeypatch.setattr(
-        api_bt_mod,
-        "_dbus_get_adapter_address",
-        lambda hci: {"hci0": "C0:FB:F9:62:D7:D6", "hci1": "00:02:72:0A:E4:3B"}.get(hci),
-    )
+    # BlueZ knows the truth: hci0=C0:FB…, hci1=00:02….
+    set_controller(controller_knowing_adapters({"hci0": "C0:FB:F9:62:D7:D6", "hci1": "00:02:72:0A:E4:3B"}))
 
     # Without the D-Bus step, hci1 would positionally resolve to 00:02…'s
     # list-position neighbour — the live mispairing.

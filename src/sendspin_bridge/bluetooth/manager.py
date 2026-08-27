@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 
 import sendspin_bridge.bluetooth.audio as bt_audio
 import sendspin_bridge.bluetooth.monitor as bt_monitor
-from sendspin_bridge.bluetooth.adapter_address import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle, LinkState, bt_executor
 from sendspin_bridge.bluetooth.address import DeviceAddress
 from sendspin_bridge.bluetooth.bluez import Adapter, BluezControl, Outcome, get_bluez, set_bluez
@@ -106,8 +105,10 @@ def install_dbus_hci_resolver(transport_factory=None) -> None:
     ``transport_factory`` is a test seam; production builds the default
     transport around the resolver.
     """
+    from sendspin_bridge.bluetooth.controller import get_controller
+
     factory = transport_factory or (lambda resolver: BluezControl(hci_resolver=resolver))
-    set_bluez(factory(_dbus_get_adapter_address))
+    set_bluez(factory(get_controller().adapter_address))
 
 
 class BluetoothManager:
@@ -701,7 +702,7 @@ class BluetoothManager:
 
     def trust_device(self) -> bool:
         """Trust the Bluetooth device"""
-        return get_bluez().trust(self.mac_address, self._bluez_adapter()).outcome is Outcome.OK
+        return self._adapter_handle.verbs.trust(self.mac_address, self._bluez_adapter()).ok
 
     def configure_bluetooth_audio(self) -> bool:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
@@ -772,12 +773,12 @@ class BluetoothManager:
             return False
 
         # Power on bluetooth
-        get_bluez().power(True, self._bluez_adapter())
+        self._adapter_handle.verbs.power(True, self._bluez_adapter())
         if not self._wait_with_cancel(1):
             return False
 
         # Try to connect
-        connect_result = get_bluez().connect(self.mac_address, self._bluez_adapter())
+        connect_result = self._adapter_handle.verbs.connect(self.mac_address, self._bluez_adapter())
         if self._abort_connect_if_cancelled():
             return False
 
@@ -846,7 +847,7 @@ class BluetoothManager:
                     sink_ok = self.configure_bluetooth_audio()
                 return not self._abort_connect_if_cancelled()
 
-        excerpt = connect_result.summary
+        excerpt = connect_result.detail
         if excerpt:
             # #302 — surface the underlying BlueZ error (page-timeout,
             # br-connection-already-active, profile-unavailable, …) so the
@@ -890,7 +891,7 @@ class BluetoothManager:
             _PAIRED_UNKNOWN_THRESHOLD,
         )
         try:
-            get_bluez().remove(self.mac_address, self._bluez_adapter())
+            self._adapter_handle.verbs.remove(self.mac_address, self._bluez_adapter())
         except Exception as e:  # defensive — the transport reports via Outcome
             logger.debug("[%s] Stale BlueZ purge failed (non-fatal): %s", self.device_name, e)
         if self.host:
@@ -927,8 +928,8 @@ class BluetoothManager:
         if self.device.disconnect_blocking():
             self._apply_connected_state(False)
             return True
-        result = get_bluez().disconnect(self.mac_address, self._bluez_adapter())
-        if result.outcome is Outcome.OK:
+        result = self._adapter_handle.verbs.disconnect(self.mac_address, self._bluez_adapter())
+        if result.ok:
             self._apply_connected_state(False)
             return True
         return False
@@ -1059,7 +1060,7 @@ class BluetoothManager:
         # object on the bus and the reconnect's on_connected fire would
         # clash with it.
         if not self.device.disconnect_blocking():
-            get_bluez().disconnect(self.mac_address, self._bluez_adapter())
+            self._adapter_handle.verbs.disconnect(self.mac_address, self._bluez_adapter())
         self._apply_connected_state(False)
         # Short settle period — BlueZ needs a moment to tear down ACL state.
         if not self._wait_with_cancel(2):
@@ -1067,7 +1068,7 @@ class BluetoothManager:
         if self._abort_connect_if_cancelled():
             return False
         # Reconnect and re-issue the explicit A2DP Sink profile request.
-        get_bluez().connect(self.mac_address, self._bluez_adapter())
+        self._adapter_handle.verbs.connect(self.mac_address, self._bluez_adapter())
         for _i in range(_CONNECT_CHECK_RETRIES):
             if not self._wait_with_cancel(1):
                 return False

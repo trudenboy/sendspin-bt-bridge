@@ -47,7 +47,7 @@ from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.bluetooth.bluez import BluezControl, BluezResult, PowerResult, ScanTranscript
+    from sendspin_bridge.bluetooth.bluez import BluezControl, PowerResult, ScanTranscript, VerbResult
 
 logger = logging.getLogger(__name__)
 
@@ -223,12 +223,27 @@ class AdapterHandle:
         self._bluez = bluez
         self._link_probe = link_probe
         self._hci_name = ""
+        self._verbs = None
 
     # -- identity ------------------------------------------------------
 
     @property
     def bluez(self) -> BluezControl:
         return self._bluez if self._bluez is not None else get_bluez()
+
+    @property
+    def verbs(self):
+        """The controller's verbs: BlueZ's own bus, this handle's transport behind it.
+
+        The fallback is this handle's bluetoothctl transport rather than the
+        shared one, so a handle built around a substituted transport keeps
+        answering from it when the bus cannot.
+        """
+        if self._verbs is None:
+            from sendspin_bridge.bluetooth.controller import DbusController, PreferredController
+
+            self._verbs = PreferredController(DbusController(), lambda: self.bluez)
+        return self._verbs
 
     @property
     def adapter(self) -> str:
@@ -380,25 +395,25 @@ class AdapterSession:
 
     # -- mutations -----------------------------------------------------
 
-    def connect(self, mac: str) -> BluezResult:
+    def connect(self, mac: str) -> VerbResult:
         self._check()
-        return self._handle.bluez.connect(mac, self._handle.scope)
+        return self._handle.verbs.connect(mac, self._handle.scope)
 
-    def disconnect(self, mac: str) -> BluezResult:
+    def disconnect(self, mac: str) -> VerbResult:
         self._check()
-        return self._handle.bluez.disconnect(mac, self._handle.scope)
+        return self._handle.verbs.disconnect(mac, self._handle.scope)
 
-    def trust(self, mac: str) -> BluezResult:
+    def trust(self, mac: str) -> VerbResult:
         self._check()
-        return self._handle.bluez.trust(mac, self._handle.scope)
+        return self._handle.verbs.trust(mac, self._handle.scope)
 
     def remove(self, mac: str):
         self._check()
-        return self._handle.bluez.remove(mac, self._handle.scope)
+        return self._handle.verbs.remove(mac, self._handle.scope)
 
     def power(self, on: bool) -> PowerResult:
         self._check()
-        return self._handle.bluez.power(on, self._handle.scope)
+        return self._handle.verbs.power(on, self._handle.scope)
 
     def scan(self, *, window_s: float = 15.0) -> ScanTranscript:
         self._check()
@@ -438,13 +453,13 @@ class AsyncAdapterSession:
     async def device_info(self, mac: str):
         return await self._call(self._session.device_info, mac)
 
-    async def connect(self, mac: str) -> BluezResult:
+    async def connect(self, mac: str) -> VerbResult:
         return await self._call(self._session.connect, mac)
 
-    async def disconnect(self, mac: str) -> BluezResult:
+    async def disconnect(self, mac: str) -> VerbResult:
         return await self._call(self._session.disconnect, mac)
 
-    async def trust(self, mac: str) -> BluezResult:
+    async def trust(self, mac: str) -> VerbResult:
         return await self._call(self._session.trust, mac)
 
     async def remove(self, mac: str):

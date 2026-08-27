@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from ._lines import BluezLine, LineKind, strip_ansi
-from ._process import Outcome
+from ._process import Outcome, RemoveResult, VerbResult
 
 __all__ = [
     "INFO_FIELDS",
@@ -30,6 +30,8 @@ __all__ = [
     "parse_show",
     "parse_version",
     "summarize_connect_output",
+    "verdict_of",
+    "verdict_of_remove",
 ]
 
 # The public keys of the /api/bt/info payload (rendered by the web UI modal).
@@ -401,3 +403,40 @@ def summarize_connect_output(lines: tuple[BluezLine, ...] | list[BluezLine]) -> 
         if "failed to connect" in text.lower():
             return text[:_EXCERPT_MAX_LEN]
     return cleaned[-1][:_EXCERPT_MAX_LEN]
+
+
+# What bluetoothctl prints when a verb did not do what it was asked.  It
+# exits 0 either way, so these markers — not the return code — are what
+# separates a refusal from a success.  Read once, here, rather than at each
+# of the call sites that used to scrape the transcript themselves.
+_REFUSAL_MARKERS = ("failed to", "not available", "not connected", "does not exist", "no default controller")
+
+
+def verdict_of(result, *, refusals: tuple[str, ...] = _REFUSAL_MARKERS) -> VerbResult:
+    """Turn one bluetoothctl invocation into the verdict its caller acts on.
+
+    A transport that never answered stays a transport failure; a command
+    that ran and printed a refusal is ``FAILED`` and carries the BlueZ error
+    line with it.  Silence is success: BlueZ >= 5.72 prints the attempt and
+    says nothing more when a verb worked.
+    """
+    detail = summarize_connect_output(result.lines)
+    if result.outcome is not Outcome.OK:
+        return VerbResult(result.outcome, detail)
+    lowered = strip_ansi(result.text).lower()
+    if any(marker in lowered for marker in refusals):
+        return VerbResult(Outcome.FAILED, detail)
+    return VerbResult(Outcome.OK)
+
+
+def verdict_of_remove(result) -> RemoveResult:
+    """``remove <MAC>``: gone, already gone, or refused."""
+    verdict = verdict_of(result)
+    lowered = strip_ansi(result.text).lower()
+    not_available = "not available" in lowered or "does not exist" in lowered
+    return RemoveResult(
+        removed=verdict.ok,
+        not_available=not_available,
+        outcome=verdict.outcome,
+        detail=verdict.detail,
+    )

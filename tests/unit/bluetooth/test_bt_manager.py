@@ -1886,60 +1886,6 @@ def test_check_audio_profiles_after_pair_no_warn_when_uuid_read_empty(bt_manager
     bt_manager.host.update_status.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# adapter_address._dbus_get_adapter_address — hciN -> MAC resolution
-# ---------------------------------------------------------------------------
-
-
-def test_dbus_get_adapter_address_returns_none_when_dbus_module_missing():
-    import sendspin_bridge.bluetooth.adapter_address as bt_dbus
-
-    with patch.object(bt_dbus, "dbus", None):
-        assert bt_dbus._dbus_get_adapter_address("hci1") is None
-
-
-def test_dbus_get_adapter_address_returns_none_for_empty_name():
-    import sendspin_bridge.bluetooth.adapter_address as bt_dbus
-
-    assert bt_dbus._dbus_get_adapter_address("") is None
-
-
-def test_dbus_get_adapter_address_reads_address_property_at_hci_path():
-    """The BlueZ object path /org/bluez/<hciN> matches the kernel hci index
-    exactly, unlike bluetoothctl list's registration-order output."""
-    import sendspin_bridge.bluetooth.adapter_address as bt_dbus
-
-    fake_dbus = MagicMock()
-    fake_bus = MagicMock()
-    fake_adapter_obj = MagicMock()
-    fake_props = MagicMock()
-    fake_props.Get.return_value = "F0:2F:74:6B:3C:BD"
-    fake_dbus.SystemBus.return_value = fake_bus
-    fake_bus.get_object.return_value = fake_adapter_obj
-    fake_dbus.Interface.return_value = fake_props
-
-    with patch.object(bt_dbus, "dbus", fake_dbus):
-        # The bus is cached per thread; a neighbour test may have filled it.
-        bt_dbus._reset_thread_buses()
-        addr = bt_dbus._dbus_get_adapter_address("hci1")
-
-    assert addr == "F0:2F:74:6B:3C:BD"
-    fake_bus.get_object.assert_called_once_with("org.bluez", "/org/bluez/hci1")
-    fake_props.Get.assert_called_once_with("org.bluez.Adapter1", "Address")
-
-
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-
 def test_connect_device_does_not_warn_when_services_resolved_unchecked(bt_manager):
     """If ``_dbus_wait_services_resolved`` reports unchecked (None), no warning.
 

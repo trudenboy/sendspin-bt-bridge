@@ -14,10 +14,10 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from sendspin_bridge.bluetooth.adapter_address import _dbus_get_adapter_address
 from sendspin_bridge.bluetooth.adapter_map import hci_for
 from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
+from sendspin_bridge.bluetooth.controller import get_controller
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config
 from sendspin_bridge.services import persist_device_enabled as _persist_device_enabled
@@ -696,20 +696,17 @@ def api_bt_disconnect():
             if any(entry.mac.upper() == mac for entry in bluez.list_devices(Adapter.select(ref.mac))):
                 owner = ref.mac
                 break
-        result = bluez.disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
-        if result.outcome is not Outcome.OK:
-            # Any non-OK outcome is a failed disconnect.  A non-zero exit
-            # often carries its error on stderr alone, where the
-            # silence-means-success heuristic below would read it as done.
-            logger.error("Failed to disconnect device %s: outcome=%s", mac, result.outcome.value)
+        result = get_controller().disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
+        if result.outcome is Outcome.FAILED:
+            # BlueZ answered, and the answer was no. The caller gets the
+            # reason with a 200: a 500 says the bridge could not ask, and
+            # leaves the client with nothing to show.
+            logger.warning("BlueZ declined to disconnect %s: %s", mac, result.detail)
+            return jsonify({"ok": False, "mac": mac, "error": result.detail or "Bluetooth disconnect refused"})
+        if not result.ok:
+            logger.error("Failed to disconnect device %s: %s", mac, result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
-        # BlueZ ≥5.72 prints "Attempting to disconnect…" and stays silent on
-        # success — only an explicit failure marker means the command failed.
-        lowered = result.stdout.lower()
-        ok = "successful" in lowered or not any(
-            marker in lowered for marker in ("failed", "not connected", "not available", "error")
-        )
-        return jsonify({"ok": ok, "mac": mac})
+        return jsonify({"ok": True, "mac": mac})
     except Exception:
         logger.exception("Failed to disconnect device %s", mac)
         return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
@@ -725,16 +722,14 @@ def api_bt_adapter_power():
         return jsonify({"error": "Invalid adapter identifier"}), 400
     power = data.get("power", True)
     try:
-        result = get_bluez().power(bool(power), Adapter.of(adapter))
-        if result.result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
-            logger.error("Failed to toggle adapter power: outcome=%s", result.result.outcome.value)
+        result = get_controller().power(bool(power), Adapter.of(adapter))
+        if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
+            logger.error("Failed to toggle adapter power: %s", result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
         # The host just changed under us; the next status build must measure
         # it rather than report the sample taken before the toggle.
         invalidate_preflight_probe()
-        # ``changed`` reproduces the historical ok-heuristic (succeeded /
-        # changing power / powered: marker) exactly.
-        return jsonify({"ok": result.changed, "power": power})
+        return jsonify({"ok": result.applied, "power": power})
     except Exception:
         logger.exception("Failed to toggle adapter power")
         return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500
@@ -830,7 +825,7 @@ def _resolve_adapter_to_mac(adapter: str) -> str:
     # /sys/class/bluetooth/hciN lacks the ``address`` file — seen live on the
     # rc.1 stand).  The D-Bus object path /org/bluez/hciN is keyed by the
     # kernel index unambiguously — prefer it over list position.
-    dbus_addr = _dbus_get_adapter_address(kernel_hci)
+    dbus_addr = get_controller().adapter_address(kernel_hci)
     if dbus_addr:
         return dbus_addr.upper()
     # No sysfs/hciconfig/D-Bus visibility: the adapters endpoint fell back
@@ -859,12 +854,12 @@ def _run_reset_reconnect(
     scope = Adapter.of(adapter)
     try:
         logger.info("Reset & Reconnect %s: removing…", mac)
-        bluez.remove(mac, scope)
+        get_controller().remove(mac, scope)
         time.sleep(1)
 
         # A controller power cycle clears the kernel-side link state that
         # survives `remove` and keeps some speakers from bonding again.
-        bluez.power(False, scope)
+        get_controller().power(False, scope)
         time.sleep(2)
 
         logger.info("Reset & Reconnect %s: pairing…", mac)

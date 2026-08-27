@@ -31,16 +31,13 @@ ARG TARGETVARIANT
 # Source stage is chosen above based on the target platform.
 COPY --from=uv-source /uv /usr/local/bin/uv
 
-# Build-time system dependencies (needed to compile dbus-python, portaudio bindings,
+# Build-time system dependencies (needed to compile the portaudio bindings
 # and PyAV on architectures without pre-built wheels)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     pkg-config \
     python3-dev \
-    libdbus-1-dev \
-    libdbus-glib-1-dev \
-    libglib2.0-dev \
     libbluetooth-dev \
     portaudio19-dev \
     libavformat-dev \
@@ -68,19 +65,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # coverage is comprehensive for our pinned versions; if a future bump
 # adds an sdist-only package, drop the flag for that one package.
 COPY requirements.txt /tmp/
-# `--no-binary` whitelist for armv7: these four ship no `linux_armv7l`
+# `--no-binary` whitelist for armv7: these three ship no `linux_armv7l`
 # wheel anywhere (PyPI nor piwheels) so under `--only-binary :all:` the
-# resolver would error out. Two are sdist-only (dbus-python, mpris-api,
-# pyric) and dbus-fast publishes wheels for x86_64/aarch64 only. Source
-# compile is fast (~3 min total — Cython for dbus-fast dominates; the
-# others are pure-Python or small C). Lift entries when upstream starts
-# shipping armv7 wheels or piwheels backfills them.
+# resolver would error out. Two are sdist-only (mpris-api, pyric) and
+# dbus-fast publishes wheels for x86_64/aarch64 only. Source compile is
+# fast (~3 min total — Cython for dbus-fast dominates; the others are
+# pure-Python or small C). Lift entries when upstream starts shipping
+# armv7 wheels or piwheels backfills them.
 RUN grep -v '^sendspin' /tmp/requirements.txt > /tmp/requirements-deps.txt && \
     if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
         uv pip install --system --no-cache --prefix=/install \
             --only-binary :all: \
             --no-binary dbus-fast \
-            --no-binary dbus-python \
             --no-binary mpris-api \
             --no-binary pyric \
             --extra-index-url https://www.piwheels.org/simple \

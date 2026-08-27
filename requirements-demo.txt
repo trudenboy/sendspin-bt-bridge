@@ -8,7 +8,6 @@
 # lazy-imported and degrade gracefully when unavailable.
 #
 # Excluded (Linux-only / system-header dependent):
-#   dbus-python              — needs libdbus-1-dev
 #   btsocket                 — Linux Bluetooth mgmt socket
 #   bluetooth-auto-recovery  — Linux rfkill / hci_mgmt
 #
