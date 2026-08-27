@@ -152,6 +152,14 @@ def test_ci_verifies_locked_dev_tool_versions():
         assert "uv sync --frozen --extra dev" not in workflow
 
 
+def test_lint_ci_installs_native_pygobject_build_dependencies():
+    lint = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "_lint.yml").read_text()
+
+    assert lint.index("Install system dependencies") < lint.index("uv sync --locked --extra dev")
+    for package in ("libcairo2-dev", "libgirepository-2.0-dev", "pkg-config"):
+        assert package in lint
+
+
 def test_dependency_prs_build_and_smoke_test_the_docker_image():
     workflow = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "docker-smoke.yml").read_text()
 

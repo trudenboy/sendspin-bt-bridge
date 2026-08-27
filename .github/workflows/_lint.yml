@@ -40,6 +40,15 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      # PyGObject pulls pycairo from source on the runner; its Meson build
+      # requires Cairo and GObject Introspection development metadata.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libgirepository-2.0-dev \
+            pkg-config
+
       - name: Install dependencies (sync from uv.lock)
         run: uv sync --locked --extra dev
 
