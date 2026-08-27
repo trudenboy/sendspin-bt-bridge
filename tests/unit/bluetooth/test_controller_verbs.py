@@ -102,6 +102,6 @@ def test_power_carries_its_own_detail_rather_than_a_transcript(bluez, fake_bluez
 
     result = bluez.power(True, Adapter.select(ADAPTER_MAC))
 
-    assert result.changed is True
+    assert result.applied is True
     assert result.powered is True
     assert "succeeded" in result.detail.lower()

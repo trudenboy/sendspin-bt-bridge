@@ -300,14 +300,14 @@ class BluezControl:
         clean = strip_ansi(result.stdout).lower()
         detail = strip_ansi(result.text).strip().splitlines()[-1] if result.text.strip() else ""
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
-            return PowerResult(changed=False, powered=not on, outcome=result.outcome, detail=detail)
+            return PowerResult(applied=False, powered=not on, outcome=result.outcome, detail=detail)
         confirmed = (
             "succeeded" in clean
             or "changing power" in clean
             or (("powered: yes" in clean) if on else ("powered: no" in clean))
         )
         if confirmed:
-            return PowerResult(changed=True, powered=on, detail=detail)
+            return PowerResult(applied=True, powered=on, detail=detail)
         # BlueZ applies the toggle asynchronously — on the live stand the
         # controller kept reporting the old state for about a second — so
         # the state is re-read until it settles or the window closes.
@@ -316,11 +316,11 @@ class BluezControl:
             info = self.show(adapter, timeout=timeout)
             if info.outcome is not Outcome.OK or not info.present:
                 # No second opinion available: report the command's own verdict.
-                return PowerResult(changed=False, powered=on, outcome=Outcome.FAILED, detail=detail)
+                return PowerResult(applied=False, powered=on, outcome=Outcome.FAILED, detail=detail)
             if info.powered is on:
-                return PowerResult(changed=True, powered=on, detail=detail)
+                return PowerResult(applied=True, powered=on, detail=detail)
             if self.now() >= deadline:
-                return PowerResult(changed=False, powered=info.powered, outcome=Outcome.FAILED, detail=detail)
+                return PowerResult(applied=False, powered=info.powered, outcome=Outcome.FAILED, detail=detail)
             self.sleep(_POWER_POLL_S)
 
     def connect(self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> VerbResult:

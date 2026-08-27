@@ -85,10 +85,10 @@ def test_list_devices(bluez):
 
 def test_power_result_reproduces_endpoint_heuristic(bluez):
     on = bluez.power(True, Adapter.select(ADAPTER_MAC))
-    assert on.changed is True
+    assert on.applied is True
     assert on.powered is True
     off = bluez.power(False, Adapter.select(ADAPTER_MAC))
-    assert off.changed is True
+    assert off.applied is True
     assert off.powered is False
 
 
@@ -263,7 +263,7 @@ def test_power_reports_the_controller_state_when_the_command_prints_no_confirmat
     off = bluez.power(False, Adapter.select(ADAPTER_MAC))
 
     assert off.powered is False
-    assert off.changed is True, "a confirmed state change must not read as a failed command"
+    assert off.applied is True, "a confirmed state change must not read as a failed command"
 
 
 def test_power_reports_failure_when_the_controller_did_not_change(bluez, fake_bluez):
@@ -272,7 +272,7 @@ def test_power_reports_failure_when_the_controller_did_not_change(bluez, fake_bl
     off = bluez.power(False, Adapter.select(ADAPTER_MAC))
 
     assert off.powered is True
-    assert off.changed is False
+    assert off.applied is False
 
 
 def test_power_waits_for_bluez_to_apply_the_change(bluez, fake_bluez):
@@ -289,5 +289,5 @@ def test_power_waits_for_bluez_to_apply_the_change(bluez, fake_bluez):
 
     shows = [c for c in fake_bluez.commands if c.kind == "run" and "show" in c.script]
     assert len(shows) > 1, "the controller state was read once and never re-checked"
-    assert off.changed is False
+    assert off.applied is False
     assert off.powered is True

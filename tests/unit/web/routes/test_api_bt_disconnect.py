@@ -70,12 +70,22 @@ def test_disconnect_silent_success_is_ok(client, installed_bluez):
 
 
 def test_disconnect_failure_marker_is_not_ok(client, installed_bluez):
+    """A speaker BlueZ declined to disconnect is an answer, not a bridge failure.
+
+    The endpoint reserves 500 for the cases where nothing could be asked —
+    a timeout, a missing bluetoothctl, an exit nobody can read — because a
+    client that sees 500 has no answer to show. "BlueZ says it is not
+    connected" is an answer, and the caller gets it with the reason.
+    """
     _two_adapters_one_device(installed_bluez)
     installed_bluez.on("disconnect", stdout="Failed to disconnect: org.bluez.Error.NotConnected\n")
 
     response = client.post("/api/bt/disconnect", json={"mac": ENEBY_MAC})
 
-    assert response.get_json()["ok"] is False
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is False
+    assert "NotConnected" in payload.get("error", "")
 
 
 def test_disconnect_reports_failure_when_bluetoothctl_exits_nonzero(client, installed_bluez):

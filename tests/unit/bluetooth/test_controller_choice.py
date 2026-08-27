@@ -89,5 +89,5 @@ def test_a_controller_the_bus_does_not_know_is_asked_of_the_subprocess(bluetooth
 
     result = _controller(dbus_bluez, bluetoothctl).power(True, Adapter.select(HCI1_MAC))
 
-    assert result.changed is True
+    assert result.applied is True
     assert [c.verb for c in bluetoothctl.commands] == ["power"]

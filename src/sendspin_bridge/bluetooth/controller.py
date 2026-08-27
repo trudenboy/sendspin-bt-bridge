@@ -113,7 +113,7 @@ class DbusController:
 
     def power(self, on: bool, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> PowerResult:
         """Power a controller up or down, reported against its own state."""
-        default = PowerResult(changed=False, powered=not on, outcome=Outcome.UNAVAILABLE, detail="no bus")
+        default = PowerResult(applied=False, powered=not on, outcome=Outcome.UNAVAILABLE, detail="no bus")
         return self._run(self._power(on, adapter), timeout, default=default)
 
     def adapter_address(self, hci_name: str) -> str:
@@ -184,11 +184,11 @@ class DbusController:
     async def _power(self, on: bool, adapter: Adapter) -> PowerResult:
         objects = await self._objects()
         if objects is None:
-            return PowerResult(changed=False, powered=not on, outcome=Outcome.UNAVAILABLE, detail="no bus")
+            return PowerResult(applied=False, powered=not on, outcome=Outcome.UNAVAILABLE, detail="no bus")
         path = self._adapter_path(objects, adapter)
         if path is None:
             return PowerResult(
-                changed=False,
+                applied=False,
                 powered=not on,
                 outcome=Outcome.UNAVAILABLE,
                 detail=f"no controller for {adapter.ident or 'the default scope'}",
@@ -196,12 +196,12 @@ class DbusController:
         verdict = await self._set_property(path, ADAPTER_INTERFACE, "Powered", on)
         if not verdict.ok:
             powered = bool(_unwrap(objects.get(path, {}).get(ADAPTER_INTERFACE, {}).get("Powered", not on)))
-            return PowerResult(changed=False, powered=powered, outcome=verdict.outcome, detail=verdict.detail)
+            return PowerResult(applied=False, powered=powered, outcome=verdict.outcome, detail=verdict.detail)
         # BlueZ applies a power change before it answers the Set, so the
         # state it reports afterwards is the state — no settle poll needed.
         powered = await self._read_property(path, ADAPTER_INTERFACE, "Powered")
         settled = on if powered is None else bool(powered)
-        return PowerResult(changed=settled is on, powered=settled)
+        return PowerResult(applied=settled is on, powered=settled)
 
     async def _adapter_address(self, hci_name: str) -> str:
         objects = await self._objects()
@@ -366,7 +366,7 @@ def _timed_out(default: Any) -> Any:
         return VerbResult(Outcome.TIMEOUT, "BlueZ did not answer")
     if isinstance(default, PowerResult):
         return PowerResult(
-            changed=False, powered=default.powered, outcome=Outcome.TIMEOUT, detail="BlueZ did not answer"
+            applied=False, powered=default.powered, outcome=Outcome.TIMEOUT, detail="BlueZ did not answer"
         )
     if isinstance(default, RemoveResult):
         return RemoveResult(removed=False, not_available=False, outcome=Outcome.TIMEOUT, detail="BlueZ did not answer")

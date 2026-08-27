@@ -697,6 +697,12 @@ def api_bt_disconnect():
                 owner = ref.mac
                 break
         result = get_controller().disconnect(mac, Adapter.select(owner) if owner else Adapter.DEFAULT)
+        if result.outcome is Outcome.FAILED:
+            # BlueZ answered, and the answer was no. The caller gets the
+            # reason with a 200: a 500 says the bridge could not ask, and
+            # leaves the client with nothing to show.
+            logger.warning("BlueZ declined to disconnect %s: %s", mac, result.detail)
+            return jsonify({"ok": False, "mac": mac, "error": result.detail or "Bluetooth disconnect refused"})
         if not result.ok:
             logger.error("Failed to disconnect device %s: %s", mac, result.detail or result.outcome.value)
             return jsonify({"ok": False, "error": "Bluetooth disconnect failed"}), 500
@@ -723,7 +729,7 @@ def api_bt_adapter_power():
         # The host just changed under us; the next status build must measure
         # it rather than report the sample taken before the toggle.
         invalidate_preflight_probe()
-        return jsonify({"ok": result.changed, "power": power})
+        return jsonify({"ok": result.applied, "power": power})
     except Exception:
         logger.exception("Failed to toggle adapter power")
         return jsonify({"ok": False, "error": "Failed to toggle adapter power"}), 500

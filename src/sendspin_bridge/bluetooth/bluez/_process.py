@@ -131,9 +131,14 @@ class VerbResult:
 
 @dataclass(frozen=True, slots=True)
 class PowerResult:
-    """Whether a controller changed power state, and what state it is in."""
+    """Whether a controller is in the state that was asked for, and which state that is.
 
-    changed: bool
+    ``applied`` is not "a toggle happened": a controller that was already
+    powered on and asked to power on has had the request applied. Callers
+    act on it as the success flag, which is what it has always been.
+    """
+
+    applied: bool
     powered: bool
     outcome: Outcome = Outcome.OK
     detail: str = ""

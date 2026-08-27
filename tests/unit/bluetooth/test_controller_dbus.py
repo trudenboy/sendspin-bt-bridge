@@ -42,7 +42,7 @@ def controller(bluez):
 def test_power_turns_on_the_controller_the_caller_named(controller, bluez):
     result = controller.power(True, Adapter.select("hci1"))
 
-    assert result.changed is True
+    assert result.applied is True
     assert result.powered is True
     assert bluez.objects[HCI1]["org.bluez.Adapter1"]["Powered"] is True
     assert bluez.objects[HCI0]["org.bluez.Adapter1"]["Powered"] is False
@@ -60,7 +60,7 @@ def test_power_reports_a_controller_that_was_already_on(controller, bluez):
     result = controller.power(True, Adapter.select("hci1"))
 
     assert result.powered is True
-    assert result.changed is True
+    assert result.applied is True
 
 
 def test_power_at_an_unknown_controller_is_unavailable_not_a_refusal(controller):
