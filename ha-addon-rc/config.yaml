@@ -1,6 +1,6 @@
 ---
 name: "Sendspin Bluetooth Bridge (RC)"
-version: "2.76.0-rc.2"
+version: "2.76.0-rc.3"
 slug: "sendspin_bt_bridge_rc"
 description: "Bridge Music Assistant Sendspin protocol to Bluetooth speakers (RC channel)"
 url: "https://github.com/trudenboy/sendspin-bt-bridge"
@@ -9,7 +9,6 @@ homeassistant: "2024.2.0"
 arch:
   - aarch64
   - amd64
-  - armv7
 startup: application
 boot: manual
 host_network: true

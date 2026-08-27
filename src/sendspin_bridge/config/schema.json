@@ -22,6 +22,11 @@
       "maximum": 65535,
       "description": "Music Assistant WebSocket port."
     },
+    "SENDSPIN_PAIRING": {
+      "type": "boolean",
+      "default": false,
+      "description": "Require Music Assistant to pair with a PIN before playback. Off by default so speakers play as soon as Music Assistant finds them. Transport encryption still runs; this only gates pairing."
+    },
     "WEB_PORT": {
       "type": ["integer", "null"],
       "default": null,

@@ -14,8 +14,12 @@ from sendspin_bridge.config.logging_setup import apply_log_level
 def _restore_root_logger_level():
     saved = logging.getLogger().level
     saved_env = os.environ.get("LOG_LEVEL")
+    saved_music_assistant_level = logging.getLogger("music_assistant_client").level
+    saved_websockets_level = logging.getLogger("websockets").level
     yield
     logging.getLogger().setLevel(saved)
+    logging.getLogger("music_assistant_client").setLevel(saved_music_assistant_level)
+    logging.getLogger("websockets").setLevel(saved_websockets_level)
     if saved_env is None:
         os.environ.pop("LOG_LEVEL", None)
     else:
@@ -46,3 +50,10 @@ def test_apply_log_level_syncs_environment_variable():
     assert os.environ.get("LOG_LEVEL") == "DEBUG"
     apply_log_level("INFO")
     assert os.environ.get("LOG_LEVEL") == "INFO"
+
+
+def test_apply_log_level_keeps_ma_wire_payload_logs_disabled_at_debug():
+    apply_log_level("DEBUG")
+
+    assert logging.getLogger("music_assistant_client").level == logging.INFO
+    assert logging.getLogger("websockets").level == logging.INFO

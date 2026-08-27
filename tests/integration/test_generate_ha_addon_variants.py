@@ -64,6 +64,7 @@ def test_generate_suffix_slug_rc_variant_supports_multi_addon_layout():
         )
     )
     config_text = rendered["ha-addon/config.yaml"]
+    build_text = rendered["ha-addon/build.yaml"]
 
     assert 'name: "Sendspin Bluetooth Bridge (RC)"' in config_text
     assert 'slug: "sendspin_bt_bridge_rc"' in config_text
@@ -75,6 +76,10 @@ def test_generate_suffix_slug_rc_variant_supports_multi_addon_layout():
     assert "ingress_port: 0" in config_text
     assert "panel_icon: mdi:flag-checkered" in config_text
     assert "stage: experimental" in config_text
+    assert "  - armv7" not in config_text
+    assert "aarch64: ghcr.io/trudenboy/sendspin-bt-bridge:rc" in build_text
+    assert "amd64: ghcr.io/trudenboy/sendspin-bt-bridge:rc" in build_text
+    assert "armv7:" not in build_text
 
 
 def test_write_variant_files_writes_generated_ha_addon_tree(tmp_path):
@@ -198,7 +203,12 @@ def test_write_multi_addon_repo_writes_expected_repository_tree(tmp_path):
     assert (tmp_path / "ha-addon-beta" / "translations" / "en.yaml").exists()
     assert (tmp_path / "ha-addon" / "icon.png").exists()
     assert (tmp_path / "ha-addon-beta" / "logo.png").exists()
-    assert (tmp_path / "ha-addon-rc" / "build.yaml").read_text().count("ghcr.io/trudenboy/sendspin-bt-bridge:rc") == 3
+    rc_build = (tmp_path / "ha-addon-rc" / "build.yaml").read_text()
+    stable_build = (tmp_path / "ha-addon" / "build.yaml").read_text()
+    assert rc_build.count("ghcr.io/trudenboy/sendspin-bt-bridge:rc") == 2
+    assert "armv7:" not in rc_build
+    assert "  - armv7" not in (tmp_path / "ha-addon-rc" / "config.yaml").read_text()
+    assert "armv7: ghcr.io/trudenboy/sendspin-bt-bridge:stable" in stable_build
 
 
 def test_generate_multi_addon_repo_files_skips_channels_without_versions():

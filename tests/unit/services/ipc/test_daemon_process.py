@@ -936,6 +936,85 @@ async def test_a_rejected_command_does_not_stop_the_reader(capsys):
 
 
 @pytest.mark.asyncio
+async def test_run_passes_pairing_requirement_into_daemon_args(monkeypatch):
+    captured = {}
+
+    class _PastDaemonArgs(BaseException):
+        pass
+
+    class _ProbeArgs(SimpleNamespace):
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            super().__init__(**kwargs)
+
+    def _stop_after_args(*_args, **_kwargs):
+        raise _PastDaemonArgs
+
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+
+    monkeypatch.setattr(bridge_daemon_mod, "DaemonArgs", _ProbeArgs)
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _stop_after_args)
+
+    with pytest.raises(_PastDaemonArgs):
+        await _run(
+            {
+                "player_name": "TestSpeaker",
+                "client_id": "test",
+                "listen_port": 8927,
+                "url": "ws://ma:8927",
+                "require_pairing": True,
+            }
+        )
+
+    assert captured["require_pairing"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_cancels_listener_daemon_when_stop_command_arrives(monkeypatch):
+    """IPC stop must cancel the daemon's otherwise-infinite listener task."""
+    import sendspin_bridge.services.ipc.daemon_process as daemon_process_mod
+
+    cancelled = asyncio.Event()
+    cleaned_up = asyncio.Event()
+
+    class _ListenerDaemon:
+        def __init__(self, *_args, **_kwargs):
+            self._audio_handler = None
+            self._client = None
+
+        async def run(self):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            finally:
+                cleaned_up.set()
+
+        async def _connection_watchdog(self):
+            await asyncio.Event().wait()
+
+    async def _stop_command(_daemon_ref, stop_event, **_kwargs):
+        stop_event.set()
+
+    monkeypatch.setattr(
+        sys.modules["sendspin_bridge.services.ipc.bridge_daemon"],
+        "BridgeDaemon",
+        _ListenerDaemon,
+        raising=False,
+    )
+    monkeypatch.setattr(daemon_process_mod, "_read_commands", _stop_command)
+
+    await asyncio.wait_for(
+        _run({"player_name": "TestSpeaker", "client_id": "test", "listen_port": 8927, "url": "ws://ma:8927"}),
+        timeout=1,
+    )
+
+    assert cancelled.is_set()
+    assert cleaned_up.is_set()
+
+
+@pytest.mark.asyncio
 async def test_an_incompatible_protocol_version_refuses_to_start(capsys):
     """A daemon that cannot honour the parent's contract must say so and exit.
 

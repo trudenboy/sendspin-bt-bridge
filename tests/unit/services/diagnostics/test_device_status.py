@@ -89,3 +89,14 @@ def test_device_status_defaults_never_paired_false():
     snapshot = status.copy()
     assert snapshot.get("never_paired") is False
     assert snapshot.get("never_paired_since") is None
+
+
+def test_device_status_accepts_pairing_pin():
+    status = DeviceStatus()
+    assert status.pairing_pin is None
+    assert status.pairing_window_open is False
+    assert status.pairing_state == "disabled"
+    status.update({"pairing_pin": "123456", "pairing_window_open": True, "pairing_state": "pin_displayed"})
+    assert status["pairing_pin"] == "123456"
+    assert status["pairing_window_open"] is True
+    assert status["pairing_state"] == "pin_displayed"

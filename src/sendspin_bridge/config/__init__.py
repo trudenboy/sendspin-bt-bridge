@@ -47,7 +47,7 @@ from sendspin_bridge.config.network import (  # noqa: F401
     resolve_web_port,
 )
 
-VERSION = "2.76.0-rc.2"
+VERSION = "2.76.0-rc.3"
 BUILD_DATE = "2026-08-27"
 _RUNTIME_VERSION_REF_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-(?:rc|beta)\.\d+)?$")
 
@@ -100,6 +100,7 @@ DEFAULT_CONFIG = {
     # before MA settled on 8927; existing configs with `SENDSPIN_PORT: 9000`
     # are preserved and the port-probe auto-shifts to 8927 at runtime.
     "SENDSPIN_PORT": 8927,
+    "SENDSPIN_PAIRING": False,
     "WEB_PORT": None,
     "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",

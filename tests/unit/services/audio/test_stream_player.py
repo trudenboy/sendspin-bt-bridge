@@ -55,6 +55,51 @@ def test_clear_drops_queued_audio_and_keeps_pipeline():
 
 
 @requires_gst
+def test_same_format_start_is_a_noop():
+    player = StreamPlayer(sink_factory=_fakesink)
+    player.start(PCM_S16_STEREO_48K)
+    pipeline = player._pipeline
+    appsrc = player._appsrc
+
+    player.start(PCM_S16_STEREO_48K)
+
+    assert player._pipeline is pipeline
+    assert player._appsrc is appsrc
+    player.stop()
+
+
+@requires_gst
+def test_player_is_reusable_after_stream_end():
+    player = StreamPlayer(sink_factory=_fakesink, raw_now_us=lambda: 0)
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(0, _silence(PCM_S16_STEREO_48K, frames=96))
+    player.close_stream()
+
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(10_000, _silence(PCM_S16_STEREO_48K, frames=96))
+    player.stop()
+
+
+@requires_gst
+def test_bus_error_is_surfaced():
+    import gi
+
+    gi.require_version("Gst", "1.0")
+    from gi.repository import GLib
+
+    from sendspin_bridge.services.audio.player.gst_support import Gst
+
+    player = StreamPlayer(sink_factory=_fakesink, raw_now_us=lambda: 0)
+    player.start(PCM_S16_STEREO_48K)
+    error = GLib.Error.new_literal(Gst.CoreError.quark(), "sink failed", Gst.CoreError.FAILED)
+    player._pipeline.get_bus().post(Gst.Message.new_error(player._pipeline, error, "test failure"))
+
+    with pytest.raises(RuntimeError, match="sink failed"):
+        player.metrics()
+    player.stop()
+
+
+@requires_gst
 def test_format_change_renegotiates_without_stop():
     handed: list[int] = []
     player = StreamPlayer(sink_factory=_recording_fakesink(handed), raw_now_us=lambda: 1_000_000)

@@ -301,6 +301,16 @@ def test_sendspin_server_change_is_global_restart():
     assert act.fields == ["SENDSPIN_SERVER"]
 
 
+def test_sendspin_pairing_change_warm_restarts_all_daemons():
+    old = _config([_device("AA:BB:CC:DD:EE:FF")], SENDSPIN_PAIRING=False)
+    new = _config([_device("AA:BB:CC:DD:EE:FF")], SENDSPIN_PAIRING=True)
+
+    (act,) = diff_configs(old, new)
+
+    assert act.kind is ActionKind.GLOBAL_RESTART
+    assert act.fields == ["SENDSPIN_PAIRING"]
+
+
 def test_bridge_name_change_is_global_restart():
     old = _config(BRIDGE_NAME="bridge-a")
     new = _config(BRIDGE_NAME="bridge-b")

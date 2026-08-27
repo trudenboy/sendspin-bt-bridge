@@ -419,7 +419,10 @@ def test_lxc_scripts_install_requirements_txt_as_the_pinset():
     install_text = (repo_root / "deployment/lxc/install.sh").read_text()
     upgrade_text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
 
-    assert "pip3 install --break-system-packages --ignore-installed -q -r /opt/sendspin-client/requirements.txt" in install_text
+    assert (
+        "pip3 install --break-system-packages --ignore-installed -q -r /opt/sendspin-client/requirements.txt"
+        in install_text
+    )
     assert "grep -v '^sendspin=='" not in install_text
     assert "sendspin>=" not in install_text
 

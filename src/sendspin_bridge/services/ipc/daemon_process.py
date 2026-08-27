@@ -507,23 +507,11 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             # this without touching the IPC layer.
             if applied and client is not None and getattr(client, "connected", False):
                 try:
-                    from aiosendspin.models.types import PlayerStateType
-
-                    cur_volume = int(getattr(daemon, "_volume", 100))
-                    cur_muted = bool(getattr(daemon, "_muted", False))
-                    cur_state = getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED
-                    try:
-                        await client.send_player_state(
-                            available=True,
-                            volume=cur_volume,
-                            muted=cur_muted,
-                        )
-                    except TypeError:
-                        await client.send_player_state(
-                            state=cur_state,
-                            volume=cur_volume,
-                            muted=cur_muted,
-                        )
+                    await client.send_player_state(
+                        available=True,
+                        volume=int(getattr(daemon, "_volume", 100)),
+                        muted=bool(getattr(daemon, "_muted", False)),
+                    )
                 except Exception as exc:
                     logger.warning("Failed to push static_delay_ms to MA: %s", exc)
         elif cmd.cmd in ("set_required_lead_time_ms", "set_min_buffer_ms"):
@@ -552,18 +540,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 daemon._bridge_status[attr] = round(value_ms)
                 daemon._notify()
                 if getattr(client, "connected", False):
-                    from aiosendspin.models.types import PlayerStateType
-
                     volume = int(getattr(daemon, "_volume", 100))
                     muted = bool(getattr(daemon, "_muted", False))
-                    try:
-                        await client.send_player_state(available=True, volume=volume, muted=muted)
-                    except TypeError:
-                        await client.send_player_state(
-                            state=getattr(daemon, "_last_player_state", None) or PlayerStateType.SYNCHRONIZED,
-                            volume=volume,
-                            muted=muted,
-                        )
+                    await client.send_player_state(available=True, volume=volume, muted=muted)
             except Exception as exc:
                 logger.warning("%s failed: %s", cmd.cmd, exc)
         elif cmd.cmd == "transport":
@@ -680,6 +659,7 @@ async def _run(params: dict) -> None:
         pulse_latency_msec=int(os.environ.get("PULSE_LATENCY_MSEC", "600") or 600),
         identity_path=str(identity_path),
         pairing_store_path=str(pairing_path),
+        require_pairing=bool(params.get("require_pairing", False)),
     )
 
     status = StatusStore(
@@ -689,6 +669,9 @@ async def _run(params: dict) -> None:
             "playing": False,
             "server_connected": False,
             "server_connected_at": None,
+            "pairing_pin": None,
+            "pairing_window_open": False,
+            "pairing_state": "unpaired" if params.get("require_pairing", False) else "disabled",
             "server_url": server_url,
             "current_track": None,
             "current_artist": None,
@@ -774,19 +757,26 @@ async def _run(params: dict) -> None:
         return_when=asyncio.FIRST_COMPLETED,
     )
 
+    # The daemon owns an infinite connection/listener loop. Once stdin closes
+    # or the parent sends stop, no natural completion can occur, so waiting for
+    # it first always burns the grace period and forces the parent to kill it.
+    # Cancellation still runs BridgeDaemon.run()'s orderly disconnect/cleanup.
+    if daemon_task not in _done:
+        daemon_task.cancel()
+
     # Cancel tracked fire-and-forget tasks
     for t in list(_background_tasks):
         t.cancel()
     _background_tasks.clear()
 
-    auxiliary_tasks = [cmd_task, watcher_task, timing_task, conn_watchdog_task]
+    auxiliary_tasks: list[asyncio.Task] = [cmd_task, watcher_task, timing_task, conn_watchdog_task]
     if routing_task:
         auxiliary_tasks.append(routing_task)
     auxiliary_tasks.extend(t for t in pending if t not in auxiliary_tasks and t is not daemon_task)
 
-    # The daemon task is given its grace period *before* anyone cancels it, so
-    # it can say goodbye to the server and let PortAudio drain.  Observability
-    # tasks have nothing to flush and go at once.
+    # After cancellation, the daemon task gets the grace period to run its
+    # disconnect/cleanup finalizer. Observability tasks have nothing to flush
+    # and go at once.
     await shut_down_tasks(
         primary=daemon_task,
         auxiliary=auxiliary_tasks,

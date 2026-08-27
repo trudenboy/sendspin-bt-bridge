@@ -397,12 +397,13 @@ Set automatically by `entrypoint.sh` during container startup. Rarely need manua
 |---|---|---|
 | `PULSE_SERVER` | *(auto-detected)* | PulseAudio / PipeWire socket path (e.g. `unix:/run/audio/pulse.sock`) |
 | `PULSE_LATENCY_MSEC` | from config (`600`) | PulseAudio latency hint in milliseconds; set from `PULSE_LATENCY_MSEC` config key |
-| `PULSE_SINK` | *(per-subprocess)* | Default PulseAudio sink for playback; set per device subprocess to route audio to the correct speaker |
 | `AUDIO_UID` | `1000` | User ID for PulseAudio socket access |
 | `AUDIO_GID` | *(from socket)* | Group ID for PulseAudio socket access |
 | `DBUS_SYSTEM_BUS_ADDRESS` | *(auto-detected)* | D-Bus system bus socket path |
 | `STARTUP_DEPENDENCY_WAIT_ATTEMPTS` | `45` | Maximum attempts to wait for D-Bus, Bluetooth, and audio during startup |
 | `STARTUP_DEPENDENCY_WAIT_DELAY_SECONDS` | `1` | Delay in seconds between startup dependency checks |
+
+Per-device sink routing is not an environment-variable contract: the daemon passes the discovered sink directly to GStreamer's `pulsesink device` property.
 
 ### Home Assistant addon variables
 

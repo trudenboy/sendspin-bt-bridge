@@ -223,19 +223,20 @@ def render_config_yaml(variant: HaAddonVariant, base_text: str | None = None) ->
     text = _replace_unquoted_scalar(text, "ingress_port", _CHANNEL_NETWORK_DEFAULTS[variant.channel]["ingress_port"])
     text = _replace_plain_scalar(text, "panel_icon", _CHANNEL_PANEL_ICONS[variant.channel])
     text = _set_optional_stage(text, variant.stage)
+    if variant.channel == "rc":
+        text = text.replace("  - armv7\n", "")
     return text
 
 
 def render_build_yaml(variant: HaAddonVariant) -> str:
-    return "\n".join(
-        [
-            "build_from:",
-            f"  aarch64: ghcr.io/trudenboy/sendspin-bt-bridge:{variant.build_tag}",
-            f"  amd64: ghcr.io/trudenboy/sendspin-bt-bridge:{variant.build_tag}",
-            f"  armv7: ghcr.io/trudenboy/sendspin-bt-bridge:{variant.build_tag}",
-            "",
-        ]
-    )
+    lines = [
+        "build_from:",
+        f"  aarch64: ghcr.io/trudenboy/sendspin-bt-bridge:{variant.build_tag}",
+        f"  amd64: ghcr.io/trudenboy/sendspin-bt-bridge:{variant.build_tag}",
+    ]
+    if variant.channel != "rc":
+        lines.append(f"  armv7: ghcr.io/trudenboy/sendspin-bt-bridge:{variant.build_tag}")
+    return "\n".join([*lines, ""])
 
 
 def render_readme_md(variant: HaAddonVariant, base_text: str | None = None) -> str:

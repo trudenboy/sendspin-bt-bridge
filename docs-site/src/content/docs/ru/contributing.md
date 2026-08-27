@@ -25,13 +25,13 @@ open http://localhost:8080
 
 ```bash
 pip install -r requirements.txt
-python sendspin_client.py
+python -m sendspin_bridge
 ```
 
 ## Структура проекта
 
 ```
-sendspin_client.py    # Точка входа: SendspinClient + main()
+src/sendspin_bridge/  # Package entrypoint, bridge runtime, services и web API
 bluetooth_manager.py  # BluetoothManager — BT подключения через bluetoothctl
 config.py             # Конфигурация, shared lock, load_config()
 state.py              # Общее runtime-состояние (список SendspinClient)
@@ -56,7 +56,7 @@ ha-addon/             # Home Assistant addon конфигурация
 lxc/                  # LXC установочные скрипты (Proxmox и OpenWrt)
 ```
 
-> **Архитектура**: каждая Bluetooth-колонка работает как изолированный asyncio-subprocess (`services/daemon_process.py`) с переменной `PULSE_SINK=<bt_sink_name>` в окружении. Это даёт каждой колонке собственный PulseAudio-контекст — аудио направляется в нужную колонку с первого семпла, без `move-sink-input` при старте.
+> **Архитектура**: каждая Bluetooth-колонка работает как изолированный asyncio-subprocess. aiosendspin 9 владеет Noise transport и постоянной identity, bridge декодирует FLAC в PCM, а GStreamer направляет звук через явный `pulsesink device=<bt_sink_name>`. PIN-сопряжение Sendspin опционально и по умолчанию выключено; Noise-шифрование остаётся включённым.
 
 ## Тестирование
 

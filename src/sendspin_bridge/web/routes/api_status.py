@@ -282,11 +282,7 @@ def _collect_portaudio_device_diagnostics() -> list[dict]:
         devices = query_audio_devices()
     except Exception:
         return []
-    return [
-        {"index": d.index, "name": d.name, "is_default": d.is_default}
-        for d in devices
-        if d.output_channels > 0
-    ]
+    return [{"index": d.index, "name": d.name, "is_default": d.is_default} for d in devices if d.output_channels > 0]
 
 
 def _build_onboarding_assistant_payload(

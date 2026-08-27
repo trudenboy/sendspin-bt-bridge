@@ -115,9 +115,7 @@ def find_duplicate_devices(
         if not mac:
             continue
         device_name = str(dev.get("name") or mac)
-        existing_name = _matching_ma_name(
-            players, mac=mac, device_name=device_name, own_bridge_name=bridge_name
-        )
+        existing_name = _matching_ma_name(players, mac=mac, device_name=device_name, own_bridge_name=bridge_name)
         if not existing_name:
             continue
         warnings.append(
@@ -155,9 +153,7 @@ def find_scan_device_conflicts(
         mac = _normalize_mac(raw_mac)
         if not mac:
             continue
-        existing_name = _matching_ma_name(
-            players, mac=mac, device_name="", own_bridge_name=own_bridge_name
-        )
+        existing_name = _matching_ma_name(players, mac=mac, device_name="", own_bridge_name=own_bridge_name)
         if not existing_name:
             continue
         conflicts[mac] = f"Already registered as '{existing_name}' in Music Assistant"

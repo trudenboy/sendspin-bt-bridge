@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import CLOCK_MONOTONIC_RAW, clock_gettime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -33,21 +33,26 @@ class StreamPlayer:
         self._sink_factory = sink_factory
         self._raw_now_us = raw_now_us or _raw_now_us
         self._clock = clock
-        self._pipeline = None
-        self._appsrc = None
-        self._sink = None
+        self._pipeline: Any = None
+        self._appsrc: Any = None
+        self._sink: Any = None
         self._format: PcmFormat | None = None
         self._discontinuities = 0
         self._last_pts_ns: int | None = None
         self._last_duration_ns: int | None = None
         self._sync_error_ns: int | None = None
         self._rendered = 0
+        self._stream_closed = False
 
     def start(self, audio_format: PcmFormat) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
         from sendspin_bridge.services.audio.player.pipeline import build_pipeline
 
-        if self._pipeline is not None:
+        if self._pipeline is not None and self._stream_closed:
+            self.stop()
+        elif self._pipeline is not None and self._format == audio_format:
+            return
+        elif self._pipeline is not None:
             self._set_caps(audio_format)
             return
         sink = self._sink_factory()
@@ -57,14 +62,15 @@ class StreamPlayer:
         self._sink = sink
         if self._clock is not None:
             pipeline.use_clock(self._clock)
-            pipeline.set_start_time(Gst.CLOCK_TIME_NONE)
-            pipeline.set_base_time(0)
+        pipeline.set_start_time(Gst.CLOCK_TIME_NONE)
+        pipeline.set_base_time(0)
         self._attach_sink_probe()
         self._set_caps(audio_format)
         if pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
             raise RuntimeError("failed to set GStreamer pipeline to PLAYING")
         if self._clock is None:
             pipeline.get_state(Gst.SECOND)
+        self._stream_closed = False
 
     def submit(self, play_time_us: int, payload: bytes) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
@@ -99,12 +105,14 @@ class StreamPlayer:
         self._pipeline.send_event(Gst.Event.new_flush_stop(True))
         self._last_pts_ns = None
         self._last_duration_ns = None
+        self._sync_error_ns = None
         self._poll_bus()
 
     def close_stream(self) -> None:
         if self._appsrc is None:
             return
         self._appsrc.emit("end-of-stream")
+        self._stream_closed = True
         self._poll_bus()
 
     def set_volume(self, value: float, muted: bool) -> None:
@@ -128,6 +136,7 @@ class StreamPlayer:
         self._format = None
         self._last_pts_ns = None
         self._last_duration_ns = None
+        self._stream_closed = False
 
     def is_drained(self) -> bool:
         if self._appsrc is None:
@@ -212,6 +221,10 @@ class StreamPlayer:
                 break
             if msg.type == Gst.MessageType.QOS:
                 self._discontinuities += 1
+            elif msg.type == Gst.MessageType.ERROR:
+                error, debug = msg.parse_error()
+                detail = f" ({debug})" if debug else ""
+                raise RuntimeError(f"GStreamer pipeline error: {error}{detail}")
 
     def _gst_format_time(self):
         from sendspin_bridge.services.audio.player.gst_support import Gst

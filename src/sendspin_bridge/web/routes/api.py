@@ -20,7 +20,7 @@ import wave
 
 from flask import Blueprint, Response, jsonify, request
 
-from sendspin_bridge.config import save_device_buffer_setting, save_device_static_delay, save_device_volume
+from sendspin_bridge.config import load_config, save_device_buffer_setting, save_device_static_delay, save_device_volume
 from sendspin_bridge.services.audio.latency_calibration import build_calibration_pcm
 from sendspin_bridge.services.audio.pulse import (
     get_sink_mute,
@@ -477,22 +477,38 @@ def api_restart():
 
 @api_bp.route("/api/pairing/window", methods=["POST"])
 def open_pairing_window():
-    data = request.get_json() or {}
-    player_name = data.get("player_name")
-    if not player_name:
-        return jsonify({"success": False, "error": "player_name required"}), 400
+    if not load_config().get("SENDSPIN_PAIRING", False):
+        return jsonify({"success": False, "error": "Sendspin pairing is disabled"}), 409
+
+    data = request.get_json(silent=True) or {}
+    player_id = str(data.get("player_id") or "").strip()
+    if not player_id:
+        return jsonify({"success": False, "error": "player_id required"}), 400
     snapshot = get_device_registry_snapshot().active_clients
-    target = next((client for client in snapshot if client.player_name == player_name), None)
+    target = next((client for client in snapshot if str(getattr(client, "player_id", "")) == player_id), None)
     if target is None:
         return jsonify({"success": False, "error": "player not found"}), 404
+    if not target.is_running():
+        return jsonify({"success": False, "error": "Player daemon is not running"}), 409
     loop = get_main_loop()
-    if loop:
-        _submit_loop_coroutine(
-            loop,
-            target._send_subprocess_command(OpenPairingWindow()),
-            description=f"open_pairing_window for {target.player_name}",
-        )
-    return jsonify({"success": True})
+    if not loop:
+        return jsonify({"success": False, "error": "Runtime loop unavailable"}), 503
+
+    coro = target._send_subprocess_command(OpenPairingWindow())
+    try:
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+    except Exception:
+        if asyncio.iscoroutine(coro):
+            coro.close()
+        logger.exception("Could not open pairing window for %s", target.player_name)
+        return jsonify({"success": False, "error": "Could not schedule pairing command"}), 503
+    try:
+        future.result(timeout=2.0)
+    except Exception:
+        future.cancel()
+        logger.exception("Could not deliver pairing command for %s", target.player_name)
+        return jsonify({"success": False, "error": "Could not deliver pairing command"}), 503
+    return jsonify({"success": True, "player_id": str(getattr(target, "player_id", ""))}), 202
 
 
 @api_bp.route("/api/volume", methods=["POST"])

@@ -60,6 +60,7 @@ class DaemonArgs:
     slave_method: str = "skew"
     identity_path: str | None = None
     pairing_store_path: str | None = None
+    require_pairing: bool = False
 
 
 class BridgeDaemon:
@@ -89,14 +90,19 @@ class BridgeDaemon:
         min_buffer_ms: float = 250.0,
     ) -> None:
         self._args = args
-        self._client = None
-        self._listener = None
+        self._client: Any = None
+        self._listener: Any = None
         self._connection_lock: asyncio.Lock | None = None
         self._player: StreamPlayer | None = None
-        self._audio_handler = None
+        self._audio_handler: Any = None
+        self._decoder: Any = None
+        self._decoder_format: tuple[str, int, int, int, bytes | None] | None = None
+        self._next_play_time_us: int | None = None
+        self._pending_play_time_us: int | None = None
+        self._pairing_window_task: asyncio.Task[None] | None = None
         self._volume = args.initial_volume
         self._muted = args.initial_muted
-        self._volume_controller = None
+        self._volume_controller: Any = None
         self._static_delay_ms = max(0.0, min(5000.0, args.static_delay_ms))
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
@@ -109,14 +115,6 @@ class BridgeDaemon:
         self._bt_manufacturer = bt_manufacturer
         self._required_lead_time_ms = required_lead_time_ms
         self._min_buffer_ms = min_buffer_ms
-        # Initialise the synchronized state lazily so test fixtures that
-        # build a BridgeDaemon without aiosendspin installed still work.
-        try:
-            from aiosendspin.models.types import PlayerStateType
-
-            self._last_player_state = PlayerStateType.SYNCHRONIZED
-        except Exception:
-            self._last_player_state = None
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -141,6 +139,7 @@ class BridgeDaemon:
 
         self._static_delay_ms = max(0.0, min(5000.0, self._args.static_delay_ms))
         await self._load_identity_and_pairing_store()
+        self._client = self._create_client(self._static_delay_ms)
         sink_name = self._args.sink_name or self._bluetooth_sink_name
         self._player = StreamPlayer(
             sink_factory=default_pulsesink_factory(
@@ -168,6 +167,11 @@ class BridgeDaemon:
         except asyncio.CancelledError:
             logger.debug("Daemon cancelled")
         finally:
+            if self._pairing_window_task is not None:
+                self._pairing_window_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._pairing_window_task
+                self._pairing_window_task = None
             if self._volume_controller is not None:
                 with contextlib.suppress(Exception):
                     await self._volume_controller.stop_monitoring()
@@ -185,8 +189,6 @@ class BridgeDaemon:
 
     async def _run_client_initiated(self) -> None:
         assert self._args.url is not None
-        client = self._create_client(self._static_delay_ms)
-        self._client = client
         await self._connection_loop(self._args.url)
 
     async def _connection_loop(self, url: str) -> None:
@@ -227,8 +229,47 @@ class BridgeDaemon:
             from aiosendspin.noise.trust_store import FileClientPairingStore
 
             self._pairing_store = await FileClientPairingStore.open(pairing_path)
+            await self._apply_pairing_policy()
+        await self._refresh_pairing_state()
+
+    async def _refresh_pairing_state(self) -> None:
+        if not bool(getattr(self._args, "require_pairing", False)):
+            self._bridge_status["pairing_state"] = "disabled"
+            self._notify()
+            return
+        store = getattr(self, "_pairing_store", None)
+        records = await store.list_records() if store is not None else ()
+        self._bridge_status["pairing_state"] = (
+            "paired" if any(getattr(record, "server_id", None) for record in records) else "unpaired"
+        )
+        self._notify()
+
+    async def _apply_pairing_policy(self) -> None:
+        store = getattr(self, "_pairing_store", None)
+        if store is None:
+            return
+        from dataclasses import replace
+
+        require_pairing = bool(getattr(self._args, "require_pairing", False))
+        current = await store.get_pairing_config()
+        desired = replace(
+            current,
+            unpaired_access_enabled=not require_pairing,
+            dynamic_pin_enabled=require_pairing,
+            pairing_psk_enabled=require_pairing,
+            static_pin_enabled=False,
+        )
+        if desired != current:
+            await store.store_pairing_config(desired)
+            logger.info(
+                "Sendspin pairing %s (unpaired access %s)",
+                "required" if require_pairing else "disabled",
+                "off" if require_pairing else "on",
+            )
 
     def _pairing_support(self):
+        if not bool(getattr(self._args, "require_pairing", False)):
+            return None
         try:
             from aiosendspin.client.models import PairingSupport
         except Exception:
@@ -236,6 +277,12 @@ class BridgeDaemon:
 
         async def _pin_display(pin: str | None) -> None:
             self._bridge_status["pairing_pin"] = pin
+            if pin:
+                logger.debug("Sendspin pairing PIN is ready for display")
+                self._bridge_status["pairing_state"] = "pin_displayed"
+            else:
+                self._bridge_status["pairing_window_open"] = False
+                await self._refresh_pairing_state()
             self._notify()
 
         return PairingSupport(pin_display=_pin_display)
@@ -245,6 +292,19 @@ class BridgeDaemon:
         opener = getattr(client, "open_pairing_window", None) if client is not None else None
         if callable(opener):
             opener()
+            self._bridge_status["pairing_window_open"] = bool(getattr(client, "pairing_window_open", True))
+            self._bridge_status["pairing_state"] = "window_open"
+            self._notify()
+            if self._pairing_window_task is None or self._pairing_window_task.done():
+                self._pairing_window_task = asyncio.create_task(self._watch_pairing_window(client))
+
+    async def _watch_pairing_window(self, client: object) -> None:
+        while bool(getattr(client, "pairing_window_open", False)):
+            await asyncio.sleep(0.05)
+        self._bridge_status["pairing_window_open"] = False
+        if not self._bridge_status.get("pairing_pin"):
+            await self._refresh_pairing_state()
+        self._notify()
 
     def _on_external_volume(self, volume: int, muted: bool) -> None:
         self._volume = volume
@@ -341,6 +401,7 @@ class BridgeDaemon:
         client.add_metadata_listener(self._on_metadata_update)
         client.add_controller_state_listener(self._on_controller_state)
         client.add_disconnect_listener(self._on_server_disconnect)
+        client.add_server_command_listener(self._handle_server_command)
 
         # Register visualizer listener if available
         if hasattr(client, "add_visualizer_listener"):
@@ -350,9 +411,9 @@ class BridgeDaemon:
         if hasattr(client, "add_stream_start_listener"):
             client.add_stream_start_listener(self._on_stream_start)
         if hasattr(client, "add_stream_end_listener"):
-            client.add_stream_end_listener(lambda _roles: self._on_stream_event("stop"))
+            client.add_stream_end_listener(self._on_stream_end)
         if hasattr(client, "add_stream_clear_listener"):
-            client.add_stream_clear_listener(lambda _roles: self._player.clear() if self._player else None)
+            client.add_stream_clear_listener(self._on_stream_clear)
 
         return client
 
@@ -380,8 +441,6 @@ class BridgeDaemon:
         self._notify()
 
     async def _handle_disconnect(self) -> None:
-        if self._player is not None:
-            self._player.clear()
         self._on_server_disconnect()
 
     async def _run_server_initiated(self) -> None:
@@ -440,7 +499,7 @@ class BridgeDaemon:
         interface = getattr(self._args, "interface", None)
         host = interface if interface is not None else "0.0.0.0"
         self._listener = _HeartbeatListener(
-            client_id=self._args.client_id,
+            client_id=self._identity.peer_id,
             on_connection=self._handle_server_connection,
             port=self._args.listen_port,
             client_name=self._args.client_name,
@@ -452,64 +511,52 @@ class BridgeDaemon:
             await asyncio.sleep(3600)
 
     async def _handle_server_connection(self, ws) -> None:
-        """Mirror the upstream connect flow without stale disconnect status races."""
+        """Give an inbound socket to the persistent client's admission machinery."""
         logger.info("Server connected")
-        assert self._connection_lock is not None
+        client = self._client
+        if client is None:
+            raise RuntimeError("Sendspin client is not initialized")
 
-        async with self._connection_lock:
-            previous_client: Any = getattr(self, "_client", None)
-            if previous_client is not None:
-                logger.info("Disconnecting from previous server")
-                await self._handle_disconnect()
-                if previous_client.connected:
-                    try:
-                        from aiosendspin.models.core import ClientGoodbyeMessage, ClientGoodbyePayload
-                        from aiosendspin.models.types import GoodbyeReason
+        async def _publish_when_connected() -> None:
+            while True:
+                admitted = getattr(client, "_admitted_connection", None)
+                transport = getattr(admitted, "_ws", None)
+                raw_socket = getattr(transport, "_ws", transport)
+                owns_socket = admitted is None or raw_socket is ws
+                if getattr(client, "connected", False) and owns_socket:
+                    self._mark_server_connected(ws)
+                    return
+                await asyncio.sleep(0.05)
 
-                        await previous_client._send_message(
-                            ClientGoodbyeMessage(
-                                payload=ClientGoodbyePayload(reason=GoodbyeReason.ANOTHER_SERVER)
-                            ).to_json()
-                        )
-                    except Exception:
-                        logger.debug("Failed to send goodbye message", exc_info=True)
-                await previous_client.disconnect()
-
-            client = self._create_client(self._static_delay_ms)
-            self._client = client
-            client.add_server_command_listener(self._handle_server_command)
-
-            try:
-                await client.attach_websocket(ws)
-            except TimeoutError:
-                logger.warning("Handshake with server timed out")
-                await self._handle_disconnect()
-                if self._client is client:
-                    self._client = None
-                return
-            except Exception:
-                logger.exception("Error during server handshake")
-                await self._handle_disconnect()
-                if self._client is client:
-                    self._client = None
-                return
-
-            self._mark_server_connected(ws)
-
+        publisher = asyncio.create_task(_publish_when_connected())
         try:
-            disconnect_event = asyncio.Event()
-            unsubscribe = client.add_disconnect_listener(disconnect_event.set)
-            await disconnect_event.wait()
-            unsubscribe()
-            logger.info("Server disconnected")
+            await client.attach_websocket(ws)
         except Exception:
-            logger.exception("Error waiting for server disconnect")
+            logger.exception("Error serving inbound server connection")
         finally:
-            if self._client is client:
-                await self._handle_disconnect()
+            publisher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await publisher
 
     def _on_server_disconnect(self) -> None:
         """Clear connection + group state on disconnect."""
+        already_disconnected = (
+            not self._bridge_status.get("server_connected")
+            and not self._bridge_status.get("connected")
+            and self._bridge_status.get("group_id") is None
+            and self._decoder is None
+            and self._next_play_time_us is None
+            and self._pending_play_time_us is None
+            and not self._bridge_status.get("audio_streaming")
+        )
+        if already_disconnected:
+            return
+        if self._player is not None:
+            self._player.clear()
+        self._decoder = None
+        self._decoder_format = None
+        self._next_play_time_us = None
+        self._pending_play_time_us = None
         self._bridge_status["server_connected"] = False
         self._bridge_status["connected"] = False
         self._bridge_status["group_name"] = None
@@ -756,9 +803,7 @@ class BridgeDaemon:
         controller = getattr(self, "_volume_controller", None)
         if controller is None:
             return
-        task = asyncio.get_running_loop().create_task(
-            controller.set_state(self._volume, muted=self._muted)
-        )
+        task = asyncio.get_running_loop().create_task(controller.set_state(self._volume, muted=self._muted))
 
         def _done(done: asyncio.Task) -> None:
             if done.cancelled():
@@ -777,14 +822,55 @@ class BridgeDaemon:
             self._on_stream_event("start")
             return
         codec = getattr(player_cfg, "codec", None)
-        codec_name = codec.value if hasattr(codec, "value") else str(codec or "PCM")
+        codec_name = str(getattr(codec, "value", codec or "PCM"))
         sample_rate = int(getattr(player_cfg, "sample_rate", 48000))
         bit_depth = int(getattr(player_cfg, "bit_depth", 16))
         channels = int(getattr(player_cfg, "channels", 2))
+        header = getattr(player_cfg, "codec_header", None)
+        self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
             self._player.start(PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth))
         self._on_stream_event("start")
+
+    def _reset_decoder(
+        self,
+        codec_name: str,
+        sample_rate: int,
+        bit_depth: int,
+        channels: int,
+        codec_header: object,
+    ) -> None:
+        from aiosendspin.audio.codecs import create_decoder
+
+        header = codec_header
+        if isinstance(header, str):
+            import base64
+
+            try:
+                header = base64.b64decode(header)
+            except Exception:
+                header = None
+        codec = str(codec_name or "pcm").split(".")[-1].lower()
+        header_bytes = bytes(header) if isinstance(header, (bytes, bytearray)) else None
+        signature = (codec, sample_rate, bit_depth, channels, header_bytes)
+        if signature == self._decoder_format:
+            return
+        self._decoder_format = signature
+        self._decoder = None
+        if codec == "pcm":
+            return
+        try:
+            self._decoder = create_decoder(
+                codec,
+                sample_rate=sample_rate,
+                bit_depth=bit_depth,
+                channels=channels,
+                codec_header=header_bytes,
+            )
+        except Exception as exc:
+            logger.error("Cannot decode %s: %s", codec, exc)
+            self._decoder = None
 
     def _on_audio_chunk(self, server_timestamp_us: int, payload: bytes, audio_format) -> None:
         if self._player is None:
@@ -795,14 +881,63 @@ class BridgeDaemon:
             channels=int(getattr(pcm, "channels", 2)),
             bit_depth=int(getattr(pcm, "bit_depth", 16)),
         )
-        self._player.start(fmt)
+        codec = getattr(audio_format, "codec", None)
+        codec_name = str(getattr(codec, "value", codec or "pcm")).lower()
+        header = getattr(audio_format, "codec_header", None)
+        self._reset_decoder(codec_name, fmt.sample_rate, fmt.bit_depth, fmt.channels, header)
         client = self._client
         play_time_us = (
             client.compute_play_time(server_timestamp_us)
             if client is not None and hasattr(client, "compute_play_time")
             else server_timestamp_us
         )
+        if codec_name != "pcm":
+            if self._decoder is None:
+                return
+            if self._pending_play_time_us is None:
+                self._pending_play_time_us = play_time_us
+            try:
+                payload = self._decoder.decode(payload)
+            except Exception:
+                logger.exception("audio decode failed")
+                return
+            if not payload:
+                return
+            play_time_us = self._pending_play_time_us
+            self._pending_play_time_us = None
+        else:
+            self._pending_play_time_us = None
+        self._player.start(fmt)
         self._player.submit(play_time_us, payload)
+        frame_bytes = fmt.frame_bytes()
+        duration_us = (len(payload) // frame_bytes) * 1_000_000 // fmt.sample_rate if frame_bytes else 0
+        self._next_play_time_us = play_time_us + duration_us
+
+    def _on_stream_clear(self, _roles: object = None) -> None:
+        self._decoder = None
+        self._decoder_format = None
+        self._next_play_time_us = None
+        self._pending_play_time_us = None
+        if self._player is not None:
+            self._player.clear()
+
+    def _on_stream_end(self, _roles: object = None) -> None:
+        if self._player is not None and self._decoder is not None:
+            try:
+                trailing = self._decoder.flush()
+            except Exception:
+                logger.exception("audio decoder flush failed")
+            else:
+                trailing_play_time = self._next_play_time_us or self._pending_play_time_us
+                if trailing and trailing_play_time is not None:
+                    self._player.submit(trailing_play_time, trailing)
+        self._decoder = None
+        self._decoder_format = None
+        self._next_play_time_us = None
+        self._pending_play_time_us = None
+        if self._player is not None:
+            self._player.close_stream()
+        self._on_stream_event("stop")
 
     def metrics(self) -> dict[str, object]:
         if self._player is None:
@@ -817,7 +952,5 @@ def _declared_formats():
     formats = []
     for sample_rate in (48000, 44100):
         for codec in (AudioCodec.FLAC, AudioCodec.PCM):
-            formats.append(
-                SupportedAudioFormat(codec=codec, channels=2, sample_rate=sample_rate, bit_depth=16)
-            )
+            formats.append(SupportedAudioFormat(codec=codec, channels=2, sample_rate=sample_rate, bit_depth=16))
     return formats

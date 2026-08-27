@@ -17,6 +17,8 @@ aiosignal==1.4.0
     # via aiohttp
 attrs==26.1.0
     # via aiohttp
+av==18.1.0
+    # via sendspin-bt-bridge
 bleak==3.0.2
     # via bluetooth-adapters
 blinker==1.9.0

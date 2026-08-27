@@ -915,6 +915,19 @@
                                 <span id="test-sendspin-result" class="form-hint" style="margin-left: 12px;"></span>
                             </div>
 
+                            <label class="config-setting-row" title="Require a PIN in Music Assistant before this bridge will play. Off by default so speakers start as soon as Music Assistant finds them. Transport encryption still runs.">
+                                <span class="config-setting-copy ui-stack ui-stack--xs">
+                                    <strong>Require Sendspin pairing</strong>
+                                    <span class="form-hint">Off: play without a PIN. On: open Pair with MA and enter the PIN in Music Assistant.</span>
+                                </span>
+                                <span class="config-setting-control">
+                                    <span class="config-switch">
+                                        <input type="checkbox" name="SENDSPIN_PAIRING" id="sendspin-pairing">
+                                        <span class="config-switch-track"></span>
+                                    </span>
+                                </span>
+                            </label>
+
                             <label class="config-setting-row">
                                 <span class="config-setting-copy ui-stack ui-stack--xs">
                                     <strong>WebSocket monitor</strong>

@@ -19,6 +19,11 @@ import os
 # treated as a fat-fingered config and silently downgraded to INFO.
 _VALID_LEVELS: frozenset[str] = frozenset({"INFO", "DEBUG"})
 
+# music-assistant-client includes its complete auth command in DEBUG output.
+# Keep its WebSocket dependency at INFO too: wire logs add no operator value and
+# can contain credentials supplied by a future upstream client implementation.
+_SENSITIVE_DEPENDENCY_LOGGERS: tuple[str, ...] = ("music_assistant_client", "websockets")
+
 
 def apply_log_level(level: str | None) -> str:
     """Normalize, validate, set the parent-process root logger, sync ``LOG_LEVEL``.
@@ -31,6 +36,8 @@ def apply_log_level(level: str | None) -> str:
     if normalized not in _VALID_LEVELS:
         normalized = "INFO"
     logging.getLogger().setLevel(getattr(logging, normalized))
+    for name in _SENSITIVE_DEPENDENCY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.INFO)
     os.environ["LOG_LEVEL"] = normalized
     return normalized
 

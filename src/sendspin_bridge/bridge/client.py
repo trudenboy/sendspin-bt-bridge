@@ -51,6 +51,7 @@ from sendspin_bridge.config import (
     _player_id_from_mac,
     config_lock,
     get_runtime_version,
+    load_config,
     save_device_static_delay,
     save_device_volume,
 )
@@ -260,6 +261,9 @@ _IPC_ALLOWED_KEYS = frozenset(
         "timing_sampled_at",
         "required_lead_time_ms",
         "min_buffer_ms",
+        "pairing_pin",
+        "pairing_window_open",
+        "pairing_state",
     }
 )
 
@@ -494,6 +498,11 @@ class DeviceStatus:
     # timestamp of the first flip for diagnostics.
     never_paired: bool = False
     never_paired_since: str | None = None
+
+    # aiosendspin 9 dynamic PIN, shown while a pairing window is open.
+    pairing_pin: str | None = None
+    pairing_window_open: bool = False
+    pairing_state: str = "disabled"
 
     # Mean lifetime (seconds) when the last 3 unexpected daemon exits landed
     # within ±1s of each other.  Populated by SendspinClient after each death.
@@ -1398,6 +1407,11 @@ class SendspinClient:
                             "connected": False,
                             "group_name": None,
                             "group_id": None,
+                            "pairing_pin": None,
+                            "pairing_window_open": False,
+                            "pairing_state": (
+                                "unpaired" if load_config().get("SENDSPIN_PAIRING", False) else "disabled"
+                            ),
                         }
                         # Surface exit context as last_error so the device card
                         # and diagnostics report show *something* even when the
@@ -1710,6 +1724,7 @@ class SendspinClient:
                         "config_schema_version": CONFIG_SCHEMA_VERSION,
                         "bt_product_name": bt_product_name,
                         "bt_manufacturer": bt_manufacturer,
+                        "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
                     }
                 )
             )

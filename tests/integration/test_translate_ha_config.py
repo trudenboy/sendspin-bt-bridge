@@ -134,6 +134,27 @@ def test_zero_bt_check_interval(tmp_path):
 # ── Runtime state preservation ───────────────────────────────────────────
 
 
+def test_sendspin_pairing_defaults_false_and_survives_addon_restart(tmp_path):
+    _write_json(tmp_path / "config.json", {"SENDSPIN_PAIRING": True})
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["SENDSPIN_PAIRING"] is True
+
+
+def test_sendspin_pairing_defaults_false_without_persisted_web_config(tmp_path):
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["SENDSPIN_PAIRING"] is False
+
+
 def test_static_delay_ms_preserved_across_addon_restart(tmp_path):
     """MA-pushed static_delay_ms must survive an addon restart (issue #237).
 

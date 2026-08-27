@@ -20,13 +20,13 @@ Without Docker (requires system Bluetooth and audio packages):
 
 ```bash
 pip install -r requirements.txt
-python sendspin_client.py
+python -m sendspin_bridge
 ```
 
 ## Project Structure
 
 ```
-sendspin_client.py    # Entry point: SendspinClient + main()
+src/sendspin_bridge/  # Package entry point, bridge runtime, services, and web API
 bluetooth_manager.py  # BluetoothManager — BT connections via bluetoothctl
 config.py             # Configuration, shared lock, load_config()
 state.py              # Shared runtime state (list of SendspinClient instances)
@@ -51,7 +51,7 @@ ha-addon/             # Home Assistant addon configuration
 lxc/                  # LXC install scripts (Proxmox & OpenWrt)
 ```
 
-> **Architecture note**: each Bluetooth speaker runs as an isolated asyncio subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in its environment. This gives every speaker its own PulseAudio context so audio routes to the correct speaker from the first sample, without any `move-sink-input` calls at startup.
+> **Architecture note**: each Bluetooth speaker runs as an isolated asyncio subprocess. aiosendspin 9 owns Noise transport and persistent identity, the bridge decodes FLAC to PCM, and GStreamer routes playback with an explicit `pulsesink device=<bt_sink_name>`. Sendspin PIN pairing is optional and off by default; Noise encryption remains enabled.
 
 ## Testing
 

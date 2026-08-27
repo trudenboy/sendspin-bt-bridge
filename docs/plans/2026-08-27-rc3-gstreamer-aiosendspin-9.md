@@ -14,15 +14,18 @@ wire change still bisect.
 daemon subprocess (one per speaker, unchanged)
   BridgeDaemon (ours)
     ├── Identity + FileClientPairingStore     persist under CONFIG_DIR
-    ├── aiosendspin 9.1.1 SendspinClient      protocol, clock, admission, FLAC→PCM
+    ├── aiosendspin 9.1.1 SendspinClient      Noise protocol, clock, admission, identity
+    ├── BridgeDaemon codec decoder (ours)     FLAC→PCM
     ├── ClientListener (+ heartbeat=30)       server-initiated mode, mDNS
     └── StreamPlayer (ours) → GStreamer:
           appsrc (PCM) ! audioconvert ! audioresample !
           pulsesink device=<sink name> sync=true
 ```
 
-aiosendspin 9.1.1 already decodes FLAC and delivers PCM on
-`add_audio_chunk_listener`. There is no `flacparse` in this pipeline.
+aiosendspin 9.1.1 delivers encoded chunks on `add_audio_chunk_listener`.
+`BridgeDaemon` creates the aiosendspin codec decoder and drives FLAC-to-PCM
+conversion itself before calling the Player. There is no `flacparse` in the
+GStreamer pipeline.
 `static_delay_ms` is still the SDK field name; the operator-facing config key
 does not change.
 
@@ -39,8 +42,9 @@ pipeline (`fakesink`; `GstCheck.TestClock` when the GIR is present).
   that package remains.
 - Music Assistant 2.10.0 on the test stand pins `aiosendspin[server]==9.1.1`.
   Noise is mandatory; 6.x is accepted only via `allow_unencrypted`.
-- The SDK, not GStreamer, now owns FLAC decode. A Phase-1 pipeline of
-  `flacparse ! flacdec` would double-decode or fight PTS.
+- The bridge, not the aiosendspin client or GStreamer pipeline, owns FLAC
+  decode. A Phase-1 pipeline of `flacparse ! flacdec` would duplicate that
+  bridge-side decode or fight PTS.
 
 Commit 2 still plays on aiosendspin 6.1.1 so a silent GST bug is not blamed on
 Noise. Commit 3 is the wire jump.
@@ -56,12 +60,12 @@ Noise. Commit 3 is the wire jump.
 
 | | Decision |
 |---|---|
-| Player | GStreamer; input is PCM from the SDK |
+| Player | GStreamer; input is PCM from the bridge-owned decoder |
 | Output | `pulsesink device=<sink>` (explicit). Drop `PULSE_SINK` in the engine commit |
 | PyGObject | PyPI `PyGObject`, not `PYTHONPATH` onto debian `python3-gi` |
-| Formats | Declared FLAC+PCM 44.1/48 stereo 16. SDK rejects anything else. Drop `sounddevice` / `libportaudio2` in the wire commit |
+| Formats | Declared FLAC+PCM 44.1/48 stereo 16. The bridge rejects anything else. Drop `sounddevice` / `libportaudio2` in the wire commit |
 | Identity | X25519 per speaker, persisted. Wire `client_id` = `identity.peer_id`. Bridge `player_id` stays uuid5(MAC) |
-| Pairing | `FileClientPairingStore` per MAC under `CONFIG_DIR`. UI: Pair → `open_pairing_window` + PIN on the card. `unpaired_access=false` |
+| Pairing | `FileClientPairingStore` per MAC under `CONFIG_DIR`. Optional and off by default (`unpaired_access=true`); when required, UI Pair → `open_pairing_window` + PIN on the card |
 | Delay | Keep `static_delay_ms` in config/UI/IPC — 9.1.1 still uses that name |
 | Settings | No `sendspin` `ClientSettings` file. Disk holds identity + pairing store only |
 | Admission | Do not copy `_should_switch_to_new_server`. The SDK arbitrates |
@@ -182,12 +186,14 @@ inbound connections racing. IPC command tests stay.
 - Modify: `CONTEXT.md` — Player, Identity, Pairing store; Daemon no longer
   “sink in the environment”
 
-**Formats:** a fixed FLAC+PCM list. The SDK raises if `player_support`
-advertises anything it cannot decode.
+**Formats:** a fixed FLAC+PCM list. The bridge advertises only formats its
+decoder path can convert to PCM.
 
 **Pairing UX (minimum for the rc):** `PairingSupport(pin_display=…)`, Pair
 opens the 300 s window, status shows unpaired / pairing / paired /
-`PAIRING_REQUIRED`. `PAIRING_PSK` stays enabled in the store default.
+`PAIRING_REQUIRED`. Pairing is disabled by default; enabling it turns off
+unpaired access and enables dynamic PIN / pairing PSK support. Noise transport
+encryption remains active in either mode.
 
 Do **not** rename `static_delay_ms` in config, JS, or HA.
 
