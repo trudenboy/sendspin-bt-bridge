@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.2] - 2026-08-27
+
+### Changed
+
+- Connecting, disconnecting, trusting and forgetting a speaker, and powering a
+  controller, now go to the system Bluetooth service directly instead of
+  through the command-line tool. The service is told which controller by name,
+  so an operation aimed at one adapter can no longer be applied to another —
+  the failure that could switch off the wrong controller on a two-adapter
+  host. The command-line tool still runs when the service cannot answer at
+  all, so installs without it keep working.
+- A failed Bluetooth operation now reports the reason the system gave for it —
+  a speaker that is out of range, a bond that is already gone — rather than a
+  reason inferred from the wording of a command's output.
+- Installing the bridge no longer builds a native D-Bus extension. It was the
+  last thing that needed the D-Bus development headers, so container and
+  manual installs have one fewer build dependency and one fewer thing that can
+  fail to compile on a 32-bit Raspberry Pi.
+- Disconnecting a speaker that Bluetooth declines to disconnect now reports
+  the reason it gave, instead of a generic failure.
+
 ## [2.76.0-rc.1] - 2026-08-27
 
 ### Changed

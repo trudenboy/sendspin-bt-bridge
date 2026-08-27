@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.2] - 2026-08-27
+
 ### Changed
 
 - Connecting, disconnecting, trusting and forgetting a speaker, and powering a
@@ -23,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   last thing that needed the D-Bus development headers, so container and
   manual installs have one fewer build dependency and one fewer thing that can
   fail to compile on a 32-bit Raspberry Pi.
+- Disconnecting a speaker that Bluetooth declines to disconnect now reports
+  the reason it gave, instead of a generic failure.
 
 ## [2.76.0-rc.1] - 2026-08-27
 
