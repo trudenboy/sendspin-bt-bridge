@@ -165,7 +165,7 @@ rich==15.0.0
     #   textual-image
 sendspin==7.5.0
     # via sendspin-bt-bridge
-sounddevice==0.5.5
+sounddevice==0.5.6
     # via sendspin
 textual-image==0.13.2
     # via sendspin
