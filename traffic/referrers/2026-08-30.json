@@ -1,0 +1,52 @@
+[
+  {
+    "referrer": "github.com",
+    "count": 337,
+    "uniques": 55
+  },
+  {
+    "referrer": "Google",
+    "count": 174,
+    "uniques": 99
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 130,
+    "uniques": 87
+  },
+  {
+    "referrer": "Bing",
+    "count": 46,
+    "uniques": 12
+  },
+  {
+    "referrer": "DuckDuckGo",
+    "count": 40,
+    "uniques": 15
+  },
+  {
+    "referrer": "youtube.com",
+    "count": 36,
+    "uniques": 23
+  },
+  {
+    "referrer": "yandex.ru",
+    "count": 30,
+    "uniques": 10
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 28,
+    "uniques": 8
+  },
+  {
+    "referrer": "search.brave.com",
+    "count": 25,
+    "uniques": 5
+  },
+  {
+    "referrer": "4pda.to",
+    "count": 14,
+    "uniques": 11
+  }
+]
