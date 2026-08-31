@@ -126,7 +126,7 @@ pyobjc-framework-cocoa==12.2.2 ; sys_platform == 'darwin'
     # via
     #   pyobjc-framework-corebluetooth
     #   pyobjc-framework-libdispatch
-pyobjc-framework-corebluetooth==12.2.1 ; sys_platform == 'darwin'
+pyobjc-framework-corebluetooth==12.2.2 ; sys_platform == 'darwin'
     # via bleak
 pyobjc-framework-libdispatch==12.2.1 ; sys_platform == 'darwin'
     # via bleak
