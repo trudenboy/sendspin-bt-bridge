@@ -1,0 +1,52 @@
+[
+  {
+    "referrer": "Google",
+    "count": 250,
+    "uniques": 135
+  },
+  {
+    "referrer": "github.com",
+    "count": 200,
+    "uniques": 45
+  },
+  {
+    "referrer": "community.home-assistant.io",
+    "count": 127,
+    "uniques": 80
+  },
+  {
+    "referrer": "trudenboy.github.io",
+    "count": 38,
+    "uniques": 18
+  },
+  {
+    "referrer": "Bing",
+    "count": 29,
+    "uniques": 10
+  },
+  {
+    "referrer": "DuckDuckGo",
+    "count": 28,
+    "uniques": 17
+  },
+  {
+    "referrer": "search.brave.com",
+    "count": 16,
+    "uniques": 6
+  },
+  {
+    "referrer": "chatgpt.com",
+    "count": 13,
+    "uniques": 12
+  },
+  {
+    "referrer": "l.facebook.com",
+    "count": 11,
+    "uniques": 7
+  },
+  {
+    "referrer": "yandex.ru",
+    "count": 6,
+    "uniques": 3
+  }
+]
