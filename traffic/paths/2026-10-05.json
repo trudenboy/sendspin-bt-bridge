@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/trudenboy/sendspin-bt-bridge",
+    "title": "Overview",
+    "count": 976,
+    "uniques": 603
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues",
+    "title": "/issues",
+    "count": 80,
+    "uniques": 37
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
+    "title": "/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
+    "count": 25,
+    "uniques": 23
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "title": "/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "count": 23,
+    "uniques": 22
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases/tag/v2.75.0",
+    "title": "/releases/tag/v2.75.0",
+    "count": 19,
+    "uniques": 18
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/pulls",
+    "title": "/pulls",
+    "count": 19,
+    "uniques": 13
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases",
+    "title": "/releases",
+    "count": 18,
+    "uniques": 14
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
+    "title": "/blob/main/README.ru.md",
+    "count": 15,
+    "uniques": 12
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docker-compose.yml",
+    "title": "/blob/main/docker-compose.yml",
+    "count": 12,
+    "uniques": 8
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/discussions",
+    "title": "/discussions",
+    "count": 12,
+    "uniques": 8
+  }
+]
