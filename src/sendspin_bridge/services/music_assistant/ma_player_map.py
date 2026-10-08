@@ -112,6 +112,13 @@ def plan_group_identity_migrations(
         new_id = learned.get(client_id)
         if not client_id or not new_id:
             continue
+        # Rewriting MA's configuration needs proof, not a name: the new player
+        # must list the client id our daemon says hello with. The display-name
+        # fallback in learn_ma_player_ids is fine for addressing a queue, but
+        # any player can carry our name.
+        advertised = str(bridge_player.get("client_id") or "").strip()
+        if not advertised or advertised not in _output_protocol_ids(by_id.get(new_id, {})):
+            continue
         legacy = _legacy_ids(players, client_id) - {new_id}
         if any(by_id.get(old, {}).get("available") for old in legacy):
             continue

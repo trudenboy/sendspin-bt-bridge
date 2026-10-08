@@ -209,6 +209,14 @@ LEGACY_ID = "fcc3c5f3-15b2-5ddb-99d2-f64b915d8c25"
 LEGACY_UNIVERSAL = "up" + LEGACY_ID.replace("-", "")
 
 
+def _new_player() -> dict:
+    return {"player_id": "up184e8a15", "available": True, "output_protocols": [{"output_protocol_id": "RND_peer"}]}
+
+
+def _bridge_player() -> dict:
+    return {"player_id": LEGACY_ID, "player_name": "ENEBY20 @ HAOS", "client_id": "RND_peer"}
+
+
 def _sync_group(player_id: str, members: list[str]) -> dict:
     return {"player_id": player_id, "type": "group", "provider": "sync_group", "static_group_members": members}
 
@@ -219,11 +227,9 @@ def test_a_sync_group_moves_from_the_legacy_player_to_the_new_one():
     left pointing at a player that will never come back."""
     from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
 
-    players = [_sync_group("syncgroup_a", [LEGACY_UNIVERSAL, "upother"])]
+    players = [_new_player(), _sync_group("syncgroup_a", [LEGACY_UNIVERSAL, "upother"])]
 
-    plans = plan_group_identity_migrations(
-        players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20 @ HAOS"}], {LEGACY_ID: "up184e8a15"}
-    )
+    plans = plan_group_identity_migrations(players, [_bridge_player()], {LEGACY_ID: "up184e8a15"})
 
     assert plans == {"syncgroup_a": ["up184e8a15", "upother"]}
 
@@ -234,12 +240,11 @@ def test_a_legacy_player_that_is_still_alive_is_left_in_its_groups():
 
     players = [
         {"player_id": LEGACY_UNIVERSAL, "available": True, "output_protocols": [{"output_protocol_id": LEGACY_ID}]},
+        _new_player(),
         _sync_group("syncgroup_a", [LEGACY_UNIVERSAL]),
     ]
 
-    plans = plan_group_identity_migrations(
-        players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20"}], {LEGACY_ID: "up184e8a15"}
-    )
+    plans = plan_group_identity_migrations(players, [_bridge_player()], {LEGACY_ID: "up184e8a15"})
 
     assert plans == {}
 
@@ -247,11 +252,9 @@ def test_a_legacy_player_that_is_still_alive_is_left_in_its_groups():
 def test_a_group_that_already_has_the_new_player_is_left_alone():
     from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
 
-    players = [_sync_group("syncgroup_a", [LEGACY_UNIVERSAL, "up184e8a15"])]
+    players = [_new_player(), _sync_group("syncgroup_a", [LEGACY_UNIVERSAL, "up184e8a15"])]
 
-    plans = plan_group_identity_migrations(
-        players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20"}], {LEGACY_ID: "up184e8a15"}
-    )
+    plans = plan_group_identity_migrations(players, [_bridge_player()], {LEGACY_ID: "up184e8a15"})
 
     assert plans == {}
 
@@ -259,6 +262,27 @@ def test_a_group_that_already_has_the_new_player_is_left_alone():
 def test_nothing_moves_until_the_new_player_is_known():
     from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
 
-    players = [_sync_group("syncgroup_a", [LEGACY_UNIVERSAL])]
+    players = [_new_player(), _sync_group("syncgroup_a", [LEGACY_UNIVERSAL])]
 
-    assert plan_group_identity_migrations(players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20"}], {}) == {}
+    assert plan_group_identity_migrations(players, [_bridge_player()], {}) == {}
+
+
+def test_a_player_matched_only_by_name_does_not_take_over_group_membership():
+    """The display-name fallback is good enough to address a queue, not to
+    rewrite Music Assistant's configuration: any player can carry our name.
+    Only a player that lists our daemon's client id as its output protocol
+    is proven to be our speaker."""
+    from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
+
+    players = [
+        {"player_id": "upimpostor", "display_name": "ENEBY20 @ HAOS", "output_protocols": []},
+        _sync_group("syncgroup_a", [LEGACY_UNIVERSAL]),
+    ]
+
+    plans = plan_group_identity_migrations(
+        players,
+        [{"player_id": LEGACY_ID, "player_name": "ENEBY20 @ HAOS", "client_id": "RND_peer"}],
+        {LEGACY_ID: "upimpostor"},
+    )
+
+    assert plans == {}
