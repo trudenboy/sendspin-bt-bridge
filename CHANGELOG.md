@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slider no longer jumps to the old level after Pause or Stop while the
   speaker keeps the new one
   ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
+- Pair and Add no longer fails with `AuthenticationFailed` on speakers that
+  pair fine from the host. The bridge's own pairing agent now answers the
+  confirmation instead of the one built into the pairing session
+  ([#471](https://github.com/trudenboy/sendspin-bt-bridge/issues/471)).
 
 ### Security
 
