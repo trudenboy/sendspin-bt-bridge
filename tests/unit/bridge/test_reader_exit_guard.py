@@ -107,3 +107,28 @@ async def test_a_cancelled_reader_is_the_bridge_stopping_it():
     await asyncio.sleep(0)
 
     assert not proc.killed, "a stop cancelled the reader; the stop path owns the daemon"
+
+
+@pytest.mark.asyncio
+async def test_a_reader_that_ends_during_a_requested_stop_leaves_the_daemon_to_it(caplog):
+    """The stop path asked the daemon to leave; it closes stdout a moment
+    before the process exits, so the reader sees EOF while ``returncode`` is
+    still None. That is the stop working, not a reader dying: killing the
+    daemon here cut its shutdown short and logged two errors per stop (seen
+    live on every Bluetooth drop)."""
+    client = _client()
+    proc = _LiveProc()
+    client._daemon_proc = proc
+    client._explicit_stop_pending = True
+
+    async def _reader_at_eof():
+        return None
+
+    with caplog.at_level("ERROR"):
+        task = asyncio.ensure_future(_reader_at_eof())
+        task.add_done_callback(client._make_reader_done_handler())
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(0)
+
+    assert not proc.killed
+    assert "Killing daemon" not in caplog.text

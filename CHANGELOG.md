@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Stopping a speaker's player, for example when its Bluetooth link drops, no
+  longer kills the player halfway through its own shutdown and logs two
+  errors each time.
+
 ## [2.76.0-rc.6] - 2026-10-08
 
 ### Changed
