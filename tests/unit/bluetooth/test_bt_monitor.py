@@ -892,3 +892,121 @@ def test_reconnect_attempt_logging_downgrades_after_first(caplog):
     assert levels[0] == logging.WARNING  # first attempt is visible
     assert levels[1] == logging.DEBUG  # subsequent attempts are quiet
     assert levels[2] == logging.DEBUG
+
+
+# ---------------------------------------------------------------------------
+# _inner_dbus_monitor — stale disconnect event (#470), dead daemon (#460)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_inner_dbus_monitor_does_not_spin_on_a_stale_disconnect_event(bt_manager):
+    """#470: a disconnect event left set from the released/offline period must
+    not satisfy the connected-branch wait, or the loop never yields and the
+    timeout handles it creates pile up until the OOM killer steps in."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = True
+    bt_manager.management_enabled = True
+    bt_manager.check_interval = 60
+    bt_manager.host = MagicMock()
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=True)
+
+    iterations = {"n": 0}
+
+    def _status_value(key, default=None):
+        if key == "bt_standby":
+            iterations["n"] += 1
+            if iterations["n"] >= 50:  # safety valve: bound the spin pre-fix
+                bt_manager._running = False
+        return False
+
+    bt_manager.host.get_status_value = MagicMock(side_effect=_status_value)
+
+    # Set while the speaker was off; the speaker is connected again now.
+    disconnect_event = asyncio.Event()
+    disconnect_event.set()
+
+    task = asyncio.create_task(
+        _inner_dbus_monitor(bt_manager, AsyncMock(), disconnect_event, asyncio.Event(), asyncio.get_running_loop())
+    )
+    await asyncio.sleep(0.05)
+    bt_manager._running = False
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert iterations["n"] < 5
+
+
+@pytest.mark.asyncio
+async def test_inner_dbus_monitor_restarts_daemon_it_stopped_after_deferred_reconnect(bt_manager):
+    """#460: the monitor stops the daemon when the link drops; if BlueZ brings
+    the link back while the reconnect poll is deferred (adapter leased), the
+    connected branch must start the daemon again rather than leave the
+    speaker connected but silent."""
+    from sendspin_bridge.bluetooth.adapter_session import AdapterHandle
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = False
+    bt_manager.management_enabled = True
+    bt_manager.check_interval = 0.01
+
+    running = {"alive": True}
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(side_effect=lambda: running["alive"])
+    bt_manager.host.send_subprocess_command = AsyncMock()
+
+    async def _stop():
+        running["alive"] = False
+
+    async def _start():
+        running["alive"] = True
+
+    bt_manager.host.stop_subprocess = AsyncMock(side_effect=_stop)
+    bt_manager.host.start_subprocess = AsyncMock(side_effect=_start)
+
+    device = AsyncMock()
+    device.get_connected = AsyncMock(return_value=False)
+
+    held: dict = {}
+    waits = {"n": 0}
+
+    async def _fake_wait_for(coro, *, timeout=None):
+        coro.close()
+        waits["n"] += 1
+        if waits["n"] == 1:
+            # Backoff after the failed attempt: a UI scan grabs the adapter.
+            held["lease"] = AdapterHandle().try_lease("scan")
+            raise TimeoutError
+        # Connected-branch wait: end the test here.
+        bt_manager._running = False
+
+    async def _sleep(_duration):
+        # The deferred poll sleeps; meanwhile BlueZ reconnects on its own.
+        if held.get("lease") is not None:
+            held.pop("lease").release()
+            bt_manager.connected = True
+
+    async def _run_in_executor(_executor, fn, *args):
+        return fn(*args)
+
+    loop = asyncio.get_running_loop()
+    try:
+        with (
+            patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_fake_wait_for),
+            patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", side_effect=_sleep),
+            patch.object(loop, "run_in_executor", side_effect=_run_in_executor),
+            patch.object(bt_manager, "is_device_paired", return_value=True),
+            patch.object(bt_manager, "connect_device", return_value=False),
+            patch.object(bt_manager, "handle_reconnect_failure", return_value=False),
+            patch.object(bt_manager, "reconnect_cancelled", return_value=False),
+        ):
+            await _inner_dbus_monitor(bt_manager, device, asyncio.Event(), asyncio.Event(), loop)
+    finally:
+        if held.get("lease") is not None:
+            held["lease"].release()
+
+    bt_manager.host.stop_subprocess.assert_awaited_once()
+    bt_manager.host.start_subprocess.assert_awaited_once()
+    assert running["alive"] is True
