@@ -313,3 +313,22 @@ async def test_daemon_stop_says_goodbye_with_restart(tmp_path: Path):
     await daemon.run()
 
     client.disconnect.assert_awaited_once_with(GoodbyeReason.RESTART)
+
+
+@pytest.mark.asyncio
+async def test_daemon_publishes_the_client_id_it_says_hello_with(tmp_path: Path):
+    """Music Assistant keys the player by the identity key in the hello, not
+    the bridge's player id; the parent needs it to address that player."""
+    daemon = _daemon(tmp_path)
+    client = SimpleNamespace(disconnect=AsyncMock())
+
+    async def inbound():
+        raise asyncio.CancelledError
+
+    daemon._create_client = MagicMock(return_value=client)  # type: ignore[method-assign]
+    daemon._run_server_initiated = inbound  # type: ignore[method-assign]
+
+    await daemon.run()
+
+    assert daemon._identity is not None
+    assert daemon._bridge_status["sendspin_client_id"] == daemon._identity.peer_id

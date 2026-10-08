@@ -264,6 +264,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "pairing_pin",
         "pairing_window_open",
         "pairing_state",
+        "sendspin_client_id",
     }
 )
 
@@ -503,6 +504,9 @@ class DeviceStatus:
     pairing_pin: str | None = None
     pairing_window_open: bool = False
     pairing_state: str = "disabled"
+    # The client id the daemon says hello with (its identity key). Music
+    # Assistant keys the player by it; the bridge's player_id is MAC-derived.
+    sendspin_client_id: str | None = None
 
     # Mean lifetime (seconds) when the last 3 unexpected daemon exits landed
     # within ±1s of each other.  Populated by SendspinClient after each death.
@@ -1350,6 +1354,22 @@ class SendspinClient:
             return proc.pid
         return None
 
+    @property
+    def sendspin_client_id(self) -> str | None:
+        """The client id the daemon says hello with (its identity key)."""
+        return self.status.get("sendspin_client_id") or None
+
+    @property
+    def ma_player_id(self) -> str:
+        """The id Music Assistant knows this speaker by.
+
+        The player MA learned for us from ``players/all`` first, else the
+        Sendspin client id MA registered, else our own player id.
+        """
+        from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_player_id
+
+        return get_ma_player_id(self.player_id) or self.sendspin_client_id or self.player_id
+
     def get_ip_address(self) -> str:
         """Get the primary IP address of this machine"""
         from sendspin_bridge.config import get_local_ip
@@ -1966,7 +1986,7 @@ class SendspinClient:
             return
         if not force and not self.status.get("muted"):
             return  # already in sync
-        pid = self.player_id
+        pid = self.ma_player_id
         if not pid:
             return
         try:

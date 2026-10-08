@@ -62,7 +62,14 @@ def learn_ma_player_ids(
         client_id = str(bridge_player.get("player_id") or "").strip()
         if not client_id:
             continue
-        resolved = by_protocol.get(client_id) or by_exact_name.get(str(bridge_player.get("player_name") or "").strip())
+        # aiosendspin 9 says hello with the daemon's identity key, so that —
+        # not the bridge's player id — is the output protocol MA lists.
+        advertised = str(bridge_player.get("client_id") or "").strip()
+        resolved = (
+            (by_protocol.get(advertised) if advertised else None)
+            or by_protocol.get(client_id)
+            or by_exact_name.get(str(bridge_player.get("player_name") or "").strip())
+        )
         if resolved:
             mapping[client_id] = resolved
     return mapping

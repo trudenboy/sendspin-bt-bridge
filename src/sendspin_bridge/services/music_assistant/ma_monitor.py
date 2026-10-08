@@ -784,7 +784,11 @@ class MaMonitor:
 
             clients = _active_bridge_clients()
             bridge_info = [
-                {"player_id": getattr(c, "player_id", ""), "player_name": getattr(c, "player_name", "")}
+                {
+                    "player_id": getattr(c, "player_id", ""),
+                    "player_name": getattr(c, "player_name", ""),
+                    "client_id": getattr(c, "sendspin_client_id", None) or "",
+                }
                 for c in clients
                 if getattr(c, "player_id", "")
             ]
@@ -792,7 +796,8 @@ class MaMonitor:
             # The same answer says which MA player fronts each of our
             # speakers.  Without it a queue command for an ungrouped speaker
             # is aimed at an id MA does not have.
-            _state.set_ma_player_ids(learn_ma_player_ids(players, bridge_info))
+            learned_ids = learn_ma_player_ids(players, bridge_info)
+            _state.set_ma_player_ids(learned_ids)
 
             member_set_by_group: dict[str, set[str]] = {}
 
@@ -809,7 +814,9 @@ class MaMonitor:
                 sg_info = {"id": sg_id, "name": sg_name}
                 for bp in bridge_info:
                     pid = bp["player_id"]
-                    if pid in member_ids and pid not in id_map:
+                    # Sync groups list MA's own player ids as members.
+                    in_group = pid in member_ids or learned_ids.get(pid) in member_ids
+                    if in_group and pid not in id_map:
                         id_map[pid] = sg_info
 
             # Fallback: fuzzy name matching for unmatched bridge players

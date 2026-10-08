@@ -139,6 +139,9 @@ class BridgeDaemon:
 
         self._static_delay_ms = max(0.0, min(5000.0, self._args.static_delay_ms))
         await self._load_identity_and_pairing_store()
+        if self._identity is not None:
+            # MA keys the player by this id, not by the bridge's player id.
+            self._bridge_status["sendspin_client_id"] = self._identity.peer_id
         self._client = self._create_client(self._static_delay_ms)
         sink_name = self._args.sink_name or self._bluetooth_sink_name
         self._player = StreamPlayer(
