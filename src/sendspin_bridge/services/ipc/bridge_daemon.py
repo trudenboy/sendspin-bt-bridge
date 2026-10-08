@@ -179,7 +179,13 @@ class BridgeDaemon:
                 self._player.stop()
                 self._player = None
             if self._client is not None:
-                await self._client.disconnect()
+                from aiosendspin.models.types import GoodbyeReason
+
+                # Every stop the parent orders brings the daemon back (link
+                # drop, standby, config change, bridge restart). ``shutdown``
+                # tells the server not to auto-reconnect, and Music Assistant
+                # then never dialled the respawned daemon again.
+                await self._client.disconnect(GoodbyeReason.RESTART)
                 self._client = None
             if self._listener is not None:
                 await self._listener.stop()

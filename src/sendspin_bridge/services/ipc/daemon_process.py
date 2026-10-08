@@ -448,7 +448,11 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 delay = float(cmd.payload.get("delay", 0))
 
                 async def _delayed_reconnect(_d=daemon, _delay=delay):
-                    await _d._client.disconnect()
+                    from aiosendspin.models.types import GoodbyeReason
+
+                    # ``restart``: the point is to come straight back. The
+                    # default ``shutdown`` made the server stop dialling us.
+                    await _d._client.disconnect(GoodbyeReason.RESTART)
                     if _delay > 0:
                         # Give MA time to process ClientRemovedEvent and unregister
                         # the old player before the auto-reconnect sends a new client_hello
