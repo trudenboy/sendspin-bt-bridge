@@ -1854,12 +1854,12 @@ class SendspinClient:
             proc = self._daemon_proc
             if proc is None or proc.returncode is not None:
                 return
-            if self._explicit_stop_pending:
+            error = task.exception()
+            if error is None and getattr(self, "_explicit_stop_pending", False):
                 # A requested stop: the daemon closes stdout a moment before it
                 # exits, so the reader sees EOF while it is still running. The
                 # stop path owns it; killing it here cut its shutdown short.
                 return
-            error = task.exception()
             if error is not None:
                 logger.error("[%s] stdout reader error: %s", self.player_name, error)
             else:
