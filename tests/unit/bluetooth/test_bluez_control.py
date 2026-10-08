@@ -349,3 +349,24 @@ def test_bluetoothctl_answers_when_the_backend_cannot(fake_bluez):
     assert control.device_info(ENEBY_MAC).name == "ENEBY Portable"
     assert backend.asked == ["list_adapters", "device_info"]
     assert next(c.argv[:2] for c in fake_bluez.commands) == ("bluetoothctl", "list")
+
+
+def test_a_scan_runs_on_the_backend_when_it_can(fake_bluez):
+    from sendspin_bridge.bluetooth.bluez import ScanTranscript
+
+    class _ScanBackend:
+        def __init__(self):
+            self.windows = []
+
+        def scan(self, adapters=None, *, window_s=15.0):
+            self.windows.append((tuple(adapters or ()), window_s))
+            return ScanTranscript(seen_macs=frozenset({ENEBY_MAC}))
+
+    backend = _ScanBackend()
+    control = BluezControl(spawner=fake_bluez, query_backend=backend)
+
+    transcript = control.scan([ADAPTER_MAC], window_s=7.0)
+
+    assert transcript.seen_macs == frozenset({ENEBY_MAC})
+    assert backend.windows == [((ADAPTER_MAC,), 7.0)]
+    assert fake_bluez.commands == []

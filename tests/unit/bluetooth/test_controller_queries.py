@@ -137,3 +137,36 @@ def test_every_question_says_none_when_the_bus_cannot_answer(bluez, controller):
     assert controller.show(Adapter.DEFAULT) is None
     assert controller.list_devices(Adapter.DEFAULT) is None
     assert controller.device_info(ENEBY, Adapter.DEFAULT) is None
+
+
+# ---------------------------------------------------------------------------
+# Discovery, without a bluetoothctl session
+# ---------------------------------------------------------------------------
+
+JBL = "AA:BB:CC:11:22:33"
+
+
+def test_a_scan_runs_classic_discovery_on_the_controllers_asked_for(bluez, controller):
+    bluez.add_in_range(HCI1, f"{HCI1}/dev_AA_BB_CC_11_22_33", JBL, Name="JBL Flip", Alias="JBL Flip", RSSI=-61)
+
+    transcript = controller.scan([HCI1_MAC], window_s=0.05)
+
+    calls = [(path, name) for path, name, _args in bluez.calls]
+    assert (HCI1, "SetDiscoveryFilter") in calls
+    assert (HCI1, "StartDiscovery") in calls
+    assert (HCI1, "StopDiscovery") in calls
+    assert (HCI0, "StartDiscovery") not in calls
+    filters = [args[0] for path, name, args in bluez.calls if name == "SetDiscoveryFilter"]
+    assert filters[0]["Transport"].value == "bredr"
+    assert JBL in transcript.seen_macs
+    assert transcript.names[JBL] == "JBL Flip"
+    assert transcript.device_adapter[JBL] == HCI1_MAC
+    assert transcript.rssi_by_mac[JBL] == -61
+
+
+def test_a_controller_that_refuses_discovery_is_reported_not_silent(bluez, controller):
+    bluez.fail["StartDiscovery"] = RuntimeError("org.bluez.Error.InProgress")
+
+    transcript = controller.scan([HCI0_MAC], window_s=0.01)
+
+    assert transcript.discovery_errors == ("org.bluez.Error.InProgress",)

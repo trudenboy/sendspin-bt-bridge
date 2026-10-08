@@ -34,6 +34,9 @@ class FakeBlueZ:
         self.connected = True
         self.fail: dict[str, Exception] = {}
         self._subscribers: dict[str, list] = {}
+        #: Devices that only show up once a controller starts discovery:
+        #: {adapter path: [(device path, address, properties)]}.
+        self.in_range: dict[str, list[tuple[str, str, dict[str, Any]]]] = {}
 
     # -- what BlueZ knows ----------------------------------------------
 
@@ -83,6 +86,10 @@ class FakeBlueZ:
 
     def remove(self, path: str) -> None:
         self.objects.pop(path, None)
+
+    def add_in_range(self, adapter_path: str, device_path: str, address: str, **props: Any) -> None:
+        """A device advertising nearby: BlueZ creates its object once discovery runs."""
+        self.in_range.setdefault(adapter_path, []).append((device_path, address, props))
 
     # -- what the module sees ------------------------------------------
 
@@ -200,6 +207,24 @@ class FakeAdapterInterface:
         self._bluez = bluez
         self._path = path
 
+    async def call_set_discovery_filter(self, properties: dict) -> None:
+        self._bluez.calls.append((self._path, "SetDiscoveryFilter", (dict(properties),)))
+
+    async def call_start_discovery(self) -> None:
+        self._bluez.calls.append((self._path, "StartDiscovery", ()))
+        if "StartDiscovery" in self._bluez.fail:
+            raise self._bluez.fail["StartDiscovery"]
+        self._bluez.set_property(self._path, "Discovering", True, interface="org.bluez.Adapter1")
+        # Devices in range stay in range: every discovery finds them again,
+        # as a speaker in pairing mode keeps advertising after a remove.
+        for device_path, address, props in self._bluez.in_range.get(self._path, []):
+            if device_path not in self._bluez.objects:
+                self._bluez.add_device(device_path, address, paired=False, **props)
+
+    async def call_stop_discovery(self) -> None:
+        self._bluez.calls.append((self._path, "StopDiscovery", ()))
+        self._bluez.set_property(self._path, "Discovering", False, interface="org.bluez.Adapter1")
+
     async def call_remove_device(self, device_path: str) -> None:
         self._bluez.calls.append((self._path, "RemoveDevice", (device_path,)))
         if "RemoveDevice" in self._bluez.fail:
@@ -211,6 +236,13 @@ class FakeDeviceInterface:
     def __init__(self, bluez: FakeBlueZ, path: str):
         self._bluez = bluez
         self._path = path
+
+    async def call_pair(self) -> None:
+        self._bluez.calls.append((self._path, "Pair", ()))
+        if "Pair" in self._bluez.fail:
+            raise self._bluez.fail["Pair"]
+        self._bluez.set_property(self._path, "Paired", True)
+        self._bluez.set_property(self._path, "Bonded", True)
 
     async def call_connect_profile(self, uuid: str) -> None:
         self._bluez.calls.append((self._path, "ConnectProfile", (uuid,)))

@@ -141,6 +141,9 @@ class PairSession:
         self._on_before_pair = on_before_pair
         self._attempt_context = attempt_context
         self._label = label or mac
+        # BlueZ's bus, when the transport has one: pairing runs over it with
+        # the native agent, and the bluetoothctl session is the fallback.
+        self._dbus = getattr(bluez, "query_backend", None)
 
     # ------------------------------------------------------------------
     # Orchestration
@@ -183,6 +186,11 @@ class PairSession:
         agent: Any | None = None
         try:
             agent = self._enter_agent(pin)
+            if agent is not None and self._dbus is not None:
+                outcome = self._pair_over_dbus(pin, agent)
+                if outcome is not None:
+                    return outcome
+                logger.info("Pair %s: BlueZ's bus unavailable — pairing through bluetoothctl", self._label)
             return self._pair_in_session(pin, agent)
         finally:
             if agent is not None:
@@ -194,6 +202,54 @@ class PairSession:
     # ------------------------------------------------------------------
     # Attempt internals
     # ------------------------------------------------------------------
+
+    def _pair_over_dbus(self, pin: str, agent: Any) -> PairOutcome | None:
+        """The pair choreography over BlueZ's bus; ``None`` when it cannot be reached.
+
+        The outcome is described in the words a bluetoothctl session would
+        have printed, so the failure wording, PIN-rejection test and failure
+        classification read it unchanged.
+        """
+        dbus = self._dbus
+        if dbus is None:
+            return None
+        timings = self._options.timings
+        power = dbus.power(True, self._adapter)
+        if power.unavailable:
+            return None
+        found = dbus.discover_device(self._mac, self._adapter, window_s=timings.scan_window_s, cancel=self._cancel)
+        if found is None:
+            return None
+        if found == "cancelled" or self._cancelled():
+            return PairOutcome(success=False, cancelled=True, pin_used=pin, reason="cancelled")
+        state = _AttemptState(pin=pin)
+        if found == "absent":
+            output = f"Device {self._mac} not available"
+            return self._classify(output, state, agent)
+
+        if self._on_before_pair is not None:
+            try:
+                self._on_before_pair()
+            except Exception as exc:
+                logger.debug("Pair %s: pre-pair hook failed: %s", self._label, exc)
+        state.pair_sent = True
+        paired = dbus.pair(self._mac, self._adapter, timeout=timings.pair_wait_s)
+        telemetry = self._read_telemetry(agent) or {}
+        state.pin_attempted = bool(telemetry.get("pin_attempted"))
+        if not paired.ok:
+            return self._classify(f"Failed to pair: {paired.detail}", state, agent)
+
+        state.paired_ok = True
+        lines = ["Pairing successful"]
+        trusted = dbus.trust(self._mac, self._adapter)
+        if not trusted.ok:
+            lines.append(f"Failed to set trusted: {trusted.detail}")
+        if self._options.connect_after_trust:
+            connected = dbus.connect(self._mac, self._adapter)
+            lines.append("Connection successful" if connected.ok else f"Failed to connect: {connected.detail}")
+        if timings.post_trust_settle_s > 0:
+            self._bluez.sleep(timings.post_trust_settle_s)
+        return self._classify("\n".join(lines), state, agent)
 
     def _pair_in_session(self, pin: str, agent: Any | None) -> PairOutcome:
         mac = self._mac
@@ -405,11 +461,13 @@ class PairSession:
         (issue #162).
         """
         try:
-            self._bluez.run(
-                ["agent off", f"remove {self._mac}"],
-                adapter=self._adapter,
-                tier=Deadline.MUTATE,
-            )
+            removed = self._dbus.remove(self._mac, self._adapter) if self._dbus is not None else None
+            if removed is None or removed.unavailable:
+                self._bluez.run(
+                    ["agent off", f"remove {self._mac}"],
+                    adapter=self._adapter,
+                    tier=Deadline.MUTATE,
+                )
         except Exception as exc:  # defensive: the transport reports via Outcome
             logger.debug("Pair %s: pre-pair cleanup failed (non-fatal): %s", self._label, exc)
         settle = self._options.timings.pre_cleanup_settle_s

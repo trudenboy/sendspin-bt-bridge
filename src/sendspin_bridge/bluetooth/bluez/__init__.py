@@ -130,6 +130,11 @@ class BluezControl:
         self._time = time_source
         self._sleep = sleeper
 
+    @property
+    def query_backend(self) -> Any:
+        """The bus transport questions go to first, or ``None`` without one."""
+        return self._query_backend
+
     # ------------------------------------------------------------------
     # Clock
     # ------------------------------------------------------------------
@@ -377,6 +382,9 @@ class BluezControl:
         ``show`` + ``devices`` enumeration so devices are attributed to the
         controller that actually saw them (issue #340)."""
         adapter_macs = tuple(a.strip().upper() for a in (adapters or ()) if a and a.strip())
+        answer = self._ask_backend("scan", adapter_macs, window_s=window_s)
+        if answer is not None:
+            return answer
         # The one place a composite budget is computed: base window plus
         # per-adapter overhead plus drain slack (historically 12 + 2N + 4).
         budget = 12 + 2 * len(adapter_macs) + 4
