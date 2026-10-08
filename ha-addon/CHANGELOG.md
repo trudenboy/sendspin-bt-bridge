@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.2] - 2026-10-08
+
+### Fixed
+
+- A speaker that keeps accepting the Bluetooth link without ever offering
+  audio, such as a JBL PartyBox switched off but still on mains power, now
+  reaches the auto-release threshold instead of reconnecting forever
+  ([#414](https://github.com/trudenboy/sendspin-bt-bridge/issues/414)).
+- Updating an LXC or bare-metal install to 2.76 installs the GStreamer audio
+  stack the new version plays through. Hosts older than Debian 13 or Ubuntu
+  24.04 cannot run it; the update stops with that explanation and leaves
+  2.75 installed.
+
 ## [2.75.1] - 2026-10-08
 
 ### Fixed
@@ -5330,12 +5343,13 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.5...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.2...HEAD
 [2.76.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.4...v2.76.0-rc.5
 [2.76.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.3...v2.76.0-rc.4
 [2.76.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.2...v2.76.0-rc.3
 [2.76.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.1...v2.76.0-rc.2
-[2.76.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.1...v2.76.0-rc.1
+[2.76.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.2...v2.76.0-rc.1
+[2.75.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.1...v2.75.2
 [2.75.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.0...v2.75.1
 [2.75.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.74.0...v2.75.0
 [2.74.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.73.4...v2.74.0
