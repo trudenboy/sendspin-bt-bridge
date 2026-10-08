@@ -435,7 +435,10 @@ async def test_refresh_stale_player_metadata_defers_reconnect_until_player_ready
         "result": [
             {
                 "display_name": "Kitchen Speaker",
-                "device_info": {"product_name": "", "manufacturer": ""},
+                "device_info": {
+                    "model": "Kitchen",
+                    "software_version": "sendspin-bt-bridge 2.70.0 (aiosendspin 6.1.1)",
+                },
             }
         ],
     }
@@ -496,7 +499,10 @@ async def test_stale_reconnect_retriggers_after_timeout(monkeypatch):
         "result": [
             {
                 "display_name": "Kitchen Speaker",
-                "device_info": {"product_name": "", "manufacturer": ""},
+                "device_info": {
+                    "model": "Kitchen",
+                    "software_version": "sendspin-bt-bridge 2.70.0 (aiosendspin 6.1.1)",
+                },
             }
         ],
     }
@@ -543,4 +549,86 @@ async def test_stale_reconnect_retriggers_after_timeout(monkeypatch):
     assert len(retrigger_tasks) > 0, "retrigger task should have been spawned"
 
     await asyncio.wait_for(asyncio.gather(*retrigger_tasks), timeout=1)
+    client.send_reconnect.assert_awaited_once()
+
+
+async def _refresh_with_record(monkeypatch, device_info: dict):
+    """Run the stale-metadata refresh against one MA record for a ready, idle client."""
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+
+    async def _fake_send(_payload: str):
+        return None
+
+    messages = iter(
+        [json.dumps({"message_id": 1, "result": [{"display_name": "M10 @ sendspin", "device_info": device_info}]})]
+    )
+
+    async def _fake_recv():
+        return next(messages)
+
+    ws = SimpleNamespace(send=_fake_send, recv=_fake_recv)
+    client = SimpleNamespace(
+        player_name="M10 @ sendspin",
+        player_id="sendspin-m10",
+        status={"playing": False, "server_connected": True},
+        send_reconnect=AsyncMock(),
+        is_running=lambda: True,
+    )
+    monkeypatch.setattr(ma_monitor, "_active_bridge_clients", lambda: [client])
+
+    await monitor._refresh_stale_player_metadata(ws)
+    if monitor._background_tasks:
+        await asyncio.wait_for(asyncio.gather(*tuple(monitor._background_tasks)), timeout=1)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_refresh_stale_player_metadata_keeps_a_player_advertising_its_speaker_identity(monkeypatch):
+    """#477: the hello carries the speaker's own name and vendor; MA stores the
+    name under ``model`` and has no ``product_name``. That is the current
+    bridge, not a stale one, and reconnecting it every 20 s kills the session."""
+    from sendspin_bridge.config import VERSION
+
+    client = await _refresh_with_record(
+        monkeypatch,
+        {
+            "model": "M10",
+            "manufacturer": "Marshall",
+            "software_version": f"sendspin-bt-bridge {VERSION} (aiosendspin 9.1.1)",
+        },
+    )
+
+    client.send_reconnect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_stale_player_metadata_leaves_a_record_without_bridge_version_alone(monkeypatch):
+    """A record that names no bridge version cannot be shown to be stale."""
+    client = await _refresh_with_record(monkeypatch, {"model": "M10", "manufacturer": "sendspin"})
+
+    client.send_reconnect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_stale_player_metadata_reconnects_a_player_from_an_older_bridge(monkeypatch):
+    client = await _refresh_with_record(
+        monkeypatch,
+        {
+            "model": "M10",
+            "manufacturer": "Marshall",
+            "software_version": "sendspin-bt-bridge 2.70.0 (aiosendspin 6.1.1)",
+        },
+    )
+
+    client.send_reconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_refresh_stale_player_metadata_reconnects_a_legacy_generic_identity(monkeypatch):
+    """Bridges before the per-speaker identity advertised the version in the product name."""
+    client = await _refresh_with_record(
+        monkeypatch, {"model": "Sendspin BT Bridge v2.60.0", "manufacturer": "sendspin"}
+    )
+
     client.send_reconnect.assert_awaited_once()

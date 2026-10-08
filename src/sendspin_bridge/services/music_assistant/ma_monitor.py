@@ -16,6 +16,7 @@ import contextlib
 import itertools
 import json
 import logging
+import re
 import time
 import urllib.parse as _up
 from typing import TYPE_CHECKING
@@ -41,6 +42,25 @@ _RECONNECT_MAX = 60  # seconds — max reconnect delay
 _STALE_RECONNECT_READY_TIMEOUT = 120.0
 _STALE_RECONNECT_READY_POLL_INTERVAL = 0.5
 _STALE_RECONNECT_STARTUP_GRACE = 20.0
+
+# The bridge version a player's MA record was registered under. Current
+# bridges carry it in the hello's software_version; bridges before the
+# per-speaker identity carried it in the product name, which MA files as
+# ``model``.
+_SOFTWARE_VERSION_RE = re.compile(r"^sendspin-bt-bridge (\S+)")
+_LEGACY_PRODUCT_RE = re.compile(r"^Sendspin BT Bridge v(\S+)$")
+
+
+def _registered_bridge_version(device_info: dict) -> str | None:
+    """The bridge version an MA player record names, or None when it names none."""
+    match = _SOFTWARE_VERSION_RE.match(str(device_info.get("software_version") or ""))
+    if match:
+        return match.group(1)
+    for key in ("product_name", "model"):
+        match = _LEGACY_PRODUCT_RE.match(str(device_info.get(key) or ""))
+        if match:
+            return match.group(1)
+    return None
 _STALE_RETRIGGER_POLL_INTERVAL = 10.0
 
 
@@ -648,18 +668,18 @@ class MaMonitor:
         return result if isinstance(result, list) else []
 
     async def _refresh_stale_player_metadata(self, ws) -> None:
-        """Compare bridge player device_info in MA with current version/hostname.
+        """Reconnect players whose MA record was registered by another bridge version.
 
         If MA has stale metadata (e.g. after a version upgrade) and the player
         is not actively playing, trigger a sendspin reconnect so the subprocess
-        sends a fresh client_hello with the updated product_name and manufacturer.
+        sends a fresh client_hello. Only a record that names a different bridge
+        version is stale: the hello advertises the speaker's own name and
+        vendor, so those fields say nothing about the bridge, and a record that
+        names no version cannot be shown to be out of date (#477).
         """
-        import socket as _socket
-
         from sendspin_bridge.config import VERSION
 
         expected_product = f"Sendspin BT Bridge v{VERSION}"
-        expected_host = _socket.gethostname()
 
         # Fetch all players from MA
         mid = self._next_id()
@@ -698,11 +718,12 @@ class MaMonitor:
                 continue
 
             device_info = p.get("device_info") or {}
-            product_name = device_info.get("product_name", "")
-            manufacturer = device_info.get("manufacturer", "")
-
-            if product_name == expected_product and manufacturer == expected_host:
-                continue  # already up to date
+            registered_version = _registered_bridge_version(device_info)
+            if registered_version is None or registered_version == VERSION:
+                continue  # current, or nothing to compare against
+            product_name = f"Sendspin BT Bridge v{registered_version}"
+            manufacturer = str(device_info.get("manufacturer") or "")
+            expected_host = manufacturer
 
             # Stale — only reconnect if player is not actively playing
             if matched_client.status.get("playing"):
