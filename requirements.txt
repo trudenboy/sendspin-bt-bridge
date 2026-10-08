@@ -47,7 +47,7 @@ cryptography==50.0.0
     #   cpace
     #   noiseprotocol
     #   sendspin-bt-bridge
-dbus-fast==5.0.22
+dbus-fast==5.2.0
     # via
     #   bleak
     #   bluetooth-adapters
