@@ -3659,12 +3659,12 @@ def test_collect_preflight_status_surfaces_audio_probe_failure(monkeypatch):
 
     import sendspin_bridge.web.routes.api_status as api_status
 
+    # The probe reads the server name and sinks from one PulseAudio session.
     monkeypatch.setattr(
         api_status,
-        "get_server_name",
+        "get_audio_server_snapshot",
         lambda: (_ for _ in ()).throw(subprocess.TimeoutExpired("pactl info", 5)),
     )
-    monkeypatch.setattr(api_status, "list_sinks", lambda: [{"name": "bluez_sink.demo"}])
     monkeypatch.setattr(
         api_status.subprocess,
         "run",

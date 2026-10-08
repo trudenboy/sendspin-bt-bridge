@@ -2257,3 +2257,18 @@ def test_pre_pair_hook_no_op_when_hex_empty(monkeypatch):
     )
     mgr._maybe_apply_cod_override_pre_pair()
     assert calls == []
+
+
+def test_a_link_transition_tells_the_host_probe(bt_manager, monkeypatch):
+    """A speaker connecting or leaving is exactly when the sampled host state
+    (paired devices, sinks) goes stale."""
+    from sendspin_bridge.services.diagnostics import preflight_status
+
+    calls: list[int] = []
+    monkeypatch.setattr(preflight_status, "notify_host_changed", lambda: calls.append(1))
+
+    bt_manager.apply_connected_state(True)
+    bt_manager.apply_connected_state(True)  # no transition
+    bt_manager.apply_connected_state(False)
+
+    assert calls == [1, 1]

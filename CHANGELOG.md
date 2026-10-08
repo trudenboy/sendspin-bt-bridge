@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The bridge's memory no longer creeps up while the web interface is open.
   Each open dashboard tab could hold up to 16 MB of status updates that had
   already been sent.
+- An open web interface no longer keeps the bridge busy. It re-checked the
+  host every two seconds, starting three bluetoothctl processes and two
+  PulseAudio connections each time; it now checks every 30 seconds and right
+  after a speaker connects or disconnects.
 - Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
   audio stack the new version plays through. Without it the update failed
   while installing Python packages. Hosts older than Debian 13 or Ubuntu

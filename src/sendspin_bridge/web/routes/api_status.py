@@ -34,7 +34,7 @@ from sendspin_bridge.config import (
 from sendspin_bridge.config import (
     VERSION as _CONFIG_VERSION,
 )
-from sendspin_bridge.services.audio.pulse import get_server_name, list_cards, list_sinks
+from sendspin_bridge.services.audio.pulse import get_audio_server_snapshot, get_server_name, list_cards, list_sinks
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.bugreport_classifier import classify_likely_causes
 from sendspin_bridge.services.diagnostics.event_hooks import get_event_hook_registry
@@ -42,6 +42,7 @@ from sendspin_bridge.services.diagnostics.log_analysis import summarize_issue_lo
 from sendspin_bridge.services.diagnostics.onboarding_assistant import build_onboarding_assistant_snapshot
 from sendspin_bridge.services.diagnostics.operator_check_runner import run_safe_check
 from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
+from sendspin_bridge.services.diagnostics.preflight_status import add_host_change_listener
 from sendspin_bridge.services.diagnostics.preflight_status import (
     collect_preflight_status as _shared_collect_preflight_status,
 )
@@ -161,9 +162,17 @@ def _collect_preflight_status() -> dict:
     operator checks.  The status path reads a sample of it instead — see
     ``_sampled_preflight_status``.
     """
+    # One PulseAudio session for both answers: each session is a new client.
+    snapshot: list[tuple[str, list[dict]]] = []
+
+    def _audio() -> tuple[str, list[dict]]:
+        if not snapshot:
+            snapshot.append(get_audio_server_snapshot())
+        return snapshot[0]
+
     return _shared_collect_preflight_status(
-        get_server_name_fn=get_server_name,
-        list_sinks_fn=list_sinks,
+        get_server_name_fn=lambda: _audio()[0],
+        list_sinks_fn=lambda: _audio()[1],
         runtime_version_fn=get_runtime_version,
         machine_fn=_platform.machine,
         exists_fn=os.path.exists,
@@ -172,14 +181,20 @@ def _collect_preflight_status() -> dict:
 
 
 #: The probe is the expensive half of a status build (~56 ms of ~62 ms,
-#: measured), and the host it describes does not change per tick.  Everything
-#: derived from it is still rebuilt every time.
+#: measured): three bluetoothctl runs and a PulseAudio session.  The host it
+#: describes changes on the order of minutes, and the moments it does — a
+#: speaker connecting or leaving, a saved config — invalidate the sample.  At
+#: the old 2 s cadence an open dashboard made it most of the bridge's idle work.
+PREFLIGHT_PROBE_INTERVAL_S = 30.0
+
 _preflight_probe: StatusDerivation[dict] = StatusDerivation(
     # Late-bound on purpose: the measurement is one function, and everything
     # that reaches for it — including tests — reaches for the same one.
     lambda: _collect_preflight_status(),
+    min_interval_s=PREFLIGHT_PROBE_INTERVAL_S,
     label="preflight probe",
 )
+add_host_change_listener(_preflight_probe.invalidate)
 
 
 def invalidate_preflight_probe() -> None:

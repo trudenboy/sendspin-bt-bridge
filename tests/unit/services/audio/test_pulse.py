@@ -663,3 +663,26 @@ async def test_aensure_null_sink_offloads_blocking_fallback(monkeypatch):
 
     assert result is True
     assert any(dispatched_fallback), "null-sink fallback was not offloaded to the executor"
+
+
+@pytest.mark.asyncio
+async def test_audio_server_snapshot_uses_one_connection():
+    """The host probe asks for the server name and the sink list together;
+    each PulseAsync session is a new PulseAudio client with its own buffers,
+    so the two answers come from one session."""
+    pulse = MagicMock()
+    pulse.server_info = AsyncMock(return_value=SimpleNamespace(server_name="pulseaudio"))
+    sink = SimpleNamespace(
+        name="bluez_sink.x", description="X", volume=SimpleNamespace(value_flat=0.5), mute=0, state="idle"
+    )
+    pulse.sink_list = AsyncMock(return_value=[sink])
+
+    with (
+        patch.object(_pulse_mod, "_PULSECTL_AVAILABLE", True),
+        patch.object(_pulse_mod.pulsectl_asyncio, "PulseAsync", return_value=_pulse_context(pulse)) as opened,
+    ):
+        server_name, sinks = await _pulse_mod.aget_audio_server_snapshot()
+
+    assert opened.call_count == 1
+    assert server_name == "pulseaudio"
+    assert [s["name"] for s in sinks] == ["bluez_sink.x"]
