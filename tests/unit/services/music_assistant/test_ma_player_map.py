@@ -177,3 +177,25 @@ def test_the_groups_refresh_also_learns_the_player_ids(monkeypatch):
         assert ma_runtime_state.get_ma_player_id(CLIENT_ID) == "up4098e820"
     finally:
         ma_runtime_state.set_ma_player_ids({})
+
+
+def test_the_sendspin_client_id_finds_the_player_when_it_differs_from_ours():
+    """With aiosendspin 9 the daemon says hello with its identity key, so MA
+    lists that — not the bridge's MAC-derived player id — as the output
+    protocol. The bridge must look the speaker up by the id it actually
+    advertised, under its own player id."""
+    peer_id = "RND_xcLCXgNT0nmfjM8pP6yMJ8qQ6ia_HCcCwwgGngs"
+    players = [
+        {
+            "player_id": "up170a459b",
+            "display_name": "ENEBY Portable @ HP-ProDesk (renamed in MA)",
+            "output_protocols": [{"output_protocol_id": peer_id, "name": "Sendspin"}],
+        }
+    ]
+
+    mapping = learn_ma_player_ids(
+        players,
+        [{"player_id": CLIENT_ID, "player_name": "ENEBY Portable @ HP-ProDesk", "client_id": peer_id}],
+    )
+
+    assert mapping == {CLIENT_ID: "up170a459b"}

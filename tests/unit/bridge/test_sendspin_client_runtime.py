@@ -1200,3 +1200,22 @@ async def test_start_sendspin_inner_tells_the_daemon_where_bluez_has_the_speaker
 
     assert captured, "the daemon was never spawned"
     assert json.loads(captured[0])["bluetooth_device_path"] == path
+
+
+@pytest.mark.asyncio
+async def test_sink_unmute_is_sent_to_the_player_music_assistant_knows():
+    """MA keys the speaker by the daemon's identity key; the MAC-derived
+    player id addresses a player MA ignores ("Ignoring command ... for
+    unavailable player")."""
+    client = SendspinClient("Test Player", "localhost", 9000)
+    client.player_id = "47cdf5f7-d51e-5261-b941-643474662cdc"
+    client._update_status({"muted": True, "sendspin_client_id": "RND_peer"})
+
+    with (
+        patch("sendspin_bridge.bridge.client._state.notify_status_changed"),
+        patch("sendspin_bridge.services.music_assistant.ma_runtime_state.is_ma_connected", return_value=True),
+        patch("sendspin_bridge.services.music_assistant.ma_monitor.send_player_cmd", return_value=True) as mock_cmd,
+    ):
+        await client._sync_unmute_to_ma(force=True)
+
+    mock_cmd.assert_awaited_once_with("players/cmd/volume_mute", {"player_id": "RND_peer", "muted": False})
