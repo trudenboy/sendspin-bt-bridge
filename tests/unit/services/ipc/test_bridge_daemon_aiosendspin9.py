@@ -163,7 +163,12 @@ def test_failed_flac_decoder_never_submits_encoded_payload(tmp_path: Path, monke
     daemon._player.submit.assert_not_called()
 
 
-def test_stream_end_flushes_decoder_and_closes_player_stream(tmp_path: Path):
+def test_stream_end_stops_output_and_discards_buffered_audio(tmp_path: Path):
+    """#464: the player role defines no completion behaviour, so on stream/end
+    the client MUST stop output and clear its buffers (Sendspin spec,
+    ``stream/end``). Playing out the queue made Pause/Stop lag 5-30 s. The
+    pipeline is torn down rather than flushed: flush events deadlocked the
+    daemon on some A2DP sinks."""
     daemon = _daemon(tmp_path)
     daemon._decoder = MagicMock(flush=MagicMock(return_value=b"trailing-pcm"))
     daemon._decoder_format = ("flac", 48000, 16, 2, None)
@@ -171,9 +176,11 @@ def test_stream_end_flushes_decoder_and_closes_player_stream(tmp_path: Path):
 
     daemon._on_stream_end(None)
 
-    daemon._player.submit.assert_called_once_with(1234, b"trailing-pcm")
-    daemon._player.close_stream.assert_called_once_with()
+    daemon._player.stop.assert_called_once_with()
+    daemon._player.submit.assert_not_called()
+    daemon._player.close_stream.assert_not_called()
     daemon._player.clear.assert_not_called()
+    assert daemon._decoder is None
 
 
 def test_buffered_decoder_output_keeps_first_packet_timestamp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

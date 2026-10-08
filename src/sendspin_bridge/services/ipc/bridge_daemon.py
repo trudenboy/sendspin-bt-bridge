@@ -647,11 +647,13 @@ class BridgeDaemon:
             self._bridge_status["volume"] = self._volume
             self._notify()
             self._apply_sink_volume()
+            self._report_player_state()
         elif cmd.command == PlayerCommand.MUTE and cmd.mute is not None:
             self._muted = cmd.mute
             self._bridge_status["muted"] = cmd.mute
             self._notify()
             self._apply_sink_volume()
+            self._report_player_state()
         elif (
             _SET_STATIC_DELAY_CMD is not None
             and cmd.command == _SET_STATIC_DELAY_CMD
@@ -814,6 +816,30 @@ class BridgeDaemon:
 
         task.add_done_callback(_done)
 
+    def _report_player_state(self) -> None:
+        """Echo volume and mute back in client/state.
+
+        The spec requires a state update whenever a player field changes,
+        including through server/command, and aiosendspin does not send one
+        on its own. Without it Music Assistant refreshes from the stale value
+        and snaps its slider back after Pause/Stop (#464).
+        """
+        client = self._client
+        if client is None or not getattr(client, "connected", False):
+            return
+        task = asyncio.get_running_loop().create_task(
+            client.send_player_state(available=True, volume=self._volume, muted=self._muted)
+        )
+
+        def _done(done: asyncio.Task) -> None:
+            if done.cancelled():
+                return
+            exc = done.exception()
+            if exc is not None:
+                logger.warning("player state report failed: %s", exc)
+
+        task.add_done_callback(_done)
+
     def _on_stream_start(self, message) -> None:
         player_cfg = getattr(getattr(message, "payload", message), "player", None)
         if player_cfg is None:
@@ -922,21 +948,17 @@ class BridgeDaemon:
             self._player.clear()
 
     def _on_stream_end(self, _roles: object = None) -> None:
-        if self._player is not None and self._decoder is not None:
-            try:
-                trailing = self._decoder.flush()
-            except Exception:
-                logger.exception("audio decoder flush failed")
-            else:
-                trailing_play_time = self._next_play_time_us or self._pending_play_time_us
-                if trailing and trailing_play_time is not None:
-                    self._player.submit(trailing_play_time, trailing)
+        # The player role defines no completion behaviour, so stream/end means
+        # stop output and clear buffers (Sendspin spec). Playing out what was
+        # queued made Pause/Stop lag by the send-ahead, 5-30 s (#464). Tear the
+        # pipeline down rather than flush it: flush events deadlocked the
+        # daemon on some A2DP sinks, and the next stream/start rebuilds it.
         self._decoder = None
         self._decoder_format = None
         self._next_play_time_us = None
         self._pending_play_time_us = None
         if self._player is not None:
-            self._player.close_stream()
+            self._player.stop()
         self._on_stream_event("stop")
 
     def metrics(self) -> dict[str, object]:

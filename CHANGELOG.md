@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own name, so the check failed every time. Only a record from a
   different bridge version now triggers a reconnect
   ([#477](https://github.com/trudenboy/sendspin-bt-bridge/issues/477)).
+- Pause and Stop in Music Assistant now silence the speaker at once instead
+  of playing on for 5 to 30 seconds. Audio already sent ahead is discarded
+  when the stream ends, as the Sendspin protocol requires
+  ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
+- A volume or mute change from Music Assistant is now reported back, so the
+  slider no longer jumps to the old level after Pause or Stop while the
+  speaker keeps the new one
+  ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
 
 ### Security
 
