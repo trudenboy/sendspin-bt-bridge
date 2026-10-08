@@ -34,15 +34,9 @@ UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
-# aiosendspin <5.1 doesn't define SET_STATIC_DELAY on PlayerCommand. Resolving
-# the enum lazily via getattr lets the bridge keep advertising VOLUME/MUTE and
-# handling other server commands on those older runtimes — the new code paths
-# (capability advertising in client/state, MA-inbound delay handling) just
-# short-circuit. The bridge currently pins aiosendspin==5.1.1, but the
-# <5.x compat code in this module (e.g. _handle_disconnect fallback) shows
-# this surface still ships to environments where defensive lookups are
-# the established pattern.
-_SET_STATIC_DELAY_CMD: Any = getattr(PlayerCommand, "SET_STATIC_DELAY", None)
+# Player commands the bridge accepts. Sendspin 1.0.0-rc1 declares them in
+# client/state (never the hello) and names the delay command set_output_delay.
+_PLAYER_COMMANDS = [PlayerCommand.VOLUME, PlayerCommand.MUTE, PlayerCommand.SET_OUTPUT_DELAY]
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,9 +258,8 @@ class BridgeDaemon:
         desired = replace(
             current,
             unpaired_access_enabled=not require_pairing,
-            dynamic_pin_enabled=require_pairing,
-            pairing_psk_enabled=require_pairing,
-            static_pin_enabled=False,
+            dynamic_pairing_code_enabled=require_pairing,
+            static_pairing_code_enabled=False,
         )
         if desired != current:
             await store.store_pairing_config(desired)
@@ -284,17 +277,19 @@ class BridgeDaemon:
         except Exception:
             return None
 
-        async def _pin_display(pin: str | None) -> None:
-            self._bridge_status["pairing_pin"] = pin
-            if pin:
-                logger.debug("Sendspin pairing PIN is ready for display")
+        async def _pairing_code_display(code: str | None, *, grouped: str | None = None) -> None:
+            # The grouped form ("123 456") is the one meant for people.
+            shown = grouped or code
+            self._bridge_status["pairing_pin"] = shown
+            if shown:
+                logger.debug("Sendspin pairing code is ready for display")
                 self._bridge_status["pairing_state"] = "pin_displayed"
             else:
                 self._bridge_status["pairing_window_open"] = False
                 await self._refresh_pairing_state()
             self._notify()
 
-        return PairingSupport(pin_display=_pin_display)
+        return PairingSupport(pairing_code_display=_pairing_code_display)
 
     def open_pairing_window(self) -> None:
         client = getattr(self, "_client", None)
@@ -380,27 +375,21 @@ class BridgeDaemon:
                 "identity": getattr(self, "_identity", None),
                 "pairing_store": getattr(self, "_pairing_store", None),
                 "pairing_support": self._pairing_support(),
-                "client_id": self._args.client_id,
                 "client_name": self._args.client_name,
                 "roles": client_roles,
                 "device_info": device_info,
                 "player_support": ClientHelloPlayerSupport(
                     supported_formats=supported_formats,  # type: ignore[arg-type]
                     buffer_capacity=32_000_000,
-                    supported_commands=[PlayerCommand.VOLUME, PlayerCommand.MUTE],
                 ),
-                "static_delay_ms": static_delay_ms,
+                "output_delay_ms": static_delay_ms,
                 "required_lead_time_ms": getattr(self, "_required_lead_time_ms", 250.0),
                 "min_buffer_ms": getattr(self, "_min_buffer_ms", 250.0),
                 "initial_volume": getattr(self, "_volume", 100),
                 "initial_muted": getattr(self, "_muted", False),
-                # client/state advertises SET_STATIC_DELAY so MA can drive the
-                # per-player delay slider. On aiosendspin <5.1 the enum value
-                # itself doesn't exist (resolved at module import as None);
-                # we send an empty list in that case so filter_supported_call_kwargs
-                # can drop the unknown kwarg without ever evaluating a
-                # missing attribute. The pin (5.1.1) covers this in production.
-                "state_supported_commands": ([_SET_STATIC_DELAY_CMD] if _SET_STATIC_DELAY_CMD is not None else []),
+                # Declared in client/state: volume, mute and set_output_delay
+                # (the per-player delay slider in MA).
+                "state_supported_commands": list(_PLAYER_COMMANDS),
             },
         )
 
@@ -663,22 +652,18 @@ class BridgeDaemon:
             self._notify()
             self._apply_sink_volume()
             self._report_player_state()
-        elif (
-            _SET_STATIC_DELAY_CMD is not None
-            and cmd.command == _SET_STATIC_DELAY_CMD
-            and cmd.static_delay_ms is not None
-        ):
+        elif cmd.command == PlayerCommand.SET_OUTPUT_DELAY and cmd.output_delay_ms is not None:
             # aiosendspin's SendspinClient._handle_server_command auto-applied
-            # the new delay via self.set_static_delay_ms(value) before this
+            # the new delay via self.set_output_delay_ms(value) before this
             # listener fires. The sendspin AudioPlayer reads the post-clamp
             # value per chunk so audio shifts naturally — we only mirror the
             # value into bridge_status so the parent persists it and the
             # web UI repaints.
             client = getattr(self, "_client", None)
             applied = (
-                int(client.static_delay_ms)
-                if client is not None and hasattr(client, "static_delay_ms")
-                else max(0, min(5000, int(cmd.static_delay_ms)))
+                int(client.output_delay_ms)
+                if client is not None and hasattr(client, "output_delay_ms")
+                else max(0, min(5000, int(cmd.output_delay_ms)))
             )
             self._bridge_status["static_delay_ms"] = applied
             # IMPORTANT: also update the daemon-level cache. _handle_server_connection
@@ -706,7 +691,7 @@ class BridgeDaemon:
 
     # ── Track metadata ───────────────────────────────────────────────────────
 
-    def _on_metadata_update(self, payload: ServerStatePayload) -> None:
+    def _on_metadata_update(self, payload: ServerStatePayload | None) -> None:
         """Callback receives ServerStatePayload; track info is in payload.metadata."""
         metadata = getattr(payload, "metadata", None)
         if metadata is None:
@@ -765,7 +750,7 @@ class BridgeDaemon:
 
     # ── Controller state ─────────────────────────────────────────────────────
 
-    def _on_controller_state(self, payload: ServerStatePayload) -> None:
+    def _on_controller_state(self, payload: ServerStatePayload | None) -> None:
         """Callback receives ServerStatePayload; controller info is in payload.controller."""
         controller = getattr(payload, "controller", None)
         if controller is None:
@@ -907,7 +892,9 @@ class BridgeDaemon:
             logger.error("Cannot decode %s: %s", codec, exc)
             self._decoder = None
 
-    def _on_audio_chunk(self, server_timestamp_us: int, payload: bytes, audio_format) -> None:
+    def _on_audio_chunk(
+        self, server_timestamp_us: int, payload: bytes, audio_format, send_ahead_us: int | None = None
+    ) -> None:
         if self._player is None:
             return
         pcm = getattr(audio_format, "pcm_format", audio_format)
