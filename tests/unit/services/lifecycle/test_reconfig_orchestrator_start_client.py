@@ -560,3 +560,27 @@ def test_start_client_atomic_mutate_drops_duplicate_when_peer_request_won_race(m
 
 async def _empty_coro() -> None:
     return None
+
+
+def test_start_client_reclaiming_a_released_client_adopts_the_new_device_config(monkeypatch):
+    # A device removed from the fleet keeps a released client; adding it back
+    # from a scan may put it on another controller. The reclaimed client must
+    # take the new adapter before management resumes, or it reconnects on the
+    # old one.
+    loop = asyncio.new_event_loop()
+    try:
+        order: list[str] = []
+        released = SimpleNamespace(
+            bt_management_enabled=False,
+            bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"),
+            adopt_device_config=MagicMock(side_effect=lambda device: order.append(f"adopt {device['adapter']}")),
+            set_bt_management_enabled=MagicMock(side_effect=lambda on: order.append(f"management {on}")),
+        )
+        orch = ReconfigOrchestrator(loop, _FakeSnapshot([released]), activation_context=_make_context())
+
+        summary = orch.apply([_make_new_device_action()])
+
+        assert order == ["adopt hci0", "management True"]
+        assert summary.errors == []
+    finally:
+        loop.close()

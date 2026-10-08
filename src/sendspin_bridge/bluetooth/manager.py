@@ -222,6 +222,9 @@ class BluetoothManager:
         self._adapter_handle = AdapterHandle(adapter=adapter or "", link_probe=self._dbus_link_probe)
         self._dbus_path_override: object = _UNSET
         self._device: BluetoothDevice | None = None
+        # Bumped on every controller change, so a monitor watching the old
+        # controller's object knows to re-subscribe.
+        self.adapter_generation = 0
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._running: bool = True  # False = shutdown; monitor loops exit
         self.paired: bool | None = None
@@ -360,6 +363,31 @@ class BluetoothManager:
     def adapter_hci_name(self, value: str) -> None:
         """Pin the resolved controller when the caller already knows it."""
         self._adapter_handle.pin_hci(value)
+
+    def retarget_adapter(self, adapter: str) -> bool:
+        """Address this speaker through another controller from now on.
+
+        A speaker re-added to the fleet, or moved in the config, may now live
+        on a different controller than the one this manager was built for.
+        Returns ``True`` when the controller actually changed.
+        """
+        adapter = (adapter or "").strip()
+        if adapter == (self.adapter or "").strip():
+            return False
+        logger.info(
+            "[%s] Bluetooth adapter changed: %s -> %s",
+            self.device_name,
+            self.adapter or "default",
+            adapter or "default",
+        )
+        self.adapter = adapter
+        self._adapter_handle = AdapterHandle(adapter=adapter, link_probe=self._dbus_link_probe)
+        self._dbus_path_override = _UNSET
+        self._device = None
+        self._paired_unknown_count = 0
+        self.adapter_generation += 1
+        self.effective_adapter_mac = self._adapter_handle.adapter_mac or self._detect_default_adapter_mac()
+        return True
 
     @property
     def device(self) -> BluetoothDevice:

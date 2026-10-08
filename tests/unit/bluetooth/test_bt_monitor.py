@@ -962,3 +962,41 @@ async def test_a_reconnect_that_yields_a_sink_clears_the_attempt_count(bt_manage
     assert bt_manager.audio_sink_ready is True
     assert bt_manager.reconnect_attempt == 0
     bt_manager.host.start_subprocess.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# A speaker moved to another controller
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_monitor_follows_the_speaker_to_its_new_controller(bt_manager):
+    """Seen live: after a speaker was re-added on hci0, the monitor kept
+    watching its old hci1 object, read Connected=False there, stopped the
+    daemon — and the reconnect, finding the link up on hci0, started it
+    again, every 1.4 s. The monitor must watch the device the manager
+    addresses now, and let go of the old one."""
+    from sendspin_bridge.bluetooth.monitor import _monitor_dbus
+
+    real_sleep = asyncio.sleep
+    bt_manager.management_enabled = False  # keep the inner loop to its idle branch
+    old = attach(bt_manager, bluez_knowing(bt_manager, controller="hci1", connected=False), controller="hci1")
+
+    async def _move_then_stop():
+        await real_sleep(0.05)
+        bt_manager.retarget_adapter("hci0")
+        attach(bt_manager, bluez_knowing(bt_manager, controller="hci0", connected=True), controller="hci0")
+        await real_sleep(0.1)
+        bt_manager.shutdown()
+
+    async def _idle(*_args):
+        await real_sleep(0.01)
+        return True  # "go round again" — keeps the released loop ticking fast
+
+    with patch("sendspin_bridge.bluetooth.monitor._finish_auto_reclaim", side_effect=_idle):
+        mover = asyncio.ensure_future(_move_then_stop())
+        await asyncio.wait_for(_monitor_dbus(bt_manager), timeout=5)
+        await mover
+
+    assert bt_manager.connected is True, "the monitor never read the speaker on its new controller"
+    assert old.watcher_count == 0, "the old controller's object is still watched"

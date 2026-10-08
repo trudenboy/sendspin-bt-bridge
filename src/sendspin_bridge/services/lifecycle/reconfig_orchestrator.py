@@ -383,6 +383,14 @@ class ReconfigOrchestrator:
             bt_management = bool(getattr(existing_client, "bt_management_enabled", True))
             if not bt_management:
                 try:
+                    # The device may come back changed — most often on another
+                    # controller after a remove and a fresh scan. Take the new
+                    # config before management resumes, or the monitor
+                    # reconnects on the old adapter.
+                    device_payload = action.payload.get("device")
+                    adopt = getattr(existing_client, "adopt_device_config", None)
+                    if isinstance(device_payload, dict) and callable(adopt):
+                        adopt(dict(device_payload))
                     existing_client.set_bt_management_enabled(True)
                 except Exception as exc:
                     logger.exception("re-enable via START_CLIENT failed for %s", action.label or action.mac)

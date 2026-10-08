@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A speaker removed from the fleet and added back, for example from a new
+  scan that pairs it on another Bluetooth adapter, now connects on the
+  adapter it was added with instead of retrying the old one forever.
+  Changing a speaker's adapter in the configuration also takes effect
+  without restarting the bridge.
 - Stopping a speaker's player, for example when its Bluetooth link drops, no
   longer kills the player halfway through its own shutdown and logs two
   errors each time.

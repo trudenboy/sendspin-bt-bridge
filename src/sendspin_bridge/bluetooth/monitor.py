@@ -182,6 +182,18 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
 
     while mgr.running:
         try:
+            current = mgr.device
+            if current is not device:
+                # The speaker moved to another controller (re-added from a
+                # scan, or its adapter changed in the config). Watching the
+                # old object reads Connected=False there forever.
+                logger.info(
+                    "[%s] D-Bus monitor moving to controller %s",
+                    mgr.device_name,
+                    current.controller,
+                )
+                await device.close()
+                device = current
             state = await device.state()
             if state.object_path is None and not device.transport_available:
                 if not unavailable_reported and mgr.host:
@@ -299,7 +311,12 @@ async def _inner_dbus_monitor(
     # connected branch knows to bring it back however the link returned —
     # including BlueZ reconnecting on its own while the poll was deferred (#460).
     stopped_daemon_for_disconnect = False
+    adapter_generation = mgr.adapter_generation
     while mgr.running:
+        if mgr.adapter_generation != adapter_generation:
+            # The speaker moved to another controller: hand back so the
+            # outer loop re-subscribes on the object it lives on now.
+            return
         if not mgr.management_enabled:
             # ``mgr.connected`` stays fresh here even while released —
             # the PropertiesChanged handler keeps applying state — so an

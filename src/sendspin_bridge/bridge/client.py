@@ -2202,6 +2202,14 @@ class SendspinClient:
                 self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 
+    def adopt_device_config(self, device: dict[str, object]) -> None:
+        """Take a device's config without restarting: name, port, adapter, idle mode.
+
+        For a released client being reclaimed — its daemon is not running,
+        and the next reconnect starts it with these values.
+        """
+        self._apply_warm_restart_fields(device)
+
     def _apply_warm_restart_fields(self, device: dict[str, object]) -> None:
         """Mutate self.<field> from the new device config before respawn."""
         if "player_name" in device:
@@ -2222,6 +2230,8 @@ class SendspinClient:
         if "preferred_format" in device:
             fmt_val = device.get("preferred_format")
             self.preferred_format = str(fmt_val) if fmt_val else None
+        if "adapter" in device and self.bt_manager is not None:
+            self.bt_manager.retarget_adapter(str(device.get("adapter") or ""))
         if "static_delay_ms" in device:
             raw = device.get("static_delay_ms")
             try:
