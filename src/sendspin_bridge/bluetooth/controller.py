@@ -28,7 +28,18 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
-from sendspin_bridge.bluetooth.bluez import Adapter, Deadline, Outcome, PowerResult, RemoveResult, VerbResult
+from sendspin_bridge.bluetooth.bluez import (
+    Adapter,
+    AdapterInfo,
+    AdapterRef,
+    Deadline,
+    DeviceEntry,
+    DeviceInfo,
+    Outcome,
+    PowerResult,
+    RemoveResult,
+    VerbResult,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -42,6 +53,12 @@ ADAPTER_INTERFACE = "org.bluez.Adapter1"
 DEVICE_INTERFACE = "org.bluez.Device1"
 PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
 OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
+
+#: ``devices <filter>`` filters bluetoothctl understands, as Device1 properties.
+_DEVICE_FILTERS = {"": None, "Paired": "Paired", "Bonded": "Bonded", "Trusted": "Trusted", "Connected": "Connected"}
+
+#: How long a question waits for the bus — the bluetoothctl query tier.
+_QUERY_TIMEOUT_S = float(Deadline.QUERY)
 
 #: How long a verb waits for the bus before calling itself unanswered.  The
 #: same tier the bluetoothctl transport gives a mutating verb, so a caller
@@ -134,6 +151,107 @@ class DbusController:
         # answers, and the ladder in the bluetoothctl transport takes over
         # when there has not been one.
         return self._addresses.get(hci_name, "")
+
+    # -- the questions ---------------------------------------------------
+    #
+    # Each answers from one GetManagedObjects round trip, in the value types
+    # the bluetoothctl parsers produce. ``None`` means the bus could not be
+    # asked — the one answer that sends the caller to bluetoothctl.
+
+    def list_adapters(self, *, timeout: float | None = None) -> list[AdapterRef] | None:
+        """Every controller, in kernel order; the first is BlueZ's default."""
+        return self._ask(self._with_objects(adapters_from_objects), timeout)
+
+    def show(self, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> AdapterInfo | None:
+        """One controller's address, names and power state."""
+        return self._ask(self._with_objects(lambda objects: self._show(objects, adapter)), timeout)
+
+    def list_devices(
+        self, adapter: Adapter = Adapter.DEFAULT, *, filter: str = "Paired", timeout: float | None = None
+    ) -> list[DeviceEntry] | None:
+        """The devices a controller knows, filtered like ``devices <filter>``."""
+        if filter not in _DEVICE_FILTERS:
+            return None
+        return self._ask(self._with_objects(lambda objects: self._devices(objects, adapter, filter)), timeout)
+
+    def device_info(
+        self, mac: str, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None
+    ) -> DeviceInfo | None:
+        """``info <MAC>`` from the object tree, lines included."""
+        return self._ask(self._with_objects(lambda objects: self._device_info(objects, mac, adapter)), timeout)
+
+    async def _with_objects(self, answer: Callable[[dict[str, Any]], Any]) -> Any:
+        objects = await self._objects()
+        return None if objects is None else answer(objects)
+
+    def _show(self, objects: dict[str, Any], adapter: Adapter) -> AdapterInfo:
+        if not any(ADAPTER_INTERFACE in interfaces for interfaces in objects.values()):
+            return AdapterInfo(no_default=True)
+        path = self._adapter_path(objects, adapter)
+        if path is None:
+            return AdapterInfo()
+        props = objects[path][ADAPTER_INTERFACE]
+        return AdapterInfo(
+            mac=str(_unwrap(props.get("Address")) or "").upper(),
+            name=str(_unwrap(props.get("Name")) or ""),
+            alias=str(_unwrap(props.get("Alias")) or ""),
+            powered=bool(_unwrap(props.get("Powered"))),
+            present=True,
+        )
+
+    def _devices(self, objects: dict[str, Any], adapter: Adapter, filter: str) -> list[DeviceEntry]:
+        path = self._adapter_path(objects, adapter)
+        if path is None:
+            return []
+        wanted = _DEVICE_FILTERS[filter]
+        entries: list[DeviceEntry] = []
+        for device_path in sorted(objects):
+            device = objects[device_path].get(DEVICE_INTERFACE)
+            if not device or not device_path.startswith(f"{path}/"):
+                continue
+            if wanted and not _unwrap(device.get(wanted)):
+                continue
+            address = DeviceAddress.parse(_unwrap(device.get("Address")))
+            if address is None:
+                continue
+            entries.append(DeviceEntry(mac=str(address), name=_display_name(device)))
+        return entries
+
+    def _device_info(self, objects: dict[str, Any], mac: str, adapter: Adapter) -> DeviceInfo:
+        wanted = mac.upper()
+        path = self._device_path(objects, mac, adapter)
+        if path is None:
+            return DeviceInfo(
+                mac=wanted, present=False, fields={}, raw=(f"Device {wanted} not available",), not_available=True
+            )
+        return device_info_from_properties(wanted, objects[path][DEVICE_INTERFACE])
+
+    def _ask(self, coro: Any, timeout: float | None) -> Any:
+        """Run a question on the bridge loop; ``None`` whenever it cannot be answered.
+
+        Unlike a verb, a question is also asked from the loop itself, where
+        waiting would deadlock — that, too, is "ask bluetoothctl instead".
+        """
+        from sendspin_bridge.bridge import state as _state
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            coro.close()
+            return None
+        loop = _state.get_main_loop()
+        if loop is None or not loop.is_running():
+            coro.close()
+            return None
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        try:
+            return future.result(timeout=timeout if timeout is not None else _QUERY_TIMEOUT_S)
+        except Exception as exc:
+            future.cancel()
+            logger.debug("BlueZ question went unanswered: %s", exc)
+            return None
 
     # -- what each verb does ---------------------------------------------
 
@@ -452,3 +570,74 @@ def set_controller(controller: PreferredController | None) -> None:
     """Replace the shared transport (tests; pass ``None`` to reset)."""
     global _controller
     _controller = controller
+
+
+def _yes_no(value: Any) -> str:
+    return "yes" if value else "no"
+
+
+def _display_name(device: dict[str, Any]) -> str:
+    """The name bluetoothctl prints for a device: alias, then name; never an address."""
+    name = str(_unwrap(device.get("Alias")) or _unwrap(device.get("Name")) or "")
+    return "" if DeviceAddress.parse(name.replace("-", ":")) is not None else name
+
+
+def adapters_from_objects(objects: dict[str, Any]) -> list[AdapterRef]:
+    """``bluetoothctl list`` from the object tree: kernel order, first is the default."""
+    paths = sorted(path for path, interfaces in objects.items() if ADAPTER_INTERFACE in interfaces)
+    adapters: list[AdapterRef] = []
+    for index, path in enumerate(paths):
+        props = objects[path][ADAPTER_INTERFACE]
+        name = str(_unwrap(props.get("Alias")) or _unwrap(props.get("Name")) or "")
+        adapters.append(
+            AdapterRef(mac=str(_unwrap(props.get("Address")) or "").upper(), name=name, is_default=index == 0)
+        )
+    return adapters
+
+
+def device_info_from_properties(mac: str, device: dict[str, Any]) -> DeviceInfo:
+    """``info <MAC>`` built from a Device1 object: fields and the modal's lines.
+
+    The lines follow bluetoothctl's own layout, because the info modal shows
+    them verbatim and the audio classifier reads ``Class:`` and ``UUID:`` out
+    of them.
+    """
+
+    def prop(name: str) -> Any:
+        return _unwrap(device.get(name))
+
+    address_type = str(prop("AddressType") or "public")
+    fields: dict[str, str] = {}
+    raw: list[str] = [f"Device {mac} ({address_type})"]
+
+    def line(label: str, value: Any, field: str | None = None) -> None:
+        if value is None or value == "":
+            return
+        text = str(value)
+        raw.append(f"{label}: {text}")
+        if field:
+            fields[field] = text
+
+    line("Name", prop("Name"), "name")
+    line("Alias", prop("Alias"), "alias")
+    device_class = prop("Class")
+    if isinstance(device_class, int):
+        line("Class", f"0x{device_class:08x}", "class")
+    line("Icon", prop("Icon"), "icon")
+    for label, field in (
+        ("Paired", "paired"),
+        ("Bonded", "bonded"),
+        ("Trusted", "trusted"),
+        ("Blocked", "blocked"),
+        ("Connected", "connected"),
+    ):
+        if label in device:
+            line(label, _yes_no(prop(label)), field)
+    if "LegacyPairing" in device:
+        line("LegacyPairing", _yes_no(prop("LegacyPairing")))
+    for uuid in prop("UUIDs") or []:
+        line("UUID", uuid)
+    line("Modalias", prop("Modalias"))
+    line("RSSI", prop("RSSI"))
+    line("TxPower", prop("TxPower"))
+    return DeviceInfo(mac=mac, present=True, fields=fields, raw=tuple(raw))

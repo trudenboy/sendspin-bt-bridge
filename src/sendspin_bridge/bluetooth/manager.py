@@ -107,8 +107,11 @@ def install_dbus_hci_resolver(transport_factory=None) -> None:
     """
     from sendspin_bridge.bluetooth.controller import get_controller
 
-    factory = transport_factory or (lambda resolver: BluezControl(hci_resolver=resolver))
-    set_bluez(factory(get_controller().adapter_address))
+    controller = get_controller()
+    # The questions — list, show, devices, info — go to BlueZ's object tree
+    # first; bluetoothctl answers only when the bus cannot.
+    factory = transport_factory or (lambda resolver: BluezControl(hci_resolver=resolver, query_backend=controller.dbus))
+    set_bluez(factory(controller.adapter_address))
 
 
 class BluetoothManager:

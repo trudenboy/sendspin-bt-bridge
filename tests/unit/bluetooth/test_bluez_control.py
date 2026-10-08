@@ -291,3 +291,61 @@ def test_power_waits_for_bluez_to_apply_the_change(bluez, fake_bluez):
     assert len(shows) > 1, "the controller state was read once and never re-checked"
     assert off.applied is False
     assert off.powered is True
+
+
+# ---------------------------------------------------------------------------
+# Questions go to BlueZ's object tree first (2.77)
+# ---------------------------------------------------------------------------
+
+
+class _Backend:
+    """A query backend that answers, or says it cannot (None)."""
+
+    def __init__(self, *, answers: bool):
+        self.answers = answers
+        self.asked: list[str] = []
+
+    def _reply(self, name, value):
+        self.asked.append(name)
+        return value if self.answers else None
+
+    def list_adapters(self, *, timeout=None):
+        from sendspin_bridge.bluetooth.bluez import AdapterRef
+
+        return self._reply("list_adapters", [AdapterRef(mac=ADAPTER_MAC, name="from-dbus", is_default=True)])
+
+    def show(self, adapter=Adapter.DEFAULT, *, timeout=None):
+        from sendspin_bridge.bluetooth.bluez import AdapterInfo
+
+        return self._reply("show", AdapterInfo(mac=ADAPTER_MAC, alias="from-dbus", present=True))
+
+    def list_devices(self, adapter=Adapter.DEFAULT, *, filter="Paired", timeout=None):
+        from sendspin_bridge.bluetooth.bluez import DeviceEntry
+
+        return self._reply("list_devices", [DeviceEntry(mac=ENEBY_MAC, name="from-dbus")])
+
+    def device_info(self, mac, adapter=Adapter.DEFAULT, *, timeout=None):
+        from sendspin_bridge.bluetooth.bluez import DeviceInfo
+
+        return self._reply("device_info", DeviceInfo(mac=mac, present=True, fields={"name": "from-dbus"}, raw=()))
+
+
+def test_questions_are_answered_by_the_query_backend_without_a_process(fake_bluez):
+    backend = _Backend(answers=True)
+    control = BluezControl(spawner=fake_bluez, query_backend=backend)
+
+    assert control.list_adapters()[0].name == "from-dbus"
+    assert control.show(Adapter.select(ADAPTER_MAC)).alias == "from-dbus"
+    assert control.list_devices()[0].name == "from-dbus"
+    assert control.device_info(ENEBY_MAC).name == "from-dbus"
+    assert fake_bluez.commands == []
+
+
+def test_bluetoothctl_answers_when_the_backend_cannot(fake_bluez):
+    backend = _Backend(answers=False)
+    control = BluezControl(spawner=fake_bluez, query_backend=backend)
+
+    assert [a.mac for a in control.list_adapters()] == [ADAPTER_MAC]
+    assert control.device_info(ENEBY_MAC).name == "ENEBY Portable"
+    assert backend.asked == ["list_adapters", "device_info"]
+    assert next(c.argv[:2] for c in fake_bluez.commands) == ("bluetoothctl", "list")
