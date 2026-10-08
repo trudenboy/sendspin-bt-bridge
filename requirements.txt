@@ -73,7 +73,7 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
-mashumaro==3.22
+mashumaro==3.23
     # via
     #   aiosendspin
     #   music-assistant-models
