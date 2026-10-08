@@ -77,7 +77,7 @@ mashumaro==3.22
     # via
     #   aiosendspin
     #   music-assistant-models
-multidict==6.9.1
+multidict==7.0.0
     # via
     #   aiohttp
     #   yarl
