@@ -96,7 +96,7 @@ paho-mqtt==2.1.0
     # via aiomqtt
 pillow==12.3.0
     # via sendspin-bt-bridge
-propcache==0.5.2
+propcache==0.5.4
     # via
     #   aiohttp
     #   yarl
