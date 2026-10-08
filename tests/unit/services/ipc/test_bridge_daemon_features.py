@@ -1031,3 +1031,61 @@ class TestConnectionWatchdog:
         assert "SENDSPIN_PORT" not in err
         assert "Waiting for Music Assistant" in err
         assert "mDNS" in err
+
+
+class TestServerCommandReportsPlayerState:
+    """#464 follow-up: a volume or mute set through server/command MUST be
+    reported back in client/state (Sendspin spec, player state). Without it
+    Music Assistant later refreshed from the stale value and snapped its
+    slider back after Pause/Stop while the speaker kept the new level."""
+
+    @staticmethod
+    def _connected_daemon():
+        daemon = _make_bridge_daemon()
+        daemon._volume = 100
+        daemon._muted = False
+        daemon._client = SimpleNamespace(connected=True, send_player_state=AsyncMock())
+        return daemon
+
+    @pytest.mark.asyncio
+    async def test_volume_command_is_reported_back(self):
+        daemon = self._connected_daemon()
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+
+        daemon._handle_server_command(
+            SimpleNamespace(
+                player=SimpleNamespace(command=PlayerCommand.VOLUME, volume=42, mute=None, static_delay_ms=None)
+            )
+        )
+        await asyncio.sleep(0)
+
+        daemon._client.send_player_state.assert_awaited_once_with(available=True, volume=42, muted=False)
+
+    @pytest.mark.asyncio
+    async def test_mute_command_is_reported_back(self):
+        daemon = self._connected_daemon()
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+
+        daemon._handle_server_command(
+            SimpleNamespace(
+                player=SimpleNamespace(command=PlayerCommand.MUTE, volume=None, mute=True, static_delay_ms=None)
+            )
+        )
+        await asyncio.sleep(0)
+
+        daemon._client.send_player_state.assert_awaited_once_with(available=True, volume=100, muted=True)
+
+    def test_volume_command_without_a_connected_client_reports_nothing(self):
+        daemon = _make_bridge_daemon()
+        daemon._muted = False
+        daemon._client = SimpleNamespace(connected=False, send_player_state=AsyncMock())
+        PlayerCommand = sys.modules["aiosendspin.models.types"].PlayerCommand
+
+        daemon._handle_server_command(
+            SimpleNamespace(
+                player=SimpleNamespace(command=PlayerCommand.VOLUME, volume=42, mute=None, static_delay_ms=None)
+            )
+        )
+
+        daemon._client.send_player_state.assert_not_called()
+        assert daemon._bridge_status["volume"] == 42
