@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A speaker that keeps accepting the Bluetooth link without ever offering
+  audio, such as a JBL PartyBox switched off but still on mains power, now
+  reaches the auto-release threshold instead of reconnecting forever
+  ([#414](https://github.com/trudenboy/sendspin-bt-bridge/issues/414)).
 - A speaker that came back on its own after an auto-release no longer sends
   the bridge into a tight loop that grew its memory until the system killed it
   ([#470](https://github.com/trudenboy/sendspin-bt-bridge/issues/470)).
