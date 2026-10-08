@@ -643,6 +643,9 @@ class SendspinClient:
         self.idle_mode = idle_mode  # default | power_save | auto_disconnect | keep_alive
         self.keepalive_enabled = idle_mode == "keep_alive" or keepalive_enabled
         self.keepalive_interval = max(30, keepalive_interval)  # seconds between keepalive bursts
+        # The burst loop, while keep_alive is on. Started and stopped with the
+        # setting, so switching idle_mode on a running speaker takes effect.
+        self._keepalive_task: asyncio.Task | None = None
         # v2.63.0-rc.2 — payload selector: "infrasound" (default) | "silence" | "none"
         self.keep_alive_method = keep_alive_method if keep_alive_method in _KEEPALIVE_METHODS else "infrasound"
         self.idle_disconnect_minutes = idle_disconnect_minutes  # 0 = disabled
@@ -2155,6 +2158,7 @@ class SendspinClient:
             await self.stop_calibration_metronome()
             await self.start_calibration_metronome()
 
+        self._sync_keepalive_task()
         return applied
 
     async def warm_restart(self, new_device: dict[str, object]) -> None:
@@ -2241,6 +2245,13 @@ class SendspinClient:
         for hot_key in self._RECONFIG_PARENT_ONLY_FIELDS:
             if hot_key in device and hasattr(self, hot_key):
                 setattr(self, hot_key, device[hot_key])
+        if "keepalive_interval" in device:
+            # Same floor as __init__ and the hot path: a fresh UI row carries
+            # 0, and the burst loop would spin on asyncio.sleep(0).
+            try:
+                self.keepalive_interval = max(30, int(device["keepalive_interval"] or 0))  # type: ignore[call-overload]
+            except (TypeError, ValueError):
+                self.keepalive_interval = 30
         # Re-derive keepalive_enabled from the new idle_mode + explicit legacy
         # flag, mirroring SendspinClient.__init__.  Without this, a warm restart
         # that changes idle_mode away from keep_alive would leave keepalive
@@ -2249,6 +2260,7 @@ class SendspinClient:
             mode_for_keepalive = str(device.get("idle_mode", self.idle_mode) or "default")
             explicit_flag = bool(device.get("keepalive_enabled", False))
             self.keepalive_enabled = mode_for_keepalive == "keep_alive" or explicit_flag
+        self._sync_keepalive_task()
         # Refresh status mirror so the UI reflects renames / idle mode change
         # immediately, without waiting for the subprocess to emit.
         self._update_status(
@@ -2265,12 +2277,27 @@ class SendspinClient:
 
     # ── Keepalive ─────────────────────────────────────────────────────────
 
+    def _sync_keepalive_task(self) -> None:
+        """Run the burst loop exactly while keep_alive is on and the client runs."""
+        task = self._keepalive_task
+        alive = task is not None and not task.done()
+        if self.keepalive_enabled and self.running and not alive:
+            try:
+                self._keepalive_task = asyncio.get_running_loop().create_task(self._keepalive_loop())
+            except RuntimeError:
+                # No loop on this thread: run() starts it.
+                self._keepalive_task = None
+        elif not self.keepalive_enabled and alive:
+            assert task is not None
+            task.cancel()
+            self._keepalive_task = None
+
     async def _keepalive_loop(self) -> None:
         """Periodically send an infrasound burst to the BT sink to prevent speaker auto-disconnect."""
         try:
             # Stagger startup across devices to avoid simultaneous paplay bursts
             await asyncio.sleep(random.uniform(0, self.keepalive_interval))
-            while self.running:
+            while self.running and self.keepalive_enabled:
                 await asyncio.sleep(self.keepalive_interval)
                 if (
                     self.bt_manager
@@ -2593,8 +2620,7 @@ class SendspinClient:
 
         # Start background tasks
         tasks = [asyncio.create_task(self._status_monitor_loop())]
-        if self.keepalive_enabled:
-            tasks.append(asyncio.create_task(self._keepalive_loop()))
+        self._sync_keepalive_task()
 
         # Handle Bluetooth connection in background if configured
         logger.info("Bluetooth manager present: %s", self.bt_manager is not None)
@@ -2692,6 +2718,9 @@ class SendspinClient:
             # Cleanup
             for task in tasks:
                 task.cancel()
+            if self._keepalive_task is not None:
+                self._keepalive_task.cancel()
+                self._keepalive_task = None
             await self.stop_sendspin()
 
     async def stop(self) -> None:

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Switching a speaker's idle mode to keep-alive in the settings now starts
+  the keep-alive signal straight away, and switching away stops it.
+  Previously the change only took effect after the bridge restarted, so the
+  speaker could still power itself off.
 - A speaker removed from the fleet and added back, for example from a new
   scan that pairs it on another Bluetooth adapter, now connects on the
   adapter it was added with instead of retrying the old one forever.
