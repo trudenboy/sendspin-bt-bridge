@@ -234,6 +234,14 @@ class BluetoothManager:
         # the stale BlueZ entry so the next reconnect can escalate to
         # pair_device (KALLSUP-class loop, #162).
         self._paired_unknown_count = 0
+        # Whether the last audio configuration found this speaker's sink. A
+        # link without one is not a recovered speaker: a JBL PartyBox powered
+        # off on mains accepts the ACL link and never offers A2DP (#414).
+        self.audio_sink_ready = False
+        # Reconnect attempts since the speaker last had a sink. Lives here,
+        # not in the monitor cycle, because a sinkless "successful" connect
+        # ends the cycle and would otherwise restart the count every time.
+        self.reconnect_attempt = 0
         # v2.70.0-rc.2 (#260, #263) — true once this bridge session has
         # observed a successful Connected=True transition for this device.
         # Drives the never_paired signal: while False AND BlueZ has no
@@ -708,7 +716,7 @@ class BluetoothManager:
         """Configure host's PipeWire/PulseAudio to use the Bluetooth device as audio output"""
         if self._reconnect_cancelled():
             return False
-        return bt_audio.configure_bluetooth_audio(
+        self.audio_sink_ready = bt_audio.configure_bluetooth_audio(
             mac_address=self.mac_address,
             prefer_sbc=self.prefer_sbc,
             on_sink_found=self.on_sink_found,
@@ -717,6 +725,7 @@ class BluetoothManager:
             device=self.device,
             logger=logger,
         )
+        return self.audio_sink_ready
 
     def connect_device(self) -> bool:
         """Connect to the Bluetooth device"""
@@ -968,6 +977,8 @@ class BluetoothManager:
             if value == self.connected:
                 return
             self.connected = value
+            if not value:
+                self.audio_sink_ready = False
             self._transition_seq += 1
             sequence = self._transition_seq
         # #260, #263 — a successful Connected=True transition is the canonical

@@ -878,3 +878,87 @@ async def test_inner_dbus_monitor_restarts_daemon_it_stopped_after_deferred_reco
     bt_manager.host.stop_subprocess.assert_awaited_once()
     bt_manager.host.start_subprocess.assert_awaited_once()
     assert running["alive"] is True
+
+
+@pytest.mark.asyncio
+async def test_reconnects_that_never_yield_a_sink_still_reach_the_failure_threshold(bt_manager):
+    """#414: a speaker powered off but still on mains accepts the ACL link and
+    never offers an A2DP sink. Each such "successful" reconnect restarted the
+    attempt count, so auto-release never fired. A connect without a sink must
+    count as a failed attempt across monitor cycles."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.management_enabled = True
+    bt_manager.check_interval = 0.01
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+    bt_manager.host.start_subprocess = AsyncMock()
+
+    attempts: list[int] = []
+
+    def _handle_failure(attempt):
+        attempts.append(attempt)
+        return attempt >= 3  # release management at the third attempt
+
+    async def _run_in_executor(_executor, fn, *args):
+        return fn(*args)
+
+    loop = asyncio.get_running_loop()
+    released = False
+    with (
+        patch.object(loop, "run_in_executor", side_effect=_run_in_executor),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        # ACL comes up; no sink ever appears (configure_bluetooth_audio fails).
+        patch.object(bt_manager, "connect_device", side_effect=lambda: bt_manager.configure_bluetooth_audio() or True),
+        patch("sendspin_bridge.bluetooth.audio.configure_bluetooth_audio", return_value=False),
+        patch.object(bt_manager, "handle_reconnect_failure", side_effect=_handle_failure),
+        patch.object(bt_manager, "reconnect_cancelled", return_value=False),
+        patch("sendspin_bridge.bluetooth.monitor._correct_other_devices_routing", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        for _cycle in range(6):
+            # The speaker drops the sinkless link, and the monitor re-subscribes.
+            bt_manager.connected = False
+            await _inner_dbus_monitor(bt_manager, AsyncMock(), asyncio.Event(), asyncio.Event(), loop)
+            if attempts and attempts[-1] >= 3:
+                released = True
+                break
+
+    assert released, f"attempt count restarted every cycle: {attempts}"
+    assert attempts == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_a_reconnect_that_yields_a_sink_clears_the_attempt_count(bt_manager):
+    """#414 counterpart: a speaker that comes back with its sink is healthy, so
+    earlier failures stop counting towards auto-release."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = False
+    bt_manager.management_enabled = True
+    bt_manager.reconnect_attempt = 3  # failures carried from earlier cycles
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+    bt_manager.host.start_subprocess = AsyncMock()
+
+    async def _run_in_executor(_executor, fn, *args):
+        return fn(*args)
+
+    loop = asyncio.get_running_loop()
+    with (
+        patch.object(loop, "run_in_executor", side_effect=_run_in_executor),
+        patch.object(bt_manager, "is_device_paired", return_value=True),
+        patch.object(bt_manager, "connect_device", side_effect=lambda: bt_manager.configure_bluetooth_audio()),
+        patch("sendspin_bridge.bluetooth.audio.configure_bluetooth_audio", return_value=True),
+        patch.object(bt_manager, "handle_reconnect_failure", return_value=False),
+        patch.object(bt_manager, "reconnect_cancelled", return_value=False),
+        patch("sendspin_bridge.bluetooth.monitor._correct_other_devices_routing", new_callable=AsyncMock),
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        await _inner_dbus_monitor(bt_manager, AsyncMock(), asyncio.Event(), asyncio.Event(), loop)
+
+    assert bt_manager.audio_sink_ready is True
+    assert bt_manager.reconnect_attempt == 0
+    bt_manager.host.start_subprocess.assert_awaited_once()
