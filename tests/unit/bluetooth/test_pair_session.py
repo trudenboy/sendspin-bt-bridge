@@ -381,3 +381,23 @@ def test_success_stands_when_the_session_never_reported_the_info_block(fake_blue
     outcome = _session(fake_bluez, agent).run()
 
     assert outcome.success is True
+
+
+def test_native_agent_is_not_shadowed_by_the_session_agent(fake_bluez, agent):
+    """#471: an interactive bluetoothctl registers an agent of its own, and
+    BlueZ asks the caller's agent before the default one, so the native agent
+    was never consulted and the SSP confirmation timed out. With the native
+    agent active the session's own agent must be off before ``pair``."""
+    fake_bluez.session_script(
+        [
+            ("scan bredr", [f"[NEW] Device {MAC} Mi Portable BT Speaker"]),
+            (f"pair {MAC}", ["Pairing successful"]),
+        ]
+    )
+
+    _session(fake_bluez, agent).run()
+
+    sends = [c.script for c in fake_bluez.commands if c.kind == "send"]
+    pair_index = next(i for i, s in enumerate(sends) if f"pair {MAC}" in s)
+    assert any("agent off" in s for s in sends[:pair_index]), sends
+    assert not any(s in ("agent on", "default-agent") for s in sends), sends
