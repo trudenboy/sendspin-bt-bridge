@@ -47,7 +47,7 @@ cryptography==50.0.0
     #   cpace
     #   noiseprotocol
     #   sendspin-bt-bridge
-dbus-fast==5.0.22
+dbus-fast==5.2.0
     # via
     #   bleak
     #   bluetooth-adapters
@@ -73,7 +73,7 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
-mashumaro==3.22
+mashumaro==3.23
     # via
     #   aiosendspin
     #   music-assistant-models
@@ -87,7 +87,7 @@ music-assistant-models==1.1.152
     # via music-assistant-client
 noiseprotocol==0.3.1
     # via aiosendspin
-orjson==3.11.9
+orjson==3.13.0
     # via
     #   aiosendspin
     #   music-assistant-client
@@ -96,7 +96,7 @@ paho-mqtt==2.1.0
     # via aiomqtt
 pillow==12.3.0
     # via sendspin-bt-bridge
-propcache==0.5.2
+propcache==0.5.4
     # via
     #   aiohttp
     #   yarl
