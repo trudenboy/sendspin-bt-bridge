@@ -253,6 +253,10 @@ async def _monitor_dbus(mgr: BluetoothManager) -> None:
                     loop.call_soon_threadsafe(disconnect_event.set)
                     return
                 logger.info("[%s] PropertiesChanged: Connected!", mgr.device_name)
+                # The disconnect that set this event is over; left set, the
+                # connected branch's wait returns at once and the loop spins
+                # without yielding (#470).
+                loop.call_soon_threadsafe(disconnect_event.clear)
                 loop.call_soon_threadsafe(connect_event.set)
                 # Correct sink routing for other devices that module-rescue-streams
                 # may have disrupted when this sink appeared.
@@ -292,6 +296,10 @@ async def _inner_dbus_monitor(
     the link is back. Issue #312.
     """
     reconnect_attempt = 0
+    # Set when this loop stopped the daemon because the link dropped, so the
+    # connected branch knows to bring it back however the link returned —
+    # including BlueZ reconnecting on its own while the poll was deferred (#460).
+    stopped_daemon_for_disconnect = False
     while mgr.running:
         if not mgr.management_enabled:
             # ``mgr.connected`` stays fresh here even while released —
@@ -313,10 +321,21 @@ async def _inner_dbus_monitor(
                 logger.info("[%s] BT already reconnected during wake — triggering reroute", mgr.device_name)
                 await mgr.host.start_subprocess()
                 continue
+            if stopped_daemon_for_disconnect:
+                stopped_daemon_for_disconnect = False
+                if mgr.host and not mgr.host.is_subprocess_running():
+                    logger.info("[%s] Link back but daemon still stopped — starting sendspin...", mgr.device_name)
+                    await mgr.host.start_subprocess()
             # Clear reconnect state
             if mgr.host and mgr.host.get_status_value("reconnecting"):
                 mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
             reconnect_attempt = 0
+
+            # A disconnect signal is only news while the link is up; one left
+            # set from the offline or released period would make the wait
+            # below return at once, every iteration (#470).
+            if disconnect_event.is_set():
+                disconnect_event.clear()
 
             # Wait for disconnect signal or heartbeat timeout
             try:
@@ -395,6 +414,7 @@ async def _inner_dbus_monitor(
                         await mgr.host.send_subprocess_command(Pause())
                         await asyncio.sleep(0.2)
                     await mgr.host.stop_subprocess()
+                    stopped_daemon_for_disconnect = True
 
                 _log_reconnect_attempt(mgr.device_name, reconnect_attempt)
                 success = await loop.run_in_executor(bt_executor(), mgr.connect_device)
