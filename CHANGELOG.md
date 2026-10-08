@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audio stack the new version plays through. Without it the update failed
   while installing Python packages. Hosts older than Debian 13 or Ubuntu
   24.04 cannot run it; the update now stops with that explanation and leaves
-  the current version installed.
+  the current version installed. The update also no longer fails on hosts
+  where the distribution already provides PyGObject.
 
 ## [2.76.0-rc.5] - 2026-10-08
 

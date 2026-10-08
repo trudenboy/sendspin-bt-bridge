@@ -429,7 +429,7 @@ def test_lxc_scripts_install_requirements_txt_as_the_pinset():
     upgrade_function = upgrade_text[
         upgrade_text.index("update_python_dependencies() {") : upgrade_text.index("\n}\n\nregister_editable_install()")
     ]
-    assert "pip3 install --break-system-packages -q -r" in upgrade_function
+    assert "pip3 install --break-system-packages --ignore-installed -q -r" in upgrade_function
     assert "grep -v '^sendspin=='" not in upgrade_function
 
 
@@ -625,3 +625,15 @@ def test_upgrade_installs_system_packages_before_python_dependencies():
     main_flow = text[text.index('NEW_VERSION=$(cat "${STAGE_APP}/VERSION"') :]
 
     assert main_flow.index('ensure_system_packages "${NEW_VERSION}"') < main_flow.index("update_python_dependencies ")
+
+
+def test_upgrade_installs_requirements_over_distribution_packages():
+    """Ubuntu 24.04 ships python3-gi (PyGObject 3.48) through apt; pip cannot
+    uninstall a distutils-installed project, so upgrading to the pinned
+    PyGObject failed and aborted every LXC update into 2.76. install.sh
+    already installs over the distribution's copies; upgrade.sh must too."""
+    repo_root = Path(__file__).resolve().parents[4]
+    text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+    function = text[text.index("update_python_dependencies() {") : text.index("\n}\n\nregister_editable_install()")]
+
+    assert "--ignore-installed" in function
