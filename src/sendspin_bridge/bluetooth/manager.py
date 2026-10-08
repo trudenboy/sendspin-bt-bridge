@@ -361,6 +361,30 @@ class BluetoothManager:
         """Pin the resolved controller when the caller already knows it."""
         self._adapter_handle.pin_hci(value)
 
+    def retarget_adapter(self, adapter: str) -> bool:
+        """Address this speaker through another controller from now on.
+
+        A speaker re-added to the fleet, or moved in the config, may now live
+        on a different controller than the one this manager was built for.
+        Returns ``True`` when the controller actually changed.
+        """
+        adapter = (adapter or "").strip()
+        if adapter == (self.adapter or "").strip():
+            return False
+        logger.info(
+            "[%s] Bluetooth adapter changed: %s -> %s",
+            self.device_name,
+            self.adapter or "default",
+            adapter or "default",
+        )
+        self.adapter = adapter
+        self._adapter_handle = AdapterHandle(adapter=adapter, link_probe=self._dbus_link_probe)
+        self._dbus_path_override = _UNSET
+        self._device = None
+        self._paired_unknown_count = 0
+        self.effective_adapter_mac = self._adapter_handle.adapter_mac or self._detect_default_adapter_mac()
+        return True
+
     @property
     def device(self) -> BluetoothDevice:
         """This speaker's life on the D-Bus, built once and kept.
