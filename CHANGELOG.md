@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A speaker that came back on its own after an auto-release no longer sends
+  the bridge into a tight loop that grew its memory until the system killed it
+  ([#470](https://github.com/trudenboy/sendspin-bt-bridge/issues/470)).
+- A speaker that reconnected while another Bluetooth operation held the
+  adapter now gets its player started again instead of staying connected but
+  silent ([#460](https://github.com/trudenboy/sendspin-bt-bridge/issues/460)).
+
 ### Security
 
 - Updated PyJWT to 2.15.1, urllib3 to 2.8.0, Werkzeug to 3.1.9 and multidict
