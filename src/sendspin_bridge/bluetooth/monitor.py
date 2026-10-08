@@ -480,7 +480,6 @@ async def _inner_dbus_monitor(
     failed-reconnect backoff sleep so audio is configured as soon as
     the link is back. Issue #312.
     """
-    reconnect_attempt = 0
     # Set when this loop stopped the daemon because the link dropped, so the
     # connected branch knows to bring it back however the link returned —
     # including BlueZ reconnecting on its own while the poll was deferred (#460).
@@ -511,10 +510,12 @@ async def _inner_dbus_monitor(
                 if mgr.host and not mgr.host.is_subprocess_running():
                     logger.info("[%s] Link back but daemon still stopped — starting sendspin...", mgr.device_name)
                     await mgr.host.start_subprocess()
-            # Clear reconnect state
-            if mgr.host and mgr.host.get_status_value("reconnecting"):
-                mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
-            reconnect_attempt = 0
+            # Clear reconnect state — only once the speaker has a sink; a
+            # link without one is the failure being counted (#414).
+            if mgr.audio_sink_ready:
+                if mgr.host and mgr.host.get_status_value("reconnecting"):
+                    mgr.host.update_status({"reconnecting": False, "reconnect_attempt": 0})
+                mgr.reconnect_attempt = 0
 
             # A disconnect signal is only news while the link is up; one left
             # set from the offline or released period would make the wait
@@ -575,7 +576,8 @@ async def _inner_dbus_monitor(
             try:
                 paired = await loop.run_in_executor(bt_executor(), mgr.is_device_paired)
                 mgr.paired = paired
-                reconnect_attempt += 1
+                mgr.reconnect_attempt += 1
+                reconnect_attempt = mgr.reconnect_attempt
                 if mgr.host:
                     mgr.host.update_status(
                         {
@@ -606,11 +608,18 @@ async def _inner_dbus_monitor(
             finally:
                 lease.release()
             if mgr.reconnect_cancelled():
-                reconnect_attempt = 0
+                mgr.reconnect_attempt = 0
                 continue
 
+            if success and not mgr.audio_sink_ready:
+                logger.warning(
+                    "[%s] Link is up but the speaker offers no audio sink — counting attempt %d as failed",
+                    mgr.device_name,
+                    reconnect_attempt,
+                )
+            elif success:
+                mgr.reconnect_attempt = 0
             if success:
-                reconnect_attempt = 0
                 mgr.policy.record_reconnect()
                 mgr.apply_connected_state(True)
                 if mgr.host:
@@ -652,8 +661,8 @@ async def _inner_dbus_monitor(
                     logger.debug("re-read connected state failed: %s", exc)
                 if mgr.connected:
                     logger.info("[%s] External reconnect detected, configuring audio...", mgr.device_name)
-                    await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
-                    reconnect_attempt = 0
+                    if await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio):
+                        mgr.reconnect_attempt = 0
                     mgr.policy.record_reconnect()
                     if mgr.host:
                         mgr.host.update_status(
