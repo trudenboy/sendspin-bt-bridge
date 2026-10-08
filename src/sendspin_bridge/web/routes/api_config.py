@@ -993,6 +993,13 @@ def api_config():
             if deleted or adapter_changed:
                 macs_to_unpair.append((mac, client_adapter.get(mac) or ""))
 
+        # What the bridge runs on now: the file plus the defaults it does not
+        # spell out. Diffing against the raw file read every default as a
+        # change and restarted every speaker on an untouched save.
+        from sendspin_bridge.config.store import ConfigStore
+
+        effective_before = ConfigStore(CONFIG_FILE).load() if existing else {}
+
         default_vol = config.pop("_new_device_default_volume", None)
         last_volumes = config.setdefault("LAST_VOLUMES", existing.get("LAST_VOLUMES", {}))
         if not isinstance(last_volumes, dict):
@@ -1012,7 +1019,7 @@ def api_config():
 
         # Compute reconfig actions from the on-disk "before" snapshot to the
         # just-persisted "after" snapshot while the lock is still held.
-        reconfig_actions = diff_configs(existing, config)
+        reconfig_actions = diff_configs(effective_before or existing, ConfigStore(CONFIG_FILE).load())
 
         # The save stands; now let the orphaned speakers go.
         for mac, adapter_mac in macs_to_unpair:
