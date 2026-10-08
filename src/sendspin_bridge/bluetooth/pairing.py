@@ -238,6 +238,12 @@ class PairSession:
             # that cancel a passkey exchange (issue #168).
             agent_cmd = "agent NoInputNoOutput" if self._options.capability == "NoInputNoOutput" else "agent on"
             commands.extend([agent_cmd, "default-agent"])
+        else:
+            # An interactive bluetoothctl registers an agent of its own, and
+            # BlueZ asks the agent of the client that called Pair() before the
+            # default one — so the native agent was never consulted and the
+            # SSP confirmation timed out (#471). Unregister the session's.
+            commands.append("agent off")
         # ``scan bredr`` (not ``scan on``) keeps discovery on the classic
         # transport: A2DP sinks only speak BR/EDR, and excluding LE-only
         # advertisers keeps the target from being delayed behind them.
