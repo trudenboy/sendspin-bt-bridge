@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Music Assistant lists each speaker as a new player after updating from
+  2.75, because the bridge now identifies itself the way the current
+  Sendspin protocol requires. The old players stay behind as unavailable:
+  remove them in Music Assistant and add the new ones to your sync groups
+  again.
+
 ### Fixed
 
-- Speakers keep their place in Music Assistant sync groups after updating
-  from 2.75. Music Assistant lists each speaker under a new player from 2.76
-  on, and the groups still pointed at the old one; the bridge now moves the
-  membership over when it connects. A speaker still served by another bridge
-  on the old version is left where it is.
 - Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
   audio stack the new version plays through. Without it the update failed
   while installing Python packages. Hosts older than Debian 13 or Ubuntu
