@@ -49,3 +49,45 @@ jobs:
             --expect-aiosendspin "${{ steps.versions.outputs.aiosendspin }}"
           docker run --rm --entrypoint python3 sendspin-pr-smoke:local \
             scripts/check_container_runtime.py
+
+  # armv7 is built only for stable releases, so a breaking change there would
+  # first surface on the stable tag. Run this by hand before cutting one.
+  armv7-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Resolve pinned runtime versions
+        id: versions
+        run: |
+          aiosendspin_version="$(sed -n -E 's/^aiosendspin(\[server\])?==//p' requirements.txt | head -n 1)"
+          test -n "${aiosendspin_version}"
+          echo "aiosendspin=${aiosendspin_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build armv7 image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm/v7
+          build-args: |
+            UV_STAGE=uv-armv7
+          cache-from: type=gha,scope=build-linux/arm/v7
+          load: true
+          tags: sendspin-armv7-smoke:local
+
+      - name: Smoke test armv7 image
+        run: |
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 sendspin-armv7-smoke:local \
+            scripts/check_sendspin_compat.py \
+            --expect-aiosendspin "${{ steps.versions.outputs.aiosendspin }}"
+          docker run --rm --platform linux/arm/v7 --entrypoint python3 sendspin-armv7-smoke:local \
+            scripts/check_container_runtime.py
