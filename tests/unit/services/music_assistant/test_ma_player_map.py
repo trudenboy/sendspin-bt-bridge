@@ -199,3 +199,66 @@ def test_the_sendspin_client_id_finds_the_player_when_it_differs_from_ours():
     )
 
     assert mapping == {CLIENT_ID: "up170a459b"}
+
+
+# ---------------------------------------------------------------------------
+# Sync groups follow a speaker across the 2.76 identity change
+# ---------------------------------------------------------------------------
+
+LEGACY_ID = "fcc3c5f3-15b2-5ddb-99d2-f64b915d8c25"
+LEGACY_UNIVERSAL = "up" + LEGACY_ID.replace("-", "")
+
+
+def _sync_group(player_id: str, members: list[str]) -> dict:
+    return {"player_id": player_id, "type": "group", "provider": "sync_group", "static_group_members": members}
+
+
+def test_a_sync_group_moves_from_the_legacy_player_to_the_new_one():
+    """Before 2.76 Music Assistant keyed the speaker by the MAC-derived id
+    ("up" + it, once wrapped); now by the identity key. The group must not be
+    left pointing at a player that will never come back."""
+    from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
+
+    players = [_sync_group("syncgroup_a", [LEGACY_UNIVERSAL, "upother"])]
+
+    plans = plan_group_identity_migrations(
+        players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20 @ HAOS"}], {LEGACY_ID: "up184e8a15"}
+    )
+
+    assert plans == {"syncgroup_a": ["up184e8a15", "upother"]}
+
+
+def test_a_legacy_player_that_is_still_alive_is_left_in_its_groups():
+    """Another bridge still on 2.75 serving the same speaker owns that id."""
+    from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
+
+    players = [
+        {"player_id": LEGACY_UNIVERSAL, "available": True, "output_protocols": [{"output_protocol_id": LEGACY_ID}]},
+        _sync_group("syncgroup_a", [LEGACY_UNIVERSAL]),
+    ]
+
+    plans = plan_group_identity_migrations(
+        players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20"}], {LEGACY_ID: "up184e8a15"}
+    )
+
+    assert plans == {}
+
+
+def test_a_group_that_already_has_the_new_player_is_left_alone():
+    from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
+
+    players = [_sync_group("syncgroup_a", [LEGACY_UNIVERSAL, "up184e8a15"])]
+
+    plans = plan_group_identity_migrations(
+        players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20"}], {LEGACY_ID: "up184e8a15"}
+    )
+
+    assert plans == {}
+
+
+def test_nothing_moves_until_the_new_player_is_known():
+    from sendspin_bridge.services.music_assistant.ma_player_map import plan_group_identity_migrations
+
+    players = [_sync_group("syncgroup_a", [LEGACY_UNIVERSAL])]
+
+    assert plan_group_identity_migrations(players, [{"player_id": LEGACY_ID, "player_name": "ENEBY20"}], {}) == {}
