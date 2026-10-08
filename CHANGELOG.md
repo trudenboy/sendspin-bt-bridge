@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Updated PyJWT to 2.15.1, urllib3 to 2.8.0, Werkzeug to 3.1.9 and multidict
+  to 6.9.1 to pick up fixes for published vulnerabilities.
+
 ## [2.76.0-rc.3] - 2026-08-27
 
 ### Added
