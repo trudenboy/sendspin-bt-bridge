@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The bridge's memory no longer creeps up while the web interface is open.
+  Each open dashboard tab could hold up to 16 MB of status updates that had
+  already been sent.
 - Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
   audio stack the new version plays through. Without it the update failed
   while installing Python packages. Hosts older than Debian 13 or Ubuntu

@@ -437,6 +437,13 @@ def _handle_500(e):
     return Response("Internal Server Error", status=500, mimetype="text/plain")
 
 
+#: waitress keeps a streaming response's sent bytes in memory until it rotates
+#: to a new output buffer after this many bytes (16 MB by default). The status
+#: stream (SSE) never ends, so each open dashboard tab held up to 16 MB of
+#: already-sent events; rotating every 1 MB bounds that.
+_OUTBUF_HIGH_WATERMARK = 1024 * 1024
+
+
 def main():
     """Start the web interface"""
     port = resolve_web_port()
@@ -450,12 +457,18 @@ def main():
         logger.info("Starting additional direct web interface on port %s", additional_port)
         threading.Thread(
             target=serve,
-            kwargs={"app": app, "host": "0.0.0.0", "port": additional_port, "threads": threads},
+            kwargs={
+                "app": app,
+                "host": "0.0.0.0",
+                "port": additional_port,
+                "threads": threads,
+                "outbuf_high_watermark": _OUTBUF_HIGH_WATERMARK,
+            },
             name="WebServerDirect",
             daemon=True,
         ).start()
     logger.info("Starting web interface on port %s", port)
-    serve(app, host="0.0.0.0", port=port, threads=threads)
+    serve(app, host="0.0.0.0", port=port, threads=threads, outbuf_high_watermark=_OUTBUF_HIGH_WATERMARK)
 
 
 if __name__ == "__main__":
