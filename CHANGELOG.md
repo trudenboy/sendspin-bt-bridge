@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- After signing in to Music Assistant again, for example when it was
+  reinstalled and the old token stopped working, the bridge reconnects
+  straight away instead of waiting up to a minute.
 - Switching a speaker's idle mode to keep-alive in the settings now starts
   the keep-alive signal straight away, and switching away stops it.
   Previously the change only took effect after the bridge restarted, so the

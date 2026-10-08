@@ -406,6 +406,8 @@ class MaMonitor:
         self._pending_queue_refresh = False
         self._pending_groups_refresh = False
         self._wake_event = asyncio.Event()
+        # Set when new credentials arrive: cuts the reconnect backoff short.
+        self._credentials_changed = asyncio.Event()
         self._consecutive_auth_failures = 0
         self._background_tasks: set[asyncio.Task] = set()
         self._pending_stale_reconnects: set[str] = set()
@@ -529,6 +531,7 @@ class MaMonitor:
         self._apply_credentials(ma_url, ma_token)
         self._pending_queue_refresh = True
         self._pending_groups_refresh = True
+        self._credentials_changed.set()
         self._wake_event.set()
         ws = self._ws
         if ws is not None:
@@ -1088,6 +1091,9 @@ class MaMonitor:
         _prev_token = self._token
         while self._running:
             disconnect_error = "connection lost"
+            # This attempt uses whatever credentials are current; only a
+            # reload that lands after it should cut the next backoff short.
+            self._credentials_changed.clear()
             try:
                 await self._connect_and_run()
                 delay = _RECONNECT_BASE  # reset on successful connection
@@ -1124,7 +1130,17 @@ class MaMonitor:
                     )
             if not self._running:
                 break
-            await asyncio.sleep(delay)
+            # Sit out the backoff, unless new credentials arrive: an operator
+            # who just signed in again should not wait out a minute that was
+            # earned by the old token.
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._credentials_changed.wait(), timeout=delay)
+            if self._credentials_changed.is_set():
+                self._credentials_changed.clear()
+                self._consecutive_auth_failures = 0
+                delay = _RECONNECT_BASE
+                _prev_token = self._token
+                continue
             # Reset backoff if credentials changed (e.g. silent auth obtained new token)
             _, fresh_token = _state.get_ma_api_credentials()
             if fresh_token and fresh_token != _prev_token:
