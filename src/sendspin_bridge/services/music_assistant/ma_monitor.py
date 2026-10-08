@@ -61,6 +61,8 @@ def _registered_bridge_version(device_info: dict) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
 _STALE_RETRIGGER_POLL_INTERVAL = 10.0
 
 
