@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.6] - 2026-10-08
+
+### Changed
+
+- Music Assistant lists each speaker as a new player after updating from
+  2.75, because the bridge now identifies itself the way the current
+  Sendspin protocol requires. The old players stay behind as unavailable:
+  remove them in Music Assistant and add the new ones to your sync groups
+  again.
+
+### Fixed
+
+- The bridge's memory no longer creeps up while the web interface is open.
+  Each open dashboard tab could hold up to 16 MB of status updates that had
+  already been sent.
+- An open web interface no longer keeps the bridge busy. It re-checked the
+  host every two seconds, starting three bluetoothctl processes and two
+  PulseAudio connections each time; it now checks every 30 seconds and right
+  after a speaker connects or disconnects.
+- Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
+  audio stack the new version plays through. Without it the update failed
+  while installing Python packages. Hosts older than Debian 13 or Ubuntu
+  24.04 cannot run it; the update now stops with that explanation and leaves
+  the current version installed. The update also no longer fails on hosts
+  where the distribution already provides PyGObject.
+
 ## [2.76.0-rc.5] - 2026-10-08
 
 ### Fixed

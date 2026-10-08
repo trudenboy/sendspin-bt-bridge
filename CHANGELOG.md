@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.6] - 2026-10-08
+
 ### Changed
 
 - Music Assistant lists each speaker as a new player after updating from
