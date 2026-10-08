@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.5] - 2026-10-08
+
 ### Fixed
 
 - Commands the bridge sends through the Music Assistant API, such as

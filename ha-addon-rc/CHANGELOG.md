@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.5] - 2026-10-08
+
+### Fixed
+
+- Commands the bridge sends through the Music Assistant API, such as
+  syncing mute after a reconnect, reach the speaker again. They were
+  addressed to an id Music Assistant no longer uses for the player, so it
+  ignored them; speakers in a sync group are also recognised by id again
+  instead of only by name.
+- Music Assistant now reconnects to a speaker by itself after the bridge
+  restarts, reloads its configuration or loses and regains the Bluetooth link.
+  The bridge told Music Assistant it was shutting down for good each time, so
+  the speaker stayed unavailable until the Sendspin provider was reloaded.
+  The metadata refresh reconnect was affected the same way.
+
 ## [2.76.0-rc.4] - 2026-10-08
 
 ### Fixed
