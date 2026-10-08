@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
+  audio stack the new version plays through. Without it the update failed
+  while installing Python packages. Hosts older than Debian 13 or Ubuntu
+  24.04 cannot run it; the update now stops with that explanation and leaves
+  the current version installed.
+
 ## [2.76.0-rc.5] - 2026-10-08
 
 ### Fixed
