@@ -185,7 +185,7 @@ ensure_system_packages() {
 update_python_dependencies() {
   local requirements_file="$1"
 
-  pip3 install --break-system-packages -q -r "${requirements_file}" \
+  pip3 install --break-system-packages --ignore-installed -q -r "${requirements_file}" \
     || die "pip3 install of requirements failed; aborting upgrade. Check that the host has network access."
 }
 
