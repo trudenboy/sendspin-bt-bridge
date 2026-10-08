@@ -26,10 +26,7 @@ from sendspin_bridge.services.bluetooth.device_registry import get_device_regist
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.music_assistant.ma_artwork import build_artwork_proxy_url
 from sendspin_bridge.services.music_assistant.ma_dispatch import MessageDispatcher
-from sendspin_bridge.services.music_assistant.ma_player_map import (
-    learn_ma_player_ids,
-    plan_group_identity_migrations,
-)
+from sendspin_bridge.services.music_assistant.ma_player_map import learn_ma_player_ids
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -412,8 +409,6 @@ class MaMonitor:
         self._consecutive_auth_failures = 0
         self._background_tasks: set[asyncio.Task] = set()
         self._pending_stale_reconnects: set[str] = set()
-        # Sync-group rewrites already sent this session: (group id, members).
-        self._applied_group_migrations: set[tuple[str, tuple[str, ...]]] = set()
 
     def _next_id(self) -> int:
         return next(self._msg_id)
@@ -773,28 +768,6 @@ class MaMonitor:
             )
             self._track_background_task(asyncio.create_task(matched_client.send_reconnect()))
 
-    async def _migrate_group_members(self, ws, players, bridge_info, learned_ids) -> None:
-        """Move our speakers' sync-group membership to their current MA player.
-
-        Since 2.76 Music Assistant files each speaker under a new player (the
-        daemon's identity key) and the groups still list the old one. Each
-        rewrite is sent once per session; a failure is logged and retried on
-        the next refresh.
-        """
-        for group_id, members in plan_group_identity_migrations(players, bridge_info, learned_ids).items():
-            key = (group_id, tuple(members))
-            if key in self._applied_group_migrations:
-                continue
-            try:
-                await self._request_command(
-                    ws, "config/players/save", {"player_id": group_id, "values": {"group_members": members}}
-                )
-            except Exception as exc:
-                logger.warning("MA: could not move sync group %s to the speakers' new players: %s", group_id, exc)
-                continue
-            self._applied_group_migrations.add(key)
-            logger.info("MA: sync group %s now lists %s (speakers' players changed in 2.76)", group_id, members)
-
     async def _refresh_groups_via_ws(self, ws) -> None:
         """Fetch players/all via WS and rebuild the syncgroup cache in state."""
         try:
@@ -825,7 +798,6 @@ class MaMonitor:
             # is aimed at an id MA does not have.
             learned_ids = learn_ma_player_ids(players, bridge_info)
             _state.set_ma_player_ids(learned_ids)
-            await self._migrate_group_members(ws, players, bridge_info, learned_ids)
 
             member_set_by_group: dict[str, set[str]] = {}
 

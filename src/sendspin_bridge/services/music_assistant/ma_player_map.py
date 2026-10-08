@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["learn_ma_player_ids", "plan_group_identity_migrations"]
+__all__ = ["learn_ma_player_ids"]
 
 
 def _display_name(player: dict[str, Any]) -> str:
@@ -73,66 +73,3 @@ def learn_ma_player_ids(
         if resolved:
             mapping[client_id] = resolved
     return mapping
-
-
-def _legacy_ids(players: list[dict[str, Any]], client_id: str) -> set[str]:
-    """Every id Music Assistant may have filed the speaker under before 2.76.
-
-    The protocol player carried the MAC-derived client id itself; its wrapper
-    was "up" + that id without dashes, or whichever player lists it as an
-    output protocol.
-    """
-    ids = {client_id, "up" + client_id.replace("-", "")}
-    for player in players or []:
-        if client_id in _output_protocol_ids(player):
-            ids.add(str(player.get("player_id") or ""))
-    ids.discard("")
-    return ids
-
-
-def plan_group_identity_migrations(
-    players: list[dict[str, Any]],
-    bridge_players: list[dict[str, Any]],
-    learned: dict[str, str],
-) -> dict[str, list[str]]:
-    """Sync groups to rewrite so they follow our speakers to their new id.
-
-    Since 2.76 the daemon says hello with its identity key, so Music
-    Assistant files each speaker under a new player and the sync groups still
-    list the old one, which never comes back. Returns ``{group id: new static
-    members}`` for the groups that need it.
-
-    A legacy player that is still available is left alone: it is another
-    bridge, still on the old version, serving the same speaker.
-    """
-    by_id = {str(p.get("player_id") or ""): p for p in players or []}
-    plans: dict[str, list[str]] = {}
-    for bridge_player in bridge_players or []:
-        client_id = str(bridge_player.get("player_id") or "").strip()
-        new_id = learned.get(client_id)
-        if not client_id or not new_id:
-            continue
-        # Rewriting MA's configuration needs proof, not a name: the new player
-        # must list the client id our daemon says hello with. The display-name
-        # fallback in learn_ma_player_ids is fine for addressing a queue, but
-        # any player can carry our name.
-        advertised = str(bridge_player.get("client_id") or "").strip()
-        if not advertised or advertised not in _output_protocol_ids(by_id.get(new_id, {})):
-            continue
-        legacy = _legacy_ids(players, client_id) - {new_id}
-        if any(by_id.get(old, {}).get("available") for old in legacy):
-            continue
-        for player in players or []:
-            if player.get("provider") != "sync_group":
-                continue
-            group_id = str(player.get("player_id") or "")
-            members = plans.get(group_id) or list(player.get("static_group_members") or [])
-            if new_id in members or not legacy.intersection(members):
-                continue
-            moved: list[str] = []
-            for member in members:
-                replacement = new_id if member in legacy else member
-                if replacement not in moved:
-                    moved.append(replacement)
-            plans[group_id] = moved
-    return plans
