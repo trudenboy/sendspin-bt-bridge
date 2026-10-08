@@ -222,6 +222,9 @@ class BluetoothManager:
         self._adapter_handle = AdapterHandle(adapter=adapter or "", link_probe=self._dbus_link_probe)
         self._dbus_path_override: object = _UNSET
         self._device: BluetoothDevice | None = None
+        # Bumped on every controller change, so a monitor watching the old
+        # controller's object knows to re-subscribe.
+        self.adapter_generation = 0
         self.management_enabled: bool = True  # False = released; monitor loop skips reconnect
         self._running: bool = True  # False = shutdown; monitor loops exit
         self.paired: bool | None = None
@@ -382,6 +385,7 @@ class BluetoothManager:
         self._dbus_path_override = _UNSET
         self._device = None
         self._paired_unknown_count = 0
+        self.adapter_generation += 1
         self.effective_adapter_mac = self._adapter_handle.adapter_mac or self._detect_default_adapter_mac()
         return True
 
