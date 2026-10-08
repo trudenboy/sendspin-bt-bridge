@@ -3563,6 +3563,12 @@ def test_api_diagnostics_includes_playing_and_sink_input_metadata(client, monkey
         "list_sinks",
         lambda: [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}],
     )
+    # The host probe reads both from one PulseAudio session.
+    monkeypatch.setattr(
+        api_status,
+        "get_audio_server_snapshot",
+        lambda: ("pulseaudio 16.1", [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}]),
+    )
     monkeypatch.setattr(
         api_status,
         "list_cards",
@@ -3659,12 +3665,12 @@ def test_collect_preflight_status_surfaces_audio_probe_failure(monkeypatch):
 
     import sendspin_bridge.web.routes.api_status as api_status
 
+    # The probe reads the server name and sinks from one PulseAudio session.
     monkeypatch.setattr(
         api_status,
-        "get_server_name",
+        "get_audio_server_snapshot",
         lambda: (_ for _ in ()).throw(subprocess.TimeoutExpired("pactl info", 5)),
     )
-    monkeypatch.setattr(api_status, "list_sinks", lambda: [{"name": "bluez_sink.demo"}])
     monkeypatch.setattr(
         api_status.subprocess,
         "run",
@@ -3712,6 +3718,12 @@ def test_api_diagnostics_reports_failed_collections_for_sink_input_timeout(clien
     )
     monkeypatch.setattr(api_status, "get_server_name", lambda: "pulseaudio 16.1")
     monkeypatch.setattr(api_status, "list_sinks", lambda: [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}])
+    # The host probe reads both from one PulseAudio session.
+    monkeypatch.setattr(
+        api_status,
+        "get_audio_server_snapshot",
+        lambda: ("pulseaudio 16.1", [{"name": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}]),
+    )
     monkeypatch.setattr(api_status, "list_cards", lambda: [])
     monkeypatch.setattr(api_status, "_collect_environment", lambda: {"audio_server": "pulseaudio 16.1"})
     monkeypatch.setattr(api_status, "_collect_subprocess_info", lambda: [])

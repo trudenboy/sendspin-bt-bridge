@@ -116,19 +116,38 @@ async def alist_sinks() -> list[dict]:
     try:
         async with asyncio.timeout(_TIMEOUT):
             async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
-                sinks = await pulse.sink_list()
-                return [
-                    {
-                        "name": s.name,
-                        "description": s.description,
-                        "volume": max(0, min(100, int(round(s.volume.value_flat * 100)))),
-                        "muted": bool(s.mute),
-                    }
-                    for s in sinks
-                ]
+                return [_sink_dict(s) for s in await pulse.sink_list()]
     except Exception as exc:
         logger.debug("alist_sinks error: %s — falling back", exc)
         return _fallback_list_sinks()
+
+
+def _sink_dict(sink) -> dict:
+    return {
+        "name": sink.name,
+        "description": sink.description,
+        "volume": max(0, min(100, int(round(sink.volume.value_flat * 100)))),
+        "muted": bool(sink.mute),
+    }
+
+
+async def aget_audio_server_snapshot() -> tuple[str, list[dict]]:
+    """Server name and sink list from one PulseAudio session.
+
+    Every PulseAsync session is a new PulseAudio client with its own buffers;
+    the host probe needs both answers, so it asks once.
+    """
+    if not _PULSECTL_AVAILABLE:
+        return _fallback_server_name(), _fallback_list_sinks()
+    try:
+        async with asyncio.timeout(_TIMEOUT):
+            async with pulsectl_asyncio.PulseAsync(_CLIENT_NAME) as pulse:
+                info = await pulse.server_info()
+                sinks = [_sink_dict(s) for s in await pulse.sink_list()]
+                return info.server_name or "running", sinks
+    except Exception as exc:
+        logger.debug("aget_audio_server_snapshot error: %s — falling back", exc)
+        return _fallback_server_name(), _fallback_list_sinks()
 
 
 async def aget_sink_description(sink_name: str) -> str | None:
@@ -703,6 +722,10 @@ def suspend_sink(sink_name: str, suspend: bool) -> bool:
 
 def get_server_name() -> str:
     return _run(aget_server_name())
+
+
+def get_audio_server_snapshot() -> tuple[str, list[dict]]:
+    return _run(aget_audio_server_snapshot())
 
 
 def list_cards() -> list[dict]:

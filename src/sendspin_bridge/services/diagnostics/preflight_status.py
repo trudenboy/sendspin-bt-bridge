@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import platform as _platform
 import socket as _socket
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.config import get_runtime_version
 from sendspin_bridge.services.audio.pulse import get_server_name, list_sinks
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _default_connect_fn(sock_path: str, timeout: float = 1.0) -> None:
@@ -28,6 +32,23 @@ def _default_connect_fn(sock_path: str, timeout: float = 1.0) -> None:
         s.connect(sock_path)
     finally:
         s.close()
+
+
+_host_change_listeners: list[Callable[[], None]] = []
+
+
+def add_host_change_listener(listener: Callable[[], None]) -> None:
+    """Call *listener* whenever the host state a preflight probe describes changes."""
+    _host_change_listeners.append(listener)
+
+
+def notify_host_changed() -> None:
+    """A speaker connected or left: sampled host state (paired devices, sinks) is stale."""
+    for listener in list(_host_change_listeners):
+        try:
+            listener()
+        except Exception as exc:  # a listener must never break the caller
+            logging.getLogger(__name__).debug("host change listener failed: %s", exc)
 
 
 def collection_error_payload(exc: Exception) -> dict[str, str]:

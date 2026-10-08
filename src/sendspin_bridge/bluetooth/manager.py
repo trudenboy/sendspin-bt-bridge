@@ -981,6 +981,10 @@ class BluetoothManager:
                 self.audio_sink_ready = False
             self._transition_seq += 1
             sequence = self._transition_seq
+        # The sampled host probe (paired devices, sinks) is stale from here on.
+        from sendspin_bridge.services.diagnostics import preflight_status
+
+        preflight_status.notify_host_changed()
         # #260, #263 — a successful Connected=True transition is the canonical
         # "this device exists in BlueZ and works" signal. Flip the session
         # flag and clear the never_paired status push so the recovery banner
