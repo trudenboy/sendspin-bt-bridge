@@ -107,6 +107,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   once. Repeated attempts left listeners behind, so one reconnect could
   correct the audio routing of every other speaker several times over.
 
+## [2.75.1] - 2026-10-08
+
+### Fixed
+
+- Music Assistant no longer loses an idle speaker 20 seconds after every
+  connection. The bridge reconnected any player whose Music Assistant record
+  did not repeat the bridge's own product name, but each speaker advertises
+  its own name, so the check failed every time. Only a record from a
+  different bridge version now triggers a reconnect
+  ([#477](https://github.com/trudenboy/sendspin-bt-bridge/issues/477)).
+- A speaker that came back on its own after an auto-release no longer sends
+  the bridge into a tight loop that grew its memory until the system killed it
+  ([#470](https://github.com/trudenboy/sendspin-bt-bridge/issues/470)).
+- A speaker that reconnected while another Bluetooth operation held the
+  adapter now gets its player started again instead of staying connected but
+  silent ([#460](https://github.com/trudenboy/sendspin-bt-bridge/issues/460)).
+- Pair and Add no longer fails with `AuthenticationFailed` on speakers that
+  pair fine from the host. The bridge's own pairing agent now answers the
+  confirmation instead of the one built into the pairing session
+  ([#471](https://github.com/trudenboy/sendspin-bt-bridge/issues/471)).
+
+### Security
+
+- Updated PyJWT to 2.15.1, urllib3 to 2.8.0, Werkzeug to 3.1.9 and multidict
+  to 6.9.1 to pick up fixes for published vulnerabilities.
+
 ## [2.75.0] - 2026-08-26
 
 ### Changed
