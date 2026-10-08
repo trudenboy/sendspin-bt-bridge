@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the keep-alive signal straight away, and switching away stops it.
   Previously the change only took effect after the bridge restarted, so the
   speaker could still power itself off.
+- Saving the settings without changing anything no longer restarts every
+  speaker's player. On configurations written by an older version, settings
+  the file did not list yet were counted as changed, so Music Assistant had
+  to reconnect to every speaker.
 - A speaker removed from the fleet and added back, for example from a new
   scan that pairs it on another Bluetooth adapter, now connects on the
   adapter it was added with instead of retrying the old one forever.
