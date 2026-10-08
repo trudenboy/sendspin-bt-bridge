@@ -632,3 +632,37 @@ async def test_refresh_stale_player_metadata_reconnects_a_legacy_generic_identit
     )
 
     client.send_reconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_new_token_reconnects_at_once_instead_of_waiting_out_the_backoff(monkeypatch):
+    """Seen live: Music Assistant was reinstalled, the stored token stopped
+    working and the monitor backed off to a minute between attempts. The
+    operator signed in again — and the monitor sat out the rest of its
+    minute before trying the new token. A credential reload must cut the
+    wait short, and start the backoff over."""
+    monitor = MaMonitor("http://ma:8095", "old-token")
+    monkeypatch.setattr(ma_monitor, "_RECONNECT_BASE", 60)
+    monkeypatch.setattr(ma_monitor, "_active_bridge_clients", lambda: [])
+    attempts: list[str] = []
+    connected = asyncio.Event()
+
+    async def _connect():
+        attempts.append(monitor._token)
+        if monitor._token == "old-token":
+            raise ma_monitor._AuthFailed()
+        connected.set()
+        monitor._running = False
+
+    monkeypatch.setattr(monitor, "_connect_and_run", _connect)
+    monkeypatch.setattr(ma_monitor._state, "get_ma_api_credentials", lambda: ("", ""))
+
+    runner = asyncio.create_task(monitor.run())
+    while not attempts:
+        await asyncio.sleep(0)
+
+    await monitor.reload_credentials("http://ma:8095", "new-token")
+
+    await asyncio.wait_for(connected.wait(), timeout=2)
+    assert attempts == ["old-token", "new-token"]
+    await asyncio.wait_for(runner, timeout=2)
