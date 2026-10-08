@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A speaker that reconnected while another Bluetooth operation held the
   adapter now gets its player started again instead of staying connected but
   silent ([#460](https://github.com/trudenboy/sendspin-bt-bridge/issues/460)).
+- Music Assistant no longer loses an idle speaker 20 seconds after every
+  connection. The bridge reconnected any player whose Music Assistant record
+  did not repeat the bridge's own product name, but each speaker advertises
+  its own name, so the check failed every time. Only a record from a
+  different bridge version now triggers a reconnect
+  ([#477](https://github.com/trudenboy/sendspin-bt-bridge/issues/477)).
 
 ### Security
 
