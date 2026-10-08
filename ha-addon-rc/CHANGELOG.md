@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.4] - 2026-10-08
+
+### Fixed
+
+- A speaker that keeps accepting the Bluetooth link without ever offering
+  audio, such as a JBL PartyBox switched off but still on mains power, now
+  reaches the auto-release threshold instead of reconnecting forever
+  ([#414](https://github.com/trudenboy/sendspin-bt-bridge/issues/414)).
+- A speaker that came back on its own after an auto-release no longer sends
+  the bridge into a tight loop that grew its memory until the system killed it
+  ([#470](https://github.com/trudenboy/sendspin-bt-bridge/issues/470)).
+- A speaker that reconnected while another Bluetooth operation held the
+  adapter now gets its player started again instead of staying connected but
+  silent ([#460](https://github.com/trudenboy/sendspin-bt-bridge/issues/460)).
+- Music Assistant no longer loses an idle speaker 20 seconds after every
+  connection. The bridge reconnected any player whose Music Assistant record
+  did not repeat the bridge's own product name, but each speaker advertises
+  its own name, so the check failed every time. Only a record from a
+  different bridge version now triggers a reconnect
+  ([#477](https://github.com/trudenboy/sendspin-bt-bridge/issues/477)).
+- Pause and Stop in Music Assistant now silence the speaker at once instead
+  of playing on for 5 to 30 seconds. Audio already sent ahead is discarded
+  when the stream ends, as the Sendspin protocol requires
+  ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
+- A volume or mute change from Music Assistant is now reported back, so the
+  slider no longer jumps to the old level after Pause or Stop while the
+  speaker keeps the new one
+  ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
+- Pair and Add no longer fails with `AuthenticationFailed` on speakers that
+  pair fine from the host. The bridge's own pairing agent now answers the
+  confirmation instead of the one built into the pairing session
+  ([#471](https://github.com/trudenboy/sendspin-bt-bridge/issues/471)).
+
+### Security
+
+- Updated PyJWT to 2.15.1, urllib3 to 2.8.0, Werkzeug to 3.1.9 and multidict
+  to 6.9.1 to pick up fixes for published vulnerabilities.
+
 ## [2.76.0-rc.3] - 2026-08-27
 
 ### Added

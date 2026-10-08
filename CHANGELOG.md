@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.0-rc.4] - 2026-10-08
+
 ### Fixed
 
 - A speaker that keeps accepting the Bluetooth link without ever offering
