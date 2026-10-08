@@ -149,6 +149,39 @@ record_release_ref() {
   printf '%s\n' "${GITHUB_BRANCH}" > "${dest_root}/.release-ref"
 }
 
+# ─── GStreamer system packages ───────────────────────────────────────────────
+# 2.76 plays through GStreamer and builds PyGObject with pip. install.sh sets
+# the system side up; an install from before 2.76 does not have it, and this
+# script is the only thing that runs on the upgrade path. The packages need
+# glib >= 2.80 (Debian 13 / Ubuntu 24.04 or newer), so they are only pulled in
+# when the target version needs them — a 2.75.x update on bookworm still works.
+_GSTREAMER_SYSTEM_PACKAGES=(
+  gstreamer1.0-plugins-base gstreamer1.0-pulseaudio gir1.2-gstreamer-1.0
+  libcairo2-dev libgirepository-2.0-dev gcc python3-dev pkg-config
+)
+
+needs_gstreamer_stack() {
+  local major minor
+  IFS=. read -r major minor _ <<<"${1%%-*}"
+  [[ "${major}" =~ ^[0-9]+$ && "${minor}" =~ ^[0-9]+$ ]] || return 1
+  (( major > 2 || (major == 2 && minor >= 76) ))
+}
+
+ensure_system_packages() {
+  local target_version="$1"
+  needs_gstreamer_stack "${target_version}" || return 0
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "apt-get not found — make sure the GStreamer runtime and PyGObject build dependencies are installed"
+    return 0
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq \
+    || die "apt-get update failed; aborting upgrade, the current version stays installed"
+  apt-get install -y -qq "${_GSTREAMER_SYSTEM_PACKAGES[@]}" \
+    || die "Could not install the GStreamer audio stack ${target_version} needs (Debian 13 / Ubuntu 24.04 or newer); aborting upgrade, the current version stays installed"
+}
+# ─── end GStreamer system packages
+
 update_python_dependencies() {
   # CRITICAL: pip failures here are the root cause of #324 — silently
   # swallowing them leaves a stale ``sendspin`` package on disk while
@@ -307,7 +340,9 @@ ok "Application files downloaded"
 
 NEW_VERSION=$(cat "${STAGE_APP}/VERSION" 2>/dev/null || echo "unknown")
 
-# ─── 2. Update Python dependencies ───────────────────────────────────────────
+# ─── 2. Update system and Python dependencies ────────────────────────────────
+msg "Checking system packages..."
+ensure_system_packages "${NEW_VERSION}"
 msg "Updating Python dependencies..."
 update_python_dependencies "${STAGE_APP}/requirements.txt"
 ok "Python dependencies updated"

@@ -552,3 +552,86 @@ def test_lxc_upgrade_script_registers_editable_install_after_swap():
     assert text.index(swap_marker) < text.rindex(register_marker), (
         "success path must register editable install after the swap"
     )
+
+
+# ---------------------------------------------------------------------------
+# upgrade.sh brings the GStreamer stack along when crossing into 2.76
+# ---------------------------------------------------------------------------
+
+
+def _run_upgrade_system_packages(tmp_path: Path, target_version: str, *, apt_fails: bool = False):
+    """Run upgrade.sh's system-package step in isolation with a fake apt-get."""
+    import subprocess
+
+    repo_root = Path(__file__).resolve().parents[4]
+    script = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+    start = script.index("# ─── GStreamer system packages")
+    end = script.index("\n# ─── end GStreamer system packages")
+    functions = script[start:end]
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "apt-calls.log"
+    fake_apt = bin_dir / "apt-get"
+    fake_apt.write_text(
+        "#!/bin/bash\n"
+        f'echo "$*" >> "{calls}"\n'
+        f'if [[ "$1" == "install" && "{int(apt_fails)}" == "1" ]]; then exit 100; fi\n'
+        "exit 0\n"
+    )
+    fake_apt.chmod(0o755)
+
+    harness = (
+        "set -euo pipefail\n"
+        'warn() { echo "WARN: $*" >&2; }\n'
+        'die() { echo "DIE: $*" >&2; exit 1; }\n'
+        f"{functions}\n"
+        f'ensure_system_packages "{target_version}"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-c", harness],
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    logged = calls.read_text().splitlines() if calls.exists() else []
+    return result, logged
+
+
+def test_upgrade_into_2_76_installs_the_gstreamer_stack(tmp_path):
+    """2.76 plays through GStreamer and builds PyGObject with pip. install.sh
+    sets the system side up; an install that predates it does not have it,
+    and upgrade.sh is the only thing that runs on that path."""
+    result, calls = _run_upgrade_system_packages(tmp_path, "2.76.0")
+
+    assert result.returncode == 0, result.stderr
+    installs = [c for c in calls if c.startswith("install")]
+    assert installs, calls
+    for package in ("gstreamer1.0-pulseaudio", "gir1.2-gstreamer-1.0", "libgirepository-2.0-dev", "libcairo2-dev"):
+        assert package in installs[0]
+
+
+def test_upgrade_within_2_75_leaves_system_packages_alone(tmp_path):
+    """Bookworm hosts cannot install the 2.76 stack; a 2.75.x update must
+    not depend on it."""
+    result, calls = _run_upgrade_system_packages(tmp_path, "2.75.2")
+
+    assert result.returncode == 0, result.stderr
+    assert calls == []
+
+
+def test_upgrade_stops_cleanly_when_the_stack_cannot_be_installed(tmp_path):
+    result, _calls = _run_upgrade_system_packages(tmp_path, "2.76.0", apt_fails=True)
+
+    assert result.returncode != 0
+    assert "Ubuntu 24.04" in result.stderr
+    assert "current version stays installed" in result.stderr
+
+
+def test_upgrade_installs_system_packages_before_python_dependencies():
+    repo_root = Path(__file__).resolve().parents[4]
+    text = (repo_root / "deployment/lxc/upgrade.sh").read_text()
+    main_flow = text[text.index('NEW_VERSION=$(cat "${STAGE_APP}/VERSION"') :]
+
+    assert main_flow.index('ensure_system_packages "${NEW_VERSION}"') < main_flow.index("update_python_dependencies ")
