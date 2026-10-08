@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Music Assistant now reconnects to a speaker by itself after the bridge
+  restarts, reloads its configuration or loses and regains the Bluetooth link.
+  The bridge told Music Assistant it was shutting down for good each time, so
+  the speaker stayed unavailable until the Sendspin provider was reloaded.
+  The metadata refresh reconnect was affected the same way.
+
 ## [2.76.0-rc.4] - 2026-10-08
 
 ### Fixed

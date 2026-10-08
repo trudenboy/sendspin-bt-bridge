@@ -286,3 +286,30 @@ async def test_pairing_state_reflects_persisted_server_record(tmp_path: Path):
     await daemon._refresh_pairing_state()
 
     assert daemon._bridge_status["pairing_state"] == "paired"
+
+
+@pytest.mark.asyncio
+async def test_daemon_stop_says_goodbye_with_restart(tmp_path: Path):
+    """The parent stops the daemon on link drops, standby, config changes and
+    bridge restarts, all of which bring it back. ``shutdown`` tells the server
+    not to auto-reconnect (Sendspin spec, ``client/goodbye``), so Music
+    Assistant never dialled the respawned daemon again; ``restart`` is the
+    reason that matches."""
+    from aiosendspin.models.types import GoodbyeReason
+
+    daemon = _daemon(tmp_path)
+    client = SimpleNamespace(disconnect=AsyncMock())
+
+    async def load():
+        daemon._identity = SimpleNamespace(peer_id="identity-peer-id")
+
+    async def inbound():
+        raise asyncio.CancelledError
+
+    daemon._load_identity_and_pairing_store = load  # type: ignore[method-assign]
+    daemon._create_client = MagicMock(return_value=client)  # type: ignore[method-assign]
+    daemon._run_server_initiated = inbound  # type: ignore[method-assign]
+
+    await daemon.run()
+
+    client.disconnect.assert_awaited_once_with(GoodbyeReason.RESTART)

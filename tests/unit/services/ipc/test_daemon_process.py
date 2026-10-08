@@ -1061,3 +1061,22 @@ async def test_a_missing_protocol_version_is_still_accepted(monkeypatch, capsys)
     lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
     errors = [json.loads(line) for line in lines if json.loads(line).get("type") == "error"]
     assert not errors
+
+
+@pytest.mark.asyncio
+async def test_read_commands_reconnect_says_goodbye_with_restart():
+    """The reconnect verb exists to come straight back (stale metadata refresh,
+    #477). Saying goodbye with ``shutdown`` made Music Assistant stop dialling
+    the client, so the "reconnect" cut the speaker off for good."""
+    from aiosendspin.models.types import GoodbyeReason
+
+    import sendspin_bridge.services.ipc.daemon_process as dp
+
+    disconnect = AsyncMock()
+    daemon = SimpleNamespace(_client=SimpleNamespace(disconnect=disconnect))
+
+    await _run_one_command(daemon, {"cmd": "reconnect", "delay": 0})
+    if dp._background_tasks:
+        await asyncio.wait_for(asyncio.gather(*tuple(dp._background_tasks), return_exceptions=True), timeout=2.0)
+
+    disconnect.assert_awaited_once_with(GoodbyeReason.RESTART)
