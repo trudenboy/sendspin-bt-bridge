@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -306,3 +307,48 @@ async def test_apply_hot_config_per_key_transactional_does_not_block_parent_only
     assert client.idle_mode == "power_save"
     # static_delay_ms stayed untouched because its IPC failed.
     assert client.static_delay_ms != 250
+
+
+# ---------------------------------------------------------------------------
+# keep_alive switched at runtime
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_switching_to_keep_alive_at_runtime_starts_the_bursts():
+    """Seen live: idle_mode set to keep_alive on a running speaker showed in
+    the status but never sent a burst — the loop was only started when the
+    client itself started, and the speaker powered itself off."""
+    client = _make_client(idle_mode="default")
+    client.running = True
+
+    await client.apply_hot_config({"idle_mode": "keep_alive"})
+
+    task = client._keepalive_task
+    assert task is not None and not task.done(), "no keepalive loop is running"
+    client.running = False
+    task.cancel()
+
+
+@pytest.mark.asyncio
+async def test_switching_away_from_keep_alive_stops_the_bursts():
+    client = _make_client(idle_mode="default")
+    client.running = True
+    await client.apply_hot_config({"idle_mode": "keep_alive"})
+    task = client._keepalive_task
+
+    await client.apply_hot_config({"idle_mode": "default"})
+    await asyncio.sleep(0)
+
+    assert task.cancelled() or task.done(), "the keepalive loop outlived keep_alive"
+    client.running = False
+
+
+def test_a_device_row_with_no_keepalive_interval_keeps_the_floor():
+    """A device row from the UI may carry keepalive_interval 0; adopting it
+    as is would have the burst loop spin on ``asyncio.sleep(0)``."""
+    client = _make_client(idle_mode="keep_alive")
+
+    client.adopt_device_config({"idle_mode": "keep_alive", "keepalive_interval": 0})
+
+    assert client.keepalive_interval >= 30
