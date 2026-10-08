@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Music Assistant lists each speaker as a new player after updating from
+  2.75, because the bridge now identifies itself the way the current
+  Sendspin protocol requires. The old players stay behind as unavailable:
+  remove them in Music Assistant and add the new ones to your sync groups
+  again.
+
 ### Fixed
 
 - Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
