@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.75.2] - 2026-10-08
+
+### Fixed
+
+- A speaker that keeps accepting the Bluetooth link without ever offering
+  audio, such as a JBL PartyBox switched off but still on mains power, now
+  reaches the auto-release threshold instead of reconnecting forever
+  ([#414](https://github.com/trudenboy/sendspin-bt-bridge/issues/414)).
+- Updating an LXC or bare-metal install to 2.76 installs the GStreamer audio
+  stack the new version plays through. Hosts older than Debian 13 or Ubuntu
+  24.04 cannot run it; the update stops with that explanation and leaves
+  2.75 installed.
+
 ## [2.75.1] - 2026-10-08
 
 ### Fixed
