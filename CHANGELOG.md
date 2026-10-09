@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A speaker that is already connected when the bridge starts gets its
+  player even if the Bluetooth adapter was busy at that moment. It used to
+  stay connected but silent, with no player in Music Assistant, until its
+  link dropped and came back.
 - Updating an LXC or bare-metal install to a chosen version, including from
   the web interface, installs that version. When the update script first
   updated itself it lost the requested version and installed the newest
