@@ -130,6 +130,41 @@ async def _finish_auto_reclaim(mgr: BluetoothManager, loop, *, connected: bool |
     return True
 
 
+async def _link_confirmed(device) -> bool:
+    """BlueZ's own answer: ``mgr.connected`` may be stale after a missed signal."""
+    try:
+        return bool(await device.is_connected())
+    except Exception as exc:
+        logger.debug("link confirmation failed: %s", exc)
+        return False
+
+
+async def _start_player_on_established_link(mgr: BluetoothManager, loop) -> bool:
+    """Configure audio and start the player for a link that is already up.
+
+    Returns ``False`` when the adapter is busy (another operation will be
+    done shortly) so the caller can look again soon.
+    """
+    lease = mgr.adapter_handle.try_lease(f"start {mgr.device_name}")
+    if lease is None:
+        return False
+    try:
+        logger.info("[%s] Connected without a player — configuring audio and starting sendspin", mgr.device_name)
+        await loop.run_in_executor(bt_executor(), mgr.configure_bluetooth_audio)
+    finally:
+        lease.release()
+    if mgr.host:
+        mgr.host.update_status(
+            {
+                "bluetooth_connected": True,
+                "bluetooth_connected_at": datetime.now(tz=UTC).isoformat(),
+            }
+        )
+        await mgr.host.start_subprocess()
+    _spawn_background(_correct_other_devices_routing(mgr))
+    return True
+
+
 async def _poll_auto_reclaim(mgr: BluetoothManager, loop) -> bool:
     """Polling-monitor variant of the auto-reclaim check.
 
@@ -342,6 +377,14 @@ async def _inner_dbus_monitor(
                 if mgr.host and not mgr.host.is_subprocess_running():
                     logger.info("[%s] Link back but daemon still stopped — starting sendspin...", mgr.device_name)
                     await mgr.host.start_subprocess()
+            elif mgr.host and not mgr.host.is_subprocess_running() and await _link_confirmed(device):
+                # A link that was already up when the bridge started: the
+                # startup connect found the adapter busy and left it to this
+                # loop, which used to only wait for a disconnect — the
+                # speaker stayed connected with no player.
+                if not await _start_player_on_established_link(mgr, loop):
+                    await asyncio.sleep(2)  # adapter busy: look again shortly
+                    continue
             # Clear reconnect state — only once the speaker has a sink; a
             # link without one is the failure being counted (#414).
             if mgr.audio_sink_ready:

@@ -1000,3 +1000,77 @@ async def test_the_monitor_follows_the_speaker_to_its_new_controller(bt_manager)
 
     assert bt_manager.connected is True, "the monitor never read the speaker on its new controller"
     assert old.watcher_count == 0, "the old controller's object is still watched"
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_connected_at_startup_gets_its_player_even_if_the_adapter_was_busy(bt_manager):
+    """Seen on HAOS after an update: ENEBY20 was already connected when the
+    bridge started, the startup connect found the adapter busy and left the
+    rest to the monitor — and the monitor, seeing the link up, only waited
+    for a disconnect. The speaker stayed connected with no player. A managed,
+    connected speaker without a running player is configured and started."""
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = True
+    bt_manager.management_enabled = True
+    bt_manager.check_interval = 0.01
+
+    running = {"alive": False}
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(return_value=False)
+    bt_manager.host.is_subprocess_running = MagicMock(side_effect=lambda: running["alive"])
+
+    async def _start():
+        running["alive"] = True
+
+    bt_manager.host.start_subprocess = AsyncMock(side_effect=_start)
+    configured: list[bool] = []
+
+    def _configure():
+        configured.append(True)
+        return True
+
+    device = AsyncMock()
+    device.is_connected = AsyncMock(return_value=True)
+    device.battery_level = AsyncMock(return_value=None)
+
+    async def _fake_wait_for(coro, *, timeout=None):
+        coro.close()
+        bt_manager._running = False
+        raise TimeoutError
+
+    async def _run_in_executor(_executor, fn, *args):
+        return fn(*args)
+
+    loop = asyncio.get_running_loop()
+    with (
+        patch("sendspin_bridge.bluetooth.monitor.asyncio.wait_for", side_effect=_fake_wait_for),
+        patch.object(loop, "run_in_executor", side_effect=_run_in_executor),
+        patch.object(bt_manager, "configure_bluetooth_audio", side_effect=_configure),
+        patch("sendspin_bridge.bluetooth.monitor._spawn_background"),
+    ):
+        await _inner_dbus_monitor(bt_manager, device, asyncio.Event(), asyncio.Event(), loop)
+
+    assert configured == [True], "the sink was never configured"
+    bt_manager.host.start_subprocess.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_speaker_in_standby_is_not_started_by_the_link_check(bt_manager):
+    from sendspin_bridge.bluetooth.monitor import _inner_dbus_monitor
+
+    bt_manager.connected = True
+    bt_manager.management_enabled = True
+    bt_manager.host = MagicMock()
+    bt_manager.host.get_status_value = MagicMock(side_effect=lambda key: key == "bt_standby")
+    bt_manager.host.is_subprocess_running = MagicMock(return_value=False)
+    bt_manager.host.start_subprocess = AsyncMock()
+
+    async def _standby_then_stop(_mgr):
+        bt_manager._running = False
+
+    loop = asyncio.get_running_loop()
+    with patch("sendspin_bridge.bluetooth.monitor._standby_sleep", side_effect=_standby_then_stop):
+        await _inner_dbus_monitor(bt_manager, AsyncMock(), asyncio.Event(), asyncio.Event(), loop)
+
+    bt_manager.host.start_subprocess.assert_not_awaited()
