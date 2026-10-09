@@ -69,3 +69,7 @@ reddit/
 img/
 scan-scroll-test*.png
 .local-run/
+
+# Front-end dependencies are installed, never committed
+ui/node_modules/
+ui/dist/
