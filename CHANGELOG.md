@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.15] - 2026-10-09
+
 ### Added
 
 - A new web interface, rebuilt as a single-page app on top of a public,
@@ -30,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Assistant's two-factor step.
 
 ### Changed
+
+- The beta channel now carries everything released on the stable and
+  release-candidate channels up to 2.77.0-rc.2, including Sendspin 1.0
+  through aiosendspin 10 (Music Assistant 2.11 or later is required).
 
 - Errors from the API are Problem Details documents with a stable `code`
   that clients can act on, and malformed requests are answered with the
