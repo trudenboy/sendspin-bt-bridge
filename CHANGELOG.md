@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The bridge now speaks the Sendspin 1.0 protocol through aiosendspin 10 and
+  needs Music Assistant 2.11 or later (currently in beta). Music Assistant
+  2.10 cannot accept these connections; stay on the stable channel until
+  2.11 is released. Music Assistant no longer reports the bridge as a
+  non-compliant client.
+- Speakers that require Sendspin pairing may need to be paired with Music
+  Assistant again after upgrading, because the stored pairing record format
+  changed.
+
 ### Fixed
 
 - Artwork hosted outside Music Assistant, such as radio station logos on

@@ -479,16 +479,16 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
             # Clamp to the same range as config.schema.json.
             delay_ms = max(0.0, min(5000.0, delay_ms))
             client = getattr(daemon, "_client", None) if daemon else None
-            setter = getattr(client, "set_static_delay_ms", None) if client else None
+            setter = getattr(client, "set_output_delay_ms", None) if client else None
             applied = False
             if callable(setter):
                 try:
                     setter(delay_ms)
                     applied = True
                 except Exception as exc:
-                    logger.warning("set_static_delay_ms failed: %s", exc)
+                    logger.warning("set_output_delay_ms failed: %s", exc)
             else:
-                logger.warning("set_static_delay_ms not supported by current sendspin client — value ignored")
+                logger.warning("set_output_delay_ms not supported by current sendspin client — value ignored")
             # Only refresh the daemon-level cache if the local apply actually
             # succeeded. The cache feeds _create_client(self._static_delay_ms)
             # on the next server reconnect; updating it after a failed/ignored
@@ -504,7 +504,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 daemon._bridge_status["static_delay_ms"] = round(delay_ms)
                 daemon._notify()
             # Push the updated player state to MA so its slider repaints.
-            # aiosendspin.set_static_delay_ms updates _static_delay_us locally
+            # aiosendspin.set_output_delay_ms updates the delay locally
             # but does NOT auto-emit client/state — explicit push is required.
             # Reuse the daemon's tracked _last_player_state instead of
             # hard-coding SYNCHRONIZED so future state machinery can drive

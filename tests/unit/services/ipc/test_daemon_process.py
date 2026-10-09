@@ -528,7 +528,7 @@ async def test_read_commands_invalid_volume_no_crash():
 def _make_static_delay_daemon(*, connected: bool = True, setter=None, raise_on_setter: bool = False):
     """Build a MagicMock daemon for set_static_delay_ms tests.
 
-    The local IPC path calls daemon._client.set_static_delay_ms(N) and then,
+    The local IPC path calls daemon._client.set_output_delay_ms(N) and then,
     on success, awaits daemon._client.send_player_state(...). Tests assert
     against the mocked client.
     """
@@ -557,7 +557,7 @@ def _make_static_delay_daemon(*, connected: bool = True, setter=None, raise_on_s
     daemon = MagicMock()
     daemon._client = SimpleNamespace(
         connected=connected,
-        set_static_delay_ms=setter,
+        set_output_delay_ms=setter,
         send_player_state=send_state,
     )
     daemon._audio_handler = SimpleNamespace(volume=42, muted=False)
@@ -666,7 +666,7 @@ async def test_read_commands_set_static_delay_skips_cache_when_setter_unsupporte
     same warning forever. Keep the cache stable instead.
     """
     daemon = MagicMock()
-    daemon._client = SimpleNamespace(connected=True)  # no set_static_delay_ms attribute
+    daemon._client = SimpleNamespace(connected=True)  # no set_output_delay_ms attribute
     daemon._audio_handler = SimpleNamespace(volume=42, muted=False)
     daemon._last_player_state = "synchronized-sentinel"
     daemon._static_delay_ms = 100.0  # prior value

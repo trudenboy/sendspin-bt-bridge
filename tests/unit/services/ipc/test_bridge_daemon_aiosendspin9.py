@@ -268,11 +268,12 @@ async def test_pairing_pin_is_not_written_to_logs(tmp_path: Path, caplog: pytest
     assert support is not None
 
     with caplog.at_level(logging.DEBUG):
-        await support.pin_display("123456")
+        await support.pairing_code_display("123456", grouped="123 456")
 
-    assert daemon._bridge_status["pairing_pin"] == "123456"
+    assert daemon._bridge_status["pairing_pin"] == "123 456"
     assert daemon._bridge_status["pairing_state"] == "pin_displayed"
     assert "123456" not in caplog.text
+    assert "123 456" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -332,3 +333,83 @@ async def test_daemon_publishes_the_client_id_it_says_hello_with(tmp_path: Path)
 
     assert daemon._identity is not None
     assert daemon._bridge_status["sendspin_client_id"] == daemon._identity.peer_id
+
+
+# ---------------------------------------------------------------------------
+# aiosendspin 10 / Sendspin 1.0.0-rc1 wire
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_client_carries_the_output_delay_and_declares_commands_in_state(tmp_path: Path):
+    """The spec renamed static delay to output delay and moved player
+    commands from client/hello to client/state; MA flags the old wire as
+    non-compliant. A constructor keyword the library no longer takes is
+    dropped silently, so the delay itself must be checked on the client."""
+    from aiosendspin.models.types import PlayerCommand
+
+    daemon = _daemon(tmp_path)
+    await daemon._load_identity_and_pairing_store()
+
+    client = daemon._create_client(300.0)
+
+    assert client.output_delay_ms == 300.0
+    assert set(client.state_supported_commands) == {
+        PlayerCommand.VOLUME,
+        PlayerCommand.MUTE,
+        PlayerCommand.SET_OUTPUT_DELAY,
+    }
+    assert client.player_support.supported_commands is None
+
+
+@pytest.mark.asyncio
+async def test_require_pairing_policy_applies_to_the_current_pairing_config(tmp_path: Path):
+    """The pairing config fields were renamed (PIN -> pairing code) and the
+    pairing-PSK switch removed; setting the old names fails the daemon."""
+    daemon = _daemon(tmp_path)
+    daemon._args = replace(daemon._args, require_pairing=True, pairing_store_path=str(tmp_path / "pairing.json"))
+    await daemon._load_identity_and_pairing_store()
+
+    config = await daemon._pairing_store.get_pairing_config()
+
+    assert config.unpaired_access_enabled is False
+    assert config.dynamic_pairing_code_enabled is True
+    assert config.static_pairing_code_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_pairing_code_is_shown_and_cleared(tmp_path: Path):
+    daemon = _daemon(tmp_path)
+    daemon._args = replace(daemon._args, require_pairing=True)
+    support = daemon._pairing_support()
+
+    await support.pairing_code_display("123456", grouped="123 456")
+    assert daemon._bridge_status["pairing_pin"] == "123 456"
+    assert daemon._bridge_status["pairing_state"] == "pin_displayed"
+
+    await support.pairing_code_display(None, grouped=None)
+    assert daemon._bridge_status["pairing_pin"] is None
+
+
+def test_server_output_delay_command_is_mirrored_into_status(tmp_path: Path):
+    from aiosendspin.models.player import PlayerCommandPayload
+    from aiosendspin.models.types import PlayerCommand
+
+    daemon = _daemon(tmp_path)
+    daemon._client = SimpleNamespace(output_delay_ms=750.0)
+
+    daemon._handle_server_command(
+        SimpleNamespace(player=PlayerCommandPayload(command=PlayerCommand.SET_OUTPUT_DELAY, output_delay_ms=750))
+    )
+
+    assert daemon._bridge_status["static_delay_ms"] == 750
+
+
+def test_audio_chunks_and_cleared_state_are_accepted(tmp_path: Path):
+    """Chunks now carry the server's send-ahead, and metadata/controller
+    listeners receive None when a role's state is cleared."""
+    daemon = _daemon(tmp_path)
+
+    daemon._on_audio_chunk(100, b"\x00\x00\x00\x00", _audio_format(AudioCodec.PCM), 250_000)
+    daemon._on_metadata_update(None)
+    daemon._on_controller_state(None)
