@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.1] - 2026-10-09
+
 ### Fixed
 
+- Updating an LXC or bare-metal install to a chosen version, including from
+  the web interface, installs that version. When the update script first
+  updated itself it lost the requested version and installed the newest
+  development snapshot instead, which could be a release candidate. An
+  update started by an older script now stops with "run the update again"
+  rather than guessing; the second run installs the version asked for.
 - Artwork hosted outside Music Assistant, such as radio station logos on
   Wikimedia, shows in the web interface again. Addresses that were already
   encoded were encoded a second time, and some hosts refused the request
@@ -5903,13 +5911,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.6...HEAD
-[2.76.0-rc.6]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.5...v2.76.0-rc.6
-[2.76.0-rc.5]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.4...v2.76.0-rc.5
-[2.76.0-rc.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.3...v2.76.0-rc.4
-[2.76.0-rc.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.2...v2.76.0-rc.3
-[2.76.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.0-rc.1...v2.76.0-rc.2
-[2.76.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.2...v2.76.0-rc.1
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.1...HEAD
+[2.76.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.2...v2.76.0
 [2.75.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.1...v2.75.2
 [2.75.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.75.0...v2.75.1
 [2.75.0]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.74.0...v2.75.0
