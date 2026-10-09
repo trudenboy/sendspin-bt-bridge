@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.77.0-rc.1] - 2026-10-09
+
+### Changed
+
+- The bridge now speaks the Sendspin 1.0 protocol through aiosendspin 10 and
+  needs Music Assistant 2.11 or later (currently in beta). Music Assistant
+  2.10 cannot accept these connections; stay on the stable channel until
+  2.11 is released. Music Assistant no longer reports the bridge as a
+  non-compliant client.
+- Speakers that require Sendspin pairing may need to be paired with Music
+  Assistant again after upgrading, because the stored pairing record format
+  changed.
+- Scanning for, pairing and inspecting Bluetooth speakers now talks to
+  BlueZ directly instead of running `bluetoothctl`. With the web UI open
+  the bridge no longer starts a `bluetoothctl` process every few seconds,
+  and pairing can no longer be answered by `bluetoothctl`'s own agent
+  instead of the bridge's, which made the confirmation time out on some
+  speakers. `bluetoothctl` is still used as a fallback when BlueZ's
+  system bus cannot be reached.
+
+### Fixed
+
+- Artwork hosted outside Music Assistant, such as radio station logos on
+  Wikimedia, shows in the web interface again. Addresses that were already
+  encoded were encoded a second time, and some hosts refused the request
+  without a proper client name. An image a host refuses is no longer asked
+  for again on every status refresh, which filled the log with a warning
+  every few seconds.
+
 ## [2.65.1-rc.1] - 2026-04-29
 
 ### Added — Per-adapter Class of Device override (Samsung Q-series workaround)
