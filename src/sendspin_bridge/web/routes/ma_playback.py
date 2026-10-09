@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
@@ -314,6 +315,55 @@ def api_ma_nowplaying():
     return jsonify(get_ma_now_playing())
 
 
+# Artwork a host refused, remembered so a refused image is not asked for on
+# every status refresh: {url: (status, retry_at)}.
+_ARTWORK_FAILURE_TTL_S = 300.0
+_artwork_failures: dict[str, tuple[int, float]] = {}
+_artwork_failures_lock = threading.Lock()
+
+
+def _reset_artwork_failures() -> None:
+    with _artwork_failures_lock:
+        _artwork_failures.clear()
+
+
+def _artwork_failure(url: str) -> int | None:
+    with _artwork_failures_lock:
+        entry = _artwork_failures.get(url)
+        if entry is None:
+            return None
+        status, retry_at = entry
+        if time.monotonic() >= retry_at:
+            del _artwork_failures[url]
+            return None
+        return status
+
+
+def _remember_artwork_failure(url: str, status: int) -> bool:
+    """Record a refusal; ``True`` when it is new (worth a log line)."""
+    with _artwork_failures_lock:
+        new = url not in _artwork_failures
+        if len(_artwork_failures) > 256:
+            _artwork_failures.clear()
+        _artwork_failures[url] = (status, time.monotonic() + _ARTWORK_FAILURE_TTL_S)
+        return new
+
+
+def _artwork_user_agent() -> str:
+    # Wikimedia, where many radio logos live, refuses urllib's default agent.
+    from sendspin_bridge.config import VERSION
+
+    return f"sendspin-bt-bridge/{VERSION} (+https://github.com/trudenboy/sendspin-bt-bridge)"
+
+
+def _artwork_unavailable(status: int) -> Response:
+    return Response(
+        "Artwork unavailable",
+        status=status,
+        headers={"Cache-Control": f"private, max-age={int(_ARTWORK_FAILURE_TTL_S)}"},
+    )
+
+
 @ma_bp.route("/api/ma/artwork", methods=["GET"])
 def api_ma_artwork():
     """Proxy MA artwork through the bridge so the UI can use same-origin image URLs."""
@@ -335,7 +385,9 @@ def api_ma_artwork():
         (
             _parsed.scheme,
             _parsed.netloc,
-            _up.quote(_parsed.path, safe="/:@!$&'()*+,;=-._~"),
+            # ``%`` is safe: a path that arrives already encoded (radio logos
+            # on Wikimedia do) must not be encoded a second time.
+            _up.quote(_parsed.path, safe="/:@!$&'()*+,;=-._~%"),
             _parsed.query,
             _parsed.fragment,
         )
@@ -343,8 +395,12 @@ def api_ma_artwork():
 
     # HMAC signature (checked above) prevents arbitrary-URL SSRF.
     # Only attach MA bearer token when the URL targets the MA server itself.
+    refused = _artwork_failure(artwork_url)
+    if refused is not None:
+        return _artwork_unavailable(refused)
+
     _ma_url, ma_token = get_ma_api_credentials()
-    req = _ur.Request(artwork_url, headers={"Accept": "image/*"})
+    req = _ur.Request(artwork_url, headers={"Accept": "image/*", "User-Agent": _artwork_user_agent()})
     if is_ma_origin and ma_token:
         req.add_header("Authorization", f"Bearer {ma_token}")
 
@@ -365,8 +421,9 @@ def api_ma_artwork():
                 content_type = "application/octet-stream"
             return Response(body, content_type=content_type, headers={"Cache-Control": "private, max-age=60"})
     except _ue.HTTPError as exc:
-        logger.warning("MA artwork proxy HTTP %s for %s", exc.code, artwork_url)
-        return Response("Artwork unavailable", status=exc.code)
+        if _remember_artwork_failure(artwork_url, exc.code):
+            logger.warning("MA artwork proxy HTTP %s for %s", exc.code, artwork_url)
+        return _artwork_unavailable(exc.code)
     except Exception:
         logger.exception("MA artwork proxy failed for %s", artwork_url)
         return Response("Artwork unavailable", status=502)

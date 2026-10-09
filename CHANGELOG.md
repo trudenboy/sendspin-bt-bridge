@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Artwork hosted outside Music Assistant, such as radio station logos on
+  Wikimedia, shows in the web interface again. Addresses that were already
+  encoded were encoded a second time, and some hosts refused the request
+  without a proper client name. An image a host refuses is no longer asked
+  for again on every status refresh, which filled the log with a warning
+  every few seconds.
+
 ## [2.76.0] - 2026-10-09
 
 ### Added
