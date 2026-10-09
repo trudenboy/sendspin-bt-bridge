@@ -43,6 +43,7 @@ export interface FieldDef {
 export type SectionComponent =
   | 'maConnection'
   | 'sendspinTest'
+  | 'latencyAssistant'
   | 'adapters'
   | 'haStatus'
   | 'areaMap'
@@ -110,6 +111,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'SMOOTH_RESTART', kind: 'toggle', advanced: true },
       { key: 'DISABLE_PA_RESCUE_STREAMS', kind: 'toggle', advanced: true },
     ],
+    after: ['latencyAssistant'],
   },
   {
     id: 'bluetooth',

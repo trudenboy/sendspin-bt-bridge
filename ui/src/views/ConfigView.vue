@@ -22,6 +22,7 @@ import { SECTIONS, type ConfigDoc, type SectionComponent, type SectionDef } from
 import SettingField from '@/components/settings/SettingField.vue'
 import MaConnectionSection from '@/components/settings/MaConnectionSection.vue'
 import SendspinTestSection from '@/components/settings/SendspinTestSection.vue'
+import LatencyAssistantSection from '@/components/settings/LatencyAssistantSection.vue'
 import AdaptersSection from '@/components/settings/AdaptersSection.vue'
 import HaStatusSection from '@/components/settings/HaStatusSection.vue'
 import AreaMapSection from '@/components/settings/AreaMapSection.vue'
@@ -50,6 +51,7 @@ const ICONS: Record<string, Component> = {
 const PARTS: Record<SectionComponent, Component> = {
   maConnection: MaConnectionSection,
   sendspinTest: SendspinTestSection,
+  latencyAssistant: LatencyAssistantSection,
   adapters: AdaptersSection,
   haStatus: HaStatusSection,
   areaMap: AreaMapSection,

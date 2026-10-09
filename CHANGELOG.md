@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recovery switches), Home Assistant (MQTT broker detection and test,
   integration status, rooms by adapter), Security (password, sign-in
   lockout, trusted proxies, API tokens), Updates, Guidance and Backup.
-  Rarely needed options appear under "Show advanced settings".
+  Rarely needed options appear under "Show advanced settings". The audio
+  buffer offers the latency assistant's presets with its recommendation.
 - The web interface follows Home Assistant's dark mode and accent colour
   when opened from its sidebar.
 - Each speaker's settings are back in its details panel: name, adapter,

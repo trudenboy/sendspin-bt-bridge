@@ -853,6 +853,10 @@
         "rawHelp": "For keys this screen does not show. Changes are saved with the Save button.",
         "edit": "Edit",
         "apply": "Apply"
+      },
+      "latency": {
+        "label": "Buffer presets",
+        "recommended": "recommended"
       }
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",
