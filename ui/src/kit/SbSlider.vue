@@ -44,10 +44,10 @@ function onInput(e: Event) {
     :class="[disabled ? 'opacity-50' : '']"
   >
     <div v-if="label || showValue" class="flex items-center justify-between text-sm">
-      <span v-if="label" class="font-medium text-text-primary dark:text-gray-200">
+      <span v-if="label" class="font-medium text-text-primary">
         {{ label }}
       </span>
-      <span v-if="showValue" class="tabular-nums text-text-secondary dark:text-gray-400">
+      <span v-if="showValue" class="tabular-nums text-text-secondary">
         {{ displayValue }}
       </span>
     </div>

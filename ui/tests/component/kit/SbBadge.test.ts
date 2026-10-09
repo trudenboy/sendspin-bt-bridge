@@ -70,6 +70,6 @@ describe('SbBadge', () => {
   it('has pill shape with radius-badge', () => {
     const wrapper = mount(SbBadge, { slots: { default: 'Pill' } })
     const badge = wrapper.find('span')
-    expect(badge.classes()).toContain('rounded-[--radius-badge]')
+    expect(badge.classes()).toContain('rounded-(--radius-badge)')
   })
 })

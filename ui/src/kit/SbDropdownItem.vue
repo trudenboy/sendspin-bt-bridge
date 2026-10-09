@@ -28,8 +28,8 @@ function onClick() {
       disabled
         ? 'opacity-50 cursor-not-allowed text-text-disabled'
         : destructive
-          ? 'text-error hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer'
-          : 'text-text-primary hover:bg-surface-secondary dark:text-gray-200 dark:hover:bg-gray-700 cursor-pointer',
+          ? 'text-error hover:bg-error/10 cursor-pointer'
+          : 'text-text-primary hover:bg-surface-secondary cursor-pointer',
     ]"
     @click="onClick"
   >

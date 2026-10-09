@@ -64,7 +64,7 @@ function openDetail(mac: string) {
 
 <template>
   <div>
-    <h1 class="mb-6 text-2xl font-bold text-text-primary">
+    <h1 class="mb-6 text-2xl font-semibold tracking-tight text-text-primary">
       {{ t('app.dashboard') }}
     </h1>
 
@@ -187,7 +187,7 @@ function openDetail(mac: string) {
       <!-- Device grid -->
       <div
         v-else-if="deviceStore.filteredDevices.length > 0"
-        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"
       >
         <DeviceCard
           v-for="device in deviceStore.filteredDevices"

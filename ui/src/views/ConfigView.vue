@@ -67,7 +67,7 @@ onMounted(() => {
   <div>
     <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center gap-3">
-        <h1 class="text-2xl font-bold text-text-primary">
+        <h1 class="text-2xl font-semibold tracking-tight text-text-primary">
           {{ t('app.config') }}
         </h1>
         <SbBadge v-if="configStore.isDirty" tone="warning">
@@ -82,7 +82,7 @@ onMounted(() => {
         >
           {{ t('config.reset') }}
         </SbButton>
-        <SbButton variant="secondary" @click="handleValidate">
+        <SbButton variant="outline" @click="handleValidate">
           {{ t('config.validate') }}
         </SbButton>
         <SbButton

@@ -29,10 +29,10 @@ const applyingLevel = ref(false)
 const levelOrder: LogLevel[] = ['ERROR', 'WARNING', 'INFO', 'DEBUG']
 
 const levelColors: Record<LogLevel, string> = {
-  ERROR: 'text-red-500',
-  WARNING: 'text-yellow-500',
-  INFO: 'text-blue-400',
-  DEBUG: 'text-gray-400',
+  ERROR: 'text-error',
+  WARNING: 'text-warning',
+  INFO: 'text-info',
+  DEBUG: 'text-text-secondary',
 }
 
 const levelBadgeTone: Record<LogLevel, 'error' | 'warning' | 'info' | 'neutral'> = {
@@ -133,7 +133,7 @@ onMounted(fetchLogs)
         >
           <option v-for="lvl in levelOrder" :key="lvl" :value="lvl">{{ lvl }}</option>
         </select>
-        <SbButton variant="secondary" size="sm" :loading="applyingLevel" @click="applyLogLevel">
+        <SbButton variant="outline" size="sm" :loading="applyingLevel" @click="applyLogLevel">
           {{ t('diagnostics.logs.apply') }}
         </SbButton>
       </div>
@@ -186,13 +186,13 @@ onMounted(fetchLogs)
       </button>
 
       <!-- Refresh -->
-      <SbButton variant="secondary" size="sm" :loading="loading" @click="fetchLogs">
+      <SbButton variant="outline" size="sm" :loading="loading" @click="fetchLogs">
         <template #icon-left><RefreshCw class="h-4 w-4" /></template>
         {{ t('diagnostics.logs.refresh') }}
       </SbButton>
 
       <!-- Download -->
-      <SbButton variant="secondary" size="sm" @click="downloadLogs()">
+      <SbButton variant="outline" size="sm" @click="downloadLogs()">
         <template #icon-left><Download class="h-4 w-4" /></template>
         {{ t('diagnostics.logs.download') }}
       </SbButton>

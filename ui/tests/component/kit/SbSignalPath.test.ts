@@ -78,7 +78,7 @@ describe('SbSignalPath', () => {
         segments: [{ id: 'a', label: 'Inactive', status: 'inactive' }],
       })
       const box = w.find('.rounded-lg')
-      expect(box.classes()).toContain('border-gray-300')
+      expect(box.classes()).toContain('border-border-strong')
     })
 
     it('applies error border class', () => {
@@ -94,7 +94,7 @@ describe('SbSignalPath', () => {
         segments: [{ id: 'a', label: 'None' }],
       })
       const box = w.find('.rounded-lg')
-      expect(box.classes()).toContain('border-gray-300')
+      expect(box.classes()).toContain('border-border-strong')
     })
   })
 

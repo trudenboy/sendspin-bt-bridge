@@ -31,18 +31,18 @@ const hasDescription = computed(() => !!props.error || !!props.hint)
     <label
       v-if="label"
       :for="inputId"
-      class="text-sm font-medium text-text-primary dark:text-gray-200"
+      class="text-sm font-medium text-text-primary"
     >
       {{ label }}
       <span v-if="required" class="text-error ml-0.5">*</span>
     </label>
 
     <div
-      class="flex items-center rounded-[--radius-input] border bg-surface-card transition-colors dark:bg-gray-800"
+      class="flex items-center rounded-(--radius-input) border bg-surface-card transition-colors"
       :class="[
         error
           ? 'border-error focus-within:ring-2 focus-within:ring-error/40'
-          : 'border-gray-300 focus-within:ring-2 focus-within:ring-primary/40 dark:border-gray-600',
+          : 'border-border-strong focus-within:ring-2 focus-within:ring-primary/40',
         disabled ? 'opacity-50 cursor-not-allowed' : '',
       ]"
     >
@@ -60,7 +60,7 @@ const hasDescription = computed(() => !!props.error || !!props.hint)
         :aria-invalid="error ? true : undefined"
         :aria-describedby="hasDescription ? descriptionId : undefined"
         :aria-required="required || undefined"
-        class="w-full bg-transparent px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-disabled dark:text-white dark:placeholder:text-gray-500"
+        class="w-full bg-transparent px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-disabled"
         :class="[disabled ? 'cursor-not-allowed' : '']"
       />
 

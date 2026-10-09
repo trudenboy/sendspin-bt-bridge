@@ -29,7 +29,7 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1 class="mb-6 text-2xl font-bold text-text-primary">
+    <h1 class="mb-6 text-2xl font-semibold tracking-tight text-text-primary">
       {{ t('app.diagnostics') }}
     </h1>
 

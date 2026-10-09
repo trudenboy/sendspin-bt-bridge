@@ -99,7 +99,7 @@ function openDetail(id: string) {
 <template>
   <div>
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-text-primary">
+      <h1 class="text-2xl font-semibold tracking-tight text-text-primary">
         {{ t('app.devices') }}
       </h1>
       <div class="flex items-center gap-2">
@@ -108,7 +108,7 @@ function openDetail(id: string) {
           <button
             type="button"
             class="rounded-l-lg p-1.5 transition-colors"
-            :class="viewMode === 'grid' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-secondary'"
+            :class="viewMode === 'grid' ? 'bg-primary text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
             :aria-label="t('devices.viewGrid')"
             @click="setViewMode('grid')"
           >
@@ -117,7 +117,7 @@ function openDetail(id: string) {
           <button
             type="button"
             class="rounded-r-lg p-1.5 transition-colors"
-            :class="viewMode === 'list' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-secondary'"
+            :class="viewMode === 'list' ? 'bg-primary text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
             :aria-label="t('devices.viewList')"
             @click="setViewMode('list')"
           >
@@ -125,7 +125,7 @@ function openDetail(id: string) {
           </button>
         </div>
 
-        <SbButton variant="secondary" size="sm" @click="scanModalOpen = true">
+        <SbButton variant="outline" size="sm" @click="scanModalOpen = true">
           <template #icon-left>
             <Bluetooth class="h-4 w-4" />
           </template>
@@ -162,7 +162,7 @@ function openDetail(id: string) {
             <button
               type="button"
               aria-haspopup="true"
-              class="inline-flex cursor-pointer items-center gap-1 rounded-[--radius-button] border border-gray-300 bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              class="inline-flex cursor-pointer items-center gap-1 rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary"
             >
               {{ adapterLabel }}
               <ChevronDown class="h-4 w-4" />
@@ -186,7 +186,7 @@ function openDetail(id: string) {
             <button
               type="button"
               aria-haspopup="true"
-              class="inline-flex cursor-pointer items-center gap-1 rounded-[--radius-button] border border-gray-300 bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              class="inline-flex cursor-pointer items-center gap-1 rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary"
             >
               {{ groupLabel }}
               <ChevronDown class="h-4 w-4" />
@@ -237,7 +237,7 @@ function openDetail(id: string) {
       <!-- Device grid -->
       <div
         v-else-if="viewMode === 'grid' && deviceStore.filteredDevices.length > 0"
-        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"
       >
         <DeviceCard
           v-for="device in deviceStore.filteredDevices"

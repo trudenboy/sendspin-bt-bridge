@@ -53,7 +53,7 @@ async function runChecks() {
         {{ t('diagnostics.recovery.title') }}
       </h3>
       <div class="flex items-center gap-2">
-        <SbButton variant="secondary" size="sm" :loading="diagnostics.loading" @click="runChecks">
+        <SbButton variant="outline" size="sm" :loading="diagnostics.loading" @click="runChecks">
           <template #icon-left>
             <RefreshCw class="h-4 w-4" aria-hidden="true" />
           </template>

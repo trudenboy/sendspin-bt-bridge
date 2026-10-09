@@ -59,14 +59,14 @@ async function copyToClipboard() {
         {{ t('bugreport.fileReport') }}
       </SbButton>
 
-      <SbButton variant="secondary" @click="download">
+      <SbButton variant="outline" @click="download">
         <template #icon-left>
           <Download class="h-4 w-4" aria-hidden="true" />
         </template>
         {{ t('diagnostics.bugreport.download') }}
       </SbButton>
 
-      <SbButton variant="secondary" @click="copyToClipboard">
+      <SbButton variant="outline" @click="copyToClipboard">
         <template #icon-left>
           <Copy class="h-4 w-4" aria-hidden="true" />
         </template>

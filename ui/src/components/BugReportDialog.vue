@@ -252,7 +252,7 @@ function onDownload() {
             class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg"
             :class="
               method === m.id
-                ? 'bg-primary text-white'
+                ? 'bg-primary text-on-primary'
                 : 'text-text-secondary hover:bg-surface-secondary'
             "
             @click="method = m.id"

@@ -100,7 +100,7 @@ function toggleAll() {
   <div class="overflow-x-auto">
     <table class="w-full border-collapse">
       <thead>
-        <tr class="bg-surface-secondary/50 dark:bg-gray-800/50">
+        <tr class="bg-surface-secondary/50">
           <th
             v-if="selectable"
             class="px-4 py-3 text-left"
@@ -139,7 +139,7 @@ function toggleAll() {
         <tr
           v-for="row in rows"
           :key="getRowId(row)"
-          class="border-b border-gray-100 transition-colors hover:bg-surface-secondary/30 dark:border-gray-700"
+          class="border-b border-border transition-colors hover:bg-surface-secondary/30"
           :class="{ 'cursor-pointer': $attrs.onRowClick }"
           @click="emit('rowClick', row)"
         >

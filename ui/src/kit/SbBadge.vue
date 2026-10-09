@@ -26,14 +26,14 @@ const dotColor = {
   warning: 'bg-warning',
   error: 'bg-error',
   info: 'bg-info',
-  neutral: 'bg-gray-400',
+  neutral: 'bg-text-disabled',
 } as const
 </script>
 
 <template>
   <span
     :class="[
-      'inline-flex items-center gap-1 rounded-[--radius-badge] font-medium',
+      'inline-flex items-center gap-1 rounded-(--radius-badge) font-medium',
       toneClass[tone],
       size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm',
     ]"

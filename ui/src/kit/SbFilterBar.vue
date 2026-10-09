@@ -43,7 +43,7 @@ function clearSearch() {
         type="text"
         role="searchbox"
         :placeholder="placeholder"
-        class="w-full rounded-[--radius-input] border border-gray-200 bg-surface-card py-2 pl-9 pr-8 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-700 dark:bg-gray-800"
+        class="w-full rounded-(--radius-input) border border-border bg-surface-card py-2 pl-9 pr-8 text-sm text-text-primary transition-colors placeholder:text-text-disabled focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       />
       <button
         v-if="search"
@@ -64,7 +64,7 @@ function clearSearch() {
       class="cursor-pointer rounded-full px-3 py-1 text-sm transition-colors"
       :class="
         filter.active
-          ? 'bg-primary text-white'
+          ? 'bg-primary text-on-primary'
           : 'bg-surface-secondary text-text-secondary hover:bg-surface-secondary/80'
       "
       :aria-pressed="!!filter.active"

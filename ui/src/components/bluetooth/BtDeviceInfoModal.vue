@@ -103,13 +103,13 @@ function onClose() {
         </div>
       </dl>
 
-      <div v-if="btStore.btDeviceInfo.error" class="rounded-lg bg-red-50 p-3 text-sm text-error dark:bg-red-900/10">
+      <div v-if="btStore.btDeviceInfo.error" class="rounded-lg bg-error/10 p-3 text-sm text-error">
         {{ btStore.btDeviceInfo.error }}
       </div>
     </div>
 
     <template #footer>
-      <SbButton variant="secondary" @click="onClose">
+      <SbButton variant="outline" @click="onClose">
         {{ t('common.close') }}
       </SbButton>
     </template>

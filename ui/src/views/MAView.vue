@@ -16,7 +16,7 @@ const { autoConnecting, autoConnectFailed } = useMaAutoConnect()
 
 <template>
   <div>
-    <h1 class="mb-6 text-2xl font-bold text-text-primary">
+    <h1 class="mb-6 text-2xl font-semibold tracking-tight text-text-primary">
       {{ t('app.ma') }}
     </h1>
 
@@ -48,7 +48,7 @@ const { autoConnecting, autoConnectFailed } = useMaAutoConnect()
     <!-- Auto-connect failed notice -->
     <div
       v-if="autoConnectFailed && !ma.connected && !bridge.maConnected"
-      class="mb-4 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-200"
+      class="mb-4 rounded-lg border border-warning/50 bg-warning/10 px-4 py-2 text-sm text-text-primary"
     >
       {{ t('ma.silentAuthFailed') }}
     </div>

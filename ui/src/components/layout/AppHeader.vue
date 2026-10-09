@@ -54,10 +54,10 @@ const healthColor = computed<HealthColor>(() => {
 
 const healthDotClass = computed(() => {
   const cls: Record<HealthColor, string> = {
-    green: 'bg-green-500',
-    yellow: 'bg-yellow-500 animate-pulse',
-    red: 'bg-red-500 animate-pulse',
-    gray: 'bg-gray-400',
+    green: 'bg-success',
+    yellow: 'bg-warning animate-pulse',
+    red: 'bg-error animate-pulse',
+    gray: 'bg-text-disabled',
   }
   return cls[healthColor.value]
 })
@@ -85,7 +85,7 @@ onMounted(() => {
 
 <template>
   <header
-    class="fixed top-0 right-0 left-0 z-30 border-b border-surface-secondary bg-surface-card shadow-sm"
+    class="fixed top-0 right-0 left-0 z-30 border-b border-border bg-surface-card"
   >
     <div class="flex h-16 items-center gap-3 px-4 sm:px-6">
       <!-- Left: Logo + Title + Version + Update -->

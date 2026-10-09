@@ -106,7 +106,7 @@ onMounted(async () => {
       <SbTimeline :events="timelineEvents" />
 
       <div v-if="hasMore" class="flex justify-center pt-2">
-        <SbButton variant="secondary" size="sm" @click="loadMore">
+        <SbButton variant="outline" size="sm" @click="loadMore">
           {{ t('diagnostics.events.loadMore') }}
         </SbButton>
       </div>

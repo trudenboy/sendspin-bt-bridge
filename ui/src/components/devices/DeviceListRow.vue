@@ -57,9 +57,9 @@ const BatteryIcon = computed(() => {
 const batteryColor = computed(() => {
   const level = battery.value
   if (level == null) return ''
-  if (level < 20) return 'text-red-500'
-  if (level <= 50) return 'text-yellow-500'
-  return 'text-green-500'
+  if (level < 20) return 'text-error'
+  if (level <= 50) return 'text-warning'
+  return 'text-success'
 })
 
 async function run(action: () => Promise<unknown>, failure: string) {
@@ -102,7 +102,7 @@ function onForget() {
       <input
         type="checkbox"
         :checked="selected"
-        class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary accent-primary focus:ring-primary"
+        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary accent-primary focus:ring-primary"
         :aria-label="`Select ${device.name}`"
         @click.stop
         @change.stop="emit('toggleSelect', device.id)"

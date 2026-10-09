@@ -1,76 +1,149 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/roboto';
 
-@theme {
-  /* Brand colors — mapped from current CSS vars */
-  --color-primary: #03a9f4;
-  --color-primary-dark: #0288d1;
-  --color-accent: #ff9800;
+/*
+ * Design tokens.
+ *
+ * The bridge lives next to Music Assistant and inside Home Assistant (ingress),
+ * so it borrows both: Music Assistant's accent (#03a9f4) and component shapes,
+ * Home Assistant's surfaces, text colours, status colours, radii and Roboto.
+ * Components use only these semantic names; light and dark differ in the
+ * variables below, never in per-component `dark:` colour overrides.
+ * When the page runs inside Home Assistant, useTheme copies HA's live
+ * primary colour and dark mode onto the root (see composables/useTheme.ts).
+ */
+@theme inline {
+  --color-primary: var(--sb-primary);
+  --color-primary-dark: var(--sb-primary-hover);
+  --color-on-primary: var(--sb-on-primary);
 
-  /* Semantic colors */
-  --color-success: #43a047;
-  --color-warning: #ffa600;
-  --color-error: #db4437;
-  --color-info: #039be5;
+  --color-success: var(--sb-success);
+  --color-warning: var(--sb-warning);
+  --color-error: var(--sb-error);
+  --color-info: var(--sb-info);
 
-  /* Surfaces — light */
-  --color-surface: #fafafa;
-  --color-surface-secondary: #e5e5e5;
-  --color-surface-card: #ffffff;
+  --color-surface: var(--sb-background);
+  --color-surface-primary: var(--sb-card);
+  --color-surface-card: var(--sb-card);
+  --color-surface-secondary: var(--sb-fill);
+  --color-surface-raised: var(--sb-raised);
 
-  /* Text — light */
-  --color-text-primary: #212121;
-  --color-text-secondary: #727272;
-  --color-text-disabled: #bdbdbd;
+  --color-text-primary: var(--sb-text);
+  --color-text-secondary: var(--sb-text-secondary);
+  --color-text-tertiary: var(--sb-text-tertiary);
+  --color-text-disabled: var(--sb-text-disabled);
 
-  /* Code */
-  --color-code-bg: #1e293b;
-  --color-code-text: #e2e8f0;
+  --color-border: var(--sb-divider);
+  --color-border-strong: var(--sb-input-border);
 
-  /* Shared tokens */
+  --color-code-bg: var(--sb-code-bg);
+  --color-code-text: var(--sb-code-text);
+
   --radius-card: 12px;
-  --radius-badge: 999px;
+  --radius-badge: 9999px;
   --radius-button: 8px;
   --radius-input: 8px;
 
-  /* Font stack (same as current) */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial,
-    sans-serif;
-  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas,
-    monospace;
+  --font-sans: 'Roboto Variable', Roboto, Noto, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-/* Dark mode overrides — using Tailwind v4 @custom-variant */
+:root {
+  color-scheme: light;
+  --sb-primary: #03a9f4;
+  --sb-primary-hover: #0288d1;
+  --sb-on-primary: #ffffff;
+
+  --sb-success: #43a047;
+  --sb-warning: #ffa600;
+  --sb-error: #db4437;
+  --sb-info: #039be5;
+
+  --sb-background: #fafafa;
+  --sb-card: #ffffff;
+  --sb-fill: #f0f0f0;
+  --sb-raised: #ffffff;
+
+  --sb-text: #212121;
+  --sb-text-secondary: #727272;
+  --sb-text-tertiary: #8a8a8a;
+  --sb-text-disabled: #bdbdbd;
+
+  --sb-divider: rgb(0 0 0 / 0.12);
+  --sb-input-border: rgb(0 0 0 / 0.24);
+
+  --sb-code-bg: #1e1e1e;
+  --sb-code-text: #e1e1e1;
+}
+
+.dark {
+  color-scheme: dark;
+  --sb-primary-hover: #29b6f6;
+
+  --sb-background: #111111;
+  --sb-card: #1c1c1c;
+  --sb-fill: #282828;
+  --sb-raised: #232323;
+
+  --sb-text: #e1e1e1;
+  --sb-text-secondary: #9b9b9b;
+  --sb-text-tertiary: #7d7d7d;
+  --sb-text-disabled: #5e5e5e;
+
+  --sb-divider: rgb(225 225 225 / 0.12);
+  --sb-input-border: rgb(225 225 225 / 0.24);
+
+  --sb-code-bg: #0b0b0b;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Badge tone system */
+/* Status tones: a quiet tinted fill with the status colour as text. */
 @utility tone-success {
-  background-color: rgb(67 160 71 / 0.12);
-  color: var(--color-success);
+  background-color: color-mix(in srgb, var(--sb-success) 14%, transparent);
+  color: var(--sb-success);
 }
 
 @utility tone-warning {
-  background-color: rgb(255 166 0 / 0.12);
-  color: var(--color-warning);
+  background-color: color-mix(in srgb, var(--sb-warning) 16%, transparent);
+  color: color-mix(in srgb, var(--sb-warning) 75%, var(--sb-text));
 }
 
 @utility tone-error {
-  background-color: rgb(219 68 55 / 0.12);
-  color: var(--color-error);
+  background-color: color-mix(in srgb, var(--sb-error) 14%, transparent);
+  color: var(--sb-error);
 }
 
 @utility tone-info {
-  background-color: rgb(3 155 229 / 0.12);
-  color: var(--color-info);
+  background-color: color-mix(in srgb, var(--sb-info) 14%, transparent);
+  color: var(--sb-info);
 }
 
 @utility tone-neutral {
-  background-color: rgb(107 114 128 / 0.1);
-  color: var(--color-text-secondary);
+  background-color: var(--sb-fill);
+  color: var(--sb-text-secondary);
 }
 
-/* Base styles */
+html {
+  /* Inside the HA ingress iframe a drag that nothing scrolls would chain out to
+     HA's pull-to-refresh and reload the panel. */
+  overscroll-behavior-y: none;
+  background-color: var(--sb-background);
+}
+
 body {
   font-family: var(--font-sans);
-  color: var(--color-text-primary);
-  background-color: var(--color-surface);
+  color: var(--sb-text);
+  background-color: var(--sb-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

@@ -17,9 +17,9 @@ const props = withDefaults(
 )
 
 const statusStyles = {
-  active: 'border-success bg-green-50 dark:bg-green-900/10',
-  inactive: 'border-gray-300 bg-surface-secondary dark:bg-gray-800',
-  error: 'border-error bg-red-50 dark:bg-red-900/10',
+  active: 'border-success bg-success/10',
+  inactive: 'border-border-strong bg-surface-secondary',
+  error: 'border-error bg-error/10',
 } as const
 
 const isVertical = computed(() => props.direction === 'vertical')

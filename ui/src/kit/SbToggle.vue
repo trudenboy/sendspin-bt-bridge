@@ -49,7 +49,7 @@ function onKeydown(e: KeyboardEvent) {
       :class="[
         model
           ? 'bg-primary'
-          : 'bg-gray-300 dark:bg-gray-600',
+          : 'bg-border-strong',
         size === 'sm' ? 'h-5 w-8' : 'h-6 w-10',
       ]"
       @click.stop="toggle"
@@ -69,7 +69,7 @@ function onKeydown(e: KeyboardEvent) {
     <label
       v-if="label"
       :for="toggleId"
-      class="text-sm text-text-primary select-none dark:text-gray-200"
+      class="text-sm text-text-primary select-none"
       :class="[disabled ? 'cursor-not-allowed' : 'cursor-pointer']"
       @click.prevent
     >

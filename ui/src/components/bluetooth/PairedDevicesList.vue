@@ -98,7 +98,7 @@ function refresh() {
       </div>
       <SbButton
         size="sm"
-        variant="secondary"
+        variant="outline"
         :loading="btStore.loadingPaired"
         @click="refresh"
       >
@@ -140,7 +140,7 @@ function refresh() {
           <SbButton
             v-else
             size="sm"
-            variant="secondary"
+            variant="outline"
             :loading="adding === device.mac"
             @click="addToBridge(device.mac, device.name, device.adapters ?? [])"
           >
@@ -183,7 +183,7 @@ function refresh() {
         {{ t('device.actions.remove') }}: <span class="font-mono">{{ confirmRemoveMac }}</span>?
       </p>
       <div class="flex items-center gap-2">
-        <SbButton size="sm" variant="secondary" @click="doRemove">
+        <SbButton size="sm" variant="outline" @click="doRemove">
           {{ t('common.confirm') }}
         </SbButton>
         <SbButton size="sm" variant="ghost" @click="confirmRemoveMac = null">

@@ -89,7 +89,7 @@ onBeforeUnmount(() => {
           type="button"
           aria-haspopup="true"
           :aria-expanded="isOpen"
-          class="inline-flex items-center gap-1 rounded-[--radius-button] border border-gray-300 bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+          class="inline-flex items-center gap-1 rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary"
         >
           Menu
           <svg class="h-4 w-4 transition-transform" :class="[isOpen ? 'rotate-180' : '']" viewBox="0 0 20 20" fill="currentColor">
@@ -112,7 +112,7 @@ onBeforeUnmount(() => {
         v-if="isOpen"
         ref="menuRef"
         role="menu"
-        class="absolute z-50 mt-1 overflow-hidden rounded-[--radius-card] border border-gray-200 bg-surface-card py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+        class="absolute z-50 mt-1 overflow-hidden rounded-(--radius-card) border border-border bg-surface-card py-1 shadow-lg"
         :class="[
           align === 'right' ? 'right-0' : 'left-0',
           width === 'full' ? 'w-full' : width === 'auto' ? 'min-w-[12rem]' : '',

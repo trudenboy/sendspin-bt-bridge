@@ -22,10 +22,10 @@ const visible = ref(true)
 
 const typeStyles = computed(() => {
   const map = {
-    success: 'border-l-4 border-success bg-green-50 dark:bg-green-900/20',
-    error: 'border-l-4 border-error bg-red-50 dark:bg-red-900/20',
-    warning: 'border-l-4 border-warning bg-amber-50 dark:bg-amber-900/20',
-    info: 'border-l-4 border-info bg-blue-50 dark:bg-blue-900/20',
+    success: 'border-l-4 border-success bg-success/10',
+    error: 'border-l-4 border-error bg-error/10',
+    warning: 'border-l-4 border-warning bg-warning/10',
+    info: 'border-l-4 border-info bg-info/10',
   } as const
   return map[props.type]
 })
@@ -58,7 +58,7 @@ onBeforeUnmount(() => {
     v-if="visible"
     role="alert"
     :class="[
-      'flex min-w-[300px] max-w-[420px] items-center gap-3 rounded-[--radius-card] px-4 py-3 shadow-lg',
+      'flex min-w-[300px] max-w-[420px] items-center gap-3 rounded-(--radius-card) px-4 py-3 shadow-lg',
       typeStyles,
     ]"
     :data-toast-id="id"

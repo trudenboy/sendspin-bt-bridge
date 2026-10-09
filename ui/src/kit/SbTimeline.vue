@@ -43,7 +43,7 @@ const dotColorMap = {
   <div role="list" class="relative">
     <!-- Vertical line -->
     <div
-      class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700"
+      class="absolute left-3 top-0 bottom-0 w-0.5 bg-border"
       aria-hidden="true"
     />
 
@@ -57,7 +57,7 @@ const dotColorMap = {
       <!-- Dot -->
       <span
         :class="[
-          'absolute left-0 h-6 w-6 rounded-full border-2 border-white dark:border-gray-800',
+          'absolute left-0 h-6 w-6 rounded-full border-2 border-surface-card',
           dotColorMap[event.type ?? 'info'],
         ]"
         aria-hidden="true"

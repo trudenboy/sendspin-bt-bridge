@@ -260,7 +260,7 @@ watch(
                 <p class="mt-1 text-text-primary">{{ device.audio.format ?? '—' }}</p>
               </div>
             </div>
-            <div v-if="device.last_error" class="rounded-lg bg-red-50 p-3 text-sm text-error dark:bg-red-900/10">
+            <div v-if="device.last_error" class="rounded-lg bg-error/10 p-3 text-sm text-error">
               {{ device.last_error }}
             </div>
 
@@ -268,7 +268,7 @@ watch(
             <div class="flex items-center gap-2 border-t border-border pt-3">
               <SbButton
                 v-if="!released"
-                variant="secondary"
+                variant="outline"
                 size="sm"
                 :loading="managementLoading"
                 @click="onRelease(true)"
@@ -277,14 +277,14 @@ watch(
               </SbButton>
               <SbButton
                 v-else
-                variant="secondary"
+                variant="outline"
                 size="sm"
                 :loading="managementLoading"
                 @click="onRelease(false)"
               >
                 {{ t('bluetooth.reclaim') }}
               </SbButton>
-              <SbButton variant="secondary" size="sm" @click="onBtInfo">
+              <SbButton variant="outline" size="sm" @click="onBtInfo">
                 <template #icon-left>
                   <Info class="h-3.5 w-3.5" />
                 </template>
@@ -394,7 +394,7 @@ watch(
             <div class="flex items-center gap-2">
               <SbButton
                 v-if="!editing"
-                variant="secondary"
+                variant="outline"
                 size="sm"
                 @click="startEditing"
               >
@@ -425,7 +425,7 @@ watch(
               </h4>
               <div class="flex items-center gap-2">
                 <SbButton
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   :loading="adapterLoading"
                   @click="onAdapterPower"
@@ -436,7 +436,7 @@ watch(
                   {{ t('adapter.togglePower') }}
                 </SbButton>
                 <SbButton
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   :loading="adapterLoading"
                   @click="onAdapterReboot"

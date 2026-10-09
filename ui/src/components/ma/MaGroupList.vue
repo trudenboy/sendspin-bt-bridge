@@ -71,7 +71,7 @@ onMounted(() => {
         <!-- Members -->
         <div
           v-if="expandedGroupId === group.id"
-          class="border-t border-gray-200 px-4 py-3 dark:border-gray-700"
+          class="border-t border-border px-4 py-3"
         >
           <div class="mb-3 flex flex-wrap gap-1">
             <SbBadge

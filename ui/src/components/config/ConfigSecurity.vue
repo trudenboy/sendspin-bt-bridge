@@ -49,7 +49,7 @@ function handleChangePassword() {
           :label="t('config.enablePassword')"
         />
 
-        <div v-if="passwordEnabled" class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+        <div v-if="passwordEnabled" class="space-y-4 rounded-lg border border-border p-4">
           <SbInput
             v-model="currentPassword"
             :label="t('config.currentPassword')"

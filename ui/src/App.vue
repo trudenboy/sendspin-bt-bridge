@@ -35,8 +35,10 @@ watch(() => route.path, () => {
       <RestartBanner v-if="!hideNav" />
       <div class="flex">
         <AppSidebar v-if="!hideNav" class="sticky top-16 hidden lg:flex" />
-        <main class="min-h-screen flex-1 pb-20 lg:pb-0">
-          <RouterView />
+        <main class="min-h-screen min-w-0 flex-1 px-4 pt-6 pb-24 sm:px-6 lg:pb-10">
+          <div class="mx-auto w-full max-w-7xl">
+            <RouterView />
+          </div>
         </main>
       </div>
     </div>

@@ -77,7 +77,7 @@ function openHaAddon() {
             class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg"
             :class="
               selectedChannel === ch
-                ? 'bg-primary text-white'
+                ? 'bg-primary text-on-primary'
                 : 'text-text-secondary hover:bg-surface-secondary'
             "
             @click="selectedChannel = ch"
@@ -139,11 +139,11 @@ function openHaAddon() {
         <!-- Docker command -->
         <div
           v-if="update.info.command"
-          class="group relative rounded-md bg-gray-900 p-3 font-mono text-xs text-green-400"
+          class="group relative rounded-md bg-code-bg p-3 font-mono text-xs text-code-text"
         >
           <pre class="overflow-x-auto whitespace-pre-wrap">{{ update.info.command }}</pre>
           <button
-            class="absolute top-2 right-2 rounded p-1 text-gray-500 opacity-0 transition-opacity hover:text-gray-300 group-hover:opacity-100"
+            class="absolute top-2 right-2 rounded p-1 text-text-secondary opacity-0 transition-opacity hover:text-text-disabled group-hover:opacity-100"
             :title="t('update.copyCommand')"
             @click="copyCommand"
           >
@@ -208,7 +208,7 @@ function openHaAddon() {
 
       <SbButton
         v-else
-        variant="secondary"
+        variant="outline"
         size="sm"
         @click="update.showDialog = false"
       >

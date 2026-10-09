@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
           aria-modal="true"
           :aria-labelledby="title ? titleId : undefined"
           :class="[
-            'fixed top-0 bottom-0 z-50 flex w-full flex-col bg-surface-card shadow-xl dark:bg-gray-800',
+            'fixed top-0 bottom-0 z-50 flex w-full flex-col bg-surface-card shadow-xl',
             sideClasses,
             width,
           ]"

@@ -49,7 +49,7 @@ function isActive(to: string): boolean {
 <template>
   <aside
     :class="[
-      'flex h-[calc(100vh-4rem)] flex-col border-r border-surface-secondary bg-surface-card transition-[width] duration-200 dark:bg-gray-900',
+      'flex h-[calc(100vh-4rem)] flex-col border-r border-border bg-surface-card transition-[width] duration-200',
       collapsed ? 'w-16' : 'w-60',
     ]"
     data-testid="app-sidebar"

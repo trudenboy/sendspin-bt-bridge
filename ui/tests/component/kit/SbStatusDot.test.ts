@@ -33,7 +33,7 @@ describe('SbStatusDot', () => {
   it('applies correct color class for offline', () => {
     const wrapper = mount(SbStatusDot, { props: { status: 'offline' } })
     const dot = wrapper.find('.rounded-full')
-    expect(dot.classes()).toContain('bg-gray-400')
+    expect(dot.classes()).toContain('bg-text-disabled')
   })
 
   it('pulses by default for streaming', () => {

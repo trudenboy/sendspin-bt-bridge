@@ -101,7 +101,7 @@ const commonTimezones = [
             <template #trigger>
               <button
                 type="button"
-                class="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-surface-primary px-3 py-2 text-sm text-text-primary dark:border-gray-600"
+                class="flex w-full items-center justify-between rounded-lg border border-border-strong bg-surface-primary px-3 py-2 text-sm text-text-primary"
               >
                 <span>{{ logLevel }}</span>
                 <svg class="h-4 w-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

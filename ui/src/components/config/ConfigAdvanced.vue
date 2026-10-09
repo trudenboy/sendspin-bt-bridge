@@ -83,29 +83,29 @@ function handleDownload() {
         <h3 class="text-lg font-semibold text-text-primary">{{ t('config.rawJson') }}</h3>
       </template>
       <div class="space-y-4">
-        <div class="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/20">
-          <span class="text-amber-600 dark:text-amber-400">⚠</span>
-          <p class="text-sm text-amber-800 dark:text-amber-200">
+        <div class="flex items-start gap-2 rounded-lg border border-warning/50 bg-warning/10 p-3">
+          <span class="text-warning">⚠</span>
+          <p class="text-sm text-text-primary">
             {{ t('config.rawJsonWarning') }}
           </p>
         </div>
 
         <textarea
           v-model="rawJson"
-          class="h-80 w-full rounded-lg border border-gray-300 bg-surface-primary p-3 font-mono text-sm text-text-primary dark:border-gray-600"
+          class="h-80 w-full rounded-lg border border-border-strong bg-surface-primary p-3 font-mono text-sm text-text-primary"
           spellcheck="false"
           data-testid="json-editor"
         />
 
-        <p v-if="jsonError" class="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p v-if="jsonError" class="text-sm text-error" role="alert">
           {{ jsonError }}
         </p>
 
         <div class="flex flex-wrap gap-2">
-          <SbButton variant="secondary" @click="applyJson">
+          <SbButton variant="outline" @click="applyJson">
             Apply JSON
           </SbButton>
-          <SbButton variant="secondary" @click="handleValidate">
+          <SbButton variant="outline" @click="handleValidate">
             {{ t('config.validateConfig') }}
           </SbButton>
         </div>
@@ -132,10 +132,10 @@ function handleDownload() {
           data-testid="file-input"
           @change="handleFileUpload"
         />
-        <SbButton variant="secondary" @click="triggerUpload">
+        <SbButton variant="outline" @click="triggerUpload">
           {{ t('config.uploadConfig') }}
         </SbButton>
-        <SbButton variant="secondary" @click="handleDownload">
+        <SbButton variant="outline" @click="handleDownload">
           {{ t('config.downloadConfig') }}
         </SbButton>
       </div>

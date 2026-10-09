@@ -59,7 +59,7 @@ describe('SbFilterBar', () => {
     })
     const activeChip = wrapper.findAll('button[aria-pressed]')[0]
     expect(activeChip.classes()).toContain('bg-primary')
-    expect(activeChip.classes()).toContain('text-white')
+    expect(activeChip.classes()).toContain('text-on-primary')
   })
 
   it('inactive filter chip has secondary styling', () => {

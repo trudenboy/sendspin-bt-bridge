@@ -17,7 +17,7 @@ describe('SbButton', () => {
     const wrapper = mount(SbButton, { slots: { default: 'Go' } })
     const btn = wrapper.find('button')
     expect(btn.classes()).toContain('bg-primary')
-    expect(btn.classes()).toContain('text-white')
+    expect(btn.classes()).toContain('text-on-primary')
   })
 
   it('applies secondary variant classes', () => {
@@ -40,6 +40,16 @@ describe('SbButton', () => {
     expect(btn.classes()).toContain('text-text-primary')
   })
 
+  it('applies outline variant classes', () => {
+    const wrapper = mount(SbButton, {
+      props: { variant: 'outline' },
+      slots: { default: 'Out' },
+    })
+    const btn = wrapper.find('button')
+    expect(btn.classes()).toContain('border-border-strong')
+    expect(btn.classes()).toContain('bg-transparent')
+  })
+
   it('applies danger variant classes', () => {
     const wrapper = mount(SbButton, {
       props: { variant: 'danger' },
@@ -47,7 +57,7 @@ describe('SbButton', () => {
     })
     const btn = wrapper.find('button')
     expect(btn.classes()).toContain('bg-error')
-    expect(btn.classes()).toContain('text-white')
+    expect(btn.classes()).toContain('text-on-primary')
   })
 
   it('applies sm size classes', () => {
@@ -63,8 +73,8 @@ describe('SbButton', () => {
   it('applies md size classes by default', () => {
     const wrapper = mount(SbButton, { slots: { default: 'Md' } })
     const btn = wrapper.find('button')
-    expect(btn.classes()).toContain('h-10')
-    expect(btn.classes()).toContain('text-base')
+    expect(btn.classes()).toContain('h-9')
+    expect(btn.classes()).toContain('text-sm')
   })
 
   it('applies lg size classes', () => {
@@ -73,8 +83,8 @@ describe('SbButton', () => {
       slots: { default: 'Lg' },
     })
     const btn = wrapper.find('button')
-    expect(btn.classes()).toContain('h-12')
-    expect(btn.classes()).toContain('text-lg')
+    expect(btn.classes()).toContain('h-10')
+    expect(btn.classes()).toContain('text-base')
   })
 
   it('is disabled when disabled prop is true', () => {
@@ -108,7 +118,7 @@ describe('SbButton', () => {
     const wrapper = mount(SbButton, { slots: { default: 'F' } })
     const btn = wrapper.find('button')
     expect(btn.classes()).toContain('focus-visible:ring-2')
-    expect(btn.classes()).toContain('focus-visible:ring-primary')
+    expect(btn.classes()).toContain('focus-visible:ring-primary/50')
   })
 
   it('renders icon-left slot', () => {
@@ -150,17 +160,17 @@ describe('SbButton', () => {
       slots: { default: '★' },
     })
     const btn = wrapper.find('button')
-    expect(btn.classes()).toContain('h-10')
-    expect(btn.classes()).toContain('w-10')
+    expect(btn.classes()).toContain('h-9')
+    expect(btn.classes()).toContain('w-9')
   })
 
-  it('has rounded-[--radius-button] class', () => {
+  it('has rounded-(--radius-button) class', () => {
     const wrapper = mount(SbButton, { slots: { default: 'R' } })
-    expect(wrapper.find('button').classes()).toContain('rounded-[--radius-button]')
+    expect(wrapper.find('button').classes()).toContain('rounded-(--radius-button)')
   })
 
   it('has transition class', () => {
     const wrapper = mount(SbButton, { slots: { default: 'T' } })
-    expect(wrapper.find('button').classes()).toContain('transition-all')
+    expect(wrapper.find('button').classes()).toContain('transition-colors')
   })
 })

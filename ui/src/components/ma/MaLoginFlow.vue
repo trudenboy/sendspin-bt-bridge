@@ -76,7 +76,7 @@ onUnmounted(() => window.removeEventListener('message', onPopupMessage))
               type="url"
             />
           </div>
-          <SbButton variant="secondary" :loading="ma.discovering" class="mt-6" @click="discover">
+          <SbButton variant="outline" :loading="ma.discovering" class="mt-6" @click="discover">
             <template #icon-left>
               <Search class="h-4 w-4" aria-hidden="true" />
             </template>
@@ -97,7 +97,7 @@ onUnmounted(() => window.removeEventListener('message', onPopupMessage))
             </template>
             {{ t('ma.login.submit') }}
           </SbButton>
-          <SbButton variant="secondary" :disabled="!serverUrl" @click="signInWithHa">
+          <SbButton variant="outline" :disabled="!serverUrl" @click="signInWithHa">
             <template #icon-left>
               <Home class="h-4 w-4" aria-hidden="true" />
             </template>

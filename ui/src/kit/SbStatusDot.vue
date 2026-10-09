@@ -15,7 +15,7 @@ const colorMap = {
   ready: 'bg-info',
   connecting: 'bg-warning',
   error: 'bg-error',
-  offline: 'bg-gray-400',
+  offline: 'bg-text-disabled',
   standby: 'bg-text-disabled',
 } as const
 

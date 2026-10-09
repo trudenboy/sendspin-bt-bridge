@@ -175,7 +175,7 @@ function signalTone(rssi?: number | null): 'success' | 'warning' | 'error' | 'ne
                 <SbButton
                   v-else
                   size="sm"
-                  variant="secondary"
+                  variant="outline"
                   :loading="btStore.pairing && btStore.pairTarget === result.mac"
                   :disabled="btStore.pairing"
                   @click="pairAndAdd(result)"
@@ -192,7 +192,7 @@ function signalTone(rssi?: number | null): 'success' | 'warning' | 'error' | 'ne
           >
             {{ t('bluetooth.scan.noDevices') }}
           </div>
-          <div v-if="btStore.scanError && !btStore.scanning" class="rounded-lg bg-red-50 p-3 text-sm text-error dark:bg-red-900/10">
+          <div v-if="btStore.scanError && !btStore.scanning" class="rounded-lg bg-error/10 p-3 text-sm text-error">
             {{ btStore.scanError }}
           </div>
         </div>
@@ -207,7 +207,7 @@ function signalTone(rssi?: number | null): 'success' | 'warning' | 'error' | 'ne
     </SbTabs>
 
     <template #footer>
-      <SbButton variant="secondary" @click="onClose(false)">
+      <SbButton variant="outline" @click="onClose(false)">
         {{ t('common.close') }}
       </SbButton>
     </template>

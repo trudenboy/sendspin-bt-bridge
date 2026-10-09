@@ -42,12 +42,12 @@ function toggleCollapsed() {
 
 <template>
   <div
-    class="overflow-hidden rounded-[--radius-card] border border-gray-200 bg-surface-card shadow-sm dark:border-gray-700 dark:bg-gray-800"
+    class="overflow-hidden rounded-(--radius-card) border border-border bg-surface-card"
   >
     <!-- Header -->
     <div
       v-if="$slots.header || $slots.actions"
-      class="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 font-semibold dark:border-gray-700"
+      class="flex items-center justify-between gap-2 px-4 pt-4 pb-1 font-medium"
     >
       <component
         :is="collapsible ? 'button' : 'div'"
@@ -74,7 +74,7 @@ function toggleCollapsed() {
       <!-- Loading overlay -->
       <div
         v-if="loading"
-        class="absolute inset-0 z-10 flex items-center justify-center bg-surface-card/70 dark:bg-gray-800/70"
+        class="absolute inset-0 z-10 flex items-center justify-center bg-surface-card/70"
       >
         <svg
           class="h-6 w-6 animate-spin text-primary"
@@ -106,7 +106,7 @@ function toggleCollapsed() {
     <!-- Footer -->
     <div
       v-if="$slots.footer"
-      class="border-t border-gray-200 bg-surface/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50"
+      class="border-t border-border px-4 py-3"
     >
       <slot name="footer" />
     </div>

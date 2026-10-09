@@ -75,7 +75,7 @@ const autoDiscovery = computed({
           <div class="flex items-center gap-2">
             <span
               class="inline-block h-2.5 w-2.5 rounded-full"
-              :class="bridgeStore.maConnected ? 'bg-green-500' : 'bg-gray-400'"
+              :class="bridgeStore.maConnected ? 'bg-success' : 'bg-text-disabled'"
             />
             <span class="text-sm text-text-secondary">
               {{ bridgeStore.maConnected ? t('config.maConnected') : t('config.maDisconnected') }}

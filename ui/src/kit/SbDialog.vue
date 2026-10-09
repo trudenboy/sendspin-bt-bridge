@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
           aria-modal="true"
           :aria-labelledby="title ? titleId : undefined"
           :class="[
-            'relative z-50 flex max-h-[85vh] w-full flex-col overflow-y-auto rounded-[--radius-card] bg-surface-card shadow-xl dark:bg-gray-800',
+            'relative z-50 flex max-h-[85vh] w-full flex-col overflow-y-auto rounded-(--radius-card) bg-surface-card shadow-xl',
             sizeClass,
           ]"
         >

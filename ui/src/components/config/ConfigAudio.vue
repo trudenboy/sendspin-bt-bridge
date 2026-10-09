@@ -73,7 +73,7 @@ function applyPreset(value: number) {
                 class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
                 :class="activePreset === preset.value
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-gray-300 text-text-secondary hover:border-primary/50 hover:text-text-primary dark:border-gray-600'"
+                  : 'border-border-strong text-text-secondary hover:border-primary/50 hover:text-text-primary'"
                 @click="applyPreset(preset.value)"
               >
                 {{ t(preset.key) }}
@@ -82,7 +82,7 @@ function applyPreset(value: number) {
                 class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
                 :class="activePreset === 'custom'
                   ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-gray-300 text-text-secondary dark:border-gray-600'"
+                  : 'border-border-strong text-text-secondary'"
               >
                 {{ t('config.latencyCustom') }}
               </span>

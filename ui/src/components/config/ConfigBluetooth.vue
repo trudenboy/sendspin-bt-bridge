@@ -98,7 +98,7 @@ function confirmEdit() {
       <div v-if="bridgeStore.adapters.length === 0" class="py-4 text-center text-sm text-text-secondary">
         {{ t('config.noAdapters') }}
       </div>
-      <div v-else class="divide-y divide-gray-200 dark:divide-gray-700">
+      <div v-else class="divide-y divide-border">
         <div
           v-for="adapter in bridgeStore.adapters"
           :key="adapter.id"
@@ -110,7 +110,7 @@ function confirmEdit() {
                 ref="editInput"
                 v-model="editName"
                 type="text"
-                class="w-48 rounded border border-gray-300 bg-transparent px-2 py-1 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40 dark:border-gray-600"
+                class="w-48 rounded border border-border-strong bg-transparent px-2 py-1 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40"
                 @keydown.enter="confirmEdit"
                 @keydown.escape="editingHci = null"
                 @blur="confirmEdit"

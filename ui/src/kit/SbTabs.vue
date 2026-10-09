@@ -74,7 +74,7 @@ function onKeydown(event: KeyboardEvent) {
     <div
       ref="tabListRef"
       role="tablist"
-      class="flex overflow-x-auto border-b border-gray-200 dark:border-gray-700"
+      class="flex overflow-x-auto border-b border-border"
       @keydown="onKeydown"
     >
       <button
