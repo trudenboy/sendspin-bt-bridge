@@ -4344,6 +4344,19 @@
       "Rest": {
         "additionalProperties": true,
         "properties": {
+          "advertise_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "",
+            "description": "Address announced to Home Assistant instead of the detected one (reverse proxy, NAT). Empty = detect.",
+            "title": "Advertise Host"
+          },
           "advertise_mdns": {
             "anyOf": [
               {
@@ -4356,6 +4369,21 @@
             "default": true,
             "description": "Publish _sendspin-bridge._tcp.local. so HA's Zeroconf discovery offers our integration.",
             "title": "Advertise Mdns"
+          },
+          "advertise_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0,
+            "description": "Port announced to Home Assistant instead of the web port. 0 = the web port.",
+            "title": "Advertise Port"
           },
           "supervisor_pair": {
             "anyOf": [

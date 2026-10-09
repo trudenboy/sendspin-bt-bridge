@@ -82,6 +82,14 @@ class Rest(BaseModel):
     """
     On HAOS, allow the custom_component to obtain a long-lived bearer token via the SUPERVISOR_TOKEN round-trip pairing endpoint.
     """
+    advertise_host: str | None = ""
+    """
+    Address announced to Home Assistant instead of the detected one (reverse proxy, NAT). Empty = detect.
+    """
+    advertise_port: int | None = Field(0, ge=0, le=65535)
+    """
+    Port announced to Home Assistant instead of the web port. 0 = the web port.
+    """
 
 
 class HAINTEGRATION(BaseModel):

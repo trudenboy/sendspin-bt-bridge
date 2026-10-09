@@ -694,6 +694,14 @@
           "supervisor_pair": {
             "label": "Pair through the Supervisor",
             "help": "On Home Assistant OS the integration gets its token without copying it by hand."
+          },
+          "advertise_host": {
+            "label": "Announced address",
+            "help": "The address Home Assistant uses to reach the bridge. Set it when the bridge sits behind a reverse proxy or NAT; empty detects it."
+          },
+          "advertise_port": {
+            "label": "Announced port",
+            "help": "0 announces the web port."
           }
         }
       },

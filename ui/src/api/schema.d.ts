@@ -3481,11 +3481,23 @@ export interface components {
         /** Rest */
         Rest: {
             /**
+             * Advertise Host
+             * @description Address announced to Home Assistant instead of the detected one (reverse proxy, NAT). Empty = detect.
+             * @default
+             */
+            advertise_host?: string | null;
+            /**
              * Advertise Mdns
              * @description Publish _sendspin-bridge._tcp.local. so HA's Zeroconf discovery offers our integration.
              * @default true
              */
             advertise_mdns?: boolean | null;
+            /**
+             * Advertise Port
+             * @description Port announced to Home Assistant instead of the web port. 0 = the web port.
+             * @default 0
+             */
+            advertise_port?: number | null;
             /**
              * Supervisor Pair
              * @description On HAOS, allow the custom_component to obtain a long-lived bearer token via the SUPERVISOR_TOKEN round-trip pairing endpoint.
