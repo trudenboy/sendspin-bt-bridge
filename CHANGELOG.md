@@ -7,128 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- The bridge uses much less CPU on hosts where it can watch Bluetooth
-  traffic to tell which speaker's buttons were pressed. On Home Assistant
-  with two speakers connected, the add-on dropped from about 40% to about
-  12% of a CPU core.
-
-### Fixed
-
-- After signing in to Music Assistant again, for example when it was
-  reinstalled and the old token stopped working, the bridge reconnects
-  straight away instead of waiting up to a minute.
-- Switching a speaker's idle mode to keep-alive in the settings now starts
-  the keep-alive signal straight away, and switching away stops it.
-  Previously the change only took effect after the bridge restarted, so the
-  speaker could still power itself off.
-- Saving the settings without changing anything no longer restarts every
-  speaker's player. On configurations written by an older version, settings
-  the file did not list yet were counted as changed, so Music Assistant had
-  to reconnect to every speaker.
-- A speaker removed from the fleet and added back, for example from a new
-  scan that pairs it on another Bluetooth adapter, now connects on the
-  adapter it was added with instead of retrying the old one forever.
-  Changing a speaker's adapter in the configuration also takes effect
-  without restarting the bridge.
-- Stopping a speaker's player, for example when its Bluetooth link drops, no
-  longer kills the player halfway through its own shutdown and logs two
-  errors each time.
-
-## [2.76.0-rc.6] - 2026-10-08
-
-### Changed
-
-- Music Assistant lists each speaker as a new player after updating from
-  2.75, because the bridge now identifies itself the way the current
-  Sendspin protocol requires. The old players stay behind as unavailable:
-  remove them in Music Assistant and add the new ones to your sync groups
-  again.
-
-### Fixed
-
-- The bridge's memory no longer creeps up while the web interface is open.
-  Each open dashboard tab could hold up to 16 MB of status updates that had
-  already been sent.
-- An open web interface no longer keeps the bridge busy. It re-checked the
-  host every two seconds, starting three bluetoothctl processes and two
-  PulseAudio connections each time; it now checks every 30 seconds and right
-  after a speaker connects or disconnects.
-- Updating an LXC or bare-metal install from 2.75 now installs the GStreamer
-  audio stack the new version plays through. Without it the update failed
-  while installing Python packages. Hosts older than Debian 13 or Ubuntu
-  24.04 cannot run it; the update now stops with that explanation and leaves
-  the current version installed. The update also no longer fails on hosts
-  where the distribution already provides PyGObject.
-
-## [2.76.0-rc.5] - 2026-10-08
-
-### Fixed
-
-- Commands the bridge sends through the Music Assistant API, such as
-  syncing mute after a reconnect, reach the speaker again. They were
-  addressed to an id Music Assistant no longer uses for the player, so it
-  ignored them; speakers in a sync group are also recognised by id again
-  instead of only by name.
-- Music Assistant now reconnects to a speaker by itself after the bridge
-  restarts, reloads its configuration or loses and regains the Bluetooth link.
-  The bridge told Music Assistant it was shutting down for good each time, so
-  the speaker stayed unavailable until the Sendspin provider was reloaded.
-  The metadata refresh reconnect was affected the same way.
-
-## [2.76.0-rc.4] - 2026-10-08
-
-### Fixed
-
-- A speaker that keeps accepting the Bluetooth link without ever offering
-  audio, such as a JBL PartyBox switched off but still on mains power, now
-  reaches the auto-release threshold instead of reconnecting forever
-  ([#414](https://github.com/trudenboy/sendspin-bt-bridge/issues/414)).
-- A speaker that came back on its own after an auto-release no longer sends
-  the bridge into a tight loop that grew its memory until the system killed it
-  ([#470](https://github.com/trudenboy/sendspin-bt-bridge/issues/470)).
-- A speaker that reconnected while another Bluetooth operation held the
-  adapter now gets its player started again instead of staying connected but
-  silent ([#460](https://github.com/trudenboy/sendspin-bt-bridge/issues/460)).
-- Music Assistant no longer loses an idle speaker 20 seconds after every
-  connection. The bridge reconnected any player whose Music Assistant record
-  did not repeat the bridge's own product name, but each speaker advertises
-  its own name, so the check failed every time. Only a record from a
-  different bridge version now triggers a reconnect
-  ([#477](https://github.com/trudenboy/sendspin-bt-bridge/issues/477)).
-- Pause and Stop in Music Assistant now silence the speaker at once instead
-  of playing on for 5 to 30 seconds. Audio already sent ahead is discarded
-  when the stream ends, as the Sendspin protocol requires
-  ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
-- A volume or mute change from Music Assistant is now reported back, so the
-  slider no longer jumps to the old level after Pause or Stop while the
-  speaker keeps the new one
-  ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
-- Pair and Add no longer fails with `AuthenticationFailed` on speakers that
-  pair fine from the host. The bridge's own pairing agent now answers the
-  confirmation instead of the one built into the pairing session
-  ([#471](https://github.com/trudenboy/sendspin-bt-bridge/issues/471)).
-
-### Security
-
-- Updated PyJWT to 2.15.1, urllib3 to 2.8.0, Werkzeug to 3.1.9 and multidict
-  to 6.9.1 to pick up fixes for published vulnerabilities.
-
-## [2.76.0-rc.3] - 2026-08-27
+## [2.76.0] - 2026-10-09
 
 ### Added
 
-- Speakers play through GStreamer to a named PulseAudio sink. Music Assistant
-  pairing is optional and off by default, so a speaker plays as soon as Music
-  Assistant finds it. Turn on Require Sendspin pairing to ask for a PIN.
+- Speakers play through GStreamer to a named PulseAudio sink. Music Assistant pairing is optional and off by default, so a speaker plays as soon as Music Assistant finds it. Turn on Require Sendspin pairing to ask for a PIN.
 - FLAC from Music Assistant is decoded before it reaches the speaker.
 
 ### Changed
 
-- The Sendspin client library is 9.1.1. Players that Music Assistant already
-  knows from an older bridge are orphans after this upgrade and should be
-  removed; the next pairing creates a new player.
+- The bridge uses much less CPU on hosts where it can watch Bluetooth traffic to tell which speaker's buttons were pressed. On Home Assistant with two speakers connected, the add-on dropped from about 40% to about 12% of a CPU core.
+- A bridge that cannot reach the system Bluetooth service now says so on the speaker's card instead of quietly falling back to a slower way of asking the same question. A speaker the service simply does not know is reported as that, which is a different thing and no longer looks like a broken setup.
+- Connecting, disconnecting, trusting and forgetting a speaker, and powering a controller, now go to the system Bluetooth service directly instead of through the command-line tool. The service is told which controller by name, so an operation aimed at one adapter can no longer be applied to another — the failure that could switch off the wrong controller on a two-adapter host. The command-line tool still runs when the service cannot answer at all, so installs without it keep working.
+- A failed Bluetooth operation now reports the reason the system gave for it — a speaker that is out of range, a bond that is already gone — rather than a reason inferred from the wording of a command's output.
+- Installing the bridge no longer builds a native D-Bus extension. It was the last thing that needed the D-Bus development headers, so container and manual installs have one fewer build dependency and one fewer thing that can fail to compile on a 32-bit Raspberry Pi.
+- Disconnecting a speaker that Bluetooth declines to disconnect now reports the reason it gave, instead of a generic failure.
+- The Sendspin client library is 9.1.1, which works with Music Assistant 2.10 and 2.11.
+- Music Assistant lists each speaker as a new player after updating from 2.75, because the bridge now identifies itself the way the current Sendspin protocol requires. The old players stay behind as unavailable: remove them in Music Assistant and add the new ones to your sync groups again.
 
 ### Removed
 
@@ -136,52 +31,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- After signing in to Music Assistant again, for example when it was reinstalled and the old token stopped working, the bridge reconnects straight away instead of waiting up to a minute.
+- Switching a speaker's idle mode to keep-alive in the settings now starts the keep-alive signal straight away, and switching away stops it. Previously the change only took effect after the bridge restarted, so the speaker could still power itself off.
+- Saving the settings without changing anything no longer restarts every speaker's player. On configurations written by an older version, settings the file did not list yet were counted as changed, so Music Assistant had to reconnect to every speaker.
+- A speaker removed from the fleet and added back, for example from a new scan that pairs it on another Bluetooth adapter, now connects on the adapter it was added with instead of retrying the old one forever. Changing a speaker's adapter in the configuration also takes effect without restarting the bridge.
+- Stopping a speaker's player, for example when its Bluetooth link drops, no longer kills the player halfway through its own shutdown and logs two errors each time.
+- The warning that says no local audio backend has claimed Bluetooth audio is no longer shown when the bridge could not check at all. It is an actionable claim, and it used to be made on the strength of an unreachable service.
+- A speaker whose link flaps no longer has each reconnect processed more than once. Repeated attempts left listeners behind, so one reconnect could correct the audio routing of every other speaker several times over.
 - Consecutive tracks continue playing after the previous stream finishes.
-- Stopping or restarting the bridge now closes each speaker process promptly
-  instead of waiting for a timeout and forcibly killing it.
+- Stopping or restarting the bridge now closes each speaker process promptly instead of waiting for a timeout and forcibly killing it.
+- A speaker that keeps accepting the Bluetooth link without ever offering audio, such as a JBL PartyBox switched off but still on mains power, now reaches the auto-release threshold instead of reconnecting forever ([#414](https://github.com/trudenboy/sendspin-bt-bridge/issues/414)).
+- A speaker that came back on its own after an auto-release no longer sends the bridge into a tight loop that grew its memory until the system killed it ([#470](https://github.com/trudenboy/sendspin-bt-bridge/issues/470)).
+- A speaker that reconnected while another Bluetooth operation held the adapter now gets its player started again instead of staying connected but silent ([#460](https://github.com/trudenboy/sendspin-bt-bridge/issues/460)).
+- Music Assistant no longer loses an idle speaker 20 seconds after every connection. The bridge reconnected any player whose Music Assistant record did not repeat the bridge's own product name, but each speaker advertises its own name, so the check failed every time. Only a record from a different bridge version now triggers a reconnect ([#477](https://github.com/trudenboy/sendspin-bt-bridge/issues/477)).
+- Pause and Stop in Music Assistant now silence the speaker at once instead of playing on for 5 to 30 seconds. Audio already sent ahead is discarded when the stream ends, as the Sendspin protocol requires ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
+- A volume or mute change from Music Assistant is now reported back, so the slider no longer jumps to the old level after Pause or Stop while the speaker keeps the new one ([#464](https://github.com/trudenboy/sendspin-bt-bridge/issues/464)).
+- Pair and Add no longer fails with `AuthenticationFailed` on speakers that pair fine from the host. The bridge's own pairing agent now answers the confirmation instead of the one built into the pairing session ([#471](https://github.com/trudenboy/sendspin-bt-bridge/issues/471)).
+- Commands the bridge sends through the Music Assistant API, such as syncing mute after a reconnect, reach the speaker again. They were addressed to an id Music Assistant no longer uses for the player, so it ignored them; speakers in a sync group are also recognised by id again instead of only by name.
+- Music Assistant now reconnects to a speaker by itself after the bridge restarts, reloads its configuration or loses and regains the Bluetooth link. The bridge told Music Assistant it was shutting down for good each time, so the speaker stayed unavailable until the Sendspin provider was reloaded. The metadata refresh reconnect was affected the same way.
+- The bridge's memory no longer creeps up while the web interface is open. Each open dashboard tab could hold up to 16 MB of status updates that had already been sent.
+- An open web interface no longer keeps the bridge busy. It re-checked the host every two seconds, starting three bluetoothctl processes and two PulseAudio connections each time; it now checks every 30 seconds and right after a speaker connects or disconnects.
+- Updating an LXC or bare-metal install from 2.75 now installs the GStreamer audio stack the new version plays through. Without it the update failed while installing Python packages. Hosts older than Debian 13 or Ubuntu 24.04 cannot run it; the update now stops with that explanation and leaves the current version installed. The update also no longer fails on hosts where the distribution already provides PyGObject.
 
 ### Security
 
 - Debug logging no longer includes Music Assistant authentication payloads.
-
-## [2.76.0-rc.2] - 2026-08-27
-
-### Changed
-
-- Connecting, disconnecting, trusting and forgetting a speaker, and powering a
-  controller, now go to the system Bluetooth service directly instead of
-  through the command-line tool. The service is told which controller by name,
-  so an operation aimed at one adapter can no longer be applied to another —
-  the failure that could switch off the wrong controller on a two-adapter
-  host. The command-line tool still runs when the service cannot answer at
-  all, so installs without it keep working.
-- A failed Bluetooth operation now reports the reason the system gave for it —
-  a speaker that is out of range, a bond that is already gone — rather than a
-  reason inferred from the wording of a command's output.
-- Installing the bridge no longer builds a native D-Bus extension. It was the
-  last thing that needed the D-Bus development headers, so container and
-  manual installs have one fewer build dependency and one fewer thing that can
-  fail to compile on a 32-bit Raspberry Pi.
-- Disconnecting a speaker that Bluetooth declines to disconnect now reports
-  the reason it gave, instead of a generic failure.
-
-## [2.76.0-rc.1] - 2026-08-27
-
-### Changed
-
-- A bridge that cannot reach the system Bluetooth service now says so on the
-  speaker's card instead of quietly falling back to a slower way of asking the
-  same question. A speaker the service simply does not know is reported as
-  that, which is a different thing and no longer looks like a broken setup.
-
-### Fixed
-
-- The warning that says no local audio backend has claimed Bluetooth audio is
-  no longer shown when the bridge could not check at all. It is an actionable
-  claim, and it used to be made on the strength of an unreachable service.
-- A speaker whose link flaps no longer has each reconnect processed more than
-  once. Repeated attempts left listeners behind, so one reconnect could
-  correct the audio routing of every other speaker several times over.
+- Updated PyJWT to 2.15.1, urllib3 to 2.8.0, Werkzeug to 3.1.9 and multidict to 6.9.1 to pick up fixes for published vulnerabilities.
 
 ## [2.75.2] - 2026-10-08
 
