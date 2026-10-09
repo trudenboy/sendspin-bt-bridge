@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.77.0-rc.2] - 2026-10-09
+
 ### Fixed
 
 - A speaker that is already connected when the bridge starts gets its
