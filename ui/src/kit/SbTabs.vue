@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, useId } from 'vue'
 
 interface Tab {
   id: string
@@ -24,6 +24,8 @@ const currentTab = computed(() => {
 })
 
 const tabListRef = ref<HTMLElement | null>(null)
+// Unique per instance: a page can show several tab sets (drawer, dialogs).
+const uid = useId()
 
 function selectTab(tab: Tab) {
   if (tab.disabled) return
@@ -82,10 +84,10 @@ function onKeydown(event: KeyboardEvent) {
         :key="tab.id"
         role="tab"
         type="button"
-        :id="`tab-${tab.id}`"
+        :id="`tab-${uid}-${tab.id}`"
         :data-tab-id="tab.id"
         :aria-selected="currentTab === tab.id"
-        :aria-controls="`panel-${tab.id}`"
+        :aria-controls="`panel-${uid}-${tab.id}`"
         :tabindex="currentTab === tab.id ? 0 : -1"
         :disabled="tab.disabled"
         class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm transition-colors"
@@ -112,9 +114,9 @@ function onKeydown(event: KeyboardEvent) {
       v-for="tab in tabs"
       :key="tab.id"
       v-show="currentTab === tab.id"
-      :id="`panel-${tab.id}`"
+      :id="`panel-${uid}-${tab.id}`"
       role="tabpanel"
-      :aria-labelledby="`tab-${tab.id}`"
+      :aria-labelledby="`tab-${uid}-${tab.id}`"
       :tabindex="0"
     >
       <slot :name="tab.id" />

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, reactive } from 'vue'
 
 interface Props {
   align?: 'left' | 'right'
   width?: 'auto' | 'full' | string
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   align: 'left',
   width: 'auto',
 })
@@ -14,16 +14,40 @@ withDefaults(defineProps<Props>(), {
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const menuRef = ref<HTMLElement | null>(null)
+/* The menu is rendered on <body> with fixed coordinates, so tables and
+   scrolling cards (overflow: auto/hidden) never clip it. */
+const position = reactive<Record<string, string>>({})
+
+function place() {
+  const anchor = containerRef.value?.getBoundingClientRect()
+  if (!anchor) return
+  const menuHeight = menuRef.value?.offsetHeight ?? 0
+  const below = window.innerHeight - anchor.bottom
+  const up = menuHeight > 0 && below < menuHeight + 8 && anchor.top > below
+  position.top = up ? '' : `${anchor.bottom + 4}px`
+  position.bottom = up ? `${window.innerHeight - anchor.top + 4}px` : ''
+  position.left = props.align === 'right' ? '' : `${anchor.left}px`
+  position.right = props.align === 'right' ? `${window.innerWidth - anchor.right}px` : ''
+  position.width = props.width === 'full' ? `${anchor.width}px` : props.width === 'auto' ? '' : props.width
+}
 
 function toggle() {
   isOpen.value = !isOpen.value
   if (isOpen.value) {
-    nextTick(() => focusFirstItem())
+    place()
+    nextTick(() => {
+      place()
+      focusFirstItem()
+    })
   }
 }
 
 function close() {
   isOpen.value = false
+}
+
+function onViewportChange() {
+  if (isOpen.value) close()
 }
 
 function focusFirstItem() {
@@ -61,17 +85,21 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function onClickOutside(e: MouseEvent) {
-  if (containerRef.value && !containerRef.value.contains(e.target as Node)) {
-    close()
-  }
+  const target = e.target as Node
+  if (containerRef.value?.contains(target) || menuRef.value?.contains(target)) return
+  close()
 }
 
 onMounted(() => {
   document.addEventListener('click', onClickOutside)
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onClickOutside)
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
 })
 </script>
 
@@ -100,28 +128,28 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Menu -->
-    <Transition
-      enter-active-class="transition duration-100 ease-out"
-      enter-from-class="scale-95 opacity-0"
-      enter-to-class="scale-100 opacity-100"
-      leave-active-class="transition duration-75 ease-in"
-      leave-from-class="scale-100 opacity-100"
-      leave-to-class="scale-95 opacity-0"
-    >
-      <div
-        v-if="isOpen"
-        ref="menuRef"
-        role="menu"
-        class="absolute z-50 mt-1 overflow-hidden rounded-(--radius-card) border border-border bg-surface-card py-1 shadow-lg"
-        :class="[
-          align === 'right' ? 'right-0' : 'left-0',
-          width === 'full' ? 'w-full' : width === 'auto' ? 'min-w-[12rem]' : '',
-        ]"
-        :style="width !== 'auto' && width !== 'full' ? { width } : undefined"
-        @click="close"
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-100 ease-out"
+        enter-from-class="scale-95 opacity-0"
+        enter-to-class="scale-100 opacity-100"
+        leave-active-class="transition duration-75 ease-in"
+        leave-from-class="scale-100 opacity-100"
+        leave-to-class="scale-95 opacity-0"
       >
-        <slot />
-      </div>
-    </Transition>
+        <div
+          v-if="isOpen"
+          ref="menuRef"
+          role="menu"
+          class="fixed z-[60] max-h-[60vh] overflow-y-auto rounded-(--radius-card) border border-border bg-surface-raised py-1 shadow-lg"
+          :class="[width === 'auto' ? 'min-w-[12rem]' : '']"
+          :style="position"
+          @click="close"
+          @keydown="onKeydown"
+        >
+          <slot />
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

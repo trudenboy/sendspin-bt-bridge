@@ -52,13 +52,17 @@ describe('SbDropdown', () => {
   it('aligns right when specified', async () => {
     const wrapper = mount(SbDropdown, { props: { align: 'right' } })
     await wrapper.find('button').trigger('click')
-    expect(wrapper.find('[role="menu"]').classes()).toContain('right-0')
+    const menu = wrapper.find('[role="menu"]').element as HTMLElement
+    expect(menu.style.right).not.toBe('')
+    expect(menu.style.left).toBe('')
   })
 
   it('aligns left by default', async () => {
     const wrapper = mount(SbDropdown)
     await wrapper.find('button').trigger('click')
-    expect(wrapper.find('[role="menu"]').classes()).toContain('left-0')
+    const menu = wrapper.find('[role="menu"]').element as HTMLElement
+    expect(menu.style.left).not.toBe('')
+    expect(menu.style.right).toBe('')
   })
 
   it('has aria-haspopup on default trigger', () => {
@@ -66,10 +70,10 @@ describe('SbDropdown', () => {
     expect(wrapper.find('button').attributes('aria-haspopup')).toBe('true')
   })
 
-  it('applies full width class', async () => {
+  it('matches the trigger width when full', async () => {
     const wrapper = mount(SbDropdown, { props: { width: 'full' } })
     await wrapper.find('button').trigger('click')
-    expect(wrapper.find('[role="menu"]').classes()).toContain('w-full')
+    expect((wrapper.find('[role="menu"]').element as HTMLElement).style.width).toMatch(/px$/)
   })
 
   it('applies custom width via style', async () => {

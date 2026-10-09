@@ -37,7 +37,19 @@ describe('SbTabs', () => {
     })
     const panels = wrapper.findAll('[role="tabpanel"]')
     expect(panels).toHaveLength(3)
-    expect(panels[0].attributes('aria-labelledby')).toBe('tab-general')
+    const firstTab = wrapper.find('[role="tab"]')
+    expect(panels[0].attributes('aria-labelledby')).toBe(firstTab.attributes('id'))
+    expect(firstTab.attributes('aria-controls')).toBe(panels[0].attributes('id'))
+  })
+
+  it('gives each tab set its own ids', () => {
+    const page = mount({
+      components: { SbTabs },
+      setup: () => ({ tabs: baseTabs }),
+      template: '<div><SbTabs :tabs="tabs" /><SbTabs :tabs="tabs" /></div>',
+    })
+    const firstTabs = page.findAll('[role="tablist"]').map((list) => list.find('[role="tab"]').attributes('id'))
+    expect(firstTabs[0]).not.toBe(firstTabs[1])
   })
 
   it('first tab is active by default when no modelValue', () => {
@@ -57,10 +69,9 @@ describe('SbTabs', () => {
         advanced: 'Advanced content',
       },
     })
-    const generalPanel = wrapper.find('#panel-general')
-    const advancedPanel = wrapper.find('#panel-advanced')
-    expect(generalPanel.element.style.display).not.toBe('none')
-    expect(advancedPanel.element.style.display).toBe('none')
+    const [generalPanel, advancedPanel] = wrapper.findAll('[role="tabpanel"]')
+    expect((generalPanel!.element as HTMLElement).style.display).not.toBe('none')
+    expect((advancedPanel!.element as HTMLElement).style.display).toBe('none')
   })
 
   it('emits update:modelValue on tab click', async () => {

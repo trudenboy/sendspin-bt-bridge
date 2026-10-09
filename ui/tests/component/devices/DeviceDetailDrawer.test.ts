@@ -19,6 +19,18 @@ vi.mock('@/stores/bridge', () => ({
   }),
 }))
 
+vi.mock('@/api/config', () => ({
+  getConfig: vi.fn().mockResolvedValue({ BLUETOOTH_DEVICES: [] }),
+  saveConfig: vi.fn().mockResolvedValue({ warnings: [], reconfig: {} }),
+}))
+vi.mock('@/api/calibration', () => ({
+  getLatencyHistory: vi.fn().mockResolvedValue({ samples: [] }),
+  setMetronome: vi.fn(),
+  createSession: vi.fn(),
+  uploadRecording: vi.fn(),
+  endSession: vi.fn(),
+}))
+
 function buildI18n() {
   return createI18n({
     legacy: false,
@@ -72,7 +84,7 @@ describe('DeviceDetailDrawer', () => {
     const w = await mountDrawer()
     expect(w.find('[role="tablist"]').exists()).toBe(true)
     const tabs = w.findAll('[role="tab"]')
-    expect(tabs.length).toBe(4)
+    expect(tabs.map((t) => t.text())).toEqual(['Status', 'Settings', 'Timing', 'Events', 'Signal Path'])
   })
 
   it('shows status tab content by default', async () => {
@@ -92,14 +104,18 @@ describe('DeviceDetailDrawer', () => {
     }
   })
 
-  it('shows config tab when selected', async () => {
+  it('shows the speaker settings when selected', async () => {
     setActivePinia(createPinia())
+    const api = await import('@/api/config')
+    vi.spyOn(api, 'getConfig').mockResolvedValue({
+      BLUETOOTH_DEVICES: [{ mac: 'AA:BB:CC:DD:EE:FF', player_name: 'Test Speaker', adapter: 'hci0' }],
+    } as never)
     const w = await mountDrawer()
-    const configTab = w.find('[data-tab-id="config"]')
-    await configTab.trigger('click')
-    await nextTick()
+    await w.find('[data-tab-id="settings"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
     expect(w.text()).toContain('AA:BB:CC:DD:EE:FF')
-    expect(w.text()).toContain('hci0')
+    const adapter = w.findAll('select').find((sel) => sel.findAll('option').some((o) => o.text().startsWith('hci0')))!
+    expect((adapter.element as HTMLSelectElement).value).toBe('hci0')
   })
 })
 
@@ -118,12 +134,12 @@ describe('DeviceDetailDrawer config save', () => {
     const getConfig = vi.spyOn(api, 'getConfig').mockResolvedValue(structuredClone(stored) as never)
     const saveConfig = vi.spyOn(api, 'saveConfig').mockResolvedValue({ warnings: [], reconfig: {} } as never)
     const w = await mountDrawer()
-    await w.find('[data-tab-id="config"]').trigger('click')
-    await nextTick()
-    await w.findAll('button').find((b) => b.text() === 'Edit')!.trigger('click')
-    await nextTick()
-    await w.find('input[type="text"]').setValue('Kitchen')
-    await w.findAll('button').find((b) => b.text().includes('Save'))!.trigger('click')
+    await w.find('[data-tab-id="settings"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    const name = w.findAll('input[type="text"]').find((i) => (i.element as HTMLInputElement).value === 'Test Speaker')!
+    await name.setValue('Kitchen')
+    await name.trigger('change')
+    await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
     await new Promise((r) => setTimeout(r, 0))
 
     expect(getConfig).toHaveBeenCalled()

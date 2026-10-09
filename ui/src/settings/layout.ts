@@ -22,10 +22,14 @@ export interface FieldDef {
   key: string
   kind: FieldKind
   options?: readonly string[]
+  /** Choices supplied at runtime (the bridge's adapters) instead of a schema enum. */
+  optionsFrom?: 'adapters'
   min?: number
   max?: number
   step?: number
   unit?: Unit
+  /** Shown when the document has no value; must equal the schema default. */
+  default?: unknown
   /** An empty input stores ``null`` (the bridge then picks the value). */
   nullable?: boolean
   placeholder?: string

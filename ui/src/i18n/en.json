@@ -306,9 +306,10 @@
   "drawer": {
     "tabs": {
       "status": "Status",
-      "config": "Config",
+      "config": "Settings",
       "events": "Events",
-      "signal": "Signal Path"
+      "signal": "Signal Path",
+      "timing": "Timing"
     },
     "status": {
       "playerState": "State",
@@ -330,13 +331,30 @@
       "saved": "Device configuration saved",
       "saveFailed": "Failed to save configuration",
       "autoAdapter": "Auto (default)",
-      "autoPort": "Auto"
+      "autoPort": "Auto",
+      "enabledHelp": "A disabled speaker keeps its settings but gets no player.",
+      "notConfigured": "This speaker is not in the configuration."
     },
     "events": {
       "empty": "No events recorded"
     },
     "signal": {
       "subprocess": "Subprocess"
+    },
+    "actions": {
+      "more": "More actions",
+      "reconnect": "Reconnect",
+      "reconnectDone": "Reconnecting",
+      "repair": "Pair again",
+      "repairDone": "Pairing again",
+      "pairing": "Let Music Assistant pair",
+      "pairingDone": "Music Assistant can pair for a while",
+      "unmute": "Unmute the audio output",
+      "unmuteDone": "Audio output unmuted",
+      "release": "Release audio now",
+      "releaseDone": "Audio released",
+      "resume": "Resume audio",
+      "resumeDone": "Audio resumed"
     }
   },
   "volume": {
@@ -836,6 +854,114 @@
         "apply": "Apply"
       }
     },
-    "leaveConfirm": "You have unsaved settings. Leave anyway?"
+    "leaveConfirm": "You have unsaved settings. Leave anyway?",
+    "device": {
+      "player_name": {
+        "label": "Name",
+        "help": "Shown as the player in Music Assistant."
+      },
+      "adapter": {
+        "label": "Bluetooth adapter",
+        "help": "The adapter that connects this speaker. Automatic uses the default adapter."
+      },
+      "room_name": {
+        "label": "Room",
+        "help": "Shown with the player and offered to Home Assistant."
+      },
+      "room_id": {
+        "label": "Home Assistant area ID",
+        "help": "Links the speaker to an area in Home Assistant."
+      },
+      "volume_controller": {
+        "label": "Volume control",
+        "help": "PulseAudio changes the system volume of the speaker; Sendspin scales the audio stream instead.",
+        "options": {
+          "pa": "PulseAudio",
+          "sendspin": "Sendspin stream"
+        }
+      },
+      "listen_port": {
+        "label": "Player port",
+        "help": "Port Music Assistant connects to for this speaker. Empty picks one automatically."
+      },
+      "idle_mode": {
+        "label": "When idle",
+        "help": "What the bridge does while nothing plays.",
+        "options": {
+          "default": "Stay connected",
+          "power_save": "Release audio (power save)",
+          "auto_disconnect": "Disconnect",
+          "keep_alive": "Keep the speaker awake"
+        }
+      },
+      "power_save_delay_minutes": {
+        "label": "Release audio after",
+        "help": "Free the speaker's audio connection after this long without sound."
+      },
+      "idle_disconnect_minutes": {
+        "label": "Disconnect after",
+        "help": "Disconnect Bluetooth after this long without sound. 0 never disconnects."
+      },
+      "keep_alive_method": {
+        "label": "Keep-awake signal",
+        "help": "An inaudible 2 Hz tone suits most speakers; silence helps the few that react to the tone.",
+        "options": {
+          "infrasound": "Inaudible tone",
+          "silence": "Silence",
+          "none": "Nothing"
+        }
+      },
+      "keepalive_interval": {
+        "label": "Signal interval",
+        "help": "Time between keep-awake bursts."
+      },
+      "static_delay_ms": {
+        "label": "Speaker delay",
+        "help": "How late this speaker plays its sound. The bridge sends audio this much earlier so it stays in time with the group."
+      },
+      "min_buffer_ms": {
+        "label": "Minimum buffer",
+        "help": "Audio the speaker keeps queued while playing."
+      },
+      "required_lead_time_ms": {
+        "label": "Start-up lead time",
+        "help": "Time the speaker needs before the first sound plays."
+      }
+    },
+    "deviceGroups": {
+      "speaker": "Speaker",
+      "idle": "Idle behaviour",
+      "sync": "Timing"
+    }
+  },
+  "timing": {
+    "applied": "Applied: {value} ms",
+    "suggestion": "Suggested delay: {value} ms",
+    "applySuggestion": "Apply",
+    "clicks": {
+      "label": "Click track",
+      "help": "Plays steady clicks in time with the group, so you can hear which speaker is late.",
+      "start": "Start",
+      "stop": "Stop"
+    },
+    "mic": {
+      "label": "Measure with a microphone",
+      "help": "Compares this speaker with another one through your phone or computer microphone. Keep the device still between both speakers.",
+      "needPeer": "Needs a second connected speaker to compare with.",
+      "needHttps": "The browser only allows the microphone over HTTPS or on localhost.",
+      "reference": "Compare with",
+      "start": "Measure",
+      "step": "Measurement {n} of 3: {name}",
+      "not_detected": "The clicks were not heard clearly. Move closer and try again.",
+      "unstable": "The measurements disagreed. Keep the device still and try again.",
+      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s delay to {value} ms?"
+    },
+    "history": {
+      "title": "Recent timing",
+      "syncError": "Sync error {ms} ms",
+      "empty": "No timing samples yet; they appear while the speaker plays.",
+      "buffer": "Buffered audio",
+      "error": "Sync error"
+    }
   }
 }

@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, watch, ref, reactive } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
-import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbToggle } from '@/kit'
+import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import { setAdapterPower } from '@/api/bluetooth'
-import { getConfig, saveConfig } from '@/api/config'
+import { openPairingWindow, reconnectDevice, repairDevice, setPowerSave, unmuteSink } from '@/api/devices'
+import { ApiError } from '@/api/client'
+import DeviceSettingsPanel from './DeviceSettingsPanel.vue'
+import DeviceTimingPanel from './DeviceTimingPanel.vue'
 import type { Device } from '@/api/types'
-import { Power, RotateCw, Save, Info } from 'lucide-vue-next'
+import { Power, RotateCw, Info, MoreHorizontal } from 'lucide-vue-next'
 
 const props = defineProps<{
   deviceId: string | null
@@ -29,16 +32,7 @@ const notifications = useNotificationStore()
 const activeTab = ref('status')
 const adapterLoading = ref(false)
 const managementLoading = ref(false)
-const saving = ref(false)
-const editing = ref(false)
 const btInfoOpen = ref(false)
-
-const editForm = reactive({
-  player_name: '',
-  adapter: '',
-  listen_port: '' as string | number,
-  static_delay_ms: '' as string | number,
-})
 
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
 const released = computed(() => device.value?.bluetooth.management_enabled === false)
@@ -48,23 +42,11 @@ const events = computed(() => device.value?.recent_events ?? [])
 
 const tabs = computed(() => [
   { id: 'status', label: t('drawer.tabs.status') },
-  { id: 'config', label: t('drawer.tabs.config') },
+  { id: 'settings', label: t('drawer.tabs.config') },
+  { id: 'timing', label: t('drawer.tabs.timing') },
   { id: 'events', label: t('drawer.tabs.events'), badge: events.value.length || undefined },
   { id: 'signal', label: t('drawer.tabs.signal') },
 ])
-
-const availableAdapters = computed(() => bridge.adapters.map((a) => a.id))
-
-const configDirty = computed(() => {
-  const d = device.value
-  if (!d) return false
-  return (
-    editForm.player_name !== (d.name ?? '') ||
-    editForm.adapter !== adapterId.value ||
-    String(editForm.listen_port) !== String(d.sendspin.listen_port ?? '') ||
-    String(editForm.static_delay_ms) !== String(d.audio.static_delay_ms ?? '')
-  )
-})
 
 const signalSegments = computed(() => {
   const d = device.value
@@ -109,55 +91,23 @@ function onDrawerUpdate(...args: unknown[]) {
   emit('update:open', Boolean(args[0]))
 }
 
-function startEditing() {
+/** Rarely needed recovery actions, kept in one menu (Music Assistant keeps toolbars minimal). */
+const actionBusy = ref(false)
+async function runAction(kind: 'reconnect' | 'repair' | 'pairing' | 'unmute' | 'release' | 'resume') {
   const d = device.value
   if (!d) return
-  editForm.player_name = d.name ?? ''
-  editForm.adapter = adapterId.value
-  editForm.listen_port = d.sendspin.listen_port ?? ''
-  editForm.static_delay_ms = d.audio.static_delay_ms ?? ''
-  editing.value = true
-}
-
-function cancelEditing() {
-  editing.value = false
-}
-
-/** Edits this speaker's entry in the full configuration and saves the whole document. */
-async function saveDeviceConfig() {
-  const d = device.value
-  const mac = d?.bluetooth.mac?.toUpperCase()
-  if (!d || !mac) return
-  saving.value = true
+  actionBusy.value = true
   try {
-    const config = (await getConfig()) as Record<string, unknown>
-    const entries = ((config.BLUETOOTH_DEVICES as Record<string, unknown>[] | undefined) ?? []).map((entry) => {
-      if (String(entry.mac ?? '').toUpperCase() !== mac) return entry
-      const updated: Record<string, unknown> = { ...entry, player_name: editForm.player_name }
-      if (editForm.adapter) updated.adapter = editForm.adapter
-      else delete updated.adapter
-      if (editForm.listen_port !== '') updated.listen_port = Number(editForm.listen_port)
-      else delete updated.listen_port
-      if (editForm.static_delay_ms !== '') updated.static_delay_ms = Number(editForm.static_delay_ms)
-      return updated
-    })
-    await saveConfig({ ...config, BLUETOOTH_DEVICES: entries } as never)
-    notifications.success(t('drawer.config.saved'))
-    editing.value = false
-  } catch {
-    notifications.error(t('drawer.config.saveFailed'))
+    if (kind === 'reconnect') await reconnectDevice(d.id)
+    else if (kind === 'repair') await repairDevice(d.id)
+    else if (kind === 'pairing') await openPairingWindow(d.id)
+    else if (kind === 'unmute') await unmuteSink(d.id)
+    else await setPowerSave(d.id, kind === 'release')
+    notifications.success(t(`drawer.actions.${kind}Done`))
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('common.error'))
   } finally {
-    saving.value = false
-  }
-}
-
-async function onToggleEnabled() {
-  const d = device.value
-  if (!d) return
-  try {
-    await deviceStore.setEnabled(d.id, !d.enabled)
-  } catch {
-    notifications.error(t('device.actions.enableFailed'))
+    actionBusy.value = false
   }
 }
 
@@ -203,12 +153,6 @@ function onAdapterReboot() {
   void powerCycle([false, true])
 }
 
-watch(
-  () => props.deviceId,
-  () => {
-    editing.value = false
-  },
-)
 </script>
 
 <template>
@@ -290,6 +234,19 @@ watch(
                 </template>
                 {{ t('bluetooth.info') }}
               </SbButton>
+              <SbDropdown align="right" class="ml-auto">
+                <template #trigger>
+                  <SbButton variant="ghost" size="sm" icon :loading="actionBusy" :title="t('drawer.actions.more')">
+                    <MoreHorizontal />
+                  </SbButton>
+                </template>
+                <SbDropdownItem @click="runAction('reconnect')">{{ t('drawer.actions.reconnect') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('repair')">{{ t('drawer.actions.repair') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('pairing')">{{ t('drawer.actions.pairing') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('unmute')">{{ t('drawer.actions.unmute') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
+                <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
+              </SbDropdown>
               <SbBadge v-if="released" tone="warning" size="sm">
                 {{ t('bluetooth.released') }}
               </SbBadge>
@@ -297,126 +254,10 @@ watch(
           </div>
         </template>
 
-        <!-- Config tab -->
-        <template #config>
-          <div class="space-y-4 py-4 text-sm">
-            <!-- Read-only mode -->
-            <div v-if="!editing" class="grid grid-cols-2 gap-3">
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.config.name') }}</span>
-                <p class="mt-1 text-text-primary">{{ device.name }}</p>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.config.mac') }}</span>
-                <p class="mt-1 font-mono text-text-primary">{{ device.bluetooth.mac }}</p>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.config.adapter') }}</span>
-                <p class="mt-1 text-text-primary">{{ adapterId || '—' }}</p>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.config.port') }}</span>
-                <p class="mt-1 text-text-primary">{{ device.sendspin.listen_port ?? '—' }}</p>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.config.delay') }}</span>
-                <p class="mt-1 text-text-primary">
-                  {{ `${device.audio.static_delay_ms} ms` }}
-                </p>
-              </div>
-              <div>
-                <span class="text-text-secondary">{{ t('drawer.config.enabled') }}</span>
-                <div class="mt-1">
-                  <SbToggle
-                    :model-value="device.enabled"
-                    :label="device.enabled ? t('common.yes') : t('common.no')"
-                    @update:model-value="onToggleEnabled"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- Edit mode -->
-            <div v-else class="space-y-3">
-              <div>
-                <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.name') }}</label>
-                <input
-                  v-model="editForm.player_name"
-                  type="text"
-                  class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.mac') }}</label>
-                <p class="mt-1 font-mono text-text-secondary">{{ device.bluetooth.mac }}</p>
-              </div>
-              <div>
-                <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.adapter') }}</label>
-                <select
-                  v-model="editForm.adapter"
-                  class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">{{ t('drawer.config.autoAdapter') }}</option>
-                  <option v-for="a in availableAdapters" :key="a" :value="a">{{ a }}</option>
-                </select>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.port') }}</label>
-                  <input
-                    v-model="editForm.listen_port"
-                    type="number"
-                    class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    :placeholder="t('drawer.config.autoPort')"
-                  />
-                </div>
-                <div>
-                  <label class="mb-1 block text-xs text-text-secondary">{{ t('drawer.config.delay') }}</label>
-                  <input
-                    v-model="editForm.static_delay_ms"
-                    type="number"
-                    class="w-full rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="ms"
-                  />
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-text-secondary">{{ t('drawer.config.enabled') }}</span>
-                <SbToggle
-                  :model-value="device.enabled"
-                  :label="device.enabled ? t('common.yes') : t('common.no')"
-                  @update:model-value="onToggleEnabled"
-                />
-              </div>
-            </div>
-
-            <!-- Edit/Save buttons -->
-            <div class="flex items-center gap-2">
-              <SbButton
-                v-if="!editing"
-                variant="outline"
-                size="sm"
-                @click="startEditing"
-              >
-                {{ t('drawer.config.edit') }}
-              </SbButton>
-              <template v-else>
-                <SbButton
-                  size="sm"
-                  :loading="saving"
-                  :disabled="!configDirty"
-                  @click="saveDeviceConfig"
-                >
-                  <template #icon-left>
-                    <Save class="h-3.5 w-3.5" />
-                  </template>
-                  {{ t('drawer.config.save') }}
-                </SbButton>
-                <SbButton variant="ghost" size="sm" @click="cancelEditing">
-                  {{ t('common.cancel') }}
-                </SbButton>
-              </template>
-            </div>
+        <!-- Settings tab -->
+        <template #settings>
+          <div class="text-sm">
+            <DeviceSettingsPanel :device="device" />
 
             <!-- Adapter management -->
             <div v-if="adapterId" class="border-t border-border pt-3">
@@ -449,6 +290,11 @@ watch(
               </div>
             </div>
           </div>
+        </template>
+
+        <!-- Timing tab -->
+        <template #timing>
+          <DeviceTimingPanel :device="device" />
         </template>
 
         <!-- Events tab -->

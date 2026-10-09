@@ -23,7 +23,7 @@ defineProps<{
       <label :for="$props.for" class="block text-sm font-medium text-text-primary">{{ label }}</label>
       <p v-if="help" :id="helpId" class="mt-0.5 text-[13px] leading-snug text-text-secondary">{{ help }}</p>
     </div>
-    <div class="shrink-0" :class="wide ? 'w-full' : 'sm:max-w-[50%]'">
+    <div class="min-w-0 shrink-0" :class="wide ? 'w-full' : 'sm:max-w-[55%]'">
       <slot />
     </div>
   </div>

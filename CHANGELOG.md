@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Rarely needed options appear under "Show advanced settings".
 - The web interface follows Home Assistant's dark mode and accent colour
   when opened from its sidebar.
+- Each speaker's settings are back in its details panel: name, adapter,
+  room, idle behaviour (power save, disconnect, keep awake and its signal),
+  volume control and player port.
+- A Timing tab per speaker: the delay applies at once, the bridge's
+  suggested delay can be applied in one click, a click track helps compare
+  speakers by ear, a microphone measurement compares two speakers and sets
+  the later one's delay, and recent buffer and sync-error history is drawn.
+- Recovery actions per speaker — reconnect, pair again, let Music
+  Assistant pair, unmute the audio output, release or resume audio — in
+  the details panel's menu.
 
 ### Changed
 
