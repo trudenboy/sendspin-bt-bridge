@@ -36,7 +36,9 @@ def _fake_wget(bin_dir: Path, fetched_script: str) -> None:
     wget.chmod(wget.stat().st_mode | stat.S_IEXEC)
 
 
-def _run(tmp_path: Path, args: list[str], env_extra: dict[str, str] | None = None, fetched: str = "") -> subprocess.CompletedProcess:
+def _run(
+    tmp_path: Path, args: list[str], env_extra: dict[str, str] | None = None, fetched: str = ""
+) -> subprocess.CompletedProcess:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     _fake_wget(bin_dir, fetched)
