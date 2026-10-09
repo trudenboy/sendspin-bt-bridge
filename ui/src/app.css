@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Brand colors — mapped from current CSS vars */
+  --color-primary: #03a9f4;
+  --color-primary-dark: #0288d1;
+  --color-accent: #ff9800;
+
+  /* Semantic colors */
+  --color-success: #43a047;
+  --color-warning: #ffa600;
+  --color-error: #db4437;
+  --color-info: #039be5;
+
+  /* Surfaces — light */
+  --color-surface: #fafafa;
+  --color-surface-secondary: #e5e5e5;
+  --color-surface-card: #ffffff;
+
+  /* Text — light */
+  --color-text-primary: #212121;
+  --color-text-secondary: #727272;
+  --color-text-disabled: #bdbdbd;
+
+  /* Code */
+  --color-code-bg: #1e293b;
+  --color-code-text: #e2e8f0;
+
+  /* Shared tokens */
+  --radius-card: 12px;
+  --radius-badge: 999px;
+  --radius-button: 8px;
+  --radius-input: 8px;
+
+  /* Font stack (same as current) */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial,
+    sans-serif;
+  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas,
+    monospace;
+}
+
+/* Dark mode overrides — using Tailwind v4 @custom-variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Badge tone system */
+@utility tone-success {
+  background-color: rgb(67 160 71 / 0.12);
+  color: var(--color-success);
+}
+
+@utility tone-warning {
+  background-color: rgb(255 166 0 / 0.12);
+  color: var(--color-warning);
+}
+
+@utility tone-error {
+  background-color: rgb(219 68 55 / 0.12);
+  color: var(--color-error);
+}
+
+@utility tone-info {
+  background-color: rgb(3 155 229 / 0.12);
+  color: var(--color-info);
+}
+
+@utility tone-neutral {
+  background-color: rgb(107 114 128 / 0.1);
+  color: var(--color-text-secondary);
+}
+
+/* Base styles */
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
+}

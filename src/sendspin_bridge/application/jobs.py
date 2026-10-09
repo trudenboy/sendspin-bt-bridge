@@ -16,9 +16,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from sendspin_bridge.application.errors import UseCaseError
+from sendspin_bridge.application.models.base import ResponseModel
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +28,13 @@ JobStatus = Literal["running", "succeeded", "failed", "cancelled"]
 _TTL_S = 600.0
 
 
-class JobError(BaseModel):
+class JobError(ResponseModel):
     code: str
     detail: str | None = None
     status: int = 500
 
 
-class Job(BaseModel):
+class Job(ResponseModel):
     id: str
     kind: str = Field(description="What the job does, e.g. bluetooth.scan, bluetooth.pairing, updates.check.")
     status: JobStatus = "running"

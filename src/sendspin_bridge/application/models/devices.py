@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+
+from sendspin_bridge.application.models.base import ResponseModel
 
 IdleMode = Literal["default", "power_save", "auto_disconnect", "keep_alive"]
 
@@ -21,19 +23,19 @@ def _int_or(value: Any, default: int) -> int:
         return default
 
 
-class AdapterRef(BaseModel):
+class AdapterRef(ResponseModel):
     mac: str | None = None
     hci: str = ""
     name: str | None = None
 
 
-class PairFailure(BaseModel):
+class PairFailure(ResponseModel):
     kind: str
     adapter_mac: str | None = None
     at: str | None = None
 
 
-class AdapterRecovery(BaseModel):
+class AdapterRecovery(ResponseModel):
     stage: str = "idle"
     last_at: str | None = None
     adapter: str | None = None
@@ -41,7 +43,7 @@ class AdapterRecovery(BaseModel):
     failure_reason: str | None = None
 
 
-class DeviceBluetooth(BaseModel):
+class DeviceBluetooth(ResponseModel):
     mac: str | None = None
     adapter: AdapterRef
     available: bool = False
@@ -70,7 +72,7 @@ class DeviceBluetooth(BaseModel):
     adapter_recovery: AdapterRecovery
 
 
-class DeviceAudio(BaseModel):
+class DeviceAudio(ResponseModel):
     sink_name: str | None = None
     has_sink: bool = False
     volume: int = 100
@@ -86,7 +88,7 @@ class DeviceAudio(BaseModel):
     static_delay_codec: str | None = None
 
 
-class LatencySuggestion(BaseModel):
+class LatencySuggestion(ResponseModel):
     suggested_static_delay_ms: int | None = None
     source: str = "unavailable"
     confidence: str = "none"
@@ -95,7 +97,7 @@ class LatencySuggestion(BaseModel):
     double_count_risk: bool = False
 
 
-class DeviceTiming(BaseModel):
+class DeviceTiming(ResponseModel):
     available: bool = False
     sampled_at: str | None = None
     backend_output_latency_ms: float | None = None
@@ -118,7 +120,7 @@ class DeviceTiming(BaseModel):
     latency_suggestion: LatencySuggestion
 
 
-class Track(BaseModel):
+class Track(ResponseModel):
     title: str | None = None
     artist: str | None = None
     album: str | None = None
@@ -130,14 +132,14 @@ class Track(BaseModel):
     duration_ms: int | None = None
 
 
-class DeviceGroupRef(BaseModel):
+class DeviceGroupRef(ResponseModel):
     id: str | None = None
     name: str | None = None
     volume: int | None = None
     muted: bool | None = None
 
 
-class DevicePlayback(BaseModel):
+class DevicePlayback(ResponseModel):
     playing: bool = False
     connected: bool = False
     server_connected: bool = False
@@ -151,7 +153,7 @@ class DevicePlayback(BaseModel):
     group: DeviceGroupRef
 
 
-class DeviceSendspin(BaseModel):
+class DeviceSendspin(ResponseModel):
     client_id: str | None = Field(default=None, description="Sendspin client id (Music Assistant player id).")
     listen_port: int | None = None
     active_listen_port: int | None = None
@@ -166,20 +168,20 @@ class DeviceSendspin(BaseModel):
     daemon_recurring_lifetime_s: float | None = None
 
 
-class DeviceMusicAssistant(BaseModel):
+class DeviceMusicAssistant(ResponseModel):
     syncgroup_id: str | None = None
     reconnecting: bool = False
     now_playing: dict[str, Any] | None = None
 
 
-class DeviceRoom(BaseModel):
+class DeviceRoom(ResponseModel):
     id: str | None = None
     name: str | None = None
     source: str | None = None
     confidence: str | None = None
 
 
-class DeviceHealth(BaseModel):
+class DeviceHealth(ResponseModel):
     state: str = "unknown"
     severity: str = "info"
     summary: str = ""
@@ -187,7 +189,7 @@ class DeviceHealth(BaseModel):
     last_event_at: str | None = None
 
 
-class Device(BaseModel):
+class Device(ResponseModel):
     id: str = Field(description="Stable player id (UUID derived from the speaker's MAC).")
     name: str | None = None
     enabled: bool = True
@@ -358,10 +360,10 @@ class Device(BaseModel):
         )
 
 
-class DisabledDevice(BaseModel):
+class DisabledDevice(ResponseModel):
     """A configured speaker the bridge is not running (``enabled: false``)."""
 
-    model_config = {"extra": "allow"}
+    model_config = ConfigDict(extra="allow", json_schema_serialization_defaults_required=True)
 
     mac: str | None = None
     player_name: str | None = None

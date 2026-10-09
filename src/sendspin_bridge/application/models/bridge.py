@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
 
+from sendspin_bridge.application.models.base import ResponseModel
 from sendspin_bridge.application.models.devices import Device, DisabledDevice
 
 
-class GroupMember(BaseModel):
+class GroupMember(ResponseModel):
     player_id: str
     player_name: str | None = None
     volume: int = 0
@@ -19,7 +20,7 @@ class GroupMember(BaseModel):
     bluetooth_connected: bool = False
 
 
-class Group(BaseModel):
+class Group(ResponseModel):
     """A Music Assistant sync group, or a solo speaker as a group of one (``id`` is null)."""
 
     id: str | None = None
@@ -45,8 +46,8 @@ class Group(BaseModel):
         )
 
 
-class StartupProgress(BaseModel):
-    model_config = {"extra": "allow"}
+class StartupProgress(ResponseModel):
+    model_config = ConfigDict(extra="allow", json_schema_serialization_defaults_required=True)
 
     status: str
     phase: str
@@ -57,8 +58,8 @@ class StartupProgress(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class UpdateInfo(BaseModel):
-    model_config = {"extra": "allow"}
+class UpdateInfo(ResponseModel):
+    model_config = ConfigDict(extra="allow", json_schema_serialization_defaults_required=True)
 
     version: str
     tag: str | None = None
@@ -70,7 +71,7 @@ class UpdateInfo(BaseModel):
     body: str | None = None
 
 
-class Bridge(BaseModel):
+class Bridge(ResponseModel):
     version: str
     build_date: str
     hostname: str = ""
@@ -97,7 +98,7 @@ class Bridge(BaseModel):
     recovery: dict[str, Any] | None = None
 
 
-class BridgeStatus(BaseModel):
+class BridgeStatus(ResponseModel):
     """Everything the dashboard renders, in one document (also the ``status`` event)."""
 
     bridge: Bridge

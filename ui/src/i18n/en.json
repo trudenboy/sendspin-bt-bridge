@@ -1,0 +1,473 @@
+{
+  "app": {
+    "title": "Sendspin Bridge",
+    "dashboard": "Dashboard",
+    "devices": "Devices",
+    "config": "Configuration",
+    "diagnostics": "Diagnostics",
+    "ma": "Music Assistant"
+  },
+  "header": {
+    "viewRelease": "View release on GitHub",
+    "uptime": "Uptime",
+    "hourShort": "h",
+    "minShort": "m",
+    "secShort": "s",
+    "healthGood": "All systems OK",
+    "healthDegraded": "Some devices degraded",
+    "healthError": "Devices offline",
+    "healthUnknown": "No devices",
+    "bugReport": "Bug report",
+    "docs": "Documentation",
+    "github": "GitHub repository",
+    "toggleMenu": "Toggle menu"
+  },
+  "device": {
+    "status": {
+      "streaming": "Streaming",
+      "ready": "Ready",
+      "connecting": "Connecting",
+      "error": "Error",
+      "offline": "Offline",
+      "standby": "Standby",
+      "idle": "Idle",
+      "degraded": "Degraded",
+      "recovering": "Recovering",
+      "transitioning": "Changing",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "remove": "Remove",
+      "wake": "Wake",
+      "standby": "Standby",
+      "enable": "Enable",
+      "disable": "Disable",
+      "details": "Details",
+      "enableFailed": "Failed to toggle device",
+      "forget": "Forget Bluetooth bond",
+      "forgetConfirm": "Forget the Bluetooth bond? The speaker must be paired again.",
+      "repair": "Pair again",
+      "claim": "Claim audio",
+      "reconnectFailed": "Reconnect failed"
+    },
+    "battery": "Battery {level}%",
+    "reanchored": "Reanchored ×{count}",
+    "backend": {
+      "bluetooth_a2dp": "Bluetooth A2DP",
+      "local_sink": "Local Audio",
+      "usb_audio": "USB Audio",
+      "virtual_sink": "Virtual Sink",
+      "snapcast_client": "Snapcast",
+      "vban": "VBAN",
+      "le_audio": "LE Audio"
+    },
+    "adapter": "Adapter {name}",
+    "released": "Released"
+  },
+  "config": {
+    "general": "General",
+    "audio": "Audio",
+    "bluetooth": "Bluetooth",
+    "ma": "Music Assistant",
+    "security": "Security",
+    "advanced": "Advanced",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Configuration saved",
+    "unsaved": "Unsaved changes",
+    "reset": "Reset",
+    "validate": "Validate",
+    "validateConfig": "Validate Configuration",
+    "validationOk": "Configuration is valid",
+    "validationResults": "Validation Results",
+    "configValid": "Configuration is valid",
+    "bridgeName": "Bridge Name",
+    "bridgeNameHint": "Auto-populated from hostname if left empty",
+    "timezone": "Timezone",
+    "webPort": "Web Port",
+    "logLevel": "Log Level",
+    "pulseLatency": "Pulse Latency",
+    "pulseLatencyHint": "PulseAudio buffer latency in milliseconds",
+    "pulseLatencyUnit": "ms",
+    "preferSbc": "Prefer SBC Codec",
+    "preferSbcHint": "Use SBC codec instead of higher quality codecs for better compatibility",
+    "staticDelay": "Static Audio Delay",
+    "staticDelayHint": "Negative delay in milliseconds to compensate for Bluetooth latency",
+    "btCheckInterval": "BT Check Interval",
+    "btCheckIntervalHint": "How often to check Bluetooth connection status",
+    "btCheckIntervalUnit": "seconds",
+    "btMaxReconnect": "Max Reconnect Failures",
+    "btMaxReconnectHint": "Stop reconnecting after this many consecutive failures",
+    "managementMode": "Management Mode",
+    "adapterList": "Bluetooth Adapters",
+    "adapterPowered": "Powered",
+    "adapterOff": "Off",
+    "noAdapters": "No adapters detected",
+    "maServer": "MA Server URL",
+    "maServerHint": "Use 'auto' for mDNS discovery",
+    "maPort": "MA Port",
+    "autoDiscovery": "Auto-Discovery",
+    "autoDiscoveryHint": "Automatically discover Music Assistant server via mDNS",
+    "connectionStatus": "Connection Status",
+    "maConnected": "Connected",
+    "maDisconnected": "Disconnected",
+    "enablePassword": "Enable Password Protection",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "changePassword": "Change Password",
+    "passwordMismatch": "Passwords do not match",
+    "haAuthInfo": "When running as a Home Assistant addon, authentication is handled by HA",
+    "rawJson": "Raw JSON",
+    "rawJsonWarning": "Editing raw JSON can break your configuration. Proceed with caution.",
+    "invalidJson": "Invalid JSON",
+    "uploadConfig": "Upload Config",
+    "downloadConfig": "Download Config",
+    "saveAndRestart": "Save & Restart",
+    "editAdapterName": "Edit adapter name",
+    "latencyPresets": "Latency Presets",
+    "latencyLow": "Low (200ms)",
+    "latencyStandard": "Standard (500ms)",
+    "latencyHigh": "High (800ms)",
+    "latencyCustom": "Custom"
+  },
+  "diagnostics": {
+    "tabs": {
+      "health": "Health",
+      "events": "Events",
+      "recovery": "Recovery",
+      "bugreport": "Bug Report",
+      "logs": "Logs"
+    },
+    "health": {
+      "title": "Bridge Health",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "error": "Error",
+      "unknown": "Unknown",
+      "audio": "Audio Backend",
+      "bluetooth": "BT Controller",
+      "dbus": "D-Bus",
+      "memory": "Memory"
+    },
+    "events": {
+      "loadMore": "Load more",
+      "empty": "No events",
+      "emptyDesc": "No events have been recorded yet."
+    },
+    "recovery": {
+      "title": "Recovery Guidance",
+      "runChecks": "Run Checks",
+      "noIssues": "All clear",
+      "noIssuesDesc": "No issues detected. All systems are operating normally."
+    },
+    "copy": "Copy",
+    "copied": "Copied!",
+    "copyFailed": "Copy failed",
+    "downloadCsv": "Download CSV",
+    "audioRouting": "Audio Routing",
+    "audioSink": "Audio Sink",
+    "codec": "Codec",
+    "sampleRate": "Sample Rate",
+    "reanchorCount": "Routing Corrections",
+    "bugreport": {
+      "systemInfo": "System Information",
+      "version": "Version",
+      "buildDate": "Build Date",
+      "adapters": "Adapters",
+      "devices": "Devices",
+      "maConnected": "MA Connected",
+      "download": "Download Bug Report",
+      "copy": "Copy to Clipboard",
+      "howToFile": "How to File a Bug Report",
+      "step1": "Download the bug report using the button above.",
+      "step2": "Describe the issue and steps to reproduce.",
+      "step3": "Open a new issue on"
+    },
+    "logs": {
+      "title": "Application Logs",
+      "logLevel": "Log Level",
+      "autoScroll": "Auto-scroll",
+      "refresh": "Refresh",
+      "download": "Download",
+      "apply": "Apply",
+      "search": "Search logs…",
+      "showingLines": "Showing {shown} of {total} lines",
+      "noLogs": "No log entries"
+    }
+  },
+  "ma": {
+    "connection": {
+      "title": "Connection Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
+    "login": {
+      "title": "Connect to Music Assistant",
+      "step1": "Step 1: Server Address",
+      "step2": "Step 2: Sign in with your Music Assistant account",
+      "serverUrl": "Server URL",
+      "serverUrlPlaceholder": "http://192.168.1.100:8095",
+      "discover": "Auto-Discover",
+      "token": "Token",
+      "tokenPlaceholder": "Enter HA token or MA API key",
+      "submit": "Connect",
+      "failed": "Connection failed. Check your credentials.",
+      "username": "Username",
+      "password": "Password",
+      "withHa": "Sign in with Home Assistant",
+      "connected": "Connected to {url}"
+    },
+    "groups": {
+      "members": "members",
+      "empty": "No Sync Groups",
+      "emptyDesc": "No Music Assistant sync groups found. Discover groups to get started.",
+      "discover": "Discover Groups"
+    },
+    "nowPlaying": {
+      "artwork": "Album artwork",
+      "artworkPreview": "Artwork Preview",
+      "artworkClose": "Close",
+      "noTrack": "Nothing playing",
+      "prev": "Previous track",
+      "playPause": "Play / Pause",
+      "next": "Next track"
+    },
+    "autoConnecting": "Connecting to Music Assistant...",
+    "openInMA": "Open in Music Assistant",
+    "silentAuthFailed": "Auto-connect failed, please log in manually"
+  },
+  "login": {
+    "title": "Sign In",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "submit": "Sign In",
+    "failed": "Invalid password. Please try again.",
+    "haAuthenticated": "Authenticated via Home Assistant",
+    "username": "Username",
+    "code": "Authentication code",
+    "codePrompt": "Enter the code from {module}",
+    "codeSubmit": "Verify",
+    "method": {
+      "password": "Bridge password",
+      "ma": "Music Assistant account",
+      "ha_via_ma": "Home Assistant account",
+      "ha": "Home Assistant account"
+    }
+  },
+  "dashboard": {
+    "bridge": "Bridge",
+    "adapters": "Adapters",
+    "devices": "Devices",
+    "maStatus": "Music Assistant",
+    "maConnected": "Connected",
+    "maDisconnected": "Disconnected",
+    "empty": {
+      "title": "No devices configured",
+      "description": "Add a Bluetooth speaker or audio device to get started."
+    },
+    "onboarding": {
+      "title": "Getting Started",
+      "addSpeaker": "Add your first Bluetooth speaker",
+      "connectMA": "Connect to Music Assistant",
+      "configure": "Configure settings",
+      "dismiss": "Dismiss"
+    }
+  },
+  "devices": {
+    "addDevice": "Add Device",
+    "empty": {
+      "title": "No devices yet",
+      "description": "Scan for Bluetooth devices or add a device manually."
+    },
+    "viewGrid": "Grid view",
+    "viewList": "List view",
+    "allAdapters": "All adapters",
+    "allGroups": "All groups",
+    "selected": "{count} of {total} selected",
+    "noneSelected": "0 selected",
+    "selectAll": "Select all",
+    "groupVolume": "Group volume",
+    "muteAll": "Mute all",
+    "pauseAll": "Pause all",
+    "reconnectAll": "Reconnect all",
+    "actionFailed": "Action failed",
+    "list": {
+      "name": "Name",
+      "status": "Status",
+      "volume": "Volume",
+      "transport": "Transport",
+      "adapter": "Adapter",
+      "actions": "Actions"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "status": "Status",
+      "config": "Config",
+      "events": "Events",
+      "signal": "Signal Path"
+    },
+    "status": {
+      "playerState": "State",
+      "backendType": "Backend",
+      "audioSink": "Audio Sink",
+      "connected": "Connected",
+      "codec": "Codec",
+      "sampleRate": "Sample Rate"
+    },
+    "config": {
+      "name": "Name",
+      "mac": "MAC Address",
+      "adapter": "Adapter",
+      "port": "Listen Port",
+      "delay": "Static Delay",
+      "enabled": "Enabled",
+      "edit": "Edit",
+      "save": "Save",
+      "saved": "Device configuration saved",
+      "saveFailed": "Failed to save configuration",
+      "autoAdapter": "Auto (default)",
+      "autoPort": "Auto"
+    },
+    "events": {
+      "empty": "No events recorded"
+    },
+    "signal": {
+      "subprocess": "Subprocess"
+    }
+  },
+  "volume": {
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
+  "bluetooth": {
+    "scan": {
+      "title": "Bluetooth Scan",
+      "description": "Scan for nearby Bluetooth audio devices.",
+      "start": "Start Scan",
+      "scanning": "Scanning…",
+      "pair": "Pair",
+      "paired": "Paired",
+      "audio": "Audio",
+      "unknown": "Unknown Device",
+      "noDevices": "No devices found",
+      "adapter": "Adapter",
+      "pairAndAdd": "Pair & add",
+      "add": "Add",
+      "added": "On this bridge",
+      "addedToast": "{name} added — the player starts in a moment",
+      "pairFailed": "Pairing failed: {reason}",
+      "advanced": "Compatibility options",
+      "quiesce": "Temporarily disconnect other speakers on this adapter while pairing",
+      "noIo": "Pair without a PIN prompt (Just Works) — for speakers that cancel pairing",
+      "hfp": "Also allow the hands-free profile (calls)",
+      "hint": "Put the speaker in pairing mode first."
+    },
+    "signal": {
+      "strong": "Strong",
+      "medium": "Medium",
+      "weak": "Weak"
+    },
+    "paired": "Paired Devices",
+    "audioOnly": "Audio only",
+    "allDevices": "All devices",
+    "audioCount": "{audio} audio · {total} total",
+    "addToFleet": "Add to fleet",
+    "info": "Device Info",
+    "release": "Release",
+    "reclaim": "Reclaim",
+    "released": "Released",
+    "resetReconnect": "Reset & Reconnect",
+    "deviceInfo": "Bluetooth Device Info",
+    "noDevices": "No paired devices found"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "search": "Search",
+    "noResults": "No results",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "update": {
+    "title": "Software Update",
+    "available": "Update available",
+    "badge": "Update v{version}",
+    "checkNow": "Check for updates",
+    "upToDate": "You are running the latest version",
+    "versionCompare": "Version update",
+    "instructions": "Update Instructions",
+    "releaseNotes": "Release Notes",
+    "recheck": "Re-check",
+    "viewRelease": "Release Notes",
+    "applyNow": "Update Now",
+    "applyStarted": "Update started — the bridge will restart shortly",
+    "openHa": "Update in HA",
+    "copyCommand": "Copy command",
+    "checking": "Checking for updates…",
+    "channel": "Channel",
+    "checkChannel": "Check"
+  },
+  "transport": {
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next track",
+    "previous": "Previous track",
+    "failed": "Transport command failed",
+    "progress": "Playback progress"
+  },
+  "adapter": {
+    "management": "Adapter Management",
+    "togglePower": "Power",
+    "reboot": "Reboot",
+    "powerToggled": "Adapter power toggled",
+    "powerFailed": "Failed to toggle adapter power",
+    "rebooted": "Adapter rebooted",
+    "rebootFailed": "Failed to reboot adapter"
+  },
+  "restart": {
+    "stopping": "Stopping bridge…",
+    "restarting": "Restarting bridge…",
+    "ready": "Bridge restarted successfully",
+    "error": "Restart failed",
+    "elapsed": "{seconds}s"
+  },
+  "bugreport": {
+    "title": "File a Bug Report",
+    "fileReport": "File Bug Report",
+    "fields": {
+      "title": "Issue Title",
+      "titlePlaceholder": "Brief description of the issue",
+      "description": "Description",
+      "descPlaceholder": "What happened? What did you expect instead?",
+      "email": "Your Email (for follow-up)"
+    },
+    "errors": {
+      "titleShort": "Title must be at least 5 characters",
+      "descShort": "Description must be at least 10 characters",
+      "emailInvalid": "Please enter a valid email address"
+    },
+    "method": {
+      "github": "GitHub",
+      "proxy": "Submit",
+      "copy": "Copy"
+    },
+    "diagnosticsPreview": "Diagnostic data",
+    "autoAttached": "auto-attached",
+    "loadingDiagnostics": "Loading diagnostics...",
+    "loadFailed": "Failed to load diagnostic data",
+    "submit": "Submit Report",
+    "download": "Download",
+    "submitted": "Bug report submitted successfully",
+    "submitFailed": "Failed to submit bug report",
+    "copied": "Report copied to clipboard",
+    "copyFailed": "Failed to copy to clipboard"
+  }
+}
