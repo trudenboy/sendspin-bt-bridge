@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { safeHttpUrl } from '@/utils/safeUrl'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfigStore } from '@/stores/config'
@@ -110,7 +111,7 @@ const publisherTone = computed(() =>
         :label="t('settings.parts.ha.mosquitto')"
         :help="t('settings.parts.ha.mosquittoMissing')"
       >
-        <a :href="mosquitto.install_url" target="_blank" rel="noopener" class="text-sm font-medium text-primary hover:underline">
+        <a v-if="safeHttpUrl(mosquitto.install_url)" :href="safeHttpUrl(mosquitto.install_url)!" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-primary hover:underline">
           {{ t('settings.parts.ha.install') }}
         </a>
       </SettingsRow>
@@ -138,10 +139,10 @@ const publisherTone = computed(() =>
       >
         <SbBadge v-if="component?.installed" tone="success" dot>{{ t('settings.parts.ha.connected') }}</SbBadge>
         <a
-          v-else-if="component?.install_url"
-          :href="component.install_url"
+          v-else-if="safeHttpUrl(component?.install_url)"
+          :href="safeHttpUrl(component?.install_url)!"
           target="_blank"
-          rel="noopener"
+          rel="noopener noreferrer"
           class="text-sm font-medium text-primary hover:underline"
         >{{ t('settings.parts.ha.installHacs') }}</a>
       </SettingsRow>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openExternal } from '@/utils/safeUrl'
 import type { UpdateChannel } from '@/api/updates'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -52,7 +53,7 @@ function copyCommand() {
 
 function openRelease() {
   if (update.info?.url) {
-    window.open(update.info.url, '_blank', 'noopener')
+    openExternal(update.info.url)
   }
 }
 

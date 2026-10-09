@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openExternal } from '@/utils/safeUrl'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
@@ -19,9 +20,7 @@ function toggleGroup(groupId: string) {
 
 function openInMA(groupId: string) {
   const baseUrl = bridge.bridge?.ma_web_url
-  if (baseUrl) {
-    window.open(`${baseUrl}/#/player/${groupId}`, '_blank', 'noopener')
-  }
+  if (baseUrl) openExternal(`${baseUrl.replace(/\/$/, '')}/#/player/${encodeURIComponent(groupId)}`)
 }
 
 async function discoverGroups() {

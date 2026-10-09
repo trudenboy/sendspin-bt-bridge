@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openExternal } from '@/utils/safeUrl'
 import { ApiError } from '@/api/client'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -144,7 +145,7 @@ async function submitViaProxy() {
       diagnostics_text: report.value?.text_full,
     })
     notifications.success(t('bugreport.submitted'))
-    window.open(result.issue_url, '_blank')
+    openExternal(result.issue_url)
     model.value = false
   } catch (e) {
     notifications.error(e instanceof ApiError ? e.message : t('bugreport.submitFailed'))

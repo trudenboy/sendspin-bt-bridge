@@ -6,7 +6,6 @@ import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import {
   SbCard,
-  SbSpinner,
   SbEmptyState,
   SbFilterBar,
   SbBadge,
@@ -69,8 +68,9 @@ function openDetail(mac: string) {
     </h1>
 
     <!-- Loading state -->
-    <div v-if="bridge.loading" class="flex flex-col items-center justify-center py-20">
-      <SbSpinner size="lg" :label="t('common.loading')" />
+    <!-- Placeholders keep the layout still while the first status arrives -->
+    <div v-if="bridge.loading" class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4" aria-busy="true" :aria-label="t('common.loading')">
+      <div v-for="n in 3" :key="n" class="h-36 animate-pulse rounded-(--radius-card) border border-border bg-surface-card" />
     </div>
 
     <template v-else>

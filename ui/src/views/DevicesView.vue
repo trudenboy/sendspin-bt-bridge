@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
-import { SbFilterBar, SbButton, SbSpinner, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
+import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
@@ -141,8 +141,9 @@ function openDetail(id: string) {
     </div>
 
     <!-- Loading -->
-    <div v-if="bridge.loading" class="flex flex-col items-center justify-center py-20">
-      <SbSpinner size="lg" :label="t('common.loading')" />
+    <!-- Placeholders keep the layout still while the first status arrives -->
+    <div v-if="bridge.loading" class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4" aria-busy="true" :aria-label="t('common.loading')">
+      <div v-for="n in 3" :key="n" class="h-36 animate-pulse rounded-(--radius-card) border border-border bg-surface-card" />
     </div>
 
     <template v-else>

@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- On a touch screen a tap on a volume bar changes the volume by one step
+  toward the tap instead of jumping to the tapped level; dragging works as
+  before. A stray touch can no longer turn a speaker up to full volume.
+- Links that come from the bridge or Music Assistant (update notes, add-on
+  install pages, Music Assistant's player page, filed bug reports) open
+  only when they are ordinary web addresses.
 - The web interface uses Home Assistant's colours, type and card shapes
   and Music Assistant's buttons, so it looks at home next to both.
 
