@@ -95,6 +95,11 @@ and add-on option translation is generated from them, replacing
 `BLUETOOTH_DEVICES` with `players[]`; v5 → v6 migrates on load. With the legacy
 UI gone there is no writer of the v5 shape left to stay compatible with.
 
+*Amended 2026-10-09:* the first v3 beta keeps schema v5 — the models are
+generated from it — and v6 follows in the parity stage with the settings
+screens that edit it. API v1 does not expose the file layout, so the change
+stays internal.
+
 ### 6. Clients
 
 * **SPA:** TypeScript client generated from the checked-in OpenAPI

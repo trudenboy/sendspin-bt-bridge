@@ -20,6 +20,15 @@ RUN pip install --no-cache-dir --root-user-action=ignore "uv==0.12.5" && \
 
 FROM ${UV_STAGE} AS uv-source
 
+# The web UI (Vue SPA). JavaScript is architecture-independent, so it is
+# built once on the build host and copied into every platform's image.
+FROM --platform=$BUILDPLATFORM node:22.20.0-slim AS ui
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY ui/ ./
+RUN npm run build
+
 FROM python:3.13-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -69,6 +78,7 @@ RUN if [ "${TARGETARCH}${TARGETVARIANT}" = "armv7" ]; then \
 # /install prefix the runtime stage will pick up via `COPY --from=builder`.
 # --no-deps because everything is already in layer 1.
 COPY src/ /build/src/
+COPY --from=ui /ui/dist /build/src/sendspin_bridge/spa
 COPY pyproject.toml VERSION /build/
 RUN uv pip install --system --no-cache --no-deps --prefix=/install /build
 

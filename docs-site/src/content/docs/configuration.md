@@ -384,7 +384,6 @@ These are the most commonly used overrides. `CONFIG_DIR` always determines where
 | `TZ` | from config | Timezone override applied when the runtime initializes local time handling |
 | `BRIDGE_NAME` | from config | Optional bridge-name override before a stored name exists |
 | `LOG_LEVEL` | `INFO` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. Also settable via config or web UI |
-| `WEB_THREADS` | `8` | Waitress HTTP worker thread count; increase to `16` for 20+ devices |
 | `DEMO_MODE` | *(unset)* | Set to `1`, `true`, or `yes` to run in demo/simulation mode without real Bluetooth hardware |
 | `SENDSPIN_NAME` | `Sendspin-{hostname}` | Override the default player name prefix |
 | `SENDSPIN_STATIC_DELAY_MS` | `0` | Global static audio delay override in milliseconds (0–5 000). Values outside the range are clamped; legacy negative defaults are no longer accepted by sendspin 7.0+. |

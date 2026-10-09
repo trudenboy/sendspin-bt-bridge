@@ -14,8 +14,11 @@ patches/
 .wrangler/
 .understand-anything/
 
-# Dev UI source / scratch / sibling CLI — none are runtime deps
-ui/
+# The SPA sources are built in the image's ui stage; their local build
+# output and dependencies are not context.
+ui/node_modules/
+ui/dist/
+ui/tests/
 sendspin-cli/
 rnd/
 

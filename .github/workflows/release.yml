@@ -507,14 +507,58 @@ jobs:
               await github.rest.repos.createRelease({ ...payload, generate_release_notes: false });
             }
 
+      - name: Set up Node (web UI for the source tarball)
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
       - name: Upload source tarball
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          TARBALL="sendspin-bt-bridge-${VERSION}.tar.gz"
-          git archive --format=tar.gz --prefix="sendspin-bt-bridge-${VERSION}/" "${TAG}" -o "${TARBALL}"
+          TARBALL="$(scripts/build_release_tarball.sh "${TAG}" "${VERSION}" | tail -n 1)"
+          gh release upload "${TAG}" "${TARBALL}" --clobber
+
+  # ── 8b. Pre-release source tarball (rc / beta) ──────────────────
+  # LXC installs of a pre-release download the tagged tarball (with the
+  # compiled web UI) from a GitHub pre-release that carries only that
+  # asset; the release notes stay with the stable releases.
+  prerelease-tarball:
+    needs: [prepare, addon-sync]
+    if: needs.prepare.outputs.is_stable != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all tags
+        run: git fetch --force --tags
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Create the pre-release and upload the tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          TARBALL="$(scripts/build_release_tarball.sh "${TAG}" "${VERSION}" | tail -n 1)"
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --prerelease --latest=false --verify-tag \
+              --title "${TAG}" \
+              --notes "Pre-release ${VERSION}. Installs and updates use the image or this tarball; see CHANGELOG.md for what changed."
+          fi
           gh release upload "${TAG}" "${TARBALL}" --clobber
 
   # ── 9. ARMv7 build (stable only) ────────────────────────────────

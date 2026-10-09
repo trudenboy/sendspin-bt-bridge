@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Dockerized Python client that bridges Music Assistant's Sendspin protocol to Bluetooth speakers, with a Flask web UI for configuration and status monitoring. Designed for headless systems (Raspberry Pi, Home Assistant, Proxmox LXC, OpenWrt LXC).
+A Dockerized Python client that bridges Music Assistant's Sendspin protocol to Bluetooth speakers, with a FastAPI API (v1) and a Vue SPA for configuration and status monitoring. Designed for headless systems (Raspberry Pi, Home Assistant, Proxmox LXC, OpenWrt LXC).
 
 ## Development Commands
 
@@ -129,7 +129,7 @@ Use **red/green TDD** for all new features and bug fixes:
 **Subprocess isolation**: each Bluetooth speaker runs as a dedicated Python subprocess (`services/daemon_process.py`) with `PULSE_SINK=<bt_sink_name>` in env. This gives every speaker its own PulseAudio context → correct audio routing from the first sample, no `move-sink-input` needed.
 
 ```
-main process (Flask API, BT manager, web UI)
+main process (FastAPI on the bridge loop, BT manager, SPA)
     ├── asyncio subprocess (PULSE_SINK=bluez_sink.AA_BB...) → daemon_process.py
     ├── asyncio subprocess (PULSE_SINK=bluez_sink.CC_DD...) → daemon_process.py
     └── ...
@@ -140,18 +140,18 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 **`sendspin_client.py`** — core orchestration per device:
 - `DeviceStatus` — `@dataclass` typed per-device status; dict-compatible (`["key"]`, `.get()`, `.update()`, `.copy()`). Includes `rssi_dbm`, `reanchoring`, `reanchor_count`, `last_sync_error_ms`, `last_reanchor_at`.
 - `SendspinClient` — manages the per-device subprocess lifecycle. Implements the `BluetoothManagerHost` Protocol from `bt_types.py`. Spawns `services/daemon_process.py` with correct `PULSE_SINK` env var. Reads JSON status from subprocess stdout, sends volume/stop commands via stdin.
-- `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and Flask WSGI threads; calls `notify_status_changed()` after each mutation
+- `_status_lock = threading.Lock()` + `_update_status(updates)` — thread-safe status mutation from asyncio loop, D-Bus callback thread, and API worker threads; calls `notify_status_changed()` after each mutation
 - `idle_mode` — per-device enum (`default`|`power_save`|`auto_disconnect`|`keep_alive`). Dispatches idle behavior: power_save suspends PA sink, auto_disconnect enters standby, keep_alive sends 2 Hz infrasound bursts (or silence/none, see `keep_alive_method`)
 - `_start_power_save_timer()` / `_enter_power_save()` / `_exit_power_save()` — PA sink suspend/resume for power_save mode
 - `_start_sendspin_inner()` — subprocess spawn with `PULSE_SINK` and JSON args
 - `stop_sendspin()` — graceful stop: sends `{"cmd":"stop"}` to stdin, kills if timeout
 - `_read_subprocess_output()` — async task: forwards log lines, detects volume changes, calls `save_device_volume()`
 - `_read_subprocess_stderr()` — async task: forwards subprocess stderr to `logger.warning`
-- `_RingLogHandler` — bounded in-memory log ring (maxlen=2000) with `subscribe_with_snapshot()` / `unsubscribe()` API. Used by the SSE log endpoint and the dormant `routes/api_ws.py:log_stream_iter`.
+- `_RingLogHandler` — bounded in-memory log ring (maxlen=2000) with `subscribe_with_snapshot()` / `unsubscribe()` API. Feeds `log` events on `/api/v1/events`.
 - `main()` — entry point. Delegates startup/shutdown to `BridgeOrchestrator` (see below).
 
 **`bridge_orchestrator.py`** — startup/shutdown layer (extracted from `sendspin_client.py:main()` in the v2.62→v2.64 cycle):
-- `BridgeOrchestrator` — owns the boot sequence. Methods: `initialize_runtime()` (config load, PA hardening, executor sizing), `initialize_devices()` (per-device factory loop via `device_activation.activate_device()`), `initialize_ma_integration()` (MA bootstrap), `start_web_server()` (Waitress in daemon thread), `install_signal_handlers()`, `graceful_shutdown()`.
+- `BridgeOrchestrator` — owns the boot sequence. Methods: `initialize_runtime()` (config load, PA hardening, executor sizing), `initialize_devices()` (per-device factory loop via `device_activation.activate_device()`), `initialize_ma_integration()` (MA bootstrap), `start_web_server()` (uvicorn serving `api.app.create_app()` on the bridge loop), `install_signal_handlers()`, `graceful_shutdown()`.
 - PA hardening: ensures null-sink `sendspin_fallback` exists as the default sink to prevent PA from auto-routing audio to the wrong sink at startup; optionally unloads `module-rescue-streams` if `DISABLE_PA_RESCUE_STREAMS=true`.
 - Runs in the asyncio event loop on the parent process. Does not own per-device runtime state — that lives in `SendspinClient`.
 
@@ -251,7 +251,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `async_job_state.py` — manages in-process state for long-running async jobs (MA discovery, scan, updates) with TTL eviction
 - `config_validation.py` — validates and normalizes uploaded config payloads including device MACs, ports, handoff modes
 - `config_diff.py` — pure diff of old vs new config; produces ordered `ReconfigAction` list classified as `HOT_APPLY` / `WARM_RESTART` / `GLOBAL_BROADCAST` / `GLOBAL_RESTART` / `RESTART_REQUIRED` / `BT_REMOVE` / `START_CLIENT` / `STOP_CLIENT`
-- `reconfig_orchestrator.py` — dispatches `ReconfigAction` lists from the Flask thread onto the asyncio loop; hot-apply IPC awaits synchronously (500 ms cap), warm restarts run fire-and-forget; powers on-line `POST /api/config` apply without a bridge restart
+- `reconfig_orchestrator.py` — dispatches `ReconfigAction` lists from an API worker thread onto the asyncio loop; hot-apply IPC awaits synchronously (500 ms cap), warm restarts run fire-and-forget; powers on-line `PUT /api/v1/config` apply without a bridge restart
 - `duplicate_device_check.py` — cross-bridge duplicate device detection via MA API to prevent disconnect/reconnect loops
 - `event_hooks.py` — runtime-scoped webhook registry with delivery history and host validation
 - `internal_events.py` — lightweight pub/sub for typed internal runtime events (connections, playback, errors)
@@ -264,20 +264,19 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 - `url_safety.py` — SSRF-style safety checks for server-side fetches, with carve-outs for RFC1918/localhost MA/HA targets
 - `_helpers.py` — shared helpers for device state extraction and ISO-8601 timestamp parsing
 
-**`routes/` module (Flask blueprints):**
-- `api.py` — core volume/mute/pause/restart endpoints, `_schedule_volume_persist()` (1 s debounce)
-- `api_bt.py` — BT scan/pair/remove/reconnect/enable/disable/device/enabled/scan/result. `_get_bt_device_info()` helper. ANSI stripping in adapter power success detection.
-- `api_transport.py` — POST `/api/transport/cmd` endpoint for native Sendspin transport commands (play/pause/volume/etc.) with lower latency than MA REST
-- `api_ma.py` — MA integration, OAuth sign-in, groups/nowplaying/queue control
-- `api_config.py` — configuration CRUD, adapter management, logs/download, update/check, update/info, update/apply, config/download, config/upload
-- `api_status.py` — status/diagnostics/version/logs/diagnostics/download/bugreport. `_collect_bt_device_info()` helper for bugreport BT device info.
-- `ma_auth.py` — MA OAuth/token routes (`/api/ma/login`, `/api/ma/ha-*`) and helpers for secure token exchange and HA integration
-- `ma_groups.py` — MA discovery and groups routes (`/api/ma/discover*`, `/api/ma/groups`, `/api/ma/rediscover*`, `/api/ma/reload`, `/api/debug/ma`)
-- `ma_playback.py` — MA playback control routes (`/api/ma/queue/*`, `/api/ma/nowplaying`, `/api/ma/artwork`) and queue command helpers
-- `api_ws.py` — **dormant** WebSocket scaffold from v2.63.0-rc.3. Blueprint is **not registered** in `web_interface.py` and `flask-sock` is **not** in `requirements.txt`. Kept in-tree (with `status_ws_iter` / `log_stream_iter` generators and tests) for future revival if the bridge moves to an ASGI server (waitress can't satisfy the WS upgrade — needs raw socket access). The HA Supervisor ingress problem it was meant to solve was instead fixed in rc.4 via `Cache-Control: no-cache, no-transform` + `Content-Encoding: identity` on the SSE response in `api_status.py`. Active streaming runs over SSE on `/api/status/stream`.
-- `views.py` — HTML page renders
-- `auth.py` — optional web UI password protection (PBKDF2-SHA256); HA login_flow with 2FA/TOTP support; brute-force lockout (configurable via `BRUTE_FORCE_*` keys, defaults: 5 attempts / 1 min window / 5 min lockout)
-- `_helpers.py` — shared route helpers for MAC/adapter validation and device lookup by player_name
+**`api/` — the HTTP surface (FastAPI, ADR-0001):**
+- `app.py` — `create_app()`: routers under `/api/v1`, OpenAPI at `/api/v1/openapi.json`, docs at `/api/v1/docs`, session + gzip + security-header + ingress middleware, SPA mount last.
+- `server.py` — uvicorn embedded in the bridge loop (`EmbeddedServer` never captures signals; the orchestrator owns shutdown).
+- `auth.py` — principals: HA ingress (add-on, trusted peer + `X-Ingress-Path`, never persisted in the cookie), session cookie (+ `X-CSRF-Token`), bearer token, anonymous when auth is off (cross-site writes refused by Origin/Sec-Fetch-Site).
+- `errors.py` — RFC 9457 problem responses; `UseCaseError` → problem with stable `code`.
+- `events.py` — `EventHub`: one envelope `{v,type,at,data}` for `status`/`job`/`log`, SSE `/api/v1/events` and WS `/api/v1/events/ws` (Origin + `csrf` query param checked).
+- `middleware.py` — `IngressMiddleware` (root_path + path prefix from trusted `X-Ingress-Path`), `SecurityHeadersMiddleware`.
+- `routers/` — `bridge`, `auth`, `devices` (+ groups/playback), `bluetooth` (adapters, scans, pairings, resets, BlueZ cache), `music_assistant`, `ha_integration`, `config`, `diagnostics` (+ latency, calibration, updates, hooks), and `compat_ha` — the HA custom component's legacy paths kept byte-compatible until it moves to v1.
+- `spa.py` — serves `ui/dist` / packaged `sendspin_bridge/spa` (hashed assets cached forever, index.html fallback).
+
+**`application/` — use cases, HTTP-free:** `devices`, `playback`, `bluetooth`, `config`, `diagnostics`, `ha_integration`, `auth`, `calibration`, `bridge_control`, `music_assistant/{auth,groups,playback,common}`, `status` (`build_status()`), `jobs` (the job registry behind every long operation), `runtime` (`run_on_loop`), `models/` (Pydantic `Device`/`Bridge`/config models; response models mark defaults required in the output schema).
+
+**`security/`** — `request_identity.TrustPolicy`, `trusted_proxies`, `login_rate_limiter`, `redaction`.
 
 **`state.py`** — shared runtime state:
 - List of `SendspinClient` instances + global lock
@@ -295,7 +294,7 @@ IPC: subprocess→parent via JSON lines on stdout; parent→subprocess via JSON 
 
 **Config persistence:** `/config/config.json` (mounted Docker volume at `/etc/docker/Sendspin`). Changes via the web UI require a container restart to take effect. See `config.schema.json` for the machine-readable JSON Schema describing all fields, types, and constraints.
 
-**`static/app.js`** — frontend logic: `_showBtInfoModal()` (BT device info modal), `rebootAdapter()` (adapter power cycle), `_startScanCooldown()` (scan button cooldown timer), `uploadConfig()` (config file upload).
+**`ui/`** — Vue 3 + TS + Vite SPA. Typed client generated from `ui/openapi.json` (`scripts/export_openapi.py`, `npm run gen:api`); `npm test` (vitest), `npm run build` (vue-tsc + vite). Docker builds it in a Node stage; release tarballs carry it pre-built in `src/sendspin_bridge/spa`.
 
 **Docs site:** `docs-site/` — Astro Starlight, deployed to GitHub Pages at `https://trudenboy.github.io/sendspin-bt-bridge`
 
@@ -309,7 +308,7 @@ Beyond the per-module notes above, these features shipped in the v2.62→v2.64 c
 - **Live RSSI badge** (`services/bt_rssi_mgmt.py` + `RSSI_BADGE` config) — colored signal-strength chip on each device card.
 - **A2DP profile auto-switch** (`bt_audio.py:_cycle_card_profile_for_mac()`) — works around BlueZ 5.82 regression where some headsets land on `headset_head_unit` instead of `a2dp_sink`.
 - **BT churn isolation** (`BT_CHURN_THRESHOLD` / `BT_CHURN_WINDOW`) — auto-disables a device that reconnect-loops, surfacing actionable guidance instead of letting it thrash forever.
-- **HA Supervisor ingress fix for SSE** (`routes/api_status.py:/api/status/stream`) — `Cache-Control: no-cache, no-transform` + `Content-Encoding: identity` headers stop ingress's deflate from corrupting `text/event-stream` payloads. The rc.3 WebSocket migration (`routes/api_ws.py`) was reverted in v2.63.0-rc.4 because waitress can't satisfy the WS upgrade; the WS scaffold is kept dormant for a future ASGI move.
+- **HA Supervisor ingress and SSE** — event streams send `Cache-Control: no-cache, no-transform` + `Content-Encoding: identity` so ingress does not deflate `text/event-stream`; with uvicorn the WebSocket channel works too.
 - **Battery level** via `org.bluez.Battery1` — queried per heartbeat cycle; shown on device card.
 - **PA hardening** at startup (`bridge_orchestrator.py`) — null-sink `sendspin_fallback` becomes default; optional unload of `module-rescue-streams`.
 - **Sendspin AudioPlayer runtime guards** (`services/daemon_process.py`) — monkey-patch protecting against `memoryview` crash on re-anchor and PyAV<13 `nb_channels` compat.
@@ -326,7 +325,6 @@ Beyond the per-module notes above, these features shipped in the v2.62→v2.64 c
 | `LOG_LEVEL` | `INFO` | Root logger level (`INFO` or `DEBUG`); set via HA addon option or web UI |
 | `BASE_LISTEN_PORT` | (auto) | Override per-device Sendspin listener base port |
 | `BRIDGE_NAME` | (hostname) | Override bridge name; `auto`/`hostname` resolved to machine hostname |
-| `WEB_THREADS` | `8` | Waitress worker thread count |
 | `PULSE_SINK` | (per-subprocess) | PulseAudio sink name; set automatically per daemon subprocess |
 | `SUPERVISOR_TOKEN` | — | Presence indicates HA addon runtime (set by HA Supervisor) |
 | `SENDSPIN_STATIC_DELAY_MS` | `0` | Static audio delay in ms (0–5000) passed to daemon subprocess; added on top of DAC-anchored sync |
