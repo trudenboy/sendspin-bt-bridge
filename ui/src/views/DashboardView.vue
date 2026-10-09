@@ -11,6 +11,7 @@ import {
   SbBadge,
 } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
+import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import { Bluetooth, Server, Wifi, Speaker, ListChecks, Settings, Music2, X } from 'lucide-vue-next'
 
@@ -74,6 +75,8 @@ function openDetail(mac: string) {
     </div>
 
     <template v-else>
+      <GuidanceBanner />
+
       <!-- Health summary -->
       <SbCard class="mb-6">
         <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">

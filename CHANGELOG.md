@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suggested delay can be applied in one click, a click track helps compare
   speakers by ear, a microphone measurement compares two speakers and sets
   the later one's delay, and recent buffer and sync-error history is drawn.
+- The dashboard shows what needs attention, as the bridge's guidance
+  sees it, with the suggested fix one click away (open the right settings
+  section, reconnect or re-enable speakers, unmute an audio output, run a
+  check again, scan for speakers).
 - A System tab in Diagnostics: uptime, memory, platform, audio server
   and BlueZ versions, each player process with its memory and restarts,
   all downloads in one place (diagnostics report, service log, recovery

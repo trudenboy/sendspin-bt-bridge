@@ -1023,5 +1023,9 @@
       "categories": "Categories (optional)",
       "add": "Add"
     }
+  },
+  "guidance": {
+    "title": "What needs attention",
+    "done": "Done: {action}"
   }
 }

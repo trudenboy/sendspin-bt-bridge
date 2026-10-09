@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
+import { useBluetoothStore } from '@/stores/bluetooth'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
@@ -22,6 +23,16 @@ const deviceStore = useDeviceStore()
 const drawerOpen = ref(false)
 const selectedId = ref<string | null>(null)
 const scanModalOpen = ref(false)
+const btStore = useBluetoothStore()
+watch(
+  () => btStore.scanRequested,
+  (requested) => {
+    if (!requested) return
+    scanModalOpen.value = true
+    btStore.scanRequested = false
+  },
+  { immediate: true },
+)
 const viewMode = ref<ViewMode>(
   (localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid',
 )

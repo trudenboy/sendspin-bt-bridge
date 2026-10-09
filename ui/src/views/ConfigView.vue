@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type Component } from 'vue'
+import { computed, nextTick, onMounted, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
@@ -119,8 +119,16 @@ onBeforeRouteLeave(() => {
   if (configStore.isDirty && !window.confirm(t('settings.leaveConfirm'))) return false
 })
 
-onMounted(() => {
-  configStore.fetchConfig()
+const route = useRoute()
+
+onMounted(async () => {
+  await configStore.fetchConfig()
+  // Guidance links straight to a section (``/config#settings-bluetooth``).
+  const id = route.hash.replace(/^#settings-/, '')
+  if (id && SECTIONS.some((s) => s.id === id)) {
+    await nextTick()
+    jump(id)
+  }
 })
 </script>
 

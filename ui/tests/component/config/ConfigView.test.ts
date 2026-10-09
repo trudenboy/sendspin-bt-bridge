@@ -53,7 +53,7 @@ vi.mock('@/api/updates', () => ({
 }))
 vi.mock('@/api/status', () => ({ getStatus: vi.fn(), restartBridge: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/composables/useIngress', () => ({ useIngress: () => ({ basePath: '', apiBase: '' }) }))
-vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn() }))
+vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), useRoute: () => ({ hash: '' }) }))
 
 async function mountView(config: Record<string, unknown> = BASE) {
   vi.mocked(getConfig).mockResolvedValue(structuredClone(config) as never)

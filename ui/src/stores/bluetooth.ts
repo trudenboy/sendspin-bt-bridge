@@ -18,6 +18,8 @@ import type { Adapter, BtDeviceInfo, Job, KnownDevice, ScanDevice, ScanResult } 
 
 export const useBluetoothStore = defineStore('bluetooth', () => {
   const adapters = ref<Adapter[]>([])
+  /** Set by guidance actions; the devices page opens its scan dialog and clears it. */
+  const scanRequested = ref(false)
   const scanJob = ref<Job | null>(null)
   const scanResults = ref<ScanDevice[]>([])
   const scanError = ref<string | null>(null)
@@ -123,6 +125,7 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
   }
 
   return {
+    scanRequested,
     adapters,
     scanJob,
     scanResults,
