@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The bridge uses much less CPU on hosts where it can watch Bluetooth
+  traffic to tell which speaker's buttons were pressed. On Home Assistant
+  with two speakers connected, the add-on dropped from about 40% to about
+  12% of a CPU core.
+
 ### Fixed
 
 - After signing in to Music Assistant again, for example when it was
