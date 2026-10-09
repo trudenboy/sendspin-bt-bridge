@@ -1,6 +1,0 @@
-export type THTMLCollectionListener<T> = (details: {
-	index?: number;
-	item?: T;
-	propertyName?: string;
-	propertyValue?: any;
-}) => void;
