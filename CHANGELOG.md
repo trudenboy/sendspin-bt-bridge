@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Bug reports sent from the web interface without a GitHub account keep
+  their log lines. The report is shortened to fit GitHub's size limit and
+  the logs came last, so they were cut off entirely; they now come before
+  the raw diagnostics data.
+
 ## [2.77.0-rc.2] - 2026-10-09
 
 ### Fixed
