@@ -268,6 +268,34 @@ def _open_hci_monitor_socket() -> socket.socket:
     return open_hci_socket(hci_dev=HCI_DEV_NONE, channel=HCI_CHANNEL_MONITOR)
 
 
+async def _read_packets(sock: socket.socket, handle_to_mac: dict[int, str], tracker) -> None:
+    """Read the monitor socket on the event loop until it fails.
+
+    The monitor channel carries every HCI packet of every controller, so
+    this runs hundreds of times a second while speakers stream. Reading each
+    packet through ``asyncio.to_thread`` cost an executor round trip apiece;
+    instead the loop wakes when the socket is readable and drains everything
+    that is ready.
+    """
+    loop = asyncio.get_running_loop()
+    readable = asyncio.Event()
+    sock.setblocking(False)
+    fd = sock.fileno()
+    loop.add_reader(fd, readable.set)
+    try:
+        while True:
+            await readable.wait()
+            readable.clear()
+            while True:
+                try:
+                    data = sock.recv(4096)
+                except BlockingIOError:
+                    break
+                _process_packet(data, handle_to_mac, tracker)
+    finally:
+        loop.remove_reader(fd)
+
+
 class HciAvrcpMonitor:
     """Background asyncio task that monitors HCI traffic for AVRCP passthrough commands.
 
@@ -328,13 +356,11 @@ class HciAvrcpMonitor:
             )
             current_backoff = _BACKOFF_BASE
             try:
-                while True:
-                    data = await asyncio.to_thread(sock.recv, 4096)
-                    _process_packet(data, handle_to_mac, tracker)
+                await _read_packets(sock, handle_to_mac, tracker)
             except asyncio.CancelledError:
                 sock.close()
                 return
-            except OSError as exc:
+            except (OSError, ValueError, TypeError) as exc:
                 sock.close()
                 handle_to_mac.clear()
                 logger.warning(

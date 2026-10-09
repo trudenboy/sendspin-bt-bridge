@@ -359,3 +359,52 @@ class TestSeedHandleMapFromKernel:
             _seed_handle_map_from_kernel(h2m)  # must not raise
 
         assert h2m == {}
+
+
+class TestHciAvrcpMonitorReading:
+    @pytest.mark.asyncio
+    async def test_packets_are_read_on_the_loop_not_one_thread_hop_each(self):
+        """Seen on HAOS: the monitor channel carries every HCI packet of every
+        controller, and the bridge read each one through asyncio.to_thread —
+        an executor round trip per packet that kept the main loop at ~16%
+        and a pool thread busy while the speakers sat idle. The socket is read
+        on the loop, every packet that is ready per wake-up."""
+        import asyncio
+        import socket
+        from unittest.mock import patch
+
+        from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import HciAvrcpMonitor
+
+        ours, theirs = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+        seen: list[bytes] = []
+
+        async def _no_thread_hops(*_args, **_kwargs):
+            raise AssertionError("a packet was read through asyncio.to_thread")
+
+        mon = HciAvrcpMonitor()
+        with (
+            patch(
+                "sendspin_bridge.services.bluetooth.hci_avrcp_monitor._open_hci_monitor_socket",
+                return_value=ours,
+            ),
+            patch("sendspin_bridge.services.bluetooth.hci_avrcp_monitor._seed_handle_map_from_kernel"),
+            patch(
+                "sendspin_bridge.services.bluetooth.hci_avrcp_monitor._process_packet",
+                side_effect=lambda data, *_: seen.append(data),
+            ),
+            patch("asyncio.to_thread", new=_no_thread_hops),
+        ):
+            await mon.start()
+            for i in range(3):
+                theirs.send(bytes([i]) * 8)
+            for _ in range(100):
+                if len(seen) == 3:
+                    break
+                await asyncio.sleep(0.01)
+            task = mon._task
+            await mon.stop()
+
+        theirs.close()
+        assert seen == [bytes([i]) * 8 for i in range(3)]
+        assert task is not None and task.done()
+        assert ours.fileno() == -1, "the socket was left open after stop"
