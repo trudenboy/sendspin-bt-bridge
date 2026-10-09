@@ -19,6 +19,22 @@ die()  { err "$*"; exit 1; }
 GITHUB_REPO="trudenboy/sendspin-bt-bridge"
 GITHUB_BRANCH="main"
 
+# Kept for the self-update below: the loop shifts the arguments away, and
+# re-executing with "$@" after it handed the fresh script none — so
+# ``--branch v2.76.0`` silently became ``main``.
+_ORIG_ARGS=("$@")
+
+# A fresh copy started by an older upgrade.sh: that one dropped the
+# arguments when it re-executed, so which version was asked for is lost.
+# Installing main would be a guess (and main may be a release candidate);
+# stop instead. The installed script is now this one, so a second run keeps
+# its arguments.
+if [[ -n "${_SELF_UPDATED:-}" && -z "${_UPGRADE_ARGS_FORWARDED:-}" ]]; then
+  echo "upgrade.sh was updated by an older version that lost the requested version." >&2
+  echo "Nothing was changed. Please run the update again." >&2
+  exit 3
+fi
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)   GITHUB_REPO="$2";   shift 2 ;;
@@ -63,7 +79,8 @@ _self_update() {
       rm -f "${new_script}"
       msg "upgrade.sh updated, restarting..."
       export _SELF_UPDATED=1
-      exec bash "${BASH_SOURCE[0]}" "$@"
+      export _UPGRADE_ARGS_FORWARDED=1
+      exec bash "${BASH_SOURCE[0]}" "${_ORIG_ARGS[@]}"
     fi
     rm -f "${new_script}"
   else
@@ -71,7 +88,7 @@ _self_update() {
     warn "Could not fetch latest upgrade.sh — continuing with current version"
   fi
 }
-_self_update "$@"
+_self_update
 
 SCRIPT_TMP_DIR=""
 STAGE_APP=""
