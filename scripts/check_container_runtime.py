@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 RUNTIME_MODULES = (
     "sendspin_bridge.bridge.orchestrator",
     "sendspin_bridge.bridge.client",
-    "sendspin_bridge.web.interface",
+    "sendspin_bridge.api.app",
 )
 TRANSLATOR_PATH = REPO_ROOT / "scripts" / "translate_ha_config.py"
 

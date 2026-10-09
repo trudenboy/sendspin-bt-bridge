@@ -321,71 +321,34 @@ class TestBtMonitorStandbyCheck:
 
 
 class TestWakeApiEndpoint:
-    """POST /api/bt/wake endpoint tests."""
+    """POST /api/v1/devices/{id}/wake."""
 
-    def _make_app(self):
-        from flask import Flask
-
-        app = Flask(__name__)
-        app.config["TESTING"] = True
-        from sendspin_bridge.web.routes.api_bt import bt_bp
-
-        app.register_blueprint(bt_bp)
-        return app
-
-    def test_wake_success(self):
+    def test_wake_success(self, api_client, bridge_loop):
         client = MagicMock()
-        client.status = MagicMock()
-        client.status.get = MagicMock(
-            side_effect=lambda k, d=None: {
-                "bt_standby": True,
-            }.get(k, d)
-        )
+        client.status = {"bt_standby": True}
         client._wake_from_standby = AsyncMock()
 
-        loop = asyncio.new_event_loop()
+        with patch("sendspin_bridge.application.devices.find_client", return_value=client):
+            resp = api_client.post("/api/v1/devices/spk/wake")
 
-        with (
-            patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(client, None)),
-            patch("sendspin_bridge.bridge.state.get_main_loop", return_value=loop),
-        ):
-            app = self._make_app()
-            with app.test_client() as tc:
-                loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
-                loop_thread.start()
-                try:
-                    resp = tc.post("/api/bt/wake", json={"player_name": "Spk"})
-                    assert resp.status_code == 200
-                    data = resp.get_json()
-                    assert data["success"] is True
-                finally:
-                    loop.call_soon_threadsafe(loop.stop)
-                    loop_thread.join(timeout=2)
-                    loop.close()
+        assert resp.status_code == 204
+        client._wake_from_standby.assert_awaited_once()
 
-    def test_wake_not_in_standby_returns_409(self):
+    def test_wake_not_in_standby_returns_409(self, api_client):
         client = MagicMock()
-        client.status = MagicMock()
-        client.status.get = MagicMock(return_value=False)
+        client.status = {"bt_standby": False}
 
-        with patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(client, None)):
-            app = self._make_app()
-            with app.test_client() as tc:
-                resp = tc.post("/api/bt/wake", json={"player_name": "Spk"})
-                assert resp.status_code == 409
+        with patch("sendspin_bridge.application.devices.find_client", return_value=client):
+            resp = api_client.post("/api/v1/devices/spk/wake")
 
-    def test_wake_no_client_returns_error(self):
-        app = self._make_app()
-        with app.app_context():
-            from flask import jsonify as _jsonify
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "not_in_standby"
 
-            err_resp = _jsonify(success=False, error="Not found"), 404
-        with (
-            patch("sendspin_bridge.web.routes.api_bt.get_client_or_error", return_value=(None, err_resp)),
-            app.test_client() as tc,
-        ):
-            resp = tc.post("/api/bt/wake", json={"player_name": "Unknown"})
-            assert resp.status_code == 404
+    def test_wake_unknown_device_returns_404(self, api_client):
+        resp = api_client.post("/api/v1/devices/unknown/wake")
+
+        assert resp.status_code == 404
+        assert resp.json()["code"] == "unknown_device"
 
 
 class TestIdleTimerFullCycle:

@@ -26,16 +26,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from flask import Flask
 
 
 @pytest.fixture
 def client(tmp_config):
-    from sendspin_bridge.web.routes.api_bt import bt_bp
+    from tests.support.api_client import make_client
 
-    app = Flask(__name__)
-    app.register_blueprint(bt_bp)
-    return app.test_client()
+    return make_client()
 
 
 _DEVICE_NOT_AVAILABLE = "Device AA:BB:CC:DD:EE:FF not available\n"
@@ -57,7 +54,7 @@ def _info_runs(fake, adapter_mac: str):
 
 def test_get_bt_device_info_issues_select_before_info_when_adapter_provided(installed_bluez):
     """With an explicit adapter, the invocation must be scoped by ``select <mac>``."""
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     installed_bluez.on_adapter("C0:FB:F9:62:D7:D6").on("info", stdout=_DEVICE_INFO_FULL)
 
@@ -73,7 +70,7 @@ def test_get_bt_device_info_issues_select_before_info_when_adapter_provided(inst
 def test_get_bt_device_info_translates_hci_name_to_controller_mac(installed_bluez):
     """``hci1`` must be resolved to a controller MAC — raw ``hci1``
     fails with ``Controller hci1 not available`` on HAOS/LXC."""
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     installed_bluez.on("list", stdout=_TWO_CONTROLLERS)
 
@@ -87,7 +84,7 @@ def test_get_bt_device_info_probes_every_adapter_when_none_given(installed_bluez
     """Without an adapter the helper must try each controller until one
     returns a response with actual device fields (``Name:``/``Paired:``).
     Prior behaviour queried only the default controller."""
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     installed_bluez.on("list", stdout=_TWO_CONTROLLERS)
     installed_bluez.on_adapter("C0:FB:F9:62:D6:9D").on("info", stdout=_DEVICE_NOT_AVAILABLE)
@@ -103,7 +100,7 @@ def test_get_bt_device_info_probes_every_adapter_when_none_given(installed_bluez
 
 def test_get_bt_device_info_stops_at_first_adapter_with_fields(installed_bluez):
     """If the first adapter already returns a full record, don't keep probing."""
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     installed_bluez.on("list", stdout=_TWO_CONTROLLERS)
     installed_bluez.on("info", stdout=_DEVICE_INFO_FULL)
@@ -115,8 +112,8 @@ def test_get_bt_device_info_stops_at_first_adapter_with_fields(installed_bluez):
 
 
 def test_api_bt_info_forwards_adapter_field(client, monkeypatch):
-    """The ``adapter`` field on the POST body must reach the helper."""
-    import sendspin_bridge.web.routes.api_bt as module
+    """The ``adapter`` query parameter must reach the helper."""
+    import sendspin_bridge.application.bluetooth as module
 
     captured: dict[str, Any] = {}
 
@@ -127,10 +124,7 @@ def test_api_bt_info_forwards_adapter_field(client, monkeypatch):
 
     monkeypatch.setattr(module, "_get_bt_device_info", fake_helper)
 
-    resp = client.post(
-        "/api/bt/info",
-        json={"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"},
-    )
+    resp = client.get("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:FF", params={"adapter": "C0:FB:F9:62:D7:D6"})
 
     assert resp.status_code == 200
     assert captured == {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "C0:FB:F9:62:D7:D6"}
@@ -170,7 +164,7 @@ def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(instal
     must reach the ``raw`` array.  Without UUIDs in the modal,
     issue #168 would have taken another round of asking the
     reporter for ``bluetoothctl info`` over SSH."""
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     installed_bluez.on_adapter("C0:FB:F9:62:D7:D6").on("info", stdout=_DEVICE_INFO_FULL_WITH_UUIDS)
 
@@ -196,7 +190,7 @@ def test_get_bt_device_info_raw_includes_uuids_modalias_and_legacypairing(instal
 
 def test_api_bt_info_rejects_invalid_adapter(client, monkeypatch):
     """Garbage adapter strings must 400 before touching bluetoothctl."""
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     called = {"n": 0}
 
@@ -206,10 +200,7 @@ def test_api_bt_info_rejects_invalid_adapter(client, monkeypatch):
 
     monkeypatch.setattr(module, "_get_bt_device_info", fake_helper)
 
-    resp = client.post(
-        "/api/bt/info",
-        json={"mac": "AA:BB:CC:DD:EE:FF", "adapter": "not-a-mac"},
-    )
+    resp = client.get("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:FF", params={"adapter": "not-a-mac"})
 
     assert resp.status_code == 400
     assert called["n"] == 0

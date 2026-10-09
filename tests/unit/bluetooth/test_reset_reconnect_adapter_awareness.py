@@ -16,23 +16,21 @@ all run on the BlueZ default controller and silently fail.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import threading
 from typing import Any
 
 import pytest
-from flask import Flask
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.fixture
 def client(tmp_config):
-    from sendspin_bridge.web.routes.api_bt import bt_bp
+    from tests.support.api_client import make_client
 
-    app = Flask(__name__)
-    app.register_blueprint(bt_bp)
-    return app.test_client()
+    return make_client()
 
 
 def _extract_select_lines(input_text: str) -> list[str]:
@@ -52,34 +50,34 @@ def _scoped_verbs(fake_bluez, mac: str) -> list[str]:
 def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
     """POST body's ``adapter`` must reach the background job verbatim."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     captured: dict[str, Any] = {}
     done = threading.Event()
 
     def fake_run(
-        job_id: str,
         mac: str,
         adapter: str,
         *,
         no_input_no_output_agent: bool = False,
         allow_hfp_profile: bool = False,
-    ) -> None:
+        ctx: Any = None,
+    ) -> dict[str, Any]:
         captured["mac"] = mac
         captured["adapter"] = adapter
         captured["no_io"] = no_input_no_output_agent
         captured["allow_hfp"] = allow_hfp_profile
-        module.finish_scan_job(job_id, {"success": True})
         done.set()
+        return {"mac": mac}
 
     monkeypatch.setattr(module, "_run_reset_reconnect", fake_run)
 
     resp = client.post(
-        "/api/bt/reset_reconnect",
+        "/api/v1/bluetooth/resets",
         json={"mac": "AA:BB:CC:DD:EE:01", "adapter": "C0:FB:F9:62:D7:D6"},
     )
-    assert resp.status_code == 200
-    assert resp.get_json().get("job_id")
+    assert resp.status_code == 202
+    assert resp.json()["kind"] == "bluetooth.reset"
     assert done.wait(2.0), "background thread never invoked _run_reset_reconnect"
     assert captured == {
         "mac": "AA:BB:CC:DD:EE:01",
@@ -92,20 +90,20 @@ def test_reset_reconnect_accepts_adapter_and_forwards_it(client, monkeypatch):
 def test_reset_reconnect_preserves_default_adapter_when_omitted(client, monkeypatch):
     """Missing ``adapter`` → empty string (pre-existing behaviour)."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     captured: dict[str, Any] = {}
     done = threading.Event()
 
-    def fake_run(job_id: str, mac: str, adapter: str, **_pair_options: Any) -> None:
+    def fake_run(mac: str, adapter: str, **_pair_options: Any) -> dict[str, Any]:
         captured["adapter"] = adapter
-        module.finish_scan_job(job_id, {"success": True})
         done.set()
+        return {"mac": mac}
 
     monkeypatch.setattr(module, "_run_reset_reconnect", fake_run)
 
-    resp = client.post("/api/bt/reset_reconnect", json={"mac": "AA:BB:CC:DD:EE:02"})
-    assert resp.status_code == 200
+    resp = client.post("/api/v1/bluetooth/resets", json={"mac": "AA:BB:CC:DD:EE:02"})
+    assert resp.status_code == 202
     assert done.wait(2.0)
     assert captured["adapter"] == ""
 
@@ -113,7 +111,7 @@ def test_reset_reconnect_preserves_default_adapter_when_omitted(client, monkeypa
 def test_reset_reconnect_rejects_invalid_adapter(client, monkeypatch):
     """Garbage adapter strings must 400 before spawning the job thread."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     called = threading.Event()
 
@@ -123,7 +121,7 @@ def test_reset_reconnect_rejects_invalid_adapter(client, monkeypatch):
     monkeypatch.setattr(module, "_run_reset_reconnect", fake_run)
 
     resp = client.post(
-        "/api/bt/reset_reconnect",
+        "/api/v1/bluetooth/resets",
         json={"mac": "AA:BB:CC:DD:EE:03", "adapter": "not-a-mac"},
     )
     assert resp.status_code == 400
@@ -151,15 +149,13 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     default controller and pairing happens on the wrong radio.
     """
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     mac = "AA:BB:CC:DD:EE:04"
     _pair_ok_script(installed_bluez, mac)
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
 
-    job_id = "job-test-1"
-    module.create_scan_job(job_id)
-    module._run_reset_reconnect(job_id, mac, "C0:FB:F9:62:D7:D6")
+    result = module._run_reset_reconnect(mac, "C0:FB:F9:62:D7:D6")
 
     # Remove + power-cycle phases, both scoped to the requested controller.
     assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6")[:2] == ["remove", "power"]
@@ -172,8 +168,7 @@ def test_run_reset_reconnect_threads_select_adapter_through_every_phase(monkeypa
     assert f"trust {mac}" in sent
     assert f"connect {mac}" in sent
 
-    result = module.get_scan_job(job_id)
-    assert result["success"] is True
+    assert result["paired"] is True
     assert result["connected"] is True
 
 
@@ -190,7 +185,7 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, 
     hci1=C0:FB:F9:62:D7:D6.
     """
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     mac = "AA:BB:CC:DD:EE:05"
     _pair_ok_script(installed_bluez, mac)
@@ -214,9 +209,7 @@ def test_run_reset_reconnect_translates_hci_name_to_controller_mac(monkeypatch, 
 
     set_bluez(BluezControl(spawner=installed_bluez, sysfs_dir=sysfs))
 
-    job_id = "job-test-hci"
-    module.create_scan_job(job_id)
-    module._run_reset_reconnect(job_id, mac, "hci1")
+    module._run_reset_reconnect(mac, "hci1")
 
     # Every phase must name the resolved MAC, never the hciN alias.
     assert _scoped_verbs(installed_bluez, "C0:FB:F9:62:D7:D6")[:2] == ["remove", "power"]
@@ -233,7 +226,7 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, i
     failed ``select`` surfaces as the natural "not paired" outcome.
     """
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
@@ -247,9 +240,10 @@ def test_run_reset_reconnect_keeps_hci_name_when_resolution_fails(monkeypatch, i
     # has nothing to resolve it against either.
     installed_bluez.on("list", stdout="")
 
-    job_id = "job-test-fallback"
-    module.create_scan_job(job_id)
-    module._run_reset_reconnect(job_id, "AA:BB:CC:DD:EE:06", "hci0")
+    from sendspin_bridge.application.errors import UseCaseError
+
+    with contextlib.suppress(UseCaseError):  # nothing answers the pair session
+        module._run_reset_reconnect("AA:BB:CC:DD:EE:06", "hci0")
 
     removes = [c for c in installed_bluez.commands if c.kind == "run" and c.verb == "remove"]
     assert removes, "remove phase never ran"
@@ -262,7 +256,7 @@ def test_run_reset_reconnect_retries_the_pin_ladder(monkeypatch, installed_bluez
     manual pair flow has always had.
     """
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     mac = "AA:BB:CC:DD:EE:07"
     installed_bluez.session_script(
@@ -274,10 +268,8 @@ def test_run_reset_reconnect_retries_the_pin_ladder(monkeypatch, installed_bluez
     )
     monkeypatch.setattr(module.time, "sleep", lambda *_a, **_kw: None)
 
-    job_id = "job-test-pins"
-    module.create_scan_job(job_id)
-    module._run_reset_reconnect(job_id, mac, "C0:FB:F9:62:D7:D6")
+    result = module._run_reset_reconnect(mac, "C0:FB:F9:62:D7:D6")
 
     replied = [c.script.strip() for c in installed_bluez.commands if c.kind == "reply"]
     assert replied == ["0000", "1234"]
-    assert module.get_scan_job(job_id)["success"] is True
+    assert result["paired"] is True

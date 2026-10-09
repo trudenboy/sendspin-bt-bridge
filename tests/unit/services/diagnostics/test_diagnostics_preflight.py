@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 
 import pytest
-from flask import Flask
 
 
 @pytest.fixture
@@ -25,7 +24,7 @@ def app(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
 
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     monkeypatch.setattr(
         api_status,
@@ -33,13 +32,13 @@ def app(monkeypatch, tmp_path):
         lambda: {"dbus": {"available": True}, "bluetooth": {"status": "ok"}, "audio": {"status": "ok"}},
     )
 
-    flask_app = Flask(__name__)
-    flask_app.register_blueprint(api_status.status_bp)
-    return flask_app, api_status
+    from tests.support.api_client import make_client
+
+    return make_client(), api_status
 
 
 def test_the_bundle_state_model_keeps_the_runtime_it_measured(app, monkeypatch):
-    flask_app, api_status = app
+    client, api_status = app
 
     seen: list[object] = []
 
@@ -51,7 +50,7 @@ def test_the_bundle_state_model_keeps_the_runtime_it_measured(app, monkeypatch):
     monkeypatch.setattr(api_status, "_build_onboarding_assistant_payload", lambda **kw: {})
     monkeypatch.setattr(api_status, "_build_operator_guidance_payload", lambda **kw: {})
 
-    flask_app.test_client().get("/api/diagnostics")
+    client.get("/api/v1/diagnostics")
 
     assert seen and seen[0] is not None, "the bundle was built without a state model"
     substrate = seen[0].to_dict()["runtime_substrate"]

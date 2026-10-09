@@ -1,4 +1,4 @@
-"""Integration tests: ma_auth routes must reject SSRF-style URLs.
+"""Integration tests: the Music Assistant sign-in endpoints must reject SSRF-style URLs.
 
 Each endpoint that accepts ``ma_url`` or ``ha_url`` from the request body is
 fuzzed against private/loopback/link-local hosts.  The tests also assert that
@@ -12,10 +12,11 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from flask import Flask
 
-from sendspin_bridge.web.routes import ma_auth as ma_auth_module
-from sendspin_bridge.web.routes.api_ma import ma_bp
+from sendspin_bridge.application.music_assistant import auth as ma_auth_module
+from tests.support.api_client import get_session, set_session
+
+SESSION = "/api/v1/music-assistant/session"
 
 
 @pytest.fixture(autouse=True)
@@ -28,17 +29,10 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def app():
-    application = Flask(__name__)
-    application.secret_key = "test-secret"
-    application.config["TESTING"] = True
-    application.register_blueprint(ma_bp)
-    return application
+def client():
+    from tests.support.api_client import make_client
 
-
-@pytest.fixture()
-def client(app):
-    return app.test_client()
+    return make_client()
 
 
 # Sample URLs that must be rejected by is_safe_external_url in *default*
@@ -66,7 +60,7 @@ UNSAFE_URLS_STRICT = [
 
 
 class TestApiMaLoginSSRF:
-    """POST /api/ma/login must reject unsafe ma_url."""
+    """POST /music-assistant/session must reject unsafe url."""
 
     @pytest.mark.parametrize("url", UNSAFE_URLS)
     def test_rejects_unsafe_urls(self, client, url, monkeypatch):
@@ -77,12 +71,9 @@ class TestApiMaLoginSSRF:
             patch.object(ma_auth_module._ur, "urlopen", urlopen),
             patch.object(ma_auth_module, "get_main_loop", return_value=MagicMock()),
         ):
-            resp = client.post(
-                "/api/ma/login",
-                json={"url": url, "username": "u", "password": "p"},
-            )
+            resp = client.post(SESSION, json={"url": url, "username": "u", "password": "p"})
         assert resp.status_code == 400
-        assert resp.get_json()["error"] == "Invalid or disallowed URL"
+        assert resp.json()["detail"] == "Invalid or disallowed URL"
         urlopen.assert_not_called()
 
     @pytest.mark.parametrize("url", UNSAFE_URLS_STRICT)
@@ -95,17 +86,14 @@ class TestApiMaLoginSSRF:
             patch.object(ma_auth_module._ur, "urlopen", urlopen),
             patch.object(ma_auth_module, "get_main_loop", return_value=MagicMock()),
         ):
-            resp = client.post(
-                "/api/ma/login",
-                json={"url": url, "username": "u", "password": "p"},
-            )
+            resp = client.post(SESSION, json={"url": url, "username": "u", "password": "p"})
         assert resp.status_code == 400
-        assert resp.get_json()["error"] == "Invalid or disallowed URL"
+        assert resp.json()["detail"] == "Invalid or disallowed URL"
         urlopen.assert_not_called()
 
 
 class TestApiMaHaAuthPageSSRF:
-    """GET /api/ma/ha-auth-page must reject unsafe ma_url."""
+    """The HA auth popup page must reject unsafe ma_url."""
 
     @pytest.mark.parametrize(
         "url",
@@ -118,18 +106,18 @@ class TestApiMaHaAuthPageSSRF:
     def test_rejects_unsafe_urls(self, client, url, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
         monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
-        resp = client.get("/api/ma/ha-auth-page", query_string={"ma_url": url})
+        resp = client.get(f"{SESSION}/ha-auth-page", params={"ma_url": url})
         assert resp.status_code == 400
-        assert b"Invalid or disallowed URL" in resp.data
+        assert resp.json()["detail"] == "Invalid or disallowed URL"
 
     def test_accepts_empty_ma_url(self, client):
-        resp = client.get("/api/ma/ha-auth-page")
+        resp = client.get(f"{SESSION}/ha-auth-page")
         # Empty URL just renders the page with null MA_URL — not a rejection
         assert resp.status_code == 200
 
 
 class TestApiMaHaSilentAuthSSRF:
-    """POST /api/ma/ha-silent-auth must reject unsafe ma_url."""
+    """POST /music-assistant/session/ha-silent must reject unsafe ma_url."""
 
     @pytest.mark.parametrize("url", ["http://169.254.169.254/", "http://224.0.0.1/"])
     def test_rejects_unsafe_urls(self, client, url, monkeypatch):
@@ -137,17 +125,14 @@ class TestApiMaHaSilentAuthSSRF:
         monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
         urlopen = MagicMock()
         with patch.object(ma_auth_module._ur, "urlopen", urlopen):
-            resp = client.post(
-                "/api/ma/ha-silent-auth",
-                json={"ha_token": "t", "ma_url": url},
-            )
+            resp = client.post(f"{SESSION}/ha-silent", json={"ha_token": "t", "ma_url": url})
         assert resp.status_code == 400
-        assert resp.get_json()["error"] == "Invalid or disallowed URL"
+        assert resp.json()["detail"] == "Invalid or disallowed URL"
         urlopen.assert_not_called()
 
 
 class TestApiMaHaLoginSSRF:
-    """POST /api/ma/ha-login (init) must reject unsafe ma_url."""
+    """POST /music-assistant/session/ha (init) must reject unsafe ma_url."""
 
     @pytest.mark.parametrize("url", ["http://169.254.169.254", "http://224.0.0.1"])
     def test_init_rejects_unsafe_urls(self, client, url, monkeypatch):
@@ -155,12 +140,9 @@ class TestApiMaHaLoginSSRF:
         monkeypatch.delenv("SENDSPIN_STRICT_SSRF", raising=False)
         urlopen = MagicMock()
         with patch.object(ma_auth_module._ur, "urlopen", urlopen):
-            resp = client.post(
-                "/api/ma/ha-login",
-                json={"step": "init", "ma_url": url, "username": "u", "password": "p"},
-            )
+            resp = client.post(f"{SESSION}/ha", json={"step": "init", "ma_url": url, "username": "u", "password": "p"})
         assert resp.status_code == 400
-        assert resp.get_json()["error"] == "Invalid or disallowed URL"
+        assert resp.json()["detail"] == "Invalid or disallowed URL"
         urlopen.assert_not_called()
 
 
@@ -174,7 +156,7 @@ class TestMfaUsesSessionNotBody:
     def test_missing_session_rejected(self, client, monkeypatch):
         monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
         resp = client.post(
-            "/api/ma/ha-login",
+            f"{SESSION}/ha",
             json={
                 "step": "mfa",
                 "ma_url": "http://ma.example.com:8095",
@@ -185,8 +167,7 @@ class TestMfaUsesSessionNotBody:
             },
         )
         assert resp.status_code == 400
-        body = resp.get_json()
-        assert "Session expired" in body["error"]
+        assert "Session expired" in resp.json()["detail"]
 
     def test_mfa_uses_session_ha_url_not_body(self, client, monkeypatch):
         # Accept any URL for this test
@@ -200,19 +181,23 @@ class TestMfaUsesSessionNotBody:
         with patch.object(ma_auth_module, "_ha_login_flow_step", side_effect=_fake_flow_step):
             # Seed session as if init had stored OAuth state pointing to a
             # trusted HA URL.
-            with client.session_transaction() as sess:
-                sess["_ha_oauth"] = {
-                    "auth_mode": "ma_oauth",
-                    "flow_id": "real-flow-id",
-                    "ha_url": "http://real-ha.example.com:8123",
-                    "client_id": "real-client",
-                    "state": "real-state",
-                    "ma_url": "http://ma.example.com:8095",
-                    "username": "alice",
-                }
+            set_session(
+                client,
+                {
+                    "_ha_oauth": {
+                        "auth_mode": "ma_oauth",
+                        "flow_id": "real-flow-id",
+                        "ha_url": "http://real-ha.example.com:8123",
+                        "client_id": "real-client",
+                        "state": "real-state",
+                        "ma_url": "http://ma.example.com:8095",
+                        "username": "alice",
+                    }
+                },
+            )
             # Attacker supplies a different ha_url/client_id/state in body
             resp = client.post(
-                "/api/ma/ha-login",
+                f"{SESSION}/ha",
                 json={
                     "step": "mfa",
                     "ma_url": "http://ma.example.com:8095",
@@ -230,24 +215,27 @@ class TestMfaUsesSessionNotBody:
         assert client_id_arg == "real-client"
         assert payload_arg == {"code": "123456"}
         # Abort cleans session
-        with client.session_transaction() as sess:
-            assert "_ha_oauth" not in sess
+        assert "_ha_oauth" not in get_session(client)
         assert resp.status_code == 400
 
     def test_mfa_rejects_when_session_ma_url_mismatches_body(self, client, monkeypatch):
         monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
-        with client.session_transaction() as sess:
-            sess["_ha_oauth"] = {
-                "auth_mode": "ma_oauth",
-                "flow_id": "real-flow-id",
-                "ha_url": "http://real-ha.example.com:8123",
-                "client_id": "real-client",
-                "state": "real-state",
-                "ma_url": "http://ma.example.com:8095",
-                "username": "alice",
-            }
+        set_session(
+            client,
+            {
+                "_ha_oauth": {
+                    "auth_mode": "ma_oauth",
+                    "flow_id": "real-flow-id",
+                    "ha_url": "http://real-ha.example.com:8123",
+                    "client_id": "real-client",
+                    "state": "real-state",
+                    "ma_url": "http://ma.example.com:8095",
+                    "username": "alice",
+                }
+            },
+        )
         resp = client.post(
-            "/api/ma/ha-login",
+            f"{SESSION}/ha",
             json={
                 "step": "mfa",
                 "ma_url": "http://different-ma.example.com:8095",
@@ -255,8 +243,7 @@ class TestMfaUsesSessionNotBody:
             },
         )
         assert resp.status_code == 400
-        with client.session_transaction() as sess:
-            assert "_ha_oauth" not in sess
+        assert "_ha_oauth" not in get_session(client)
 
 
 class TestDeriveHaUrlsFiltering:

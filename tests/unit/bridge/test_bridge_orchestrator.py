@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
 from types import SimpleNamespace
 
 import pytest
@@ -211,32 +210,75 @@ async def test_configure_executor_delegates_main_loop_publication():
     assert lifecycle_state.calls[-1][1]["web_thread_name"] == "DelegatedWeb"
 
 
-def test_start_web_server_publishes_clients_before_running_web_main():
+@pytest.fixture
+def served_apps(monkeypatch):
+    """Capture what the orchestrator would serve instead of binding a port."""
+    import sendspin_bridge.api.server as api_server
+
+    served: list[tuple[object, int | None]] = []
+
+    async def fake_serve_api(app, port=None):
+        served.append((app, port))
+        return SimpleNamespace(should_exit=False, sendspin_task=None)
+
+    monkeypatch.setattr(api_server, "serve_api", fake_serve_api)
+    return served
+
+
+@pytest.mark.asyncio
+async def test_start_web_server_publishes_clients_before_building_the_app(served_apps):
     orchestrator = BridgeOrchestrator()
     clients = [SimpleNamespace(player_name="Kitchen")]
-    seen = threading.Event()
+    seen: list[object] = []
 
-    def fake_web_main() -> None:
-        snapshot = state.get_clients_snapshot()
-        assert snapshot == clients
-        seen.set()
+    def fake_app_factory():
+        seen.append(state.get_clients_snapshot())
+        return "app"
 
-    thread = orchestrator.start_web_server(clients, web_main=fake_web_main, thread_name="TestWebServer")
-    thread.join(timeout=1)
+    server = await orchestrator.start_web_server(clients, app_factory=fake_app_factory)
 
-    assert seen.is_set()
-    assert thread.name == "TestWebServer"
+    assert seen == [clients]
+    assert served_apps == [("app", None)]
+    assert server.should_exit is False
 
 
-def test_start_web_server_delegates_client_publication():
+@pytest.mark.asyncio
+async def test_start_web_server_delegates_client_publication(served_apps):
     lifecycle_state = RecordingLifecycleState()
     orchestrator = BridgeOrchestrator(lifecycle_state=lifecycle_state)
     clients = [SimpleNamespace(player_name="Kitchen")]
 
-    thread = orchestrator.start_web_server(clients, web_main=lambda: None, thread_name="DelegatedWebServer")
-    thread.join(timeout=1)
+    await orchestrator.start_web_server(clients, app_factory=lambda: "app")
 
     assert lifecycle_state.calls == [("publish_clients", {"clients": clients})]
+
+
+@pytest.mark.asyncio
+async def test_graceful_shutdown_stops_the_api_server():
+    orchestrator = BridgeOrchestrator(lifecycle_state=RecordingLifecycleState())
+    finished = asyncio.Event()
+
+    async def serving():
+        await finished.wait()
+
+    task = asyncio.create_task(serving())
+    server = SimpleNamespace(should_exit=False, sendspin_task=task)
+    orchestrator._api_server = server
+
+    async def no_mute(_sink, _flag):
+        return False
+
+    async def stop_when_asked():
+        while not server.should_exit:
+            await asyncio.sleep(0)
+        finished.set()
+
+    stopper = asyncio.create_task(stop_when_asked())
+    await orchestrator.graceful_shutdown(clients=[], mute_sink=no_mute)
+    stopper.cancel()
+
+    assert server.should_exit is True
+    assert task.done()
 
 
 @pytest.mark.asyncio
@@ -286,7 +328,7 @@ async def test_graceful_shutdown_mutes_sinks_and_stops_clients():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_lifecycle_contract_sequence_updates_shared_state(monkeypatch):
+async def test_orchestrator_lifecycle_contract_sequence_updates_shared_state(monkeypatch, served_apps):
     published = []
     orchestrator = BridgeOrchestrator()
 
@@ -324,8 +366,7 @@ async def test_orchestrator_lifecycle_contract_sequence_updates_shared_state(mon
 
     try:
         await orchestrator.configure_executor(len(bootstrap.device_configs), web_thread_name="LifecycleWeb")
-        web_thread = orchestrator.start_web_server(clients, web_main=lambda: None, thread_name="LifecycleWeb")
-        web_thread.join(timeout=1)
+        await orchestrator.start_web_server(clients, app_factory=lambda: "app")
 
         orchestrator.lifecycle_state.publish_device_registry(
             configured_devices=len(bootstrap.device_configs),
@@ -691,9 +732,6 @@ async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
     loop = asyncio.get_running_loop()
     bootstrap = await orchestrator.initialize_runtime()
 
-    class FakeThread:
-        name = "LifecycleWebThread"
-
     fake_clients = [SimpleNamespace(player_name="Kitchen"), SimpleNamespace(player_name="Bedroom")]
     fake_monitor_task = asyncio.create_task(asyncio.sleep(3600))
 
@@ -703,12 +741,11 @@ async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
         call_order.append("devices")
         return SimpleNamespace(clients=fake_clients)
 
-    def fake_start_web_server(clients, *, web_main=None, thread_name="WebServer"):
+    async def fake_start_web_server(clients, *, app_factory=None):
         assert clients == fake_clients
-        observed["web_main"] = web_main
-        observed["thread_name"] = thread_name
+        observed["app_factory"] = app_factory
         call_order.append("web")
-        return FakeThread()
+        return SimpleNamespace(should_exit=False)
 
     def fake_install_signal_handlers(current_loop, *, shutdown_factory=None):
         assert current_loop is loop
@@ -717,7 +754,6 @@ async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
 
     async def fake_configure_executor(device_count, *, web_thread_name=""):
         assert device_count == 2
-        assert web_thread_name == "LifecycleWebThread"
         call_order.append("executor")
         return 8
 
@@ -751,9 +787,9 @@ async def test_run_bridge_lifecycle_sequences_remaining_flow(monkeypatch):
     )
 
     assert result == "done"
-    assert call_order == ["devices", "web", "executor", "signals", "ma", "runtime"]
-    assert observed["web_main"] is None
-    assert observed["thread_name"] == "WebServer"
+    # The executor is sized before the server starts: its endpoints run there.
+    assert call_order == ["devices", "executor", "web", "signals", "ma", "runtime"]
+    assert observed["app_factory"] is None
     assert callable(observed["shutdown_factory"])
 
     fake_monitor_task.cancel()
@@ -771,8 +807,8 @@ async def test_run_bridge_lifecycle_marks_startup_failure_when_ma_init_fails(mon
     def fake_initialize_devices(*args, **kwargs):
         return SimpleNamespace(clients=fake_clients)
 
-    def fake_start_web_server(clients, *, web_main=None, thread_name="WebServer"):
-        return SimpleNamespace(name="LifecycleWebThread")
+    async def fake_start_web_server(clients, *, app_factory=None):
+        return SimpleNamespace(should_exit=False)
 
     async def fake_configure_executor(device_count, *, web_thread_name=""):
         return 8

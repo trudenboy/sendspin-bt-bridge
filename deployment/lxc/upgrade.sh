@@ -234,8 +234,8 @@ for module_name in (
     "sendspin_bridge.bridge.state",
     "sendspin_bridge.services.music_assistant.ma_artwork",
     "sendspin_bridge.services.music_assistant.ma_monitor",
-    "sendspin_bridge.web.routes.api_ma",
-    "sendspin_bridge.web.interface",
+    "sendspin_bridge.application.music_assistant.playback",
+    "sendspin_bridge.api.app",
 ):
     importlib.import_module(module_name)
 print("import-ok")

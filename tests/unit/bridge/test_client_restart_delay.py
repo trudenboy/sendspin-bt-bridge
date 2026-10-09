@@ -39,7 +39,7 @@ def test_a_live_daemon_resets_the_reported_delay():
 
 
 def test_the_diagnostics_bundle_reports_the_backoff_in_force(monkeypatch):
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     client = _client()
     client._supervisor.on_death(bt_connected=True)

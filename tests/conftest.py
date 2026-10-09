@@ -11,7 +11,7 @@ def _unsampled_host_probe():
     process-wide cache, so without this a probe stubbed by one test would be
     served to the next one that builds a status payload.
     """
-    from sendspin_bridge.web.routes.api_status import reset_preflight_probe
+    from sendspin_bridge.application.diagnostics import reset_preflight_probe
 
     reset_preflight_probe()
     yield
@@ -173,34 +173,19 @@ def _reset_shared_module_state():
     with _ajs._scan_jobs_lock:
         _ajs._scan_jobs.clear()
 
-    # 3. Re-sync the `routes` package's submodule attributes with the
-    #    sys.modules entries. test_scan_cooldown's stash/pop fixture
-    #    sometimes leaves `routes.api_bt` pointing at a re-imported,
-    #    now-popped instance while sys.modules holds the original —
-    #    `monkeypatch.setattr(api_bt, ...)` then patches one and
-    #    Flask's blueprint references the other.
-    import sys as _sys
+    # 3. Forget jobs and the scan cooldown left by a sibling test.
+    import sendspin_bridge.application.bluetooth as _app_bt
+    from sendspin_bridge.application.jobs import jobs as _jobs
 
-    import sendspin_bridge.web.routes as _routes_pkg
-
-    for _submod in (
-        "api",
-        "api_bt",
-        "api_config",
-        "api_status",
-        "api_ha",
-        "api_ma",
-        "api_transport",
-        "api_ws",
-        "auth",
-        "ma_auth",
-        "ma_groups",
-        "ma_playback",
-        "views",
-        "_helpers",
-    ):
-        _full = f"sendspin_bridge.web.routes.{_submod}"
-        if _full in _sys.modules:
-            setattr(_routes_pkg, _submod, _sys.modules[_full])
+    _jobs.clear()
+    _app_bt._last_scan_completed = 0.0
 
     yield
+
+
+@pytest.fixture
+def api_client():
+    """The bridge API with authentication off."""
+    from tests.support.api_client import make_client
+
+    return make_client()

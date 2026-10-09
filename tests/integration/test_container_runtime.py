@@ -6,7 +6,7 @@ def test_container_runtime_smoke_imports_runtime_modules():
 
     assert "sendspin_bridge.bridge.orchestrator" in imported
     assert "sendspin_bridge.bridge.client" in imported
-    assert "sendspin_bridge.web.interface" in imported
+    assert "sendspin_bridge.api.app" in imported
 
 
 def test_container_runtime_smoke_runs_translation_path():

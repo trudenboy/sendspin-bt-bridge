@@ -1,12 +1,12 @@
-"""Multi-adapter behaviour for /api/bt/paired and /api/bt/remove.
+"""Multi-adapter behaviour for GET /api/v1/bluetooth/devices and DELETE /api/v1/bluetooth/devices/{mac}.
 
 Prior to this change, both endpoints only talked to the BlueZ default
 controller, so bonds living on a non-default adapter were invisible and
 could not be removed via the UI.  These tests lock in the new behaviour:
 
-* ``/api/bt/paired`` enumerates every known adapter and reports which
+* ``GET /api/v1/bluetooth/devices`` enumerates every known adapter and reports which
   adapter(s) each device is bonded with.
-* ``/api/bt/remove`` accepts an optional ``adapter_mac`` and, when it is
+* ``DELETE /api/v1/bluetooth/devices/{mac}`` accepts an optional ``adapter_mac`` and, when it is
   absent, removes the bond from *every* adapter rather than only the
   default one.
 """
@@ -16,16 +16,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from flask import Flask
 
 
 @pytest.fixture
 def client(tmp_config):
-    from sendspin_bridge.web.routes.api_bt import bt_bp
+    from tests.support.api_client import make_client
 
-    app = Flask(__name__)
-    app.register_blueprint(bt_bp)
-    return app.test_client()
+    return make_client()
 
 
 def _make_paired_stdout(devices: list[tuple[str, str]]) -> str:
@@ -35,7 +32,7 @@ def _make_paired_stdout(devices: list[tuple[str, str]]) -> str:
 def test_paired_enumerates_every_adapter(client, monkeypatch, installed_bluez):
     """Two adapters, one device bonded on each → both surface with adapters[]."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     adapters = ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"]
     monkeypatch.setattr(module, "list_bt_adapters", lambda: list(adapters))
@@ -47,9 +44,9 @@ def test_paired_enumerates_every_adapter(client, monkeypatch, installed_bluez):
         "devices Paired", stdout=_make_paired_stdout([("BB:BB:BB:BB:BB:02", "Speaker Bravo")])
     )
 
-    resp = client.get("/api/bt/paired")
+    resp = client.get("/api/v1/bluetooth/devices")
     assert resp.status_code == 200
-    devices = resp.get_json()["devices"]
+    devices = resp.json()
 
     by_mac = {d["mac"]: d for d in devices}
     assert set(by_mac) == {"AA:AA:AA:AA:AA:01", "BB:BB:BB:BB:BB:02"}
@@ -63,7 +60,7 @@ def test_paired_enumerates_every_adapter(client, monkeypatch, installed_bluez):
 def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch, installed_bluez):
     """Same MAC visible on two adapters collapses to one entry with both MACs."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     adapters = ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"]
     monkeypatch.setattr(module, "list_bt_adapters", lambda: list(adapters))
@@ -73,9 +70,9 @@ def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch, i
             "devices Paired", stdout=_make_paired_stdout([("CC:CC:CC:CC:CC:03", "Shared Speaker")])
         )
 
-    resp = client.get("/api/bt/paired")
+    resp = client.get("/api/v1/bluetooth/devices")
     assert resp.status_code == 200
-    devices = resp.get_json()["devices"]
+    devices = resp.json()
 
     assert len(devices) == 1
     entry = devices[0]
@@ -86,14 +83,14 @@ def test_paired_merges_device_bonded_on_multiple_adapters(client, monkeypatch, i
 def test_paired_falls_back_when_adapter_list_is_empty(client, monkeypatch, installed_bluez):
     """Environments where ``bluetoothctl list`` fails still produce a list."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
     installed_bluez.on("devices", stdout=_make_paired_stdout([("DD:DD:DD:DD:DD:04", "Lone Speaker")]))
 
-    resp = client.get("/api/bt/paired")
+    resp = client.get("/api/v1/bluetooth/devices")
     assert resp.status_code == 200
-    devices = resp.get_json()["devices"]
+    devices = resp.json()
     assert any(d["mac"] == "DD:DD:DD:DD:DD:04" for d in devices)
     # The unscoped fallback runs plain ``devices`` against the default
     # controller — no select line, and no "Paired" filter (legacy contract).
@@ -103,7 +100,7 @@ def test_paired_falls_back_when_adapter_list_is_empty(client, monkeypatch, insta
 
 
 def test_paired_filters_unnamed_devices_by_default(client, monkeypatch, installed_bluez):
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: ["11:11:11:11:11:11"])
     installed_bluez.on(
@@ -116,18 +113,18 @@ def test_paired_filters_unnamed_devices_by_default(client, monkeypatch, installe
         ),
     )
 
-    resp = client.get("/api/bt/paired")
+    resp = client.get("/api/v1/bluetooth/devices")
     assert resp.status_code == 200
-    macs = {d["mac"] for d in resp.get_json()["devices"]}
+    macs = {d["mac"] for d in resp.json()}
     assert macs == {"AA:BB:CC:DD:EE:AA"}
 
-    resp_all = client.get("/api/bt/paired?filter=0")
-    macs_all = {d["mac"] for d in resp_all.get_json()["devices"]}
+    resp_all = client.get("/api/v1/bluetooth/devices?named_only=false")
+    macs_all = {d["mac"] for d in resp_all.json()}
     assert macs_all == {"AA:BB:CC:DD:EE:AA", "AA:BB:CC:DD:EE:BB"}
 
 
 def test_remove_without_adapter_mac_targets_every_adapter(client, monkeypatch):
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     adapters = ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"]
     monkeypatch.setattr(module, "list_bt_adapters", lambda: list(adapters))
@@ -139,40 +136,31 @@ def test_remove_without_adapter_mac_targets_every_adapter(client, monkeypatch):
 
     monkeypatch.setattr(module, "_bt_remove_device", fake_remove)
 
-    resp = client.post("/api/bt/remove", json={"mac": "AA:BB:CC:DD:EE:01"})
-    assert resp.status_code == 200
-    payload = resp.get_json()
-    assert payload["ok"] is True
-    assert payload["mac"] == "AA:BB:CC:DD:EE:01"
+    resp = client.delete("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:01")
+    assert resp.status_code == 204
 
     assert sorted(recorded) == sorted([("AA:BB:CC:DD:EE:01", adapter) for adapter in adapters])
 
 
 def test_remove_with_adapter_mac_only_targets_that_adapter(client, monkeypatch):
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"])
     fake_remove = MagicMock()
     monkeypatch.setattr(module, "_bt_remove_device", fake_remove)
 
-    resp = client.post(
-        "/api/bt/remove",
-        json={"mac": "AA:BB:CC:DD:EE:01", "adapter_mac": "00:15:83:FF:8F:2B"},
-    )
-    assert resp.status_code == 200
+    resp = client.delete("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:01", params={"adapter_mac": "00:15:83:FF:8F:2B"})
+    assert resp.status_code == 204
     fake_remove.assert_called_once_with("AA:BB:CC:DD:EE:01", "00:15:83:FF:8F:2B")
 
 
 def test_remove_rejects_invalid_adapter_mac(client, monkeypatch):
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     fake_remove = MagicMock()
     monkeypatch.setattr(module, "_bt_remove_device", fake_remove)
 
-    resp = client.post(
-        "/api/bt/remove",
-        json={"mac": "AA:BB:CC:DD:EE:01", "adapter_mac": "not-a-mac"},
-    )
+    resp = client.delete("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:01", params={"adapter_mac": "not-a-mac"})
     assert resp.status_code == 400
     fake_remove.assert_not_called()
 
@@ -182,26 +170,22 @@ def test_remove_rejects_adapter_mac_not_present_on_host(client, monkeypatch):
     ``list_bt_adapters`` must return 400 instead of silently "succeeding"
     against the default controller while the ``select`` failed."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: ["C0:FB:F9:62:D7:D6", "00:15:83:FF:8F:2B"])
     fake_remove = MagicMock()
     monkeypatch.setattr(module, "_bt_remove_device", fake_remove)
 
-    resp = client.post(
-        "/api/bt/remove",
-        json={"mac": "AA:BB:CC:DD:EE:01", "adapter_mac": "DE:AD:BE:EF:00:01"},
-    )
+    resp = client.delete("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:01", params={"adapter_mac": "DE:AD:BE:EF:00:01"})
     assert resp.status_code == 400
-    body = resp.get_json() or {}
-    assert "adapter" in (body.get("error") or "").lower()
+    assert "adapter" in resp.json()["detail"].lower()
     fake_remove.assert_not_called()
 
 
 def test_remove_without_adapters_still_calls_default(client, monkeypatch):
     """Pre-existing behaviour preserved when no adapters are known."""
 
-    import sendspin_bridge.web.routes.api_bt as module
+    import sendspin_bridge.application.bluetooth as module
 
     monkeypatch.setattr(module, "list_bt_adapters", lambda: [])
     recorded: list[tuple[str, str]] = []
@@ -211,6 +195,6 @@ def test_remove_without_adapters_still_calls_default(client, monkeypatch):
 
     monkeypatch.setattr(module, "_bt_remove_device", fake_remove)
 
-    resp = client.post("/api/bt/remove", json={"mac": "AA:BB:CC:DD:EE:02"})
-    assert resp.status_code == 200
+    resp = client.delete("/api/v1/bluetooth/devices/AA:BB:CC:DD:EE:02")
+    assert resp.status_code == 204
     assert recorded == [("AA:BB:CC:DD:EE:02", "")]

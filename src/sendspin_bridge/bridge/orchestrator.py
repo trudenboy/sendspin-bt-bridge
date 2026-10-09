@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import signal
 import socket
 import subprocess
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -417,29 +417,22 @@ class BridgeOrchestrator:
         self.lifecycle_state.publish_main_loop(asyncio.get_running_loop(), web_thread_name=web_thread_name)
         return pool_size
 
-    def start_web_server(
+    async def start_web_server(
         self,
         clients: list[Any],
         *,
-        web_main: Callable[[], None] | None = None,
-        thread_name: str = "WebServer",
-    ) -> threading.Thread:
-        """Publish clients to shared state and start the web server thread."""
-        web_main_fn = web_main
-        if web_main_fn is None:
-            from sendspin_bridge.web.interface import main as imported_web_main
+        app_factory: Callable[[], Any] | None = None,
+        port: int | None = None,
+    ) -> Any:
+        """Publish clients to shared state and serve the API and web UI on this loop."""
+        from sendspin_bridge.api.app import create_app
+        from sendspin_bridge.api.server import serve_api
 
-            web_main_fn = imported_web_main
-
+        factory = app_factory or create_app
         self.lifecycle_state.publish_clients(clients)
-
-        def _run_web_server() -> None:
-            web_main_fn()
-
-        web_thread = threading.Thread(target=_run_web_server, daemon=True, name=thread_name)
-        web_thread.start()
-        logger.info("Web interface starting in background...")
-        return web_thread
+        server = await serve_api(factory(), port)
+        self._api_server = server
+        return server
 
     async def graceful_shutdown(
         self,
@@ -495,6 +488,14 @@ class BridgeOrchestrator:
             await sink_monitor.stop()
         if hci_monitor is not None:
             await hci_monitor.stop()
+
+        api_server = getattr(self, "_api_server", None)
+        if api_server is not None:
+            api_server.should_exit = True
+            task = getattr(api_server, "sendspin_task", None)
+            if task is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(asyncio.shield(task), timeout=5)
 
         self.lifecycle_state.publish_clients([])
         self.lifecycle_state.publish_shutdown_complete(stopped_clients=len(shutdown_clients))
@@ -906,7 +907,7 @@ class BridgeOrchestrator:
         filter_devices_fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
         load_saved_volume_fn: Callable[[str], int | None] | None = None,
         persist_enabled_fn: Callable[[str, bool], None] | None = None,
-        web_main: Callable[[], None] | None = None,
+        app_factory: Callable[[], Any] | None = None,
     ) -> Any:
         """Run the remaining bridge lifecycle after runtime bootstrap is complete."""
         startup_phase = "devices"
@@ -936,11 +937,9 @@ class BridgeOrchestrator:
             await sink_monitor.start()
             await hci_monitor.start()
             startup_phase = "web"
-            web_thread = (
-                self.start_web_server(clients, web_main=web_main) if web_main else self.start_web_server(clients)
-            )
             loop = asyncio.get_running_loop()
-            await self.configure_executor(len(clients), web_thread_name=web_thread.name)
+            await self.configure_executor(len(clients))
+            await self.start_web_server(clients, app_factory=app_factory)
             startup_phase = "signals"
             self.install_signal_handlers(
                 loop,

@@ -289,43 +289,12 @@ def _bridge_restart(_value: Any) -> CommandResult:
     return CommandResult(success=True, message="Bridge restart scheduled")
 
 
-def _bridge_scan(_value: Any) -> CommandResult:
-    """Trigger a BT scan.
-
-    Heavy operation — the existing ``/api/bt/scan`` endpoint runs it in a
-    background job with TTL-tracked results.  For HA we only ack scheduling;
-    operators inspect results in the web UI.
-    """
-    try:
-        # Best-effort: try to kick off a scan via routes/api_bt's job
-        # machinery if it exposes one; otherwise fall back to ack-only.
-        # The route module is imported by name so mypy doesn't insist
-        # on a concrete attribute that may not exist on older builds.
-        import importlib
-
-        api_bt_mod = importlib.import_module("sendspin_bridge.web.routes.api_bt")
-        starter = getattr(api_bt_mod, "_start_bt_scan_job", None)
-        if callable(starter):
-            job_id = starter()
-            return CommandResult(success=True, message="Scan started", details={"job_id": job_id})
-    except Exception as exc:
-        logger.debug("Bridge scan dispatch fell back: %s", exc)
-    # Without a job-pipeline available we still want callers to know
-    # the command was acknowledged but no job tracking exists.
-    return CommandResult(
-        success=True,
-        message="Scan acknowledged (no job pipeline available)",
-        details={"job_id": None},
-    )
-
-
 _BRIDGE_HANDLERS = {
     "restart": _bridge_restart,
     # ``scan`` is intentionally absent from the HA dispatcher — scan
     # results only matter inside the bridge web UI's pair-flow modal,
-    # which HA can't open (see services/ha_entity_model.py).  The
-    # ``_bridge_scan`` helper above stays in the module so future
-    # surfaces (e.g. a programmatic API) can reuse it.
+    # which HA can't open (see services/ha_entity_model.py).  Programmatic
+    # callers use ``POST /api/v1/bluetooth/scans``.
 }
 
 

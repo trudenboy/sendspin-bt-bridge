@@ -90,7 +90,7 @@ def test_the_diagnostics_endpoint_passes_the_state_model(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
 
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     seen: list[object] = []
 
@@ -102,14 +102,12 @@ def test_the_diagnostics_endpoint_passes_the_state_model(monkeypatch, tmp_path):
     monkeypatch.setattr(api_status, "_build_onboarding_assistant_payload", lambda **kw: {})
     monkeypatch.setattr(api_status, "_build_operator_guidance_payload", lambda **kw: {})
 
-    from flask import Flask
+    from tests.support.api_client import make_client
 
-    app = Flask(__name__)
-    app.register_blueprint(api_status.status_bp)
     # The response itself is not the subject: on a host without PulseAudio
     # some collectors fail and the bundle still renders their errors.  What
     # matters is that the recovery assistant was handed the state model.
-    app.test_client().get("/api/diagnostics")
+    make_client().get("/api/v1/diagnostics")
 
     assert seen, "the recovery assistant was never built"
     assert seen[0] is not None, "the diagnostics bundle was built without the state model"
@@ -124,7 +122,7 @@ def test_the_status_endpoint_passes_the_state_model(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
 
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     seen: list[object] = []
 
@@ -151,7 +149,7 @@ def _spy_on_the_snapshot_builder(monkeypatch, tmp_path) -> list[object]:
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({}))
 
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     seen: list[object] = []
 
@@ -174,7 +172,7 @@ def test_a_caller_that_names_no_state_still_gets_one(monkeypatch, tmp_path):
     """
     seen = _spy_on_the_snapshot_builder(monkeypatch, tmp_path)
 
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     api_status._build_recovery_assistant_payload()
 
@@ -185,7 +183,7 @@ def test_a_caller_that_names_no_state_still_gets_one(monkeypatch, tmp_path):
 def test_a_caller_that_names_a_state_keeps_it(monkeypatch, tmp_path):
     seen = _spy_on_the_snapshot_builder(monkeypatch, tmp_path)
 
-    import sendspin_bridge.web.routes.api_status as api_status
+    import sendspin_bridge.application.diagnostics as api_status
 
     sentinel = object()
     api_status._build_recovery_assistant_payload(bridge_state=sentinel)

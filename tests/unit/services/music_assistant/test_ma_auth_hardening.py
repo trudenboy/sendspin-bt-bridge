@@ -1,4 +1,4 @@
-"""Follow-up hardening tests for routes.ma_auth.
+"""Follow-up hardening tests for the Music Assistant sign-in.
 
 Covers two issues surfaced during the v2.58.0-rc.1 review:
 
@@ -6,7 +6,7 @@ Covers two issues surfaced during the v2.58.0-rc.1 review:
   parsed out of the MA server's ``authorization_url`` without re-running
   the SSRF check.  A malicious MA could redirect us at an internal HA.
 
-* bug_003 — ``/api/ma/ha-auth-page`` rendered ``ma_url`` into an inline
+* bug_003 — the HA auth popup page rendered ``ma_url`` into an inline
   ``<script>`` block via ``json.dumps``, which does not escape
   ``</script>`` — enabling reflected XSS.
 """
@@ -14,12 +14,13 @@ Covers two issues surfaced during the v2.58.0-rc.1 review:
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
-from flask import Flask
 
-from sendspin_bridge.web.routes import ma_auth as ma_auth_module
-from sendspin_bridge.web.routes.api_ma import ma_bp
+from sendspin_bridge.application.music_assistant import auth as ma_auth_module
+
+PAGE = "/api/v1/music-assistant/session/ha-auth-page"
 
 
 @pytest.fixture(autouse=True)
@@ -32,17 +33,16 @@ def _isolated_config(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def app():
-    application = Flask(__name__)
-    application.secret_key = "test-secret"
-    application.config["TESTING"] = True
-    application.register_blueprint(ma_bp)
-    return application
+def client():
+    from tests.support.api_client import make_client
+
+    return make_client()
 
 
-@pytest.fixture()
-def client(app):
-    return app.test_client()
+def _csp_nonce(resp) -> str:
+    match = re.search(r"'nonce-([^']+)'", resp.headers["Content-Security-Policy"])
+    assert match, resp.headers["Content-Security-Policy"]
+    return match.group(1)
 
 
 class TestOauthBootstrapHaBaseValidated:
@@ -109,12 +109,9 @@ class TestHaAuthPageNoScriptBreakout:
 
         # Include an inline-script breakout attempt inside the URL
         payload = 'http://a.example/</script><script>alert("xss")</script>'
-        resp = client.get(
-            "/api/ma/ha-auth-page",
-            query_string={"ma_url": payload},
-        )
+        resp = client.get(PAGE, params={"ma_url": payload})
         assert resp.status_code == 200
-        body = resp.data.decode("utf-8")
+        body = resp.text
 
         # The raw </script> must not appear inside the response (it was
         # escaped to <\/script>).  If it does, the page renders two
@@ -131,38 +128,24 @@ class TestHaAuthPageCspCompliance:
     credentials silently "swallowed".
     """
 
-    def test_popup_inline_script_has_csp_nonce(self, app, client, monkeypatch):
+    def test_popup_inline_script_has_csp_nonce(self, client, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
         monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
 
-        # Mirror the real app's per-request nonce lifecycle from web_interface.
-        from flask import g
-
-        @app.before_request
-        def _seed_nonce():
-            g.csp_nonce = "TESTNONCE123"
-
-        resp = client.get(
-            "/api/ma/ha-auth-page",
-            query_string={"ma_url": "http://a.example"},
-        )
+        resp = client.get(PAGE, params={"ma_url": "http://a.example"})
         assert resp.status_code == 200
-        body = resp.data.decode("utf-8")
+        body = resp.text
 
-        # The popup's inline <script> must carry the per-request nonce so
-        # that production CSP `script-src 'self' 'nonce-<value>'` does not
-        # block it.
-        assert 'nonce="TESTNONCE123"' in body
+        # The popup's inline <script> must carry the nonce its own CSP
+        # (`script-src 'self' 'nonce-<value>'`) allows, or it is blocked.
+        assert f'nonce="{_csp_nonce(resp)}"' in body
 
     def test_popup_has_no_inline_event_handlers(self, client, monkeypatch):
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
         monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
 
-        resp = client.get(
-            "/api/ma/ha-auth-page",
-            query_string={"ma_url": "http://a.example"},
-        )
-        body = resp.data.decode("utf-8")
+        resp = client.get(PAGE, params={"ma_url": "http://a.example"})
+        body = resp.text
 
         # Inline event-handler attributes (``onsubmit=``, ``onclick=``, …)
         # are blocked by a CSP that uses a nonce without ``'unsafe-inline'``.
@@ -176,22 +159,15 @@ class TestHaAuthPageCspCompliance:
         )
         assert not inline_handlers, f"Popup still has inline event handlers: {inline_handlers}"
 
-    def test_popup_placeholder_is_substituted(self, app, client, monkeypatch):
-        """Regression guard: the raw ``__CSP_NONCE__`` token must never leak
-        into the rendered HTML."""
+    def test_popup_placeholder_is_substituted(self, client, monkeypatch):
+        """Regression guard: the raw placeholders must never leak into the
+        rendered HTML."""
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
         monkeypatch.setattr(ma_auth_module, "is_safe_external_url", lambda _u: True)
 
-        from flask import g
-
-        @app.before_request
-        def _seed_nonce():
-            g.csp_nonce = "abcDEF"
-
-        resp = client.get(
-            "/api/ma/ha-auth-page",
-            query_string={"ma_url": "http://a.example"},
-        )
-        body = resp.data.decode("utf-8")
+        resp = client.get(PAGE, params={"ma_url": "http://a.example"})
+        body = resp.text
 
         assert "__CSP_NONCE__" not in body
+        assert "__CSRF_TOKEN__" not in body
+        assert "__MA_URL__" not in body

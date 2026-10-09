@@ -10,13 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
-import secrets
 from unittest.mock import patch
 
 import pytest
-from flask import Flask
-
-from sendspin_bridge.web.routes.auth import auth_bp
 
 
 @pytest.fixture(autouse=True)
@@ -35,41 +31,14 @@ def _ha_mode(monkeypatch):
 
 
 @pytest.fixture()
-def app():
-    application = Flask(
-        __name__,
-        template_folder="../../../../src/sendspin_bridge/web/templates",
-        static_folder="../../../../src/sendspin_bridge/web/static",
-    )
-    application.secret_key = "test-secret"
-    application.config["TESTING"] = True
-    application.register_blueprint(auth_bp)
+def client():
+    from tests.support.api_client import make_client
 
-    @application.route("/static/v<version>/<path:filename>")
-    def vstatic(version, filename):
-        from flask import send_from_directory
-
-        return send_from_directory(application.static_folder, filename)
-
-    @application.context_processor
-    def _inject_version():
-        return {"VERSION": "0.0.0-test"}
-
-    return application
+    return make_client()
 
 
-@pytest.fixture()
-def client(app):
-    return app.test_client()
-
-
-def _post_login(client, **extra):
-    token = secrets.token_hex(32)
-    with client.session_transaction() as sess:
-        sess["csrf_token"] = token
-    data = {"csrf_token": token, "username": "alice", "password": "pw"}
-    data.update(extra)
-    return client.post("/login", data=data)
+def _post_login(client):
+    return client.post("/api/v1/auth/session", json={"method": "ha", "username": "alice", "password": "pw"})
 
 
 class TestFallbackOffByDefault:
@@ -82,14 +51,14 @@ class TestFallbackOffByDefault:
             return True
 
         with (
-            patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
-            patch("sendspin_bridge.web.routes.auth._supervisor_auth", side_effect=_fake_supervisor_auth),
-            caplog.at_level(logging.ERROR, logger="sendspin_bridge.web.routes.auth"),
+            patch("sendspin_bridge.application.auth.flow_start", return_value=None),
+            patch("sendspin_bridge.application.auth._supervisor_auth", side_effect=_fake_supervisor_auth),
+            caplog.at_level(logging.ERROR, logger="sendspin_bridge.application.auth"),
         ):
             resp = _post_login(client)
 
-        assert resp.status_code == 200
-        assert b"Authentication service unavailable" in resp.data
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "Authentication service unavailable"
         assert super_called["count"] == 0
         assert any("refusing Supervisor fallback" in rec.message for rec in caplog.records)
 
@@ -99,34 +68,31 @@ class TestFallbackOnOptIn:
         monkeypatch.setenv("ALLOW_SUPERVISOR_FALLBACK", "1")
 
         with (
-            patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
-            patch("sendspin_bridge.web.routes.auth._supervisor_auth", return_value=True),
-            caplog.at_level(logging.WARNING, logger="sendspin_bridge.web.routes.auth"),
-        ):
-            resp = _post_login(client)
-
-        assert resp.status_code == 302
-        assert "/login" not in resp.headers["Location"] or "next" in resp.headers["Location"]
-        assert any("does NOT verify MFA" in rec.message for rec in caplog.records)
-        with client.session_transaction() as sess:
-            assert sess.get("authenticated") is True
-            assert sess.get("ha_user") == "alice"
-            # outer /login wrapper stamps auth_method from form.method; the
-            # inner handler's "ha_supervisor_fallback" marker is overwritten —
-            # the authoritative signal that fallback was used is the log line.
-
-    def test_fallback_invalid_creds_records_failure(self, client, monkeypatch):
-        monkeypatch.setenv("ALLOW_SUPERVISOR_FALLBACK", "1")
-
-        with (
-            patch("sendspin_bridge.web.routes.auth._ha_flow_start", return_value=None),
-            patch("sendspin_bridge.web.routes.auth._supervisor_auth", return_value=False),
-            patch("sendspin_bridge.web.routes.auth._record_failure") as record_failure,
+            patch("sendspin_bridge.application.auth.flow_start", return_value=None),
+            patch("sendspin_bridge.application.auth._supervisor_auth", return_value=True),
+            caplog.at_level(logging.WARNING, logger="sendspin_bridge.application.auth"),
         ):
             resp = _post_login(client)
 
         assert resp.status_code == 200
-        assert b"Invalid credentials" in resp.data
+        assert resp.json()["status"] == "signed_in"
+        assert any("does NOT verify MFA" in rec.message for rec in caplog.records)
+        session = client.get("/api/v1/auth/session").json()
+        assert session["authenticated"] is True
+        assert session["user"] == "alice"
+
+    def test_fallback_invalid_creds_records_failure(self, client, monkeypatch):
+        monkeypatch.setenv("ALLOW_SUPERVISOR_FALLBACK", "1")
+        import sendspin_bridge.application.auth as auth_uc
+
+        with (
+            patch("sendspin_bridge.application.auth.flow_start", return_value=None),
+            patch("sendspin_bridge.application.auth._supervisor_auth", return_value=False),
+            patch.object(auth_uc.rate_limiter, "record_failure") as record_failure,
+        ):
+            resp = _post_login(client)
+
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Invalid credentials"
         record_failure.assert_called_once()
-        with client.session_transaction() as sess:
-            assert "authenticated" not in sess
+        assert client.get("/api/v1/auth/session").json()["authenticated"] is False

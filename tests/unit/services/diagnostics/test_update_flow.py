@@ -7,24 +7,22 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.api_client import wait_for_job
+
 
 @pytest.fixture()
 def config_client(tmp_path, monkeypatch):
-    from flask import Flask
-
+    import sendspin_bridge.application.config as api_config
     import sendspin_bridge.config as config
-    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     monkeypatch.setattr(api_config, "CONFIG_FILE", tmp_path / "config.json")
     (tmp_path / "config.json").write_text("{}")
 
-    app = Flask(__name__)
-    app.secret_key = "testing"
-    app.config["TESTING"] = True
-    app.register_blueprint(api_config.config_bp)
-    return app.test_client()
+    from tests.support.api_client import make_client
+
+    return make_client()
 
 
 def test_start_upgrade_job_passes_release_tag(monkeypatch):
@@ -179,7 +177,7 @@ def test_check_latest_version_uses_tags_for_prerelease(monkeypatch):
 
 
 def test_api_update_apply_starts_requested_version(config_client, monkeypatch):
-    import sendspin_bridge.web.routes.api_config as api_config
+    import sendspin_bridge.application.config as api_config
 
     captured = {}
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "systemd")
@@ -190,18 +188,17 @@ def test_api_update_apply_starts_requested_version(config_client, monkeypatch):
 
     monkeypatch.setattr(api_config, "_start_upgrade_job", fake_start_upgrade_job)
 
-    resp = config_client.post("/api/update/apply", json={"version": "2.32.0"})
+    resp = config_client.post("/api/v1/updates/apply", json={"ref": "2.32.0"})
 
-    assert resp.status_code == 200
+    assert resp.status_code == 202
     assert captured["target_ref"] == "2.32.0"
-    assert resp.get_json()["message"] == "Upgrade started."
+    assert resp.json()["message"] == "Upgrade started."
 
 
-def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
-    import sendspin_bridge.web.routes.api_config as api_config
+def test_api_update_check_uses_selected_channel(config_client, monkeypatch, bridge_loop):
+    import sendspin_bridge.application.config as api_config
 
     captured = {}
-    monkeypatch.setattr(api_config, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc"})
 
     async def fake_check_latest_version(channel=None):
@@ -217,36 +214,20 @@ def test_api_update_check_uses_selected_channel(config_client, monkeypatch):
             "prerelease": True,
         }
 
-    class _ImmediateThread:
-        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
-            self._target = target
-            self._args = args
-            self._kwargs = kwargs or {}
-
-        def start(self):
-            self._target(*self._args, **self._kwargs)
-
-    def fake_run_coroutine_threadsafe(coro, loop):
-        return SimpleNamespace(result=lambda timeout=None: asyncio.run(coro))
-
     monkeypatch.setattr(api_config, "check_latest_version", fake_check_latest_version)
-    monkeypatch.setattr(api_config.asyncio, "run_coroutine_threadsafe", fake_run_coroutine_threadsafe)
-    monkeypatch.setattr(api_config.threading, "Thread", _ImmediateThread)
 
-    resp = config_client.post("/api/update/check")
+    resp = config_client.post("/api/v1/updates/check")
 
     assert resp.status_code == 202
-    job_id = resp.get_json()["job_id"]
+    job = wait_for_job(config_client, resp.json())
     assert captured["channel"] == "rc"
-    result = config_client.get(f"/api/update/check/result/{job_id}")
-    assert result.status_code == 200
-    assert result.get_json()["channel"] == "rc"
+    assert job["status"] == "succeeded"
+    assert job["result"]["channel"] == "rc"
 
 
-def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client, monkeypatch):
-    import sendspin_bridge.web.routes.api_config as api_config
+def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client, monkeypatch, bridge_loop):
+    import sendspin_bridge.application.config as api_config
 
-    monkeypatch.setattr(api_config, "get_main_loop", lambda: object())
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc"})
     monkeypatch.setattr(api_config, "get_runtime_version", lambda: "2.41.0-rc.1")
 
@@ -263,37 +244,20 @@ def test_api_update_check_uses_runtime_version_ref_for_rc_updates(config_client,
             "prerelease": True,
         }
 
-    class _ImmediateThread:
-        def __init__(self, target, args=(), kwargs=None, daemon=None, name=None):
-            self._target = target
-            self._args = args
-            self._kwargs = kwargs or {}
-
-        def start(self):
-            self._target(*self._args, **self._kwargs)
-
-    def fake_run_coroutine_threadsafe(coro, loop):
-        return SimpleNamespace(result=lambda timeout=None: asyncio.run(coro))
-
     monkeypatch.setattr(api_config, "check_latest_version", fake_check_latest_version)
-    monkeypatch.setattr(api_config.asyncio, "run_coroutine_threadsafe", fake_run_coroutine_threadsafe)
-    monkeypatch.setattr(api_config.threading, "Thread", _ImmediateThread)
 
-    resp = config_client.post("/api/update/check")
+    resp = config_client.post("/api/v1/updates/check")
 
     assert resp.status_code == 202
-    job_id = resp.get_json()["job_id"]
-    result = config_client.get(f"/api/update/check/result/{job_id}")
-    assert result.status_code == 200
-    payload = result.get_json()
+    payload = wait_for_job(config_client, resp.json())["result"]
     assert payload["update_available"] is True
     assert payload["current_version"] == "2.41.0-rc.1"
     assert payload["version"] == "2.41.0-rc.2"
 
 
 def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch):
+    import sendspin_bridge.application.config as api_config
     import sendspin_bridge.bridge.state as state
-    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "docker")
@@ -307,12 +271,12 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
     )
 
     try:
-        resp = config_client.get("/api/update/info")
+        resp = config_client.get("/api/v1/updates")
     finally:
         state.set_update_available(None)
 
     assert resp.status_code == 200
-    data = resp.get_json()
+    data = resp.json()
     assert data["channel"] == "beta"
     assert "Beta channel" in data["channel_warning"]
     assert data["command"] == "docker compose pull && docker compose up -d"
@@ -320,8 +284,8 @@ def test_api_update_info_reports_beta_channel_warning(config_client, monkeypatch
 
 
 def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_client, monkeypatch):
+    import sendspin_bridge.application.config as api_config
     import sendspin_bridge.bridge.state as state
-    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "rc", "AUTO_UPDATE": False})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
@@ -336,10 +300,10 @@ def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_clien
     )
     state.set_update_available(None)
 
-    resp = config_client.get("/api/update/info")
+    resp = config_client.get("/api/v1/updates")
 
     assert resp.status_code == 200
-    data = resp.get_json()
+    data = resp.json()
     assert data["delivery_channel"] == "rc"
     assert data["delivery_slug"] == "85b1ecde_sendspin_bt_bridge_rc"
     assert data["channel_switch_required"] is False
@@ -347,8 +311,8 @@ def test_api_update_info_reports_matching_ha_addon_delivery_channel(config_clien
 
 
 def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_variant(config_client, monkeypatch):
+    import sendspin_bridge.application.config as api_config
     import sendspin_bridge.bridge.state as state
-    import sendspin_bridge.web.routes.api_config as api_config
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta", "AUTO_UPDATE": False})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
@@ -363,10 +327,10 @@ def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_v
     )
     state.set_update_available(None)
 
-    resp = config_client.get("/api/update/info")
+    resp = config_client.get("/api/v1/updates")
 
     assert resp.status_code == 200
-    data = resp.get_json()
+    data = resp.json()
     assert data["delivery_channel"] == "stable"
     assert data["channel_switch_required"] is True
     assert "Selected update channel is `beta`" in data["instructions"]
@@ -374,7 +338,7 @@ def test_api_update_info_flags_when_selected_channel_differs_from_installed_ha_v
 
 
 def test_api_update_apply_in_ha_addon_returns_matching_variant_guidance(config_client, monkeypatch):
-    import sendspin_bridge.web.routes.api_config as api_config
+    import sendspin_bridge.application.config as api_config
 
     monkeypatch.setattr(api_config, "load_config", lambda: {"UPDATE_CHANNEL": "beta"})
     monkeypatch.setattr(api_config, "_detect_runtime", lambda: "ha_addon")
@@ -388,10 +352,11 @@ def test_api_update_apply_in_ha_addon_returns_matching_variant_guidance(config_c
         },
     )
 
-    resp = config_client.post("/api/update/apply")
+    resp = config_client.post("/api/v1/updates/apply")
 
-    assert resp.status_code == 400
-    assert "Selected update channel is `beta`" in resp.get_json()["error"]
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "manual_update"
+    assert "Selected update channel is `beta`" in resp.json()["detail"]
 
 
 def test_lxc_scripts_sync_repo_snapshot_recursively():

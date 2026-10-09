@@ -2,7 +2,8 @@
 
 import pytest
 
-from sendspin_bridge.web.routes._helpers import validate_adapter
+from sendspin_bridge.application.errors import UseCaseError
+from sendspin_bridge.application.errors import normalize_adapter as validate_adapter
 
 # ---------------------------------------------------------------------------
 # Valid inputs
@@ -56,5 +57,5 @@ def test_none_or_empty_returns_empty(value):
     ],
 )
 def test_injection_rejected(value):
-    with pytest.raises(ValueError, match="Invalid adapter identifier"):
+    with pytest.raises(UseCaseError, match="Invalid adapter identifier"):
         validate_adapter(value)

@@ -1,14 +1,13 @@
-"""Tests for rate-limit XFF hop selection, 500 handler, and X-Frame-Options."""
+"""Tests for rate-limit XFF hop selection, the 500 handler, and X-Frame-Options."""
 
 from __future__ import annotations
 
 import json
 
 import pytest
-from flask import Blueprint, Flask, abort
+from fastapi import Request  # noqa: TC002 - FastAPI reads the annotation at runtime
 
-from sendspin_bridge.web.request_identity import TrustPolicy
-from sendspin_bridge.web.routes.auth import _get_forwarded_client_ip, auth_bp
+from sendspin_bridge.security.request_identity import TrustPolicy
 
 
 @pytest.fixture(autouse=True)
@@ -20,109 +19,79 @@ def _isolated_config(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(json.dumps({}))
 
 
-@pytest.fixture()
-def app():
-    application = Flask(__name__)
-    application.secret_key = "test-secret"
-    application.config["TESTING"] = True
-    application.register_blueprint(auth_bp)
-    return application
+def _client_with_probe(monkeypatch, trusted: set[str]):
+    """An app whose ``/probe`` answers with the address a request is attributed to.
 
+    The request arrives from 127.0.0.1, a trusted proxy, so the forwarded
+    headers count as they would behind a real one.
+    """
+    from sendspin_bridge.api import auth
+    from tests.support.api_client import make_client
 
-@pytest.fixture()
-def client(app):
-    return app.test_client()
+    monkeypatch.setattr(auth, "trust_policy", lambda _request: TrustPolicy(trusted))
+    client = make_client(peer="127.0.0.1")
+
+    @client.app.get("/probe")
+    def _probe(request: Request) -> dict[str, str]:
+        return {"client": auth.client_id(request)}
+
+    return client
 
 
 # ─── XFF rightmost-untrusted ─────────────────────────────────────────────
 
 
 class TestForwardedClientIp:
-    def test_single_hop_proxy_returns_real_client(self, app, monkeypatch):
-        monkeypatch.setattr(
-            "sendspin_bridge.web.routes.auth.current_trust_policy",
-            lambda: TrustPolicy({"127.0.0.1"}),
-        )
-        with app.test_request_context(
-            "/",
-            headers={"X-Forwarded-For": "evil, 127.0.0.1"},
-        ):
-            assert _get_forwarded_client_ip() == "evil"
+    def test_single_hop_proxy_returns_real_client(self, monkeypatch):
+        client = _client_with_probe(monkeypatch, {"127.0.0.1"})
+        resp = client.get("/probe", headers={"X-Forwarded-For": "evil, 127.0.0.1"})
+        assert resp.json()["client"] == "evil"
 
-    def test_spoofed_leftmost_ignored(self, app, monkeypatch):
+    def test_spoofed_leftmost_ignored(self, monkeypatch):
         """Spoofed client-set XFF entry should not win over the real hop."""
-        monkeypatch.setattr(
-            "sendspin_bridge.web.routes.auth.current_trust_policy",
-            lambda: TrustPolicy({"127.0.0.1"}),
-        )
-        with app.test_request_context(
-            "/",
-            headers={"X-Forwarded-For": "spoofed, real-client, 127.0.0.1"},
-        ):
-            assert _get_forwarded_client_ip() == "real-client"
+        client = _client_with_probe(monkeypatch, {"127.0.0.1"})
+        resp = client.get("/probe", headers={"X-Forwarded-For": "spoofed, real-client, 127.0.0.1"})
+        assert resp.json()["client"] == "real-client"
 
-    def test_all_trusted_returns_empty(self, app, monkeypatch):
-        monkeypatch.setattr(
-            "sendspin_bridge.web.routes.auth.current_trust_policy",
-            lambda: TrustPolicy({"127.0.0.1", "::1"}),
-        )
-        with app.test_request_context(
-            "/",
-            headers={"X-Forwarded-For": "127.0.0.1, ::1"},
-        ):
-            assert _get_forwarded_client_ip() == ""
+    def test_x_real_ip_fallback(self, monkeypatch):
+        client = _client_with_probe(monkeypatch, {"127.0.0.1"})
+        resp = client.get("/probe", headers={"X-Real-IP": "1.2.3.4"})
+        assert resp.json()["client"] == "1.2.3.4"
 
-    def test_x_real_ip_fallback(self, app, monkeypatch):
-        monkeypatch.setattr(
-            "sendspin_bridge.web.routes.auth.current_trust_policy",
-            lambda: TrustPolicy({"127.0.0.1"}),
-        )
-        with app.test_request_context("/", headers={"X-Real-IP": "1.2.3.4"}):
-            assert _get_forwarded_client_ip() == "1.2.3.4"
+    def test_untrusted_peer_headers_ignored(self, monkeypatch):
+        from sendspin_bridge.api import auth
+        from tests.support.api_client import make_client
+
+        monkeypatch.setattr(auth, "trust_policy", lambda _request: TrustPolicy({"127.0.0.1"}))
+        client = make_client(peer="192.0.2.7")
+
+        @client.app.get("/probe")
+        def _probe(request: Request) -> dict[str, str]:
+            return {"client": auth.client_id(request)}
+
+        resp = client.get("/probe", headers={"X-Forwarded-For": "1.2.3.4"})
+        assert resp.json()["client"] == "192.0.2.7"
 
 
-# ─── 500 handler plain text ──────────────────────────────────────────────
+# ─── 500 handler ─────────────────────────────────────────────────────────
 
 
 class TestServerErrorHandler:
-    def _build_app(self, monkeypatch):
-        import importlib
+    def test_unexpected_error_is_a_problem_without_internals(self):
+        from tests.support.api_client import make_client
 
-        import sendspin_bridge.web.interface as web_interface
+        client = make_client()
 
-        importlib.reload(web_interface)
-        web_interface.app.config["TESTING"] = False
-        web_interface.app.config["PROPAGATE_EXCEPTIONS"] = False
-        bp = Blueprint("boom", __name__)
+        @client.app.get("/api/v1/boom")
+        def _boom():
+            raise RuntimeError("secret internals")
 
-        @bp.route("/boom-html")
-        def _boom_html():
-            abort(500)
-
-        @bp.route("/api/boom")
-        def _boom_api():
-            abort(500)
-
-        web_interface.app.register_blueprint(bp)
-        return web_interface.app
-
-    def test_html_route_500_returns_plain_text(self, monkeypatch):
-        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
-        app = self._build_app(monkeypatch)
-        client = app.test_client()
-        resp = client.get("/boom-html")
+        resp = client.get("/api/v1/boom")
         assert resp.status_code == 500
-        assert resp.mimetype == "text/plain"
-        assert resp.data == b"Internal Server Error"
-
-    def test_api_route_500_returns_json(self, monkeypatch):
-        monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
-        app = self._build_app(monkeypatch)
-        client = app.test_client()
-        resp = client.get("/api/boom")
-        assert resp.status_code == 500
-        assert resp.is_json
-        assert resp.get_json()["error"] == "Internal server error"
+        assert resp.headers["content-type"].startswith("application/problem+json")
+        body = resp.json()
+        assert body["code"] == "internal_error"
+        assert "secret internals" not in resp.text
 
 
 # ─── X-Frame-Options standalone vs addon ────────────────────────────────
@@ -130,23 +99,15 @@ class TestServerErrorHandler:
 
 class TestXFrameOptions:
     def test_standalone_sets_sameorigin(self, monkeypatch):
-        import importlib
+        from tests.support.api_client import make_client
 
         monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
-        import sendspin_bridge.web.interface as web_interface
-
-        importlib.reload(web_interface)
-        client = web_interface.app.test_client()
-        resp = client.get("/login")
+        resp = make_client().get("/api/v1/health")
         assert resp.headers.get("X-Frame-Options") == "SAMEORIGIN"
 
     def test_ha_addon_omits_xfo(self, monkeypatch):
-        import importlib
+        from tests.support.api_client import make_client
 
         monkeypatch.setenv("SUPERVISOR_TOKEN", "fake-token")
-        import sendspin_bridge.web.interface as web_interface
-
-        importlib.reload(web_interface)
-        client = web_interface.app.test_client()
-        resp = client.get("/login")
+        resp = make_client().get("/api/v1/health")
         assert "X-Frame-Options" not in resp.headers

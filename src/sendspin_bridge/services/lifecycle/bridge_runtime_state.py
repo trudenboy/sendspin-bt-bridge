@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import threading
 import time as _time
 from datetime import datetime, timedelta, timezone
@@ -240,11 +241,38 @@ def notify_status_changed() -> None:
             _notify_timer.start()
 
 
+_status_listeners: list = []
+_status_listeners_lock = threading.Lock()
+
+
+def add_status_listener(callback) -> None:
+    """Call *callback()* (from the notifier thread) after each status change.
+
+    For asyncio consumers: pass something that hops onto their loop, e.g.
+    ``lambda: loop.call_soon_threadsafe(event.set)``.
+    """
+    with _status_listeners_lock:
+        _status_listeners.append(callback)
+
+
+def remove_status_listener(callback) -> None:
+    with _status_listeners_lock:
+        if callback in _status_listeners:
+            _status_listeners.remove(callback)
+
+
 def _flush_notify() -> None:
     global _status_version
     with _status_condition:
         _status_version += 1
         _status_condition.notify_all()
+    with _status_listeners_lock:
+        listeners = list(_status_listeners)
+    for callback in listeners:
+        try:
+            callback()
+        except Exception:
+            logging.getLogger(__name__).debug("status listener failed", exc_info=True)
 
 
 def get_status_version() -> int:

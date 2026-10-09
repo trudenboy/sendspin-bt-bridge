@@ -1,4 +1,4 @@
-"""Tests for routes/_helpers.py — get_client_or_error() and validate_mac()."""
+"""Device lookup by id, and MAC validation."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 import types
 
 import pytest
-from flask import Flask
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -23,120 +22,61 @@ def _isolated_config(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(json.dumps({}))
 
 
-def _make_client(name: str) -> types.SimpleNamespace:
-    """Return a lightweight mock client with a player_name attribute."""
-    return types.SimpleNamespace(player_name=name)
+def _make_client(player_id: str) -> types.SimpleNamespace:
+    return types.SimpleNamespace(player_id=player_id, player_name=player_id.title())
 
 
-@pytest.fixture()
-def app():
-    """Minimal Flask app for request context (needed by jsonify)."""
-    a = Flask(__name__)
-    a.config["TESTING"] = True
-    return a
+def _register(monkeypatch, clients) -> None:
+    import sendspin_bridge.application.status as status
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+
+    monkeypatch.setattr(status, "get_device_registry_snapshot", lambda: DeviceRegistrySnapshot(active_clients=clients))
 
 
 # ---------------------------------------------------------------------------
-# get_client_or_error
+# find_client
 # ---------------------------------------------------------------------------
 
 
-class TestGetClientOrError:
-    """Tests for get_client_or_error()."""
+class TestFindClient:
+    """Devices are addressed by their stable player id, never by name or index."""
 
-    def test_valid_player_name(self, app, monkeypatch):
-        """Returns the matching client when player_name matches."""
-        import sendspin_bridge.web.routes._helpers as helpers
-        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+    def test_returns_the_matching_client(self, monkeypatch):
+        from sendspin_bridge.application.status import find_client
 
         target = _make_client("kitchen")
-        monkeypatch.setattr(
-            helpers,
-            "get_device_registry_snapshot",
-            lambda: DeviceRegistrySnapshot(active_clients=[_make_client("bedroom"), target]),
-        )
+        _register(monkeypatch, [_make_client("bedroom"), target])
 
-        with app.app_context():
-            client, err = helpers.get_client_or_error("kitchen")
+        assert find_client("kitchen") is target
 
-        assert err is None
-        assert client is target
+    def test_unknown_id_is_404(self, monkeypatch):
+        from sendspin_bridge.application.errors import UseCaseError
+        from sendspin_bridge.application.status import find_client
 
-    def test_invalid_player_name(self, app, monkeypatch):
-        """Returns 400 with 'Unknown player' for a non-existent name."""
-        import sendspin_bridge.web.routes._helpers as helpers
-        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+        _register(monkeypatch, [_make_client("bedroom")])
 
-        monkeypatch.setattr(
-            helpers,
-            "get_device_registry_snapshot",
-            lambda: DeviceRegistrySnapshot(active_clients=[_make_client("bedroom")]),
-        )
+        with pytest.raises(UseCaseError) as exc:
+            find_client("kitchen")
+        assert exc.value.status == 404
+        assert exc.value.code == "unknown_device"
 
-        with app.app_context():
-            client, err = helpers.get_client_or_error("nonexistent")
+    def test_a_player_name_is_not_an_id(self, monkeypatch):
+        from sendspin_bridge.application.errors import UseCaseError
+        from sendspin_bridge.application.status import find_client
 
-        assert client is None
-        resp, status = err
-        assert status == 400
-        data = resp.get_json()
-        assert "Unknown player" in data["error"]
+        _register(monkeypatch, [_make_client("kitchen")])
 
-    def test_no_name_single_client(self, app, monkeypatch):
-        """With no player_name and one client, returns that client."""
-        import sendspin_bridge.web.routes._helpers as helpers
-        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+        with pytest.raises(UseCaseError):
+            find_client("Kitchen")
 
-        only = _make_client("solo")
-        monkeypatch.setattr(
-            helpers,
-            "get_device_registry_snapshot",
-            lambda: DeviceRegistrySnapshot(active_clients=[only]),
-        )
+    def test_no_clients_is_404(self, monkeypatch):
+        from sendspin_bridge.application.errors import UseCaseError
+        from sendspin_bridge.application.status import find_client
 
-        with app.app_context():
-            client, err = helpers.get_client_or_error(None)
+        _register(monkeypatch, [])
 
-        assert err is None
-        assert client is only
-
-    def test_no_name_multiple_clients(self, app, monkeypatch):
-        """With no player_name and multiple clients, returns 400."""
-        import sendspin_bridge.web.routes._helpers as helpers
-        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
-
-        monkeypatch.setattr(
-            helpers,
-            "get_device_registry_snapshot",
-            lambda: DeviceRegistrySnapshot(active_clients=[_make_client("a"), _make_client("b")]),
-        )
-
-        with app.app_context():
-            client, err = helpers.get_client_or_error(None)
-
-        assert client is None
-        resp, status = err
-        assert status == 400
-        assert "player_name" in resp.get_json()["error"].lower()
-
-    def test_no_clients(self, app, monkeypatch):
-        """With no clients configured, returns 503."""
-        import sendspin_bridge.web.routes._helpers as helpers
-        from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
-
-        monkeypatch.setattr(
-            helpers,
-            "get_device_registry_snapshot",
-            lambda: DeviceRegistrySnapshot(active_clients=[]),
-        )
-
-        with app.app_context():
-            client, err = helpers.get_client_or_error("any")
-
-        assert client is None
-        resp, status = err
-        assert status == 503
-        assert "No clients" in resp.get_json()["error"]
+        with pytest.raises(UseCaseError):
+            find_client("any")
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +96,7 @@ class TestValidateMac:
         ],
     )
     def test_valid_formats(self, mac):
-        from sendspin_bridge.web.routes._helpers import validate_mac
+        from sendspin_bridge.application.errors import validate_mac
 
         assert validate_mac(mac) is True
 
@@ -172,7 +112,7 @@ class TestValidateMac:
         ],
     )
     def test_invalid_formats(self, mac):
-        from sendspin_bridge.web.routes._helpers import validate_mac
+        from sendspin_bridge.application.errors import validate_mac
 
         assert validate_mac(mac) is False
 
@@ -185,6 +125,6 @@ class TestValidateMac:
         ],
     )
     def test_command_injection_rejected(self, mac):
-        from sendspin_bridge.web.routes._helpers import validate_mac
+        from sendspin_bridge.application.errors import validate_mac
 
         assert validate_mac(mac) is False
