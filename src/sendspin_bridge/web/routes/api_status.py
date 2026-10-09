@@ -1973,22 +1973,8 @@ def _build_full_text_report(
     full.append(f"  PulseAudio:  {diag.get('pulseaudio', '?')}")
     full.append("")
 
-    # Raw diagnostics JSON
-    full.append(sep)
-    full.append("  RAW DIAGNOSTICS JSON")
-    full.append(sep)
-    full.append(json.dumps(diag, indent=2, default=str))
-    full.append("")
-
-    # Config
-    config = masked.get("config")
-    if config:
-        full.append(sep)
-        full.append("  CONFIG (sanitized)")
-        full.append(sep)
-        full.append(json.dumps(config, indent=2, default=str))
-        full.append("")
-
+    # Logs before the raw JSON and the config: a report cut to the issue
+    # size limit loses its tail, and the logs are what a report most needs.
     issue_logs = masked.get("recent_issue_logs", [])
     if issue_logs:
         full.append(sep)
@@ -2006,6 +1992,23 @@ def _build_full_text_report(
         full.append(sep)
         for line in logs:
             full.append(str(line))
+        full.append("")
+
+    # Raw diagnostics JSON
+    full.append(sep)
+    full.append("  RAW DIAGNOSTICS JSON")
+    full.append(sep)
+    full.append(json.dumps(diag, indent=2, default=str))
+    full.append("")
+
+    # Config
+    config = masked.get("config")
+    if config:
+        full.append(sep)
+        full.append("  CONFIG (sanitized)")
+        full.append(sep)
+        full.append(json.dumps(config, indent=2, default=str))
+        full.append("")
 
     return "\n".join(full)
 
