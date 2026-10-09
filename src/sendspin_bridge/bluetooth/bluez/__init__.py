@@ -19,7 +19,7 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._adapters import Adapter, enumerate_sysfs_adapters, parse_hciconfig, resolve_select_mac
 from ._lines import BluezLine, LineKind, classify_line, classify_lines, strip_ansi
@@ -105,8 +105,12 @@ class BluezControl:
 
     Parameters are injection seams; production uses the defaults plus an
     optional ``hci_resolver`` (``bluetooth.manager`` injects the D-Bus
-    object-path lookup — the good ``hciN → MAC`` path).  Tests substitute
-    ``spawner`` (FakeBluez) and the clock/sleeper pair.
+    object-path lookup — the good ``hciN → MAC`` path) and a
+    ``query_backend``: the questions (``list``, ``show``, ``devices``,
+    ``info``) are put to it first and reach bluetoothctl only when it
+    answers ``None`` — the bus could not be asked.  It is duck-typed so this
+    package stays stdlib-only.  Tests substitute ``spawner`` (FakeBluez) and
+    the clock/sleeper pair.
     """
 
     def __init__(
@@ -117,12 +121,19 @@ class BluezControl:
         sysfs_dir: Path = Path("/sys/class/bluetooth"),
         time_source: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
+        query_backend: Any = None,
     ):
         self._spawner = spawner if spawner is not None else SubprocessSpawner()
         self._hci_resolver = hci_resolver
+        self._query_backend = query_backend
         self._sysfs_dir = sysfs_dir
         self._time = time_source
         self._sleep = sleeper
+
+    @property
+    def query_backend(self) -> Any:
+        """The bus transport questions go to first, or ``None`` without one."""
+        return self._query_backend
 
     # ------------------------------------------------------------------
     # Clock
@@ -206,8 +217,22 @@ class BluezControl:
             return ""
         return parse_version(result.stdout)
 
+    def _ask_backend(self, question: str, *args: Any, **kwargs: Any) -> Any:
+        """The backend's answer, or ``None`` to fall through to bluetoothctl."""
+        backend = self._query_backend
+        if backend is None:
+            return None
+        try:
+            return getattr(backend, question)(*args, **kwargs)
+        except Exception as exc:
+            logger.debug("Query backend could not answer %s: %s", question, exc)
+            return None
+
     def list_adapters(self, *, timeout: float | None = None) -> list[AdapterRef]:
         """``bluetoothctl list`` → controller rows (MAC, name, default flag)."""
+        answer = self._ask_backend("list_adapters", timeout=timeout)
+        if answer is not None:
+            return answer
         result = run_bluetoothctl(
             self._spawner,
             ("bluetoothctl", "list"),
@@ -240,6 +265,9 @@ class BluezControl:
 
     def show(self, adapter: Adapter = Adapter.DEFAULT, *, timeout: float | None = None) -> AdapterInfo:
         """``show`` for one controller; ``Adapter.addressed(mac)`` never selects."""
+        answer = self._ask_backend("show", adapter, timeout=timeout)
+        if answer is not None:
+            return answer
         if adapter.mode == "addressed":
             result = run_bluetoothctl(
                 self._spawner,
@@ -260,6 +288,9 @@ class BluezControl:
         timeout: float | None = None,
     ) -> DeviceInfo:
         """``info <MAC>`` with adapter scoping; tri-state fields via :class:`DeviceInfo`."""
+        answer = self._ask_backend("device_info", mac, adapter, timeout=timeout)
+        if answer is not None:
+            return answer
         result = self.run([f"info {mac}"], adapter=adapter, tier=Deadline.QUERY, timeout=timeout)
         return parse_device_info(result.stdout, mac.upper(), outcome=result.outcome)
 
@@ -271,6 +302,9 @@ class BluezControl:
         timeout: float | None = None,
     ) -> list[DeviceEntry]:
         """``devices [filter]`` → ``(mac, name)`` entries; ``[]`` on transport failure."""
+        answer = self._ask_backend("list_devices", adapter, filter=filter, timeout=timeout)
+        if answer is not None:
+            return answer
         verb = f"devices {filter}".rstrip()
         result = self.run([verb], adapter=adapter, tier=Deadline.QUERY, timeout=timeout)
         if result.outcome in (Outcome.TIMEOUT, Outcome.UNAVAILABLE):
@@ -348,6 +382,9 @@ class BluezControl:
         ``show`` + ``devices`` enumeration so devices are attributed to the
         controller that actually saw them (issue #340)."""
         adapter_macs = tuple(a.strip().upper() for a in (adapters or ()) if a and a.strip())
+        answer = self._ask_backend("scan", adapter_macs, window_s=window_s)
+        if answer is not None:
+            return answer
         # The one place a composite budget is computed: base window plus
         # per-adapter overhead plus drain slack (historically 12 + 2N + 4).
         budget = 12 + 2 * len(adapter_macs) + 4

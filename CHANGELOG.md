@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Speakers that require Sendspin pairing may need to be paired with Music
   Assistant again after upgrading, because the stored pairing record format
   changed.
+- Scanning for, pairing and inspecting Bluetooth speakers now talks to
+  BlueZ directly instead of running `bluetoothctl`. With the web UI open
+  the bridge no longer starts a `bluetoothctl` process every few seconds,
+  and pairing can no longer be answered by `bluetoothctl`'s own agent
+  instead of the bridge's, which made the confirmation time out on some
+  speakers. `bluetoothctl` is still used as a fallback when BlueZ's
+  system bus cannot be reached.
 
 ### Fixed
 
