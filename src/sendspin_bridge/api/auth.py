@@ -128,10 +128,10 @@ def resolve_principal(request: HTTPConnection) -> Principal | None:
     if not settings.enabled:
         return Principal("anonymous")
     if is_trusted_ingress(request, settings):
-        user = _ingress_user(request)
-        request.session["authenticated"] = True
-        request.session["ha_user"] = user
-        return Principal("ingress", user)
+        # Decided per request and never written into the session: the cookie
+        # is shared by every port on the host, so a session marked
+        # authenticated here would also open the bridge's direct port.
+        return Principal("ingress", _ingress_user(request))
     if request.session.get("authenticated"):
         session_user = request.session.get("ha_user")
         return Principal("session", session_user if isinstance(session_user, str) and session_user else None)

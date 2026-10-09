@@ -344,3 +344,15 @@ def test_ha_pair_refuses_outside_addon_mode(tmp_config, monkeypatch, peer):
     monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
     client = make_client(peer=peer)
     assert client.post("/api/v1/auth/ha-pair", headers={"X-Ingress-Path": "/x"}).status_code == 403
+
+
+def test_an_ingress_visit_does_not_leave_an_authenticated_cookie(addon):
+    """Cookies ignore ports: a session marked authenticated through ingress
+    would also open the bridge's direct port on the same host."""
+    via_ingress = make_client(peer="172.30.32.2")
+    via_ingress.get("/api/v1/devices", headers={"X-Ingress-Path": "/api/hassio_ingress/abc"})
+    assert get_session(via_ingress).get("authenticated") is not True
+
+    direct = make_client(peer="192.168.10.50")
+    direct.cookies = via_ingress.cookies
+    assert direct.get("/api/v1/devices").status_code == 401

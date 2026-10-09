@@ -113,8 +113,12 @@ def sign_in(body: SignInRequest, request: Request) -> SignInResult:
     who = client_id(request)
     peer = peer_address(request)
     if peer and trust_policy(request).is_trusted(peer) and who == peer:
-        # Behind a proxy that names no client: bucket by username, not by the proxy.
-        who = f"proxy-login:{body.username.strip().casefold()}" if body.username.strip() else f"proxy:{peer}"
+        # Behind a proxy that names no client: bucket by the account being
+        # tried, so one household member's typos don't lock out the rest.
+        # The local password has no account — a username there is free text
+        # an attacker could vary per attempt — so it buckets by the proxy.
+        username = body.username.strip().casefold()
+        who = f"proxy-login:{username}" if username and body.method != "password" else f"proxy:{peer}"
     limiter = auth_uc.rate_limiter
     if limiter.is_locked_out(who):
         duration = auth_uc.lockout_settings().lockout_s

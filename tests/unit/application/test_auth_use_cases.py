@@ -91,7 +91,7 @@ def test_redact_flow_result_handles_non_dict():
 # -- lockout buckets ------------------------------------------------------------------------
 
 
-def _bucket_of(tmp_config, *, trusted, peer, username="alice", headers=None):
+def _bucket_of(tmp_config, *, trusted, peer, username="alice", headers=None, method="password"):
     """The rate-limit bucket a failed sign-in from *peer* lands in."""
     import json
 
@@ -104,7 +104,9 @@ def _bucket_of(tmp_config, *, trusted, peer, username="alice", headers=None):
         patch.object(auth_uc, "sign_in", return_value=auth_uc.LoginOutcome("invalid", counts_as_failure=True)),
     ):
         make_client({"AUTH_ENABLED": True}, peer=peer).post(
-            "/api/v1/auth/session", json={"username": username, "password": "x"}, headers=headers or {}
+            "/api/v1/auth/session",
+            json={"method": method, "username": username, "password": "x"},
+            headers=headers or {},
         )
     assert len(buckets) == 1
     return buckets[0]
@@ -132,5 +134,15 @@ def test_bucket_honours_a_cidr_trusted_proxy(tmp_config):
 
 
 @pytest.mark.parametrize(("trusted", "peer"), [(["172.30.32.0/23"], "172.30.33.7"), (["10.0.0.10"], "10.0.0.10")])
-def test_bucket_falls_back_to_the_username_behind_a_proxy_that_names_no_client(tmp_config, trusted, peer):
-    assert _bucket_of(tmp_config, trusted=trusted, peer=peer, username="Alice") == "proxy-login:alice"
+def test_bucket_falls_back_to_the_account_behind_a_proxy_that_names_no_client(tmp_config, trusted, peer):
+    bucket = _bucket_of(tmp_config, trusted=trusted, peer=peer, username="Alice", method="ma")
+    assert bucket == "proxy-login:alice"
+
+
+def test_the_local_password_cannot_dodge_the_lockout_by_varying_the_username(tmp_config):
+    """The password method ignores the username, so it must not pick the bucket."""
+    buckets = {
+        _bucket_of(tmp_config, trusted=["10.0.0.10"], peer="10.0.0.10", username=name)
+        for name in ("alice", "bob", "mallory", "")
+    }
+    assert buckets == {"proxy:10.0.0.10"}

@@ -530,6 +530,19 @@ _PRESERVED_KEYS = tuple(sorted(SENSITIVE_CONFIG_KEYS | {"MA_TOKEN_INSTANCE_HOSTN
 MAX_CONFIG_UPLOAD_BYTES = 1_000_000
 
 
+def _require_password_for_auth(config: dict) -> None:
+    """Turning authentication on without a password would lock everyone out
+    (in the HA add-on Home Assistant signs people in instead)."""
+    if not config.get("AUTH_ENABLED") or os.environ.get("SUPERVISOR_TOKEN"):
+        return
+    try:
+        stored = json.loads(CONFIG_FILE.read_text()) if CONFIG_FILE.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        stored = {}
+    if not (isinstance(stored, dict) and stored.get("AUTH_PASSWORD_HASH")):
+        raise _error("Set a password before enabling authentication")
+
+
 def import_config(raw: bytes) -> dict:
     """Replace the configuration with an uploaded file; secrets stay as stored.
 
@@ -550,6 +563,7 @@ def import_config(raw: bytes) -> dict:
         raise _validation_error(errors, warnings)
     uploaded = validation.normalized_config
     warnings = _append_ma_duplicate_device_warnings(uploaded, warnings)
+    _require_password_for_auth(uploaded)
 
     # The sensitive keys belong to the stored file, not the upload. The store
     # refuses rather than writes when the existing file cannot be read.
@@ -770,16 +784,7 @@ def save_config(config: dict) -> dict:
         raise _error(str(exc))
 
     # Require password when enabling auth (except HA addon — uses HA login)
-    if config.get("AUTH_ENABLED") and not os.environ.get("SUPERVISOR_TOKEN"):
-        has_hash = False
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE) as f:
-                    has_hash = bool(json.load(f).get("AUTH_PASSWORD_HASH"))
-            except (json.JSONDecodeError, OSError):
-                pass
-        if not has_hash:
-            raise _error("Set a password before enabling authentication")
+    _require_password_for_auth(config)
 
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with config_lock:

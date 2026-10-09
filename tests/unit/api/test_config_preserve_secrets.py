@@ -150,3 +150,21 @@ def test_upload_does_not_accept_a_secret_the_file_carries(client):
     )
 
     assert json.loads(cfg_file.read_text())["AUTH_PASSWORD_HASH"] == _SECRETS["AUTH_PASSWORD_HASH"]
+
+
+def test_upload_cannot_turn_on_authentication_without_a_password(client, monkeypatch):
+    """Same rule as saving the settings: no password, no auth — or nobody can sign in."""
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    cl, cfg_file, _ = client
+    stored = json.loads(cfg_file.read_text())
+    stored.pop("AUTH_PASSWORD_HASH", None)
+    cfg_file.write_text(json.dumps(stored))
+
+    resp = cl.post(
+        "/api/v1/config/import",
+        files={"file": ("config.json", io.BytesIO(json.dumps({"BRIDGE_NAME": "X", "AUTH_ENABLED": True}).encode()))},
+    )
+
+    assert resp.status_code == 400
+    assert "password" in resp.json()["detail"].lower()
+    assert not json.loads(cfg_file.read_text()).get("AUTH_ENABLED")
