@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The settings no longer fail to load when a Bluetooth adapter is linked
+  to a Home Assistant area: the API described that link as plain text and
+  rejected the bridge's own answer.
+
 ## [3.0.0-beta.15] - 2026-10-09
 
 ### Added

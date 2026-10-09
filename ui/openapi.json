@@ -63,6 +63,33 @@
         "title": "AUTHTOKEN",
         "type": "object"
       },
+      "AdapterArea": {
+        "additionalProperties": true,
+        "properties": {
+          "area_id": {
+            "description": "Home Assistant area ID.",
+            "title": "Area Id",
+            "type": "string"
+          },
+          "area_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The area's name when it was chosen.",
+            "title": "Area Name"
+          }
+        },
+        "required": [
+          "area_id"
+        ],
+        "title": "AdapterArea",
+        "type": "object"
+      },
       "AdapterOut": {
         "properties": {
           "id": {
@@ -1111,7 +1138,7 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/AdapterArea"
                 },
                 "type": "object"
               },
@@ -1120,7 +1147,7 @@
               }
             ],
             "default": {},
-            "description": "Manual mapping of adapter MAC → HA area name.",
+            "description": "Manual mapping of adapter MAC → Home Assistant area.",
             "title": "Ha Adapter Area Map"
           },
           "HA_AREA_NAME_ASSIST_ENABLED": {

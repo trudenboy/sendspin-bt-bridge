@@ -1699,6 +1699,21 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** AdapterArea */
+        AdapterArea: {
+            /**
+             * Area Id
+             * @description Home Assistant area ID.
+             */
+            area_id: string;
+            /**
+             * Area Name
+             * @description The area's name when it was chosen.
+             */
+            area_name?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** AdapterOut */
         AdapterOut: {
             /**
@@ -2136,11 +2151,11 @@ export interface components {
             EXPERIMENTAL_PA_MODULE_RELOAD?: boolean | null;
             /**
              * Ha Adapter Area Map
-             * @description Manual mapping of adapter MAC → HA area name.
+             * @description Manual mapping of adapter MAC → Home Assistant area.
              * @default {}
              */
             HA_ADAPTER_AREA_MAP?: {
-                [key: string]: string;
+                [key: string]: components["schemas"]["AdapterArea"];
             } | null;
             /**
              * Ha Area Name Assist Enabled

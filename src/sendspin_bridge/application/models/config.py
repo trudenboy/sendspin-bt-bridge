@@ -100,6 +100,19 @@ class HAINTEGRATION(BaseModel):
     rest: Rest | None = None
 
 
+class AdapterArea(BaseModel):
+    model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
+
+    area_id: str
+    """
+    Home Assistant area ID.
+    """
+    area_name: str | None = None
+    """
+    The area's name when it was chosen.
+    """
+
+
 class AUTHTOKEN(BaseModel):
     model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
 
@@ -306,9 +319,9 @@ class BridgeConfig(BaseModel):
     """
     Enable automatic room name assist from Home Assistant areas.
     """
-    HA_ADAPTER_AREA_MAP: dict[str, str] | None = {}
+    HA_ADAPTER_AREA_MAP: dict[str, AdapterArea] | None = {}
     """
-    Manual mapping of adapter MAC → HA area name.
+    Manual mapping of adapter MAC → Home Assistant area.
     """
     TZ: str | None = "Australia/Melbourne"
     """

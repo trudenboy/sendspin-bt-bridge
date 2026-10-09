@@ -70,8 +70,15 @@
     "HA_ADAPTER_AREA_MAP": {
       "type": "object",
       "default": {},
-      "description": "Manual mapping of adapter MAC → HA area name.",
-      "additionalProperties": { "type": "string" }
+      "description": "Manual mapping of adapter MAC → Home Assistant area.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["area_id"],
+        "properties": {
+          "area_id": { "type": "string" },
+          "area_name": { "type": "string" }
+        }
+      }
     },
     "TZ": {
       "type": "string",

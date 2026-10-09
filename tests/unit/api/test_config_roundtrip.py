@@ -60,3 +60,18 @@ def test_a_real_change_is_still_seen(client):
 
     restart = (resp.json() or {}).get("reconfig", {}).get("global_restart") or []
     assert [a["fields"] for a in restart] == [["BT_CHURN_THRESHOLD"]]
+
+
+def test_settings_with_an_adapter_area_mapping_load_and_save(client, tmp_path):
+    """The area map stores ``{area_id, area_name}`` per adapter. The settings
+    response model declared plain strings, so a config with a mapping made
+    GET /api/v1/config fail its own response validation."""
+    adapter = "C0:FB:F9:62:D6:9D"
+    shown = client.get("/api/v1/config").json()
+    shown["HA_ADAPTER_AREA_MAP"] = {adapter: {"area_id": "living_room", "area_name": "Living Room"}}
+    assert client.put("/api/v1/config", json=shown).status_code == 200
+
+    resp = client.get("/api/v1/config")
+
+    assert resp.status_code == 200
+    assert resp.json()["HA_ADAPTER_AREA_MAP"] == {adapter: {"area_id": "living_room", "area_name": "Living Room"}}
