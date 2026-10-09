@@ -8,6 +8,7 @@ import EventTimeline from '@/components/diagnostics/EventTimeline.vue'
 import RecoveryPanel from '@/components/diagnostics/RecoveryPanel.vue'
 import BugReportPanel from '@/components/diagnostics/BugReportPanel.vue'
 import LogsViewer from '@/components/diagnostics/LogsViewer.vue'
+import SystemPanel from '@/components/diagnostics/SystemPanel.vue'
 
 const { t } = useI18n()
 const diagnostics = useDiagnosticsStore()
@@ -19,6 +20,7 @@ const tabs = [
   { id: 'recovery', label: t('diagnostics.tabs.recovery') },
   { id: 'bugreport', label: t('diagnostics.tabs.bugreport') },
   { id: 'logs', label: t('diagnostics.tabs.logs') },
+  { id: 'system', label: t('diagnostics.tabs.system') },
 ]
 
 onMounted(async () => {
@@ -57,6 +59,11 @@ onMounted(async () => {
       <template #logs>
         <div class="pt-4">
           <LogsViewer />
+        </div>
+      </template>
+      <template #system>
+        <div class="pt-4">
+          <SystemPanel />
         </div>
       </template>
     </SbTabs>

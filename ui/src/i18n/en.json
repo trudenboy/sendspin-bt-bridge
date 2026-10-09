@@ -139,7 +139,8 @@
       "events": "Events",
       "recovery": "Recovery",
       "bugreport": "Bug Report",
-      "logs": "Logs"
+      "logs": "Logs",
+      "system": "System"
     },
     "health": {
       "title": "Bridge Health",
@@ -962,6 +963,53 @@
       "empty": "No timing samples yet; they appear while the speaker plays.",
       "buffer": "Buffered audio",
       "error": "Sync error"
+    }
+  },
+  "system": {
+    "bridge": "Bridge",
+    "uptime": "Uptime",
+    "memory": "Memory",
+    "platform": "Platform",
+    "python": "Python",
+    "audio": "Audio server",
+    "bluez": "BlueZ",
+    "downloads": "Downloads",
+    "downloadAction": "Download",
+    "download": {
+      "report": {
+        "label": "Diagnostics report",
+        "help": "Everything a bug report needs, with secrets removed."
+      },
+      "logs": {
+        "label": "Service log",
+        "help": "The bridge log as text."
+      },
+      "timeline": {
+        "label": "Recovery timeline",
+        "help": "Startup and device events as CSV."
+      },
+      "config": {
+        "label": "Configuration",
+        "help": "Without passwords and tokens."
+      }
+    },
+    "players": "Player processes",
+    "noPlayers": "No player processes running.",
+    "player": "Player",
+    "restarts": "Restarts",
+    "state": "State",
+    "running": "Running",
+    "reconnecting": "Reconnecting",
+    "stopped": "Stopped",
+    "hooks": {
+      "title": "Webhooks",
+      "help": "The bridge POSTs device and bridge events to these addresses. They last until the bridge restarts.",
+      "allEvents": "all events",
+      "counts": "{ok} delivered, {failed} failed",
+      "remove": "Remove",
+      "url": "Address",
+      "categories": "Categories (optional)",
+      "add": "Add"
     }
   }
 }
