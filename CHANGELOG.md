@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Updating an LXC or bare-metal install to a chosen version, including from
+  the web interface, installs that version. When the update script first
+  updated itself it lost the requested version and installed the newest
+  development snapshot instead, which could be a release candidate. An
+  update started by an older script now stops with "run the update again"
+  rather than guessing; the second run installs the version asked for.
+
 ## [2.77.0-rc.1] - 2026-10-09
 
 ### Changed
