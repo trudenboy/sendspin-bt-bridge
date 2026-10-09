@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Settings cover every option of the bridge again, in sections named
+  after what they do: Music Assistant (connection test, player control),
+  Audio, Bluetooth (adapter names and device class, reconnect limits,
+  recovery switches), Home Assistant (MQTT broker detection and test,
+  integration status, rooms by adapter), Security (password, sign-in
+  lockout, trusted proxies, API tokens), Updates, Guidance and Backup.
+  Rarely needed options appear under "Show advanced settings".
+- The web interface follows Home Assistant's dark mode and accent colour
+  when opened from its sidebar.
+
+### Changed
+
+- The web interface uses Home Assistant's colours, type and card shapes
+  and Music Assistant's buttons, so it looks at home next to both.
+
 ### Fixed
+
+- Changing the web interface password now uses the current password and
+  takes effect at once; the settings screen used to put the new password
+  into the configuration, which the bridge ignored.
 
 - The settings no longer fail to load when a Bluetooth adapter is linked
   to a Home Assistant area: the API described that link as plain text and

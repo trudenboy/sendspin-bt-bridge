@@ -469,5 +469,373 @@
     "submitFailed": "Failed to submit bug report",
     "copied": "Report copied to clipboard",
     "copyFailed": "Failed to copy to clipboard"
+  },
+  "settings": {
+    "title": "Settings",
+    "showAdvanced": "Show advanced settings",
+    "unsaved": "Unsaved changes",
+    "save": "Save",
+    "discard": "Discard",
+    "saved": "Settings saved",
+    "appliedLive": "Applied without a restart",
+    "restartNeeded": "Restart the bridge to apply some changes",
+    "restartNow": "Restart now",
+    "units": {
+      "ms": "ms",
+      "s": "s",
+      "min": "min",
+      "h": "h"
+    },
+    "auto": "Automatic",
+    "notSet": "Not set",
+    "sections": {
+      "general": {
+        "title": "General",
+        "description": "Name, time zone and logging."
+      },
+      "musicAssistant": {
+        "title": "Music Assistant",
+        "description": "Connection to your Music Assistant server and how players are controlled."
+      },
+      "audio": {
+        "title": "Audio",
+        "description": "Buffering and codec choices for Bluetooth playback."
+      },
+      "bluetooth": {
+        "title": "Bluetooth",
+        "description": "Adapters, reconnecting and recovery."
+      },
+      "homeAssistant": {
+        "title": "Home Assistant",
+        "description": "Entities in Home Assistant and room names from its areas."
+      },
+      "security": {
+        "title": "Security",
+        "description": "Sign-in, sessions and API tokens."
+      },
+      "updates": {
+        "title": "Updates",
+        "description": "How the bridge finds and installs new versions."
+      },
+      "guidance": {
+        "title": "Guidance",
+        "description": "When the dashboard starts showing setup and recovery hints."
+      },
+      "backup": {
+        "title": "Backup",
+        "description": "Export, import or edit the configuration file."
+      }
+    },
+    "fields": {
+      "BRIDGE_NAME": {
+        "label": "Bridge name",
+        "help": "Shown in Music Assistant next to each player. Leave empty to use the host name."
+      },
+      "TZ": {
+        "label": "Time zone",
+        "help": "IANA name, for example Europe/Berlin. Used for log and event times."
+      },
+      "WEB_PORT": {
+        "label": "Web port",
+        "help": "Port of this web interface. Empty uses the WEB_PORT environment variable or 8080. Takes effect after a restart."
+      },
+      "LOG_LEVEL": {
+        "label": "Log level",
+        "help": "DEBUG writes much more detail; use it while investigating a problem."
+      },
+      "SENDSPIN_SERVER": {
+        "label": "Music Assistant server",
+        "help": "Host name or IP address of Music Assistant, or auto to find it on the network."
+      },
+      "SENDSPIN_PORT": {
+        "label": "Sendspin port",
+        "help": "Music Assistant's Sendspin port, normally 9000."
+      },
+      "BASE_LISTEN_PORT": {
+        "label": "First player port",
+        "help": "Speakers listen on consecutive ports from here. Empty picks free ports automatically."
+      },
+      "SENDSPIN_PAIRING": {
+        "label": "Require pairing",
+        "help": "Music Assistant must enter a PIN before it can play to these speakers."
+      },
+      "VOLUME_VIA_MA": {
+        "label": "Volume through Music Assistant",
+        "help": "Volume changes go through Music Assistant so its sliders stay in step."
+      },
+      "MUTE_VIA_MA": {
+        "label": "Mute through Music Assistant",
+        "help": "Muting goes through Music Assistant so its players show the same state."
+      },
+      "MA_WEBSOCKET_MONITOR": {
+        "label": "Live updates from Music Assistant",
+        "help": "Keep a connection open for now playing, queue and group changes."
+      },
+      "MA_AUTO_SILENT_AUTH": {
+        "label": "Renew sign-in automatically",
+        "help": "Refresh the Music Assistant sign-in in the background when it expires."
+      },
+      "DUPLICATE_DEVICE_CHECK": {
+        "label": "Warn about speakers on other bridges",
+        "help": "Ask Music Assistant whether another bridge already serves the same speaker."
+      },
+      "PULSE_LATENCY_MSEC": {
+        "label": "Audio buffer",
+        "help": "Higher values survive busy hosts and virtual machines; lower values react faster."
+      },
+      "PREFER_SBC_CODEC": {
+        "label": "Prefer SBC codec",
+        "help": "Use SBC instead of AAC or aptX. Helps speakers that stutter with other codecs."
+      },
+      "SMOOTH_RESTART": {
+        "label": "Smooth restarts",
+        "help": "Reconnect a speaker's player instead of restarting it from scratch."
+      },
+      "DISABLE_PA_RESCUE_STREAMS": {
+        "label": "Stop PulseAudio moving streams",
+        "help": "Unload module-rescue-streams so a reconnecting speaker never borrows another's audio."
+      },
+      "BT_CHECK_INTERVAL": {
+        "label": "Connection check interval",
+        "help": "How often the bridge checks that each speaker is still connected."
+      },
+      "BT_MAX_RECONNECT_FAILS": {
+        "label": "Reconnect attempts",
+        "help": "Failed reconnects in a row before the bridge stops trying. 0 keeps trying."
+      },
+      "RSSI_BADGE": {
+        "label": "Signal strength",
+        "help": "Show live signal strength on each connected speaker."
+      },
+      "BT_CHURN_THRESHOLD": {
+        "label": "Reconnect loop limit",
+        "help": "Connect/disconnect cycles within the window that make the bridge pause a speaker. 0 turns this off."
+      },
+      "BT_CHURN_WINDOW": {
+        "label": "Reconnect loop window",
+        "help": "Time window for counting those cycles."
+      },
+      "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
+        "label": "Recover a missing audio sink",
+        "help": "Experimental. Disconnect and reconnect a speaker whose audio output never appears."
+      },
+      "EXPERIMENTAL_PA_MODULE_RELOAD": {
+        "label": "Reload the PulseAudio Bluetooth module",
+        "help": "Experimental. Last resort when PulseAudio stops creating Bluetooth outputs."
+      },
+      "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY": {
+        "label": "Reset a stuck adapter",
+        "help": "Experimental. After the reconnect attempts run out, power-cycle or reset the Bluetooth adapter."
+      },
+      "HA_INTEGRATION": {
+        "mode": {
+          "label": "Connection to Home Assistant",
+          "help": "MQTT publishes entities through your broker; Integration uses the Sendspin Bridge custom integration.",
+          "options": {
+            "off": "Off",
+            "mqtt": "MQTT",
+            "rest": "Integration"
+          }
+        },
+        "mqtt": {
+          "broker": {
+            "label": "MQTT broker",
+            "help": "Host name or IP, or auto to use the Mosquitto add-on."
+          },
+          "port": {
+            "label": "MQTT port",
+            "help": "Usually 1883, or 8883 with TLS."
+          },
+          "tls": {
+            "label": "Use TLS",
+            "help": "Encrypt the connection to the broker."
+          },
+          "username": {
+            "label": "MQTT user",
+            "help": "Leave empty when the broker allows anonymous clients."
+          },
+          "password": {
+            "label": "MQTT password",
+            "help": "Stored on the bridge and never shown again."
+          },
+          "discovery_prefix": {
+            "label": "Discovery prefix",
+            "help": "Must match Home Assistant's MQTT discovery prefix."
+          },
+          "client_id": {
+            "label": "Client ID",
+            "help": "Empty derives one from the bridge."
+          }
+        },
+        "rest": {
+          "advertise_mdns": {
+            "label": "Announce on the network",
+            "help": "Let Home Assistant discover the bridge and offer the integration."
+          },
+          "supervisor_pair": {
+            "label": "Pair through the Supervisor",
+            "help": "On Home Assistant OS the integration gets its token without copying it by hand."
+          }
+        }
+      },
+      "HA_AREA_NAME_ASSIST_ENABLED": {
+        "label": "Room names from areas",
+        "help": "Suggest room names for speakers from Home Assistant areas."
+      },
+      "AUTH_ENABLED": {
+        "label": "Require sign-in",
+        "help": "Ask for a password or account before showing this interface."
+      },
+      "SESSION_TIMEOUT_HOURS": {
+        "label": "Session length",
+        "help": "How long a sign-in lasts."
+      },
+      "BRUTE_FORCE_PROTECTION": {
+        "label": "Lock out repeated failures",
+        "help": "Block sign-in for a while after too many wrong passwords."
+      },
+      "BRUTE_FORCE_MAX_ATTEMPTS": {
+        "label": "Failed attempts allowed",
+        "help": "Wrong passwords within the window before the lockout starts."
+      },
+      "BRUTE_FORCE_WINDOW_MINUTES": {
+        "label": "Counting window",
+        "help": "Time over which failed attempts are counted."
+      },
+      "BRUTE_FORCE_LOCKOUT_MINUTES": {
+        "label": "Lockout length",
+        "help": "How long sign-in stays blocked."
+      },
+      "TRUSTED_PROXIES": {
+        "label": "Trusted proxies",
+        "help": "One IP address per line. Only these may tell the bridge the real client address."
+      },
+      "CHECK_UPDATES": {
+        "label": "Check for updates",
+        "help": "Look for new versions in the background."
+      },
+      "UPDATE_CHANNEL": {
+        "label": "Update channel",
+        "help": "Stable for everyday use; release candidates and betas arrive earlier and may break.",
+        "options": {
+          "stable": "Stable",
+          "rc": "Release candidate",
+          "beta": "Beta"
+        }
+      },
+      "AUTO_UPDATE": {
+        "label": "Install updates automatically",
+        "help": "Install a new version on the chosen channel as soon as it is found."
+      },
+      "STARTUP_BANNER_GRACE_SECONDS": {
+        "label": "Startup grace period",
+        "help": "Wait this long after start before showing setup hints."
+      },
+      "RECOVERY_BANNER_GRACE_SECONDS": {
+        "label": "Recovery grace period",
+        "help": "Wait this long before suggesting fixes for a speaker that dropped."
+      }
+    },
+    "sectionsNav": "Sections",
+    "parts": {
+      "maConnection": {
+        "label": "Music Assistant account",
+        "help": "Sign in so the bridge can show groups and now playing and control the queue.",
+        "change": "Sign in again",
+        "signIn": "Sign in"
+      },
+      "sendspinTest": {
+        "label": "Sendspin connection",
+        "help": "Check that the bridge reaches Music Assistant with the server and port above.",
+        "run": "Test",
+        "ok": "OK",
+        "failed": "Failed"
+      },
+      "adapters": {
+        "label": "Adapters",
+        "help": "Give adapters a name you recognise. Device class is a workaround for speakers that refuse unknown computers; leave it empty unless you need it.",
+        "name": "Name",
+        "deviceClass": "Device class",
+        "deviceClassHelp": "Six-digit hex, for example 0x00010c (laptop). Empty keeps the system default."
+      },
+      "ha": {
+        "publisher": "MQTT publisher",
+        "publisherHelp": "Publishes the bridge and its speakers as Home Assistant entities.",
+        "publisherBroker": "Connected to {broker}.",
+        "mosquitto": "Mosquitto add-on",
+        "mosquittoMissing": "Home Assistant has no MQTT broker yet. Install the Mosquitto add-on, then set the broker to auto.",
+        "install": "Install",
+        "broker": "Broker",
+        "brokerHelp": "Find the broker automatically, or test the address and credentials below before saving.",
+        "detect": "Detect",
+        "test": "Test",
+        "detected": "Broker found and filled in.",
+        "notDetected": "No broker found; enter it by hand.",
+        "testOk": "The broker accepted the connection ({ms} ms).",
+        "testFailed": "The broker refused the connection.",
+        "component": "Sendspin Bridge integration",
+        "componentSeen": "Last contact {when}.",
+        "componentMissing": "Install the integration from HACS, then add it in Home Assistant.",
+        "installHacs": "Open in HACS",
+        "connected": "Connected",
+        "mdns": "Network announcement",
+        "mdnsHelp": "Home Assistant finds the bridge through this announcement.",
+        "announced": "Announced",
+        "notAnnounced": "Not announced"
+      },
+      "areaMap": {
+        "label": "Rooms by adapter",
+        "help": "Speakers on an adapter get its room. The area ID is the last part of the area's address in Home Assistant (Settings → Areas).",
+        "areaId": "Area ID",
+        "areaName": "Room name"
+      },
+      "password": {
+        "label": "Password",
+        "set": "A password is set for signing in to this interface.",
+        "notSet": "No password yet. Create one before requiring sign-in.",
+        "change": "Change",
+        "create": "Create",
+        "current": "Current password",
+        "new": "New password",
+        "confirm": "Repeat the new password",
+        "tooShort": "At least 8 characters.",
+        "save": "Save password",
+        "changed": "Password saved"
+      },
+      "tokens": {
+        "label": "API tokens",
+        "help": "For the Home Assistant integration and your own scripts: send as Authorization: Bearer <token>.",
+        "once": "Copy this token now. It is not shown again.",
+        "copy": "Copy",
+        "copied": "Token copied",
+        "created": "created {when}",
+        "lastUsed": "last used {when}",
+        "revoke": "Revoke",
+        "revokeConfirm": "Revoke this token? Anything using it stops working.",
+        "newLabel": "Token name",
+        "create": "Create token"
+      },
+      "updates": {
+        "label": "Version {version}",
+        "available": "Version {version} is available.",
+        "upToDate": "No newer version found on this channel.",
+        "check": "Check now",
+        "install": "Update"
+      },
+      "backup": {
+        "export": "Export",
+        "exportHelp": "Download the configuration with passwords and tokens removed.",
+        "download": "Download",
+        "import": "Import",
+        "importHelp": "Replace the configuration with a file exported earlier. Secrets already on the bridge are kept.",
+        "choose": "Choose file",
+        "imported": "Configuration imported",
+        "raw": "Edit as JSON",
+        "rawHelp": "For keys this screen does not show. Changes are saved with the Save button.",
+        "edit": "Edit",
+        "apply": "Apply"
+      }
+    },
+    "leaveConfirm": "You have unsaved settings. Leave anyway?"
   }
 }
