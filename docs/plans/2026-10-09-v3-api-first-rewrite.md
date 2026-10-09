@@ -57,7 +57,7 @@ Details and alternatives: ADR-0001.
 
 | # | Stage | Deliverable | Done when |
 |---|---|---|---|
-| 0 | Hygiene (main) | `ui/node_modules` untracked; beta channel stops serving April code | CI green; beta add-on no longer on 3.0.0-beta.14 |
+| 0 | Hygiene (main) — **done 2026-10-09** | `ui/node_modules` untracked (#518). Beta channel: decided to leave it on 3.0.0-beta.14 until the first real v3 beta (stage 4) rather than publish main as 3.0.0-beta.15 | CI green |
 | 1 | Contract | ADR-0001 accepted; resource map; Pydantic models; generated OpenAPI 3.1 checked in; endpoint migration table (old → v1 / dropped) | OpenAPI reviewed; every current endpoint mapped |
 | 2 | Application layer (branch `v3` from main) | business logic moved out of Flask routes into use-case services with service-level tests | behaviour parity proven by tests; routes are thin wrappers |
 | 3 | FastAPI | uvicorn in the bridge loop; v1 routers; SSE + WS events; auth (ingress, session, bearer); HA ingress `root_path`; compat router; **Flask, waitress, legacy UI and views deleted**; tests on httpx | full suite; live stand: HAOS ingress, LXC (CT 107), Docker |
