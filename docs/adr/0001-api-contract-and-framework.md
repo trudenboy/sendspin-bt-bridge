@@ -1,6 +1,6 @@
 # ADR-0001 — One typed API as the single source of truth (FastAPI + Pydantic)
 
-* **Status:** proposed
+* **Status:** accepted (2026-10-09)
 * **Date:** 2026-10-09
 * **Plan:** [v3 — API-first rewrite](../plans/2026-10-09-v3-api-first-rewrite.md)
 
@@ -132,10 +132,9 @@ UI gone there is no writer of the v5 shape left to stay compatible with.
 * Operational: the loop is shared, so blocking calls become a correctness
   issue, guarded by tests; uvicorn and the Node build must work on armv7.
 
-## Open questions (stage 1)
+## Open questions (resolved in stage 1)
 
-1. TypeScript client generator: `openapi-typescript` + `openapi-fetch` vs. Orval.
-2. Event schema versioning: per-type version vs. one envelope version.
-3. Whether `devices` and Music Assistant players are one resource or linked ones.
-4. How long the HA compat router lives (one stable release after the v1
-   component ships?).
+Resolved in the [endpoint map](0001-api-v1-endpoint-map.md#resolved-open-questions):
+`openapi-typescript` + `openapi-fetch`; one event envelope version with a
+`type` discriminator; Music Assistant players are a field of `devices`; the HA
+compat router lives until one stable release after the v1 custom component.
