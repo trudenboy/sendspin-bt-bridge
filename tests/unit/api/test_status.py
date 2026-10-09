@@ -85,6 +85,37 @@ def test_all_devices_disabled_gets_its_own_neutral_header(api_client, registry, 
     import sendspin_bridge.application.status as status_uc
 
     monkeypatch.setattr(status_uc, "load_config", diagnostics.load_config)
+    # The onboarding checks probe the host's Bluetooth and audio; pin them
+    # healthy so the header depends only on the disabled devices.
+    monkeypatch.setattr(
+        diagnostics,
+        "_build_onboarding_assistant_payload",
+        lambda **_: {
+            "checks": [{"key": "bluetooth", "status": "ok", "summary": "Bluetooth access is ready."}],
+            "checklist": {
+                "overall_status": "warning",
+                "progress_percent": 60,
+                "headline": "Next recommended step: Attach your first speaker",
+                "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                "current_step_key": "sink_verification",
+                "current_step_title": "Attach your first speaker",
+                "primary_action": {"key": "open_devices_settings", "label": "Open device settings"},
+                "checkpoints": [],
+                "steps": [
+                    {"key": "bluetooth", "title": "Check Bluetooth access", "status": "ok", "stage": "complete"},
+                    {"key": "audio", "title": "Verify audio backend", "status": "ok", "stage": "complete"},
+                    {
+                        "key": "sink_verification",
+                        "title": "Attach your first speaker",
+                        "status": "warning",
+                        "stage": "current",
+                        "summary": "Devices are configured, but none are currently connected over Bluetooth.",
+                    },
+                ],
+            },
+            "counts": {"configured_devices": 2, "connected_devices": 0, "sink_ready_devices": 0},
+        },
+    )
     state.set_disabled_devices(
         [
             {"player_name": "Kitchen", "mac": "AA", "enabled": False},

@@ -688,12 +688,17 @@ def test_status_events_streams_typed_events_until_its_lifetime(client, monkeypat
     import time
 
     import sendspin_bridge.api.routers.compat_ha as compat
-    from sendspin_bridge.bridge.state import publish_internal_event
+    from sendspin_bridge.bridge.state import get_internal_event_publisher, publish_internal_event
 
-    monkeypatch.setattr(compat, "_EVENT_SSE_MAX_LIFETIME", 0.6)
+    monkeypatch.setattr(compat, "_EVENT_SSE_MAX_LIFETIME", 1.5)
+    publisher = get_internal_event_publisher()
+    baseline = len(publisher._subscribers)
 
     def _publish_soon():
-        time.sleep(0.2)
+        # Publish once the stream has subscribed, not after a fixed delay.
+        deadline = time.monotonic() + 1.0
+        while len(publisher._subscribers) <= baseline and time.monotonic() < deadline:
+            time.sleep(0.01)
         publish_internal_event(
             event_type="device.connected", category="device", subject_id="kitchen", payload={"rssi": -60}
         )
