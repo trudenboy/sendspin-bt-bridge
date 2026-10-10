@@ -884,6 +884,10 @@ def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str) -> str:
     return ""
 
 
+# Home Assistant Core as add-ons reach it on the Supervisor network.
+_HA_CORE_URL = "http://homeassistant:8123"
+
+
 def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
     """Create a long-lived MA token through the HA ingress proxy."""
     base_url = _find_ma_ingress_url_via_ha(ha_url, ha_token)
@@ -1298,6 +1302,12 @@ def ha_silent_auth(ha_token: str, ma_url: str) -> dict:
     if not ha_user:
         raise UseCaseError(401, "ha_token_invalid", "Could not verify HA user — token may be expired")
     ma_token = _create_ma_token_via_ingress(ha_user["id"], ha_user["name"], ha_user.get("name", ""))
+    if not ma_token:
+        # Music Assistant (server #6772) trusts the ingress user headers only
+        # from the Supervisor, so the direct call above is refused there. Home
+        # Assistant's ingress proxy makes the same request as this user, from
+        # the Supervisor.
+        ma_token = _create_ma_token_via_ha_proxy(_HA_CORE_URL, ha_token)
     if not ma_token:
         raise UseCaseError(
             502, "ma_ingress_failed", "Could not create MA token via Ingress — is Music Assistant running?"

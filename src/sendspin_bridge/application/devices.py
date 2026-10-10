@@ -183,6 +183,13 @@ def remove(device_id: str) -> dict[str, Any]:
         raise UseCaseError(404, "unknown_device", f"Unknown device: {device_id}")
     config["BLUETOOTH_DEVICES"] = kept
     result = config_uc.save_config(config)
+    # The disabled list is built at startup; a removed speaker leaves it now.
+    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot, set_disabled_devices
+
+    disabled = get_device_registry_snapshot().disabled_devices
+    remaining = [d for d in disabled if not (d.get("mac") and _player_id_from_mac(str(d["mac"])) == device_id)]
+    if len(remaining) != len(disabled):
+        set_disabled_devices(remaining)
     return {"removed": True, "reconfig": result.get("reconfig") or {}}
 
 

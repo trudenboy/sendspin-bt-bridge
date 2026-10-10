@@ -686,3 +686,27 @@ def _http_error_with_location(url: str, location: str):
     if location:
         headers["Location"] = location
     return HTTPError(url, 302, "Found", headers, io.BytesIO(b""))
+
+
+@patch("sendspin_bridge.application.music_assistant.auth.get_ma_api_credentials", return_value=("", ""))
+@patch("sendspin_bridge.application.music_assistant.auth._save_ma_token_and_rediscover", return_value=None)
+@patch("sendspin_bridge.application.music_assistant.auth._validate_ma_token", return_value=True)
+@patch("sendspin_bridge.application.music_assistant.auth._create_ma_token_via_ha_proxy", return_value="proxy_token")
+@patch("sendspin_bridge.application.music_assistant.auth._create_ma_token_via_ingress", return_value=None)
+@patch(
+    "sendspin_bridge.application.music_assistant.auth._get_ha_user_via_ws",
+    return_value={"id": "u1", "name": "admin", "is_admin": True},
+)
+def test_silent_auth_goes_through_home_assistant_when_ma_refuses_the_direct_ingress_call(
+    _ws, _ingress, _proxy, _validate, _save, _mock_get_ma_api_credentials, client
+):
+    """Music Assistant (since server #6772) trusts ingress user headers only from
+    the Supervisor, so the add-on's direct call gets 401. Through Home
+    Assistant's ingress proxy the request does come from the Supervisor."""
+    resp = client.post(
+        "/api/v1/music-assistant/session/ha-silent",
+        json={"ha_token": "tok", "ma_url": "http://localhost:8095"},
+    )
+    assert resp.status_code == 200
+    _proxy.assert_called_once_with("http://homeassistant:8123", "tok")
+    _save.assert_called_once_with("http://localhost:8095", "proxy_token", "admin", auth_provider="ha")

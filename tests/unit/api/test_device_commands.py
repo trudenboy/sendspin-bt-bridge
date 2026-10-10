@@ -211,3 +211,23 @@ def test_removing_a_speaker_takes_it_off_the_bridge_and_unpairs_it(api_client, r
 def test_removing_an_unknown_speaker_is_404(api_client, registry, config_on_disk):
     assert api_client.delete("/api/v1/devices/ghost").status_code == 404
     assert len(json.loads(config_on_disk.file.read_text())["BLUETOOTH_DEVICES"]) == 2
+
+
+def test_a_removed_disabled_speaker_leaves_the_disabled_list(api_client, registry, config_on_disk):
+    """The disabled list is built at startup; removing a disabled speaker used
+    to leave it there until the bridge restarted."""
+    from sendspin_bridge.config import _player_id_from_mac
+    from sendspin_bridge.services.bluetooth import device_registry
+
+    device_registry.set_disabled_devices(
+        [
+            {"mac": MAC, "player_name": "Garage", "enabled": False},
+            {"mac": "AA:AA:AA:AA:AA:AA", "player_name": "Attic", "enabled": False},
+        ]
+    )
+    try:
+        assert api_client.delete(f"/api/v1/devices/{_player_id_from_mac(MAC)}").status_code == 200
+        left = [d["mac"] for d in device_registry.get_device_registry_snapshot().disabled_devices]
+        assert left == ["AA:AA:AA:AA:AA:AA"]
+    finally:
+        device_registry.set_disabled_devices([])

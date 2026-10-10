@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A removed speaker no longer stays listed as disabled until the bridge
+  restarts.
+- Signing in to Music Assistant with the Home Assistant account works again
+  in the add-on. Newer Music Assistant versions refuse the add-on's direct
+  sign-in request; the bridge now signs in through Home Assistant instead.
+
 ## [3.0.0-beta.18] - 2026-10-10
 
 ### Added
