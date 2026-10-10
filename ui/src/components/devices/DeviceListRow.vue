@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
-import { confirmDialog } from '@/composables/useConfirm'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
@@ -13,12 +12,11 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  MoreVertical,
   BatteryLow,
   BatteryMedium,
   BatteryFull,
 } from 'lucide-vue-next'
-import { SbDropdown, SbDropdownItem } from '@/kit'
+import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import { transport } from '@/api/playback'
 import type { Device } from '@/api/types'
 
@@ -84,20 +82,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   void run(() => transport(props.device.id, command), 'transport.failed')
 }
 
-function onToggleEnabled() {
-  void run(() => deviceStore.setEnabled(props.device.id, !props.device.enabled), 'device.actions.enableFailed')
-}
 
-async function onForget() {
-  const ok = await confirmDialog({
-    title: t('device.actions.forgetTitle', { name: props.device.name }),
-    message: t('device.actions.forgetConfirm'),
-    confirmLabel: t('device.actions.forget'),
-    danger: true,
-  })
-  if (!ok) return
-  void run(() => deviceStore.forget(props.device.id), 'device.actions.enableFailed')
-}
 </script>
 
 <template>
@@ -200,35 +185,7 @@ async function onForget() {
 
     <!-- Actions -->
     <td class="py-2 pl-2 pr-3 text-right">
-      <SbDropdown align="right">
-        <template #trigger>
-          <button
-            type="button"
-            class="inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
-            :aria-label="t('device.actions.details')"
-          >
-            <MoreVertical class="h-4 w-4" />
-          </button>
-        </template>
-        <SbDropdownItem @click="deviceStore.reconnect(device.id)">
-          {{ t('device.actions.reconnect') }}
-        </SbDropdownItem>
-        <SbDropdownItem @click="deviceStore.standby(device.id)">
-          {{ t('device.actions.standby') }}
-        </SbDropdownItem>
-        <SbDropdownItem @click="deviceStore.wake(device.id)">
-          {{ t('device.actions.wake') }}
-        </SbDropdownItem>
-        <SbDropdownItem @click="onToggleEnabled">
-          {{ device.enabled ? t('device.actions.disable') : t('device.actions.enable') }}
-        </SbDropdownItem>
-        <SbDropdownItem @click="emit('openDetail', device.id)">
-          {{ t('device.actions.details') }}
-        </SbDropdownItem>
-        <SbDropdownItem :destructive="true" @click="onForget">
-          {{ t('device.actions.forget') }}
-        </SbDropdownItem>
-      </SbDropdown>
+      <SpeakerActionsMenu :device="device" />
     </td>
   </tr>
 </template>

@@ -13,7 +13,7 @@ const store = {
   reconnect: vi.fn(),
   standby: vi.fn(),
   wake: vi.fn(),
-  forget: vi.fn(),
+  remove: vi.fn(),
   release: vi.fn(),
   setEnabled: vi.fn(),
 }
@@ -123,29 +123,29 @@ describe('DeviceCard', () => {
 
   it('releases and reclaims through the device store', async () => {
     let items = await openMenu(mountCard())
-    await items.find((b) => b.text() === 'Release')!.trigger('click')
+    await items.find((b) => b.text() === 'Hand over to other devices')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', true)
 
     items = await openMenu(mountCard(makeDevice({ bluetooth: { management_enabled: false } })))
-    await items.find((b) => b.text() === 'Reclaim')!.trigger('click')
+    await items.find((b) => b.text() === 'Take back')!.trigger('click')
     expect(store.release).toHaveBeenCalledWith('dev-1', false)
   })
 
-  it('asks before forgetting the Bluetooth bond', async () => {
+  it('asks before removing the speaker', async () => {
     const { confirmState, settleConfirm } = await import('@/composables/useConfirm')
     let items = await openMenu(mountCard())
-    await items.find((b) => b.text().includes('Forget'))!.trigger('click')
+    await items.find((b) => b.text().includes('Remove speaker'))!.trigger('click')
     expect(confirmState.open).toBe(true)
     expect(confirmState.options?.danger).toBe(true)
     settleConfirm(false)
     await new Promise((r) => setTimeout(r, 0))
-    expect(store.forget).not.toHaveBeenCalled()
+    expect(store.remove).not.toHaveBeenCalled()
 
     items = await openMenu(mountCard())
-    await items.find((b) => b.text().includes('Forget'))!.trigger('click')
+    await items.find((b) => b.text().includes('Remove speaker'))!.trigger('click')
     settleConfirm(true)
     await new Promise((r) => setTimeout(r, 0))
-    expect(store.forget).toHaveBeenCalledWith('dev-1')
+    expect(store.remove).toHaveBeenCalledWith('dev-1')
   })
 
   it('opens the details from the card itself', async () => {

@@ -21,6 +21,7 @@ const STATES: Record<string, { tone: Tone; dot: DotStatus }> = {
   degraded: { tone: 'error', dot: 'error' },
   offline: { tone: 'neutral', dot: 'offline' },
   standby: { tone: 'neutral', dot: 'standby' },
+  released: { tone: 'warning', dot: 'standby' },
   disabled: { tone: 'neutral', dot: 'offline' },
 }
 

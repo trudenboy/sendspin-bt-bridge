@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useBridgeStore } from './bridge'
-import { reconnectDevice, setDeviceEnabled, setManagement, standbyDevice, wakeDevice } from '@/api/devices'
-import { forgetBtDevice } from '@/api/bluetooth'
+import { reconnectDevice, removeDevice, setDeviceEnabled, setManagement, standbyDevice, wakeDevice } from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
 import type { Device } from '@/api/types'
@@ -18,8 +17,13 @@ export interface DeviceFilter {
 }
 
 /** A short state for lists and filters, derived from the device's health. */
+/**
+ * One status per speaker, most decisive first: switched off, handed over to
+ * other devices, parked on standby, playing, then its health.
+ */
 export function deviceState(d: Device): string {
   if (!d.enabled) return 'disabled'
+  if (d.bluetooth.management_enabled === false) return 'released'
   if (d.bluetooth.standby) return 'standby'
   if (d.playback.playing && d.audio.streaming) return 'streaming'
   if (d.health.state && d.health.state !== 'unknown') return d.health.state
@@ -99,10 +103,10 @@ export const useDeviceStore = defineStore('devices', () => {
     await setManagement(id, !released)
   }
 
-  /** Forget the speaker's Bluetooth bond (its configuration stays). */
-  async function forget(id: string) {
-    const mac = bridge.deviceById(id)?.bluetooth.mac
-    if (mac) await forgetBtDevice(mac)
+  /** Take the speaker off the bridge (player and Bluetooth pairing go with it). */
+  async function remove(id: string) {
+    await removeDevice(id)
+    await bridge.refresh()
   }
 
   async function setEnabled(id: string, enabled: boolean) {
@@ -123,7 +127,7 @@ export const useDeviceStore = defineStore('devices', () => {
     wake,
     standby,
     release,
-    forget,
+    remove,
     setEnabled,
   }
 })

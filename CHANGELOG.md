@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Speakers can be removed from the bridge again — from a speaker's menu,
+  at the end of its settings, or from the list of disabled speakers. Its
+  player leaves Music Assistant and its Bluetooth pairing is removed.
+- Disabled speakers are listed under the speakers, where they can be
+  enabled again or removed.
+
+### Changed
+
+- A speaker's actions read the same everywhere and are grouped by what
+  they affect: its connection (reconnect, standby, active source), its
+  place on the bridge (hand over to other devices or take back, disable)
+  and removal. "Forget Bluetooth bond", which left the speaker on the
+  bridge trying to reconnect, is replaced by removal; "Pair again" in the
+  speaker's details still repairs a broken pairing.
+- A speaker handed over to other devices shows as "Handed over", and the
+  power-saving action is called "Suspend audio output" so it is not mixed
+  up with handing the speaker over.
+
 ### Fixed
 
 - Settings did not open on installs whose speakers have keep-alive off

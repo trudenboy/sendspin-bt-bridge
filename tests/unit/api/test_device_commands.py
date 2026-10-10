@@ -171,3 +171,43 @@ def test_power_save_switches_only_on_a_change(api_client, registry, bridge_loop,
     speaker.status["bt_power_save"] = wanted
     assert api_client.put("/api/v1/devices/kitchen/power-save", json={"enabled": wanted}).status_code == 204
     getattr(speaker, called).assert_not_awaited()
+
+
+# -- removal ---------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def config_on_disk(tmp_config, monkeypatch):
+    import sendspin_bridge.application.config as config_uc
+
+    monkeypatch.setattr(config_uc, "CONFIG_FILE", tmp_config)
+    unpaired: list[str] = []
+    monkeypatch.setattr(config_uc, "_bt_remove_device", lambda mac, adapter="": unpaired.append(mac))
+    other = "11:22:33:44:55:66"
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {"mac": MAC, "player_name": "Garage", "enabled": False},
+                    {"mac": other, "player_name": "Office", "enabled": True},
+                ]
+            }
+        )
+    )
+    return SimpleNamespace(file=tmp_config, unpaired=unpaired, other=other)
+
+
+def test_removing_a_speaker_takes_it_off_the_bridge_and_unpairs_it(api_client, registry, config_on_disk):
+    from sendspin_bridge.config import _player_id_from_mac
+
+    resp = api_client.delete(f"/api/v1/devices/{_player_id_from_mac(MAC)}")
+
+    assert resp.status_code == 200
+    saved = json.loads(config_on_disk.file.read_text())
+    assert [d["mac"] for d in saved["BLUETOOTH_DEVICES"]] == [config_on_disk.other]
+    assert config_on_disk.unpaired == [MAC]
+
+
+def test_removing_an_unknown_speaker_is_404(api_client, registry, config_on_disk):
+    assert api_client.delete("/api/v1/devices/ghost").status_code == 404
+    assert len(json.loads(config_on_disk.file.read_text())["BLUETOOTH_DEVICES"]) == 2

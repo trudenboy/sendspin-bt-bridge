@@ -365,5 +365,6 @@ class DisabledDevice(ResponseModel):
 
     model_config = ConfigDict(extra="allow", json_schema_serialization_defaults_required=True)
 
+    id: str | None = Field(default=None, description="The id /devices/{id} commands take (enable, remove).")
     mac: str | None = None
     player_name: str | None = None

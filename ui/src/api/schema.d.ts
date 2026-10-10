@@ -596,7 +596,11 @@ export interface paths {
         get: operations["get_device_api_v1_devices__device_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a speaker from the bridge
+         * @description Stops its player and removes its Bluetooth bond, as removing it from the settings does.
+         */
+        delete: operations["delete_device_api_v1_devices__device_id__delete"];
         options?: never;
         head?: never;
         /** Enable or disable a speaker */
@@ -2824,6 +2828,11 @@ export interface components {
          * @description A configured speaker the bridge is not running (``enabled: false``).
          */
         DisabledDevice: {
+            /**
+             * Id
+             * @description The id /devices/{id} commands take (enable, remove).
+             */
+            id: string | null;
             /** Mac */
             mac: string | null;
             /** Player Name */
@@ -3454,6 +3463,15 @@ export interface components {
             job: components["schemas"]["Job"];
             /** Monitor Reloaded */
             monitor_reloaded: boolean;
+        };
+        /** RemovedOut */
+        RemovedOut: {
+            /** Reconfig */
+            reconfig?: {
+                [key: string]: unknown;
+            };
+            /** Removed */
+            removed: boolean;
         };
         /** RepairIn */
         RepairIn: {
@@ -5359,6 +5377,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Device"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    delete_device_api_v1_devices__device_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedOut"];
                 };
             };
             /** @description Client error */

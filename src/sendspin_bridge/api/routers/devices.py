@@ -82,6 +82,17 @@ def patch_device(device_id: str, body: EnabledIn) -> EnabledOut:
     return EnabledOut(**dev.set_enabled(device_id, body.enabled))
 
 
+class RemovedOut(BaseModel):
+    removed: bool
+    reconfig: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.delete("/devices/{device_id}", response_model=RemovedOut, summary="Remove a speaker from the bridge")
+def delete_device(device_id: str) -> RemovedOut:
+    """Stops its player and removes its Bluetooth bond, as removing it from the settings does."""
+    return RemovedOut(**dev.remove(device_id))
+
+
 @router.put("/devices/{device_id}/volume", response_model=VolumeOut, summary="Set volume")
 def put_volume(device_id: str, body: VolumeIn) -> VolumeOut:
     return VolumeOut(**playback.set_device_volume(device_id, body.level))

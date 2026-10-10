@@ -10,6 +10,8 @@ import { SbButton, SbSpinner, SbToggle } from '@/kit'
 import SettingField from '@/components/settings/SettingField.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS } from '@/settings/device'
+import { confirmDialog } from '@/composables/useConfirm'
+import { speakerName } from '@/utils/speakerName'
 import type { Device } from '@/api/types'
 
 const props = defineProps<{ device: Device }>()
@@ -89,6 +91,28 @@ async function save() {
   }
 }
 
+const removing = ref(false)
+
+/** The same removal as the speaker menu, at the end of its settings (as on a Home Assistant device page). */
+async function removeSpeaker() {
+  const name = speakerName(props.device.name, props.device.bluetooth.mac ?? props.device.id)
+  const ok = await confirmDialog({
+    title: t('speaker.removeTitle', { name }),
+    message: t('speaker.removeMessage'),
+    confirmLabel: t('speaker.remove'),
+    danger: true,
+  })
+  if (!ok) return
+  removing.value = true
+  try {
+    await deviceStore.remove(props.device.id)
+  } catch (e) {
+    notifications.error(e instanceof ApiError ? e.message : t('common.error'))
+  } finally {
+    removing.value = false
+  }
+}
+
 async function toggleEnabled(enabled: boolean) {
   try {
     await deviceStore.setEnabled(props.device.id, enabled)
@@ -136,6 +160,12 @@ async function toggleEnabled(enabled: boolean) {
         <SbToggle v-model="showAdvanced" size="sm" />
         {{ t('settings.showAdvanced') }}
       </label>
+
+      <section class="mt-6 rounded-(--radius-card) border border-error/30 p-4">
+        <p class="text-sm font-medium text-text-primary">{{ t('speaker.remove') }}</p>
+        <p class="mt-0.5 text-[13px] text-text-secondary">{{ t('speaker.removeMessage') }}</p>
+        <SbButton class="mt-3" variant="danger" size="sm" :loading="removing" @click="removeSpeaker">{{ t('speaker.remove') }}…</SbButton>
+      </section>
 
       <div class="sticky bottom-0 -mx-1 mt-4 flex justify-end gap-2 bg-surface-card px-1 py-3">
         <SbButton variant="ghost" size="sm" :disabled="!dirty" @click="load">{{ t('settings.discard') }}</SbButton>

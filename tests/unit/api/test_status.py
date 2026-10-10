@@ -70,6 +70,15 @@ def test_disabled_devices_are_listed_on_the_bridge(api_client, registry):
     assert [d["player_name"] for d in disabled] == ["Off Speaker"]
 
 
+def test_a_disabled_speaker_carries_the_id_its_commands_take(api_client, registry):
+    """Enabling or removing it goes through /devices/{id}, like a running one."""
+    from sendspin_bridge.config import _player_id_from_mac
+
+    state.set_disabled_devices([{"player_name": "Off Speaker", "mac": "AA:BB:CC:DD:EE:FF", "enabled": False}])
+    disabled = api_client.get("/api/v1/status").json()["bridge"]["disabled_devices"]
+    assert disabled[0]["id"] == _player_id_from_mac("AA:BB:CC:DD:EE:FF")
+
+
 def test_all_devices_disabled_gets_its_own_neutral_header(api_client, registry, monkeypatch):
     monkeypatch.setattr(
         diagnostics,

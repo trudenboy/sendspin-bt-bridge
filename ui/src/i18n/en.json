@@ -47,7 +47,8 @@
       "degraded": "Problem",
       "recovering": "Reconnecting…",
       "transitioning": "Connecting…",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "released": "Handed over"
     },
     "actions": {
       "reconnect": "Reconnect",
@@ -384,10 +385,10 @@
       "pairingDone": "Music Assistant can pair for a while",
       "unmute": "Unmute the audio output",
       "unmuteDone": "Audio output unmuted",
-      "release": "Release audio now",
-      "releaseDone": "Audio released",
-      "resume": "Resume audio",
-      "resumeDone": "Audio resumed"
+      "release": "Suspend audio output",
+      "releaseDone": "Audio output suspended",
+      "resume": "Resume audio output",
+      "resumeDone": "Audio output resumed"
     }
   },
   "volume": {
@@ -429,9 +430,9 @@
     "audioCount": "{audio} audio · {total} total",
     "addToFleet": "Add to fleet",
     "info": "Device Info",
-    "release": "Release",
-    "reclaim": "Reclaim",
-    "released": "Released",
+    "release": "Hand over to other devices",
+    "reclaim": "Take back",
+    "released": "Handed over",
     "resetReconnect": "Reset & Reconnect",
     "deviceInfo": "Bluetooth Device Info",
     "noDevices": "No paired devices found"
@@ -1122,5 +1123,27 @@
     "search": "Search on this page",
     "help": "Show this list",
     "close": "Close a dialog or menu"
+  },
+  "speaker": {
+    "groups": {
+      "connection": "Connection",
+      "bridge": "On this bridge"
+    },
+    "reconnect": "Reconnect",
+    "standby": "Put on standby",
+    "wake": "Wake from standby",
+    "claim": "Make this bridge the active source",
+    "handOver": "Hand over to other devices",
+    "takeBack": "Take back",
+    "disable": "Disable",
+    "enable": "Enable",
+    "bluetoothInfo": "Bluetooth details",
+    "remove": "Remove speaker",
+    "removeTitle": "Remove {name}?",
+    "removeMessage": "Its player disappears from Music Assistant and its Bluetooth pairing is removed. To use it again, add it as a new speaker.",
+    "suspendOutput": "Suspend audio output",
+    "resumeOutput": "Resume audio output",
+    "disabledTitle": "Disabled speakers",
+    "disabledHelp": "Their settings are kept; they get no player until enabled."
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { speakerName } from '@/utils/speakerName'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
@@ -40,6 +40,11 @@ const released = computed(() => device.value?.bluetooth.management_enabled === f
 const adapterId = computed(() => device.value?.bluetooth.adapter.hci || '')
 const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth.mac ?? ''))
 const events = computed(() => device.value?.recent_events ?? [])
+
+// A speaker that disappears (removed) takes its panel with it.
+watch(device, (now, before) => {
+  if (before && !now && props.open) emit('update:open', false)
+})
 
 const tabs = computed(() => [
   { id: 'status', label: t('drawer.tabs.status') },

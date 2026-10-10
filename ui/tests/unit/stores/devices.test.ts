@@ -11,6 +11,7 @@ vi.mock('@/api/devices', () => ({
   setManagement: vi.fn().mockResolvedValue(undefined),
   wakeDevice: vi.fn().mockResolvedValue(undefined),
   standbyDevice: vi.fn().mockResolvedValue(undefined),
+  removeDevice: vi.fn().mockResolvedValue({ removed: true, reconfig: {} }),
 }))
 vi.mock('@/api/bluetooth', () => ({ forgetBtDevice: vi.fn().mockResolvedValue(undefined), getAdapters: vi.fn() }))
 vi.mock('@/api/playback', () => ({
@@ -19,7 +20,7 @@ vi.mock('@/api/playback', () => ({
 }))
 
 import { reconnectDevice, setDeviceEnabled, setManagement, standbyDevice, wakeDevice } from '@/api/devices'
-import { forgetBtDevice } from '@/api/bluetooth'
+import { removeDevice } from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 
 const A = () =>
@@ -44,6 +45,7 @@ describe('deviceState', () => {
     expect(deviceState(makeDevice())).toBe('ready')
     expect(deviceState(makeDevice({ enabled: false }))).toBe('disabled')
     expect(deviceState(makeDevice({ bluetooth: { standby: true } }))).toBe('standby')
+    expect(deviceState(makeDevice({ bluetooth: { management_enabled: false, standby: true } }))).toBe('released')
     expect(deviceState(makeDevice({ playback: { playing: true }, audio: { streaming: true } }))).toBe('streaming')
     expect(deviceState(makeDevice({ health: { state: 'unknown' }, bluetooth: { connected: false } }))).toBe('offline')
   })
@@ -125,9 +127,11 @@ describe('useDeviceStore', () => {
     expect(job.status).toBe('succeeded')
   })
 
-  it('forgets the bond by the speaker MAC', async () => {
-    const { store } = setup()
-    await store.forget('b')
-    expect(forgetBtDevice).toHaveBeenCalledWith('AA:00:00:00:00:02')
+  it('removes a speaker from the bridge by id, then refreshes', async () => {
+    const { store, bridge } = setup()
+    const refresh = vi.spyOn(bridge, 'refresh').mockResolvedValue(undefined)
+    await store.remove('b')
+    expect(removeDevice).toHaveBeenCalledWith('b')
+    expect(refresh).toHaveBeenCalled()
   })
 })

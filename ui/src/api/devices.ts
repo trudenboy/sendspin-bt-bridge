@@ -7,6 +7,11 @@ export function setDeviceEnabled(deviceId: string, enabled: boolean) {
   return unwrap(api().PATCH('/api/v1/devices/{device_id}', { ...path(deviceId), body: { enabled } }))
 }
 
+/** Take the speaker off the bridge; the bridge also removes its Bluetooth pairing. */
+export function removeDevice(deviceId: string) {
+  return unwrap(api().DELETE('/api/v1/devices/{device_id}', path(deviceId)))
+}
+
 export function setManagement(deviceId: string, enabled: boolean) {
   return unwrap(api().PUT('/api/v1/devices/{device_id}/management', { ...path(deviceId), body: { enabled } }))
 }

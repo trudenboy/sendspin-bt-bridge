@@ -2868,6 +2868,18 @@
         "additionalProperties": true,
         "description": "A configured speaker the bridge is not running (``enabled: false``).",
         "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The id /devices/{id} commands take (enable, remove).",
+            "title": "Id"
+          },
           "mac": {
             "anyOf": [
               {
@@ -2892,6 +2904,7 @@
           }
         },
         "required": [
+          "id",
           "mac",
           "player_name"
         ],
@@ -4306,6 +4319,24 @@
           "job"
         ],
         "title": "ReloadOut",
+        "type": "object"
+      },
+      "RemovedOut": {
+        "properties": {
+          "reconfig": {
+            "additionalProperties": true,
+            "title": "Reconfig",
+            "type": "object"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "RemovedOut",
         "type": "object"
       },
       "RepairIn": {
@@ -7017,6 +7048,59 @@
       }
     },
     "/api/v1/devices/{device_id}": {
+      "delete": {
+        "description": "Stops its player and removes its Bluetooth bond, as removing it from the settings does.",
+        "operationId": "delete_device_api_v1_devices__device_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove a speaker from the bridge",
+        "tags": [
+          "devices"
+        ]
+      },
       "get": {
         "operationId": "get_device_api_v1_devices__device_id__get",
         "parameters": [

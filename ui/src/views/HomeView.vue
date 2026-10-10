@@ -12,6 +12,7 @@ import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
+import DisabledSpeakers from '@/components/devices/DisabledSpeakers.vue'
 import { Plus, LayoutGrid, List, ChevronDown } from 'lucide-vue-next'
 
 type ViewMode = 'grid' | 'list'
@@ -312,6 +313,8 @@ function openDetail(id: string) {
         {{ t('common.noResults') }}
       </div>
     </template>
+
+    <DisabledSpeakers v-if="!bridge.loading" />
 
     <!-- Detail drawer -->
     <DeviceDetailDrawer

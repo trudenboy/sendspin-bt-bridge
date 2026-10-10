@@ -166,6 +166,26 @@ def set_enabled(device_id: str, enabled: bool) -> dict[str, Any]:
     return {"enabled": enabled, "restart_required": not enabled}
 
 
+def remove(device_id: str) -> dict[str, Any]:
+    """Take the speaker off the bridge: its player stops and its Bluetooth bond is removed.
+
+    Goes through the ordinary settings save, which already stops a removed
+    speaker's player and unpairs it (an orphaned bond would keep the speaker
+    from pairing with anything else). Works for disabled speakers too.
+    """
+    from sendspin_bridge.application import config as config_uc
+    from sendspin_bridge.config import _player_id_from_mac, load_config
+
+    config = load_config()
+    entries = list(config.get("BLUETOOTH_DEVICES") or [])
+    kept = [d for d in entries if not (d.get("mac") and _player_id_from_mac(str(d["mac"])) == device_id)]
+    if len(kept) == len(entries):
+        raise UseCaseError(404, "unknown_device", f"Unknown device: {device_id}")
+    config["BLUETOOTH_DEVICES"] = kept
+    result = config_uc.save_config(config)
+    return {"removed": True, "reconfig": result.get("reconfig") or {}}
+
+
 def claim_audio(device_id: str) -> None:
     """On a multipoint speaker, make the bridge the active AVRCP source (MPRIS 'Playing')."""
     client = find_client(device_id)

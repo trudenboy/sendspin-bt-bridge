@@ -27,6 +27,13 @@ def bridge_name(config: dict) -> str:
     return socket.gethostname() if raw.lower() in ("", "auto", "hostname") else raw
 
 
+def _disabled(entry: dict) -> DisabledDevice:
+    from sendspin_bridge.config import _player_id_from_mac
+
+    mac = entry.get("mac")
+    return DisabledDevice.model_validate({**entry, "id": _player_id_from_mac(str(mac)) if mac else None})
+
+
 def build_status(*, auth_enabled: bool) -> BridgeStatus:
     """Bridge, devices and groups, with guidance — what the dashboard renders."""
     from sendspin_bridge.bridge import state
@@ -90,7 +97,7 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
         ma_connected=snapshot.ma_connected,
         ma_web_url=snapshot.ma_web_url,
         device_count=len(snapshot.devices),
-        disabled_devices=[DisabledDevice.model_validate(d) for d in snapshot.disabled_devices],
+        disabled_devices=[_disabled(d) for d in snapshot.disabled_devices],
         startup=StartupProgress(**startup) if startup else None,
         update_available=UpdateInfo(**snapshot.update_available) if snapshot.update_available else None,
         mock_runtime=snapshot.mock_runtime.to_dict() if snapshot.mock_runtime else None,

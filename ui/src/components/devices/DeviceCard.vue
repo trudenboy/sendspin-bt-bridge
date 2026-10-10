@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { confirmDialog } from '@/composables/useConfirm'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
-import { SbDropdown, SbDropdownItem } from '@/kit'
+import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import { speakerName } from '@/utils/speakerName'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
-import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import {
-  MoreVertical,
   Music,
   Play,
   Pause,
@@ -24,7 +21,6 @@ import {
   SignalMedium,
   SignalLow,
 } from 'lucide-vue-next'
-import { claimAudio } from '@/api/devices'
 import { transport } from '@/api/playback'
 import type { Device } from '@/api/types'
 import type { MaNowPlaying } from '@/composables/usePlaybackProgress'
@@ -51,7 +47,6 @@ const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
 
 const transportLoading = ref(false)
-const btInfoOpen = ref(false)
 
 const state = computed(() => deviceState(props.device))
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth.mac ?? props.device.id))
@@ -117,53 +112,17 @@ function onMuteUpdate(muted: boolean) {
   void run(() => deviceStore.setMute(props.device.id, muted), 'device.actions.enableFailed')
 }
 
-async function onReconnect() {
-  const job = await deviceStore.reconnect(props.device.id).catch(() => null)
-  if (!job || job.status !== 'succeeded') notifications.error(t('device.actions.reconnectFailed'))
-}
 
-function onStandby() {
-  void run(() => deviceStore.standby(props.device.id), 'device.actions.enableFailed')
-}
 
-function onWake() {
-  void run(() => deviceStore.wake(props.device.id), 'device.actions.enableFailed')
-}
 
 function onDetails() {
   emit('openDetail', props.device.id)
 }
 
-async function onForget() {
-  const ok = await confirmDialog({
-    title: t('device.actions.forgetTitle', { name: props.device.name }),
-    message: t('device.actions.forgetConfirm'),
-    confirmLabel: t('device.actions.forget'),
-    danger: true,
-  })
-  if (!ok) return
-  void run(() => deviceStore.forget(props.device.id), 'device.actions.enableFailed')
-}
 
-function onToggleEnabled() {
-  void run(() => deviceStore.setEnabled(props.device.id, !props.device.enabled), 'device.actions.enableFailed')
-}
 
-async function onRelease(release: boolean) {
-  try {
-    await deviceStore.release(props.device.id, release)
-  } catch {
-    notifications.error(t('device.actions.enableFailed'))
-  }
-}
 
-function onBtInfo() {
-  btInfoOpen.value = true
-}
 
-function onClaim() {
-  void run(() => claimAudio(props.device.id), 'device.actions.enableFailed')
-}
 
 async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   transportLoading.value = true
@@ -217,28 +176,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
         </p>
       </div>
       <DeviceStatusBadge :state="state" class="relative z-10 shrink-0" />
-      <SbDropdown align="right" class="relative z-10 -mt-1.5 -mr-2">
-        <template #trigger>
-          <button
-            type="button"
-            class="inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
-            :aria-label="t('device.actions.more', { name: displayName })"
-          >
-            <MoreVertical class="size-4" />
-          </button>
-        </template>
-        <SbDropdownItem @click="onReconnect">{{ t('device.actions.reconnect') }}</SbDropdownItem>
-        <SbDropdownItem v-if="device.bluetooth.standby" @click="onWake">{{ t('device.actions.wake') }}</SbDropdownItem>
-        <SbDropdownItem v-else @click="onStandby">{{ t('device.actions.standby') }}</SbDropdownItem>
-        <SbDropdownItem v-if="connected" @click="onClaim">{{ t('device.actions.claim') }}</SbDropdownItem>
-        <SbDropdownItem @click="onToggleEnabled">
-          {{ device.enabled ? t('device.actions.disable') : t('device.actions.enable') }}
-        </SbDropdownItem>
-        <SbDropdownItem v-if="!released" @click="onRelease(true)">{{ t('bluetooth.release') }}</SbDropdownItem>
-        <SbDropdownItem v-else @click="onRelease(false)">{{ t('bluetooth.reclaim') }}</SbDropdownItem>
-        <SbDropdownItem @click="onBtInfo">{{ t('bluetooth.info') }}</SbDropdownItem>
-        <SbDropdownItem :destructive="true" @click="onForget">{{ t('device.actions.forget') }}</SbDropdownItem>
-      </SbDropdown>
+      <div class="relative z-10 -mt-1.5 -mr-2"><SpeakerActionsMenu :device="device" /></div>
     </header>
 
     <!-- Now playing with its main control -->
@@ -294,11 +232,5 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       @update:muted="onMuteUpdate"
     />
 
-    <BtDeviceInfoModal
-      :mac="device.bluetooth.mac ?? ''"
-      :adapter="device.bluetooth.adapter.mac ?? ''"
-      :open="btInfoOpen"
-      @update:open="btInfoOpen = $event"
-    />
   </article>
 </template>
