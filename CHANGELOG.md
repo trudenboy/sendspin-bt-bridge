@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings did not open on installs whose speakers have keep-alive off
+  (an interval of 0): loading them failed and the page kept spinning. The
+  settings now load such configurations, and if loading ever fails the
+  page says so and offers to try again.
+- The container's health check asked for an address the new API no longer
+  had, so Docker reported the bridge as unhealthy.
+
 ## [3.0.0-beta.17] - 2026-10-10
 
 ### Added

@@ -187,7 +187,17 @@ onMounted(async () => {
       <SbButton size="sm" variant="warning" @click="restartNow">{{ t('settings.restartNow') }}</SbButton>
     </div>
 
-    <div v-if="configStore.loading || !configStore.config" class="flex items-center justify-center py-20">
+    <div
+      v-if="configStore.loadError && !configStore.loading"
+      class="flex flex-col items-center gap-3 rounded-(--radius-card) border border-error/40 bg-error/8 px-6 py-10 text-center"
+      role="alert"
+    >
+      <p class="font-medium text-text-primary">{{ t('settings.loadFailed') }}</p>
+      <p class="text-sm text-text-secondary">{{ configStore.loadError }}</p>
+      <SbButton variant="outline" size="sm" @click="configStore.fetchConfig()">{{ t('settings.retry') }}</SbButton>
+    </div>
+
+    <div v-else-if="configStore.loading || !configStore.config" class="flex items-center justify-center py-20">
       <SbSpinner size="lg" :label="t('common.loading')" />
     </div>
 

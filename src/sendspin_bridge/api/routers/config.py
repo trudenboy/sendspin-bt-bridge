@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from sendspin_bridge.api.auth import require_principal
@@ -46,10 +46,20 @@ class SendspinTestIn(BaseModel):
     SENDSPIN_PORT: int | str | None = None
 
 
-@router.get("", response_model=BridgeConfig, response_model_exclude_unset=True, summary="The configuration")
-def get_config() -> dict[str, Any]:
+@router.get(
+    "",
+    response_model=BridgeConfig,
+    response_model_exclude_unset=True,
+    summary="The configuration",
+    responses={200: {"model": BridgeConfig}},
+)
+def get_config() -> JSONResponse:
     """Secrets are removed; ``_password_set`` and ``_effective_*`` fields describe the runtime."""
-    return cfg.get_config()
+    # Sent as is, not validated against the model: real configs carry values
+    # the bridge accepts but the published schema is stricter about
+    # (keepalive_interval 0 = keep-alive off). Validating the answer made
+    # those a 500, and the settings screen never loaded.
+    return JSONResponse(cfg.get_config())
 
 
 @router.put("", response_model=SaveResult, summary="Save and apply the configuration")

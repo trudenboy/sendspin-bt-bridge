@@ -982,7 +982,9 @@
     "leave": "Leave without saving",
     "search": "Search settings",
     "nothingFound": "Nothing matches “{q}”.",
-    "changed": "Changed"
+    "changed": "Changed",
+    "loadFailed": "Settings could not be loaded.",
+    "retry": "Try again"
   },
   "timing": {
     "applied": "Applied: {value} ms",

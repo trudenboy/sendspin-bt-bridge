@@ -25,6 +25,7 @@ const config = ref<Record<string, unknown> | null>(null)
 const entry = ref<Entry | null>(null)
 const original = ref('')
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 const saving = ref(false)
 const showAdvanced = ref(false)
 try {
@@ -41,6 +42,7 @@ const groups = computed(() => DEVICE_GROUPS.filter((g) => g.id !== 'sync'))
 
 async function load() {
   loading.value = true
+  loadError.value = null
   try {
     const doc = (await getConfig()) as Record<string, unknown>
     const found = ((doc.BLUETOOTH_DEVICES as Entry[] | undefined) ?? []).find(
@@ -49,6 +51,8 @@ async function load() {
     config.value = doc
     entry.value = found ? { ...found } : null
     original.value = JSON.stringify(entry.value)
+  } catch (e) {
+    loadError.value = e instanceof ApiError ? e.message : String(e)
   } finally {
     loading.value = false
   }
@@ -97,6 +101,10 @@ async function toggleEnabled(enabled: boolean) {
 <template>
   <div class="py-2">
     <div v-if="loading && !entry" class="flex justify-center py-10"><SbSpinner /></div>
+    <div v-else-if="loadError" class="space-y-2 py-6 text-sm" role="alert">
+      <p class="text-text-primary">{{ t('settings.loadFailed') }} <span class="text-text-secondary">{{ loadError }}</span></p>
+      <SbButton variant="outline" size="sm" @click="load">{{ t('settings.retry') }}</SbButton>
+    </div>
     <p v-else-if="!entry" class="py-6 text-sm text-text-secondary">{{ t('drawer.config.notConfigured') }}</p>
     <template v-else>
       <div class="divide-y divide-border">

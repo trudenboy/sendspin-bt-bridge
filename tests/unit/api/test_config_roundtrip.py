@@ -75,3 +75,18 @@ def test_settings_with_an_adapter_area_mapping_load_and_save(client, tmp_path):
 
     assert resp.status_code == 200
     assert resp.json()["HA_ADAPTER_AREA_MAP"] == {adapter: {"area_id": "living_room", "area_name": "Living Room"}}
+
+
+def test_settings_load_a_config_the_bridge_accepts_but_the_schema_is_stricter_about(client, tmp_path):
+    """Real add-on configs carry values the bridge runs with but the published
+    schema rejects (keepalive_interval 0 = keep-alive off, legacy negative
+    delays before migration...). Loading the settings must not fail on them:
+    the answer is the bridge's config, not a validated copy."""
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    cfg["BLUETOOTH_DEVICES"] = [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen", "keepalive_interval": 0}]
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+
+    resp = client.get("/api/v1/config")
+
+    assert resp.status_code == 200
+    assert resp.json()["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 0

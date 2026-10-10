@@ -177,4 +177,21 @@ describe('ConfigView (settings)', () => {
     const row = w.findAll('label').find((l) => l.text().startsWith('Bridge name'))!
     expect(row.text()).toContain('Changed')
   })
+
+  it('says why the settings did not load, and retries', async () => {
+    vi.mocked(getConfig).mockRejectedValueOnce(new Error('Internal Server Error'))
+    const w = mount(ConfigView, {
+      global: {
+        plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
+        stubs: { MaLoginFlow: true },
+      },
+    })
+    await flushPromises()
+    expect(w.get('[role="alert"]').text()).toContain('Settings could not be loaded')
+
+    vi.mocked(getConfig).mockResolvedValue(structuredClone(BASE) as never)
+    await w.findAll('button').find((b) => b.text() === 'Try again')!.trigger('click')
+    await flushPromises()
+    expect(w.findAll('section h2').length).toBeGreaterThan(0)
+  })
 })

@@ -23,6 +23,13 @@ from sendspin_bridge.application.errors import UseCaseError
 router = APIRouter(prefix="/api", include_in_schema=False)
 protected = APIRouter(prefix="/api", include_in_schema=False, dependencies=[Depends(require_principal)])
 
+
+@router.get("/health")
+def health() -> dict[str, bool]:
+    """Liveness at the pre-v1 address: the image's Docker HEALTHCHECK probes it."""
+    return {"ok": True}
+
+
 _EVENT_SSE_MAX_LIFETIME = 6 * 60 * 60
 _EVENT_QUEUE_MAXSIZE = 256
 _HEARTBEAT_S = 15.0

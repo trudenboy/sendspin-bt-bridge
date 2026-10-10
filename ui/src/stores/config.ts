@@ -20,6 +20,8 @@ export const useConfigStore = defineStore('config', () => {
      avoids reactive-proxy issues with structuredClone/JSON.stringify. */
   const _originalJson = ref('')
   const loading = ref(false)
+  /** Why the last load failed (null when it worked). */
+  const loadError = ref<string | null>(null)
   const saving = ref(false)
   const validationErrors = ref<Record<string, string>>({})
 
@@ -34,12 +36,15 @@ export const useConfigStore = defineStore('config', () => {
 
   async function fetchConfig() {
     loading.value = true
+    loadError.value = null
     try {
       const data = await getConfig()
       config.value = deepClone(data)
       originalConfig.value = deepClone(data)
       _originalJson.value = JSON.stringify(data)
       validationErrors.value = {}
+    } catch (e) {
+      loadError.value = e instanceof Error ? e.message : String(e)
     } finally {
       loading.value = false
     }
@@ -104,6 +109,7 @@ export const useConfigStore = defineStore('config', () => {
     config,
     originalConfig,
     loading,
+    loadError,
     saving,
     validationErrors,
     isDirty,
