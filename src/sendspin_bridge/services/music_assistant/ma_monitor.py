@@ -773,6 +773,8 @@ class MaMonitor:
 
     async def _refresh_groups_via_ws(self, ws) -> None:
         """Fetch players/all via WS and rebuild the syncgroup cache in state."""
+        from sendspin_bridge.services.music_assistant.ma_client import sync_group_members
+
         try:
             resp = await self._request_command(ws, "players/all", {}, flush=False)
             players = resp.get("result") or []
@@ -812,7 +814,7 @@ class MaMonitor:
                 raw_members = p.get("group_members") or []
                 member_ids = set(raw_members)
                 member_set_by_group[sg_id] = member_ids
-                members = [{"id": mid_m, "name": id_to_name.get(mid_m, mid_m)} for mid_m in raw_members]
+                members = sync_group_members(raw_members, players)
                 all_groups.append({"id": sg_id, "name": sg_name, "members": members})
                 sg_info = {"id": sg_id, "name": sg_name}
                 for bp in bridge_info:

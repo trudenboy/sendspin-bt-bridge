@@ -69,11 +69,18 @@ def get_duplicate_device_warnings() -> list[Any]:
         return list(_duplicate_device_warnings)
 
 
+def _group_shape(groups: list[dict[str, Any]]) -> list[tuple]:
+    """Which groups exist and who is in them — without the members' live state."""
+    return [(g.get("id"), g.get("name"), tuple(m.get("id") for m in g.get("members") or [])) for g in groups]
+
+
 def set_ma_groups(mapping: dict[str, dict[str, Any]], all_groups: list[dict[str, Any]] | None = None) -> None:
     """Store the MA player_id → syncgroup mapping and full group list."""
     with _ma_groups_lock:
-        changed = _ma_groups != mapping
+        reshaped = _ma_groups != mapping
+        changed = reshaped
         if all_groups is not None:
+            reshaped = reshaped or _group_shape(_ma_all_groups) != _group_shape(all_groups)
             changed = changed or _ma_all_groups != all_groups
         _ma_groups.clear()
         _ma_groups.update(mapping)
@@ -81,9 +88,14 @@ def set_ma_groups(mapping: dict[str, dict[str, Any]], all_groups: list[dict[str,
             _ma_all_groups.clear()
             _ma_all_groups.extend(copy.deepcopy(all_groups))
         total_groups = len(_ma_all_groups)
-    log_fn = logger.info if changed else logger.debug
+    # A member's state or volume changes often; only a change of groups or
+    # members is worth an info line.
+    log_fn = logger.info if reshaped else logger.debug
     status = "updated" if changed else "unchanged"
     log_fn("MA syncgroup cache %s: %d mapped, %d total group(s)", status, len(mapping), total_groups)
+    if changed:
+        # Members' MA states live here; open Groups pages refresh on this.
+        notify_status_changed()
 
 
 def set_ma_api_credentials(url: str, token: str) -> None:

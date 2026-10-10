@@ -151,3 +151,16 @@ def test_get_ma_group_for_player_unknown_player_returns_none():
     assert ma_runtime_state.get_ma_group_for_player_id("not-a-real-pid") is None
     # Sanity: existing player still resolves.
     assert ma_runtime_state.get_ma_group_for_player_id(pid) is not None
+
+
+def test_a_changed_group_tells_status_listeners(monkeypatch):
+    """A member starting or stopping in MA must reach open Groups pages; an
+    unchanged refresh (every minute) must not wake them."""
+    calls = []
+    monkeypatch.setattr(ma_runtime_state, "notify_status_changed", lambda: calls.append(1))
+    groups = [{"id": "sg", "name": "Beta", "members": [{"id": "a", "state": "idle"}]}]
+    ma_runtime_state.set_ma_groups({}, groups)
+    ma_runtime_state.set_ma_groups({}, groups)
+    assert len(calls) == 1
+    ma_runtime_state.set_ma_groups({}, [{"id": "sg", "name": "Beta", "members": [{"id": "a", "state": "playing"}]}])
+    assert len(calls) == 2

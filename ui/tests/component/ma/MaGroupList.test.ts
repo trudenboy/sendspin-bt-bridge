@@ -5,11 +5,13 @@ import { createI18n } from 'vue-i18n'
 import MaGroupList from '@/components/ma/MaGroupList.vue'
 import en from '@/i18n/en.json'
 import type { MaGroup } from '@/api/types'
+import { useBridgeStore } from '@/stores/bridge'
 
 let mockGroupsResult: MaGroup[] = []
+const getGroupsSpy = vi.fn(() => Promise.resolve(mockGroupsResult))
 
 vi.mock('@/api/ma', () => ({
-  getGroups: () => Promise.resolve(mockGroupsResult),
+  getGroups: () => getGroupsSpy(),
   getNowPlaying: vi.fn().mockResolvedValue({ connected: false }),
   refreshGroups: vi.fn().mockResolvedValue({ id: 'j', status: 'succeeded' }),
   queueCommand: vi.fn(),
@@ -79,5 +81,37 @@ describe('MaGroupList', () => {
     const member = wrapper.get('li')
     expect(member.text()).toBe('ENEBY')
     expect(member.find('[title]').attributes('title')).toBe('ENEBY @ kitchen-bridge')
+  })
+
+  it("colours each member by its Music Assistant state", async () => {
+    mockGroupsResult = [
+      {
+        id: 'g1',
+        name: 'Beta',
+        members: [
+          { id: 'a', name: 'Kitchen', state: 'playing', available: true },
+          { id: 'b', name: 'Office', state: 'idle', available: true },
+          { id: 'c', name: 'Porch', state: 'idle', available: false },
+        ],
+      },
+    ]
+    const wrapper = mount(MaGroupList, { global: { plugins: [buildI18n()] } })
+    await flushPromises()
+    const tones = wrapper.findAll('li > *').map((b) => b.classes().find((c) => c.startsWith('tone-')))
+    expect(tones).toEqual(['tone-success', 'tone-neutral', 'tone-warning'])
+  })
+
+  it('refreshes the groups when the bridge reports a change', async () => {
+    vi.useFakeTimers()
+    try {
+      mount(MaGroupList, { global: { plugins: [buildI18n()] } })
+      await flushPromises()
+      const before = getGroupsSpy.mock.calls.length
+      useBridgeStore().snapshot = { devices: [], groups: [] } as never
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(getGroupsSpy.mock.calls.length).toBe(before + 1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

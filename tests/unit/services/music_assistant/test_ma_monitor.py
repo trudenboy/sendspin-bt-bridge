@@ -691,3 +691,31 @@ async def test_send_queue_cmd_plays_and_pauses_a_sync_group_queue(monkeypatch, a
 
     assert result["accepted"] is True
     assert sent == [(f"player_queues/{action}", {"queue_id": "syncgroup_beta"})]
+
+
+@pytest.mark.asyncio
+async def test_group_refresh_keeps_each_members_state(monkeypatch):
+    """The Groups page colours each member by its MA state; the live refresh
+    used to keep only id and name, so every member showed as idle."""
+    monitor = MaMonitor("http://ma:8095", "token")
+    players = [
+        {"player_id": "sg", "type": "group", "provider": "sync_group", "name": "Beta", "group_members": ["a", "b"]},
+        {"player_id": "a", "name": "Kitchen", "playback_state": "playing", "volume_level": 30, "available": True},
+        {"player_id": "b", "name": "Office", "playback_state": "idle", "volume_level": 12, "available": False},
+    ]
+
+    async def _fake_request(ws, command, args, flush=True):
+        assert command == "players/all"
+        return {"result": players}
+
+    monkeypatch.setattr(monitor, "_request_command", _fake_request)
+    monkeypatch.setattr(ma_monitor, "_active_bridge_clients", lambda: [])
+    try:
+        await monitor._refresh_groups_via_ws(object())
+        (group,) = state.get_ma_groups()
+        assert group["members"] == [
+            {"id": "a", "name": "Kitchen", "state": "playing", "volume": 30, "available": True},
+            {"id": "b", "name": "Office", "state": "idle", "volume": 12, "available": False},
+        ]
+    finally:
+        state.set_ma_groups({}, [])

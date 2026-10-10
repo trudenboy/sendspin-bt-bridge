@@ -45,6 +45,24 @@ def fetch_all_players_snapshot(ma_url: str, ma_token: str) -> list[dict]:
     return asyncio.run(_fetch_all_players(ma_url, ma_token))
 
 
+def sync_group_members(member_ids: list[str], players: list[dict]) -> list[dict]:
+    """A sync group's members as the bridge mirrors them: name and MA's live state."""
+    by_id = {p.get("player_id"): p for p in players}
+    members = []
+    for mid in member_ids:
+        player = by_id.get(mid, {})
+        members.append(
+            {
+                "id": mid,
+                "name": player.get("display_name") or player.get("name") or mid,
+                "state": player.get("playback_state"),
+                "volume": player.get("volume_level"),
+                "available": player.get("available", True),
+            }
+        )
+    return members
+
+
 async def discover_ma_groups(
     ma_url: str,
     ma_token: str,
@@ -94,17 +112,7 @@ async def discover_ma_groups(
         syncgroup_id = p["player_id"]
         syncgroup_name = p.get("display_name") or p.get("name") or syncgroup_id
         raw_members = p.get("group_members") or []
-        member_by_id = {pl["player_id"]: pl for pl in players}
-        members = [
-            {
-                "id": mid,
-                "name": id_to_name.get(mid, mid),
-                "state": member_by_id.get(mid, {}).get("playback_state"),
-                "volume": member_by_id.get(mid, {}).get("volume_level"),
-                "available": member_by_id.get(mid, {}).get("available", True),
-            }
-            for mid in raw_members
-        ]
+        members = sync_group_members(raw_members, players)
         member_ids = set(raw_members)
         member_set_by_group[syncgroup_id] = member_ids
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { openExternal } from '@/utils/safeUrl'
 import { speakerName } from '@/utils/speakerName'
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
 import { useBridgeStore } from '@/stores/bridge'
@@ -25,9 +25,27 @@ async function discoverGroups() {
   await ma.refresh()
 }
 
+/** Playing members show green, members Music Assistant cannot reach amber. */
+function memberTone(member: { state?: string; available?: unknown }) {
+  if (member.available === false) return 'warning'
+  return member.state === 'playing' ? 'success' : 'neutral'
+}
+
 onMounted(() => {
   ma.fetchGroups()
 })
+
+// The bridge raises a status event when a member starts, stops or drops out
+// in Music Assistant; follow it (coalesced) so the members stay current.
+let pending: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => bridge.snapshot,
+  () => {
+    if (pending) clearTimeout(pending)
+    pending = setTimeout(() => void ma.fetchGroups().catch(() => undefined), 250)
+  },
+)
+onUnmounted(() => pending && clearTimeout(pending))
 </script>
 
 <template>
@@ -50,7 +68,7 @@ onMounted(() => {
         </div>
         <ul class="flex flex-wrap gap-1.5 px-4 pt-1 pb-3" :aria-label="t('ma.groups.members')">
           <li v-for="member in group.members" :key="member.id">
-            <SbBadge :tone="member.state === 'playing' ? 'success' : 'neutral'" size="sm" dot :title="member.name ?? member.id">
+            <SbBadge :tone="memberTone(member)" size="sm" dot :title="member.name ?? member.id">
               {{ memberName(member.name, member.id) }}
             </SbBadge>
           </li>

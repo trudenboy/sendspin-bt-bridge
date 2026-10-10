@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   idle group's last track is now marked as not playing.
 - Play/pause on a group card goes through the group's own Music Assistant
   queue, so it works for groups whose speakers are on another bridge.
+- Group members on the Groups page show their state again: green while
+  playing, amber when Music Assistant cannot reach them. The page follows
+  changes made in Music Assistant without a reload.
 
 ## [3.0.0-beta.17] - 2026-10-10
 
