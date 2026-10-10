@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.17] - 2026-10-10
+
+### Added
+
+- "Add speaker" is a guided flow: the search starts by itself, a found
+  speaker pairs with one click, then you give it a name and a room and play
+  a test sound. Compatibility options and already-paired speakers are one
+  step away for when the speaker is not found.
+- Settings can be searched, and edited-but-unsaved options are marked.
+  Section headings stand apart from the options under them.
+- A notice appears when the page loses its live connection to the bridge,
+  so stale information is not mistaken for current.
+- Keyboard shortcuts: 1–4 switch places, A adds a speaker, / searches, ?
+  lists them.
+
+### Changed
+
+- Four places instead of five: Speakers (the former dashboard and device
+  list in one), Groups (Music Assistant groups, each with its now playing
+  and controls), Settings and Diagnostics. Old addresses still work.
+- The header shows the product name and logo (the same as the stable
+  release, also as the browser icon), this bridge's name, its status and
+  a Sponsor link with a heart; help
+  (documentation, GitHub, bug report, version) and preferences (language,
+  theme) are in two menus.
+- Diagnostics has three tabs — Overview (health, what needs attention,
+  recent events), Logs and System — and a "File bug report" button.
+- Search and filters on the speakers page appear once there are enough
+  speakers to need them.
+- Speaker cards lead with what matters: the name without the bridge
+  suffix, room, battery and signal in words, what is playing with its
+  controls, and the volume. Status reads Playing, Connected, Standby, Not
+  connected or Problem. The whole card opens the speaker's details; the
+  MAC address and adapter moved there.
+- Fewer pop-up confirmations for actions whose result is already visible.
+
+- Buttons, links and status text keep readable contrast (WCAG AA) in the
+  light theme; the bright blue stays for icons and sliders.
+- Confirmations (forgetting a speaker, revoking a token, leaving unsaved
+  settings, applying a measured delay) appear in the page's own dialog
+  instead of the browser's.
+- Phone layout: shorter labels in the bottom bar, one "+" to add a speaker,
+  larger touch targets for menus and mute.
+- Screen readers announce each speaker's volume slider by name and read
+  the page in the chosen language; the browser tab shows the page and the
+  bridge's name.
+
+### Fixed
+
+- Dividers in dialogs were drawn black.
+- "Up to date" and "Update started" messages showed internal text keys.
+- On a phone with Russian selected the devices page scrolled sideways.
+- "Connected" and "Healthy" showed in blue instead of green, and health
+  checks said "ok" untranslated.
+
 ## [3.0.0-beta.16] - 2026-10-10
 
 ### Added
