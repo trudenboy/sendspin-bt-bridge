@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.20] - 2026-10-10
+
+### Fixed
+
+- A speaker connected to a Music Assistant server set by address
+  (`SENDSPIN_SERVER`) showed "Sendspin is not connected" and, after half a
+  minute, "Cannot connect to Sendspin server" while it played. Such
+  connections are now shown as connected.
+- Music Assistant no longer logs "Invalid command: subscribe_events" each
+  time the bridge connects; the bridge stopped asking for a subscription MA
+  does not have (it sends its events to every signed-in client).
+
 ## [3.0.0-beta.19] - 2026-10-10
 
 ### Fixed
