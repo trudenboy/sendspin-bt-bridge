@@ -30,7 +30,10 @@
       "light": "Light",
       "dark": "Dark"
     },
-    "openDiagnostics": "Open diagnostics"
+    "openDiagnostics": "Open diagnostics",
+    "sponsor": "Sponsor",
+    "sponsorHint": "Support the project",
+    "bridgeName": "This bridge"
   },
   "device": {
     "status": {

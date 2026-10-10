@@ -230,14 +230,21 @@ onMounted(async () => {
           v-for="s in SECTIONS.filter(sectionShown)"
           :id="`settings-${s.id}`"
           :key="s.id"
-          class="scroll-mt-24 rounded-(--radius-card) border border-border bg-surface-card"
+          class="scroll-mt-24 overflow-hidden rounded-(--radius-card) border border-border bg-surface-card"
           :aria-labelledby="`settings-${s.id}-title`"
         >
-          <header class="px-4 pt-4 sm:px-5">
-            <h2 :id="`settings-${s.id}-title`" class="text-base font-medium text-text-primary">
-              {{ t(`settings.sections.${s.id}.title`) }}
-            </h2>
-            <p class="mt-0.5 text-[13px] text-text-secondary">{{ t(`settings.sections.${s.id}.description`) }}</p>
+          <!-- Section header: larger, with its icon and a rule under it, so it
+               never reads as one more setting. -->
+          <header class="flex items-start gap-3 border-b border-border bg-surface-secondary/40 px-4 py-4 sm:px-5">
+            <span class="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary-text">
+              <component :is="ICONS[s.icon]" class="size-5" aria-hidden="true" />
+            </span>
+            <div class="min-w-0">
+              <h2 :id="`settings-${s.id}-title`" class="text-lg font-semibold leading-tight text-text-primary">
+                {{ t(`settings.sections.${s.id}.title`) }}
+              </h2>
+              <p class="mt-1 text-sm text-text-secondary">{{ t(`settings.sections.${s.id}.description`) }}</p>
+            </div>
           </header>
           <div class="divide-y divide-border px-4 pb-1 sm:px-5">
             <template v-if="partsShown(s)">

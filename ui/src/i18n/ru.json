@@ -30,7 +30,10 @@
       "light": "Светлая",
       "dark": "Тёмная"
     },
-    "openDiagnostics": "Открыть диагностику"
+    "openDiagnostics": "Открыть диагностику",
+    "sponsor": "Поддержать",
+    "sponsorHint": "Поддержать проект",
+    "bridgeName": "Этот мост"
   },
   "device": {
     "status": {

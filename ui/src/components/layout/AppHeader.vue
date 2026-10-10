@@ -8,7 +8,8 @@ import { useUpdateStore } from '@/stores/update'
 import { SbDropdown, SbDropdownItem } from '@/kit'
 import BugReportDialog from '@/components/BugReportDialog.vue'
 import { shortcutsOpen } from '@/composables/useKeyboardShortcuts'
-import { CircleHelp, SlidersHorizontal, ArrowUpCircle } from 'lucide-vue-next'
+import { CircleHelp, SlidersHorizontal, ArrowUpCircle, Heart } from 'lucide-vue-next'
+import logoUrl from '@/assets/bridge-logo.svg'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -18,9 +19,10 @@ const update = useUpdateStore()
 
 const GITHUB_URL = 'https://github.com/trudenboy/sendspin-bt-bridge'
 const DOCS_URL = 'https://trudenboy.github.io/sendspin-bt-bridge'
+const SPONSOR_URL = 'https://trudenboy.github.io/sendspin-bt-bridge/support/'
 
 const bugReportOpen = ref(false)
-const bridgeName = computed(() => bridge.bridge?.name || t('app.title'))
+const bridgeName = computed(() => bridge.bridge?.name || '')
 
 /** The bridge's own one-line verdict (guidance header), as a pill that opens diagnostics. */
 const status = computed(() => {
@@ -59,9 +61,14 @@ const iconButton =
 <template>
   <header class="fixed top-0 right-0 left-0 z-30 border-b border-border bg-surface-card">
     <div class="flex h-16 items-center gap-2 px-4 sm:gap-3 sm:px-6">
-      <router-link to="/" class="flex min-w-0 shrink items-center gap-2.5">
-        <img src="/bridge-logo.svg" alt="" class="size-8 shrink-0" width="32" height="32" />
-        <span class="truncate text-base font-medium text-text-primary sm:text-lg">{{ bridgeName }}</span>
+      <router-link to="/" class="flex min-w-0 shrink items-center gap-2.5" :aria-label="t('app.title')">
+        <img :src="logoUrl" alt="" class="h-7 w-auto shrink-0" width="53" height="28" />
+        <span class="min-w-0 truncate text-base font-semibold text-text-primary sm:shrink-0 sm:text-lg">{{ t('app.title') }}</span>
+        <span
+          v-if="bridgeName"
+          class="hidden min-w-0 truncate rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs text-text-secondary sm:inline"
+          :title="t('header.bridgeName')"
+        >{{ bridgeName }}</span>
       </router-link>
 
       <div class="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
@@ -87,6 +94,18 @@ const iconButton =
           <ArrowUpCircle class="size-3.5" aria-hidden="true" />
           <span class="hidden sm:inline">{{ t('update.badge', { version: update.latestVersion }) }}</span>
         </button>
+
+        <a
+          :href="SPONSOR_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex h-10 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+          :title="t('header.sponsorHint')"
+        >
+          <Heart class="size-4 fill-current text-[#e5487a]" aria-hidden="true" />
+          <span class="hidden md:inline">{{ t('header.sponsor') }}</span>
+          <span class="sr-only md:hidden">{{ t('header.sponsor') }}</span>
+        </a>
 
         <SbDropdown align="right">
           <template #trigger>

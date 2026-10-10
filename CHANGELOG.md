@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a test sound. Compatibility options and already-paired speakers are one
   step away for when the speaker is not found.
 - Settings can be searched, and edited-but-unsaved options are marked.
+  Section headings stand apart from the options under them.
 - A notice appears when the page loses its live connection to the bridge,
   so stale information is not mistaken for current.
 - Keyboard shortcuts: 1–4 switch places, A adds a speaker, / searches, ?
@@ -24,7 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Four places instead of five: Speakers (the former dashboard and device
   list in one), Groups (Music Assistant groups, each with its now playing
   and controls), Settings and Diagnostics. Old addresses still work.
-- The header shows the bridge's name and its status in one line; help
+- The header shows the product name and logo (the same as the stable
+  release, also as the browser icon), this bridge's name, its status and
+  a Sponsor link with a heart; help
   (documentation, GitHub, bug report, version) and preferences (language,
   theme) are in two menus.
 - Diagnostics has three tabs — Overview (health, what needs attention,
