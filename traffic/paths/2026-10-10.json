@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/trudenboy/sendspin-bt-bridge",
+    "title": "Overview",
+    "count": 794,
+    "uniques": 492
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues",
+    "title": "/issues",
+    "count": 96,
+    "uniques": 36
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases",
+    "title": "/releases",
+    "count": 25,
+    "uniques": 15
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
+    "title": "/blob/main/docs-site/public/screenshots/sbb_infographic_en.png",
+    "count": 17,
+    "uniques": 15
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/README.ru.md",
+    "title": "/blob/main/README.ru.md",
+    "count": 16,
+    "uniques": 11
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/issues/470",
+    "title": "/issues/470",
+    "count": 16,
+    "uniques": 5
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "title": "/blob/main/docs-site/public/screenshots/screenshot-dashboard-full.png",
+    "count": 13,
+    "uniques": 13
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/pulls",
+    "title": "/pulls",
+    "count": 13,
+    "uniques": 8
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/releases/tag/v2.75.0",
+    "title": "/releases/tag/v2.75.0",
+    "count": 10,
+    "uniques": 10
+  },
+  {
+    "path": "/trudenboy/sendspin-bt-bridge/tree/main/src/sendspin_bridge",
+    "title": "/tree/main/src/sendspin_bridge",
+    "count": 10,
+    "uniques": 5
+  }
+]
