@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { apiUrl } from '@/api/client'
-import { setDevicePlayback } from '@/api/playback'
 import { SbButton } from '@/kit'
 import { SkipBack, Play, Pause, SkipForward, Music, X } from 'lucide-vue-next'
 
@@ -20,10 +19,14 @@ const notifications = useNotificationStore()
 const imgError = ref(false)
 const artworkOpen = ref(false)
 
-/** Shown when Music Assistant reports this group as the one playing. */
+/** This group's own now playing — one group playing must not show on another. */
+const current = computed(() => ma.nowPlayingByGroup[props.groupId] ?? {})
+const isPlaying = computed(() => current.value.state === 'playing')
+
+/** The last track stays known while a group is idle; it is then marked as not playing. */
 const track = computed(() => {
-  const np = ma.nowPlaying
-  if (!np.track || (np.syncgroup_id && np.syncgroup_id !== props.groupId)) return null
+  const np = current.value
+  if (!np.track) return null
   return {
     title: np.track,
     artist: np.artist,
@@ -32,14 +35,16 @@ const track = computed(() => {
   }
 })
 
-const isPlaying = computed(() => ma.nowPlaying.state === 'playing')
-
-/** A bridge speaker in this Music Assistant group, to pause or resume the group through. */
-const member = computed(() => bridge.devices.find((d) => d.music_assistant.syncgroup_id === props.groupId))
-
-onMounted(() => {
-  void ma.getNowPlaying()
-})
+// Refresh with every status tick (MA's now-playing changes raise one), so a
+// group started or paused elsewhere updates here too.
+let pending: ReturnType<typeof setTimeout> | null = null
+function refresh() {
+  if (pending) clearTimeout(pending)
+  pending = setTimeout(() => void ma.fetchGroupNowPlaying(props.groupId).catch(() => undefined), 250)
+}
+onMounted(() => void ma.fetchGroupNowPlaying(props.groupId).catch(() => undefined))
+watch(() => bridge.snapshot, refresh)
+onUnmounted(() => pending && clearTimeout(pending))
 
 function openArtwork() {
   if (track.value?.artwork_url && !imgError.value) artworkOpen.value = true
@@ -68,10 +73,9 @@ function prev() {
   void guarded(() => ma.queueCmd('previous', { syncgroup_id: props.groupId }))
 }
 
+/** Through the group's own queue, so it works for groups whose speakers are on another bridge. */
 function togglePlay() {
-  const target = member.value
-  if (!target) return
-  void guarded(() => setDevicePlayback(target.id, isPlaying.value ? 'pause' : 'play'))
+  void guarded(() => ma.queueCmd(isPlaying.value ? 'pause' : 'play', { syncgroup_id: props.groupId }))
 }
 
 function next() {
@@ -112,6 +116,7 @@ function next() {
       <p v-if="track?.album" class="truncate text-xs text-text-disabled">
         {{ track.album }}
       </p>
+      <p v-if="track && !isPlaying" class="mt-0.5 text-xs text-text-tertiary">{{ t('ma.nowPlaying.notPlaying') }}</p>
     </div>
 
     <!-- Controls -->

@@ -1245,6 +1245,10 @@ async def send_queue_cmd(
             command, args = "players/cmd/previous", {"player_id": resolved_player_id}
         else:
             command, args = "player_queues/previous", {"queue_id": queue_id}
+    elif action in ("play", "pause"):
+        # The queue, not a member: a group whose speakers are on another
+        # bridge has no member here to send it through.
+        command, args = f"player_queues/{action}", {"queue_id": queue_id}
     elif action == "shuffle":
         command, args = "player_queues/shuffle", {"queue_id": queue_id, "shuffle_enabled": bool(value)}
     elif action == "repeat":

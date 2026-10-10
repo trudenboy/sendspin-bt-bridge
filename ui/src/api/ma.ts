@@ -34,8 +34,13 @@ export function getGroups() {
   return unwrap(api().GET('/api/v1/music-assistant/groups'))
 }
 
-export function getNowPlaying() {
-  return unwrap(api().GET('/api/v1/music-assistant/now-playing'))
+/** What one Music Assistant sync group plays (or the first known group without an id). */
+export function getNowPlaying(syncgroupId?: string) {
+  return unwrap(
+    api().GET('/api/v1/music-assistant/now-playing', {
+      params: { query: syncgroupId ? { syncgroup_id: syncgroupId } : {} },
+    }),
+  )
 }
 
 export function queueCommand(

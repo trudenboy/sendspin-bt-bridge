@@ -267,7 +267,8 @@
       "noTrack": "Nothing playing",
       "prev": "Previous track",
       "playPause": "Play / Pause",
-      "next": "Next track"
+      "next": "Next track",
+      "notPlaying": "Not playing — last played"
     },
     "autoConnecting": "Connecting to Music Assistant...",
     "openInMA": "Open in Music Assistant",

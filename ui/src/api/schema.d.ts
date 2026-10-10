@@ -1501,7 +1501,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** What is playing */
+        /**
+         * What is playing
+         * @description For one Music Assistant sync group with ``syncgroup_id``; without it, the first known group.
+         */
         get: operations["now_playing_api_v1_music_assistant_now_playing_get"];
         put?: never;
         post?: never;
@@ -3419,7 +3422,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "next" | "previous" | "shuffle" | "repeat" | "seek";
+            action: "next" | "previous" | "play" | "pause" | "shuffle" | "repeat" | "seek";
             /** Device Id */
             device_id?: string | null;
             /** Group Id */
@@ -7804,7 +7807,9 @@ export interface operations {
     };
     now_playing_api_v1_music_assistant_now_playing_get: {
         parameters: {
-            query?: never;
+            query?: {
+                syncgroup_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;

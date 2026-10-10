@@ -636,7 +636,11 @@ def build_group_snapshots(
 
     for client, device in snapshot_pairs or build_device_snapshot_pairs(clients):
         status = device.extra
-        group_id = status.get("group_id")
+        # The Music Assistant sync group identifies a group across speakers.
+        # Sendspin 1.0's group id is per playback session — each speaker of
+        # one sync group gets its own — so it only groups speakers MA does
+        # not group.
+        group_id = device.ma_syncgroup_id or status.get("ma_syncgroup_id") or status.get("group_id")
         key = group_id if group_id is not None else f"__solo_{solo_counter}"
         if group_id is None:
             solo_counter += 1

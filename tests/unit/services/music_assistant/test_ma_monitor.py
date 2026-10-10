@@ -666,3 +666,28 @@ async def test_a_new_token_reconnects_at_once_instead_of_waiting_out_the_backoff
     await asyncio.wait_for(connected.wait(), timeout=2)
     assert attempts == ["old-token", "new-token"]
     await asyncio.wait_for(runner, timeout=2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["play", "pause"])
+async def test_send_queue_cmd_plays_and_pauses_a_sync_group_queue(monkeypatch, action):
+    """A group without speakers on this bridge can only be paused through its MA queue."""
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monitor._ws = object()
+    sent: list[tuple[str, dict]] = []
+
+    async def _fake_execute_cmd(command: str, args: dict) -> dict:
+        sent.append((command, args))
+        return {"result": None}
+
+    monkeypatch.setattr(monitor, "execute_cmd", _fake_execute_cmd)
+    monkeypatch.setattr(ma_monitor, "_monitor_instance", monitor)
+    state.set_ma_groups({}, [])
+    try:
+        result = await ma_monitor.send_queue_cmd(action, None, "syncgroup_beta")
+    finally:
+        ma_monitor._monitor_instance = None
+
+    assert result["accepted"] is True
+    assert sent == [(f"player_queues/{action}", {"queue_id": "syncgroup_beta"})]

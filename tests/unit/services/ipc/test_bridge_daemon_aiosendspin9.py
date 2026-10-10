@@ -413,3 +413,31 @@ def test_audio_chunks_and_cleared_state_are_accepted(tmp_path: Path):
     daemon._on_audio_chunk(100, b"\x00\x00\x00\x00", _audio_format(AudioCodec.PCM), 250_000)
     daemon._on_metadata_update(None)
     daemon._on_controller_state(None)
+
+
+@pytest.mark.asyncio
+async def test_a_volume_change_made_outside_music_assistant_is_reported_to_it(tmp_path: Path):
+    """The bridge's own slider and the speaker's buttons change the sink, not
+    Music Assistant. The change must reach MA as client/state, or MA keeps the
+    old value (seen live: bridge 35 %, MA still 57 %) and later restores it."""
+    daemon = _daemon(tmp_path)
+    client = SimpleNamespace(connected=True, send_player_state=AsyncMock())
+    daemon._client = client
+
+    daemon._on_external_volume(35, False)
+    await asyncio.sleep(0)
+
+    client.send_player_state.assert_awaited_once_with(available=True, volume=35, muted=False)
+    assert daemon._bridge_status["volume"] == 35
+
+
+@pytest.mark.asyncio
+async def test_an_external_volume_change_is_not_reported_while_disconnected(tmp_path: Path):
+    daemon = _daemon(tmp_path)
+    client = SimpleNamespace(connected=False, send_player_state=AsyncMock())
+    daemon._client = client
+
+    daemon._on_external_volume(20, True)
+    await asyncio.sleep(0)
+
+    client.send_player_state.assert_not_awaited()

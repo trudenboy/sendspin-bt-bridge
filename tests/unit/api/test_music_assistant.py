@@ -305,3 +305,25 @@ def test_queue_command_without_ma_is_503(api_client):
 
 def test_now_playing_without_ma(api_client):
     assert api_client.get("/api/v1/music-assistant/now-playing").json() == {"connected": False}
+
+
+def test_now_playing_is_per_sync_group(api_client, monkeypatch):
+    """Each group card asks for its own group. One group playing and another
+    idle used to share one answer: the idle group's stale track for both."""
+    import sendspin_bridge.application.music_assistant.playback as ma_playback
+
+    monkeypatch.setattr(ma_playback, "is_ma_connected", lambda: True)
+    state.set_ma_now_playing_for_group(
+        "syncgroup_idle", {"state": "idle", "track": "Old radio", "syncgroup_id": "syncgroup_idle"}
+    )
+    state.set_ma_now_playing_for_group(
+        "syncgroup_beta", {"state": "playing", "track": "Fly Me", "syncgroup_id": "syncgroup_beta"}
+    )
+    try:
+        beta = api_client.get("/api/v1/music-assistant/now-playing", params={"syncgroup_id": "syncgroup_beta"}).json()
+        assert (beta["state"], beta["track"]) == ("playing", "Fly Me")
+        unknown = api_client.get("/api/v1/music-assistant/now-playing", params={"syncgroup_id": "nope"}).json()
+        assert unknown.get("track") is None
+    finally:
+        state.set_ma_now_playing_for_group("syncgroup_idle", {})
+        state.set_ma_now_playing_for_group("syncgroup_beta", {})

@@ -267,7 +267,8 @@
       "noTrack": "Ничего не воспроизводится",
       "prev": "Предыдущий трек",
       "playPause": "Воспроизведение / Пауза",
-      "next": "Следующий трек"
+      "next": "Следующий трек",
+      "notPlaying": "Не играет — последний трек"
     },
     "autoConnecting": "Подключение к Music Assistant...",
     "openInMA": "Открыть в Music Assistant",

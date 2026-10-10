@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   page says so and offers to try again.
 - The container's health check asked for an address the new API no longer
   had, so Docker reported the bridge as unhealthy.
+- Volume changed on the bridge — a speaker's or a group's slider, or the
+  speaker's own buttons — now reaches Music Assistant. MA kept showing the
+  old level and could restore it later.
+- Speakers of one Music Assistant sync group show as one group on the
+  Groups page, and group volume and pause act on all of them. Each speaker
+  used to appear in a group of its own with no id.
+- Each group on the Groups page shows its own track. One group's track
+  (often a stale one from an idle group) used to appear on every card; an
+  idle group's last track is now marked as not playing.
+- Play/pause on a group card goes through the group's own Music Assistant
+  queue, so it works for groups whose speakers are on another bridge.
 
 ## [3.0.0-beta.17] - 2026-10-10
 

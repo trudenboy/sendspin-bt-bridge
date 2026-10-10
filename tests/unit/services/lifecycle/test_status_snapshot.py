@@ -374,6 +374,63 @@ def test_build_group_snapshots_merges_ma_syncgroup_members():
         state.set_ma_groups({}, [])
 
 
+def test_speakers_in_one_ma_syncgroup_form_one_group_without_a_sendspin_group_id():
+    """Sendspin 1.0 reports the group's name but no group id. Two speakers of
+    one Music Assistant sync group must still be one group, identified by the
+    sync group (seen live: 'Beta' came back twice, id null, one member each)."""
+    client_a = _make_client(player_name="Kitchen", player_id="sendspin-kitchen", group_id=None, volume=40)
+    client_b = _make_client(player_name="Office", player_id="sendspin-office", group_id=None, volume=60)
+    client_b.bt_manager = SimpleNamespace(
+        mac_address="FF:EE:DD:CC:BB:AA",
+        effective_adapter_mac="11:22:33:44:55:77",
+        adapter="hci1",
+        adapter_hci_name="hci1",
+        battery_level=None,
+    )
+    state.set_ma_groups(
+        {
+            "sendspin-kitchen": {"id": "syncgroup_beta", "name": "Beta"},
+            "sendspin-office": {"id": "syncgroup_beta", "name": "Beta"},
+        },
+        [{"id": "syncgroup_beta", "name": "Beta", "members": [{"id": "sendspin-kitchen"}, {"id": "sendspin-office"}]}],
+    )
+    try:
+        groups = [g.to_dict() for g in build_group_snapshots([client_a, client_b])]
+        assert len(groups) == 1
+        assert groups[0]["group_id"] == "syncgroup_beta"
+        assert groups[0]["group_name"] == "Beta"
+        assert sorted(m["player_name"] for m in groups[0]["members"]) == ["Kitchen", "Office"]
+        assert groups[0]["avg_volume"] == 50
+    finally:
+        state.set_ma_groups({}, [])
+
+
+def test_per_session_sendspin_group_ids_do_not_split_an_ma_syncgroup():
+    """Sendspin 1.0 gives each speaker's session its own group id, named after
+    the speaker. The MA sync group still makes them one group."""
+    client_a = _make_client(player_name="Kitchen", player_id="sendspin-kitchen", group_id="session-a")
+    client_b = _make_client(player_name="Office", player_id="sendspin-office", group_id="session-b")
+    client_b.bt_manager = SimpleNamespace(
+        mac_address="FF:EE:DD:CC:BB:AA",
+        effective_adapter_mac="11:22:33:44:55:77",
+        adapter="hci1",
+        adapter_hci_name="hci1",
+        battery_level=None,
+    )
+    state.set_ma_groups(
+        {
+            "sendspin-kitchen": {"id": "syncgroup_beta", "name": "Beta"},
+            "sendspin-office": {"id": "syncgroup_beta", "name": "Beta"},
+        },
+        [{"id": "syncgroup_beta", "name": "Beta", "members": [{"id": "sendspin-kitchen"}, {"id": "sendspin-office"}]}],
+    )
+    try:
+        groups = [g.to_dict() for g in build_group_snapshots([client_a, client_b])]
+        assert [(g["group_id"], len(g["members"])) for g in groups] == [("syncgroup_beta", 2)]
+    finally:
+        state.set_ma_groups({}, [])
+
+
 def test_build_bridge_snapshot_no_clients_preserves_bridge_metadata():
     from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
     from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION

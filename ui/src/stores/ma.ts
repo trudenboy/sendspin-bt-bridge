@@ -60,13 +60,27 @@ export const useMaStore = defineStore('ma', () => {
     return nowPlaying.value
   }
 
+  /** Now playing per Music Assistant sync group: each group card shows its own. */
+  const nowPlayingByGroup = ref<Record<string, NowPlaying>>({})
+
+  async function fetchGroupNowPlaying(syncgroupId: string) {
+    const np = (await apiGetNowPlaying(syncgroupId)) as NowPlaying
+    nowPlayingByGroup.value = { ...nowPlayingByGroup.value, [syncgroupId]: np }
+    return np
+  }
+
   async function queueCmd(
     action: QueueAction,
     target: { device_id?: string; syncgroup_id?: string; group_id?: string },
     value?: unknown,
   ) {
     const accepted = await queueCommand(action, target, value)
-    if (accepted.ma_now_playing) nowPlaying.value = accepted.ma_now_playing as NowPlaying
+    if (accepted.ma_now_playing) {
+      nowPlaying.value = accepted.ma_now_playing as NowPlaying
+      if (target.syncgroup_id) {
+        nowPlayingByGroup.value = { ...nowPlayingByGroup.value, [target.syncgroup_id]: accepted.ma_now_playing as NowPlaying }
+      }
+    }
     return useJobsStore().waitFor(accepted.job)
   }
 
@@ -95,6 +109,8 @@ export const useMaStore = defineStore('ma', () => {
     discover,
     getNowPlaying,
     queueCmd,
+    nowPlayingByGroup,
+    fetchGroupNowPlaying,
     login,
     silentAuth,
   }

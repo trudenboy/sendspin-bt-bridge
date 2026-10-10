@@ -198,3 +198,35 @@ def test_group_volume_sets_every_member(api_client, speakers, sinks, monkeypatch
     assert resp.json()["results"] == [{"device_id": "kitchen", "ok": True}, {"device_id": "lounge", "ok": True}]
     assert ("bluez_sink.AA.a2dp_sink", 40) in sinks
     assert ("bluez_sink.BB.a2dp_sink", 40) in sinks
+
+
+def test_group_volume_finds_members_by_music_assistant_sync_group(
+    api_client, speakers, sinks, monkeypatch, bridge_loop
+):
+    """Without a Sendspin group id (Sendspin 1.0), the group is addressed by its
+    Music Assistant sync group id — the id /api/v1/groups reports for it."""
+    kitchen, lounge = _Speaker("kitchen"), _Speaker("lounge", sink="bluez_sink.BB.a2dp_sink")
+    speakers.extend([kitchen, lounge])
+
+    def _pairs(clients):
+        return [(c, SimpleNamespace(extra={"group_id": None, "ma_syncgroup_id": "syncgroup_beta"})) for c in clients]
+
+    monkeypatch.setattr(playback, "build_device_snapshot_pairs", _pairs)
+
+    resp = api_client.put("/api/v1/groups/syncgroup_beta/volume", json={"level": 30})
+
+    assert resp.status_code == 200
+    assert ("bluez_sink.AA.a2dp_sink", 30) in sinks
+    assert ("bluez_sink.BB.a2dp_sink", 30) in sinks
+
+
+def test_pause_all_counts_a_music_assistant_sync_group_once(api_client, speakers, monkeypatch, bridge_loop):
+    kitchen, lounge = _Speaker("kitchen"), _Speaker("lounge")
+    speakers.extend([kitchen, lounge])
+
+    def _pairs(clients):
+        return [(c, SimpleNamespace(extra={"group_id": None, "ma_syncgroup_id": "syncgroup_beta"})) for c in clients]
+
+    monkeypatch.setattr(playback, "build_device_snapshot_pairs", _pairs)
+
+    assert api_client.post("/api/v1/playback", json={"action": "pause"}).json() == {"action": "pause", "count": 1}

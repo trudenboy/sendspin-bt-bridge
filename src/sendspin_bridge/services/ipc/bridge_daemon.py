@@ -311,11 +311,16 @@ class BridgeDaemon:
         self._notify()
 
     def _on_external_volume(self, volume: int, muted: bool) -> None:
+        """The sink changed outside Music Assistant (the bridge's slider, the
+        speaker's own buttons). The daemon holds the controller's only
+        callback, so it is also the one that tells Music Assistant — otherwise
+        MA keeps the old value and restores it later."""
         self._volume = volume
         self._muted = muted
         self._bridge_status["volume"] = volume
         self._bridge_status["muted"] = muted
         self._notify()
+        self._report_player_state()
 
     def retarget_sink(self, sink_name: str | None) -> None:
         if self._player is None:

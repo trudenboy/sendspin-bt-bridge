@@ -332,7 +332,12 @@ class Device(ResponseModel):
                 repeat_mode=g("repeat_mode"),
                 supported_commands=[str(c) for c in (g("supported_commands") or [])],
                 group=DeviceGroupRef(
-                    id=g("group_id"), name=g("group_name"), volume=g("group_volume"), muted=g("group_muted")
+                    # The MA sync group names the group (Sendspin 1.0's group id is per
+                    # session), matching the id /api/v1/groups and the group commands use.
+                    id=g("ma_syncgroup_id") or g("group_id"),
+                    name=g("group_name"),
+                    volume=g("group_volume"),
+                    muted=g("group_muted"),
                 ),
             ),
             sendspin=DeviceSendspin(

@@ -157,8 +157,9 @@ def groups() -> list[dict[str, Any]]:
 
 
 @router.get("/now-playing", response_model=dict[str, Any], summary="What is playing")
-def now_playing() -> dict[str, Any]:
-    return ma_playback.now_playing()
+def now_playing(syncgroup_id: str | None = None) -> dict[str, Any]:
+    """For one Music Assistant sync group with ``syncgroup_id``; without it, the first known group."""
+    return ma_playback.now_playing(syncgroup_id)
 
 
 @router.post(

@@ -90,7 +90,13 @@ def set_device_volume(device_id: str, volume: int) -> dict[str, Any]:
 
 def _group_members(group_id: str) -> list[tuple[Any, Any]]:
     pairs = build_device_snapshot_pairs(get_device_registry_snapshot().active_clients)
-    members = [(client, device) for client, device in pairs if device.extra.get("group_id") == group_id]
+    # A group is addressed by its Sendspin group id or, when Sendspin does not
+    # report one, by the Music Assistant sync group /api/v1/groups names it by.
+    members = [
+        (client, device)
+        for client, device in pairs
+        if group_id in (device.extra.get("group_id"), device.extra.get("ma_syncgroup_id"))
+    ]
     if not members:
         raise UseCaseError(404, "unknown_group", f"Unknown group or no members on this bridge: {group_id}")
     return members
@@ -209,7 +215,7 @@ def all_playback(action: PlaybackAction) -> dict[str, Any]:
                 if _ma_group_play(str(client.player_id)):
                     count += 1
                     continue
-        gid = device.extra.get("group_id")
+        gid = device.extra.get("ma_syncgroup_id") or device.extra.get("group_id")
         if gid:
             if gid in seen_groups:
                 continue

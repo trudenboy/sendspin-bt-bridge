@@ -28,12 +28,13 @@ from sendspin_bridge.services.music_assistant.ma_runtime_state import (
     get_ma_group_for_player_id,
     get_ma_groups,
     get_ma_now_playing,
+    get_ma_now_playing_for_group,
     is_ma_connected,
 )
 
 logger = logging.getLogger(__name__)
 
-QueueAction = Literal["next", "previous", "shuffle", "repeat", "seek"]
+QueueAction = Literal["next", "previous", "play", "pause", "shuffle", "repeat", "seek"]
 _ARTWORK_MAX_BYTES = 10 * 1024 * 1024
 
 
@@ -130,6 +131,8 @@ def _resolve_target_queue(
 
 def _build_ma_prediction_patch(action: str, value) -> dict:
     """Build a small predicted state patch for fast UI feedback."""
+    if action in ("play", "pause"):
+        return {"state": "playing" if action == "play" else "paused"}
     if action == "shuffle":
         return {"shuffle": bool(value)}
     if action == "repeat":
@@ -254,10 +257,13 @@ def _artwork_unavailable(status: int) -> UseCaseError:
     )
 
 
-def now_playing() -> dict[str, Any]:
-    """What Music Assistant is playing; ``{"connected": false}`` without MA."""
+def now_playing(syncgroup_id: str | None = None) -> dict[str, Any]:
+    """What Music Assistant is playing — for one sync group when given, else the
+    first known group (the pre-v1 answer); ``{"connected": false}`` without MA."""
     if not is_ma_connected():
         return {"connected": False}
+    if syncgroup_id:
+        return {"connected": True, "syncgroup_id": syncgroup_id, **get_ma_now_playing_for_group(syncgroup_id)}
     return get_ma_now_playing()
 
 

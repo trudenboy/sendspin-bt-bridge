@@ -4172,6 +4172,8 @@
             "enum": [
               "next",
               "previous",
+              "play",
+              "pause",
               "shuffle",
               "repeat",
               "seek"
@@ -9972,7 +9974,26 @@
     },
     "/api/v1/music-assistant/now-playing": {
       "get": {
+        "description": "For one Music Assistant sync group with ``syncgroup_id``; without it, the first known group.",
         "operationId": "now_playing_api_v1_music_assistant_now_playing_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "syncgroup_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Syncgroup Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
