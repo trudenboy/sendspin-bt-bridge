@@ -719,3 +719,54 @@ async def test_group_refresh_keeps_each_members_state(monkeypatch):
         ]
     finally:
         state.set_ma_groups({}, [])
+
+
+@pytest.mark.asyncio
+async def test_the_monitor_does_not_send_an_unknown_subscribe_command(monkeypatch):
+    """Music Assistant sends events to every authenticated client and has no
+    subscribe_events command; asking for it logged "Invalid command:
+    subscribe_events" on the MA side after every connect (#405)."""
+    import contextlib
+    import json as _json
+
+    import websockets.asyncio.client as ws_client
+
+    sent: list[str] = []
+    replies = [
+        {"server_info": {"server_version": "2.10.6", "schema_version": 28}},
+        {"message_id": 1, "result": {"authenticated": True}},
+    ]
+
+    class _Ws:
+        async def send(self, raw):
+            sent.append(_json.loads(raw)["command"])
+
+        async def recv(self):
+            return _json.dumps(replies.pop(0)) if replies else _json.dumps({"message_id": 99, "error_code": 1})
+
+    @contextlib.asynccontextmanager
+    async def _connect(*_a, **_kw):
+        yield _Ws()
+
+    listened: list[bool] = []
+
+    async def _event_loop(_ws):
+        listened.append(True)
+
+    async def _noop(*_a):
+        return None
+
+    monitor = MaMonitor("http://ma:8095", "token")
+    monitor._running = True
+    monkeypatch.setattr(ws_client, "connect", _connect)
+    monkeypatch.setattr(state, "get_ma_api_credentials", lambda: ("", ""))
+    monkeypatch.setattr(monitor, "_detect_ha_addon", lambda _info: None)
+    monkeypatch.setattr(monitor, "_prime_session", _noop)
+    monkeypatch.setattr(monitor, "_event_loop", _event_loop)
+    try:
+        await monitor._connect_and_run()
+    finally:
+        state.set_ma_connected(False)
+
+    assert "subscribe_events" not in sent
+    assert listened == [True]
