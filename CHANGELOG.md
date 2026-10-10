@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.16] - 2026-10-10
+
 ### Added
 
 - Settings cover every option of the bridge again, in sections named
@@ -6080,7 +6082,8 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.2...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.15...HEAD
+[3.0.0-beta.15]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.2...v3.0.0-beta.15
 [2.77.0-rc.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.77.0-rc.1...v2.77.0-rc.2
 [2.77.0-rc.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.2...v2.77.0-rc.1
 [2.76.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v2.76.1...v2.76.2
