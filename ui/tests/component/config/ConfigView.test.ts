@@ -157,4 +157,24 @@ describe('ConfigView (settings)', () => {
     await proxies.trigger('change')
     expect(store.config?.TRUSTED_PROXIES).toEqual(['10.0.0.1', '10.0.0.2'])
   })
+
+  it('finds a setting by its label, including advanced ones', async () => {
+    const w = await mountView()
+    await w.get('input[type="search"]').setValue('web port')
+    expect(w.findAll('section label').map((l) => l.text())).toEqual(['Web port'])
+    expect(w.findAll('section h2').map((h) => h.text())).toEqual(['General'])
+
+    await w.get('input[type="search"]').setValue('zzz-nothing')
+    expect(w.text()).toContain('Nothing matches')
+  })
+
+  it('marks a field that was edited but not saved', async () => {
+    const w = await mountView()
+    expect(w.text()).not.toContain('Changed')
+    const name = w.findAll('input').find((i) => (i.element as HTMLInputElement).value === 'Kitchen bridge')!
+    await name.setValue('Living room bridge')
+    await name.trigger('change')
+    const row = w.findAll('label').find((l) => l.text().startsWith('Bridge name'))!
+    expect(row.text()).toContain('Changed')
+  })
 })

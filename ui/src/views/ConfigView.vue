@@ -16,10 +16,11 @@ import {
   Home,
   Lightbulb,
   Music2,
+  Search,
   Settings2,
   ShieldCheck,
 } from 'lucide-vue-next'
-import { SECTIONS, type ConfigDoc, type SectionComponent, type SectionDef } from '@/settings/layout'
+import { SECTIONS, type ConfigDoc, type FieldDef, type SectionComponent, type SectionDef } from '@/settings/layout'
 import SettingField from '@/components/settings/SettingField.vue'
 import MaConnectionSection from '@/components/settings/MaConnectionSection.vue'
 import SendspinTestSection from '@/components/settings/SendspinTestSection.vue'
@@ -82,11 +83,42 @@ function setAdvanced(v: boolean) {
 
 const doc = computed(() => (configStore.config ?? {}) as ConfigDoc)
 
+/* Search, as in Home Assistant's settings: matches a field's label, help or key. */
+const query = ref('')
+const q = computed(() => query.value.trim().toLowerCase())
+
+function fieldMatches(f: FieldDef) {
+  if (!q.value) return true
+  const base = `settings.fields.${f.key}`
+  return [t(`${base}.label`), t(`${base}.help`), f.key].some((x) => x.toLowerCase().includes(q.value))
+}
+
+function sectionTitleMatches(section: SectionDef) {
+  return !!q.value && t(`settings.sections.${section.id}.title`).toLowerCase().includes(q.value)
+}
+
 function visibleFields(section: SectionDef) {
+  const searching = !!q.value && !sectionTitleMatches(section)
   return section.fields.filter(
-    (f) => (showAdvanced.value || !f.advanced) && (!f.visible || f.visible(doc.value)),
+    (f) =>
+      // A search also reaches advanced options.
+      (showAdvanced.value || !f.advanced || (searching && fieldMatches(f))) &&
+      (!f.visible || f.visible(doc.value)) &&
+      (!searching || fieldMatches(f)),
   )
 }
+
+/** While searching, a section shows only if something in it matches. */
+function sectionShown(section: SectionDef) {
+  return !q.value || sectionTitleMatches(section) || visibleFields(section).length > 0
+}
+
+/** Section components (sign-in, adapters, tokens…) show unless a search hides them. */
+function partsShown(section: SectionDef) {
+  return !q.value || sectionTitleMatches(section)
+}
+
+const nothingFound = computed(() => !!q.value && !SECTIONS.some(sectionShown))
 
 const active = ref(SECTIONS[0]!.id)
 function jump(id: string) {
@@ -163,7 +195,7 @@ onMounted(async () => {
       <!-- Section navigation: a sticky list on wide screens, a scrolling chip row on phones -->
       <nav :aria-label="t('settings.sectionsNav')" class="mb-4 lg:mb-0">
         <ul class="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] lg:sticky lg:top-24 lg:flex-col lg:overflow-visible">
-          <li v-for="s in SECTIONS" :key="s.id" class="shrink-0">
+          <li v-for="s in SECTIONS.filter(sectionShown)" :key="s.id" class="shrink-0">
             <button
               type="button"
               class="flex w-full items-center gap-2.5 rounded-(--radius-button) px-3 py-2 text-left text-sm whitespace-nowrap transition-colors"
@@ -183,8 +215,19 @@ onMounted(async () => {
       </nav>
 
       <div class="min-w-0 space-y-6 pb-24">
+        <div class="relative">
+          <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-tertiary" aria-hidden="true" />
+          <input
+            v-model="query"
+            type="search"
+            :placeholder="t('settings.search')"
+            :aria-label="t('settings.search')"
+            class="h-10 w-full rounded-(--radius-input) border border-border-strong bg-surface-card pr-3 pl-9 text-sm text-text-primary outline-none placeholder:text-text-disabled focus:border-primary focus:ring-2 focus:ring-primary/25"
+          />
+        </div>
+        <p v-if="nothingFound" class="py-10 text-center text-sm text-text-secondary">{{ t('settings.nothingFound', { q: query }) }}</p>
         <section
-          v-for="s in SECTIONS"
+          v-for="s in SECTIONS.filter(sectionShown)"
           :id="`settings-${s.id}`"
           :key="s.id"
           class="scroll-mt-24 rounded-(--radius-card) border border-border bg-surface-card"
@@ -197,9 +240,13 @@ onMounted(async () => {
             <p class="mt-0.5 text-[13px] text-text-secondary">{{ t(`settings.sections.${s.id}.description`) }}</p>
           </header>
           <div class="divide-y divide-border px-4 pb-1 sm:px-5">
-            <component :is="PARTS[part]" v-for="part in s.before ?? []" :key="part" />
+            <template v-if="partsShown(s)">
+              <component :is="PARTS[part]" v-for="part in s.before ?? []" :key="part" />
+            </template>
             <SettingField v-for="f in visibleFields(s)" :key="f.key" :field="f" />
-            <component :is="PARTS[part]" v-for="part in s.after ?? []" :key="part" />
+            <template v-if="partsShown(s)">
+              <component :is="PARTS[part]" v-for="part in s.after ?? []" :key="part" />
+            </template>
           </div>
         </section>
       </div>

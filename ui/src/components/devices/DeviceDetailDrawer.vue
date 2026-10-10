@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { speakerName } from '@/utils/speakerName'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
@@ -37,7 +38,7 @@ const btInfoOpen = ref(false)
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
 const released = computed(() => device.value?.bluetooth.management_enabled === false)
 const adapterId = computed(() => device.value?.bluetooth.adapter.hci || '')
-const drawerTitle = computed(() => device.value?.name ?? '')
+const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth.mac ?? ''))
 const events = computed(() => device.value?.recent_events ?? [])
 
 const tabs = computed(() => [
@@ -117,7 +118,6 @@ async function onRelease(release: boolean) {
   managementLoading.value = true
   try {
     await deviceStore.release(d.id, release)
-    notifications.success(t(release ? 'bluetooth.release' : 'bluetooth.reclaim'))
   } catch {
     notifications.error(t('device.actions.enableFailed'))
   } finally {

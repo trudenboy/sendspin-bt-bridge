@@ -30,7 +30,8 @@ vi.mock('@/stores/notifications', () => ({
 vi.mock('@/api/playback', () => ({ transport: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/api/devices', () => ({ claimAudio: vi.fn().mockResolvedValue(undefined) }))
 
-const streaming = () => makeDevice({ playback: { playing: true }, audio: { streaming: true } })
+const streaming = () =>
+  makeDevice({ playback: { playing: true, track: { title: 'Song', artist: 'Band' } }, audio: { streaming: true } })
 
 function mountCard(device: Device = makeDevice()) {
   return mount(DeviceCard, {
@@ -44,7 +45,7 @@ function buttonLabelled(w: ReturnType<typeof mountCard>, label: string) {
 }
 
 async function openMenu(w: ReturnType<typeof mountCard>) {
-  await buttonLabelled(w, 'Details')!.trigger('click')
+  await buttonLabelled(w, 'More actions for Test Speaker')!.trigger('click')
   return w.findAll('button[role="menuitem"]')
 }
 
@@ -54,18 +55,24 @@ describe('DeviceCard', () => {
     vi.clearAllMocks()
   })
 
-  it('shows the name, the speaker MAC and the adapter', () => {
-    const text = mountCard().text()
-    expect(text).toContain('Test Speaker')
-    expect(text).toContain('AA:BB:CC:DD:EE:FF')
-    expect(text).toContain('hci0')
+  it('names the speaker without the bridge suffix, and its room — not its MAC', () => {
+    const w = mountCard(makeDevice({ name: 'Kitchen Boom @ HP-ProDesk', room: { name: 'Kitchen' } }))
+    expect(w.text()).toContain('Kitchen Boom')
+    expect(w.text()).not.toContain('@ HP-ProDesk')
+    expect(w.text()).toContain('Kitchen')
+    expect(w.text()).not.toContain('AA:BB:CC:DD:EE:FF')
   })
 
-  it('derives its badge from the device health', () => {
-    expect(mountCard().text()).toContain('Ready')
-    expect(mountCard(streaming()).text()).toContain('Streaming')
-    expect(mountCard(makeDevice({ health: { state: 'degraded' } })).text()).toContain('Degraded')
+  it('says its state in plain words', () => {
+    expect(mountCard().text()).toContain('Connected')
+    expect(mountCard(streaming()).text()).toContain('Playing')
+    expect(mountCard(makeDevice({ health: { state: 'degraded' } })).text()).toContain('Problem')
     expect(mountCard(makeDevice({ bluetooth: { standby: true } })).text()).toContain('Standby')
+  })
+
+  it('describes the signal in words', () => {
+    expect(mountCard(makeDevice({ bluetooth: { rssi_dbm: -50 } })).text()).toContain('Strong')
+    expect(mountCard(makeDevice({ bluetooth: { rssi_dbm: -80 } })).text()).toContain('Weak')
   })
 
   it('shows the volume slider only while Bluetooth is connected', () => {
@@ -78,8 +85,8 @@ describe('DeviceCard', () => {
   })
 
   it('dims a disabled speaker', () => {
-    expect(mountCard(makeDevice({ enabled: false })).find('.opacity-50').exists()).toBe(true)
-    expect(mountCard().find('.opacity-50').exists()).toBe(false)
+    expect(mountCard(makeDevice({ enabled: false })).find('.opacity-60').exists()).toBe(true)
+    expect(mountCard().find('.opacity-60').exists()).toBe(false)
   })
 
   it('offers transport only while streaming', () => {
@@ -141,10 +148,15 @@ describe('DeviceCard', () => {
     expect(store.forget).toHaveBeenCalledWith('dev-1')
   })
 
-  it('emits openDetail with the device id', async () => {
+  it('opens the details from the card itself', async () => {
     const w = mountCard()
-    const items = await openMenu(w)
-    await items.filter((b) => b.text() === 'Details').at(-1)!.trigger('click')
+    await w.findAll('button').find((b) => b.text() === 'Test Speaker')!.trigger('click')
     expect(w.emitted('openDetail')?.[0]).toEqual(['dev-1'])
+  })
+
+  it('shows what is playing', () => {
+    const text = mountCard(streaming()).text()
+    expect(text).toContain('Song')
+    expect(text).toContain('Band')
   })
 })

@@ -55,6 +55,14 @@ function optionLabel(option: string) {
   return te(key) ? t(key) : option
 }
 
+/** Differs from what is saved (bridge settings only; device panels track their own). */
+const changed = computed(() => {
+  if (props.read) return false
+  const saved = getPath(configStore.originalConfig as Record<string, unknown>, props.field.key)
+  const now = getPath(configStore.config as Record<string, unknown>, props.field.key)
+  return JSON.stringify(saved ?? null) !== JSON.stringify(now ?? null)
+})
+
 const error = computed(() => (props.read ? undefined : configStore.validationErrors[props.field.key]))
 
 const numberText = computed(() => (value.value == null ? '' : String(value.value)))
@@ -82,7 +90,7 @@ const inputClass =
 </script>
 
 <template>
-  <SettingsRow :label="label" :help="help" :for="id" :help-id="helpId" :wide="field.kind === 'list'">
+  <SettingsRow :label="label" :help="help" :for="id" :help-id="helpId" :wide="field.kind === 'list'" :changed="changed">
     <SbToggle
       v-if="field.kind === 'toggle'"
       :id="id"

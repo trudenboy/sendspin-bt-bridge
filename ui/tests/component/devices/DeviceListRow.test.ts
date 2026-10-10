@@ -57,7 +57,7 @@ describe('DeviceListRow', () => {
 
   it('renders status badge', () => {
     const w = mountRow()
-    expect(w.text()).toContain('Ready')
+    expect(w.text()).toContain('Connected')
   })
 
   it('renders volume slider when connected', () => {

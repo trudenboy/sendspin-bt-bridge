@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { applyUpdate, getUpdateInfo, startUpdateCheck, type UpdateChannel, type UpdateInfo } from '@/api/updates'
@@ -46,7 +47,7 @@ export const useUpdateStore = defineStore('update', () => {
       }
       await fetchInfo()
       if (info.value?.update_available) showDialog.value = true
-      else if (!showDialog.value) notifications.info('update.upToDate')
+      else if (!showDialog.value) notifications.info(i18n.global.t('update.upToDate'))
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Update check failed'
       notifications.error(error.value)
@@ -62,7 +63,7 @@ export const useUpdateStore = defineStore('update', () => {
     const notifications = useNotificationStore()
     try {
       const result = await applyUpdate(info.value?.tag, info.value?.channel as UpdateChannel | undefined)
-      notifications.success('update.applyStarted')
+      notifications.success(i18n.global.t('update.applyStarted'))
       showDialog.value = false
       return result
     } catch (e) {

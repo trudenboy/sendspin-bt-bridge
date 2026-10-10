@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { speakerName } from '@/utils/speakerName'
 import { confirmDialog } from '@/composables/useConfirm'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -110,7 +111,7 @@ async function onForget() {
         type="checkbox"
         :checked="selected"
         class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
-        :aria-label="`Select ${device.name}`"
+        :aria-label="t('device.select', { name: speakerName(device.name) })"
         @click.stop
         @change.stop="emit('toggleSelect', device.id)"
       />
@@ -125,7 +126,7 @@ async function onForget() {
           class="truncate text-sm font-medium text-text-primary hover:text-primary-text"
           @click="emit('openDetail', device.id)"
         >
-          {{ device.name }}
+          {{ speakerName(device.name, device.bluetooth.mac ?? device.id) }}
         </button>
         <span
           v-if="battery != null && BatteryIcon"

@@ -140,6 +140,21 @@ describe('useUpdateStore', () => {
       expect(startUpdateCheck).toHaveBeenCalledWith('beta')
     })
 
+    it('says in words that the bridge is up to date', async () => {
+      const { useNotificationStore } = await import('@/stores/notifications')
+      vi.mocked(startUpdateCheck).mockResolvedValue(job('succeeded'))
+      vi.mocked(getUpdateInfo).mockResolvedValue({
+        update_available: false,
+        runtime: 'docker',
+        auto_update: false,
+        channel: 'stable',
+        update_method: 'manual',
+      })
+      await useUpdateStore().checkForUpdates()
+      const messages = useNotificationStore().toasts.map((n) => n.message)
+      expect(messages).toContain('You are running the latest version')
+    })
+
     it('reports a failed check', async () => {
       vi.mocked(startUpdateCheck).mockResolvedValue(
         job('failed', { error: { code: 'github_unreachable', detail: 'Rate limited', status: 502 } }),

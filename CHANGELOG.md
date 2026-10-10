@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   speaker pairs with one click, then you give it a name and a room and play
   a test sound. Compatibility options and already-paired speakers are one
   step away for when the speaker is not found.
+- Settings can be searched, and edited-but-unsaved options are marked.
+- A notice appears when the page loses its live connection to the bridge,
+  so stale information is not mistaken for current.
+- Keyboard shortcuts: 1–4 switch places, A adds a speaker, / searches, ?
+  lists them.
 
 ### Changed
 
@@ -26,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recent events), Logs and System — and a "File bug report" button.
 - Search and filters on the speakers page appear once there are enough
   speakers to need them.
+- Speaker cards lead with what matters: the name without the bridge
+  suffix, room, battery and signal in words, what is playing with its
+  controls, and the volume. Status reads Playing, Connected, Standby, Not
+  connected or Problem. The whole card opens the speaker's details; the
+  MAC address and adapter moved there.
+- Fewer pop-up confirmations for actions whose result is already visible.
 
 - Buttons, links and status text keep readable contrast (WCAG AA) in the
   light theme; the bright blue stays for icons and sliders.
@@ -41,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Dividers in dialogs were drawn black.
+- "Up to date" and "Update started" messages showed internal text keys.
 - On a phone with Russian selected the devices page scrolled sideways.
 - "Connected" and "Healthy" showed in blue instead of green, and health
   checks said "ok" untranslated.

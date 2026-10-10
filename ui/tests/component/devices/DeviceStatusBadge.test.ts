@@ -21,12 +21,12 @@ describe('DeviceStatusBadge', () => {
   }
 
   it.each([
-    ['streaming', 'Streaming', 'success'],
-    ['ready', 'Ready', 'info'],
-    ['transitioning', 'Changing', 'warning'],
-    ['recovering', 'Recovering', 'warning'],
-    ['degraded', 'Degraded', 'error'],
-    ['offline', 'Offline', 'neutral'],
+    ['streaming', 'Playing', 'success'],
+    ['ready', 'Connected', 'neutral'],
+    ['transitioning', 'Connecting…', 'warning'],
+    ['recovering', 'Reconnecting…', 'warning'],
+    ['degraded', 'Problem', 'error'],
+    ['offline', 'Not connected', 'neutral'],
     ['standby', 'Standby', 'neutral'],
     ['disabled', 'Disabled', 'neutral'],
   ])('renders %s as %s with %s tone', (state, label, tone) => {

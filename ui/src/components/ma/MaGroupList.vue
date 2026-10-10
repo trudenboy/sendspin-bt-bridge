@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { openExternal } from '@/utils/safeUrl'
+import { speakerName } from '@/utils/speakerName'
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMaStore } from '@/stores/ma'
@@ -13,9 +14,7 @@ const ma = useMaStore()
 const bridge = useBridgeStore()
 
 /** Bridge players are named "Speaker @ bridge"; the group already says where it is. */
-function memberName(name: string | null | undefined, id: string) {
-  return (name ?? id).split(' @ ')[0]
-}
+const memberName = (name: string | null | undefined, id: string) => speakerName(name, id)
 
 function openInMA(groupId: string) {
   const baseUrl = bridge.bridge?.ma_web_url

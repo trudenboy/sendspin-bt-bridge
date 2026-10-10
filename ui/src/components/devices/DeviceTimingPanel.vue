@@ -35,7 +35,6 @@ function read(key: string) {
 async function apply(field: 'static_delay_ms' | 'min_buffer_ms' | 'required_lead_time_ms', value: number, source = 'manual', revision?: string, deviceId = props.device.id) {
   try {
     await setLatency(deviceId, value, { field, source, revision })
-    notifications.success(t('timing.applied', { value }))
   } catch (e) {
     notifications.error(e instanceof ApiError ? e.message : t('common.error'))
   }

@@ -34,16 +34,16 @@
   },
   "device": {
     "status": {
-      "streaming": "Streaming",
-      "ready": "Ready",
+      "streaming": "Playing",
+      "ready": "Connected",
       "connecting": "Connecting",
       "error": "Error",
-      "offline": "Offline",
+      "offline": "Not connected",
       "standby": "Standby",
       "idle": "Idle",
-      "degraded": "Degraded",
-      "recovering": "Recovering",
-      "transitioning": "Changing",
+      "degraded": "Problem",
+      "recovering": "Reconnecting…",
+      "transitioning": "Connecting…",
       "disabled": "Disabled"
     },
     "actions": {
@@ -61,7 +61,8 @@
       "repair": "Pair again",
       "claim": "Claim audio",
       "reconnectFailed": "Reconnect failed",
-      "forgetTitle": "Forget {name}?"
+      "forgetTitle": "Forget {name}?",
+      "more": "More actions for {name}"
     },
     "battery": "Battery {level}%",
     "reanchored": "Reanchored ×{count}",
@@ -75,7 +76,14 @@
       "le_audio": "LE Audio"
     },
     "adapter": "Adapter {name}",
-    "released": "Released"
+    "released": "Released",
+    "select": "Select {name}",
+    "signal": "Signal {dbm} dBm",
+    "signalLevel": {
+      "strong": "Strong",
+      "fair": "Fair",
+      "weak": "Weak"
+    }
   },
   "config": {
     "general": "General",
@@ -968,7 +976,10 @@
       "idle": "Idle behaviour",
       "sync": "Timing"
     },
-    "leave": "Leave without saving"
+    "leave": "Leave without saving",
+    "search": "Search settings",
+    "nothingFound": "Nothing matches “{q}”.",
+    "changed": "Changed"
   },
   "timing": {
     "applied": "Applied: {value} ms",
@@ -1095,5 +1106,16 @@
     "waiting": "Connecting the speaker's audio — this takes a few seconds.",
     "testSound": "Play test sound",
     "done": "Done"
+  },
+  "connection": {
+    "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "places": "Go to Speakers, Groups, Settings, Diagnostics",
+    "add": "Add a speaker",
+    "search": "Search on this page",
+    "help": "Show this list",
+    "close": "Close a dialog or menu"
   }
 }

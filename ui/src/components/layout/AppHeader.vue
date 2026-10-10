@@ -7,6 +7,7 @@ import { useBridgeStore } from '@/stores/bridge'
 import { useUpdateStore } from '@/stores/update'
 import { SbDropdown, SbDropdownItem } from '@/kit'
 import BugReportDialog from '@/components/BugReportDialog.vue'
+import { shortcutsOpen } from '@/composables/useKeyboardShortcuts'
 import { CircleHelp, SlidersHorizontal, ArrowUpCircle } from 'lucide-vue-next'
 
 const { t, locale } = useI18n()
@@ -97,6 +98,7 @@ const iconButton =
           <SbDropdownItem @click="open(GITHUB_URL)">{{ t('header.github') }}</SbDropdownItem>
           <SbDropdownItem @click="bugReportOpen = true">{{ t('header.bugReport') }}</SbDropdownItem>
           <SbDropdownItem @click="update.checkForUpdates()">{{ t('update.checkNow') }}</SbDropdownItem>
+          <SbDropdownItem @click="shortcutsOpen = true">{{ t('shortcuts.title') }}</SbDropdownItem>
           <p v-if="bridge.version" class="px-3 pt-2 pb-1 text-xs text-text-tertiary">v{{ bridge.version }}</p>
         </SbDropdown>
 

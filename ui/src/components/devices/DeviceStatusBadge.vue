@@ -11,11 +11,11 @@ const props = defineProps<{
 const { t } = useI18n()
 
 type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
-type DotStatus = 'streaming' | 'ready' | 'connecting' | 'error' | 'offline' | 'standby'
+type DotStatus = 'online' | 'streaming' | 'ready' | 'connecting' | 'error' | 'offline' | 'standby'
 
 const STATES: Record<string, { tone: Tone; dot: DotStatus }> = {
   streaming: { tone: 'success', dot: 'streaming' },
-  ready: { tone: 'info', dot: 'ready' },
+  ready: { tone: 'neutral', dot: 'online' },
   transitioning: { tone: 'warning', dot: 'connecting' },
   recovering: { tone: 'warning', dot: 'connecting' },
   degraded: { tone: 'error', dot: 'error' },
@@ -30,7 +30,7 @@ const label = computed(() => (STATES[props.state] ? t(`device.status.${props.sta
 
 <template>
   <SbBadge :tone="look.tone" size="sm">
-    <SbStatusDot :status="look.dot" size="sm" />
+    <SbStatusDot :status="look.dot" size="sm" :label="label" />
     {{ label }}
   </SbBadge>
 </template>

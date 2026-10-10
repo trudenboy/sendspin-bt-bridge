@@ -6,9 +6,11 @@ import { useBridgeStore } from '@/stores/bridge'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import RestartBanner from '@/components/layout/RestartBanner.vue'
+import ConnectionBanner from '@/components/layout/ConnectionBanner.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
 import ConfirmHost from '@/components/ConfirmHost.vue'
+import ShortcutsDialog from '@/components/ShortcutsDialog.vue'
 import { SbToastContainer } from '@/kit'
 import { useTheme } from '@/composables/useTheme'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
@@ -37,6 +39,7 @@ const hideNav = computed(() => route.meta.hideNav === true)
     <AppHeader v-if="!hideNav" />
     <div :class="[hideNav ? '' : 'pt-16']">
       <RestartBanner v-if="!hideNav" />
+      <ConnectionBanner v-if="!hideNav" />
       <div class="flex">
         <AppSidebar v-if="!hideNav" class="sticky top-16 hidden lg:flex" />
         <main class="min-h-screen min-w-0 flex-1 px-4 pt-6 pb-24 sm:px-6 lg:pb-10">
@@ -50,6 +53,7 @@ const hideNav = computed(() => route.meta.hideNav === true)
     <MobileNav v-if="!hideNav" class="lg:hidden" />
     <UpdateDialog />
     <ConfirmHost />
+    <ShortcutsDialog />
     <SbToastContainer />
   </div>
 </template>
