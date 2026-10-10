@@ -93,7 +93,7 @@ function onKeydown(event: KeyboardEvent) {
         class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm transition-colors"
         :class="[
           currentTab === tab.id
-            ? 'border-primary font-medium text-primary'
+            ? 'border-primary font-medium text-primary-text'
             : 'border-transparent text-text-secondary hover:bg-surface-secondary/50',
           tab.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
         ]"
@@ -102,7 +102,7 @@ function onKeydown(event: KeyboardEvent) {
         <span>{{ tab.label }}</span>
         <span
           v-if="tab.badge != null"
-          class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-medium text-primary"
+          class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-medium text-primary-text"
         >
           {{ tab.badge }}
         </span>

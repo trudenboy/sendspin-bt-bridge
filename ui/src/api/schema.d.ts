@@ -1967,6 +1967,12 @@ export interface components {
             mock_runtime: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Name
+             * @description The bridge's name (BRIDGE_NAME, or the host name).
+             * @default
+             */
+            name: string;
             /** Onboarding */
             onboarding: {
                 [key: string]: unknown;

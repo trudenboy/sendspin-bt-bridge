@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDialog } from '@/composables/useConfirm'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationStore } from '@/stores/notifications'
@@ -40,7 +41,13 @@ async function create() {
 }
 
 async function revoke(id: string) {
-  if (!window.confirm(t('settings.parts.tokens.revokeConfirm'))) return
+  const ok = await confirmDialog({
+    title: t('settings.parts.tokens.revoke'),
+    message: t('settings.parts.tokens.revokeConfirm'),
+    confirmLabel: t('settings.parts.tokens.revoke'),
+    danger: true,
+  })
+  if (!ok) return
   try {
     await revokeToken(id)
     await load()

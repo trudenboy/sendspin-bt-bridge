@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDialog } from '@/composables/useConfirm'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
@@ -120,8 +121,14 @@ function onDetails() {
   emit('openDetail', props.device.id)
 }
 
-function onForget() {
-  if (!window.confirm(t('device.actions.forgetConfirm'))) return
+async function onForget() {
+  const ok = await confirmDialog({
+    title: t('device.actions.forgetTitle', { name: props.device.name }),
+    message: t('device.actions.forgetConfirm'),
+    confirmLabel: t('device.actions.forget'),
+    danger: true,
+  })
+  if (!ok) return
   void run(() => deviceStore.forget(props.device.id), 'device.actions.enableFailed')
 }
 
@@ -166,7 +173,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
           v-if="selectable"
           type="checkbox"
           :checked="selected"
-          class="h-4 w-4 shrink-0 cursor-pointer rounded border-border-strong text-primary accent-primary focus:ring-primary"
+          class="h-4 w-4 shrink-0 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
           :aria-label="`Select ${device.name}`"
           @click.stop
           @change.stop="emit('toggleSelect', device.id)"
@@ -194,7 +201,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
           <template #trigger>
             <button
               type="button"
-              class="cursor-pointer rounded p-1 text-text-secondary transition-colors hover:text-text-primary"
+              class="-m-2 inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
               :aria-label="t('device.actions.details')"
             >
               <MoreVertical class="h-4 w-4" />
@@ -258,6 +265,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       <VolumeSlider
         v-if="connected"
         :mac="device.bluetooth.mac ?? device.id"
+        :name="device.name"
         :volume="device.audio.volume"
         :muted="device.audio.muted"
         :disabled="!device.audio.has_sink"
@@ -281,7 +289,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
         </button>
         <button
           type="button"
-          class="rounded-full bg-primary/10 p-2 text-primary transition-colors hover:bg-primary/20"
+          class="rounded-full bg-primary/10 p-2 text-primary-text transition-colors hover:bg-primary/20"
           :aria-label="isStreaming ? t('transport.pause') : t('transport.play')"
           :disabled="transportLoading"
           @click="onTransport(isStreaming ? 'pause' : 'play')"
@@ -308,7 +316,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
         v-if="nowPlaying && isStreaming"
         class="flex items-center gap-2 rounded-lg bg-surface-secondary p-2"
       >
-        <Music class="h-4 w-4 shrink-0 text-primary" />
+        <Music class="h-4 w-4 shrink-0 text-primary-text" />
         <div class="min-w-0">
           <p class="truncate text-sm font-medium text-text-primary">
             {{ nowPlaying.title }}

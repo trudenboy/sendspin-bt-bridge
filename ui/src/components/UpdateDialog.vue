@@ -78,7 +78,7 @@ function openHaAddon() {
             class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg"
             :class="
               selectedChannel === ch
-                ? 'bg-primary text-on-primary'
+                ? 'bg-primary-fill text-on-primary'
                 : 'text-text-secondary hover:bg-surface-secondary'
             "
             @click="selectedChannel = ch"
@@ -100,13 +100,13 @@ function openHaAddon() {
 
       <!-- Version comparison -->
       <div v-if="update.latestVersion" class="flex items-center gap-3 rounded-lg bg-surface-secondary p-4">
-        <ArrowUpCircle class="h-8 w-8 shrink-0 text-primary" />
+        <ArrowUpCircle class="h-8 w-8 shrink-0 text-primary-text" />
         <div class="min-w-0">
           <p class="text-sm text-text-secondary">{{ t('update.versionCompare') }}</p>
           <p class="mt-1 text-lg font-semibold text-text-primary">
             <span class="text-text-secondary">v{{ bridge.version }}</span>
             <span class="mx-2 text-text-secondary">→</span>
-            <span class="text-primary">v{{ update.latestVersion }}</span>
+            <span class="text-primary-text">v{{ update.latestVersion }}</span>
           </p>
           <div class="mt-1.5 flex items-center gap-2">
             <SbBadge :tone="channelTone" size="sm">

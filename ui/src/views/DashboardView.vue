@@ -81,7 +81,7 @@ function openDetail(mac: string) {
       <SbCard class="mb-6">
         <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div class="flex items-center gap-3">
-            <Server class="h-5 w-5 text-primary" />
+            <Server class="h-5 w-5 text-primary-text" />
             <div>
               <p class="text-xs text-text-secondary">{{ t('dashboard.bridge') }}</p>
               <p class="font-semibold text-text-primary">
@@ -90,7 +90,7 @@ function openDetail(mac: string) {
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <Bluetooth class="h-5 w-5 text-primary" />
+            <Bluetooth class="h-5 w-5 text-primary-text" />
             <div>
               <p class="text-xs text-text-secondary">{{ t('dashboard.adapters') }}</p>
               <p class="font-semibold text-text-primary">
@@ -99,7 +99,7 @@ function openDetail(mac: string) {
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <Speaker class="h-5 w-5 text-primary" />
+            <Speaker class="h-5 w-5 text-primary-text" />
             <div>
               <p class="text-xs text-text-secondary">{{ t('dashboard.devices') }}</p>
               <p class="font-semibold text-text-primary">
@@ -108,7 +108,7 @@ function openDetail(mac: string) {
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <Wifi class="h-5 w-5 text-primary" />
+            <Wifi class="h-5 w-5 text-primary-text" />
             <div>
               <p class="text-xs text-text-secondary">{{ t('dashboard.maStatus') }}</p>
               <SbBadge :tone="bridge.maConnected ? 'success' : 'neutral'" size="sm" dot>
@@ -123,7 +123,7 @@ function openDetail(mac: string) {
       <SbCard v-if="showOnboarding" class="mb-6">
         <div class="flex items-start justify-between">
           <div class="flex items-center gap-2">
-            <ListChecks class="h-5 w-5 text-primary" />
+            <ListChecks class="h-5 w-5 text-primary-text" />
             <h2 class="text-base font-semibold text-text-primary">
               {{ t('dashboard.onboarding.title') }}
             </h2>
@@ -141,7 +141,7 @@ function openDetail(mac: string) {
           <li>
             <button
               type="button"
-              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary"
+              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary-text"
               @click="router.push('/devices')"
             >
               <Bluetooth class="h-4 w-4" />
@@ -151,7 +151,7 @@ function openDetail(mac: string) {
           <li>
             <button
               type="button"
-              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary"
+              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary-text"
               @click="router.push('/ma')"
             >
               <Music2 class="h-4 w-4" />
@@ -161,7 +161,7 @@ function openDetail(mac: string) {
           <li>
             <button
               type="button"
-              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary"
+              class="flex items-center gap-2 text-text-secondary transition-colors hover:text-primary-text"
               @click="router.push('/config')"
             >
               <Settings class="h-4 w-4" />

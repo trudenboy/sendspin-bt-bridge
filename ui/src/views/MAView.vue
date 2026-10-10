@@ -26,7 +26,7 @@ const { autoConnecting, autoConnectFailed } = useMaAutoConnect()
         <span>{{ t('ma.connection.title') }}</span>
       </template>
       <div class="flex items-center gap-3">
-        <SbStatusDot :status="bridge.maConnected ? 'ready' : 'offline'" />
+        <SbStatusDot :status="bridge.maConnected ? 'online' : 'offline'" />
         <span class="text-sm text-text-primary">
           {{ bridge.maConnected ? t('ma.connection.connected') : t('ma.connection.disconnected') }}
         </span>

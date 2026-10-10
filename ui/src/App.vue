@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useBridgeStore } from '@/stores/bridge'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import RestartBanner from '@/components/layout/RestartBanner.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
+import ConfirmHost from '@/components/ConfirmHost.vue'
 import { SbToastContainer } from '@/kit'
 import { useTheme } from '@/composables/useTheme'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
@@ -14,6 +17,17 @@ useTheme()
 useKeyboardShortcuts()
 
 const route = useRoute()
+const { t, locale } = useI18n()
+const bridge = useBridgeStore()
+
+// Screen readers pick the voice from <html lang>; the tab title names the page and bridge.
+watchEffect(() => {
+  document.documentElement.lang = locale.value
+  const page = route.meta.title ? t(route.meta.title) : ''
+  const name = bridge.bridge?.name || t('app.title')
+  document.title = page ? `${page} — ${name}` : name
+})
+
 const hideNav = computed(() => route.meta.hideNav === true)
 
 const mobileSidebarOpen = ref(false)
@@ -78,6 +92,7 @@ watch(() => route.path, () => {
 
     <MobileNav v-if="!hideNav" class="lg:hidden" />
     <UpdateDialog />
+    <ConfirmHost />
     <SbToastContainer />
   </div>
 </template>

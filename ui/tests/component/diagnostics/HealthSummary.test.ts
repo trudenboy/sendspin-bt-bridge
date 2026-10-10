@@ -61,9 +61,9 @@ describe('HealthSummary', () => {
     expect(wrapper.text()).toContain('BT Controller')
     expect(wrapper.text()).toContain('D-Bus')
     expect(wrapper.text()).toContain('Memory')
-    expect(wrapper.text()).toContain('ok')
-    expect(wrapper.text()).toContain('warning')
-    expect(wrapper.text()).toContain('error')
+    expect(wrapper.text()).toContain('OK')
+    expect(wrapper.text()).toContain('Attention')
+    expect(wrapper.text()).toContain('Problem')
   })
 
   it('shows degraded overall status', () => {
@@ -86,6 +86,6 @@ describe('HealthSummary', () => {
     const wrapper = mount(HealthSummary, {
       global: { plugins: [buildI18n()] },
     })
-    expect(wrapper.text()).toContain('unknown')
+    expect(wrapper.text()).toContain('Unknown')
   })
 })

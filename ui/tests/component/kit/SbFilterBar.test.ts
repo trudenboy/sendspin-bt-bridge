@@ -58,7 +58,7 @@ describe('SbFilterBar', () => {
       props: { filters: baseFilters },
     })
     const activeChip = wrapper.findAll('button[aria-pressed]')[0]
-    expect(activeChip.classes()).toContain('bg-primary')
+    expect(activeChip.classes()).toContain('bg-primary-fill')
     expect(activeChip.classes()).toContain('text-on-primary')
   })
 

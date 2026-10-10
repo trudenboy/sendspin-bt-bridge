@@ -107,7 +107,7 @@ onMounted(() => {
         :href="`${GITHUB_URL}/releases/tag/v${bridge.version}`"
         target="_blank"
         rel="noopener"
-        class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+        class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary-text transition-colors hover:bg-primary/20"
         :title="t('header.viewRelease')"
       >
         v{{ bridge.version }}

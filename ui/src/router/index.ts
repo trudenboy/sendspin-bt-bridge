@@ -7,6 +7,8 @@ declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     hideNav?: boolean
+    /** i18n key of the page name, used in the browser tab title. */
+    title?: string
   }
 }
 
@@ -17,26 +19,31 @@ const router = createRouter({
     {
       path: '/',
       name: 'dashboard',
+      meta: { title: 'app.dashboard' },
       component: () => import('@/views/DashboardView.vue'),
     },
     {
       path: '/devices',
       name: 'devices',
+      meta: { title: 'app.devices' },
       component: () => import('@/views/DevicesView.vue'),
     },
     {
       path: '/config',
       name: 'config',
+      meta: { title: 'app.config' },
       component: () => import('@/views/ConfigView.vue'),
     },
     {
       path: '/diagnostics',
       name: 'diagnostics',
+      meta: { title: 'app.diagnostics' },
       component: () => import('@/views/DiagnosticsView.vue'),
     },
     {
       path: '/ma',
       name: 'ma',
+      meta: { title: 'app.ma' },
       component: () => import('@/views/MAView.vue'),
     },
     {

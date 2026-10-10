@@ -109,17 +109,17 @@ function openDetail(id: string) {
 
 <template>
   <div>
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold tracking-tight text-text-primary">
         {{ t('app.devices') }}
       </h1>
       <div class="flex items-center gap-2">
         <!-- View mode toggle -->
-        <div class="flex rounded-lg border border-border">
+        <div class="hidden rounded-lg border border-border sm:flex">
           <button
             type="button"
-            class="rounded-l-lg p-1.5 transition-colors"
-            :class="viewMode === 'grid' ? 'bg-primary text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
+            class="rounded-l-lg p-2.5 transition-colors"
+            :class="viewMode === 'grid' ? 'bg-primary-fill text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
             :aria-label="t('devices.viewGrid')"
             @click="setViewMode('grid')"
           >
@@ -127,8 +127,8 @@ function openDetail(id: string) {
           </button>
           <button
             type="button"
-            class="rounded-r-lg p-1.5 transition-colors"
-            :class="viewMode === 'list' ? 'bg-primary text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
+            class="rounded-r-lg p-2.5 transition-colors"
+            :class="viewMode === 'list' ? 'bg-primary-fill text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
             :aria-label="t('devices.viewList')"
             @click="setViewMode('list')"
           >
@@ -136,17 +136,11 @@ function openDetail(id: string) {
           </button>
         </div>
 
-        <SbButton variant="outline" size="sm" @click="scanModalOpen = true">
-          <template #icon-left>
-            <Bluetooth class="h-4 w-4" />
-          </template>
-          {{ t('bluetooth.scan.title') }}
-        </SbButton>
-        <SbButton size="sm" @click="scanModalOpen = true">
+        <SbButton size="sm" :aria-label="t('devices.addDevice')" @click="scanModalOpen = true">
           <template #icon-left>
             <Plus class="h-4 w-4" />
           </template>
-          {{ t('devices.addDevice') }}
+          <span class="hidden sm:inline">{{ t('devices.addDevice') }}</span>
         </SbButton>
       </div>
     </div>

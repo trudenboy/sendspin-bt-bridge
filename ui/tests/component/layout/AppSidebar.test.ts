@@ -74,7 +74,7 @@ describe('AppSidebar', () => {
   it('highlights the active route', async () => {
     const wrapper = await mountSidebar('/devices')
     const devicesLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/devices')!
-    expect(devicesLink.classes()).toContain('text-primary')
+    expect(devicesLink.classes()).toContain('text-primary-text')
     expect(devicesLink.classes()).toContain('bg-primary/10')
   })
 

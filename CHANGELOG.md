@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Buttons, links and status text keep readable contrast (WCAG AA) in the
+  light theme; the bright blue stays for icons and sliders.
+- Confirmations (forgetting a speaker, revoking a token, leaving unsaved
+  settings, applying a measured delay) appear in the page's own dialog
+  instead of the browser's.
+- Phone layout: shorter labels in the bottom bar, one "+" to add a speaker,
+  larger touch targets for menus and mute.
+- Screen readers announce each speaker's volume slider by name and read
+  the page in the chosen language; the browser tab shows the page and the
+  bridge's name.
+
+### Fixed
+
+- Dividers in dialogs were drawn black.
+- On a phone with Russian selected the devices page scrolled sideways.
+- "Connected" and "Healthy" showed in blue instead of green, and health
+  checks said "ok" untranslated.
+
 ## [3.0.0-beta.16] - 2026-10-10
 
 ### Added

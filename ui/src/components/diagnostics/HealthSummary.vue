@@ -35,7 +35,7 @@ interface SubsystemCheck {
 const overall = computed(() => String(diagnostics.health?.status ?? 'unknown'))
 
 const overallStatus = computed(() => {
-  const map: Record<string, 'streaming' | 'ready' | 'error' | 'offline'> = { ok: 'ready', degraded: 'error', error: 'error' }
+  const map: Record<string, 'online' | 'connecting' | 'error' | 'offline'> = { ok: 'online', degraded: 'connecting', error: 'error' }
   return map[overall.value] ?? 'offline'
 })
 
@@ -96,7 +96,7 @@ const subsystems = computed<SubsystemCheck[]>(() => [
         </div>
       </template>
       <div class="flex items-center gap-3">
-        <SbStatusDot :status="overallStatus" size="md" />
+        <SbStatusDot :status="overallStatus" :label="overallLabel" size="md" />
         <span class="text-lg font-semibold text-text-primary">{{ overallLabel }}</span>
       </div>
     </SbCard>
@@ -108,7 +108,7 @@ const subsystems = computed<SubsystemCheck[]>(() => [
           <component :is="sub.icon" class="h-5 w-5 text-text-secondary" aria-hidden="true" />
           <span class="flex-1 text-sm font-medium text-text-primary">{{ sub.label }}</span>
           <SbBadge :tone="badgeTone(sub.status)" size="sm" dot>
-            {{ sub.status }}
+            {{ t(`diagnostics.health.check.${sub.status}`) }}
           </SbBadge>
         </div>
       </SbCard>

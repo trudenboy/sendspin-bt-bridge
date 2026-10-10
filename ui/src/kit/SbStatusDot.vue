@@ -3,14 +3,17 @@ import { computed } from 'vue'
 
 const props = withDefaults(
   defineProps<{
-    status: 'streaming' | 'ready' | 'connecting' | 'error' | 'offline' | 'standby'
+    status: 'online' | 'streaming' | 'ready' | 'connecting' | 'error' | 'offline' | 'standby'
+    /** Accessible name; defaults to an English word for the status. */
+    label?: string
     pulse?: boolean | null
     size?: 'sm' | 'md'
   }>(),
-  { size: 'md', pulse: null },
+  { size: 'md', pulse: null, label: undefined },
 )
 
 const colorMap = {
+  online: 'bg-success',
   streaming: 'bg-success',
   ready: 'bg-info',
   connecting: 'bg-warning',
@@ -27,6 +30,7 @@ const sizeClass = computed(() => (props.size === 'sm' ? 'h-2 w-2' : 'h-3 w-3'))
 
 const statusLabel = computed(() => {
   const labels: Record<string, string> = {
+    online: 'Online',
     streaming: 'Streaming',
     ready: 'Ready',
     connecting: 'Connecting',
@@ -34,7 +38,7 @@ const statusLabel = computed(() => {
     offline: 'Offline',
     standby: 'Standby',
   }
-  return labels[props.status]
+  return props.label ?? labels[props.status]
 })
 </script>
 

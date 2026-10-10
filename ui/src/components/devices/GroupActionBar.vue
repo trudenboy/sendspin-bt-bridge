@@ -127,7 +127,7 @@ watch(
           ref="checkboxRef"
           type="checkbox"
           :checked="allSelected"
-          class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary accent-primary focus:ring-primary"
+          class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
           :aria-label="t('devices.selectAll')"
           @change="emit('toggleAll')"
         />

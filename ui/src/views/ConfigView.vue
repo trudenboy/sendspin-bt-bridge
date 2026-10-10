@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDialog } from '@/composables/useConfirm'
 import { computed, nextTick, onMounted, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
@@ -115,8 +116,14 @@ async function save() {
   }
 }
 
-onBeforeRouteLeave(() => {
-  if (configStore.isDirty && !window.confirm(t('settings.leaveConfirm'))) return false
+onBeforeRouteLeave(async () => {
+  if (!configStore.isDirty) return true
+  return confirmDialog({
+    title: t('settings.unsaved'),
+    message: t('settings.leaveConfirm'),
+    confirmLabel: t('settings.leave'),
+    danger: true,
+  })
 })
 
 const route = useRoute()
@@ -162,7 +169,7 @@ onMounted(async () => {
               class="flex w-full items-center gap-2.5 rounded-(--radius-button) px-3 py-2 text-left text-sm whitespace-nowrap transition-colors"
               :class="
                 active === s.id
-                  ? 'bg-primary/12 font-medium text-primary'
+                  ? 'bg-primary/12 font-medium text-primary-text'
                   : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary'
               "
               :aria-current="active === s.id ? 'true' : undefined"

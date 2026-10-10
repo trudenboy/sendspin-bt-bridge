@@ -111,7 +111,7 @@ const publisherTone = computed(() =>
         :label="t('settings.parts.ha.mosquitto')"
         :help="t('settings.parts.ha.mosquittoMissing')"
       >
-        <a v-if="safeHttpUrl(mosquitto.install_url)" :href="safeHttpUrl(mosquitto.install_url)!" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-primary hover:underline">
+        <a v-if="safeHttpUrl(mosquitto.install_url)" :href="safeHttpUrl(mosquitto.install_url)!" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-primary-text hover:underline">
           {{ t('settings.parts.ha.install') }}
         </a>
       </SettingsRow>
@@ -143,7 +143,7 @@ const publisherTone = computed(() =>
           :href="safeHttpUrl(component?.install_url)!"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-sm font-medium text-primary hover:underline"
+          class="text-sm font-medium text-primary-text hover:underline"
         >{{ t('settings.parts.ha.installHacs') }}</a>
       </SettingsRow>
       <SettingsRow :label="t('settings.parts.ha.mdns')" :help="mdns?.service_name || t('settings.parts.ha.mdnsHelp')">

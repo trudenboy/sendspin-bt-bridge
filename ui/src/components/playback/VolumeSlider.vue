@@ -22,11 +22,13 @@ import { useI18n } from 'vue-i18n'
 const props = withDefaults(
   defineProps<{
     mac: string
+    /** Speaker name, for the slider's accessible label. */
+    name?: string | null
     volume: number
     muted: boolean
     disabled?: boolean
   }>(),
-  { disabled: false },
+  { disabled: false, name: null },
 )
 
 const emit = defineEmits<{
@@ -102,7 +104,7 @@ function toggleMute() {
   <div class="flex items-center gap-2">
     <button
       type="button"
-      class="shrink-0 cursor-pointer rounded p-1 text-text-secondary transition-colors hover:text-text-primary"
+      class="-ml-2 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
       :class="{ 'text-warning': muted }"
       :aria-label="muted ? t('volume.unmute') : t('volume.mute')"
       :disabled="disabled"
@@ -121,6 +123,7 @@ function toggleMute() {
       :max="100"
       :disabled="disabled || muted"
       :show-value="false"
+      :aria-label="t('volume.label', { name: name ?? mac })"
       class="flex-1"
       @update:model-value="onVolumeInput"
     />

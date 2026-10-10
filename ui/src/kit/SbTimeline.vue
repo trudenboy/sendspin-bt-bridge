@@ -87,7 +87,7 @@ const dotColorMap = {
     <button
       v-if="hasMore && !expanded"
       type="button"
-      class="ml-8 cursor-pointer text-sm font-medium text-primary hover:text-primary-dark"
+      class="ml-8 cursor-pointer text-sm font-medium text-primary-text hover:text-primary-dark"
       data-testid="timeline-show-more"
       @click="expanded = true"
     >

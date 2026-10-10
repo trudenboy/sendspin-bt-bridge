@@ -176,7 +176,7 @@ onMounted(fetchLogs)
         class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
         :class="
           autoScroll
-            ? 'bg-primary/10 text-primary'
+            ? 'bg-primary/10 text-primary-text'
             : 'text-text-secondary hover:text-text-primary'
         "
         @click="autoScroll = !autoScroll"

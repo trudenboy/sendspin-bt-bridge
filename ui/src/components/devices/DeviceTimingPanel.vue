@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDialog } from '@/composables/useConfirm'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
@@ -97,9 +98,11 @@ async function measure() {
       return
     }
     const late = plan.deviceId === props.device.id ? props.device : reference
-    const ok = window.confirm(
-      t('timing.mic.confirm', { offset: plan.median.toFixed(0), spread: plan.spread.toFixed(0), value: plan.value, name: late.name }),
-    )
+    const ok = await confirmDialog({
+      title: t('timing.mic.resultTitle'),
+      message: t('timing.mic.confirm', { offset: plan.median.toFixed(0), spread: plan.spread.toFixed(0), value: plan.value, name: late.name }),
+      confirmLabel: t('timing.applySuggestion'),
+    })
     if (ok) await apply('static_delay_ms', plan.value, 'microphone_calibration', undefined, plan.deviceId)
   } catch (e) {
     notifications.error(e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e))

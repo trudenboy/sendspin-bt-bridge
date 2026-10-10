@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import socket
+
 from sendspin_bridge.application import diagnostics as _diag
 from sendspin_bridge.application.models import (
     Bridge,
@@ -13,6 +16,12 @@ from sendspin_bridge.application.models import (
     UpdateInfo,
 )
 from sendspin_bridge.config import load_config
+
+
+def bridge_name(config: dict) -> str:
+    """BRIDGE_NAME as the bridge uses it: ``auto``/``hostname``/empty mean the host name."""
+    raw = str(config.get("BRIDGE_NAME") or os.getenv("BRIDGE_NAME") or "").strip()
+    return socket.gethostname() if raw.lower() in ("", "auto", "hostname") else raw
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.ipc.bridge_state_model import build_bridge_state_model
 from sendspin_bridge.services.lifecycle.status_snapshot import build_bridge_snapshot
@@ -67,6 +76,7 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
     )
     info = state.get_bridge_system_info()
     bridge = Bridge(
+        name=bridge_name(config),
         version=info.get("version", ""),
         build_date=info.get("build_date", ""),
         hostname=info.get("hostname", ""),

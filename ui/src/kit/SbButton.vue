@@ -16,11 +16,11 @@ const props = withDefaults(
 // Shapes and sizes follow Music Assistant's buttons (shadcn-vue "new-york"):
 // 36 px default height, 14 px label, 8 px radius.
 const variantClasses = {
-  primary: 'bg-primary text-on-primary hover:bg-primary-dark',
+  primary: 'bg-primary-fill text-on-primary hover:bg-primary-dark',
   outline: 'border border-border-strong bg-transparent text-text-primary hover:bg-surface-secondary',
   secondary: 'bg-surface-secondary text-text-primary hover:brightness-95 dark:hover:brightness-125',
   ghost: 'bg-transparent text-text-primary hover:bg-surface-secondary',
-  danger: 'bg-error text-on-primary hover:brightness-90',
+  danger: 'bg-error-fill text-on-primary hover:brightness-90',
   warning: 'bg-warning text-black/85 hover:brightness-95',
 } as const
 

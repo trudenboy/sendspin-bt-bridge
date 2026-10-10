@@ -48,7 +48,7 @@ function onKeydown(e: KeyboardEvent) {
       class="relative inline-flex shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       :class="[
         model
-          ? 'bg-primary'
+          ? 'bg-primary-fill'
           : 'bg-border-strong',
         size === 'sm' ? 'h-5 w-8' : 'h-6 w-10',
       ]"

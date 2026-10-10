@@ -695,6 +695,12 @@
             ],
             "title": "Mock Runtime"
           },
+          "name": {
+            "default": "",
+            "description": "The bridge's name (BRIDGE_NAME, or the host name).",
+            "title": "Name",
+            "type": "string"
+          },
           "onboarding": {
             "anyOf": [
               {
@@ -787,6 +793,7 @@
           }
         },
         "required": [
+          "name",
           "version",
           "build_date",
           "hostname",

@@ -125,17 +125,20 @@ describe('DeviceCard', () => {
   })
 
   it('asks before forgetting the Bluetooth bond', async () => {
-    const confirm = vi.fn().mockReturnValue(false)
-    vi.stubGlobal('confirm', confirm)
+    const { confirmState, settleConfirm } = await import('@/composables/useConfirm')
     let items = await openMenu(mountCard())
     await items.find((b) => b.text().includes('Forget'))!.trigger('click')
+    expect(confirmState.open).toBe(true)
+    expect(confirmState.options?.danger).toBe(true)
+    settleConfirm(false)
+    await new Promise((r) => setTimeout(r, 0))
     expect(store.forget).not.toHaveBeenCalled()
 
-    confirm.mockReturnValue(true)
     items = await openMenu(mountCard())
     await items.find((b) => b.text().includes('Forget'))!.trigger('click')
+    settleConfirm(true)
+    await new Promise((r) => setTimeout(r, 0))
     expect(store.forget).toHaveBeenCalledWith('dev-1')
-    vi.unstubAllGlobals()
   })
 
   it('emits openDetail with the device id', async () => {

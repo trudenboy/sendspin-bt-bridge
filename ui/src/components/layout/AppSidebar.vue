@@ -63,7 +63,7 @@ function isActive(to: string): boolean {
         :class="[
           'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
           isActive(link.to)
-            ? 'bg-primary/10 text-primary'
+            ? 'bg-primary/10 text-primary-text'
             : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary',
           collapsed ? 'justify-center' : '',
         ]"

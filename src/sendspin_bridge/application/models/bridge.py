@@ -72,6 +72,7 @@ class UpdateInfo(ResponseModel):
 
 
 class Bridge(ResponseModel):
+    name: str = Field(default="", description="The bridge's name (BRIDGE_NAME, or the host name).")
     version: str
     build_date: str
     hostname: str = ""

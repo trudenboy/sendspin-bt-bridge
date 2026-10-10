@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { confirmDialog } from '@/composables/useConfirm'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
@@ -86,8 +87,14 @@ function onToggleEnabled() {
   void run(() => deviceStore.setEnabled(props.device.id, !props.device.enabled), 'device.actions.enableFailed')
 }
 
-function onForget() {
-  if (!window.confirm(t('device.actions.forgetConfirm'))) return
+async function onForget() {
+  const ok = await confirmDialog({
+    title: t('device.actions.forgetTitle', { name: props.device.name }),
+    message: t('device.actions.forgetConfirm'),
+    confirmLabel: t('device.actions.forget'),
+    danger: true,
+  })
+  if (!ok) return
   void run(() => deviceStore.forget(props.device.id), 'device.actions.enableFailed')
 }
 </script>
@@ -102,7 +109,7 @@ function onForget() {
       <input
         type="checkbox"
         :checked="selected"
-        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary accent-primary focus:ring-primary"
+        class="h-4 w-4 cursor-pointer rounded border-border-strong text-primary-text accent-primary focus:ring-primary"
         :aria-label="`Select ${device.name}`"
         @click.stop
         @change.stop="emit('toggleSelect', device.id)"
@@ -115,7 +122,7 @@ function onForget() {
         <Bluetooth class="h-4 w-4 shrink-0 text-text-secondary" />
         <button
           type="button"
-          class="truncate text-sm font-medium text-text-primary hover:text-primary"
+          class="truncate text-sm font-medium text-text-primary hover:text-primary-text"
           @click="emit('openDetail', device.id)"
         >
           {{ device.name }}
@@ -142,6 +149,7 @@ function onForget() {
       <VolumeSlider
         v-if="connected"
         :mac="device.bluetooth.mac ?? device.id"
+        :name="device.name"
         :volume="device.audio.volume"
         :muted="device.audio.muted"
         :disabled="!device.audio.has_sink"
@@ -165,7 +173,7 @@ function onForget() {
           </button>
           <button
             type="button"
-            class="rounded p-1 text-primary hover:text-primary/80"
+            class="rounded p-1 text-primary-text hover:text-primary/80"
             :aria-label="t('transport.pause')"
             @click="onTransport('pause')"
           >
@@ -195,7 +203,7 @@ function onForget() {
         <template #trigger>
           <button
             type="button"
-            class="cursor-pointer rounded p-1 text-text-secondary hover:text-text-primary"
+            class="inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
             :aria-label="t('device.actions.details')"
           >
             <MoreVertical class="h-4 w-4" />

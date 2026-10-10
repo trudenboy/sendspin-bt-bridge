@@ -9,6 +9,8 @@ interface Props {
   showValue?: boolean
   disabled?: boolean
   formatValue?: (v: number) => string
+  /** Accessible name of the range input (the visible label is optional). */
+  ariaLabel?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -55,6 +57,8 @@ function onInput(e: Event) {
     <input
       type="range"
       :value="model"
+      :aria-label="ariaLabel ?? label"
+      :aria-valuetext="displayValue"
       :min="min"
       :max="max"
       :step="step"

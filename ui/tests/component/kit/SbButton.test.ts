@@ -16,7 +16,7 @@ describe('SbButton', () => {
   it('applies primary variant classes by default', () => {
     const wrapper = mount(SbButton, { slots: { default: 'Go' } })
     const btn = wrapper.find('button')
-    expect(btn.classes()).toContain('bg-primary')
+    expect(btn.classes()).toContain('bg-primary-fill')
     expect(btn.classes()).toContain('text-on-primary')
   })
 
@@ -56,7 +56,7 @@ describe('SbButton', () => {
       slots: { default: 'Delete' },
     })
     const btn = wrapper.find('button')
-    expect(btn.classes()).toContain('bg-error')
+    expect(btn.classes()).toContain('bg-error-fill')
     expect(btn.classes()).toContain('text-on-primary')
   })
 

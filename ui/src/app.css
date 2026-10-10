@@ -13,9 +13,14 @@
  * primary colour and dark mode onto the root (see composables/useTheme.ts).
  */
 @theme inline {
+  /* --color-primary is decorative (icons, sliders, focus); text and filled
+     surfaces use the -text / -fill shades, which keep WCAG AA contrast. */
   --color-primary: var(--sb-primary);
-  --color-primary-dark: var(--sb-primary-hover);
+  --color-primary-dark: var(--sb-primary-fill-hover);
+  --color-primary-fill: var(--sb-primary-fill);
+  --color-primary-text: var(--sb-primary-text);
   --color-on-primary: var(--sb-on-primary);
+  --color-error-fill: var(--sb-error-fill);
 
   --color-success: var(--sb-success);
   --color-warning: var(--sb-warning);
@@ -51,13 +56,17 @@
 :root {
   color-scheme: light;
   --sb-primary: #03a9f4;
-  --sb-primary-hover: #0288d1;
+  --sb-primary-fill: #0277bd;
+  --sb-primary-fill-hover: #01579b;
+  --sb-primary-text: #0277bd;
   --sb-on-primary: #ffffff;
 
-  --sb-success: #43a047;
+  /* Status colours as text on light surfaces: darker shades of HA's palette. */
+  --sb-success: #2e7d32;
   --sb-warning: #ffa600;
-  --sb-error: #db4437;
-  --sb-info: #039be5;
+  --sb-error: #c62828;
+  --sb-error-fill: #c62828;
+  --sb-info: #0277bd;
 
   --sb-background: #fafafa;
   --sb-card: #ffffff;
@@ -73,12 +82,16 @@
   --sb-input-border: rgb(0 0 0 / 0.24);
 
   --sb-code-bg: #1e1e1e;
+  --slider-track: var(--sb-fill);
   --sb-code-text: #e1e1e1;
 }
 
 .dark {
   color-scheme: dark;
-  --sb-primary-hover: #29b6f6;
+  --sb-primary-text: #4fc3f7;
+  --sb-success: #43a047;
+  --sb-error: #ef5350;
+  --sb-info: #29b6f6;
 
   --sb-background: #111111;
   --sb-card: #1c1c1c;
@@ -122,6 +135,16 @@
 @utility tone-neutral {
   background-color: var(--sb-fill);
   color: var(--sb-text-secondary);
+}
+
+/* Tailwind 4 draws an uncoloured border in currentColor; ours are dividers.
+   In the base layer so border-* utilities still win. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--sb-divider);
+  }
 }
 
 html {

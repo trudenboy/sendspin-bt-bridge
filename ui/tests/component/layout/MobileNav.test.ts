@@ -45,20 +45,16 @@ describe('MobileNav', () => {
     expect(links.length).toBe(5)
   })
 
-  it('renders all tab labels', async () => {
+  it('renders short tab labels that fit a phone', async () => {
     const wrapper = await mountMobileNav()
-    const text = wrapper.text()
-    expect(text).toContain('Dashboard')
-    expect(text).toContain('Devices')
-    expect(text).toContain('Configuration')
-    expect(text).toContain('Diagnostics')
-    expect(text).toContain('Music Assistant')
+    const labels = wrapper.findAll('a').map((a) => a.text())
+    expect(labels).toEqual(['Home', 'Speakers', 'Settings', 'Diagnostics', 'Music'])
   })
 
   it('highlights active tab', async () => {
     const wrapper = await mountMobileNav('/config')
     const configLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/config')!
-    expect(configLink.classes()).toContain('text-primary')
+    expect(configLink.classes()).toContain('text-primary-text')
   })
 
   it('does not highlight inactive tabs', async () => {
@@ -84,12 +80,12 @@ describe('MobileNav', () => {
   it('highlights dashboard on root route', async () => {
     const wrapper = await mountMobileNav('/')
     const dashLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/')!
-    expect(dashLink.classes()).toContain('text-primary')
+    expect(dashLink.classes()).toContain('text-primary-text')
   })
 
   it('does not highlight dashboard on sub-routes', async () => {
     const wrapper = await mountMobileNav('/devices')
     const dashLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/')!
-    expect(dashLink.classes()).not.toContain('text-primary')
+    expect(dashLink.classes()).not.toContain('text-primary-text')
   })
 })

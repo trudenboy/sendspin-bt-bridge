@@ -64,7 +64,7 @@ function clearSearch() {
       class="cursor-pointer rounded-full px-3 py-1 text-sm transition-colors"
       :class="
         filter.active
-          ? 'bg-primary text-on-primary'
+          ? 'bg-primary-fill text-on-primary'
           : 'bg-surface-secondary text-text-secondary hover:bg-surface-secondary/80'
       "
       :aria-pressed="!!filter.active"

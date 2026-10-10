@@ -50,7 +50,8 @@
       "forgetConfirm": "Forget the Bluetooth bond? The speaker must be paired again.",
       "repair": "Pair again",
       "claim": "Claim audio",
-      "reconnectFailed": "Reconnect failed"
+      "reconnectFailed": "Reconnect failed",
+      "forgetTitle": "Forget {name}?"
     },
     "battery": "Battery {level}%",
     "reanchored": "Reanchored ×{count}",
@@ -151,7 +152,13 @@
       "audio": "Audio Backend",
       "bluetooth": "BT Controller",
       "dbus": "D-Bus",
-      "memory": "Memory"
+      "memory": "Memory",
+      "check": {
+        "ok": "OK",
+        "warning": "Attention",
+        "error": "Problem",
+        "unknown": "Unknown"
+      }
     },
     "events": {
       "loadMore": "Load more",
@@ -360,7 +367,8 @@
   },
   "volume": {
     "mute": "Mute",
-    "unmute": "Unmute"
+    "unmute": "Unmute",
+    "label": "Volume of {name}"
   },
   "bluetooth": {
     "scan": {
@@ -945,7 +953,8 @@
       "speaker": "Speaker",
       "idle": "Idle behaviour",
       "sync": "Timing"
-    }
+    },
+    "leave": "Leave without saving"
   },
   "timing": {
     "applied": "Applied: {value} ms",
@@ -967,7 +976,8 @@
       "step": "Measurement {n} of 3: {name}",
       "not_detected": "The clicks were not heard clearly. Move closer and try again.",
       "unstable": "The measurements disagreed. Keep the device still and try again.",
-      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s delay to {value} ms?"
+      "confirm": "Measured offset {offset} ms (spread {spread} ms). Set {name}'s delay to {value} ms?",
+      "resultTitle": "Measurement result"
     },
     "history": {
       "title": "Recent timing",
@@ -1027,5 +1037,12 @@
   "guidance": {
     "title": "What needs attention",
     "done": "Done: {action}"
+  },
+  "nav": {
+    "dashboard": "Home",
+    "devices": "Speakers",
+    "config": "Settings",
+    "diagnostics": "Diagnostics",
+    "ma": "Music"
   }
 }

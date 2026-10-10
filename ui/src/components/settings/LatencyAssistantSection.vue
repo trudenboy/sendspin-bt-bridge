@@ -45,7 +45,7 @@ function choose(value: number) {
         class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
         :class="
           configStore.config?.PULSE_LATENCY_MSEC === p.value
-            ? 'border-primary bg-primary/12 text-primary'
+            ? 'border-primary bg-primary/12 text-primary-text'
             : 'border-border-strong text-text-secondary hover:text-text-primary'
         "
         :aria-pressed="configStore.config?.PULSE_LATENCY_MSEC === p.value"

@@ -209,3 +209,18 @@ def test_a_mocked_runtime_says_so(api_client, registry):
     bridge = api_client.get("/api/v1/status").json()["bridge"]
     assert bridge["runtime_mode"] == "demo"
     assert bridge["mock_runtime"]["fixture_devices"] == 3
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [("Living room", "Living room"), ("auto", "test-host"), ("", "test-host")],
+)
+def test_the_bridge_carries_its_name(api_client, registry, monkeypatch, configured, expected):
+    """The UI titles pages with the bridge's name; ``auto`` and empty mean the host name."""
+    import sendspin_bridge.application.status as status_uc
+
+    monkeypatch.setattr(status_uc, "load_config", lambda: {"BRIDGE_NAME": configured})
+    monkeypatch.setattr(status_uc.socket, "gethostname", lambda: "test-host")
+    monkeypatch.delenv("BRIDGE_NAME", raising=False)
+
+    assert api_client.get("/api/v1/bridge").json()["name"] == expected
