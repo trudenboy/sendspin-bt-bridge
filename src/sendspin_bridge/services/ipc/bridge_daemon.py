@@ -203,6 +203,8 @@ class BridgeDaemon:
         while True:
             try:
                 await self._client.connect(url)
+                # connect() returns once the server admitted us.
+                self._mark_server_connected(None, url=url)
                 error_backoff = 1.0
                 disconnect_event = asyncio.Event()
                 unsubscribe = self._client.add_disconnect_listener(disconnect_event.set)
@@ -417,8 +419,12 @@ class BridgeDaemon:
 
     # ── Connection lifecycle ─────────────────────────────────────────────────
 
-    def _mark_server_connected(self, ws) -> None:
-        """Publish bridge status only after the new server handshake succeeds."""
+    def _mark_server_connected(self, ws, url: str | None = None) -> None:
+        """Publish bridge status only after the new server handshake succeeds.
+
+        ``ws`` is the inbound socket (Music Assistant dialled us); ``url`` the
+        server the daemon dialled itself.
+        """
         if not self._bridge_status.get("server_connected"):
             self._bridge_status["server_connected_at"] = datetime.now(tz=UTC).isoformat()
         self._bridge_status["server_connected"] = True
@@ -436,6 +442,8 @@ class BridgeDaemon:
                 self._bridge_status["connected_server_url"] = f"{peer}:{port}"
         except Exception as _exc:
             logger.debug("Could not extract peer address: %s", _exc)
+        if url:
+            self._bridge_status["connected_server_url"] = url
         self._notify()
 
     async def _handle_disconnect(self) -> None:
