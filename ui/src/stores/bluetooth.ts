@@ -109,12 +109,13 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
    * Make a paired device a bridge speaker: append it to the configuration
    * (the whole document is saved; the bridge starts the player live).
    */
-  async function addToBridge(mac: string, name: string, adapter = '') {
+  async function addToBridge(mac: string, name: string, adapter = '', extra: { room?: string } = {}) {
     const config = (await getConfig()) as Record<string, unknown>
     const entries = (config.BLUETOOTH_DEVICES as Record<string, unknown>[] | undefined) ?? []
     if (entries.some((e) => String(e.mac ?? '').toUpperCase() === mac.toUpperCase())) return false
     const entry: Record<string, unknown> = { mac: mac.toUpperCase(), player_name: name || mac, enabled: true }
     if (adapter) entry.adapter = adapter
+    if (extra.room?.trim()) entry.room_name = extra.room.trim()
     await saveConfig({ ...config, BLUETOOTH_DEVICES: [...entries, entry] } as never)
     return true
   }

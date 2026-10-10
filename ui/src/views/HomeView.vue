@@ -10,8 +10,9 @@ import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
 import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
-import BtScanModal from '@/components/bluetooth/BtScanModal.vue'
-import { Plus, Bluetooth, LayoutGrid, List, ChevronDown } from 'lucide-vue-next'
+import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
+import GuidanceBanner from '@/components/GuidanceBanner.vue'
+import { Plus, LayoutGrid, List, ChevronDown } from 'lucide-vue-next'
 
 type ViewMode = 'grid' | 'list'
 const STORAGE_KEY = 'sb-view-mode'
@@ -42,6 +43,14 @@ const selection = useDeviceSelection(
 )
 
 const showGroupBar = computed(() => bridge.devices.length >= 2)
+/* Search and filters earn their space only on larger setups. */
+const FILTER_FROM = 6
+const showFilters = computed(() => bridge.devices.length >= FILTER_FROM)
+const showViewToggle = computed(() => bridge.devices.length >= 4)
+
+/** One line of context above the speakers: Music Assistant, playing, adapters. */
+const playing = computed(() => bridge.devices.filter((d) => d.playback.playing && d.audio.streaming).length)
+const connected = computed(() => bridge.devices.filter((d) => d.bluetooth.connected).length)
 const selectable = computed(() => bridge.devices.length >= 2)
 
 
@@ -111,11 +120,11 @@ function openDetail(id: string) {
   <div>
     <div class="mb-6 flex items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold tracking-tight text-text-primary">
-        {{ t('app.devices') }}
+        {{ t('nav.home') }}
       </h1>
       <div class="flex items-center gap-2">
         <!-- View mode toggle -->
-        <div class="hidden rounded-lg border border-border sm:flex">
+        <div v-if="showViewToggle" class="hidden rounded-lg border border-border sm:flex">
           <button
             type="button"
             class="rounded-l-lg p-2.5 transition-colors"
@@ -152,8 +161,19 @@ function openDetail(id: string) {
     </div>
 
     <template v-else>
+      <GuidanceBanner />
+
+      <p v-if="bridge.devices.length" class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
+        <span class="inline-flex items-center gap-1.5">
+          <span class="size-2 rounded-full" :class="bridge.maConnected ? 'bg-success' : 'bg-text-disabled'" aria-hidden="true" />
+          {{ bridge.maConnected ? t('home.maConnected') : t('home.maDisconnected') }}
+        </span>
+        <span>{{ t('home.connected', { n: connected, total: bridge.devices.length }) }}</span>
+        <span v-if="playing">{{ t('home.playing', { n: playing }) }}</span>
+      </p>
+
       <!-- Filter bar -->
-      <div class="mb-4 flex flex-wrap items-center gap-2">
+      <div v-if="showFilters" class="mb-4 flex flex-wrap items-center gap-2">
         <SbFilterBar
           v-model="deviceStore.filter.search"
           :placeholder="t('common.search')"
@@ -233,9 +253,9 @@ function openDetail(id: string) {
         <template #action>
           <SbButton @click="scanModalOpen = true">
             <template #icon-left>
-              <Bluetooth class="h-4 w-4" />
+              <Plus class="h-4 w-4" />
             </template>
-            {{ t('bluetooth.scan.title') }}
+            {{ t('devices.addDevice') }}
           </SbButton>
         </template>
       </SbEmptyState>
@@ -301,7 +321,7 @@ function openDetail(id: string) {
     />
 
     <!-- BT Scan modal -->
-    <BtScanModal
+    <AddSpeakerDialog
       :open="scanModalOpen"
       @update:open="scanModalOpen = $event"
     />

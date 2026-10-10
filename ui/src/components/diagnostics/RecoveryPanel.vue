@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDiagnosticsStore } from '@/stores/diagnostics'
-import { SbCard, SbBadge, SbButton, SbEmptyState, SbSpinner } from '@/kit'
+import { SbCard, SbBadge, SbButton, SbSpinner } from '@/kit'
 import { ShieldCheck, RefreshCw, ClipboardCopy, DownloadCloud } from 'lucide-vue-next'
 import { copyToClipboard } from '@/utils/clipboard'
 import { downloadTimelineCsv } from '@/api/diagnostics'
@@ -93,14 +93,9 @@ async function runChecks() {
       </SbCard>
     </template>
 
-    <SbEmptyState
-      v-else
-      :title="t('diagnostics.recovery.noIssues')"
-      :description="t('diagnostics.recovery.noIssuesDesc')"
-    >
-      <template #icon>
-        <ShieldCheck class="h-16 w-16" aria-hidden="true" />
-      </template>
-    </SbEmptyState>
+    <p v-else class="flex items-center gap-2 rounded-(--radius-card) border border-border bg-surface-card px-4 py-3 text-sm text-text-secondary">
+      <ShieldCheck class="size-5 shrink-0 text-success" aria-hidden="true" />
+      <span><span class="font-medium text-text-primary">{{ t('diagnostics.recovery.noIssues') }}.</span> {{ t('diagnostics.recovery.noIssuesDesc') }}</span>
+    </p>
   </div>
 </template>

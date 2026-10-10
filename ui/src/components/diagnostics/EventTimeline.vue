@@ -81,6 +81,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
+    <h2 class="text-base font-medium text-text-primary">{{ t('diagnostics.timeline.title') }}</h2>
     <div class="flex items-center gap-2">
       <div class="flex-1">
         <SbFilterBar

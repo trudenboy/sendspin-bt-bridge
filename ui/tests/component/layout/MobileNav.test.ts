@@ -9,11 +9,10 @@ function buildRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', name: 'dashboard', component: { template: '<div />' } },
-      { path: '/devices', name: 'devices', component: { template: '<div />' } },
+      { path: '/', name: 'home', component: { template: '<div />' } },
+      { path: '/groups', name: 'groups', component: { template: '<div />' } },
       { path: '/config', name: 'config', component: { template: '<div />' } },
       { path: '/diagnostics', name: 'diagnostics', component: { template: '<div />' } },
-      { path: '/ma', name: 'ma', component: { template: '<div />' } },
     ],
   })
 }
@@ -39,16 +38,15 @@ async function mountMobileNav(initialRoute = '/') {
 }
 
 describe('MobileNav', () => {
-  it('renders 5 tab links', async () => {
+  it('renders 4 tab links', async () => {
     const wrapper = await mountMobileNav()
-    const links = wrapper.findAll('a')
-    expect(links.length).toBe(5)
+    expect(wrapper.findAll('a').length).toBe(4)
   })
 
   it('renders short tab labels that fit a phone', async () => {
     const wrapper = await mountMobileNav()
     const labels = wrapper.findAll('a').map((a) => a.text())
-    expect(labels).toEqual(['Home', 'Speakers', 'Settings', 'Diagnostics', 'Music'])
+    expect(labels).toEqual(['Speakers', 'Groups', 'Settings', 'Health'])
   })
 
   it('highlights active tab', async () => {
@@ -84,7 +82,7 @@ describe('MobileNav', () => {
   })
 
   it('does not highlight dashboard on sub-routes', async () => {
-    const wrapper = await mountMobileNav('/devices')
+    const wrapper = await mountMobileNav('/groups')
     const dashLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/')!
     expect(dashLink.classes()).not.toContain('text-primary-text')
   })

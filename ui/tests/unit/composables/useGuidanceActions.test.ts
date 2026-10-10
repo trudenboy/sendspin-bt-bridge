@@ -52,7 +52,7 @@ describe('useGuidanceActions', () => {
     const api = setup()
     await api.run({ key: 'scan_devices', label: 'Scan' })
     expect(useBluetoothStore().scanRequested).toBe(true)
-    expect(push).toHaveBeenCalledWith('/devices')
+    expect(push).toHaveBeenCalledWith('/')
   })
 
   it('falls back to diagnostics for an action it does not know', async () => {

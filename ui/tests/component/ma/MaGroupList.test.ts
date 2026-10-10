@@ -58,16 +58,16 @@ describe('MaGroupList', () => {
     })
     await flushPromises()
     expect(wrapper.text()).toContain('Living Room')
-    expect(wrapper.text()).toContain('2 members')
+    expect(wrapper.findAll('li').map((li) => li.text())).toEqual(['Speaker 1', 'Speaker 2'])
   })
 
-  it('expands group on click to show members', async () => {
+  it('shows members without the bridge suffix, the full name on hover', async () => {
     mockGroupsResult = [
       {
         id: 'g1',
         name: 'Kitchen',
         members: [
-          { id: 'p1', name: 'ENEBY', state: 'idle' },
+          { id: 'p1', name: 'ENEBY @ kitchen-bridge', state: 'idle' },
         ],
       },
     ]
@@ -76,7 +76,8 @@ describe('MaGroupList', () => {
       global: { plugins: [buildI18n()] },
     })
     await flushPromises()
-    await wrapper.find('button[aria-expanded]').trigger('click')
-    expect(wrapper.text()).toContain('ENEBY')
+    const member = wrapper.get('li')
+    expect(member.text()).toBe('ENEBY')
+    expect(member.find('[title]').attributes('title')).toBe('ENEBY @ kitchen-bridge')
   })
 })

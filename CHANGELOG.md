@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- "Add speaker" is a guided flow: the search starts by itself, a found
+  speaker pairs with one click, then you give it a name and a room and play
+  a test sound. Compatibility options and already-paired speakers are one
+  step away for when the speaker is not found.
+
 ### Changed
+
+- Four places instead of five: Speakers (the former dashboard and device
+  list in one), Groups (Music Assistant groups, each with its now playing
+  and controls), Settings and Diagnostics. Old addresses still work.
+- The header shows the bridge's name and its status in one line; help
+  (documentation, GitHub, bug report, version) and preferences (language,
+  theme) are in two menus.
+- Diagnostics has three tabs — Overview (health, what needs attention,
+  recent events), Logs and System — and a "File bug report" button.
+- Search and filters on the speakers page appear once there are enough
+  speakers to need them.
 
 - Buttons, links and status text keep readable contrast (WCAG AA) in the
   light theme; the bright blue stays for icons and sliders.

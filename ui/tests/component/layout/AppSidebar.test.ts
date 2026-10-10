@@ -20,11 +20,10 @@ function buildRouter(initialRoute = '/') {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', name: 'dashboard', component: { template: '<div />' } },
-      { path: '/devices', name: 'devices', component: { template: '<div />' } },
+      { path: '/', name: 'home', component: { template: '<div />' } },
+      { path: '/groups', name: 'groups', component: { template: '<div />' } },
       { path: '/config', name: 'config', component: { template: '<div />' } },
       { path: '/diagnostics', name: 'diagnostics', component: { template: '<div />' } },
-      { path: '/ma', name: 'ma', component: { template: '<div />' } },
     ],
   })
 }
@@ -55,31 +54,25 @@ describe('AppSidebar', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders all 5 nav links', async () => {
+  it('links the four places of the app', async () => {
     const wrapper = await mountSidebar()
-    const links = wrapper.findAll('a')
-    expect(links.length).toBe(5)
-  })
-
-  it('renders expected link labels when expanded', async () => {
-    const wrapper = await mountSidebar()
-    const text = wrapper.text()
-    expect(text).toContain('Dashboard')
-    expect(text).toContain('Devices')
-    expect(text).toContain('Configuration')
-    expect(text).toContain('Diagnostics')
-    expect(text).toContain('Music Assistant')
+    expect(wrapper.findAll('a').map((a) => [a.attributes('href'), a.text()])).toEqual([
+      ['/', 'Speakers'],
+      ['/groups', 'Groups'],
+      ['/config', 'Settings'],
+      ['/diagnostics', 'Diagnostics'],
+    ])
   })
 
   it('highlights the active route', async () => {
-    const wrapper = await mountSidebar('/devices')
-    const devicesLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/devices')!
-    expect(devicesLink.classes()).toContain('text-primary-text')
-    expect(devicesLink.classes()).toContain('bg-primary/10')
+    const wrapper = await mountSidebar('/groups')
+    const link = wrapper.findAll('a').find((a) => a.attributes('href') === '/groups')!
+    expect(link.classes()).toContain('text-primary-text')
+    expect(link.classes()).toContain('bg-primary/10')
   })
 
   it('does not highlight inactive routes', async () => {
-    const wrapper = await mountSidebar('/devices')
+    const wrapper = await mountSidebar('/groups')
     const dashboardLink = wrapper.findAll('a').find((a) => a.attributes('href') === '/')!
     expect(dashboardLink.classes()).toContain('text-text-secondary')
   })
@@ -94,7 +87,7 @@ describe('AppSidebar', () => {
     const wrapper = await mountSidebar()
 
     // Initially labels visible
-    expect(wrapper.text()).toContain('Dashboard')
+    expect(wrapper.text()).toContain('Speakers')
 
     // Collapse
     await wrapper.find('[data-testid="sidebar-toggle"]').trigger('click')

@@ -1,35 +1,15 @@
 <script setup lang="ts">
+import { NAV, isActive as navActive } from '@/router/nav'
 import { useI18n } from 'vue-i18n'
-import {
-  LayoutDashboard,
-  Speaker,
-  Settings,
-  Activity,
-  Music,
-} from 'lucide-vue-next'
-import { type Component } from 'vue'
 import { useRoute } from 'vue-router'
 
 const { t } = useI18n()
 const route = useRoute()
 
-interface NavTab {
-  to: string
-  label: string
-  icon: Component
-}
+const tabs = NAV.map((n) => ({ to: n.to, label: n.short, icon: n.icon }))
 
-const tabs: NavTab[] = [
-  { to: '/', label: 'nav.dashboard', icon: LayoutDashboard },
-  { to: '/devices', label: 'nav.devices', icon: Speaker },
-  { to: '/config', label: 'nav.config', icon: Settings },
-  { to: '/diagnostics', label: 'nav.diagnostics', icon: Activity },
-  { to: '/ma', label: 'nav.ma', icon: Music },
-]
-
-function isActive(to: string): boolean {
-  if (to === '/') return route.path === '/'
-  return route.path.startsWith(to)
+function isActive(to: string) {
+  return navActive(route.path, to)
 }
 </script>
 

@@ -8,23 +8,23 @@
  * This composable computes it once from `window.location.pathname`.
  */
 
-const SPA_ROUTES = /\/(dashboard|devices|config|diagnostics|ma|login)(\/|$)/
+import { APP_SEGMENTS } from '@/router/segments'
+
+const SPA_ROUTES = new RegExp(`/(${APP_SEGMENTS.join('|')})(/|$)`)
 
 let _cached: { basePath: string; apiBase: string } | null = null
+
+/** The prefix in front of the app's own routes (empty outside HA ingress). */
+export function basePathFor(pathname: string): string {
+  const match = pathname.match(SPA_ROUTES)
+  const path = match ? pathname.substring(0, match.index) : pathname
+  return path.replace(/\/+$/, '')
+}
 
 function compute(): { basePath: string; apiBase: string } {
   if (_cached) return _cached
 
-  let path = window.location.pathname
-
-  // Strip SPA route segments to find the real base
-  const match = path.match(SPA_ROUTES)
-  if (match) {
-    path = path.substring(0, match.index)
-  }
-
-  // Remove trailing slash
-  const basePath = path.replace(/\/+$/, '')
+  const basePath = basePathFor(window.location.pathname)
   const apiBase = basePath
 
   _cached = { basePath, apiBase }

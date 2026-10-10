@@ -82,6 +82,15 @@ describe('useBluetoothStore', () => {
     expect(saveConfig).not.toHaveBeenCalled()
   })
 
+  it('stores the room chosen when adding', async () => {
+    vi.mocked(getConfig).mockResolvedValue({ BLUETOOTH_DEVICES: [] } as never)
+    const store = useBluetoothStore()
+    await store.addToBridge('CC:00', 'Desk', 'hci0', { room: ' Office ' })
+    expect(saveConfig).toHaveBeenCalledWith({
+      BLUETOOTH_DEVICES: [{ mac: 'CC:00', player_name: 'Desk', enabled: true, adapter: 'hci0', room_name: 'Office' }],
+    })
+  })
+
   it('powers an adapter and refreshes the list', async () => {
     vi.mocked(bt.getAdapters).mockResolvedValue([{ id: 'hci0', mac: 'M', name: 'n', powered: false }] as never)
     const store = useBluetoothStore()

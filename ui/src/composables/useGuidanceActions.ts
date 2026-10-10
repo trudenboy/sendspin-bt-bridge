@@ -57,12 +57,12 @@ export function useGuidanceActions() {
       }
       switch (action.key) {
         case 'open_devices_settings':
-          await router.push('/devices')
+          await router.push('/')
           return
         case 'scan_devices':
         case 'pair_device':
           bluetooth.scanRequested = true
-          await router.push('/devices')
+          await router.push('/')
           return
         case 'reconnect_device':
         case 'reconnect_devices':

@@ -18,34 +18,32 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'dashboard',
-      meta: { title: 'app.dashboard' },
-      component: () => import('@/views/DashboardView.vue'),
+      name: 'home',
+      meta: { title: 'nav.home' },
+      component: () => import('@/views/HomeView.vue'),
     },
     {
-      path: '/devices',
-      name: 'devices',
-      meta: { title: 'app.devices' },
-      component: () => import('@/views/DevicesView.vue'),
+      path: '/groups',
+      name: 'groups',
+      meta: { title: 'nav.groups' },
+      component: () => import('@/views/GroupsView.vue'),
     },
     {
       path: '/config',
       name: 'config',
-      meta: { title: 'app.config' },
+      meta: { title: 'nav.settings' },
       component: () => import('@/views/ConfigView.vue'),
     },
     {
       path: '/diagnostics',
       name: 'diagnostics',
-      meta: { title: 'app.diagnostics' },
+      meta: { title: 'nav.diagnostics' },
       component: () => import('@/views/DiagnosticsView.vue'),
     },
-    {
-      path: '/ma',
-      name: 'ma',
-      meta: { title: 'app.ma' },
-      component: () => import('@/views/MAView.vue'),
-    },
+    // Earlier addresses (bookmarks, the HA panel) keep working.
+    { path: '/devices', redirect: '/' },
+    { path: '/ma', redirect: '/groups' },
+    { path: '/settings', redirect: '/config' },
     {
       path: '/login',
       name: 'login',

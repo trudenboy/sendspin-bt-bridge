@@ -20,7 +20,17 @@
     "bugReport": "Сообщить об ошибке",
     "docs": "Документация",
     "github": "Репозиторий GitHub",
-    "toggleMenu": "Открыть меню"
+    "toggleMenu": "Открыть меню",
+    "help": "Помощь",
+    "preferences": "Параметры",
+    "language": "Язык",
+    "theme": "Тема",
+    "themes": {
+      "auto": "Автоматически",
+      "light": "Светлая",
+      "dark": "Тёмная"
+    },
+    "openDiagnostics": "Открыть диагностику"
   },
   "device": {
     "status": {
@@ -141,7 +151,8 @@
       "recovery": "Восстановление",
       "bugreport": "Отчёт об ошибке",
       "logs": "Логи",
-      "system": "Система"
+      "system": "Система",
+      "overview": "Обзор"
     },
     "health": {
       "title": "Здоровье моста",
@@ -204,6 +215,9 @@
       "search": "Поиск по логам…",
       "showingLines": "Показано {shown} из {total} записей",
       "noLogs": "Нет записей в логе"
+    },
+    "timeline": {
+      "title": "Последние события"
     }
   },
   "ma": {
@@ -285,7 +299,7 @@
     }
   },
   "devices": {
-    "addDevice": "Добавить устройство",
+    "addDevice": "Добавить колонку",
     "empty": {
       "title": "Нет устройств",
       "description": "Выполните поиск Bluetooth-устройств или добавьте устройство вручную."
@@ -1039,10 +1053,47 @@
     "done": "Выполнено: {action}"
   },
   "nav": {
-    "dashboard": "Главная",
-    "devices": "Колонки",
-    "config": "Настройки",
+    "home": "Колонки",
+    "homeShort": "Колонки",
+    "groups": "Группы",
+    "groupsShort": "Группы",
+    "settings": "Настройки",
+    "settingsShort": "Настройки",
     "diagnostics": "Диагностика",
-    "ma": "Музыка"
+    "diagnosticsShort": "Состояние"
+  },
+  "home": {
+    "maConnected": "Music Assistant подключён",
+    "maDisconnected": "Music Assistant не подключён",
+    "connected": "Подключено {n} из {total}",
+    "playing": "Играют: {n}"
+  },
+  "groups": {
+    "via": "Music Assistant: {url}",
+    "connectFirst": "Подключите мост к Music Assistant, чтобы видеть его группы и управлять ими."
+  },
+  "addSpeaker": {
+    "title": "Добавить колонку",
+    "findHelp": "Переведите колонку в режим сопряжения. Колонки рядом появятся ниже.",
+    "scanAgain": "Искать снова",
+    "looking": "Ищу колонки…",
+    "add": "Добавить",
+    "signal": {
+      "success": "Сильный",
+      "warning": "Средний",
+      "error": "Слабый",
+      "neutral": "—"
+    },
+    "trouble": "Колонка не находится или не сопрягается?",
+    "alreadyPaired": "Выбрать уже сопряжённую колонку",
+    "backToScan": "Назад к поиску",
+    "paired": "Сопряжено. Дайте колонке имя и комнату.",
+    "roomHint": "Необязательно. Показывается у плеера и передаётся в Home Assistant.",
+    "addToBridge": "Добавить в мост",
+    "addedTitle": "{name} добавлена в мост.",
+    "testHelp": "Проиграйте короткий щелчок, чтобы проверить, что колонку слышно.",
+    "waiting": "Подключаю звук колонки — это занимает несколько секунд.",
+    "testSound": "Тестовый звук",
+    "done": "Готово"
   }
 }

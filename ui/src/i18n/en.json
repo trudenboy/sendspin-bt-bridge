@@ -20,7 +20,17 @@
     "bugReport": "Bug report",
     "docs": "Documentation",
     "github": "GitHub repository",
-    "toggleMenu": "Toggle menu"
+    "toggleMenu": "Toggle menu",
+    "help": "Help",
+    "preferences": "Preferences",
+    "language": "Language",
+    "theme": "Theme",
+    "themes": {
+      "auto": "Automatic",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "openDiagnostics": "Open diagnostics"
   },
   "device": {
     "status": {
@@ -141,7 +151,8 @@
       "recovery": "Recovery",
       "bugreport": "Bug Report",
       "logs": "Logs",
-      "system": "System"
+      "system": "System",
+      "overview": "Overview"
     },
     "health": {
       "title": "Bridge Health",
@@ -204,6 +215,9 @@
       "search": "Search logs…",
       "showingLines": "Showing {shown} of {total} lines",
       "noLogs": "No log entries"
+    },
+    "timeline": {
+      "title": "Recent events"
     }
   },
   "ma": {
@@ -285,7 +299,7 @@
     }
   },
   "devices": {
-    "addDevice": "Add Device",
+    "addDevice": "Add speaker",
     "empty": {
       "title": "No devices yet",
       "description": "Scan for Bluetooth devices or add a device manually."
@@ -1039,10 +1053,47 @@
     "done": "Done: {action}"
   },
   "nav": {
-    "dashboard": "Home",
-    "devices": "Speakers",
-    "config": "Settings",
+    "home": "Speakers",
+    "homeShort": "Speakers",
+    "groups": "Groups",
+    "groupsShort": "Groups",
+    "settings": "Settings",
+    "settingsShort": "Settings",
     "diagnostics": "Diagnostics",
-    "ma": "Music"
+    "diagnosticsShort": "Health"
+  },
+  "home": {
+    "maConnected": "Music Assistant connected",
+    "maDisconnected": "Music Assistant not connected",
+    "connected": "{n} of {total} connected",
+    "playing": "{n} playing"
+  },
+  "groups": {
+    "via": "Music Assistant at {url}",
+    "connectFirst": "Connect the bridge to Music Assistant to see and control its groups."
+  },
+  "addSpeaker": {
+    "title": "Add speaker",
+    "findHelp": "Put the speaker in pairing mode. Speakers nearby appear below.",
+    "scanAgain": "Search again",
+    "looking": "Looking for speakers…",
+    "add": "Add",
+    "signal": {
+      "success": "Strong",
+      "warning": "Fair",
+      "error": "Weak",
+      "neutral": "—"
+    },
+    "trouble": "Speaker not found or pairing fails?",
+    "alreadyPaired": "Choose a speaker that is already paired",
+    "backToScan": "Back to search",
+    "paired": "Paired. Give it a name and a room.",
+    "roomHint": "Optional. Shown with the player and offered to Home Assistant.",
+    "addToBridge": "Add to bridge",
+    "addedTitle": "{name} is on the bridge.",
+    "testHelp": "Play a short click to check that you hear it.",
+    "waiting": "Connecting the speaker's audio — this takes a few seconds.",
+    "testSound": "Play test sound",
+    "done": "Done"
   }
 }
