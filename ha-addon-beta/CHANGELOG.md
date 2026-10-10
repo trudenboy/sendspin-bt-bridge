@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0-beta.18] - 2026-10-10
+
+### Added
+
+- Speakers can be removed from the bridge again — from a speaker's menu,
+  at the end of its settings, or from the list of disabled speakers. Its
+  player leaves Music Assistant and its Bluetooth pairing is removed.
+- Disabled speakers are listed under the speakers, where they can be
+  enabled again or removed.
+
+### Changed
+
+- A speaker's actions read the same everywhere and are grouped by what
+  they affect: its connection (reconnect, standby, active source), its
+  place on the bridge (hand over to other devices or take back, disable)
+  and removal. "Forget Bluetooth bond", which left the speaker on the
+  bridge trying to reconnect, is replaced by removal; "Pair again" in the
+  speaker's details still repairs a broken pairing.
+- A speaker handed over to other devices shows as "Handed over", and the
+  power-saving action is called "Suspend audio output" so it is not mixed
+  up with handing the speaker over.
+
+### Fixed
+
+- Settings did not open on installs whose speakers have keep-alive off
+  (an interval of 0): loading them failed and the page kept spinning. The
+  settings now load such configurations, and if loading ever fails the
+  page says so and offers to try again.
+- The container's health check asked for an address the new API no longer
+  had, so Docker reported the bridge as unhealthy.
+- Volume changed on the bridge — a speaker's or a group's slider, or the
+  speaker's own buttons — now reaches Music Assistant. MA kept showing the
+  old level and could restore it later.
+- Speakers of one Music Assistant sync group show as one group on the
+  Groups page, and group volume and pause act on all of them. Each speaker
+  used to appear in a group of its own with no id.
+- Each group on the Groups page shows its own track. One group's track
+  (often a stale one from an idle group) used to appear on every card; an
+  idle group's last track is now marked as not playing.
+- Play/pause on a group card goes through the group's own Music Assistant
+  queue, so it works for groups whose speakers are on another bridge.
+- Group members on the Groups page show their state again: green while
+  playing, amber when Music Assistant cannot reach them. The page follows
+  changes made in Music Assistant without a reload.
+
 ## [3.0.0-beta.17] - 2026-10-10
 
 ### Added
