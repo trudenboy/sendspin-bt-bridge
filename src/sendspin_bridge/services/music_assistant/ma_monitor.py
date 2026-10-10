@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL = 15  # seconds between polling cycles when events unavailable
+_POLL_INTERVAL = 15  # seconds between queue polls alongside events
 #: How long a single request may wait for its answer before we call it lost.
 _REQUEST_TIMEOUT_S = 15.0
 _GROUPS_REFRESH_INTERVAL = 60  # seconds between syncgroup cache refreshes
@@ -914,24 +914,10 @@ class MaMonitor:
             try:
                 await self._prime_session(ws)
 
-                # Subscribe to events
-                events_ok = False
-                try:
-                    mid = self._next_id()
-                    await _send(
-                        ws, mid, "subscribe_events", {"event_types": ["player_queue_updated", "player_updated"]}
-                    )
-                    sub_resp = await _recv(ws, timeout=5.0)
-                    events_ok = sub_resp.get("error") is None
-                except Exception:
-                    events_ok = False
-
-                if events_ok:
-                    logger.info("MA monitor: subscribed to MA events")
-                    await self._event_loop(ws)
-                else:
-                    logger.info("MA monitor: events unavailable, using polling every %ds", _POLL_INTERVAL)
-                    await self._polling_loop(ws)
+                # Music Assistant sends its events to every authenticated
+                # client; it has no subscribe command (asking for one only
+                # logged "Invalid command: subscribe_events" on its side).
+                await self._event_loop(ws)
             finally:
                 self._cancel_pending_cmd_futures()
                 self._ws = None
@@ -1070,18 +1056,6 @@ class MaMonitor:
                     fut.set_exception(RuntimeError("MA monitor disconnected"))
             except asyncio.QueueEmpty:
                 break
-
-    async def _polling_loop(self, ws) -> None:
-        """Fallback: poll every POLL_INTERVAL seconds."""
-        while self._running:
-            await self._process_local_work(ws)
-            try:
-                await asyncio.wait_for(self._wake_event.wait(), timeout=_POLL_INTERVAL)
-                self._wake_event.clear()
-                await self._process_local_work(ws)
-                continue
-            except TimeoutError:
-                await self._poll_queues(ws)
 
     async def run(self) -> None:
         """Main entry point — reconnect loop with exponential backoff."""

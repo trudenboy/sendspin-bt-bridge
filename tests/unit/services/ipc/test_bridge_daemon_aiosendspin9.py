@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import replace
 from types import SimpleNamespace
@@ -413,3 +414,33 @@ def test_audio_chunks_and_cleared_state_are_accepted(tmp_path: Path):
     daemon._on_audio_chunk(100, b"\x00\x00\x00\x00", _audio_format(AudioCodec.PCM), 250_000)
     daemon._on_metadata_update(None)
     daemon._on_controller_state(None)
+
+
+@pytest.mark.asyncio
+async def test_an_outbound_connection_is_reported_as_connected(tmp_path: Path):
+    """With SENDSPIN_SERVER set the daemon dials Music Assistant. Only inbound
+    connections used to mark the speaker connected, so an outbound one played
+    audio while the bridge said "Sendspin is not connected" (#405)."""
+    daemon = _daemon(tmp_path)
+    connected = asyncio.Event()
+    stay = asyncio.Event()
+
+    async def _connect(url):
+        connected.set()
+
+    def _add_disconnect_listener(cb):
+        return lambda: None
+
+    daemon._client = SimpleNamespace(connect=_connect, add_disconnect_listener=_add_disconnect_listener)
+    loop_task = asyncio.create_task(daemon._connection_loop("ws://ma.local:8927/sendspin"))
+    try:
+        await asyncio.wait_for(connected.wait(), 1)
+        await asyncio.sleep(0)
+        assert daemon._bridge_status["server_connected"] is True
+        assert daemon._bridge_status["connected"] is True
+        assert daemon._bridge_status["connected_server_url"] == "ws://ma.local:8927/sendspin"
+    finally:
+        stay.set()
+        loop_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await loop_task
