@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Changing the volume or mute with the speaker's own buttons now moves the
+  Music Assistant slider too. The bridge picked up the change and updated its
+  own interface, but never reported it back to Music Assistant.
 - In the Home Assistant add-on, the bridge kept asking to connect Music
   Assistant ("Music Assistant API URL is not configured") although Music
   Assistant was found automatically and connected. The check now follows

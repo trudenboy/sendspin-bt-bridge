@@ -323,6 +323,7 @@ class BridgeDaemon:
         self._bridge_status["volume"] = volume
         self._bridge_status["muted"] = muted
         self._notify()
+        self._report_player_state()
 
     def retarget_sink(self, sink_name: str | None) -> None:
         if self._player is None:

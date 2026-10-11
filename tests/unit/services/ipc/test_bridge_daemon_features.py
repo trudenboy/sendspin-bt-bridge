@@ -1089,3 +1089,46 @@ class TestServerCommandReportsPlayerState:
 
         daemon._client.send_player_state.assert_not_called()
         assert daemon._bridge_status["volume"] == 42
+
+
+class TestExternalVolumeReportsPlayerState:
+    """A volume or mute change made on the speaker itself (AVRCP absolute
+    volume, picked up by the PulseAudio sink monitor) must also be reported
+    in client/state. Without it the bridge UI followed the speaker buttons
+    but the Music Assistant slider never moved."""
+
+    @staticmethod
+    def _connected_daemon():
+        daemon = _make_bridge_daemon()
+        daemon._volume = 31
+        daemon._muted = False
+        daemon._client = SimpleNamespace(connected=True, send_player_state=AsyncMock())
+        return daemon
+
+    @pytest.mark.asyncio
+    async def test_speaker_volume_change_is_reported(self):
+        daemon = self._connected_daemon()
+
+        daemon._on_external_volume(20, False)
+        await asyncio.sleep(0)
+
+        daemon._client.send_player_state.assert_awaited_once_with(available=True, volume=20, muted=False)
+        assert daemon._bridge_status["volume"] == 20
+
+    @pytest.mark.asyncio
+    async def test_speaker_mute_change_is_reported(self):
+        daemon = self._connected_daemon()
+
+        daemon._on_external_volume(31, True)
+        await asyncio.sleep(0)
+
+        daemon._client.send_player_state.assert_awaited_once_with(available=True, volume=31, muted=True)
+
+    def test_speaker_volume_change_without_a_connected_client_reports_nothing(self):
+        daemon = _make_bridge_daemon()
+        daemon._client = SimpleNamespace(connected=False, send_player_state=AsyncMock())
+
+        daemon._on_external_volume(20, False)
+
+        daemon._client.send_player_state.assert_not_called()
+        assert daemon._bridge_status["volume"] == 20
