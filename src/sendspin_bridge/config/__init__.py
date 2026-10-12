@@ -405,23 +405,18 @@ def _player_id_from_mac(mac: str) -> str:
 
 
 def save_device_volume(mac: str | None, volume: int) -> None:
-    """Persist per-device volume to config.json under LAST_VOLUMES[mac]."""
+    """Persist a speaker's volume under PLAYER_STATE[<player id>].volume."""
     if not mac or not CONFIG_FILE.exists():
         return
 
     def _set_vol(cfg: dict) -> None:
-        devices = cfg.get("BLUETOOTH_DEVICES", [])
-        known_macs = {
-            device.get("mac", "").strip().upper()
-            for device in devices
-            if isinstance(device, dict) and isinstance(device.get("mac"), str)
-        }
-        normalized_mac = mac.strip().upper()
-        if normalized_mac not in known_macs:
-            cfg.setdefault("LAST_VOLUMES", {}).pop(normalized_mac, None)
-            logger.warning("Skipping saved volume for unknown Bluetooth device %s", normalized_mac)
+        from sendspin_bridge.config.players import find_player_by_mac, player_state
+
+        player = find_player_by_mac(cfg, mac)
+        if player is None:
+            logger.warning("Skipping saved volume for unknown Bluetooth device %s", mac.strip().upper())
             return
-        cfg.setdefault("LAST_VOLUMES", {})[normalized_mac] = volume
+        player_state(cfg, player["id"])["volume"] = volume
 
     try:
         update_config(_set_vol)
@@ -430,17 +425,16 @@ def save_device_volume(mac: str | None, volume: int) -> None:
 
 
 def save_device_sink(mac: str | None, sink_name: str) -> None:
-    """Persist per-device PA sink name to config.json under LAST_SINKS[mac]."""
+    """Persist a speaker's PA sink name under PLAYER_STATE[<player id>].sink."""
     if not mac or not CONFIG_FILE.exists():
         return
 
     def _set_sink(cfg: dict) -> None:
-        from sendspin_bridge.config.migration import _normalize_mac_key
+        from sendspin_bridge.config.players import find_player_by_mac, player_state
 
-        normalized_mac = _normalize_mac_key(mac)
-        if not normalized_mac:
-            return
-        cfg.setdefault("LAST_SINKS", {})[normalized_mac] = sink_name.strip()
+        player = find_player_by_mac(cfg, mac)
+        if player is not None:
+            player_state(cfg, player["id"])["sink"] = sink_name.strip()
 
     try:
         update_config(_set_sink)
@@ -472,20 +466,18 @@ def save_device_static_delay(
         return
 
     def _set_delay(cfg: dict) -> None:
-        normalized_mac = mac.strip().upper()
-        for device in cfg.get("BLUETOOTH_DEVICES", []):
-            if not isinstance(device, dict):
-                continue
-            device_mac = device.get("mac", "")
-            if isinstance(device_mac, str) and device_mac.strip().upper() == normalized_mac:
-                device["static_delay_ms"] = clamped
-                if source:
-                    device["static_delay_source"] = source
-                    device["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                if codec:
-                    device["static_delay_codec"] = codec
-                return
-        logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", normalized_mac)
+        from sendspin_bridge.config.players import find_player_by_mac
+
+        player = find_player_by_mac(cfg, mac)
+        if player is None:
+            logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", mac.strip().upper())
+            return
+        player["static_delay_ms"] = clamped
+        if source:
+            player["static_delay_source"] = source
+            player["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if codec:
+            player["static_delay_codec"] = codec
 
     try:
         update_config(_set_delay)
@@ -503,16 +495,34 @@ def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> No
         return
 
     def _set_value(cfg: dict) -> None:
-        normalized_mac = mac.strip().upper()
-        for device in cfg.get("BLUETOOTH_DEVICES", []):
-            if isinstance(device, dict) and str(device.get("mac") or "").strip().upper() == normalized_mac:
-                device[field] = clamped
-                return
+        from sendspin_bridge.config.players import find_player_by_mac
+
+        player = find_player_by_mac(cfg, mac)
+        if player is not None:
+            player[field] = clamped
 
     try:
         update_config(_set_value)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         logger.warning("Could not save %s for %s: %s", field, mac, exc)
+
+
+def load_player_state_for_mac(mac: str) -> dict:
+    """The saved PLAYER_STATE entry of the speaker with *mac*, read from disk."""
+    from sendspin_bridge.config.migration import migrate_v5_to_v6
+    from sendspin_bridge.config.players import find_player_by_mac
+
+    try:
+        with config_lock, open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(cfg, dict):
+        return {}
+    migrate_v5_to_v6(cfg)
+    player = find_player_by_mac(cfg, mac)
+    state = (cfg.get("PLAYER_STATE") or {}).get(player["id"]) if player else None
+    return dict(state) if isinstance(state, dict) else {}
 
 
 def load_config() -> dict:

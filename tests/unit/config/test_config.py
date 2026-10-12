@@ -114,7 +114,8 @@ def test_save_device_volume(tmp_path):
 
     save_device_volume("AA:BB:CC:DD:EE:FF", 75)
     with open(tmp_path / "config.json") as f:
-        assert json.load(f)["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 75
+        cfg = json.load(f)
+    assert cfg["PLAYER_STATE"][player_id_for_mac("AA:BB:CC:DD:EE:FF")]["volume"] == 75
 
 
 def test_save_volume_zero(tmp_path):
@@ -124,7 +125,8 @@ def test_save_volume_zero(tmp_path):
 
     save_device_volume("AA:BB:CC:DD:EE:FF", 0)
     with open(tmp_path / "config.json") as f:
-        assert json.load(f)["LAST_VOLUMES"]["AA:BB:CC:DD:EE:FF"] == 0
+        cfg = json.load(f)
+    assert cfg["PLAYER_STATE"][player_id_for_mac("AA:BB:CC:DD:EE:FF")]["volume"] == 0
 
 
 def test_save_device_sink_normalizes_mac_and_sink(tmp_path):
@@ -134,7 +136,9 @@ def test_save_device_sink_normalizes_mac_and_sink(tmp_path):
     save_device_sink(" aa:bb:cc:dd:ee:ff ", " bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink ")
 
     with open(tmp_path / "config.json") as f:
-        assert json.load(f)["LAST_SINKS"]["AA:BB:CC:DD:EE:FF"] == "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
+        saved = json.load(f)
+    state = saved["PLAYER_STATE"][player_id_for_mac("AA:BB:CC:DD:EE:FF")]
+    assert state["sink"] == "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
 
 
 def test_save_device_volume_skips_unknown_device(tmp_path):
@@ -151,7 +155,7 @@ def test_save_device_volume_skips_unknown_device(tmp_path):
 
     with open(tmp_path / "config.json") as f:
         saved = json.load(f)
-    assert saved["LAST_VOLUMES"] == {}
+    assert saved.get("PLAYER_STATE", {}) == {}
 
 
 def test_player_id_deterministic_and_case_insensitive():

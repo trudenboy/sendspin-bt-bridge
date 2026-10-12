@@ -46,10 +46,8 @@ from sendspin_bridge.bridge.idle_machine import PlaybackState as IdlePlaybackSta
 from sendspin_bridge.bridge.loop_scheduling import schedule_on_bridge_loop
 from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
 from sendspin_bridge.config import (
-    CONFIG_FILE,
     CONFIG_SCHEMA_VERSION,
     _player_id_from_mac,
-    config_lock,
     get_runtime_version,
     load_config,
     save_device_static_delay,
@@ -583,15 +581,12 @@ def _filter_duplicate_bluetooth_devices(devices: list[dict]) -> list[dict]:
 
 
 def _load_saved_device_volume(mac: str) -> int | None:
-    """Read LAST_VOLUMES from config so the UI has a volume before BT reconnects."""
-    try:
-        with config_lock, open(CONFIG_FILE) as config_file:
-            saved_config = json.load(config_file)
-        saved_volume = saved_config.get("LAST_VOLUMES", {}).get(mac)
-        if isinstance(saved_volume, int) and 0 <= saved_volume <= 100:
-            return saved_volume
-    except Exception as exc:
-        logger.debug("pre-fill saved volume failed: %s", exc)
+    """Read the saved volume so the UI has one before BT reconnects."""
+    from sendspin_bridge.config import load_player_state_for_mac
+
+    saved_volume = load_player_state_for_mac(mac).get("volume")
+    if isinstance(saved_volume, int) and 0 <= saved_volume <= 100:
+        return saved_volume
     return None
 
 

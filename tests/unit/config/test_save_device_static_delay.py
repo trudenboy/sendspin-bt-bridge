@@ -19,7 +19,12 @@ def _write_config(tmp_path, data):
 
 
 def _read_devices(tmp_path):
-    return json.loads((tmp_path / "config.json").read_text())["BLUETOOTH_DEVICES"]
+    from sendspin_bridge.config.migration import migrate_v5_to_v6
+    from sendspin_bridge.config.players import device_entries
+
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    migrate_v5_to_v6(cfg)  # no-op once a writer has migrated the file; covers the no-write cases
+    return device_entries(cfg)
 
 
 def test_save_device_static_delay_writes_to_device_dict(tmp_path):
