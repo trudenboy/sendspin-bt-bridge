@@ -9,17 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The configuration file moves to a new format (schema 6) on the first start:
-  speakers are stored as players, and their saved volume, audio output and
-  "released" state are kept apart from the settings. A copy of the previous
-  file is saved as `config.v5.bak.json`. Going back to a 2.x version after this
-  update starts without speakers.
+- The configuration file moves to a new format on the first start: speakers
+  are stored as players, and their saved volume, audio output and "released"
+  state are kept apart from the settings. A copy of the previous file is saved
+  as `config.v5.bak.json`. Going back to a 2.x version after this update starts
+  without speakers; to keep them, restore `config.v5.bak.json` as `config.json`
+  before going back.
 
 ### Removed
 
 - The Home Assistant add-on no longer lists speakers in its Configuration tab.
   Speakers are added, changed and removed in the bridge's web interface; the
-  add-on's old list is read once when updating and ignored afterwards.
+  speakers already set up are kept when updating, and the add-on's old list is
+  ignored from then on.
 
 ### Fixed
 
