@@ -134,3 +134,22 @@ def test_player_state_creates_and_returns_live_entry():
     config: dict = {}
     player_state(config, "abc")["volume"] = 30
     assert config == {"PLAYER_STATE": {"abc": {"volume": 30}}}
+
+
+def test_supported_actions_per_backend():
+    from sendspin_bridge.config.players import supported_actions_for
+
+    assert supported_actions_for("bluetooth_a2dp") == [
+        "volume",
+        "transport",
+        "power_save",
+        "reconnect",
+        "repair",
+        "standby",
+        "claim",
+        "pairing_window",
+        "rssi",
+        "battery",
+    ]
+    assert supported_actions_for("pulse_sink") == ["volume", "transport", "power_save"]
+    assert supported_actions_for("unknown") == []

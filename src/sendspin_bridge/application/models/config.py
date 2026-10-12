@@ -1,4 +1,4 @@
-"""The bridge configuration (config.json, schema version 5) as Pydantic models.
+"""The bridge configuration (config.json, schema version 6) as Pydantic models.
 
 Generated once from config/schema.json and maintained here from now on:
 these models are the source, the JSON Schema is exported from them.
@@ -15,11 +15,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field
 
-
-class LASTVOLUMES(RootModel[int]):
-    root: int = Field(..., ge=0, le=100)
+from sendspin_bridge.config.players import Player
 
 
 class LOGLEVEL(StrEnum):
@@ -177,90 +175,6 @@ class KeepAliveMethod(StrEnum):
     none = "none"
 
 
-class BluetoothDevice(BaseModel):
-    model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
-    mac: str = Field(..., pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
-    """
-    Bluetooth MAC address (XX:XX:XX:XX:XX:XX).
-    """
-    player_name: str | None = None
-    """
-    Display name for the speaker. Falls back to MAC if empty.
-    """
-    adapter: str | None = ""
-    """
-    Bluetooth adapter to use (e.g. 'hci0'). Empty = default adapter.
-    """
-    listen_port: int | None = Field(None, ge=1024, le=65535)
-    """
-    Override Sendspin listener port for this device.
-    """
-    static_delay_ms: int | None = Field(None, ge=0, le=5000)
-    """
-    Per-device static audio delay in milliseconds (0-5000). Added on top of DAC-anchored sync.
-    """
-    static_delay_source: StaticDelaySource | None = None
-    """
-    Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker.
-    """
-    static_delay_calibrated_at: str | None = None
-    """
-    ISO-8601 timestamp of the last confirmed calibration.
-    """
-    static_delay_codec: str | None = None
-    """
-    Codec active when the delay was calibrated.
-    """
-    required_lead_time_ms: int | None = Field(250, ge=0, le=30000)
-    """
-    Sendspin startup lead time advertised by this device.
-    """
-    min_buffer_ms: int | None = Field(250, ge=0, le=30000)
-    """
-    Sendspin minimum ongoing buffer advertised by this device.
-    """
-    enabled: bool | None = True
-    """
-    Whether this device is active.
-    """
-    volume_controller: VolumeController | None = "pa"
-    """
-    Volume control backend: 'pa' (PulseAudio) or 'sendspin'.
-    """
-    idle_disconnect_minutes: int | None = Field(0, ge=0)
-    """
-    Minutes of idle before BT standby disconnect. 0 = disabled. Legacy field — prefer idle_mode.
-    """
-    keepalive_enabled: bool | None = False
-    """
-    Send periodic silence to prevent BT speaker auto-sleep. Legacy field — prefer idle_mode.
-    """
-    keepalive_interval: int | None = Field(30, ge=30)
-    """
-    Seconds between keepalive infrasound bursts.
-    """
-    idle_mode: IdleMode | None = "default"
-    """
-    Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts).
-    """
-    power_save_delay_minutes: int | None = Field(1, ge=0, le=60)
-    """
-    Minutes after sink idle before suspending PA sink in power_save mode.
-    """
-    keep_alive_method: KeepAliveMethod | None = "infrasound"
-    """
-    Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally).
-    """
-    room_id: str | None = None
-    """
-    Home Assistant area/room ID for this device.
-    """
-    room_name: str | None = None
-    """
-    Human-readable room name.
-    """
-
-
 class BluetoothAdapter(BaseModel):
     model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
     mac: str | None = Field(None, pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
@@ -287,7 +201,7 @@ class BridgeConfig(BaseModel):
     """
 
     model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
-    CONFIG_SCHEMA_VERSION: Literal[5] | None = None
+    CONFIG_SCHEMA_VERSION: Literal[6] | None = None
     """
     Schema version; managed by the application — do not change.
     """
@@ -315,9 +229,10 @@ class BridgeConfig(BaseModel):
     """
     Bridge instance name. Empty or 'auto' resolves to hostname.
     """
-    BLUETOOTH_DEVICES: list[BluetoothDevice] | None = Field([], validate_default=True)
+    players: list[Player] = Field(default_factory=list)
     """
-    List of configured Bluetooth speaker devices.
+    Configured players. Each has a stable id and a backend: a Bluetooth speaker
+    (bluetooth_a2dp) or a local audio output (pulse_sink).
     """
     BLUETOOTH_ADAPTERS: list[BluetoothAdapter] | None = Field([], validate_default=True)
     """
@@ -334,14 +249,6 @@ class BridgeConfig(BaseModel):
     TZ: str | None = "Australia/Melbourne"
     """
     Timezone (IANA format).
-    """
-    LAST_VOLUMES: dict[str, LASTVOLUMES] | None = Field({}, validate_default=True)
-    """
-    Runtime state: persisted per-device volumes keyed by MAC.
-    """
-    LAST_SINKS: dict[str, str] | None = {}
-    """
-    Runtime state: persisted per-device PulseAudio sink names keyed by MAC.
     """
     PULSE_LATENCY_MSEC: int | None = Field(600, ge=0, le=5000)
     """

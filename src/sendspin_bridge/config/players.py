@@ -20,6 +20,21 @@ logger = logging.getLogger(__name__)
 _MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 BLUETOOTH: Final = "bluetooth_a2dp"
 PULSE_SINK: Final = "pulse_sink"
+SUPPORTED_ACTIONS: dict[str, tuple[str, ...]] = {
+    BLUETOOTH: (
+        "volume",
+        "transport",
+        "power_save",
+        "reconnect",
+        "repair",
+        "standby",
+        "claim",
+        "pairing_window",
+        "rssi",
+        "battery",
+    ),
+    PULSE_SINK: ("volume", "transport", "power_save"),
+}
 LEGACY_DEVICE_STATE_KEYS = ("released", "released_by")
 # v5 device keys that move into ``backend``.
 _LEGACY_BACKEND_KEYS = ("mac", "adapter")
@@ -223,3 +238,8 @@ def player_state(config: dict[str, Any], player_id: str) -> dict[str, Any]:
     if not isinstance(entry, dict):
         entry = state[player_id] = {}
     return entry
+
+
+def supported_actions_for(backend_type: str) -> list[str]:
+    """What a player of this backend can do (``Device.supported_actions``)."""
+    return list(SUPPORTED_ACTIONS.get(backend_type, ()))
