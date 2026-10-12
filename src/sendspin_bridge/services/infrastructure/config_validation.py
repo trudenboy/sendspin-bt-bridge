@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import ValidationError
+
 from sendspin_bridge.config import (
     CONFIG_SCHEMA_VERSION,
     DEFAULT_LISTEN_PORT_BASE,
@@ -14,6 +16,7 @@ from sendspin_bridge.config import (
     migrate_config_payload,
     normalize_update_channel,
 )
+from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, Player, normalize_mac
 from sendspin_bridge.services.bluetooth import _MAC_RE
 
 
@@ -155,8 +158,8 @@ def _validate_effective_listen_ports(
     *,
     default_base_listen_port: int,
 ) -> None:
-    bt_devices = normalized.get("BLUETOOTH_DEVICES", [])
-    if not isinstance(bt_devices, list) or len(bt_devices) <= 1:
+    players = normalized.get("players", [])
+    if not isinstance(players, list) or len(players) <= 1:
         return
 
     base_listen_port_raw = normalized.get("BASE_LISTEN_PORT")
@@ -171,13 +174,29 @@ def _validate_effective_listen_ports(
         base_listen_port = int(default_base_listen_port)
 
     seen_ports: dict[int, str] = {}
-    for index, dev in enumerate(bt_devices):
-        if not isinstance(dev, dict) or dev.get("enabled", True) is False:
+    # The ``base + index`` fallback uses a Bluetooth player's position among
+    # the Bluetooth players (what ``device_entries`` yields, and what the
+    # orchestrator and ``activate_device`` enumerate), not its index in
+    # ``players``: that is the index stage 1 used, so effective ports do not
+    # move for existing users. Other backends have no runtime port fallback
+    # yet, so only an explicit ``listen_port`` of theirs is checked.
+    bluetooth_position = 0
+    for index, player in enumerate(players):
+        if not isinstance(player, dict):
+            continue
+        fallback_port: int | None = None
+        backend = player.get("backend")
+        if isinstance(backend, dict) and backend.get("type") == BLUETOOTH and normalize_mac(backend.get("mac")):
+            fallback_port = base_listen_port + bluetooth_position
+            bluetooth_position += 1
+        if player.get("enabled", True) is False:
             continue
 
-        raw_listen_port = dev.get("listen_port")
+        raw_listen_port = player.get("listen_port")
         if raw_listen_port in (None, ""):
-            effective_port = base_listen_port + index
+            if fallback_port is None:
+                continue
+            effective_port = fallback_port
         else:
             try:
                 if isinstance(raw_listen_port, (int, str)) and not isinstance(raw_listen_port, bool):
@@ -190,11 +209,11 @@ def _validate_effective_listen_ports(
         if not (1 <= effective_port <= 65535):
             continue
 
-        owner = str(dev.get("player_name") or dev.get("mac") or f"device {index + 1}")
+        owner = str(player.get("name") or f"player {index + 1}")
         if effective_port in seen_ports:
             result.errors.append(
                 ConfigValidationIssue(
-                    field=f"BLUETOOTH_DEVICES[{index}].listen_port",
+                    field=f"players[{index}].listen_port",
                     message=f"Duplicate effective listen_port {effective_port}: also used by {seen_ports[effective_port]}",
                 )
             )
@@ -202,15 +221,113 @@ def _validate_effective_listen_ports(
         seen_ports[effective_port] = owner
 
 
+def _validate_player_settings(player: dict[str, Any], result: ConfigValidationResult, field_prefix: str) -> None:
+    """Normalise and check a Bluetooth player's own (non-backend) settings in place."""
+    room_id = str(player.get("room_id") or "").strip()
+    room_name = str(player.get("room_name") or "").strip()
+    if room_id:
+        player["room_id"] = room_id
+    else:
+        player.pop("room_id", None)
+    if room_name:
+        player["room_name"] = room_name
+    else:
+        player.pop("room_name", None)
+    player.pop("handoff_mode", None)
+    keepalive_interval_raw = player.get("keepalive_interval")
+    keepalive_interval = _normalize_optional_field_int(
+        player,
+        result,
+        "keepalive_interval",
+        issue_field=f"{field_prefix}.keepalive_interval",
+        min_value=0,
+        max_value=3600,
+    )
+    _normalize_optional_field_int(
+        player,
+        result,
+        "listen_port",
+        issue_field=f"{field_prefix}.listen_port",
+        min_value=1024,
+        max_value=65535,
+    )
+    _normalize_optional_field_int(
+        player,
+        result,
+        "static_delay_ms",
+        issue_field=f"{field_prefix}.static_delay_ms",
+        min_value=0,
+        max_value=5000,
+    )
+    if keepalive_interval is not None and keepalive_interval != 0 and keepalive_interval < 30:
+        result.errors.append(
+            ConfigValidationIssue(
+                field=f"{field_prefix}.keepalive_interval",
+                message=(f"Invalid keepalive_interval: {keepalive_interval_raw} (must be 0 or 30-3600)"),
+            )
+        )
+
+
+def _validate_bluetooth_player(
+    player: dict[str, Any],
+    backend: dict[str, Any],
+    result: ConfigValidationResult,
+    field_prefix: str,
+    seen_macs: set[str],
+) -> None:
+    mac = str(backend.get("mac") or "").strip().upper()
+    if not mac:
+        result.errors.append(
+            ConfigValidationIssue(field=f"{field_prefix}.backend.mac", message="A Bluetooth player needs a MAC address")
+        )
+    else:
+        backend["mac"] = mac
+        if not _MAC_RE.match(mac):
+            result.errors.append(
+                ConfigValidationIssue(field=f"{field_prefix}.backend.mac", message=f"Invalid MAC address: {mac}")
+            )
+        elif mac in seen_macs:
+            result.errors.append(
+                ConfigValidationIssue(field=f"{field_prefix}.backend.mac", message=f"Duplicate MAC address: {mac}")
+            )
+        else:
+            seen_macs.add(mac)
+    backend["adapter"] = str(backend.get("adapter") or "").strip()
+    _validate_player_settings(player, result, field_prefix)
+
+
+def _validate_other_player(player: dict[str, Any], result: ConfigValidationResult, field_prefix: str) -> None:
+    """Check a non-Bluetooth player against the ``Player`` model and keep its coerced values."""
+    # A new player has no id yet (the save assigns one), so validate it with a stand-in.
+    missing_id = player.get("id") is None
+    candidate = {**player, "id": "new-player"} if missing_id else player
+    try:
+        validated = Player.model_validate(candidate)
+    except ValidationError as exc:
+        for error in exc.errors(include_url=False):
+            loc = [str(part) for part in error["loc"]]
+            # A discriminated union puts the backend tag in the path: backend.pulse_sink.sink.
+            if len(loc) >= 2 and loc[0] == "backend" and loc[1] in (BLUETOOTH, PULSE_SINK):
+                del loc[1]
+            field_path = ".".join([field_prefix, *loc])
+            result.errors.append(ConfigValidationIssue(field=field_path, message=error["msg"]))
+        return
+    player.update(validated.model_dump(mode="json", exclude_unset=True))
+    if missing_id:
+        player.pop("id", None)
+
+
 def validate_uploaded_config(
     uploaded: dict[str, Any], *, default_base_listen_port: int = DEFAULT_LISTEN_PORT_BASE
 ) -> ConfigValidationResult:
     """Validate an uploaded config payload and normalize additive defaults.
 
-    The payload and the result keep the v5 ``BLUETOOTH_DEVICES`` shape API v1
-    speaks; the caller converts to the v6 file.
+    The result is schema v6 (``players``); a v5 upload (``BLUETOOTH_DEVICES``)
+    is converted first, which is how import keeps accepting v5 files. Player
+    issues are reported as ``players[<index in players>].<key>``, backend keys
+    as ``players[<i>].backend.<key>``.
     """
-    migration = migrate_config_payload(uploaded, to_v6=False)
+    migration = migrate_config_payload(uploaded)
     normalized = migration.normalized_config
     result = ConfigValidationResult(normalized_config=normalized)
     result.warnings.extend(
@@ -275,77 +392,24 @@ def validate_uploaded_config(
         else:
             normalized["UPDATE_CHANNEL"] = normalized_channel
 
-    bt_devices = normalized.get("BLUETOOTH_DEVICES", [])
-    if not isinstance(bt_devices, list):
-        result.errors.append(
-            ConfigValidationIssue(
-                field="BLUETOOTH_DEVICES",
-                message="BLUETOOTH_DEVICES must be an array",
-            )
-        )
-    else:
-        seen_macs: set[str] = set()
-        for index, dev in enumerate(bt_devices):
-            field_prefix = f"BLUETOOTH_DEVICES[{index}]"
-            if not isinstance(dev, dict):
-                result.errors.append(ConfigValidationIssue(field=field_prefix, message="Each device must be an object"))
-                continue
-            mac = str(dev.get("mac", "")).strip().upper()
-            if mac:
-                normalized["BLUETOOTH_DEVICES"][index]["mac"] = mac
-                if not _MAC_RE.match(mac):
+    if "players" in normalized:
+        players = normalized["players"]
+        if not isinstance(players, list):
+            result.errors.append(ConfigValidationIssue(field="players", message="players must be an array"))
+        else:
+            seen_macs: set[str] = set()
+            for index, player in enumerate(players):
+                field_prefix = f"players[{index}]"
+                if not isinstance(player, dict):
                     result.errors.append(
-                        ConfigValidationIssue(field=f"{field_prefix}.mac", message=f"Invalid MAC address: {mac}")
+                        ConfigValidationIssue(field=field_prefix, message="Each player must be an object")
                     )
-                elif mac in seen_macs:
-                    result.errors.append(
-                        ConfigValidationIssue(field=f"{field_prefix}.mac", message=f"Duplicate MAC address: {mac}")
-                    )
+                    continue
+                backend = player.get("backend")
+                if isinstance(backend, dict) and backend.get("type") == BLUETOOTH:
+                    _validate_bluetooth_player(player, backend, result, field_prefix, seen_macs)
                 else:
-                    seen_macs.add(mac)
-            room_id = str(dev.get("room_id") or "").strip()
-            room_name = str(dev.get("room_name") or "").strip()
-            if room_id:
-                normalized["BLUETOOTH_DEVICES"][index]["room_id"] = room_id
-            else:
-                normalized["BLUETOOTH_DEVICES"][index].pop("room_id", None)
-            if room_name:
-                normalized["BLUETOOTH_DEVICES"][index]["room_name"] = room_name
-            else:
-                normalized["BLUETOOTH_DEVICES"][index].pop("room_name", None)
-            normalized["BLUETOOTH_DEVICES"][index].pop("handoff_mode", None)
-            keepalive_interval_raw = dev.get("keepalive_interval")
-            keepalive_interval = _normalize_optional_field_int(
-                normalized["BLUETOOTH_DEVICES"][index],
-                result,
-                "keepalive_interval",
-                issue_field=f"{field_prefix}.keepalive_interval",
-                min_value=0,
-                max_value=3600,
-            )
-            _normalize_optional_field_int(
-                normalized["BLUETOOTH_DEVICES"][index],
-                result,
-                "listen_port",
-                issue_field=f"{field_prefix}.listen_port",
-                min_value=1024,
-                max_value=65535,
-            )
-            _normalize_optional_field_int(
-                normalized["BLUETOOTH_DEVICES"][index],
-                result,
-                "static_delay_ms",
-                issue_field=f"{field_prefix}.static_delay_ms",
-                min_value=0,
-                max_value=5000,
-            )
-            if keepalive_interval is not None and keepalive_interval != 0 and keepalive_interval < 30:
-                result.errors.append(
-                    ConfigValidationIssue(
-                        field=f"{field_prefix}.keepalive_interval",
-                        message=(f"Invalid keepalive_interval: {keepalive_interval_raw} (must be 0 or 30-3600)"),
-                    )
-                )
+                    _validate_other_player(player, result, field_prefix)
 
     bt_adapters = normalized.get("BLUETOOTH_ADAPTERS", [])
     if not isinstance(bt_adapters, list):

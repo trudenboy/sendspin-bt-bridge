@@ -298,7 +298,7 @@ def get_runtime_version() -> str:
     return VERSION
 
 
-def migrate_config_payload(config: dict[str, Any], *, to_v6: bool = True) -> ConfigMigrationResult:
+def migrate_config_payload(config: dict[str, Any]) -> ConfigMigrationResult:
     """Run schema migration on a raw config dict.
 
     Delegates to config_migration, passing the allowed-keys set that lives
@@ -306,7 +306,7 @@ def migrate_config_payload(config: dict[str, Any], *, to_v6: bool = True) -> Con
     """
     from sendspin_bridge.config.migration import migrate_config_payload as _mig_migrate
 
-    return _mig_migrate(config, allowed_keys=CONFIG_ALLOWED_KEYS, to_v6=to_v6)
+    return _mig_migrate(config, allowed_keys=CONFIG_ALLOWED_KEYS)
 
 
 def write_config_file(
