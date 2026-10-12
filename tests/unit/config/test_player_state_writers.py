@@ -88,7 +88,7 @@ def test_load_player_state_for_mac_never_raises_on_malformed_state(tmp_path):
             {
                 "CONFIG_SCHEMA_VERSION": 6,
                 "players": [{"id": PID, "name": "S", "backend": {"type": "bluetooth_a2dp", "mac": MAC}}],
-                "PLAYER_STATE": [],
+                "PLAYER_STATE": [{"id": PID}],
             }
         )
     )
