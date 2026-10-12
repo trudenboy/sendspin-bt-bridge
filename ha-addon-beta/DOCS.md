@@ -48,15 +48,14 @@ simultaneously.
 
 ## Quick Start
 
-1. **Pair your Bluetooth speaker** using `bluetoothctl` in the Host terminal
-   (Settings → System → Hardware → ⋮ → Terminal) or via the HA Bluetooth
-   integration.
-2. **Open the addon Configuration tab** and add a device under
-   `bluetooth_devices` with the speaker's MAC address and a player name.
+1. **Start the addon** and open the sidebar UI.
+2. **Add your speaker in the web interface**: put the speaker in pairing mode,
+   then scan, pair and add it there. The addon's Configuration tab does not
+   list speakers.
 3. **Set `sendspin_server`** to the IP of your Music Assistant instance, or
    leave `auto` to discover it via mDNS (recommended).
-4. **Start the addon** and open the sidebar UI. The header onboarding checklist
-   points to the next safe setup step.
+4. **Follow the header onboarding checklist** in the sidebar UI; it points to
+   the next safe setup step.
 5. **Open Configuration → Music Assistant** to connect or reconfigure MA. In
    addon mode, "Sign in with Home Assistant" can create or reuse the token for
    you.
@@ -122,26 +121,11 @@ Bluetooth device list.
 
 ### Bluetooth devices
 
-```yaml
-bluetooth_devices:
-  - mac: "AA:BB:CC:DD:EE:FF"
-    player_name: "Living Room Speaker"
-```
-
-Each entry in the `bluetooth_devices` list represents one Bluetooth speaker.
-
-| Field | Required | Type | Description |
-|---|---|---|---|
-| `mac` | **yes** | string | Bluetooth MAC address of the speaker (`AA:BB:CC:DD:EE:FF`). Find it with `bluetoothctl devices` after pairing. |
-| `player_name` | **yes** | string | Display name shown in Music Assistant. Must be unique across all devices. |
-| `adapter` | no | string | MAC address of the Bluetooth adapter to use for this device. Leave blank to use the system default adapter. |
-| `static_delay_ms` | no | int | Extra delay in milliseconds (0–5000) added on top of DAC-anchored sync. Default `0`. Use small positive values (e.g. 50) only if audio plays slightly too late. |
-| `listen_host` | no | string | Override the listen address for this device's Sendspin server. |
-| `listen_port` | no | port | Override the listen port for this device's Sendspin server. |
-| `enabled` | no | bool | Set to `false` to temporarily disable a device without removing it from the config. |
-| `preferred_format` | no | string | Audio format preference string passed to the Sendspin daemon. |
-| `keepalive_silence` | no | bool | Send silent audio frames to prevent the Bluetooth speaker from entering standby. |
-| `keepalive_interval` | no | int | Interval in seconds between keepalive silence frames. |
+Speakers are not configured in the addon's Configuration tab. Add, change and
+remove them in the bridge's web interface (scan, pair, add); per-speaker
+options such as the player name, adapter, static delay, listen port, keep-alive
+and enabled state are edited there too. Speakers set up earlier are kept when
+you update the addon.
 
 ### Bluetooth adapters
 
@@ -189,24 +173,14 @@ When multiple addon variants are installed on the same HAOS host, they use diffe
 
 ## Multi-Speaker Setup
 
-Each Bluetooth speaker is configured as a separate entry in
-`bluetooth_devices` and appears as its own player in Music Assistant.
-
-```yaml
-bluetooth_devices:
-  - mac: "AA:BB:CC:DD:EE:FF"
-    player_name: "Kitchen"
-  - mac: "11:22:33:44:55:66"
-    player_name: "Bedroom"
-    adapter: "00:1A:7D:DA:71:13"
-    static_delay_ms: 50
-```
+Each Bluetooth speaker is added in the bridge's web interface and appears as
+its own player in Music Assistant.
 
 **Tips for multi-speaker setups:**
 
-- Assign distinct `player_name` values so they are easy to identify in MA.
-- If speakers are on different Bluetooth adapters, specify the `adapter` MAC
-  for each device to avoid contention.
+- Give each speaker a distinct player name so they are easy to identify in MA.
+- If speakers are on different Bluetooth adapters, choose the adapter for
+  each speaker in the web interface to avoid contention.
 - Use `static_delay_ms` (0–5000) to fine-tune audio timing across speakers
   when grouping them in Music Assistant multi-room mode. DAC-anchored sync
   handles most latency automatically; only add a small positive value if needed.
