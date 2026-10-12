@@ -18,7 +18,6 @@ import socket as _socket
 import tempfile
 import threading
 import time
-import uuid as _uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -363,7 +362,9 @@ def update_config(mutator) -> None:
 
 def _player_id_from_mac(mac: str) -> str:
     """Stable, globally-unique player ID derived from BT MAC address."""
-    return str(_uuid.uuid5(_uuid.NAMESPACE_DNS, mac.lower()))
+    from sendspin_bridge.config.players import player_id_for_mac
+
+    return player_id_for_mac(mac)
 
 
 def save_device_volume(mac: str | None, volume: int) -> None:
