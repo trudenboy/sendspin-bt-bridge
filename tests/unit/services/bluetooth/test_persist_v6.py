@@ -28,6 +28,7 @@ def _isolated(tmp_path, monkeypatch):
     options.write_text(json.dumps({"bluetooth_devices": [{"mac": MAC, "player_name": "Kitchen"}]}))
     import sendspin_bridge.services.bluetooth as bt_svc
 
+    # The options path the old mirror wrote; the constant stays so this proves nothing writes it any more.
     monkeypatch.setattr(bt_svc, "_OPTIONS_FILE", options)
     return tmp_path
 
@@ -62,3 +63,39 @@ def test_apply_device_enabled_finds_disabled_player_by_id(tmp_path, monkeypatch)
     result = bt_commands.apply_device_enabled(PID, False)
     assert result.success
     assert _disk(tmp_path)["players"][0]["enabled"] is False
+
+
+def _boom(_cfg):
+    raise ValueError("migration exploded")
+
+
+def test_failing_migration_still_applies_the_flag(tmp_path, monkeypatch):
+    import sendspin_bridge.config.migration as migration
+    from sendspin_bridge.services.bluetooth import persist_device_enabled
+
+    monkeypatch.setattr(migration, "migrate_v5_to_v6", _boom)
+    persist_device_enabled("Kitchen", False)  # must not raise
+    assert _disk(tmp_path)["players"][0]["enabled"] is False
+
+
+def test_apply_device_enabled_returns_500_when_migration_fails(tmp_path, monkeypatch):
+    import sendspin_bridge.services.bluetooth.bt_commands as bt_commands
+
+    monkeypatch.setattr(bt_commands, "migrate_v5_to_v6", _boom)
+    before = (tmp_path / "config.json").read_text()
+    result = bt_commands.apply_device_enabled(PID, False)
+    assert not result.success
+    assert result.code == 500
+    assert "migration" in result.error.lower()
+    assert (tmp_path / "config.json").read_text() == before
+
+
+def test_apply_device_config_change_returns_500_when_migration_fails(tmp_path, monkeypatch):
+    import sendspin_bridge.services.bluetooth.bt_commands as bt_commands
+
+    monkeypatch.setattr(bt_commands, "find_client_by_player_id", lambda _pid: object())
+    monkeypatch.setattr(bt_commands, "migrate_v5_to_v6", _boom)
+    result = bt_commands.apply_device_config_change(PID, "static_delay_ms", 100)
+    assert not result.success
+    assert result.code == 500
+    assert "migration" in result.error.lower()
