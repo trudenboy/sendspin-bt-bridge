@@ -103,13 +103,12 @@ DEFAULT_CONFIG = {
     "WEB_PORT": None,
     "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",
-    "BLUETOOTH_DEVICES": [],
+    "players": [],
+    "PLAYER_STATE": {},
     "BLUETOOTH_ADAPTERS": [],
     "HA_AREA_NAME_ASSIST_ENABLED": False,
     "HA_ADAPTER_AREA_MAP": {},
     "TZ": "Australia/Melbourne",
-    "LAST_VOLUMES": {},
-    "LAST_SINKS": {},
     "PULSE_LATENCY_MSEC": 600,
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
@@ -202,7 +201,7 @@ config_lock = threading.RLock()  # serializes all config.json read-modify-write 
 _config_load_log_lock = threading.Lock()
 _config_load_logged_once = False
 CONFIG_ALLOWED_KEYS = frozenset(DEFAULT_CONFIG)
-RUNTIME_STATE_CONFIG_KEYS = frozenset(("LAST_VOLUMES", "LAST_SINKS"))
+RUNTIME_STATE_CONFIG_KEYS = frozenset(("PLAYER_STATE",))
 SENSITIVE_CONFIG_KEYS = frozenset(
     (
         "AUTH_PASSWORD_HASH",

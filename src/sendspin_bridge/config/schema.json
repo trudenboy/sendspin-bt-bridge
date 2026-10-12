@@ -54,6 +54,39 @@
         "$ref": "#/$defs/BluetoothDevice"
       }
     },
+    "players": {
+      "type": "array",
+      "default": [],
+      "description": "Configured players (schema v6). Each has an id, a name and a backend (bluetooth_a2dp or pulse_sink).",
+      "items": {
+        "type": "object",
+        "required": ["id", "backend"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "backend": {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "enum": ["bluetooth_a2dp", "pulse_sink"] } }
+          }
+        }
+      }
+    },
+    "PLAYER_STATE": {
+      "type": "object",
+      "default": {},
+      "description": "Runtime state keyed by player id: volume (0-100), sink, released, released_by.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "volume": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "sink": { "type": "string" },
+          "released": { "type": "boolean" },
+          "released_by": { "type": "string" }
+        }
+      }
+    },
     "BLUETOOTH_ADAPTERS": {
       "type": "array",
       "default": [],

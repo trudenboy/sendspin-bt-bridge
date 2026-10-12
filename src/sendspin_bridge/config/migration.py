@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONFIG_SCHEMA_VERSION = 5
+CONFIG_SCHEMA_VERSION = 6
+LEGACY_V5_KEYS = frozenset({"BLUETOOTH_DEVICES", "LAST_VOLUMES", "LAST_SINKS"})
 UPDATE_CHANNELS = ("stable", "rc", "beta")
 DEFAULT_UPDATE_CHANNEL = "stable"
 _VALID_IDLE_MODES = frozenset(("default", "power_save", "auto_disconnect", "keep_alive"))
@@ -246,58 +247,153 @@ def _normalize_mac_key(raw_mac: object) -> str:
     return raw_mac.strip().upper()
 
 
-def _prune_last_volumes(config: dict, *, defaults: Mapping[str, Any]) -> None:
-    last_volumes = config.get("LAST_VOLUMES", defaults["LAST_VOLUMES"])
-    if not isinstance(last_volumes, dict):
-        logger.warning("Invalid LAST_VOLUMES value %r in config; using default {}", last_volumes)
-        config["LAST_VOLUMES"] = {}
-        return
+def migrate_v5_to_v6(config: dict) -> list:
+    """Move ``BLUETOOTH_DEVICES``/``LAST_VOLUMES``/``LAST_SINKS`` into ``players`` + ``PLAYER_STATE``.
 
-    # Map UPPER(mac) → the device's canonical MAC casing so a saved volume
-    # under a differently-cased key still matches (MACs are compared
-    # case-insensitively everywhere else).
-    configured_by_upper = {
-        device["mac"].upper(): device["mac"]
-        for device in config.get("BLUETOOTH_DEVICES", [])
-        if isinstance(device, dict) and isinstance(device.get("mac"), str) and device.get("mac")
-    }
-    sanitized: dict[str, int] = {}
-    for mac, volume in last_volumes.items():
-        canonical = configured_by_upper.get(mac.upper()) if isinstance(mac, str) else None
-        if canonical is None:
+    Mutates *config*. Runs whenever a legacy key is present: the add-on's
+    translator writes the current schema number next to its device list.
+    """
+    from sendspin_bridge.config import ConfigMigrationIssue
+    from sendspin_bridge.config.players import (
+        LEGACY_DEVICE_STATE_KEYS,
+        legacy_device_to_player,
+        normalize_mac,
+        player_id_for_mac,
+    )
+
+    issues: list = []
+    if not any(key in config for key in LEGACY_V5_KEYS):
+        return issues
+
+    legacy_devices = config.pop("BLUETOOTH_DEVICES", None)
+    last_volumes = config.pop("LAST_VOLUMES", None)
+    last_sinks = config.pop("LAST_SINKS", None)
+
+    if isinstance(config.get("players"), list):
+        if legacy_devices:
+            issues.append(
+                ConfigMigrationIssue(
+                    field="BLUETOOTH_DEVICES",
+                    message="BLUETOOTH_DEVICES ignored: the config already has players",
+                )
+            )
+        return issues
+
+    devices = _normalize_bluetooth_devices(
+        {"BLUETOOTH_DEVICES": legacy_devices or []}, defaults={"BLUETOOTH_DEVICES": []}
+    )
+    players: list[dict] = []
+    state: dict[str, dict] = {}
+    seen: set[str] = set()
+    for device in devices:
+        try:
+            player = legacy_device_to_player(device)
+        except ValueError as exc:
+            issues.append(ConfigMigrationIssue(field="BLUETOOTH_DEVICES", message=f"Skipped device: {exc}"))
             continue
-        if not isinstance(volume, int) or not 0 <= volume <= 100:
-            logger.warning("Ignoring invalid saved volume %r for %s", volume, mac)
+        mac = player["backend"]["mac"]
+        if mac in seen:
+            issues.append(ConfigMigrationIssue(field="BLUETOOTH_DEVICES", message=f"Skipped duplicate device {mac}"))
             continue
-        sanitized[canonical] = volume
-    config["LAST_VOLUMES"] = sanitized
+        seen.add(mac)
+        players.append(player)
+        entry = {key: device[key] for key in LEGACY_DEVICE_STATE_KEYS if device.get(key) is not None}
+        if entry:
+            state[player["id"]] = entry
+
+    known_ids = {player_id_for_mac(mac) for mac in seen}
+    for store, field in ((last_volumes, "volume"), (last_sinks, "sink")):
+        if not isinstance(store, dict):
+            continue
+        for raw_mac, value in store.items():
+            mac = normalize_mac(raw_mac)
+            pid = player_id_for_mac(mac) if mac else ""
+            if pid not in known_ids:
+                continue
+            if field == "volume" and not (isinstance(value, int) and 0 <= value <= 100):
+                logger.warning("Ignoring invalid saved volume %r for %s", value, raw_mac)
+                continue
+            if field == "sink" and not (isinstance(value, str) and value.strip()):
+                logger.warning("Ignoring invalid saved sink %r for %s", value, raw_mac)
+                continue
+            state.setdefault(pid, {})[field] = value.strip() if field == "sink" else value
+
+    config["players"] = players
+    config["PLAYER_STATE"] = state
+    issues.append(
+        ConfigMigrationIssue(
+            field="players",
+            message=f"Migrated {len(players)} Bluetooth device(s) to players (config schema v6)",
+        )
+    )
+    return issues
 
 
-def _prune_last_sinks(config: dict, *, defaults: Mapping[str, Any]) -> None:
-    last_sinks = config.get("LAST_SINKS", defaults["LAST_SINKS"])
-    if not isinstance(last_sinks, dict):
-        logger.warning("Invalid LAST_SINKS value %r in config; using default %r", last_sinks, {})
-        config["LAST_SINKS"] = {}
-        return
+def _player_backend_is_valid(entry: dict) -> bool:
+    from pydantic import ValidationError
 
-    configured_macs = {
-        _normalize_mac_key(device.get("mac"))
-        for device in config.get("BLUETOOTH_DEVICES", [])
-        if isinstance(device, dict) and _normalize_mac_key(device.get("mac"))
-    }
-    sanitized: dict[str, str] = {}
-    for mac, sink_name in last_sinks.items():
-        normalized_mac = _normalize_mac_key(mac)
-        if not normalized_mac:
-            logger.warning("Ignoring non-string MAC key %r in LAST_SINKS", mac)
-            continue
-        if normalized_mac not in configured_macs:
-            continue
-        if not isinstance(sink_name, str) or not sink_name.strip():
-            logger.warning("Ignoring invalid saved sink %r for %s", sink_name, mac)
-            continue
-        sanitized[normalized_mac] = sink_name.strip()
-    config["LAST_SINKS"] = sanitized
+    from sendspin_bridge.config.players import PULSE_SINK, BluetoothBackend, PulseSinkBackend
+
+    backend = entry.get("backend")
+    if not isinstance(backend, dict):
+        return False
+    model = PulseSinkBackend if backend.get("type") == PULSE_SINK else BluetoothBackend
+    try:
+        model.model_validate(backend)
+    except ValidationError:
+        return False
+    return True
+
+
+def _normalize_players(config: dict) -> None:
+    from pydantic import ValidationError
+
+    from sendspin_bridge.config.players import Player, PlayerState
+
+    raw_players = config.get("players")
+    kept: list[dict] = []
+    if isinstance(raw_players, list):
+        for entry in raw_players:
+            try:
+                kept.append(Player.model_validate(entry).model_dump(mode="json", exclude_unset=True))
+                continue
+            except ValidationError as exc:
+                failing = sorted({".".join(str(part) for part in err["loc"]) for err in exc.errors()})
+                # One out-of-range setting must not delete a speaker: keep the
+                # entry as written when its id and backend are usable.
+                if (
+                    isinstance(entry, dict)
+                    and isinstance(entry.get("id"), str)
+                    and entry["id"].strip()
+                    and _player_backend_is_valid(entry)
+                ):
+                    logger.warning(
+                        "Player %s has invalid setting(s) %s; keeping it as written", entry["id"], ", ".join(failing)
+                    )
+                    kept.append(entry)
+                else:
+                    logger.warning("Skipping invalid player %r: %s", entry, exc.errors(include_url=False))
+    config["players"] = kept
+
+    known = {player["id"] for player in kept}
+    raw_state = config.get("PLAYER_STATE")
+    pruned: dict[str, dict] = {}
+    if isinstance(raw_state, dict):
+        for pid, entry in raw_state.items():
+            if pid not in known or not isinstance(entry, dict):
+                continue
+            clean = {
+                key: value for key, value in entry.items() if key in PlayerState.model_fields and value is not None
+            }
+            if "volume" in clean and not (
+                isinstance(clean["volume"], int)
+                and not isinstance(clean["volume"], bool)
+                and 0 <= clean["volume"] <= 100
+            ):
+                logger.warning("Ignoring invalid saved volume %r for player %s", clean.pop("volume"), pid)
+            if clean:
+                pruned[pid] = clean
+    config["PLAYER_STATE"] = pruned
 
 
 def _normalize_adapter_area_map(config: dict, *, defaults: Mapping[str, Any]) -> None:
@@ -372,9 +468,7 @@ def _normalize_ha_integration(config: dict, *, defaults: Mapping[str, Any]) -> N
 
 
 def _normalize_loaded_config(config: dict, *, defaults: Mapping[str, Any]) -> None:
-    config["BLUETOOTH_DEVICES"] = _normalize_bluetooth_devices(config, defaults=defaults)
-    _prune_last_volumes(config, defaults=defaults)
-    _prune_last_sinks(config, defaults=defaults)
+    _normalize_players(config)
     _normalize_ha_area_name_assist_enabled(config, defaults=defaults)
     _normalize_adapter_area_map(config, defaults=defaults)
     _normalize_ha_integration(config, defaults=defaults)
@@ -554,7 +648,7 @@ def _filter_allowed_config_keys(config: dict[str, Any], *, allowed_keys: frozens
 def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[str]) -> ConfigMigrationResult:
     from sendspin_bridge.config import ConfigMigrationIssue, ConfigMigrationResult
 
-    normalized = _filter_allowed_config_keys(config, allowed_keys=allowed_keys)
+    normalized = _filter_allowed_config_keys(config, allowed_keys=allowed_keys | LEGACY_V5_KEYS)
     warnings: list[ConfigMigrationIssue] = []
     needs_persist = False
 
@@ -663,6 +757,15 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
             )
         )
         needs_persist = True
+
+    if normalized.get("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION) <= CONFIG_SCHEMA_VERSION:
+        v6_issues = migrate_v5_to_v6(normalized)
+        if v6_issues:
+            warnings.extend(v6_issues)
+            needs_persist = True
+    else:
+        for key in LEGACY_V5_KEYS:
+            normalized.pop(key, None)
 
     # Detection-only check for malformed SENDSPIN_SERVER values written before
     # the strict validator landed (issue #291). We do NOT auto-strip — Strict

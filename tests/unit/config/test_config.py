@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from sendspin_bridge.config.players import device_entries, player_id_for_mac
+
 
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path, monkeypatch):
@@ -95,14 +97,15 @@ def test_load_migrates_legacy_config_keys(tmp_path):
     loaded = load_config()
 
     assert loaded["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
-    assert loaded["BLUETOOTH_DEVICES"] == [
-        {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "", "player_name": "Sendspin Player"}
+    assert [(d["mac"], d["adapter"], d["player_name"]) for d in device_entries(loaded)] == [
+        ("AA:BB:CC:DD:EE:FF", "", "Sendspin Player")
     ]
-    assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 33}
+    pid = player_id_for_mac("AA:BB:CC:DD:EE:FF")
+    assert loaded["PLAYER_STATE"] == {pid: {"volume": 33}}
     saved = json.loads((tmp_path / "config.json").read_text())
     assert "BLUETOOTH_MAC" not in saved
     assert "LAST_VOLUME" not in saved
-    assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 33}
+    assert saved["PLAYER_STATE"] == {pid: {"volume": 33}}
 
 
 def test_save_device_volume(tmp_path):
@@ -207,7 +210,8 @@ def test_load_normalizes_last_sinks_keys(tmp_path):
 
     loaded = load_config()
 
-    assert loaded["LAST_SINKS"] == {"AA:BB:CC:DD:EE:FF": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}
+    pid = player_id_for_mac("AA:BB:CC:DD:EE:FF")
+    assert loaded["PLAYER_STATE"] == {pid: {"sink": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"}}
 
 
 def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
@@ -235,8 +239,8 @@ def test_load_config_normalizes_types_and_prunes_orphan_volumes(tmp_path):
     assert loaded["BT_CHURN_THRESHOLD"] == 3
     assert loaded["BT_CHURN_WINDOW"] == 120.5
     assert loaded["PREFER_SBC_CODEC"] is True
-    assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
-    assert loaded["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 55}
+    assert device_entries(loaded)[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert loaded["PLAYER_STATE"] == {player_id_for_mac("AA:BB:CC:DD:EE:FF"): {"volume": 55}}
 
 
 def test_load_config_normalizes_room_metadata(tmp_path):
@@ -257,10 +261,11 @@ def test_load_config_normalizes_room_metadata(tmp_path):
 
     loaded = load_config()
 
-    assert loaded["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
-    assert loaded["BLUETOOTH_DEVICES"][0]["room_name"] == "Living Room"
-    assert loaded["BLUETOOTH_DEVICES"][0]["room_id"] == "living-room"
-    assert "handoff_mode" not in loaded["BLUETOOTH_DEVICES"][0]
+    device = device_entries(loaded)[0]
+    assert device["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert device["room_name"] == "Living Room"
+    assert device["room_id"] == "living-room"
+    assert "handoff_mode" not in device
 
 
 def test_resolve_device_room_context_prefers_manual_room_metadata_over_ha_area():
@@ -561,15 +566,15 @@ def test_update_config_logs_info_for_real_config_change(tmp_path, caplog):
 def test_update_config_logs_debug_for_runtime_state_only_change(tmp_path, caplog):
     from sendspin_bridge.config import CONFIG_SCHEMA_VERSION, update_config
 
-    _write_config(tmp_path, {"CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION, "LAST_VOLUMES": {}})
+    _write_config(tmp_path, {"CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION, "PLAYER_STATE": {}})
 
     with caplog.at_level("DEBUG", logger="sendspin_bridge.config"):
-        update_config(lambda cfg: cfg.__setitem__("LAST_VOLUMES", {"AA:BB:CC:DD:EE:FF": 55}))
+        update_config(lambda cfg: cfg.__setitem__("PLAYER_STATE", {"some-id": {"volume": 55}}))
 
     records = [record for record in caplog.records if "Updated runtime config state in" in record.getMessage()]
     assert len(records) == 1
     assert records[0].levelname == "DEBUG"
-    assert "LAST_VOLUMES" in records[0].getMessage()
+    assert "PLAYER_STATE" in records[0].getMessage()
 
 
 def test_update_config_creates_dir(tmp_path, monkeypatch):
