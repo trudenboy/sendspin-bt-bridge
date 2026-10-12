@@ -765,3 +765,22 @@ def test_config_migration_failure_is_a_recovery_issue(monkeypatch):
 
     monkeypatch.setattr(ra, "get_config_migration_error", lambda: None)
     assert ra._build_config_migration_issue() is None
+
+
+def test_recovery_snapshot_includes_config_migration_failure_card(monkeypatch):
+    import sendspin_bridge.services.diagnostics.recovery_assistant as recovery_module
+
+    monkeypatch.setattr(recovery_module, "get_config_migration_error", lambda: "RuntimeError: boom")
+
+    snapshot = build_recovery_assistant_snapshot(
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
+        devices=[],
+        onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
+        startup_progress={"status": "complete", "message": "Startup complete."},
+    )
+
+    data = snapshot.to_dict()
+    card = next(issue for issue in data["issues"] if issue["key"] == "config_migration_failed")
+    assert card["severity"] == "error"
+    assert "boom" in card["summary"]
+    assert data["summary"]["highest_severity"] == "error"
