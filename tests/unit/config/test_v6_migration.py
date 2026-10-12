@@ -259,3 +259,21 @@ def test_v5_backup_is_owner_only(tmp_path, monkeypatch):
     (tmp_path / "config.json").write_text(FIXTURE.read_text())
     config.load_config()
     assert (tmp_path / "config.v5.bak.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_failed_migration_leaves_the_config_untouched():
+    import copy
+
+    import pytest
+
+    from sendspin_bridge.config.migration import migrate_v5_to_v6
+
+    cfg = {
+        "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "K", "idle_mode": []}],
+        "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 40},
+        "LAST_SINKS": {"AA:BB:CC:DD:EE:FF": "sink"},
+    }
+    snapshot = copy.deepcopy(cfg)
+    with pytest.raises(TypeError):
+        migrate_v5_to_v6(cfg)
+    assert cfg == snapshot

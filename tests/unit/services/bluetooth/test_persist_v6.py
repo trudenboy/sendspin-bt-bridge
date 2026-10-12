@@ -99,3 +99,34 @@ def test_apply_device_config_change_returns_500_when_migration_fails(tmp_path, m
     assert not result.success
     assert result.code == 500
     assert "migration" in result.error.lower()
+
+
+def _write_unmigratable_v5(tmp_path):
+    cfg = {
+        "CONFIG_SCHEMA_VERSION": 5,
+        "BLUETOOTH_DEVICES": [{"mac": MAC, "player_name": "Kitchen", "idle_mode": []}],
+        "LAST_VOLUMES": {MAC: 40},
+    }
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    return cfg
+
+
+def test_unmigratable_v5_file_keeps_its_speakers_through_persist(tmp_path):
+    """A device the migration cannot convert must not be wiped by a flag write."""
+    from sendspin_bridge.services.bluetooth import persist_device_enabled
+
+    original = _write_unmigratable_v5(tmp_path)
+    persist_device_enabled("Kitchen", False)
+    disk = _disk(tmp_path)
+    assert disk["BLUETOOTH_DEVICES"] == original["BLUETOOTH_DEVICES"]
+    assert disk["LAST_VOLUMES"] == original["LAST_VOLUMES"]
+
+
+def test_unmigratable_v5_file_keeps_its_speakers_through_update_config(tmp_path):
+    from sendspin_bridge.config import update_config
+
+    original = _write_unmigratable_v5(tmp_path)
+    update_config(lambda cfg: cfg.__setitem__("BRIDGE_NAME", "x"))
+    disk = _disk(tmp_path)
+    assert disk["BLUETOOTH_DEVICES"] == original["BLUETOOTH_DEVICES"]
+    assert disk["LAST_VOLUMES"] == original["LAST_VOLUMES"]

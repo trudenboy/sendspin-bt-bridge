@@ -265,11 +265,15 @@ def migrate_v5_to_v6(config: dict) -> list:
     if not any(key in config for key in LEGACY_V5_KEYS):
         return issues
 
-    legacy_devices = config.pop("BLUETOOTH_DEVICES", None)
-    last_volumes = config.pop("LAST_VOLUMES", None)
-    last_sinks = config.pop("LAST_SINKS", None)
+    # Atomic: nothing in *config* changes until the conversion has succeeded,
+    # so an exception leaves the legacy keys (and every speaker) untouched.
+    legacy_devices = copy.deepcopy(config.get("BLUETOOTH_DEVICES"))
+    last_volumes = config.get("LAST_VOLUMES")
+    last_sinks = config.get("LAST_SINKS")
 
     if isinstance(config.get("players"), list):
+        for key in LEGACY_V5_KEYS:
+            config.pop(key, None)
         if legacy_devices:
             issues.append(
                 ConfigMigrationIssue(
@@ -318,6 +322,8 @@ def migrate_v5_to_v6(config: dict) -> list:
                 continue
             state.setdefault(pid, {})[field] = value.strip() if field == "sink" else value
 
+    for key in LEGACY_V5_KEYS:
+        config.pop(key, None)
     config["players"] = players
     config["PLAYER_STATE"] = state
     issues.append(

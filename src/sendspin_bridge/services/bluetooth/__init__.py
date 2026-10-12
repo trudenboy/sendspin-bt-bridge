@@ -4,6 +4,7 @@ Bluetooth service helpers for sendspin-bt-bridge.
 Low-level operations shared between web_interface.py routes and other modules.
 """
 
+import copy
 import logging
 import re
 import threading
@@ -369,10 +370,14 @@ def _update_bound_config_file(mutator) -> None:
     from sendspin_bridge.config.store import ConfigStore
 
     def _migrated(cfg: dict) -> None:
+        migrated = copy.deepcopy(cfg)
         try:
-            migrate_v5_to_v6(cfg)
+            migrate_v5_to_v6(migrated)
         except Exception:
             logger.exception("Config migration failed; applying change to the unmigrated config")
+        else:
+            cfg.clear()
+            cfg.update(migrated)
         mutator(cfg)
 
     ConfigStore(CONFIG_FILE).mutate(_migrated)
