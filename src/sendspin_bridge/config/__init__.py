@@ -519,9 +519,14 @@ def load_player_state_for_mac(mac: str) -> dict:
         return {}
     if not isinstance(cfg, dict):
         return {}
-    migrate_v5_to_v6(cfg)
-    player = find_player_by_mac(cfg, mac)
-    state = (cfg.get("PLAYER_STATE") or {}).get(player["id"]) if player else None
+    try:
+        migrate_v5_to_v6(cfg)
+        player = find_player_by_mac(cfg, mac)
+        all_state = cfg.get("PLAYER_STATE")
+        state = all_state.get(player["id"]) if player and isinstance(all_state, dict) else None
+    except Exception as exc:  # reader must degrade, never break device construction
+        logger.debug("Could not read saved state for %s: %s", mac, exc)
+        return {}
     return dict(state) if isinstance(state, dict) else {}
 
 

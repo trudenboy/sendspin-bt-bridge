@@ -78,3 +78,30 @@ def test_load_player_state_for_mac_reads_v5_and_v6(tmp_path):
     (tmp_path / "config.json").write_text(json.dumps({"BLUETOOTH_DEVICES": [{"mac": MAC}], "LAST_VOLUMES": {MAC: 70}}))
     assert load_player_state_for_mac(MAC) == {"volume": 70}
     assert load_player_state_for_mac("11:22:33:44:55:66") == {}
+
+
+def test_load_player_state_for_mac_never_raises_on_malformed_state(tmp_path):
+    from sendspin_bridge.config import load_player_state_for_mac
+
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "players": [{"id": PID, "name": "S", "backend": {"type": "bluetooth_a2dp", "mac": MAC}}],
+                "PLAYER_STATE": [],
+            }
+        )
+    )
+    assert load_player_state_for_mac(MAC) == {}
+
+
+def test_load_player_state_for_mac_never_raises_when_migration_fails(tmp_path, monkeypatch):
+    import sendspin_bridge.config.migration as migration
+    from sendspin_bridge.config import load_player_state_for_mac
+
+    def _boom(_cfg):
+        raise TypeError("odd data")
+
+    monkeypatch.setattr(migration, "migrate_v5_to_v6", _boom)
+    (tmp_path / "config.json").write_text(json.dumps({"BLUETOOTH_DEVICES": [{"mac": MAC}], "LAST_VOLUMES": {MAC: 70}}))
+    assert load_player_state_for_mac(MAC) == {}
