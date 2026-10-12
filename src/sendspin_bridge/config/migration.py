@@ -162,19 +162,31 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized.pop("room_name", None)
         normalized.pop("handoff_mode", None)
         _migrate_negative_static_delay(normalized)
-        if "static_delay_ms" in normalized and not normalized.get("static_delay_source"):
-            normalized["static_delay_source"] = "legacy"
-        for latency_key in ("required_lead_time_ms", "min_buffer_ms"):
-            if latency_key not in normalized:
-                continue
-            try:
-                normalized[latency_key] = max(0, min(30000, int(normalized[latency_key])))
-            except (TypeError, ValueError):
-                normalized.pop(latency_key, None)
-        _migrate_device_idle_mode(normalized)
-        _migrate_power_save_delay(normalized)
+        normalize_device_settings(normalized)
         normalized_devices.append(normalized)
     return normalized_devices
+
+
+def normalize_device_settings(device: dict) -> None:
+    """Clamp-and-continue clean-up of a speaker's settings, in place.
+
+    Shared by the v5 device migration and upload validation of Bluetooth
+    players: latency hints clamped to 0-30000 (dropped when not a number),
+    an invalid ``idle_mode`` removed or a legacy one derived, legacy
+    ``power_save_delay_seconds`` converted. Never raises. ``static_delay_ms``
+    range is left to the caller (migration clamps it, validation rejects it).
+    """
+    if "static_delay_ms" in device and not device.get("static_delay_source"):
+        device["static_delay_source"] = "legacy"
+    for latency_key in ("required_lead_time_ms", "min_buffer_ms"):
+        if latency_key not in device:
+            continue
+        try:
+            device[latency_key] = max(0, min(30000, int(device[latency_key])))
+        except (TypeError, ValueError):
+            device.pop(latency_key, None)
+    _migrate_device_idle_mode(device)
+    _migrate_power_save_delay(device)
 
 
 _warned_static_delay_issues: set[tuple[str, str]] = set()

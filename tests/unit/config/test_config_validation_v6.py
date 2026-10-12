@@ -66,3 +66,62 @@ def test_bluetooth_player_without_mac_is_an_error():
     payload = {"CONFIG_SCHEMA_VERSION": 6, "players": [{"name": "X", "backend": {"type": "bluetooth_a2dp"}}]}
     result = validate_uploaded_config(payload, default_base_listen_port=8928)
     assert [e.field for e in result.errors] == ["players[0].backend.mac"]
+
+
+def test_v5_upload_with_a_duplicate_mac_is_rejected_in_the_uploaded_shape():
+    result = validate_uploaded_config(
+        {"BLUETOOTH_DEVICES": [{"mac": A}, {"mac": A.lower()}]}, default_base_listen_port=8928
+    )
+    assert not result.is_valid
+    assert [e.field for e in result.errors] == ["BLUETOOTH_DEVICES[1].mac"]
+    assert result.errors[0].message == f"Duplicate MAC address: {A}"
+
+
+def test_v5_upload_with_an_invalid_mac_is_rejected():
+    result = validate_uploaded_config({"BLUETOOTH_DEVICES": [{"mac": "zz"}]}, default_base_listen_port=8928)
+    assert not result.is_valid
+    assert [e.field for e in result.errors] == ["BLUETOOTH_DEVICES[0].mac"]
+
+
+def test_bluetooth_player_settings_are_cleaned_up_without_errors():
+    payload = {
+        "CONFIG_SCHEMA_VERSION": 6,
+        "players": [
+            _bt(
+                A,
+                idle_mode="bogus",
+                required_lead_time_ms=99999,
+                min_buffer_ms="x",
+                power_save_delay_minutes=-5,
+                power_save_delay_seconds=600,
+            )
+        ],
+    }
+    result = validate_uploaded_config(payload, default_base_listen_port=8928)
+    assert result.errors == []
+    player = result.normalized_config["players"][0]
+    assert "idle_mode" not in player
+    assert player["required_lead_time_ms"] == 30000
+    assert "min_buffer_ms" not in player
+    # The legacy seconds key is dropped; an explicit minutes value wins, as in the v5 migration.
+    assert player["power_save_delay_minutes"] == -5
+    assert "power_save_delay_seconds" not in player
+
+
+def test_bluetooth_player_after_a_pulse_sink_player_keeps_its_bluetooth_position_port():
+    payload = {
+        "CONFIG_SCHEMA_VERSION": 6,
+        "BASE_LISTEN_PORT": 8928,
+        "players": [
+            {"id": "dac", "name": "DAC", "backend": {"type": "pulse_sink", "sink": "alsa_output.x"}},
+            _bt(A),
+            _bt(B, listen_port=8929),
+        ],
+    }
+    result = validate_uploaded_config(payload, default_base_listen_port=8928)
+    # A takes 8928 + 0 (first Bluetooth player), so B's explicit 8929 is free...
+    assert result.is_valid
+    payload["players"][2]["listen_port"] = 8928
+    result = validate_uploaded_config(payload, default_base_listen_port=8928)
+    # ...and B's 8928 collides with A's fallback.
+    assert [e.field for e in result.errors] == ["players[2].listen_port"]

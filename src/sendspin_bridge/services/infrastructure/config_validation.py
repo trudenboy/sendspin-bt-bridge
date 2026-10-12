@@ -16,6 +16,7 @@ from sendspin_bridge.config import (
     migrate_config_payload,
     normalize_update_channel,
 )
+from sendspin_bridge.config.migration import normalize_device_settings
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, Player, normalize_mac
 from sendspin_bridge.services.bluetooth import _MAC_RE
 
@@ -294,6 +295,7 @@ def _validate_bluetooth_player(
             seen_macs.add(mac)
     backend["adapter"] = str(backend.get("adapter") or "").strip()
     _validate_player_settings(player, result, field_prefix)
+    normalize_device_settings(player)
 
 
 def _validate_other_player(player: dict[str, Any], result: ConfigValidationResult, field_prefix: str) -> None:
@@ -317,6 +319,37 @@ def _validate_other_player(player: dict[str, Any], result: ConfigValidationResul
         player.pop("id", None)
 
 
+def _check_legacy_device_list(uploaded: dict[str, Any]) -> list[ConfigValidationIssue]:
+    """Errors in a v5 upload's ``BLUETOOTH_DEVICES``, in the uploaded shape.
+
+    The v6 conversion skips a bad or duplicate MAC with only a warning, so
+    without this an imported v5 file would silently lose speakers. When the
+    upload also has ``players`` the device list is ignored, so it is not checked.
+    """
+    if "BLUETOOTH_DEVICES" not in uploaded or "players" in uploaded:
+        return []
+    devices = uploaded["BLUETOOTH_DEVICES"]
+    if not isinstance(devices, list):
+        return [ConfigValidationIssue(field="BLUETOOTH_DEVICES", message="BLUETOOTH_DEVICES must be an array")]
+    issues: list[ConfigValidationIssue] = []
+    seen_macs: set[str] = set()
+    for index, device in enumerate(devices):
+        field_prefix = f"BLUETOOTH_DEVICES[{index}]"
+        if not isinstance(device, dict):
+            issues.append(ConfigValidationIssue(field=field_prefix, message="Each device must be an object"))
+            continue
+        mac = str(device.get("mac", "")).strip().upper()
+        if not mac:
+            continue
+        if not _MAC_RE.match(mac):
+            issues.append(ConfigValidationIssue(field=f"{field_prefix}.mac", message=f"Invalid MAC address: {mac}"))
+        elif mac in seen_macs:
+            issues.append(ConfigValidationIssue(field=f"{field_prefix}.mac", message=f"Duplicate MAC address: {mac}"))
+        else:
+            seen_macs.add(mac)
+    return issues
+
+
 def validate_uploaded_config(
     uploaded: dict[str, Any], *, default_base_listen_port: int = DEFAULT_LISTEN_PORT_BASE
 ) -> ConfigValidationResult:
@@ -327,9 +360,11 @@ def validate_uploaded_config(
     issues are reported as ``players[<index in players>].<key>``, backend keys
     as ``players[<i>].backend.<key>``.
     """
+    legacy_issues = _check_legacy_device_list(uploaded)
     migration = migrate_config_payload(uploaded)
     normalized = migration.normalized_config
     result = ConfigValidationResult(normalized_config=normalized)
+    result.errors.extend(legacy_issues)
     result.warnings.extend(
         ConfigValidationIssue(field=issue.field, message=issue.message) for issue in migration.warnings
     )
