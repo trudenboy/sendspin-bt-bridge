@@ -387,7 +387,7 @@ def update_config(mutator) -> None:
         if not changed_keys:
             logger.debug("Config update made no changes for %s", CONFIG_FILE)
             return
-        if had_legacy:
+        if had_legacy and raw is not None:
             _backup_v5_config(raw)
         write_config_file(existing)
     changed_key_list = ", ".join(changed_keys)

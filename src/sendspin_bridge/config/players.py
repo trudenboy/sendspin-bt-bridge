@@ -11,15 +11,15 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
 _MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
-BLUETOOTH = "bluetooth_a2dp"
-PULSE_SINK = "pulse_sink"
+BLUETOOTH: Final = "bluetooth_a2dp"
+PULSE_SINK: Final = "pulse_sink"
 LEGACY_DEVICE_STATE_KEYS = ("released", "released_by")
 # v5 device keys that move into ``backend``.
 _LEGACY_BACKEND_KEYS = ("mac", "adapter")
@@ -162,13 +162,15 @@ def device_entries(config: dict[str, Any]) -> list[dict[str, Any]]:
     players = config.get("players") if isinstance(config, dict) else None
     if not isinstance(players, list):
         return []
-    state = config.get("PLAYER_STATE") if isinstance(config.get("PLAYER_STATE"), dict) else {}
+    raw_state = config.get("PLAYER_STATE")
+    state: dict[str, Any] = raw_state if isinstance(raw_state, dict) else {}
     entries: list[dict[str, Any]] = []
     for player in players:
         entry = player_to_device_entry(player) if isinstance(player, dict) else None
         if entry is None:
             continue
-        player_state_entry = state.get(entry["id"]) if isinstance(state.get(entry["id"]), dict) else {}
+        raw_entry_state = state.get(entry["id"])
+        player_state_entry: dict[str, Any] = raw_entry_state if isinstance(raw_entry_state, dict) else {}
         for key in LEGACY_DEVICE_STATE_KEYS:
             if player_state_entry.get(key) is not None:
                 entry[key] = player_state_entry[key]

@@ -9,6 +9,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime, timezone
+from typing import Any
 
 from sendspin_bridge.application.diagnostics import invalidate_preflight_probe
 from sendspin_bridge.application.errors import UseCaseError, config_write_error
@@ -135,7 +136,8 @@ def _to_api_view(file_config: dict) -> dict:
     file_config = _as_v6(file_config)
     view = {k: v for k, v in file_config.items() if k not in ("players", "PLAYER_STATE")}
     entries = device_entries(file_config)
-    state = file_config.get("PLAYER_STATE") if isinstance(file_config.get("PLAYER_STATE"), dict) else {}
+    raw_state = file_config.get("PLAYER_STATE")
+    state: dict[str, Any] = raw_state if isinstance(raw_state, dict) else {}
     view["BLUETOOTH_DEVICES"] = [
         {k: v for k, v in entry.items() if k not in ("id", *LEGACY_DEVICE_STATE_KEYS)} for entry in entries
     ]
@@ -177,7 +179,8 @@ def _from_api_view(payload: dict, existing_file: dict) -> dict:
         if not (isinstance(p.get("backend"), dict) and p["backend"].get("type") == BLUETOOTH)
     )
     kept = {p.get("id") for p in players}
-    existing_state = existing.get("PLAYER_STATE") if isinstance(existing.get("PLAYER_STATE"), dict) else {}
+    raw_existing_state = existing.get("PLAYER_STATE")
+    existing_state: dict[str, Any] = raw_existing_state if isinstance(raw_existing_state, dict) else {}
     state = {pid: dict(entry) for pid, entry in existing_state.items() if pid in kept and isinstance(entry, dict)}
     last_volumes = payload.get("LAST_VOLUMES")
     for raw_mac, volume in (last_volumes if isinstance(last_volumes, dict) else {}).items():
