@@ -799,3 +799,63 @@ def test_addon_schema_has_no_device_list():
                 break
             block.append(line)
         assert not any(line.startswith("  bluetooth_devices:") for line in block), section
+
+
+# ── upgrade: schema dropped bluetooth_devices (Supervisor strips unknown options) ──
+
+
+def _v5_config_with_two_devices() -> dict:
+    return {
+        "CONFIG_SCHEMA_VERSION": 5,
+        "BLUETOOTH_DEVICES": [
+            {
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "player_name": "One",
+                "enabled": True,
+                "static_delay_ms": 120,
+                "released": True,
+                "room_id": "kitchen",
+            },
+            {"mac": "11:22:33:44:55:66", "player_name": "Two", "enabled": True},
+        ],
+        "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 40, "11:22:33:44:55:66": 70},
+    }
+
+
+def _translate_then_load(tmp_path, monkeypatch, options: dict):
+    _write_json(tmp_path / "options.json", options)
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    return config.load_config()
+
+
+@pytest.mark.parametrize("with_empty_option", [False, True])
+def test_upgrade_without_device_option_keeps_v5_speakers(tmp_path, monkeypatch, with_empty_option):
+    _write_json(tmp_path / "config.json", _v5_config_with_two_devices())
+    options = _minimal_options()
+    del options["bluetooth_devices"]
+    if with_empty_option:
+        options["bluetooth_devices"] = []
+
+    loaded = _translate_then_load(tmp_path, monkeypatch, options)
+
+    by_mac = {p["backend"]["mac"]: p for p in loaded["players"]}
+    assert set(by_mac) == {"AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66"}
+    one = by_mac["AA:BB:CC:DD:EE:FF"]
+    assert one["static_delay_ms"] == 120
+    assert one["room_id"] == "kitchen"
+    assert loaded["PLAYER_STATE"][one["id"]]["released"] is True
+    assert loaded["PLAYER_STATE"][one["id"]]["volume"] == 40
+    assert loaded["PLAYER_STATE"][by_mac["11:22:33:44:55:66"]["id"]]["volume"] == 70
+
+
+def test_fresh_install_without_devices_has_no_players(tmp_path, monkeypatch):
+    options = _minimal_options()
+    del options["bluetooth_devices"]
+    loaded = _translate_then_load(tmp_path, monkeypatch, options)
+    assert loaded["players"] == []

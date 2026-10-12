@@ -227,6 +227,13 @@ def main() -> None:
                 "speakers are managed in the bridge's web interface"
             )
     else:
+        legacy_devices = existing.get("BLUETOOTH_DEVICES")
+        if not options_devices and isinstance(legacy_devices, list):
+            # The add-on schema no longer has ``bluetooth_devices`` and the
+            # Supervisor strips unknown options, so on the first start after the
+            # upgrade options.json carries no list.  Keep the v5 speakers; the
+            # bridge's load_config() migrates them into ``players``.
+            options_devices = legacy_devices
         config["BLUETOOTH_DEVICES"] = options_devices
 
     # Normalize: devices without explicit 'enabled' field default to True
