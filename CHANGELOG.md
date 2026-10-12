@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- In the Home Assistant add-on, the bridge kept asking to connect Music
+  Assistant ("Music Assistant API URL is not configured") although Music
+  Assistant was found automatically and connected. The check now follows
+  the live connection, and "Revalidate MA link" uses the address found
+  automatically.
+
 ## [2.76.3] - 2026-10-10
 
 ### Fixed

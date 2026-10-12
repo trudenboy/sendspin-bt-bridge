@@ -12,7 +12,7 @@ from sendspin_bridge.services.bluetooth.device_registry import get_device_regist
 from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot
 from sendspin_bridge.services.music_assistant.ma_client import discover_ma_groups
-from sendspin_bridge.services.music_assistant.ma_runtime_state import set_ma_groups
+from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials, set_ma_groups
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +209,11 @@ def _run_sink_verification(device_names: list[str] | None = None) -> dict[str, A
 def _run_ma_validation(config: dict[str, Any]) -> dict[str, Any]:
     ma_url = str(config.get("MA_API_URL") or "").strip()
     ma_token = str(config.get("MA_API_TOKEN") or "").strip()
+    if not (ma_url and ma_token):
+        # Add-on mode keeps the auto-detected MA URL in runtime state only.
+        runtime_url, runtime_token = get_ma_api_credentials()
+        ma_url = ma_url or runtime_url
+        ma_token = ma_token or runtime_token
     if not (ma_url and ma_token):
         return _result("error", "ma_auth", "Music Assistant is not configured yet.", groups=[])
     registry = get_device_registry_snapshot()

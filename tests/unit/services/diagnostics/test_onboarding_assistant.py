@@ -555,3 +555,26 @@ def test_onboarding_does_not_regress_when_all_devices_in_standby():
     assert checkpoints["bluetooth_connected"].reached is True
     assert checkpoints["sink_ready"].reached is True
     assert snapshot.checklist.overall_status == "ok"
+
+
+def test_onboarding_ma_auth_ok_when_connected_with_auto_detected_url():
+    # Add-on mode: the MA URL is auto-detected at runtime (http://localhost:8095)
+    # and never written to MA_API_URL. A connected bridge must not be told to
+    # configure the URL (#525).
+    snapshot = build_onboarding_assistant_snapshot(
+        config={
+            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            "MA_API_URL": "",
+            "MA_API_TOKEN": "token",
+        },
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": 1},
+        },
+        devices=[SimpleNamespace(player_name="Kitchen", bluetooth_connected=True, has_sink=True)],
+        ma_connected=True,
+        runtime_mode="production",
+    )
+
+    checks = {check.key: check for check in snapshot.checks}
+    assert checks["ma_auth"].status == "ok"

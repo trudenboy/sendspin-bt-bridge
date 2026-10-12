@@ -798,7 +798,18 @@ def build_onboarding_assistant_snapshot(
             )
         )
 
-    if not ma_url:
+    # In add-on mode the MA URL is auto-detected at runtime and never written
+    # to MA_API_URL, so a live connection outranks the saved settings.
+    if ma_connected:
+        checks.append(
+            OnboardingCheck(
+                key="ma_auth",
+                status="ok",
+                summary="Music Assistant integration is configured and connected.",
+                details={"configured_url": ma_url},
+            )
+        )
+    elif not ma_url:
         checks.append(
             OnboardingCheck(
                 key="ma_auth",
@@ -819,15 +830,6 @@ def build_onboarding_assistant_snapshot(
                 summary="Music Assistant credentials are missing.",
                 details={"configured_url": ma_url},
                 actions=["Open Music Assistant settings and sign in or paste a long-lived token."],
-            )
-        )
-    elif ma_connected:
-        checks.append(
-            OnboardingCheck(
-                key="ma_auth",
-                status="ok",
-                summary="Music Assistant integration is configured and connected.",
-                details={"configured_url": ma_url},
             )
         )
     else:
