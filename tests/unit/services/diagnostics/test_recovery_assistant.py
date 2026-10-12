@@ -751,3 +751,17 @@ def test_latency_assistant_uses_runtime_reanchor_evidence():
     assert result["tone"] == "warning"
     assert result["recommended_min_buffer_ms"] == 400
     assert result["evidence"]["reanchor_count"] == 4
+
+
+def test_config_migration_failure_is_a_recovery_issue(monkeypatch):
+    import sendspin_bridge.services.diagnostics.recovery_assistant as ra
+
+    monkeypatch.setattr(ra, "get_config_migration_error", lambda: "RuntimeError: boom")
+    issue = ra._build_config_migration_issue()
+    assert issue is not None
+    assert issue.key == "config_migration_failed"
+    assert issue.severity == "error"
+    assert "boom" in issue.summary
+
+    monkeypatch.setattr(ra, "get_config_migration_error", lambda: None)
+    assert ra._build_config_migration_issue() is None

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
 
+from sendspin_bridge.config import V5_BACKUP_NAME, get_config_migration_error
 from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
@@ -646,6 +647,27 @@ def _build_config_writable_issue(preflight: dict[str, Any] | None = None) -> Rec
     )
 
 
+def _build_config_migration_issue() -> RecoveryIssue | None:
+    """The config file could not be moved to the current schema; speakers are not loaded."""
+    error = get_config_migration_error()
+    if not error:
+        return None
+    primary_action, secondary_actions = build_recovery_issue_actions("config_migration_failed", [])
+    return RecoveryIssue(
+        key="config_migration_failed",
+        severity="error",
+        title="The configuration could not be updated to this version",
+        summary=(
+            "The bridge started without speakers and left config.json untouched, "
+            f"so it is still the old file. Error: {error}. "
+            "Please report it with the bug report button. "
+            f"A copy of the old file is kept as {V5_BACKUP_NAME} once an update succeeds."
+        ),
+        primary_action=primary_action,
+        secondary_actions=secondary_actions,
+    )
+
+
 def _build_onboarding_issue(onboarding_assistant: dict[str, Any]) -> RecoveryIssue | None:
     checklist = onboarding_assistant.get("checklist") or {}
     current_title = str(checklist.get("current_step_title") or "").strip()
@@ -967,6 +989,9 @@ def build_recovery_assistant_snapshot(
     config_writable_issue = _build_config_writable_issue(preflight=preflight)
     if config_writable_issue:
         issues.append(config_writable_issue)
+    config_migration_issue = _build_config_migration_issue()
+    if config_migration_issue:
+        issues.append(config_migration_issue)
     onboarding_issue = _build_onboarding_issue(onboarding_assistant)
     if onboarding_issue:
         issues.append(onboarding_issue)
