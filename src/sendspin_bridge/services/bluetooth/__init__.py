@@ -358,48 +358,35 @@ def _config_file_exists() -> bool:
 
 
 def _update_bound_config_file(mutator) -> None:
-    """Atomically mutate the config file.
+    """Atomically mutate the config file (migrated to the current schema first).
 
-    This used to carry its own copy of the tempfile/fsync/replace dance —
-    the fourth in the codebase — and bound ``CONFIG_FILE`` at import, so a
-    test that redirected the config still wrote to the real one.  The store
-    resolves the path when asked.
+    Writes through ``ConfigStore.mutate`` rather than ``update_config``, so the
+    v5 -> v6 migration is applied here.  A failing migration is logged and the
+    mutator runs on the unmigrated dict, mirroring ``update_config``.
     """
     from sendspin_bridge.config import CONFIG_FILE
+    from sendspin_bridge.config.migration import migrate_v5_to_v6
     from sendspin_bridge.config.store import ConfigStore
 
-    ConfigStore(CONFIG_FILE).mutate(mutator)
+    def _migrated(cfg: dict) -> None:
+        try:
+            migrate_v5_to_v6(cfg)
+        except Exception:
+            logger.exception("Config migration failed; applying change to the unmigrated config")
+        mutator(cfg)
 
-
-def _sync_addon_options(mutator) -> bool:
-    """Mirror a change into the HA addon's options.json, if there is one.
-
-    Best-effort: the addon config page is a convenience mirror, and failing
-    to update it must not fail the operation that already succeeded against
-    config.json.  Uses the same store as the config so the write is atomic
-    and there is one implementation of it rather than five.
-    """
-    if not _OPTIONS_FILE.exists():
-        return False
-    from sendspin_bridge.config.store import ConfigStore
-
-    try:
-        ConfigStore(_OPTIONS_FILE).mutate(mutator)
-    except Exception as exc:
-        logger.debug("Could not sync to options.json: %s", exc)
-        return False
-    return True
+    ConfigStore(CONFIG_FILE).mutate(_migrated)
 
 
 def persist_device_enabled(player_name: str, enabled: bool) -> None:
-    """Persist the enabled flag to config.json and (in HA mode) to options.json."""
+    """Persist the enabled flag on the player in config.json."""
     if not _config_file_exists():
         return
 
     def _set_enabled(cfg: dict) -> None:
-        for dev in cfg.get("BLUETOOTH_DEVICES", []):
-            if _match_player_name(dev.get("player_name", ""), player_name):
-                dev["enabled"] = enabled
+        for player in cfg.get("players", []):
+            if isinstance(player, dict) and _match_player_name(player.get("name", ""), player_name):
+                player["enabled"] = enabled
                 break
 
     try:
@@ -407,19 +394,9 @@ def persist_device_enabled(player_name: str, enabled: bool) -> None:
     except Exception as e:
         logger.warning("Could not persist enabled flag for '%s': %s", player_name, e)
 
-    # Sync to options.json so the HA addon config page reflects the change
-    def _set_option_enabled(opts: dict) -> None:
-        for dev in opts.get("bluetooth_devices", []):
-            if _match_player_name(dev.get("player_name", ""), player_name):
-                dev["enabled"] = enabled
-                break
-
-    if _sync_addon_options(_set_option_enabled):
-        logger.debug("Synced enabled=%s for '%s' to options.json", enabled, player_name)
-
 
 def persist_device_released(player_name: str, released: bool, *, released_by: str | None = None) -> None:
-    """Persist the released (bt_management_enabled=False) flag to config.json.
+    """Persist the released (bt_management_enabled=False) flag in PLAYER_STATE.
 
     ``released_by`` records who initiated the release ("auto" / "user") so
     the auto-reclaim gate (issues #349/#350) can distinguish an operator's
@@ -430,32 +407,22 @@ def persist_device_released(player_name: str, released: bool, *, released_by: st
         return
 
     def _set_released(cfg: dict) -> None:
-        for dev in cfg.get("BLUETOOTH_DEVICES", []):
-            if _match_player_name(dev.get("player_name", ""), player_name):
-                dev["released"] = released
+        from sendspin_bridge.config.players import player_state
+
+        for player in cfg.get("players", []):
+            if isinstance(player, dict) and _match_player_name(player.get("name", ""), player_name):
+                state = player_state(cfg, player["id"])
+                state["released"] = released
                 if released and released_by:
-                    dev["released_by"] = released_by
+                    state["released_by"] = released_by
                 else:
-                    dev.pop("released_by", None)
+                    state.pop("released_by", None)
                 break
 
     try:
         _update_bound_config_file(_set_released)
     except Exception as e:
         logger.warning("Could not persist released flag for '%s': %s", player_name, e)
-
-    def _set_option_released(opts: dict) -> None:
-        for dev in opts.get("bluetooth_devices", []):
-            if _match_player_name(dev.get("player_name", ""), player_name):
-                dev["released"] = released
-                if released and released_by:
-                    dev["released_by"] = released_by
-                else:
-                    dev.pop("released_by", None)
-                break
-
-    if _sync_addon_options(_set_option_released):
-        logger.debug("Synced released=%s for '%s' to options.json", released, player_name)
 
 
 def classify_audio_capability(info: DeviceInfo) -> tuple[bool, str]:
