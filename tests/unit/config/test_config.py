@@ -5,6 +5,7 @@ import json
 import pytest
 
 from sendspin_bridge.config.players import device_entries, player_id_for_mac
+from tests.support.config_v6 import v6_players
 
 
 @pytest.fixture(autouse=True)
@@ -277,14 +278,16 @@ def test_resolve_device_room_context_prefers_manual_room_metadata_over_ha_area()
 
     resolved = resolve_device_room_context(
         {
-            "BLUETOOTH_DEVICES": [
-                {
-                    "mac": "AA:BB:CC:DD:EE:FF",
-                    "player_name": "Kitchen",
-                    "room_id": "kitchen",
-                    "room_name": "Kitchen",
-                }
-            ],
+            **v6_players(
+                [
+                    {
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "player_name": "Kitchen",
+                        "room_id": "kitchen",
+                        "room_name": "Kitchen",
+                    }
+                ]
+            ),
             "HA_AREA_NAME_ASSIST_ENABLED": True,
             "HA_ADAPTER_AREA_MAP": {"11:22:33:44:55:66": {"area_id": "living-room", "area_name": "Living Room"}},
         },

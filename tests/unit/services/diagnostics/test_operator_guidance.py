@@ -4,11 +4,12 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from sendspin_bridge.services.diagnostics.operator_guidance import build_operator_guidance_snapshot
+from tests.support.config_v6 import v6_players
 
 
 def test_operator_guidance_reports_empty_state_onboarding():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [], "BLUETOOTH_DEVICES": []},
+        config={"BLUETOOTH_ADAPTERS": [], **v6_players([])},
         onboarding_assistant={
             "checklist": {
                 "headline": "Setup checklist",
@@ -38,7 +39,7 @@ def test_operator_guidance_reports_empty_state_onboarding():
 
 def test_operator_guidance_keeps_onboarding_when_adapter_exists_but_no_devices():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": []},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([])},
         onboarding_assistant={
             "checklist": {
                 "headline": "Setup checklist",
@@ -67,7 +68,7 @@ def test_operator_guidance_keeps_onboarding_when_adapter_exists_but_no_devices()
 
 def test_operator_guidance_exposes_pending_onboarding_card_for_progress_state():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {
                 "headline": "Setup checklist",
@@ -104,7 +105,7 @@ def test_operator_guidance_exposes_pending_onboarding_card_for_progress_state():
 
 def test_operator_guidance_keeps_onboarding_card_available_in_healthy_mode():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {
                 "headline": "Setup checklist",
@@ -141,7 +142,7 @@ def test_operator_guidance_keeps_onboarding_card_available_in_healthy_mode():
 
 def test_operator_guidance_does_not_flag_transport_loss_while_audio_is_streaming():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {
                 "headline": "Setup checklist",
@@ -179,7 +180,7 @@ def test_operator_guidance_does_not_flag_transport_loss_while_audio_is_streaming
 
 def test_operator_guidance_does_not_flag_transport_loss_during_planned_ma_reconnect():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {
                 "headline": "Setup checklist",
@@ -216,7 +217,7 @@ def test_operator_guidance_does_not_flag_transport_loss_during_planned_ma_reconn
 
 def test_operator_guidance_groups_disconnected_devices_into_bulk_reconnect():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}, {"mac": "BB"}])},
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 2, "connected_devices": 0, "sink_ready_devices": 0},
@@ -252,7 +253,7 @@ def test_operator_guidance_groups_disconnected_devices_into_bulk_reconnect():
 
 def test_operator_guidance_issue_groups_include_machine_readable_context():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
@@ -279,7 +280,7 @@ def test_operator_guidance_issue_groups_include_machine_readable_context():
 
 def test_operator_guidance_promotes_ma_auth_attention():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
@@ -316,7 +317,7 @@ def test_operator_guidance_promotes_ma_auth_attention():
 
 def test_operator_guidance_surfaces_latency_issue_group_with_apply_action():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}, {"mac": "BB"}])},
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
@@ -365,7 +366,7 @@ def test_operator_guidance_surfaces_latency_issue_group_with_apply_action():
 
 def test_operator_guidance_prefers_device_settings_for_multi_device_latency_without_static_delays():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}, {"mac": "BB"}])},
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
@@ -417,7 +418,7 @@ def test_operator_guidance_emits_never_paired_group():
     Start pairing action — distinct from the existing 'repair_required'
     group (#260)."""
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
@@ -457,7 +458,7 @@ def test_operator_guidance_emits_never_paired_group():
 
 def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
@@ -488,7 +489,7 @@ def test_operator_guidance_prefers_repair_for_unpaired_reconnecting_device():
 
 def test_operator_guidance_prefers_release_for_active_auto_reconnect_device():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
@@ -521,7 +522,7 @@ def test_operator_guidance_suppresses_problem_banner_during_startup_grace_period
     snapshot = build_operator_guidance_snapshot(
         config={
             "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            **v6_players([{"mac": "AA"}]),
             "STARTUP_BANNER_GRACE_SECONDS": 10,
         },
         onboarding_assistant={
@@ -555,7 +556,7 @@ def test_operator_guidance_can_disable_startup_grace_period():
     snapshot = build_operator_guidance_snapshot(
         config={
             "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            **v6_players([{"mac": "AA"}]),
             "STARTUP_BANNER_GRACE_SECONDS": 0,
             "RECOVERY_BANNER_GRACE_SECONDS": 0,
         },
@@ -587,7 +588,7 @@ def test_operator_guidance_hides_recovery_banner_briefly_after_unlock():
     snapshot = build_operator_guidance_snapshot(
         config={
             "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            **v6_players([{"mac": "AA"}]),
             "STARTUP_BANNER_GRACE_SECONDS": 10,
             "RECOVERY_BANNER_GRACE_SECONDS": 20,
         },
@@ -617,7 +618,7 @@ def test_operator_guidance_hides_recovery_banner_briefly_after_unlock():
 
 def test_operator_guidance_uses_shared_recovery_actions_for_auto_released_issue():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {"overall_status": "ok", "progress_percent": 100},
             "counts": {"configured_devices": 1, "connected_devices": 0, "sink_ready_devices": 0},
@@ -645,7 +646,7 @@ def test_operator_guidance_uses_shared_recovery_actions_for_auto_released_issue(
 
 def test_operator_guidance_treats_user_released_devices_as_neutral():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
@@ -713,7 +714,7 @@ def test_operator_guidance_treats_user_released_devices_as_neutral():
 
 def test_operator_guidance_uses_bulk_reclaim_onboarding_when_all_devices_are_released():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}, {"mac": "BB"}])},
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
@@ -793,7 +794,7 @@ def test_operator_guidance_uses_bulk_reclaim_onboarding_when_all_devices_are_rel
 
 def test_operator_guidance_reports_all_devices_disabled_as_neutral():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}, {"mac": "BB"}])},
         onboarding_assistant={
             "checklist": {
                 "overall_status": "warning",
@@ -862,7 +863,7 @@ def test_operator_guidance_reports_all_devices_disabled_as_neutral():
 
 def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_devices():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checks": [
                 {
@@ -945,7 +946,7 @@ def test_operator_guidance_prioritizes_bluetooth_adapter_failure_over_disabled_d
 
 def test_operator_guidance_keeps_disabled_devices_neutral_when_bluetooth_check_is_healthy():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checks": [
                 {
@@ -1004,7 +1005,7 @@ def test_operator_guidance_keeps_disabled_devices_neutral_when_bluetooth_check_i
 
 def test_operator_guidance_surfaces_mixed_disabled_and_unpaired_state():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checks": [
                 {
@@ -1083,7 +1084,7 @@ def test_operator_guidance_surfaces_mixed_disabled_and_unpaired_state():
 
 def test_operator_guidance_prioritizes_runtime_access_over_disabled_devices():
     snapshot = build_operator_guidance_snapshot(
-        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], "BLUETOOTH_DEVICES": [{"mac": "AA"}]},
+        config={"BLUETOOTH_ADAPTERS": [{"id": "hci0"}], **v6_players([{"mac": "AA"}])},
         onboarding_assistant={
             "checks": [
                 {

@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from sendspin_bridge.config.players import device_entries
+
 # ---------------------------------------------------------------------------
 # Field classification
 # ---------------------------------------------------------------------------
@@ -107,8 +109,7 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
 # Keys that are pure runtime state and never trigger any action.
 _IGNORED_FIELDS: frozenset[str] = frozenset(
     {
-        "LAST_VOLUMES",
-        "LAST_SINKS",
+        "PLAYER_STATE",
         "CONFIG_SCHEMA_VERSION",
         "MA_AUTH_PROVIDER",
         "MA_USERNAME",
@@ -212,7 +213,7 @@ class ReconfigAction:
 
 def _devices_by_mac(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
-    for dev in config.get("BLUETOOTH_DEVICES", []) or []:
+    for dev in device_entries(config):
         if not isinstance(dev, dict):
             continue
         mac = dev.get("mac")
@@ -222,7 +223,7 @@ def _devices_by_mac(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _device_index_in(config: dict[str, Any], mac: str) -> int | None:
-    """Return the position of ``mac`` inside ``BLUETOOTH_DEVICES``.
+    """Return the position of ``mac`` inside the device entries (``players``).
 
     This is the index the startup path (``bridge_orchestrator``) would use
     when computing the ``base_listen_port + index`` fallback for a device
@@ -232,7 +233,7 @@ def _device_index_in(config: dict[str, Any], mac: str) -> int | None:
     listen port.
     """
     mac_upper = mac.upper()
-    for idx, dev in enumerate(config.get("BLUETOOTH_DEVICES", []) or []):
+    for idx, dev in enumerate(device_entries(config)):
         if not isinstance(dev, dict):
             continue
         dev_mac = dev.get("mac")

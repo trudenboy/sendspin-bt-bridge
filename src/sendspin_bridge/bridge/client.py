@@ -1932,7 +1932,7 @@ class SendspinClient:
             self._schedule_persist("volume", save_device_volume, _mac, new_volume)
         # MA-driven static_delay_ms changes flow through the daemon's
         # status mirror (BridgeDaemon._handle_server_command). Persist
-        # to BLUETOOTH_DEVICES[i].static_delay_ms so the value
+        # to the player's ``static_delay_ms`` so the value
         # survives restart and the bridge UI repaints from config.
         new_delay = updates.get("static_delay_ms")
         if isinstance(new_delay, int) and _mac:

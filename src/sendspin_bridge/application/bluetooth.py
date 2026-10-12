@@ -21,6 +21,7 @@ from sendspin_bridge.bluetooth.bluez import Adapter, Outcome, get_bluez
 from sendspin_bridge.bluetooth.controller import get_controller
 from sendspin_bridge.bluetooth.pairing import PairOptions, PairSession, PairTimings
 from sendspin_bridge.config import load_config
+from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.bluetooth import (
     COMMON_BT_PAIR_PINS,
     build_hci_map,
@@ -413,7 +414,7 @@ def known_devices(*, named_only: bool = True) -> list[dict[str, Any]]:
         for mac, entry in merged.items()
         if entry["name"] or not named_only
     ]
-    bridge_macs = {d.get("mac", "").upper() for d in load_config().get("BLUETOOTH_DEVICES", []) if d.get("mac")}
+    bridge_macs = {d.get("mac", "").upper() for d in device_entries(load_config()) if d.get("mac")}
     devices.sort(key=lambda d: (0 if d["mac"] in bridge_macs else 1, d["name"].lower()))
     return devices
 

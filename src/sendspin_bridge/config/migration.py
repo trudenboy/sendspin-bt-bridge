@@ -595,6 +595,8 @@ def resolve_device_room_context(
     adapter_mac: str = "",
 ) -> dict[str, str]:
     """Resolve room metadata for a configured Bluetooth device."""
+    from sendspin_bridge.config.players import device_entries
+
     resolved = {
         "room_id": "",
         "room_name": "",
@@ -607,7 +609,7 @@ def resolve_device_room_context(
     normalized_device_mac = _normalize_mac_key(device_mac)
     normalized_adapter_mac = _normalize_mac_key(adapter_mac)
     configured_device = None
-    for device in config.get("BLUETOOTH_DEVICES", []) or []:
+    for device in device_entries(config):
         if isinstance(device, dict) and _configured_device_matches(
             device,
             player_name=str(player_name or "").strip(),

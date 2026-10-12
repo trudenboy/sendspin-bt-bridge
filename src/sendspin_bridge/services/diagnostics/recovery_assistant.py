@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
 
+from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.diagnostics.device_phrasing import reconnect_attempt_summary
 from sendspin_bridge.services.diagnostics.preflight_status import collect_preflight_status
 from sendspin_bridge.services.diagnostics.recovery_timeline import build_recovery_timeline
@@ -743,8 +744,7 @@ def _build_traces(devices: list[Any], startup_progress: dict[str, Any]) -> list[
 
 
 def _build_latency_assistant(config: dict[str, Any], devices: list[Any]) -> dict[str, Any]:
-    configured_devices = config.get("BLUETOOTH_DEVICES", [])
-    configured_count = len(configured_devices) if isinstance(configured_devices, list) else 0
+    configured_count = len(device_entries(config))
     custom_delays = sum(1 for device in devices if getattr(device, "static_delay_ms", None) not in (None, 0, 0.0))
     pulse_latency = int(config.get("PULSE_LATENCY_MSEC") or 0)
     presets = [
@@ -947,7 +947,7 @@ def build_recovery_assistant_snapshot(
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
         delay_by_name: dict[str, Any] = {}
-        for dev_cfg in config.get("BLUETOOTH_DEVICES") or config.get("devices") or []:
+        for dev_cfg in device_entries(config) or config.get("devices") or []:
             name = dev_cfg.get("player_name") or ""
             if name:
                 delay_by_name[name] = dev_cfg.get("static_delay_ms")

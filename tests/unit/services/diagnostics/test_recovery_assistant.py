@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from sendspin_bridge.services.diagnostics.recovery_assistant import build_recovery_assistant_snapshot
+from tests.support.config_v6 import v6_players
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +58,7 @@ def test_recovery_assistant_flags_sink_and_disconnect_issues():
     ]
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}], "PULSE_LATENCY_MSEC": 300},
+        config={**v6_players([{"mac": "AA"}, {"mac": "BB"}]), "PULSE_LATENCY_MSEC": 300},
         devices=devices,
         onboarding_assistant={
             "checklist": {
@@ -125,7 +126,7 @@ def test_recovery_assistant_surfaces_config_writable_failure_as_issue(monkeypatc
     )
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[],
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "complete", "message": "Startup complete."},
@@ -159,7 +160,7 @@ def test_recovery_assistant_omits_config_writable_card_when_ok(monkeypatch):
     )
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[],
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "complete", "message": "Startup complete."},
@@ -172,7 +173,7 @@ def test_recovery_assistant_omits_config_writable_card_when_ok(monkeypatch):
 
 def test_recovery_assistant_reports_healthy_single_device_setup():
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -199,7 +200,7 @@ def test_recovery_assistant_reports_healthy_single_device_setup():
 
 def test_recovery_assistant_ignores_transport_down_while_audio_is_streaming():
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -225,7 +226,7 @@ def test_recovery_assistant_ignores_transport_down_while_audio_is_streaming():
 
 def test_recovery_assistant_ignores_transport_down_during_planned_ma_reconnect():
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -256,7 +257,7 @@ def test_recovery_assistant_ignores_transport_down_during_planned_ma_reconnect()
 def test_recovery_assistant_transport_down_with_connection_error_suggests_port_check():
     """When transport is down due to connection error, guidance should mention SENDSPIN_PORT."""
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -289,7 +290,7 @@ def test_recovery_assistant_transport_down_with_connection_error_suggests_port_c
 
 def test_recovery_assistant_prefers_repair_for_unpaired_device():
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -354,7 +355,7 @@ def test_recovery_assistant_emits_auto_disabled_never_paired_card():
     a 'Re-enable' recovery card (#263), distinct from the never_paired
     'Start pairing' card (which targets still-enabled devices)."""
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -390,7 +391,7 @@ def test_recovery_assistant_emits_never_paired_for_unknown_bluez_record():
     card must title 'has never been paired' with a Start pairing primary
     action — distinct from 'needs re-pairing' (#260)."""
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -435,7 +436,7 @@ def test_recovery_assistant_repair_required_unchanged_when_never_paired_false():
     """Regression: a device that WAS paired but is now offline must still
     produce the existing `repair_required` card (not `never_paired`)."""
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Office",
@@ -467,7 +468,7 @@ def test_recovery_assistant_disconnected_unchanged_when_paired_unknown_no_flag()
     (BlueZ-hiccup before threshold), continue to emit `disconnected` rather
     than over-triggering the never-paired surface."""
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Bath",
@@ -496,7 +497,7 @@ def test_recovery_assistant_disconnected_unchanged_when_paired_unknown_no_flag()
 
 def test_recovery_assistant_only_flags_auto_released_devices():
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}], "PULSE_LATENCY_MSEC": 250},
+        config={**v6_players([{"mac": "AA"}, {"mac": "BB"}]), "PULSE_LATENCY_MSEC": 250},
         devices=[
             SimpleNamespace(
                 player_name="Kitchen",
@@ -550,7 +551,7 @@ def test_recovery_assistant_flags_sink_system_muted():
     ]
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "CC"}], "PULSE_LATENCY_MSEC": 300},
+        config={**v6_players([{"mac": "CC"}]), "PULSE_LATENCY_MSEC": 300},
         devices=devices,
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "complete", "message": "Startup complete."},
@@ -581,7 +582,7 @@ def test_recovery_assistant_no_sink_muted_issue_when_app_muted():
     ]
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "CC"}], "PULSE_LATENCY_MSEC": 300},
+        config={**v6_players([{"mac": "CC"}]), "PULSE_LATENCY_MSEC": 300},
         devices=devices,
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "complete", "message": "Startup complete."},
@@ -625,7 +626,7 @@ def test_recovery_assistant_surfaces_samsung_cod_filter_card():
     ]
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "1C:86:9A:71:E0:F5"}], "PULSE_LATENCY_MSEC": 300},
+        config={**v6_players([{"mac": "1C:86:9A:71:E0:F5"}]), "PULSE_LATENCY_MSEC": 300},
         devices=devices,
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "running", "message": "Startup complete."},
@@ -675,7 +676,7 @@ def test_recovery_assistant_suppresses_samsung_cod_filter_when_device_connected(
     ]
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "1C:86:9A:71:E0:F5"}], "PULSE_LATENCY_MSEC": 300},
+        config={**v6_players([{"mac": "1C:86:9A:71:E0:F5"}]), "PULSE_LATENCY_MSEC": 300},
         devices=devices,
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "running", "message": "Startup complete."},
@@ -713,7 +714,7 @@ def test_recovery_assistant_samsung_cod_filter_takes_precedence_over_repair():
     ]
 
     snapshot = build_recovery_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "1C:86:9A:71:E0:F5"}], "PULSE_LATENCY_MSEC": 300},
+        config={**v6_players([{"mac": "1C:86:9A:71:E0:F5"}]), "PULSE_LATENCY_MSEC": 300},
         devices=devices,
         onboarding_assistant={"checklist": {"overall_status": "ok", "checkpoints": []}},
         startup_progress={"status": "running", "message": "Startup complete."},
@@ -743,7 +744,7 @@ def test_latency_assistant_uses_runtime_reanchor_evidence():
     )
 
     result = _build_latency_assistant(
-        {"BLUETOOTH_DEVICES": [{"mac": "A"}, {"mac": "B"}], "PULSE_LATENCY_MSEC": 600},
+        {**v6_players([{"mac": "A"}, {"mac": "B"}]), "PULSE_LATENCY_MSEC": 600},
         [device],
     )
 

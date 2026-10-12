@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sendspin_bridge.config import _player_id_from_mac
+from sendspin_bridge.config.players import device_entries
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ def find_duplicate_devices(
     if not ma_url or not ma_token:
         return []
 
-    devices = config.get("BLUETOOTH_DEVICES") or []
+    devices = device_entries(config)
     if not devices:
         return []
 
@@ -114,7 +115,7 @@ def find_duplicate_devices(
         mac = _normalize_mac(dev.get("mac"))
         if not mac:
             continue
-        device_name = str(dev.get("name") or mac)
+        device_name = str(dev.get("player_name") or dev.get("name") or mac)
         existing_name = _matching_ma_name(players, mac=mac, device_name=device_name, own_bridge_name=bridge_name)
         if not existing_name:
             continue

@@ -449,7 +449,7 @@ def save_device_static_delay(
     source: str | None = None,
     codec: str | None = None,
 ) -> None:
-    """Persist per-device static_delay_ms to BLUETOOTH_DEVICES[i].static_delay_ms.
+    """Persist per-device static_delay_ms into the matching player.
 
     Used when MA pushes a SET_STATIC_DELAY command — the parent extracts the
     new value from the daemon's status update and writes it through to config

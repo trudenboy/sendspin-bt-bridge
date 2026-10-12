@@ -28,6 +28,7 @@ from sendspin_bridge.config import (
     resolve_web_port,
 )
 from sendspin_bridge.config.logging_setup import apply_log_level
+from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext, activate_device
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
@@ -387,7 +388,7 @@ class BridgeOrchestrator:
 
         return RuntimeBootstrap(
             config=config,
-            device_configs=list(config.get("BLUETOOTH_DEVICES", [])),
+            device_configs=device_entries(config),
             demo_mode=demo_mode,
             delivery_channel=delivery_channel,
             server_host=server_host,

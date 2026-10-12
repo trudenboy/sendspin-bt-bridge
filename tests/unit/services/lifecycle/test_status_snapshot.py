@@ -9,6 +9,7 @@ from sendspin_bridge.services.lifecycle.status_snapshot import (
     build_device_snapshot_pairs,
     build_group_snapshots,
 )
+from tests.support.config_v6 import v6_players
 
 UTC = timezone.utc
 
@@ -103,7 +104,7 @@ def test_build_device_snapshot_includes_global_enabled_flag(monkeypatch):
     client = _make_client(player_name="Kitchen @ LXC")
     monkeypatch.setattr(
         "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
-        lambda: {"BLUETOOTH_DEVICES": [{"player_name": "Kitchen", "enabled": False}]},
+        lambda: v6_players([{"player_name": "Kitchen", "mac": "AA:BB:CC:DD:EE:01", "enabled": False}]),
     )
 
     snapshot = build_device_snapshot(client)
@@ -118,7 +119,7 @@ def test_build_device_snapshot_exposes_pairing_config_and_runtime_status(monkeyp
     client.status.update({"pairing_window_open": True, "pairing_pin": "123456"})
     monkeypatch.setattr(
         "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
-        lambda: {"SENDSPIN_PAIRING": True, "BLUETOOTH_DEVICES": []},
+        lambda: {"SENDSPIN_PAIRING": True, **v6_players([])},
     )
 
     data = build_device_snapshot(client).to_dict()
@@ -133,15 +134,16 @@ def test_build_device_snapshot_includes_room_context_and_transfer_readiness(monk
     client.status.update({"reconnecting": True})
     monkeypatch.setattr(
         "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
-        lambda: {
-            "BLUETOOTH_DEVICES": [
+        lambda: v6_players(
+            [
                 {
                     "player_name": "Kitchen",
+                    "mac": "AA:BB:CC:DD:EE:01",
                     "room_id": "living-room",
                     "room_name": "Living Room",
                 }
             ]
-        },
+        ),
     )
 
     snapshot = build_device_snapshot(client)

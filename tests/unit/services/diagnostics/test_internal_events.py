@@ -10,6 +10,7 @@ from sendspin_bridge.services.diagnostics.internal_events import (
     InternalEventPublisher,
     normalize_device_event,
 )
+from tests.support.config_v6 import v6_players
 
 
 def test_internal_event_publisher_notifies_subscribers():
@@ -84,15 +85,16 @@ def test_publish_device_event_enriches_details_with_room_and_readiness_context(m
     )
     monkeypatch.setattr(
         "sendspin_bridge.services.lifecycle.status_snapshot.load_config",
-        lambda: {
-            "BLUETOOTH_DEVICES": [
+        lambda: v6_players(
+            [
                 {
                     "player_name": "Kitchen",
+                    "mac": "AA:BB:CC:DD:EE:FF",
                     "room_id": "living-room",
                     "room_name": "Living Room",
                 }
             ]
-        },
+        ),
     )
     state.set_clients([client])
     state.clear_device_events("sendspin-kitchen")

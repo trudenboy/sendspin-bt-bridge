@@ -1231,7 +1231,7 @@ def _build_header_status(
     mixed_bluetooth_guidance: dict[str, Any] | None = None,
 ) -> GuidanceHeaderStatus:
     configured_adapters = _count_config_entries(config, "BLUETOOTH_ADAPTERS")
-    configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
+    configured_devices = len(config.get("players") or [])
     checklist = onboarding_assistant.get("checklist") or {}
     active_devices = [device for device in devices if getattr(device, "bt_management_enabled", True)]
     released_devices = [device for device in devices if getattr(device, "bt_management_enabled", True) is False]
@@ -1347,7 +1347,7 @@ def build_operator_guidance_snapshot(
     devices: list[Any],
     disabled_devices: list[dict[str, Any]] | None = None,
 ) -> OperatorGuidanceSnapshot:
-    configured_devices = _count_config_entries(config, "BLUETOOTH_DEVICES")
+    configured_devices = len(config.get("players") or [])
     checklist = onboarding_assistant.get("checklist") or {}
     disabled_count = len(disabled_devices or [])
     all_devices_globally_disabled = configured_devices > 0 and not devices and disabled_count >= configured_devices

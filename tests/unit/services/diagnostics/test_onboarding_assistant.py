@@ -3,11 +3,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from sendspin_bridge.services.diagnostics.onboarding_assistant import build_onboarding_assistant_snapshot
+from tests.support.config_v6 import v6_players
 
 
 def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {
                 "system": "unreachable",
@@ -35,7 +36,7 @@ def test_onboarding_audio_unreachable_socket_emits_pa_socket_refused_reason_code
 
 def test_onboarding_audio_unknown_socket_missing_emits_pa_socket_missing_reason_code():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {
                 "system": "unknown",
@@ -61,7 +62,7 @@ def test_onboarding_audio_unknown_socket_missing_emits_pa_socket_missing_reason_
 
 def test_onboarding_audio_unknown_without_socket_skips_missing_reason_code():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "unknown", "sinks": 0},
             "bluetooth": {"controller": True, "paired_devices": 0},
@@ -90,7 +91,7 @@ def test_onboarding_bluetooth_step_cross_references_audio_when_both_fail():
     co-occur.
     """
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {
                 "system": "unreachable",
@@ -126,7 +127,7 @@ def test_onboarding_bluetooth_step_calls_out_inactive_daemon():
     but the actionable next step lived outside the UI.
     """
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {
                 "system": "pipewire",
@@ -158,7 +159,7 @@ def test_onboarding_bluetooth_step_skips_audio_hint_when_audio_healthy():
     we must not muddy the BT remediation with a misleading audio/UID hint.
     """
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {
                 "system": "pipewire",
@@ -191,7 +192,7 @@ def test_onboarding_audio_unreachable_without_refused_error_skips_linger_reason_
     failures would send operators down a useless diagnostic path.
     """
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {
                 "system": "unreachable",
@@ -217,7 +218,7 @@ def test_onboarding_audio_unreachable_without_refused_error_skips_linger_reason_
 
 def test_onboarding_assistant_reports_missing_prerequisites():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "unknown", "sinks": 0},
             "bluetooth": {"controller": False, "paired_devices": 0},
@@ -254,7 +255,7 @@ def test_onboarding_assistant_reports_missing_prerequisites():
 
 def test_onboarding_assistant_blocks_lower_layers_when_runtime_access_fails():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "dbus": False,
             "audio": {"system": "pulseaudio", "sinks": 1},
@@ -294,7 +295,7 @@ def test_onboarding_assistant_reports_connected_bridge_readiness():
 
     snapshot = build_onboarding_assistant_snapshot(
         config={
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}],
+            **v6_players([{"mac": "AA"}, {"mac": "BB"}]),
             "PULSE_LATENCY_MSEC": 300,
             "MA_API_URL": "http://ma.local",
             "MA_API_TOKEN": "token",
@@ -329,7 +330,7 @@ def test_onboarding_assistant_reports_connected_bridge_readiness():
 
 def test_onboarding_assistant_recommends_scanning_for_unpaired_speakers():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "pulseaudio", "sinks": 1},
             "bluetooth": {"controller": True, "paired_devices": 0},
@@ -349,7 +350,7 @@ def test_onboarding_assistant_recommends_scanning_for_unpaired_speakers():
 
 def test_onboarding_assistant_recommends_device_scan_when_no_devices_configured():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "pulseaudio", "sinks": 1},
             "bluetooth": {"controller": True, "paired_devices": 1},
@@ -368,7 +369,7 @@ def test_onboarding_assistant_recommends_device_scan_when_no_devices_configured(
 
 def test_onboarding_assistant_surfaces_bridge_control_before_sink_checks_for_disabled_devices():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA", "enabled": False}], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([{"mac": "AA", "enabled": False}]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "pulseaudio", "sinks": 1},
             "bluetooth": {"controller": True, "paired_devices": 1},
@@ -390,7 +391,7 @@ def test_onboarding_assistant_surfaces_bridge_control_before_sink_checks_for_dis
 
 def test_onboarding_assistant_explains_disabled_plus_unpaired_mixed_state():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA", "enabled": False}], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([{"mac": "AA", "enabled": False}]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "pulseaudio", "sinks": 1},
             "bluetooth": {"controller": True, "paired_devices": 0},
@@ -432,7 +433,7 @@ def test_onboarding_assistant_points_latency_step_to_general_latency_setting():
 
     snapshot = build_onboarding_assistant_snapshot(
         config={
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}],
+            **v6_players([{"mac": "AA"}, {"mac": "BB"}]),
             "PULSE_LATENCY_MSEC": 1000,
             "MA_API_URL": "http://ma.local",
             "MA_API_TOKEN": "token",
@@ -472,7 +473,7 @@ def test_onboarding_assistant_points_multi_device_latency_step_to_device_setting
 
     snapshot = build_onboarding_assistant_snapshot(
         config={
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}, {"mac": "BB"}],
+            **v6_players([{"mac": "AA"}, {"mac": "BB"}]),
             "PULSE_LATENCY_MSEC": 1000,
             "MA_API_URL": "http://ma.local",
             "MA_API_TOKEN": "token",
@@ -495,7 +496,7 @@ def test_onboarding_assistant_points_multi_device_latency_step_to_device_setting
 
 def test_onboarding_assistant_recommends_discovery_when_ma_url_missing():
     snapshot = build_onboarding_assistant_snapshot(
-        config={"BLUETOOTH_DEVICES": [{"mac": "AA"}], "PULSE_LATENCY_MSEC": 200},
+        config={**v6_players([{"mac": "AA"}]), "PULSE_LATENCY_MSEC": 200},
         preflight={
             "audio": {"system": "pulseaudio", "sinks": 1},
             "bluetooth": {"controller": True, "paired_devices": 1},
@@ -533,7 +534,7 @@ def test_onboarding_does_not_regress_when_all_devices_in_standby():
 
     snapshot = build_onboarding_assistant_snapshot(
         config={
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            **v6_players([{"mac": "AA"}]),
             "PULSE_LATENCY_MSEC": 300,
             "MA_API_URL": "http://ma.local",
             "MA_API_TOKEN": "token",
@@ -563,7 +564,7 @@ def test_onboarding_ma_auth_ok_when_connected_with_auto_detected_url():
     # configure the URL (#525).
     snapshot = build_onboarding_assistant_snapshot(
         config={
-            "BLUETOOTH_DEVICES": [{"mac": "AA"}],
+            **v6_players([{"mac": "AA"}]),
             "MA_API_URL": "",
             "MA_API_TOKEN": "token",
         },
