@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.76.4] - 2026-10-12
+
 ### Fixed
 
 - Changing the volume or mute with the speaker's own buttons now moves the
