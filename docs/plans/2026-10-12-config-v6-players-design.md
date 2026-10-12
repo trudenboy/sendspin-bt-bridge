@@ -143,9 +143,12 @@ apply it without a restart).
 * `PLAYER_STATE` is internal, like `SECRET_KEY`: not in `GET /config` or
   `/config/export`, not accepted by `PUT /config` (the server keeps its copy).
 * `id` is optional in `PUT /config` for new players; the server assigns it.
-  For an existing id, changing `backend.type`, `backend.mac` or `backend.match`
-  is `422 player_backend_immutable` (replacing a speaker is remove + add).
-  Changing `backend.sink` alone is allowed: it re-targets the output.
+  For an existing id, changing `backend.type` or `backend.mac` is
+  `422 player_backend_immutable` (replacing a speaker is remove + add).
+  Changing `backend.sink` is allowed: it re-targets the output.
+* `backend.match` is server-managed: the server fills it from the chosen sink's
+  properties whenever `backend.sink` is set or changed, and ignores a `match`
+  sent by the client.
 * `POST /config/import` accepts v5 and v6 files; v5 goes through the same
   migration.
 
@@ -209,8 +212,8 @@ in this order, logging the method that matched:
    them; with several, narrowed by `alsa.long_card_name`
 4. the stored `backend.sink` name
 
-If the name differs from `backend.sink`, the config is updated and a
-`sink_rematched` event is published. No match → `sink_missing`; an ambiguous
+If the name differs from `backend.sink`, `backend.sink` is updated (`match`
+stays, it is what found the device) and a `sink_rematched` event is published. No match → `sink_missing`; an ambiguous
 vendor:product without a tie-breaker → `sink_ambiguous` (no guess). A sink
 claimed by two players goes to the first in list order; the other reports
 `sink_in_use`.
@@ -284,7 +287,7 @@ are unchanged in stage 3; stage 4 widens them.
 
 ### `PUT /config` (RFC 9457 problems with a stable `code`)
 
-* `422 player_backend_immutable` — backend type, MAC or `match` changed for an
+* `422 player_backend_immutable` — backend type or MAC changed for an
   existing id.
 * `422 duplicate_player` — two players with one MAC or one sink.
 * `422 option_not_supported_for_backend` — `auto_disconnect` or `infrasound` on
