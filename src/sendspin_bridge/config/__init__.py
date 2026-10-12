@@ -339,11 +339,18 @@ def get_config_migration_error() -> str | None:
 
 
 def _backup_v5_config(raw: bytes) -> None:
+    """Keep the pre-v6 file once, owner-only (it holds the secret key and tokens)."""
     backup = CONFIG_DIR / V5_BACKUP_NAME
-    if backup.exists():
+    try:
+        fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return
+    except OSError as exc:
+        logger.warning("Could not save %s: %s", backup, exc)
         return
     try:
-        backup.write_bytes(raw)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
         logger.info("Saved the pre-v6 config as %s", backup)
     except OSError as exc:
         logger.warning("Could not save %s: %s", backup, exc)
@@ -363,15 +370,25 @@ def update_config(mutator) -> None:
             if not isinstance(existing, dict):
                 raise ValueError("Config file must contain a JSON object")
         before = copy.deepcopy(existing)
-        from sendspin_bridge.config.migration import migrate_v5_to_v6
+        from sendspin_bridge.config.migration import LEGACY_V5_KEYS, migrate_v5_to_v6
 
-        migrate_v5_to_v6(existing)
+        global _config_migration_error
+        had_legacy = raw is not None and any(key in before for key in LEGACY_V5_KEYS)
+        try:
+            migrate_v5_to_v6(existing)
+        except Exception as exc:  # writers must keep working on a file we cannot migrate
+            _config_migration_error = f"{type(exc).__name__}: {exc}"
+            logger.exception("Config migration failed; applying the update to the unmigrated file")
+            existing = copy.deepcopy(before)
+            had_legacy = False
         mutator(existing)
         existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
         changed_keys = _changed_config_keys(before, existing)
         if not changed_keys:
             logger.debug("Config update made no changes for %s", CONFIG_FILE)
             return
+        if had_legacy:
+            _backup_v5_config(raw)
         write_config_file(existing)
     changed_key_list = ", ".join(changed_keys)
     if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):
@@ -565,10 +582,6 @@ def load_config() -> dict:
         else:
             if migrated.needs_persist:
                 try:
-                    from sendspin_bridge.config.migration import LEGACY_V5_KEYS
-
-                    if any(key in saved_config for key in LEGACY_V5_KEYS):
-                        _backup_v5_config(raw)
 
                     def _persist_migration(cfg: dict) -> None:
                         for key, value in migrated.normalized_config.items():

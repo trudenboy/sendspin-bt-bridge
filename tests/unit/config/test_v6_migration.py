@@ -222,3 +222,40 @@ def test_update_config_mutators_see_v6(tmp_path, monkeypatch):
     assert seen["legacy"] is False
     assert seen["players"][0]["backend"]["mac"] == ENEBY
     assert "players" in json.loads((tmp_path / "config.json").read_text())
+
+
+def test_update_config_as_first_writer_backs_up_the_v5_file(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    original = FIXTURE.read_text()
+    (tmp_path / "config.json").write_text(original)
+
+    config.update_config(lambda cfg: cfg.__setitem__("LOG_LEVEL", "DEBUG"))
+
+    assert (tmp_path / "config.v5.bak.json").read_text() == original
+    assert "BLUETOOTH_DEVICES" not in json.loads((tmp_path / "config.json").read_text())
+
+
+def test_update_config_survives_a_failing_migration(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    import sendspin_bridge.config.migration as migration
+
+    def _boom(_cfg):
+        raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr(migration, "migrate_v5_to_v6", _boom)
+    (tmp_path / "config.json").write_text(json.dumps({"BLUETOOTH_DEVICES": [{"mac": ENEBY}]}))
+
+    config.update_config(lambda c: c.__setitem__("SECRET_KEY", "x"))
+
+    on_disk = json.loads((tmp_path / "config.json").read_text())
+    assert on_disk["SECRET_KEY"] == "x"
+    assert on_disk["BLUETOOTH_DEVICES"] == [{"mac": ENEBY}]
+    assert "synthetic failure" in (config.get_config_migration_error() or "")
+    assert not (tmp_path / "config.v5.bak.json").exists()
+
+
+def test_v5_backup_is_owner_only(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    (tmp_path / "config.json").write_text(FIXTURE.read_text())
+    config.load_config()
+    assert (tmp_path / "config.v5.bak.json").stat().st_mode & 0o777 == 0o600
