@@ -747,3 +747,55 @@ def test_merge_adapters_matches_mac_case_insensitively():
     result = _merge_adapters(detected, user)
     assert len(result) == 1
     assert result[0]["name"] == "Living Room"
+
+
+# ── v6 players ───────────────────────────────────────────────────────────
+
+
+def test_v6_players_survive_and_options_devices_are_ignored(tmp_path, capsys):
+    # A speaker removed in the UI does not come back from options.json.
+    existing = {
+        "CONFIG_SCHEMA_VERSION": 6,
+        "players": [{"id": "p1", "name": "Kept", "backend": {"type": "bluetooth_a2dp", "mac": "11:22:33:44:55:66"}}],
+        "PLAYER_STATE": {"p1": {"volume": 33}},
+    }
+    _write_json(tmp_path / "config.json", existing)
+    _write_json(tmp_path / "options.json", _minimal_options())  # still lists AA:BB:CC:DD:EE:FF
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["players"] == existing["players"]
+    assert cfg["PLAYER_STATE"] == {"p1": {"volume": 33}}
+    assert "BLUETOOTH_DEVICES" not in cfg
+    assert "bluetooth_devices" in capsys.readouterr().out
+
+
+def test_first_start_after_upgrade_hands_legacy_devices_to_the_bridge(tmp_path, monkeypatch):
+    _write_json(tmp_path / "config.json", {"CONFIG_SCHEMA_VERSION": 5, "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 50}})
+    _write_json(tmp_path / "options.json", _minimal_options())
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    loaded = config.load_config()
+    assert [p["backend"]["mac"] for p in loaded["players"]] == ["AA:BB:CC:DD:EE:FF"]
+    pid = loaded["players"][0]["id"]
+    assert loaded["PLAYER_STATE"][pid]["volume"] == 50
+
+
+def test_addon_schema_has_no_device_list():
+    # PyYAML is not a project dependency: scan the top-level blocks by indentation.
+    lines = (Path(__file__).resolve().parents[2] / "ha-addon" / "config.yaml").read_text().splitlines()
+    for section in ("options", "schema"):
+        start = lines.index(f"{section}:")
+        block = []
+        for line in lines[start + 1 :]:
+            if line and not line.startswith((" ", "#")):
+                break
+            block.append(line)
+        assert not any(line.startswith("  bluetooth_devices:") for line in block), section

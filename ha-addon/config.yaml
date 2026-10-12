@@ -58,7 +58,6 @@ options:
   ma_api_url: ""
   ma_api_token: ""
   ma_auto_silent_auth: true
-  bluetooth_devices: []
   bluetooth_adapters: []
   ha_integration:
     enabled: false
@@ -90,25 +89,6 @@ schema:
   ma_api_url: str?
   ma_api_token: str?
   ma_auto_silent_auth: bool?
-  bluetooth_devices:
-    - mac: "match(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"
-      player_name: str
-      adapter: str?
-      static_delay_ms: int?
-      static_delay_source: str?
-      static_delay_calibrated_at: str?
-      static_delay_codec: str?
-      required_lead_time_ms: int?
-      min_buffer_ms: int?
-      listen_host: str?
-      listen_port: port?
-      enabled: bool?
-      preferred_format: str?
-      keepalive_silence: bool?
-      keepalive_interval: int?
-      idle_disconnect_minutes: int?
-      idle_mode: str?
-      power_save_delay_minutes: int?
   bluetooth_adapters:
     - id: str
       mac: str?

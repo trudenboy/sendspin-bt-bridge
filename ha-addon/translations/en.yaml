@@ -105,62 +105,6 @@ configuration:
       Route volume changes through the Music Assistant API instead of
       direct PulseAudio control. Ensures MA stays in sync with actual
       speaker volume. Requires "Music Assistant API URL" to be set.
-  bluetooth_devices:
-    name: "Bluetooth devices"
-    description: >-
-      List of Bluetooth speakers to bridge. Each entry requires a MAC
-      address and a player name that will appear in Music Assistant.
-    fields:
-      mac:
-        name: "MAC address"
-        description: >-
-          Bluetooth MAC address of the speaker (format: AA:BB:CC:DD:EE:FF).
-          Find it in bluetoothctl with "devices" after pairing.
-      player_name:
-        name: "Player name"
-        description: >-
-          Display name shown in Music Assistant for this speaker.
-          Each device must have a unique name.
-      adapter:
-        name: "Bluetooth adapter"
-        description: >-
-          MAC address of the Bluetooth adapter to use for this device.
-          Leave blank to use the system default adapter.
-      static_delay_ms:
-        name: "Static delay (ms)"
-        description: >-
-          Extra delay in milliseconds (0–5000) added on top of DAC-anchored sync.
-          Default 0. Use small positive values (e.g. 50) only if audio plays slightly too late.
-      listen_host:
-        name: "Listen host"
-        description: >-
-          Override the network address this player listens on. Leave empty
-          to use the default address. Only needed in advanced network setups.
-      listen_port:
-        name: "Listen port"
-        description: >-
-          Override the port this player listens on. Leave empty to use an
-          automatically assigned port.
-      enabled:
-        name: "Enabled"
-        description: >-
-          Enable or disable this Bluetooth device. Disabled devices are
-          not connected or bridged until re-enabled.
-      preferred_format:
-        name: "Preferred audio format"
-        description: >-
-          Preferred audio format string (e.g. "pcm,44100,16,2"). Leave
-          empty to use the Music Assistant default format.
-      keepalive_silence:
-        name: "Keepalive silence"
-        description: >-
-          Send silent audio when idle to keep the Bluetooth connection
-          alive. Prevents some speakers from auto-powering off.
-      keepalive_interval:
-        name: "Keepalive interval"
-        description: >-
-          Interval in seconds between keepalive silence packets. Only
-          applies when "Keepalive silence" is enabled.
   bluetooth_adapters:
     name: "Bluetooth adapters"
     description: >-
