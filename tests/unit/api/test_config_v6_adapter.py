@@ -53,11 +53,26 @@ def test_get_config_returns_v5_shape(client):
     assert "players" not in body and "PLAYER_STATE" not in body
 
 
-def test_saving_the_same_list_keeps_ids_order_and_state(client, tmp_path):
+def test_saving_the_same_list_keeps_ids_order_and_state(client, tmp_path, monkeypatch):
     # An untouched save changes nothing Music Assistant sees.
+    import sendspin_bridge.application.config as config_uc
+
+    real_diff = config_uc.diff_configs
+    actions: list = []
+    calls: list = []
+
+    def _spy(old, new):
+        calls.append(1)
+        result = real_diff(old, new)
+        actions.extend(result)
+        return result
+
+    monkeypatch.setattr(config_uc, "diff_configs", _spy)
     payload = client.get("/api/v1/config").json()
     resp = client.put("/api/v1/config", json=payload)
     assert resp.status_code == 200, resp.text
+    assert calls, "the save never diffed the config"
+    assert actions == []
     disk = _disk(tmp_path)
     assert [p["id"] for p in disk["players"]] == ["custom-a", player_id_for_mac(B)]
     assert disk["PLAYER_STATE"]["custom-a"]["sink"] == "s"

@@ -1316,7 +1316,7 @@ def _collect_bt_device_info() -> list[dict]:
         mac = dev.get("mac", "") if isinstance(dev, dict) else ""
         if not mac:
             continue
-        entry: dict = {"mac": mac, "name": dev.get("name", "?")}
+        entry: dict = {"mac": mac, "name": dev.get("player_name", "?")}
         info = get_bluez().device_info(mac)
         if info.outcome is not Outcome.OK:
             logger.warning("Failed to get BT info for %s: outcome=%s", mac, info.outcome.value)
