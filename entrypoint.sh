@@ -70,7 +70,7 @@ _refresh_config_diagnostics() {
     CONFIG_PATH="${CONFIG_DIR:-/config}/config.json"
     DEV_COUNT=0
     if [ -f "$CONFIG_PATH" ]; then
-        DEV_COUNT=$(python3 -c "import json; c=json.load(open('$CONFIG_PATH')); print(len(c.get('BLUETOOTH_DEVICES',[])))" 2>/dev/null || echo "?")
+        DEV_COUNT=$(python3 -c "import json; c=json.load(open('$CONFIG_PATH')); print(len(c['players'] if isinstance(c.get('players'), list) else c.get('BLUETOOTH_DEVICES',[])))" 2>/dev/null || echo "?")
         CONFIG_STATUS="✓ $CONFIG_PATH ($DEV_COUNT devices)"
     else
         CONFIG_STATUS="✗ $CONFIG_PATH not found (will use defaults)"
