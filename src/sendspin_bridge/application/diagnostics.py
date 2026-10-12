@@ -27,7 +27,7 @@ from sendspin_bridge.config import (
 from sendspin_bridge.config import (
     VERSION as _CONFIG_VERSION,
 )
-from sendspin_bridge.config.players import device_entries
+from sendspin_bridge.config.players import device_entries, normalize_mac
 from sendspin_bridge.security.redaction import redact
 from sendspin_bridge.services.audio.pulse import get_audio_server_snapshot, get_server_name, list_cards, list_sinks
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
@@ -1223,6 +1223,8 @@ def _sanitized_config() -> dict:
             result[k] = [
                 {
                     **p,
+                    # A nameless player is named after its MAC.
+                    "name": _mask_text(str(p["name"])) if normalize_mac(p.get("name")) else p.get("name"),
                     "backend": {
                         bk: (_mask_text(str(bv)) if bk == "mac" else bv) for bk, bv in (p.get("backend") or {}).items()
                     },

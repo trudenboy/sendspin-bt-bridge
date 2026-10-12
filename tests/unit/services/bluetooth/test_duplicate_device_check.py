@@ -312,3 +312,16 @@ def test_annotate_scan_conflicts_exception_safe(mock_load):
     devices = [{"mac": "AA:BB:CC:DD:EE:FF"}]
     _annotate_scan_conflicts(devices)
     assert "warning" not in devices[0]
+
+
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
+def test_find_duplicate_devices_nameless_player_is_named_by_its_mac(mock_fetch):
+    from sendspin_bridge.config import _player_id_from_mac
+
+    mac = "AA:BB:CC:DD:EE:FF"
+    mock_fetch.return_value = [{"player_id": _player_id_from_mac(mac), "display_name": "Other Bridge"}]
+
+    warnings = find_duplicate_devices(_make_config(devices=[{"mac": mac}]), "HAOS")
+
+    assert len(warnings) == 1
+    assert warnings[0].device_name == mac
