@@ -153,3 +153,25 @@ def test_run_safe_check_rechecks_connected_sinks(monkeypatch):
 
     assert result["status"] == "ok"
     assert result["device_results"][0]["sink"] == "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"
+
+
+def test_run_safe_check_ma_auth_uses_auto_detected_credentials(monkeypatch):
+    # Add-on mode keeps the auto-detected MA URL only in runtime state (#525).
+    import sendspin_bridge.services.diagnostics.operator_check_runner as runner
+    from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+
+    captured = {}
+    monkeypatch.setattr(runner, "get_device_registry_snapshot", lambda: DeviceRegistrySnapshot(active_clients=[]))
+    monkeypatch.setattr(runner, "get_ma_api_credentials", lambda: ("http://localhost:8095", "runtime-token"))
+
+    async def _fake_discover(ma_url, ma_token, bridge_players):
+        captured.update({"url": ma_url, "token": ma_token})
+        return ({}, [])
+
+    monkeypatch.setattr(runner, "discover_ma_groups", _fake_discover)
+    monkeypatch.setattr(runner, "set_ma_groups", lambda mapping, all_groups: None)
+
+    result = run_safe_check("ma_auth", config={"MA_API_URL": "", "MA_API_TOKEN": ""})
+
+    assert result["summary"] != "Music Assistant is not configured yet."
+    assert captured == {"url": "http://localhost:8095", "token": "runtime-token"}
