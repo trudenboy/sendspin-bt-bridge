@@ -10,6 +10,7 @@ import pytest
 
 import sendspin_bridge.application.devices as devices
 import sendspin_bridge.application.status as status
+from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.audio.mpris_player import MprisPlayer, get_registry
 from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
@@ -204,13 +205,13 @@ def test_removing_a_speaker_takes_it_off_the_bridge_and_unpairs_it(api_client, r
 
     assert resp.status_code == 200
     saved = json.loads(config_on_disk.file.read_text())
-    assert [d["mac"] for d in saved["BLUETOOTH_DEVICES"]] == [config_on_disk.other]
+    assert [d["mac"] for d in device_entries(saved)] == [config_on_disk.other]
     assert config_on_disk.unpaired == [MAC]
 
 
 def test_removing_an_unknown_speaker_is_404(api_client, registry, config_on_disk):
     assert api_client.delete("/api/v1/devices/ghost").status_code == 404
-    assert len(json.loads(config_on_disk.file.read_text())["BLUETOOTH_DEVICES"]) == 2
+    assert len(device_entries(json.loads(config_on_disk.file.read_text()))) == 2
 
 
 def test_a_removed_disabled_speaker_leaves_the_disabled_list(api_client, registry, config_on_disk):
@@ -242,5 +243,5 @@ def test_removing_a_running_speaker_finds_it_by_its_player_id(api_client, regist
 
     assert resp.status_code == 200
     saved = json.loads(config_on_disk.file.read_text())
-    assert [d["mac"] for d in saved["BLUETOOTH_DEVICES"]] == [MAC]
+    assert [d["mac"] for d in device_entries(saved)] == [MAC]
     assert config_on_disk.unpaired == [config_on_disk.other]

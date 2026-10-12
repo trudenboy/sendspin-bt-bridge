@@ -15,6 +15,8 @@ import sys
 
 import pytest
 
+from sendspin_bridge.config.players import device_entries
+
 MAC = "AA:BB:CC:DD:EE:FF"
 DEVICE = {"mac": MAC, "player_name": "Kitchen", "enabled": True}
 
@@ -60,7 +62,7 @@ def test_a_deleted_speaker_is_unpaired_once_the_change_is_saved(client):
 
     assert response.status_code == 200
     assert removed == [MAC]
-    assert json.loads(cfg_file.read_text())["BLUETOOTH_DEVICES"] == []
+    assert device_entries(json.loads(cfg_file.read_text())) == []
 
 
 def test_a_failed_save_leaves_the_speaker_paired(client, monkeypatch):
@@ -78,7 +80,7 @@ def test_a_failed_save_leaves_the_speaker_paired(client, monkeypatch):
     assert removed == [], "the speaker was unpaired for a change that failed to save"
     # The deletion never reached disk, so the speaker is still configured —
     # which is the state the operator will retry from.
-    stored = json.loads(cfg_file.read_text())["BLUETOOTH_DEVICES"]
+    stored = device_entries(json.loads(cfg_file.read_text()))
     assert [dev["mac"] for dev in stored] == [MAC]
 
 

@@ -9,6 +9,9 @@ from unittest.mock import patch
 
 import pytest
 
+from sendspin_bridge.config.players import device_entries, player_id_for_mac
+from tests.support.config_v6 import v6_config, v6_players
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -29,6 +32,12 @@ def client():
     from tests.support.api_client import make_client
 
     return make_client()
+
+
+def _saved_volumes(saved: dict) -> dict:
+    """The saved volumes by MAC (schema v6 keeps them in PLAYER_STATE by player id)."""
+    state = saved.get("PLAYER_STATE") or {}
+    return {e["mac"]: state[e["id"]]["volume"] for e in device_entries(saved) if "volume" in state.get(e["id"], {})}
 
 
 # ---------------------------------------------------------------------------
@@ -512,9 +521,13 @@ def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatc
             "MA_API_TOKEN": "legacy-token",
             "AUTH_PASSWORD_HASH": "hashed",
             "SECRET_KEY": "secret",
-            "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 20},
-            "LAST_SINKS": {"AA:BB:CC:DD:EE:FF": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink"},
-            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
+            **v6_players([{"mac": "AA:BB:CC:DD:EE:FF"}]),
+            "PLAYER_STATE": {
+                player_id_for_mac("AA:BB:CC:DD:EE:FF"): {
+                    "volume": 20,
+                    "sink": "bluez_sink.AA_BB_CC_DD_EE_FF.a2dp_sink",
+                }
+            },
         },
     )
 
@@ -525,8 +538,7 @@ def test_api_bugreport_redacts_oauth_tokens_and_runtime_state(client, monkeypatc
     assert sanitized["MA_API_TOKEN"] == "***"
     assert sanitized["AUTH_PASSWORD_HASH"] == "***"
     assert sanitized["SECRET_KEY"] == "***"
-    assert sanitized["LAST_VOLUMES"] == "***"
-    assert sanitized["LAST_SINKS"] == "***"
+    assert sanitized["PLAYER_STATE"] == "***"
 
 
 def test_api_version_includes_runtime_dependency_versions(client, monkeypatch):
@@ -822,10 +834,10 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
     from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
 
     assert saved["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
-    assert saved["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
-    assert saved["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
-    assert saved["BLUETOOTH_DEVICES"][0]["room_name"] == "Living Room"
-    assert saved["BLUETOOTH_DEVICES"][0]["room_id"] == "living-room"
+    assert device_entries(saved)[0]["listen_port"] == 8930
+    assert device_entries(saved)[0]["keepalive_interval"] == 60
+    assert device_entries(saved)[0]["room_name"] == "Living Room"
+    assert device_entries(saved)[0]["room_id"] == "living-room"
 
 
 def test_api_config_post_accepts_empty_manual_port_overrides(client, tmp_path, monkeypatch):
@@ -1318,8 +1330,8 @@ def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_pat
 
     assert resp.status_code == 200
     saved = json.loads((tmp_path / "config.json").read_text())
-    assert saved["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
-    assert saved["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 60}
+    assert device_entries(saved)[0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert _saved_volumes(saved) == {"AA:BB:CC:DD:EE:FF": 60}
 
 
 def test_api_config_post_marks_only_unconfigured_new_device_for_initial_delay(client, tmp_path, monkeypatch):
@@ -1358,7 +1370,7 @@ def test_api_config_post_marks_only_unconfigured_new_device_for_initial_delay(cl
     response = client.put("/api/v1/config", json=payload)
 
     assert response.status_code == 200
-    devices = {device["mac"]: device for device in json.loads(config_file.read_text())["BLUETOOTH_DEVICES"]}
+    devices = {device["mac"]: device for device in device_entries(json.loads(config_file.read_text()))}
     assert devices["AA:BB:CC:DD:EE:FF"]["static_delay_source"] == "manual"
     assert devices["11:22:33:44:55:66"]["static_delay_ms"] == 0
     assert devices["11:22:33:44:55:66"]["static_delay_source"] == "auto_pending"
@@ -1720,11 +1732,7 @@ def test_onboarding_assistant_endpoint_returns_guidance(client, monkeypatch):
     monkeypatch.setattr(
         api_status,
         "load_config",
-        lambda: {
-            "BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}],
-            "PULSE_LATENCY_MSEC": 200,
-            "MA_API_URL": "",
-        },
+        lambda: v6_config([{"mac": "AA:BB:CC:DD:EE:FF"}], PULSE_LATENCY_MSEC=200, MA_API_URL=""),
     )
     monkeypatch.setattr(
         api_status,
@@ -2222,7 +2230,7 @@ def test_device_enabled_toggle(client, tmp_path, monkeypatch):
 
     # Verify config was updated
     saved = json.loads((tmp_path / "config.json").read_text())
-    dev = saved["BLUETOOTH_DEVICES"][0]
+    dev = device_entries(saved)[0]
     assert dev["enabled"] is False
 
 

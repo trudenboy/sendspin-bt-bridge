@@ -142,16 +142,10 @@ def set_enabled(device_id: str, enabled: bool) -> dict[str, Any]:
         client = find_client(device_id)
     except UseCaseError:
         # A disabled speaker has no running client; find it in the config.
-        from sendspin_bridge.config import _player_id_from_mac, load_config
+        from sendspin_bridge.config import load_config
+        from sendspin_bridge.config.players import device_entries
 
-        configured = next(
-            (
-                d
-                for d in load_config().get("BLUETOOTH_DEVICES", [])
-                if d.get("mac") and _player_id_from_mac(str(d["mac"])) == device_id
-            ),
-            None,
-        )
+        configured = next((d for d in device_entries(load_config()) if d["id"] == device_id), None)
         if configured is None:
             raise
         _persist_device_enabled(str(configured.get("player_name") or ""), enabled)
@@ -174,24 +168,22 @@ def remove(device_id: str) -> dict[str, Any]:
     from pairing with anything else). Works for disabled speakers too.
     """
     from sendspin_bridge.application import config as config_uc
-    from sendspin_bridge.config import _player_id_from_mac, load_config
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.config.players import device_entries
 
-    # A running speaker's id is its player id; a disabled one's is derived
-    # from its MAC. Either way the MAC names the config entry.
+    # A running speaker's id is its player id; a disabled one is found by
+    # its player id in the config. Either way the MAC names the entry.
+    file_config = load_config()
     try:
-        running_mac = str(getattr(getattr(find_client(device_id), "bt_manager", None), "mac_address", "") or "")
+        target_mac = str(getattr(getattr(find_client(device_id), "bt_manager", None), "mac_address", "") or "")
     except UseCaseError:
-        running_mac = ""
+        target_mac = next((d["mac"] for d in device_entries(file_config) if d["id"] == device_id), "")
 
     def _is_target(entry: dict) -> bool:
         mac = str(entry.get("mac") or "")
-        if not mac:
-            return False
-        if running_mac:
-            return mac.upper() == running_mac.upper()
-        return _player_id_from_mac(mac) == device_id
+        return bool(mac and target_mac) and mac.upper() == target_mac.upper()
 
-    config = load_config()
+    config = config_uc._to_api_view(file_config)
     entries = list(config.get("BLUETOOTH_DEVICES") or [])
     kept = [d for d in entries if not _is_target(d)]
     if len(kept) == len(entries):

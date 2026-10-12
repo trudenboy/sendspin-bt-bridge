@@ -647,7 +647,14 @@ def _filter_allowed_config_keys(config: dict[str, Any], *, allowed_keys: frozens
     return {key: copy.deepcopy(value) for key, value in config.items() if key in allowed_keys}
 
 
-def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[str]) -> ConfigMigrationResult:
+def migrate_config_payload(
+    config: dict[str, Any], *, allowed_keys: frozenset[str], to_v6: bool = True
+) -> ConfigMigrationResult:
+    """Normalise a raw config; with ``to_v6=False`` the v5 device list is left in place.
+
+    API v1 still sends the v5 shape (stage 1 of config v6): its validator needs
+    ``BLUETOOTH_DEVICES`` as sent, before the conversion drops bad entries.
+    """
     from sendspin_bridge.config import ConfigMigrationIssue, ConfigMigrationResult
 
     normalized = _filter_allowed_config_keys(config, allowed_keys=allowed_keys | LEGACY_V5_KEYS)
@@ -760,14 +767,15 @@ def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[st
         )
         needs_persist = True
 
-    if normalized.get("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION) <= CONFIG_SCHEMA_VERSION:
-        v6_issues = migrate_v5_to_v6(normalized)
-        if v6_issues:
-            warnings.extend(v6_issues)
-            needs_persist = True
-    else:
-        for key in LEGACY_V5_KEYS:
-            normalized.pop(key, None)
+    if to_v6:
+        if normalized.get("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION) <= CONFIG_SCHEMA_VERSION:
+            v6_issues = migrate_v5_to_v6(normalized)
+            if v6_issues:
+                warnings.extend(v6_issues)
+                needs_persist = True
+        else:
+            for key in LEGACY_V5_KEYS:
+                normalized.pop(key, None)
 
     # Detection-only check for malformed SENDSPIN_SERVER values written before
     # the strict validator landed (issue #291). We do NOT auto-strip — Strict

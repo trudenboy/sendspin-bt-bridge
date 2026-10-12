@@ -10,6 +10,7 @@ import pytest
 import sendspin_bridge.application.diagnostics as diagnostics
 import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
+from tests.support.config_v6 import v6_config
 
 
 def _runtime_client(player_id: str, name: str, **status_fields):
@@ -83,13 +84,13 @@ def test_all_devices_disabled_gets_its_own_neutral_header(api_client, registry, 
     monkeypatch.setattr(
         diagnostics,
         "load_config",
-        lambda: {
-            "BLUETOOTH_ADAPTERS": [{"id": "hci0"}],
-            "BLUETOOTH_DEVICES": [
+        lambda: v6_config(
+            [
                 {"player_name": "Kitchen", "mac": "AA", "enabled": False},
                 {"player_name": "Office", "mac": "BB", "enabled": False},
             ],
-        },
+            BLUETOOTH_ADAPTERS=[{"id": "hci0"}],
+        ),
     )
     import sendspin_bridge.application.status as status_uc
 
