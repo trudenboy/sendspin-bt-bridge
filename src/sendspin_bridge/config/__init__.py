@@ -197,6 +197,8 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
+V5_BACKUP_NAME = "config.v5.bak.json"
+_config_migration_error: str | None = None
 config_lock = threading.RLock()  # serializes all config.json read-modify-write ops
 _config_load_log_lock = threading.Lock()
 _config_load_logged_once = False
@@ -331,6 +333,22 @@ def write_config_file(
         raise
 
 
+def get_config_migration_error() -> str | None:
+    """Why the last load could not move the config to the current schema, if it could not."""
+    return _config_migration_error
+
+
+def _backup_v5_config(raw: bytes) -> None:
+    backup = CONFIG_DIR / V5_BACKUP_NAME
+    if backup.exists():
+        return
+    try:
+        backup.write_bytes(raw)
+        logger.info("Saved the pre-v6 config as %s", backup)
+    except OSError as exc:
+        logger.warning("Could not save %s: %s", backup, exc)
+
+
 def update_config(mutator) -> None:
     """Atomically read-modify-write config.json under config_lock.
 
@@ -345,6 +363,9 @@ def update_config(mutator) -> None:
             if not isinstance(existing, dict):
                 raise ValueError("Config file must contain a JSON object")
         before = copy.deepcopy(existing)
+        from sendspin_bridge.config.migration import migrate_v5_to_v6
+
+        migrate_v5_to_v6(existing)
         mutator(existing)
         existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
         changed_keys = _changed_config_keys(before, existing)
@@ -479,6 +500,7 @@ def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> No
 
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
+    global _config_migration_error
     result = copy.deepcopy(DEFAULT_CONFIG)
     has_explicit_ha_area_name_assist = False
 
@@ -489,7 +511,21 @@ def load_config() -> dict:
             saved_config = json.loads(raw)
             if not isinstance(saved_config, dict):
                 raise ValueError("Config file must contain a JSON object")
-            migrated = migrate_config_payload(saved_config)
+            try:
+                migrated = migrate_config_payload(saved_config)
+            except Exception as exc:  # a migration bug must not cost the operator their settings
+                _config_migration_error = f"{type(exc).__name__}: {exc}"
+                logger.exception("Config migration failed; leaving %s untouched", CONFIG_FILE)
+                migrated = ConfigMigrationResult(
+                    normalized_config={
+                        k: v
+                        for k, v in saved_config.items()
+                        if k in CONFIG_ALLOWED_KEYS and k not in ("players", "PLAYER_STATE")
+                    },
+                    needs_persist=False,
+                )
+            else:
+                _config_migration_error = None
             result.update(migrated.normalized_config)
             has_explicit_ha_area_name_assist = "HA_AREA_NAME_ASSIST_ENABLED" in migrated.normalized_config
             for issue in migrated.warnings:
@@ -529,6 +565,10 @@ def load_config() -> dict:
         else:
             if migrated.needs_persist:
                 try:
+                    from sendspin_bridge.config.migration import LEGACY_V5_KEYS
+
+                    if any(key in saved_config for key in LEGACY_V5_KEYS):
+                        _backup_v5_config(raw)
 
                     def _persist_migration(cfg: dict) -> None:
                         for key, value in migrated.normalized_config.items():

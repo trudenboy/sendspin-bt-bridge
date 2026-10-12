@@ -159,3 +159,66 @@ def test_player_with_out_of_range_setting_is_kept(tmp_path, monkeypatch):
     loaded = config.load_config()
     assert [p["id"] for p in loaded["players"]] == [pid]
     assert loaded["players"][0]["idle_mode"] == "warp"
+
+
+def _isolate(tmp_path, monkeypatch):
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    return config
+
+
+def test_load_config_persists_v6_and_keeps_a_v5_backup(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    original = FIXTURE.read_text()
+    (tmp_path / "config.json").write_text(original)
+
+    config.load_config()
+
+    on_disk = json.loads((tmp_path / "config.json").read_text())
+    assert on_disk["CONFIG_SCHEMA_VERSION"] == 6
+    assert "BLUETOOTH_DEVICES" not in on_disk and "LAST_VOLUMES" not in on_disk
+    assert len(on_disk["players"]) == 6
+    assert (tmp_path / "config.v5.bak.json").read_text() == original
+    assert config.get_config_migration_error() is None
+
+
+def test_backup_is_never_overwritten(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    (tmp_path / "config.v5.bak.json").write_text("first")
+    (tmp_path / "config.json").write_text(FIXTURE.read_text())
+    config.load_config()
+    assert (tmp_path / "config.v5.bak.json").read_text() == "first"
+
+
+def test_failed_migration_leaves_the_file_alone(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    import sendspin_bridge.config.migration as migration
+
+    def _boom(_cfg):
+        raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr(migration, "migrate_v5_to_v6", _boom)
+    original = FIXTURE.read_text()
+    (tmp_path / "config.json").write_text(original)
+
+    loaded = config.load_config()
+
+    assert (tmp_path / "config.json").read_text() == original
+    assert loaded["players"] == []
+    assert "synthetic failure" in (config.get_config_migration_error() or "")
+
+
+def test_update_config_mutators_see_v6(tmp_path, monkeypatch):
+    config = _isolate(tmp_path, monkeypatch)
+    (tmp_path / "config.json").write_text(json.dumps({"BLUETOOTH_DEVICES": [{"mac": ENEBY}]}))
+    seen = {}
+
+    config.update_config(
+        lambda cfg: seen.update(players=list(cfg.get("players", [])), legacy="BLUETOOTH_DEVICES" in cfg)
+    )
+
+    assert seen["legacy"] is False
+    assert seen["players"][0]["backend"]["mac"] == ENEBY
+    assert "players" in json.loads((tmp_path / "config.json").read_text())
