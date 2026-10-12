@@ -13,8 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are stored as players, and their saved volume, audio output and "released"
   state are kept apart from the settings. A copy of the previous file is saved
   as `config.v5.bak.json`. Going back to a 2.x version after this update starts
-  without speakers; to keep them, restore `config.v5.bak.json` as `config.json`
-  before going back.
+  without speakers. On Docker and LXC installs, restore `config.v5.bak.json` as
+  `config.json` before going back to keep them. In the Home Assistant add-on,
+  go back by restoring the add-on backup Home Assistant offers to take before
+  the update.
 
 ### Removed
 
