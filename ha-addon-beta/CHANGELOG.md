@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.1] - 2026-10-14
+
+### Added
+
+- Local audio output players: besides Bluetooth speakers, the bridge can play
+  to an audio output of the computer it runs on (a USB DAC, a sound card,
+  HDMI) as its own Music Assistant player. Add one from the new "Audio output"
+  tab of the Add speaker dialog. The output is found again by its hardware
+  identity, so it keeps working after a replug or a rename. When it is
+  unplugged the card shows "Output missing" and playback waits for it; when it
+  comes back the player resumes by itself.
+- The bridge's own volume control is used for outputs by default, so a shared
+  sound card's volume is not changed unless the player is set to use the
+  system volume. Diagnostics warn when an output is muted, at zero volume or
+  unplugged, and the optional `PULSE_SINK_RESET_ON_START` setting wakes
+  each output once when the bridge starts.
+
+### Changed
+
+- The configuration file moves to a new format on the first start: speakers
+  are stored as players, and their saved volume, audio output and "released"
+  state are kept apart from the settings. A copy of the previous file is saved
+  as `config.v5.bak.json`. Going back to a 2.x version after this update starts
+  without speakers. On Docker and LXC installs, restore `config.v5.bak.json` as
+  `config.json` before going back to keep them. In the Home Assistant add-on,
+  go back by restoring the add-on backup Home Assistant offers to take before
+  the update.
+- The bridge's HTTP API (v1) now reads and writes speakers as `players` (each
+  with a stable id and a backend) instead of `BLUETOOTH_DEVICES`; scripts that
+  edit the configuration through the API need the new shape. Configuration
+  files in the old format are still accepted by import.
+
+### Removed
+
+- The Home Assistant add-on no longer lists speakers in its Configuration tab.
+  Speakers are added, changed and removed in the bridge's web interface; the
+  speakers already set up are kept when updating, and the add-on's old list is
+  ignored from then on.
+
+### Fixed
+
+- A speaker's power-save delay outside 0-60 minutes (for example after
+  updating from a long legacy delay) is corrected to the nearest limit instead
+  of blocking every settings save.
+- Saving the settings without changing anything no longer restarts the running
+  speakers.
+- Duplicate-device warnings name the speaker instead of showing its Bluetooth
+  address.
+- In the Home Assistant add-on, the bridge kept asking to connect Music
+  Assistant ("Music Assistant API URL is not configured") although Music
+  Assistant was found automatically and connected. The check now follows
+  the live connection, and "Revalidate MA link" uses the address found
+  automatically.
+
 ## [3.0.0-beta.21] - 2026-10-11
 
 ### Changed
