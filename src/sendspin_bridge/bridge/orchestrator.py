@@ -29,11 +29,12 @@ from sendspin_bridge.config import (
 )
 from sendspin_bridge.config.logging_setup import apply_log_level
 from sendspin_bridge.config.players import PULSE_SINK, PulseSinkBackend, device_entries, get_players
-from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_sinks
+from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_sinks, match_players
 from sendspin_bridge.services.bluetooth.device_activation import (
     DeviceActivationContext,
     activate_device,
     activate_player,
+    pulse_sink_identity,
 )
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
@@ -729,7 +730,12 @@ class BridgeOrchestrator:
 
         # Same port fallback as live reconfig: after every Bluetooth player.
         port_indexes = player_port_indexes(getattr(bootstrap, "config", None) or {})
-        claimed: set[str] = set()
+        # Matched together: one player's stored name never takes a twin DAC
+        # another player's identifiers find.
+        sink_matches = match_players(
+            {str(player["id"]): pulse_sink_identity(player) for player in pulse_players if player.get("enabled", True)},
+            list(local_sinks or []),
+        )
         for player in pulse_players:
             player_name_raw = str(player.get("name") or resolved_default_name)
             player_name = (
@@ -753,10 +759,8 @@ class BridgeOrchestrator:
                 context=activation_context,
                 default_player_name=resolved_default_name,
                 local_sinks=local_sinks or [],
-                claimed=claimed,
+                found=sink_matches[str(player["id"])],
             )
-            if result.client.bluetooth_sink_name:
-                claimed.add(result.client.bluetooth_sink_name)
             clients.append(result.client)
             logger.info(
                 "  Player: '%s', output: %s",

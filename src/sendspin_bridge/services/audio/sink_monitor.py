@@ -36,7 +36,7 @@ from sendspin_bridge.services.audio.sink_inventory import (
     SinkInventoryUnavailable,
     SinkMatch,
     list_local_sinks,
-    match_sink,
+    match_players,
 )
 from sendspin_bridge.services.audio.sink_names import address_from_sink_name, is_bluez_sink_name
 
@@ -261,7 +261,7 @@ class SinkMonitor:
         """Follow a local output for player *key*.
 
         *on_absent* fires when the sink it plays to (*current_sink*) goes away;
-        *on_present* fires with the sink name when ``match_sink`` finds it again
+        *on_present* fires with the sink name when matching finds it again
         (possibly under a new name).  While a sink is held, its running/idle
         transitions go to *on_active* / *on_idle* like a Bluetooth sink's.
         *owner* lets a retiring client unregister without removing its successor.
@@ -312,7 +312,10 @@ class SinkMonitor:
         if entry is None:
             return SinkMatch(None, None, "sink_missing")
         claimed = {p.sink for k, p in self._presence.items() if k != key and p.sink}
-        found = match_sink(entry.match, entry.stored_name, sinks, claimed=claimed)
+        # Players still without an output match alongside: their identifiers
+        # own their devices before *key*'s stored name is tried.
+        unmatched = {k: (p.match, p.stored_name) for k, p in self._presence.items() if k != key and not p.sink}
+        found = match_players({key: (entry.match, entry.stored_name), **unmatched}, sinks, claimed=claimed)[key]
         if found.status == "ok" and found.sink is not None:
             self._seed_state(found.sink)
             self._hold(key, found.sink.name)
@@ -341,17 +344,19 @@ class SinkMonitor:
                 if entry.sink and entry.sink not in present:
                     self._lose(key, entry)
             claimed = {p.sink for p in self._presence.values() if p.sink}
-            for key, entry in list(self._presence.items()):
+            for entry in self._presence.values():
                 if entry.sink:
                     # Still here: keep its running/idle state current.
                     current = next((s for s in sinks if s.name == entry.sink), None)
                     if current is not None:
                         self._observe_state(current.name, current.state)
-                    continue
-                found = match_sink(entry.match, entry.stored_name, sinks, claimed=claimed)
+            # Matched together: one player's stored name never takes the
+            # device another player's identifiers find.
+            unmatched = {key: (p.match, p.stored_name) for key, p in self._presence.items() if not p.sink}
+            for key, found in match_players(unmatched, sinks, claimed=claimed).items():
+                entry = self._presence[key]
                 if found.status != "ok" or found.sink is None:
                     continue
-                claimed.add(found.sink.name)
                 self._seed_state(found.sink)
                 self._hold(key, found.sink.name)
                 logger.info("SinkMonitor: output for %s present as %s (%s)", key, found.sink.name, found.method)

@@ -157,6 +157,32 @@ def test_a_sink_already_played_by_a_running_player_is_not_taken(loop, registry, 
     assert _wait_for(lambda: second.events == ["run"])
 
 
+def test_an_added_player_does_not_take_a_twin_dac_a_running_player_without_output_owns(
+    loop, registry, sinks, monkeypatch
+):
+    """B's player runs without its output; B's DAC is present under the name A stored."""
+    twin_ids = {"vendor_id": "0x262a", "product_id": "0x3b3c"}
+    base = "alsa_output.usb-Generic_USB_DAC-00.analog-stereo"
+    port_a, port_b = "pci-0000:00:14.0-usb-0:2:1.0", "pci-0000:00:14.0-usb-0:3:1.0"
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.record_rematched_sink", lambda *a: None)
+    running_b = _Client("Right", "auto", 9000, None)
+    running_b.config_id = "dac-b"
+    running_b.backend_type = "pulse_sink"
+    running_b.sink_match = {**twin_ids, "bus_path": port_b}
+    running_b.configured_sink = base + ".2"
+    registry.mutate_active_clients(lambda _current: [running_b])
+    sinks.present[:] = [_sink(base, **twin_ids, bus_path=port_b)]
+    orch = ReconfigOrchestrator(loop, registry.get_device_registry_snapshot(), activation_context=_context())
+
+    player_a = _player("dac-a", "Left", sink=base)
+    player_a["backend"]["match"] = {**twin_ids, "bus_path": port_a}
+    orch.apply([_start(player_a)])
+
+    added = next(c for c in registry.get_device_registry_snapshot().active_clients if c is not running_b)
+    assert added.bluetooth_sink_name is None
+    assert added.status["sink_match_status"] == "sink_missing"
+
+
 def test_an_added_player_whose_output_is_unplugged_is_saved_and_runs_without_a_sink(loop, registry, sinks):
     sinks.present.clear()
     orch = ReconfigOrchestrator(loop, registry.get_device_registry_snapshot(), activation_context=_context())

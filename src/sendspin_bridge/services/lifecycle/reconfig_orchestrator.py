@@ -766,24 +766,31 @@ class ReconfigOrchestrator:
             return
 
         import sendspin_bridge.bridge.state as _state
-        from sendspin_bridge.services.bluetooth.device_activation import activate_player
+        from sendspin_bridge.services.audio.sink_inventory import match_players
+        from sendspin_bridge.services.bluetooth.device_activation import activate_player, pulse_sink_identity
         from sendspin_bridge.services.bluetooth.device_registry import mutate_active_clients
 
+        running = [c for c in _state.get_clients_snapshot() if _is_pulse_sink_client(c) and c is not after]
         # Sinks other running players play to are taken, whatever their list position.
-        claimed = {
-            str(c.bluetooth_sink_name)
-            for c in _state.get_clients_snapshot()
-            if _is_pulse_sink_client(c) and getattr(c, "bluetooth_sink_name", None) and c is not after
+        claimed = {str(c.bluetooth_sink_name) for c in running if getattr(c, "bluetooth_sink_name", None)}
+        # Running players still without their output match alongside the new
+        # one: their identifiers own their devices before its stored name is tried.
+        waiting = {
+            f"running:{id(c)}": (dict(getattr(c, "sink_match", None) or {}), getattr(c, "configured_sink", None))
+            for c in running
+            if not getattr(c, "bluetooth_sink_name", None)
         }
         payload_index = action.payload.get("device_index")
         try:
+            found = match_players(
+                {"new": pulse_sink_identity(player), **waiting}, _read_local_sinks(self._loop), claimed=claimed
+            )["new"]
             result = activate_player(
                 player,
                 index=payload_index if isinstance(payload_index, int) and payload_index >= 0 else 0,
                 context=context,
                 default_player_name=context.default_player_name,
-                local_sinks=_read_local_sinks(self._loop),
-                claimed=claimed,
+                found=found,
             )
         except Exception as exc:
             logger.exception("START_CLIENT activation failed for %s", action.label or action.player_id)

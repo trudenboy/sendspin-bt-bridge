@@ -25,7 +25,7 @@ from sendspin_bridge.services.audio.mpris_player import (
     get_registry,
     resolve_avrcp_source_client,
 )
-from sendspin_bridge.services.audio.sink_inventory import match_sink
+from sendspin_bridge.services.audio.sink_inventory import SinkMatch, match_sink
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
 from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport, mpris_dbus_path
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
@@ -610,13 +610,16 @@ def activate_player(
     default_player_name: str,
     local_sinks: Sequence[LocalSink] = (),
     claimed: Collection[str] = frozenset(),
+    found: SinkMatch | None = None,
 ) -> ActivationResult:
     """Build the client for one player, by its backend.
 
     A ``pulse_sink`` player (a ``backend`` of that type) gets a client without
     Bluetooth, matched to a sink from *local_sinks* — *claimed* holds the sinks
-    earlier players already play to.  Anything else is a Bluetooth entry in
-    the v5 shape and goes through :func:`activate_device` unchanged.
+    earlier players already play to.  *found* is that match made already,
+    together with the other players' (see :func:`match_players`); it wins.
+    Anything else is a Bluetooth entry in the v5 shape and goes through
+    :func:`activate_device` unchanged.
     """
     backend = player.get("backend")
     if isinstance(backend, dict) and backend.get("type") == PULSE_SINK:
@@ -627,6 +630,7 @@ def activate_player(
             default_player_name=default_player_name,
             local_sinks=local_sinks,
             claimed=claimed,
+            found=found,
         )
     return activate_device(player, index=index, context=context, default_player_name=default_player_name)
 
@@ -639,6 +643,7 @@ def _activate_pulse_sink(
     default_player_name: str,
     local_sinks: Sequence[LocalSink],
     claimed: Collection[str],
+    found: SinkMatch | None = None,
 ) -> ActivationResult:
     player_id = str(player["id"])
     backend = player["backend"]
@@ -661,7 +666,7 @@ def _activate_pulse_sink(
     client.backend_type = PULSE_SINK
     client.volume_controller = str(player.get("volume_controller") or "sendspin")
 
-    match = backend.get("match") if isinstance(backend.get("match"), dict) else {}
+    match, _stored = pulse_sink_identity(player)
     # Kept on the client so it can find its output again after an unplug.
     client.sink_match = dict(match)
     client.reset_output_on_start = context.pulse_sink_reset_on_start
@@ -671,7 +676,8 @@ def _activate_pulse_sink(
         # The daemon applies it to its stream (``sendspin``), or to the sink under ``pa``.
         if isinstance(saved_volume, int) and 0 <= saved_volume <= 100:
             client._update_status({"volume": saved_volume})
-    found = match_sink(match, stored_sink, list(local_sinks), claimed=claimed)
+    if found is None:
+        found = match_sink(match, stored_sink, list(local_sinks), claimed=claimed)
     sink_name = found.sink.name if found.status == "ok" and found.sink is not None else None
     client.bluetooth_sink_name = sink_name
     client._update_status(
@@ -691,6 +697,15 @@ def _activate_pulse_sink(
             client.configured_sink = sink_name
 
     return ActivationResult(client=client, bt_manager=None, bt_available=False, listen_port=listen_port)
+
+
+def pulse_sink_identity(player: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """A ``pulse_sink`` player's stored ``(match, sink name)``, as :func:`match_players` takes them."""
+    backend = player.get("backend")
+    if not isinstance(backend, dict):
+        return {}, None
+    match = backend.get("match")
+    return (match if isinstance(match, dict) else {}), str(backend.get("sink") or "") or None
 
 
 def record_rematched_sink(player_id: str, previous: str | None, sink_name: str, method: str | None) -> None:

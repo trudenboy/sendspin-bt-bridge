@@ -256,3 +256,50 @@ async def test_startup_reads_the_local_sinks_only_when_a_pulse_sink_player_is_co
     with_dac = _bootstrap([{"id": "dac-1", "name": "D", "backend": {"type": "pulse_sink", "sink": "alsa_output.a"}}])
     assert [s.name for s in await orchestrator.read_local_sinks_for(with_dac)] == ["alsa_output.a"]
     assert reads == [1]
+
+
+TWIN_A = "alsa_output.usb-Generic_USB_DAC-00.analog-stereo"
+TWIN_B = "alsa_output.usb-Generic_USB_DAC-00.analog-stereo.2"
+TWIN_IDS = {"vendor_id": "0x262a", "product_id": "0x3b3c"}
+PORT_A = "pci-0000:00:14.0-usb-0:2:1.0"
+PORT_B = "pci-0000:00:14.0-usb-0:3:1.0"
+
+
+def _twin_players() -> list[dict]:
+    return [
+        {
+            "id": "dac-a",
+            "name": "Left",
+            "backend": {"type": "pulse_sink", "sink": TWIN_A, "match": {**TWIN_IDS, "bus_path": PORT_A}},
+        },
+        {
+            "id": "dac-b",
+            "name": "Right",
+            "backend": {"type": "pulse_sink", "sink": TWIN_B, "match": {**TWIN_IDS, "bus_path": PORT_B}},
+        },
+    ]
+
+
+def test_startup_with_one_twin_unplugged_gives_the_other_twin_to_its_own_player(monkeypatch):
+    """After a reboot with A unplugged, B is enumerated alone under A's stored name."""
+    rematched: list[tuple] = []
+    monkeypatch.setattr(
+        "sendspin_bridge.services.bluetooth.device_activation.record_rematched_sink",
+        lambda *args: rematched.append(args),
+    )
+
+    result = BridgeOrchestrator().initialize_devices(
+        _bootstrap(_twin_players()),
+        client_factory=_FakeClient,
+        bt_manager_factory=_bt_factory,
+        base_listen_port=9000,
+        default_player_name="Sendspin",
+        local_sinks=[_sink(TWIN_A, **TWIN_IDS, bus_path=PORT_B)],
+    )
+
+    by_name = {c.player_name: c for c in result.clients}
+    assert by_name["Left"].bluetooth_sink_name is None
+    assert by_name["Left"].status["sink_match_status"] == "sink_missing"
+    assert by_name["Right"].bluetooth_sink_name == TWIN_A
+    assert by_name["Right"].status["sink_match_status"] == "ok"
+    assert rematched == [("dac-b", TWIN_B, TWIN_A, "bus_path")]

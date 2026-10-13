@@ -317,3 +317,45 @@ def test_unregister_by_another_owner_keeps_the_registration():
 
     mon.unregister_presence("dac-1", owner=new)
     assert not mon.has_presence("dac-1")
+
+
+# ── Identical DACs without a serial ────────────────────────────────────────
+
+TWIN_A = "alsa_output.usb-Generic_USB_DAC-00.analog-stereo"
+TWIN_B = "alsa_output.usb-Generic_USB_DAC-00.analog-stereo.2"
+TWIN_IDS = {"vendor_id": "0x262a", "product_id": "0x3b3c"}
+PORT_A = "pci-0000:00:14.0-usb-0:2:1.0"
+PORT_B = "pci-0000:00:14.0-usb-0:3:1.0"
+
+
+def _twin_monitor(inv: _Inventory, rec_a: _Recorder, rec_b: _Recorder) -> SinkMonitor:
+    """Both DACs unplugged; A's player was registered first."""
+    mon = SinkMonitor(inventory=inv)
+    mon.register_presence("A", {**TWIN_IDS, "bus_path": PORT_A}, TWIN_A, rec_a.present, rec_a.absent)
+    mon.register_presence("B", {**TWIN_IDS, "bus_path": PORT_B}, TWIN_B, rec_b.present, rec_b.absent)
+    return mon
+
+
+async def test_a_twin_returning_under_the_other_twins_name_goes_to_its_own_player():
+    # Only B comes back, alone, so PulseAudio gives it the base name A stored.
+    inv = _Inventory(_sink(TWIN_A, **TWIN_IDS, bus_path=PORT_B))
+    rec_a, rec_b = _Recorder(), _Recorder()
+    mon = _twin_monitor(inv, rec_a, rec_b)
+
+    await mon.refresh_presence()
+
+    assert rec_a.calls == []
+    assert rec_b.calls == [("present", TWIN_A)]
+    assert mon.presence_sink("A") is None
+    assert mon.presence_sink("B") == TWIN_A
+
+
+async def test_rematch_does_not_give_a_player_its_unmatched_twins_dac():
+    inv = _Inventory(_sink(TWIN_A, **TWIN_IDS, bus_path=PORT_B))
+    rec_a, rec_b = _Recorder(), _Recorder()
+    mon = _twin_monitor(inv, rec_a, rec_b)
+
+    found = await mon.rematch("A")
+
+    assert (found.sink, found.status) == (None, "sink_missing")
+    assert mon.presence_sink("A") is None

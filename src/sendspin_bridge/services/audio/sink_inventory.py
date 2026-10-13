@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Collection, Hashable, Mapping
 
 from sendspin_bridge.services.audio import pulse
 from sendspin_bridge.services.audio.pulse import STANDBY_SINK_NAME
@@ -31,6 +31,7 @@ __all__ = [
     "SinkInventoryUnavailable",
     "SinkMatch",
     "list_local_sinks",
+    "match_players",
     "match_sink",
     "parse_pactl_sinks",
 ]
@@ -318,24 +319,9 @@ def _same_port(match: dict, sink: LocalSink) -> bool:
     return not stored or not current or stored == current
 
 
-def match_sink(
-    match: dict,
-    stored_name: str | None,
-    sinks: list[LocalSink],
-    *,
-    claimed: Collection[str] = frozenset(),
-) -> SinkMatch:
-    """Find the current sink for a player's stored identifiers.
-
-    Order: ``serial`` -> ``bus_path`` -> ``vendor_id``+``product_id`` -> stored
-    sink name.  A tier that finds several sinks is narrowed by
-    ``alsa_long_card_name`` and then by the stored name; if that does not
-    leave exactly one the result is ``sink_ambiguous``.  A sink already in
-    *claimed* (an earlier player) yields ``sink_in_use``.
-    """
+def _match_identity(match: dict, stored_name: str | None, sinks: list[LocalSink]) -> tuple[SinkMatch | None, bool]:
+    """The identity tiers only: (match, ambiguous); the stored name is not tried."""
     ambiguous = False
-    found: tuple[LocalSink, str] | None = None
-
     tiers: list[tuple[str, list[LocalSink]]] = []
     if match.get("serial"):
         tiers.append(("serial", [s for s in sinks if s.identifiers.get("serial") == match["serial"]]))
@@ -357,16 +343,71 @@ def match_sink(
     for method, candidates in tiers:
         sink, how, tier_ambiguous = _resolve(candidates, method, match, stored_name)
         if sink is not None and how is not None:
-            found = (sink, how)
-            break
+            return SinkMatch(sink, how, "ok"), False
         ambiguous = ambiguous or tier_ambiguous
+    return None, ambiguous
 
-    if found is None and not ambiguous and stored_name:
-        by_name = next((s for s in sinks if s.name == stored_name), None)
-        if by_name is not None:
-            found = (by_name, "name")
 
-    if found is None:
-        return SinkMatch(None, None, "sink_ambiguous" if ambiguous else "sink_missing")
-    sink, how = found
-    return SinkMatch(sink, how, "sink_in_use" if sink.name in claimed else "ok")
+def match_players[K: Hashable](
+    players: Mapping[K, tuple[dict, str | None]],
+    sinks: list[LocalSink],
+    *,
+    claimed: Collection[str] = frozenset(),
+) -> dict[K, SinkMatch]:
+    """Find the current sink of several players at once.
+
+    *players* maps a key to its stored ``(match, sink name)``.  Every player's
+    identifiers (``serial`` -> ``bus_path`` -> ``vendor_id``+``product_id``)
+    claim their sinks first; only then does a player still without one try its
+    stored name, and never on a sink another player's identifiers claimed.
+    PulseAudio names identical DACs by enumeration order, so after a reboot
+    with one unplugged its twin can carry the stored name of the missing one.
+
+    A tier that finds several sinks is narrowed by ``alsa_long_card_name`` and
+    then by the stored name; if that does not leave exactly one the result is
+    ``sink_ambiguous``.  A sink in *claimed* (another running player) or taken
+    by an earlier player here yields ``sink_in_use``.
+    """
+    results: dict[K, SinkMatch] = {}
+    by_identity: set[str] = set()
+    pending: list[K] = []
+    for key, (match, stored_name) in players.items():
+        found, ambiguous = _match_identity(match or {}, stored_name, sinks)
+        if found is not None and found.sink is not None:
+            name = found.sink.name
+            in_use = name in claimed or name in by_identity
+            results[key] = SinkMatch(found.sink, found.method, "sink_in_use" if in_use else "ok")
+            by_identity.add(name)
+        elif ambiguous:
+            results[key] = SinkMatch(None, None, "sink_ambiguous")
+        else:
+            pending.append(key)
+
+    by_name: set[str] = set()
+    for key in pending:
+        stored_name = players[key][1]
+        sink = next((s for s in sinks if stored_name and s.name == stored_name), None)
+        if sink is None or sink.name in by_identity:
+            # The name now belongs to a device another player's identifiers found.
+            results[key] = SinkMatch(None, None, "sink_missing")
+            continue
+        in_use = sink.name in claimed or sink.name in by_name
+        results[key] = SinkMatch(sink, "name", "sink_in_use" if in_use else "ok")
+        by_name.add(sink.name)
+    return {key: results[key] for key in players}
+
+
+def match_sink(
+    match: dict,
+    stored_name: str | None,
+    sinks: list[LocalSink],
+    *,
+    claimed: Collection[str] = frozenset(),
+) -> SinkMatch:
+    """Find the current sink for one player's stored identifiers.
+
+    One player alone; see :func:`match_players` for the order of the tiers.
+    Players matched together must go through :func:`match_players`, so one
+    player's stored name cannot take a sink another player's identifiers own.
+    """
+    return match_players({0: (match, stored_name)}, sinks, claimed=claimed)[0]

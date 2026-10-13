@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from sendspin_bridge.services.audio import sink_inventory
 from sendspin_bridge.services.audio.sink_inventory import (
     LocalSink,
     list_local_sinks,
+    match_players,
     match_sink,
     parse_pactl_sinks,
 )
@@ -193,6 +195,60 @@ def test_unplugged_identical_dac_is_not_replaced_by_its_twin():
     assert (res_a.sink, res_a.status) == (None, "sink_missing")
     res_b = match_sink(ids_second, second.name, only_b, claimed=set())
     assert (res_b.sink, res_b.method, res_b.status) == (second, "bus_path", "ok")
+
+
+def _twins() -> tuple[LocalSink, LocalSink]:
+    return tuple(_load("two_usb_dacs_no_serial.txt"))  # type: ignore[return-value]
+
+
+@pytest.mark.parametrize("order", [("A", "B"), ("B", "A")])
+def test_twin_booted_alone_under_the_base_name_stays_with_its_own_player(order):
+    """A unplugged at boot: PulseAudio gives B the base name A's player stored.
+
+    Matching the players one by one let A's player take B's DAC by name.  Each
+    player's identity claims its sink before any name is considered.
+    """
+    a, b = _twins()
+    b_alone = dataclasses.replace(b, name=a.name)  # B enumerated first, so it gets the base name
+    players = {"A": (a.identifiers, a.name), "B": (b.identifiers, b.name)}
+    res = match_players({key: players[key] for key in order}, [b_alone])
+    assert (res["A"].sink, res["A"].status) == (None, "sink_missing")
+    assert (res["B"].sink, res["B"].method, res["B"].status) == (b_alone, "bus_path", "ok")
+
+
+def test_twins_replugged_in_reverse_order_keep_their_own_players():
+    a, b = _twins()
+    # B enumerated first this time: the names swap, the ports do not.
+    a_now = dataclasses.replace(a, name=b.name)
+    b_now = dataclasses.replace(b, name=a.name)
+    res = match_players(
+        {"A": (a.identifiers, a.name), "B": (b.identifiers, b.name)},
+        [b_now, a_now],
+    )
+    assert (res["A"].sink, res["A"].status) == (a_now, "ok")
+    assert (res["B"].sink, res["B"].status) == (b_now, "ok")
+
+
+def test_lone_dac_moved_to_another_port_is_still_found_by_name_next_to_its_twins_player():
+    """S3-R2: a DAC moved to a free port keeps its player, even with its twin's player configured."""
+    a, b = _twins()
+    moved = dataclasses.replace(
+        a,
+        identifiers={
+            **a.identifiers,
+            "bus_path": "pci-0000:00:14.0-usb-0:4:1.0",
+            "alsa_long_card_name": "Generic USB DAC at usb-0000:00:14.0-4, high speed",
+        },
+    )
+    res = match_players({"B": (b.identifiers, b.name), "A": (a.identifiers, a.name)}, [moved])
+    assert (res["A"].sink, res["A"].method, res["A"].status) == (moved, "name", "ok")
+    assert (res["B"].sink, res["B"].status) == (None, "sink_missing")
+
+
+def test_match_players_marks_a_sink_running_elsewhere_in_use():
+    a = _sink("a", serial="S")
+    res = match_players({"p": ({"serial": "S"}, None)}, [a], claimed={"a"})
+    assert (res["p"].sink, res["p"].status) == (a, "sink_in_use")
 
 
 def test_vendor_product_still_matches_when_device_moved_port_without_stored_bus_path():
