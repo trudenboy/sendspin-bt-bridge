@@ -145,10 +145,11 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
     """The ``players`` to write, in payload order.
 
     A Bluetooth player is rebuilt from the pipeline's entry with its MAC and
-    keeps the payload id, else the id its MAC already has, else the MAC's
-    uuid5. Any other player is taken as validated, with a new ``uuid4`` id when
-    it has none and ``backend.match`` taken from the stored player of that id
-    (the server owns it; a client value is never used).
+    keeps the id its MAC already has, else the MAC's uuid5 (a client id is
+    never used). Any other player is taken as validated; it keeps a client id
+    only when a stored player of that backend type has it, else gets a new
+    ``uuid4``, and its ``backend.match`` is taken from the stored player of
+    that id (the server owns it; a client value is never used).
     """
     from sendspin_bridge.config.players import BLUETOOTH, legacy_device_to_player, normalize_mac, player_id_for_mac
 
@@ -176,11 +177,17 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
             entry = entries_by_mac.get(mac)
             if entry is None:
                 continue
-            player_id = player.get("id") or ids_by_mac.get(mac) or player_id_for_mac(mac)
+            player_id = ids_by_mac.get(mac) or player_id_for_mac(mac)
             players.append(legacy_device_to_player(entry, existing_id=player_id))
             continue
         built = copy.deepcopy(player)
-        built["id"] = built.get("id") or str(uuid.uuid4())
+        client_id = built.get("id")
+        stored_by_client_id = existing_by_id.get(client_id) if isinstance(client_id, str) else None
+        stored_by_client_backend = stored_by_client_id.get("backend") if stored_by_client_id else None
+        keeps_id = isinstance(stored_by_client_backend, dict) and stored_by_client_backend.get("type") == backend.get(
+            "type"
+        )
+        built["id"] = client_id if keeps_id else str(uuid.uuid4())
         built_backend = dict(backend)
         stored = existing_by_id.get(built["id"]) or {}
         raw_stored_backend = stored.get("backend")
@@ -216,12 +223,21 @@ def _without_private_player_keys(payload: dict) -> dict:
     return cleaned
 
 
+class PlayerPayloadError(UseCaseError):
+    """A refused ``players`` payload, with the position of the offending player."""
+
+    def __init__(self, index: int, status: int, code: str, detail: str) -> None:
+        super().__init__(status, code, detail)
+        self.player_index = index
+
+
 def _check_payload_players(players: list, existing: dict) -> None:
     """The spec rules on a save's ``players``, checked before field validation.
 
     An existing player's backend type and Bluetooth MAC cannot change; two
     players cannot share a MAC or a sink; Bluetooth-only options on a
-    ``pulse_sink`` player are refused with their own code.
+    ``pulse_sink`` player are refused with their own code. Raises
+    :class:`PlayerPayloadError`.
     """
     from pydantic import ValidationError
 
@@ -231,12 +247,20 @@ def _check_payload_players(players: list, existing: dict) -> None:
         p["id"]: p for p in existing.get("players") or [] if isinstance(p, dict) and isinstance(p.get("id"), str)
     }
     backends = [
-        (player, player["backend"])
-        for player in players
+        (index, player, player["backend"])
+        for index, player in enumerate(players)
         if isinstance(player, dict) and isinstance(player.get("backend"), dict)
     ]
 
-    for player, backend in backends:
+    seen_ids: set[str] = set()
+    for index, player, _backend in backends:
+        raw_id = player.get("id")
+        if isinstance(raw_id, str) and raw_id:
+            if raw_id in seen_ids:
+                raise PlayerPayloadError(index, 422, "duplicate_player", f"Two players share the id {raw_id}")
+            seen_ids.add(raw_id)
+
+    for index, player, backend in backends:
         player_id = player.get("id")
         stored = existing_by_id.get(player_id) if isinstance(player_id, str) else None
         stored_backend = stored.get("backend") if isinstance(stored, dict) else None
@@ -246,14 +270,15 @@ def _check_payload_players(players: list, existing: dict) -> None:
             stored_backend.get("type") == BLUETOOTH
             and normalize_mac(backend.get("mac")) != normalize_mac(stored_backend.get("mac"))
         ):
-            raise UseCaseError(
+            raise PlayerPayloadError(
+                index,
                 422,
                 "player_backend_immutable",
                 f"Player {player_id} cannot change what it plays to; remove it and add a new player instead",
             )
 
     seen: set[tuple[str, str]] = set()
-    for _player, backend in backends:
+    for index, _player, backend in backends:
         if backend.get("type") == BLUETOOTH:
             key = (BLUETOOTH, normalize_mac(backend.get("mac")))
         elif backend.get("type") == PULSE_SINK:
@@ -263,10 +288,10 @@ def _check_payload_players(players: list, existing: dict) -> None:
         if not key[1]:
             continue
         if key in seen:
-            raise UseCaseError(422, "duplicate_player", f"Two players use {key[1]}")
+            raise PlayerPayloadError(index, 422, "duplicate_player", f"Two players use {key[1]}")
         seen.add(key)
 
-    for player, backend in backends:
+    for index, player, backend in backends:
         if backend.get("type") != PULSE_SINK:
             continue
         try:
@@ -276,8 +301,8 @@ def _check_payload_players(players: list, existing: dict) -> None:
                 # The model-level check is the one about backend-specific options.
                 if not error["loc"] and error["type"] == "value_error":
                     reason = (error.get("ctx") or {}).get("error")
-                    raise UseCaseError(
-                        422, "option_not_supported_for_backend", str(reason) if reason else error["msg"]
+                    raise PlayerPayloadError(
+                        index, 422, "option_not_supported_for_backend", str(reason) if reason else error["msg"]
                     ) from exc
 
 
@@ -775,10 +800,16 @@ def validate_config(config: dict) -> dict:
     normalized.pop("PLAYER_STATE", None)
     errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
-    if validation.is_valid:
+    payload_players = config.get("players")
+    if isinstance(payload_players, list):
+        try:
+            _check_payload_players(payload_players, _load_existing_config_for_validation())
+        except PlayerPayloadError as exc:
+            errors.append({"field": f"players[{exc.player_index}]", "message": f"{exc.code}: {exc.detail}"})
+    if validation.is_valid and not errors:
         warnings = _append_ma_duplicate_device_warnings(normalized, warnings)
     return {
-        "valid": validation.is_valid,
+        "valid": validation.is_valid and not errors,
         "errors": errors,
         "warnings": warnings,
         "normalized_config": normalized,

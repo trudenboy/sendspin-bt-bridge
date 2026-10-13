@@ -183,7 +183,7 @@ def test_client_cannot_set_player_state_or_match(client, tmp_path):
     payload = client.get("/api/v1/config").json()
     payload["PLAYER_STATE"] = {"custom-a": {"volume": 1}}
     payload["players"][2]["backend"]["match"] = {"serial": "forged"}
-    client.put("/api/v1/config", json=payload)
+    assert client.put("/api/v1/config", json=payload).status_code == 200
     disk = _disk(tmp_path)
     assert disk["PLAYER_STATE"]["custom-a"]["volume"] == 40
     assert disk["players"][2]["backend"].get("match", {}).get("serial") != "forged"
@@ -285,3 +285,73 @@ def test_ha_options_sync_no_longer_pushes_the_device_list(monkeypatch):
 
     assert len(sent) == 1
     assert "bluetooth_devices" not in sent[0]["options"]
+
+
+def test_client_id_never_replaces_the_id_of_a_known_bluetooth_mac(client, tmp_path):
+    payload = client.get("/api/v1/config").json()
+    payload["players"][0]["id"] = "other-id"
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    disk = _disk(tmp_path)
+    assert [p["id"] for p in disk["players"]][0] == "custom-a"
+    assert disk["PLAYER_STATE"]["custom-a"]["volume"] == 40
+
+
+def test_client_id_is_ignored_for_a_new_bluetooth_mac(client, tmp_path):
+    new = "AA:BB:CC:DD:EE:03"
+    payload = client.get("/api/v1/config").json()
+    payload["players"].append({"id": "mine", "name": "C", "backend": {"type": "bluetooth_a2dp", "mac": new}})
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert _disk(tmp_path)["players"][-1]["id"] == player_id_for_mac(new)
+
+
+def test_unknown_client_id_on_a_new_pulse_sink_player_gets_a_fresh_id(client, tmp_path):
+    payload = client.get("/api/v1/config").json()
+    payload["players"].append({"id": "mine", "name": "N", "backend": {"type": "pulse_sink", "sink": "alsa_output.n"}})
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    ids = [p["id"] for p in _disk(tmp_path)["players"]]
+    assert ids[2] == "dac-1" and ids[3] != "mine"
+
+
+def test_two_players_with_one_id_are_refused(client, tmp_path):
+    before = _disk(tmp_path)
+    payload = client.get("/api/v1/config").json()
+    payload["players"] = [
+        {"id": "x", "name": "P", "backend": {"type": "pulse_sink", "sink": "alsa_output.p"}},
+        {"id": "x", "name": "Q", "backend": {"type": "pulse_sink", "sink": "alsa_output.q"}},
+    ]
+    resp = client.put("/api/v1/config", json=payload)
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "duplicate_player"
+    assert _disk(tmp_path) == before
+
+
+def test_validate_reports_what_a_save_would_refuse(client):
+    payload = client.get("/api/v1/config").json()
+    payload["players"] = [
+        {"id": "x", "name": "P", "backend": {"type": "pulse_sink", "sink": "alsa_output.p"}},
+        {"id": "x", "name": "Q", "backend": {"type": "pulse_sink", "sink": "alsa_output.q"}},
+    ]
+    body = client.post("/api/v1/config/validate", json=payload)
+    assert body.status_code == 200
+    data = body.json()
+    assert data["valid"] is False
+    assert any(e["field"].startswith("players[") and "duplicate_player" in e["message"] for e in data["errors"])
+
+
+def test_validate_reports_an_immutable_backend(client):
+    payload = client.get("/api/v1/config").json()
+    payload["players"][0]["backend"]["mac"] = "AA:BB:CC:DD:EE:99"
+    data = client.post("/api/v1/config/validate", json=payload).json()
+    assert data["valid"] is False
+    assert any("player_backend_immutable" in e["message"] for e in data["errors"])
+
+
+def test_stored_pulse_sink_match_survives_a_save(client, tmp_path):
+    disk = _disk(tmp_path)
+    disk["players"][2]["backend"]["match"] = {"serial": "S123"}
+    (tmp_path / "config.json").write_text(json.dumps(disk))
+    payload = client.get("/api/v1/config").json()
+    payload["players"][2]["name"] = "DAC renamed"
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    saved = _disk(tmp_path)["players"][2]
+    assert saved["name"] == "DAC renamed" and saved["backend"]["match"] == {"serial": "S123"}

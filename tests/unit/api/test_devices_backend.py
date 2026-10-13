@@ -60,14 +60,22 @@ def test_bluetooth_commands_on_a_pulse_sink_player_are_409(api_client, tmp_confi
         assert resp.status_code == 409, path
         assert resp.json()["code"] == "not_supported_for_backend"
     resp = api_client.put("/api/v1/devices/dac-1/power-save", json={"enabled": True})
-    assert resp.status_code != 409 or resp.json()["code"] != "not_supported_for_backend"
+    assert resp.status_code == 404
 
 
 def test_pulse_sink_player_keeps_volume_and_transport_actions(api_client, tmp_config):
     _write_v6(tmp_config, [{"id": "dac-1", "name": "DAC", "backend": {"type": "pulse_sink", "sink": "s"}}])
-    for path in ("volume", "mute"):
-        resp = api_client.put(f"/api/v1/devices/dac-1/{path}", json={"level": 5, "muted": True})
-        assert resp.json().get("code") != "not_supported_for_backend", path
+    # Not running, so a definite "unknown device" - never the backend refusal.
+    calls = [
+        ("put", "volume", {"level": 5}),
+        ("put", "mute", {"muted": True}),
+        ("post", "playback", {"action": "pause"}),
+        ("post", "transport", {"command": "next"}),
+    ]
+    for method, path, body in calls:
+        resp = getattr(api_client, method)(f"/api/v1/devices/dac-1/{path}", json=body)
+        assert resp.status_code == 404, path
+        assert resp.json()["code"] == "unknown_device", path
 
 
 def test_bluetooth_player_commands_are_not_blocked(api_client, tmp_config):
@@ -117,3 +125,14 @@ def test_running_speaker_takes_its_backend_from_the_client_not_the_config(api_cl
     for path in ("reconnect", "standby"):
         resp = api_client.post(f"/api/v1/devices/kitchen/{path}")
         assert resp.json().get("code") != "not_supported_for_backend", path
+
+
+def test_disabled_device_id_comes_from_its_config_entry(api_client, running, tmp_config):
+    import sendspin_bridge.bridge.state as state
+
+    state.set_disabled_devices([{"id": "custom-id", "player_name": "Off", "mac": MAC, "enabled": False}])
+    try:
+        disabled = api_client.get("/api/v1/status").json()["bridge"]["disabled_devices"]
+        assert disabled[0]["id"] == "custom-id"
+    finally:
+        state.set_disabled_devices([])

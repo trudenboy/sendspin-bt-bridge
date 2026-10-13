@@ -129,52 +129,6 @@ class AUTHTOKEN(BaseModel):
     last_used: str | None = None
 
 
-class StaticDelaySource(StrEnum):
-    """
-    Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker.
-    """
-
-    auto_pending = "auto_pending"
-    legacy = "legacy"
-    manual = "manual"
-    music_assistant = "music_assistant"
-    bluez_report = "bluez_report"
-    bluez_delay_report = "bluez_delay_report"
-    codec_fallback = "codec_fallback"
-    manual_calibration = "manual_calibration"
-    microphone_calibration = "microphone_calibration"
-
-
-class VolumeController(StrEnum):
-    """
-    Volume control backend: 'pa' (PulseAudio) or 'sendspin'.
-    """
-
-    pa = "pa"
-    sendspin = "sendspin"
-
-
-class IdleMode(StrEnum):
-    """
-    Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts).
-    """
-
-    default = "default"
-    power_save = "power_save"
-    auto_disconnect = "auto_disconnect"
-    keep_alive = "keep_alive"
-
-
-class KeepAliveMethod(StrEnum):
-    """
-    Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally).
-    """
-
-    infrasound = "infrasound"
-    silence = "silence"
-    none = "none"
-
-
 class BluetoothAdapter(BaseModel):
     model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
     mac: str | None = Field(None, pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")

@@ -31,7 +31,9 @@ def _disabled(entry: dict) -> DisabledDevice:
     from sendspin_bridge.config import _player_id_from_mac
 
     mac = entry.get("mac")
-    return DisabledDevice.model_validate({**entry, "id": _player_id_from_mac(str(mac)) if mac else None})
+    return DisabledDevice.model_validate(
+        {**entry, "id": entry.get("id") or (_player_id_from_mac(str(mac)) if mac else None)}
+    )
 
 
 def _disabled_running(device) -> DisabledDevice:
