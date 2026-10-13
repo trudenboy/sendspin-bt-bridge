@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.json` before going back to keep them. In the Home Assistant add-on,
   go back by restoring the add-on backup Home Assistant offers to take before
   the update.
+- The bridge's HTTP API (v1) now reads and writes speakers as `players` (each
+  with a stable id and a backend) instead of `BLUETOOTH_DEVICES`; scripts that
+  edit the configuration through the API need the new shape. Configuration
+  files in the old format are still accepted by import.
 
 ### Removed
 
@@ -27,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saving the settings without changing anything no longer restarts the running
+  speakers.
 - Duplicate-device warnings name the speaker instead of showing its Bluetooth
   address.
 - In the Home Assistant add-on, the bridge kept asking to connect Music
