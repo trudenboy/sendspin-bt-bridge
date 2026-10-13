@@ -3262,12 +3262,20 @@ export interface components {
             enabled?: boolean;
             /** Id */
             id: string;
-            /** Idle Disconnect Minutes */
+            /**
+             * Idle Disconnect Minutes
+             * @default 0
+             */
             idle_disconnect_minutes?: number | null;
             /** Idle Mode */
             idle_mode?: ("default" | "power_save" | "auto_disconnect" | "keep_alive") | null;
             /** Keep Alive Method */
             keep_alive_method?: ("infrasound" | "silence" | "none") | null;
+            /**
+             * Keepalive Interval
+             * @default 30
+             */
+            keepalive_interval?: number | null;
             /** Listen Host */
             listen_host?: string | null;
             /** Listen Port */
@@ -3279,7 +3287,10 @@ export interface components {
              * @default
              */
             name?: string;
-            /** Power Save Delay Minutes */
+            /**
+             * Power Save Delay Minutes
+             * @default 1
+             */
             power_save_delay_minutes?: number | null;
             /** Preferred Format */
             preferred_format?: string | null;

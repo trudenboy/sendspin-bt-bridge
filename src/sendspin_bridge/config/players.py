@@ -108,8 +108,9 @@ class Player(BaseModel):
     min_buffer_ms: int | None = Field(None, ge=0, le=30000)
     volume_controller: Literal["pa", "sendspin"] | None = None
     idle_mode: Literal["default", "power_save", "auto_disconnect", "keep_alive"] | None = None
-    power_save_delay_minutes: int | None = None
-    idle_disconnect_minutes: int | None = None
+    power_save_delay_minutes: int | None = Field(1, ge=0, le=60)
+    idle_disconnect_minutes: int | None = Field(0, ge=0)
+    keepalive_interval: int | None = Field(30, ge=30)
     keep_alive_method: Literal["infrasound", "silence", "none"] | None = None
     room_id: str | None = None
     room_name: str | None = None

@@ -95,6 +95,27 @@ describe('DeviceDetailDrawer', () => {
     expect(w.text()).toContain('SBC')
   })
 
+  it('offers repair and the pairing window only when the backend supports them', async () => {
+    setActivePinia(createPinia())
+    const all = mockDevice.supported_actions
+    const open = async () => {
+      const w = await mountDrawer()
+      const more = w.findAll('button').find((b) => b.attributes('title') === 'More actions')!
+      await more.trigger('click')
+      return w.findAll('[role="menuitem"]').map((i) => i.text())
+    }
+    try {
+      expect(await open()).toEqual(expect.arrayContaining(['Reconnect', 'Pair again', 'Let Music Assistant pair']))
+      mockDevice.supported_actions = ['volume', 'transport', 'power_save']
+      const items = await open()
+      expect(items).not.toContain('Reconnect')
+      expect(items).not.toContain('Pair again')
+      expect(items).not.toContain('Let Music Assistant pair')
+    } finally {
+      mockDevice.supported_actions = all
+    }
+  })
+
   it('emits update:open on close', async () => {
     setActivePinia(createPinia())
     const w = await mountDrawer()

@@ -3843,12 +3843,14 @@
           "idle_disconnect_minutes": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
+            "default": 0,
             "title": "Idle Disconnect Minutes"
           },
           "idle_mode": {
@@ -3883,6 +3885,19 @@
               }
             ],
             "title": "Keep Alive Method"
+          },
+          "keepalive_interval": {
+            "anyOf": [
+              {
+                "minimum": 30.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 30,
+            "title": "Keepalive Interval"
           },
           "listen_host": {
             "anyOf": [
@@ -3929,12 +3944,15 @@
           "power_save_delay_minutes": {
             "anyOf": [
               {
+                "maximum": 60.0,
+                "minimum": 0.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
+            "default": 1,
             "title": "Power Save Delay Minutes"
           },
           "preferred_format": {

@@ -61,7 +61,7 @@ const signal = computed(() => {
   return { level: 'weak', icon: SignalLow }
 })
 const connected = computed(() => props.device.bluetooth?.connected)
-const released = computed(() => !props.device.bluetooth?.management_enabled)
+const released = computed(() => props.device.bluetooth?.management_enabled === false)
 const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
 
 const BatteryIcon = computed(() => {
