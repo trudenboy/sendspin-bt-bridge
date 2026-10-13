@@ -64,6 +64,15 @@ describe('deviceState for a local audio output', () => {
     expect(deviceState(pulse({}, { health: { state: 'unknown' } }))).toBe('ready')
   })
 
+  it('is never offline for a Bluetooth reason while its output is present', () => {
+    const health = { state: 'offline', summary: 'Bluetooth speaker disconnected', reasons: ['bluetooth_disconnected'] }
+    expect(deviceState(pulse({}, { health }))).toBe('ready')
+  })
+
+  it('follows the bridge health for anything else', () => {
+    expect(deviceState(pulse({}, { health: { state: 'degraded' } }))).toBe('degraded')
+  })
+
   it('says the output is missing when the sink is gone', () => {
     expect(deviceState(pulse({ has_sink: false, sink_missing: true }))).toBe('output_missing')
   })

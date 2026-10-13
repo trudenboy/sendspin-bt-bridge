@@ -97,6 +97,14 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("sink_muted_at_system_level",),
     ),
+    # A pulse_sink player's local output is gone: plug it in or pick another.
+    "output_missing": GuidanceIssueDefinition(
+        key="output_missing",
+        layer="sink_verification",
+        priority=41,
+        severity="warning",
+        default_reason_codes=("output_missing",),
+    ),
     # A pulse_sink player's local output: Music Assistant volume cannot fix these.
     "output_muted": GuidanceIssueDefinition(
         key="output_muted",

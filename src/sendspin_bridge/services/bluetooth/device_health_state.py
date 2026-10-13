@@ -131,7 +131,19 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
-    if not getattr(device, "bluetooth_connected", False):
+    if facts.is_local_output:
+        if not facts.output_present:
+            _append_reason(reasons, "output_missing")
+            for reason in event_reasons:
+                _append_reason(reasons, reason)
+            return DeviceHealthState(
+                state="offline",
+                severity="warning",
+                summary="Audio output missing",
+                reasons=reasons,
+                last_event_at=last_event_at,
+            )
+    elif not getattr(device, "bluetooth_connected", False):
         _append_reason(reasons, "bluetooth_disconnected")
         for reason in event_reasons:
             _append_reason(reasons, reason)

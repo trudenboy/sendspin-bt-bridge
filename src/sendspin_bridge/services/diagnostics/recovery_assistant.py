@@ -20,6 +20,7 @@ from sendspin_bridge.services.infrastructure._helpers import (
     _device_extra,
     _device_ma_reconnecting,
 )
+from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
 UTC = timezone.utc
 
@@ -284,6 +285,8 @@ def build_recovery_issue_actions(
             0,
             _recovery_action("open_diagnostics", "Open diagnostics", device_names=names),
         )
+    elif issue_key == "output_missing":
+        primary_action = _recovery_action("open_devices_settings", "Open player settings", device_names=names)
     elif issue_key == "duplicate_device":
         primary_action = _recovery_action(
             "open_devices_settings",
@@ -404,6 +407,13 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
+        facts = DeviceFacts(device)
+        local_output = facts.is_local_output
+        if local_output and not facts.output_present:
+            # No Bluetooth link to repair: the device is unplugged, renamed
+            # away, or cannot be told apart from another one.
+            issues.append(_output_missing_issue(name, facts))
+            continue
         # Samsung Q-series Class-of-Device filter quirk
         # (bluez/bluez#1025).  Surfaced *before* the generic
         # bluetooth-disconnected / repair-required branches because
@@ -479,7 +489,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
-        if not bluetooth_connected:
+        if not local_output and not bluetooth_connected:
             attempt_summary = _reconnect_attempt_summary(device)
             bluetooth_paired = bluetooth.get("paired") if bluetooth else _device_extra(device).get("bluetooth_paired")
             # v2.70.0-rc.2 (#260) — three-way branch: never_paired beats
@@ -549,7 +559,10 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         device_name=name,
                     )
                 )
-            else:
+                continue
+            if not local_output:
+                # Its remedy is a Bluetooth reconnect; a local output's
+                # daemon falls through to the generic attention card.
                 primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
                 issues.append(
                     RecoveryIssue(
@@ -562,7 +575,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         device_name=name,
                     )
                 )
-            continue
+                continue
         health_state = str(health.get("state") or "")
         if ma_reconnecting:
             continue
@@ -578,6 +591,32 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
     return issues
+
+
+_OUTPUT_MISSING_CAUSES = {
+    "sink_in_use": "Another player already plays to it.",
+    "sink_ambiguous": "Several identical outputs match it and none can be told apart.",
+}
+
+
+def _output_missing_issue(name: str, facts: DeviceFacts) -> RecoveryIssue:
+    """A ``pulse_sink`` player without its output: plug it in or pick another one."""
+    sink = facts.audio_sink or "its audio output"
+    cause = _OUTPUT_MISSING_CAUSES.get(str(facts.sink_match_status or ""), "It is unplugged or was renamed.")
+    primary_action, secondary_actions = build_recovery_issue_actions("output_missing", [name])
+    return RecoveryIssue(
+        key="output_missing",
+        severity="warning",
+        title=f"{name}: the audio output is missing",
+        summary=(
+            f"The output {sink} is not available. {cause} Plug the device back in, or pick another "
+            "output in the player's settings. Until then the player stays in its Music Assistant "
+            "groups, silent."
+        ),
+        primary_action=primary_action,
+        secondary_actions=secondary_actions,
+        device_name=name,
+    )
 
 
 def _build_duplicate_device_issues() -> list[RecoveryIssue]:
