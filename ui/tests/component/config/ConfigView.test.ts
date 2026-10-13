@@ -20,7 +20,7 @@ const BASE = {
   TRUSTED_PROXIES: [],
   HA_INTEGRATION: { enabled: false, mode: 'off', mqtt: { broker: 'auto', port: 1883 }, rest: {} },
   BLUETOOTH_ADAPTERS: [],
-  BLUETOOTH_DEVICES: [],
+  players: [],
   _password_set: true,
 }
 

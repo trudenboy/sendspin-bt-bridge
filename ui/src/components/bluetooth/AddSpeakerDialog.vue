@@ -35,9 +35,9 @@ const saving = ref(false)
 const testing = ref(false)
 
 const adapters = computed(() => bridge.adapters.filter((a) => a.powered !== false))
-const onBridge = computed(() => new Set(bridge.devices.map((d) => d.bluetooth.mac?.toUpperCase())))
+const onBridge = computed(() => new Set(bridge.devices.map((d) => d.bluetooth?.mac?.toUpperCase())))
 const added = computed(() =>
-  chosen.value ? bridge.devices.find((d) => d.bluetooth.mac?.toUpperCase() === chosen.value!.mac.toUpperCase()) : undefined,
+  chosen.value ? bridge.devices.find((d) => d.bluetooth?.mac?.toUpperCase() === chosen.value!.mac.toUpperCase()) : undefined,
 )
 
 function hciOf(result: ScanDevice) {
@@ -203,7 +203,7 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
         <CheckCircle2 class="size-5 text-success" aria-hidden="true" />
         {{ t('addSpeaker.paired') }}
       </p>
-      <SbInput v-model="name" :label="t('settings.device.player_name.label')" :hint="t('settings.device.player_name.help')" :placeholder="chosen?.mac" />
+      <SbInput v-model="name" :label="t('settings.device.name.label')" :hint="t('settings.device.name.help')" :placeholder="chosen?.mac" />
       <SbInput v-model="room" :label="t('settings.device.room_name.label')" :hint="t('addSpeaker.roomHint')" />
     </form>
 

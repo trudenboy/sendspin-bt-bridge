@@ -150,5 +150,23 @@
   },
   "capabilities": {},
   "transfer_readiness": null,
-  "recent_events": []
+  "recent_events": [],
+  "backend": {
+    "type": "bluetooth_a2dp",
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "adapter": "hci0",
+    "sink": null
+  },
+  "supported_actions": [
+    "volume",
+    "transport",
+    "power_save",
+    "reconnect",
+    "repair",
+    "standby",
+    "claim",
+    "pairing_window",
+    "rssi",
+    "battery"
+  ]
 }

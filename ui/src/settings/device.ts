@@ -1,6 +1,6 @@
 /**
- * Per-speaker settings (an entry of BLUETOOTH_DEVICES), grouped the way the
- * device drawer shows them. Checked against the ``BluetoothDevice`` schema by
+ * Per-speaker settings (an entry of ``players``), grouped the way the
+ * device drawer shows them. Checked against the ``Player`` schema by
  * a unit test, like the bridge layout. Text: ``settings.device.<key>``.
  */
 import type { ConfigDoc, FieldDef } from './layout'
@@ -16,8 +16,8 @@ export const DEVICE_GROUPS: readonly DeviceGroup[] = [
   {
     id: 'speaker',
     fields: [
-      { key: 'player_name', kind: 'text' },
-      { key: 'adapter', kind: 'select', optionsFrom: 'adapters', nullable: true },
+      { key: 'name', kind: 'text', default: '' },
+      { key: 'backend.adapter', kind: 'select', optionsFrom: 'adapters', nullable: true },
       { key: 'room_name', kind: 'text' },
       { key: 'room_id', kind: 'text', advanced: true },
       { key: 'volume_controller', kind: 'select', options: ['pa', 'sendspin'], default: 'pa', advanced: true },
@@ -46,8 +46,13 @@ export const DEVICE_GROUPS: readonly DeviceGroup[] = [
 
 /** Keys the drawer edits elsewhere (status switches, calibration) or never edits. */
 export const DEVICE_MANAGED_KEYS: readonly string[] = [
-  'mac',
+  // Identity and backend (type / MAC) are fixed once a player exists.
+  'id',
+  'backend',
   'enabled',
+  // Not edited in the app: the bind address and the format hint.
+  'listen_host',
+  'preferred_format',
   // Derived by the bridge from idle_mode / keepalive_interval.
   'keepalive_enabled',
   // Written by calibration and delay reports.

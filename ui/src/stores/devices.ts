@@ -23,11 +23,11 @@ export interface DeviceFilter {
  */
 export function deviceState(d: Device): string {
   if (!d.enabled) return 'disabled'
-  if (d.bluetooth.management_enabled === false) return 'released'
-  if (d.bluetooth.standby) return 'standby'
+  if (d.bluetooth?.management_enabled === false) return 'released'
+  if (d.bluetooth?.standby) return 'standby'
   if (d.playback.playing && d.audio.streaming) return 'streaming'
   if (d.health.state && d.health.state !== 'unknown') return d.health.state
-  return d.bluetooth.connected ? 'ready' : 'offline'
+  return d.bluetooth?.connected ? 'ready' : 'offline'
 }
 
 export const useDeviceStore = defineStore('devices', () => {
@@ -43,18 +43,18 @@ export const useDeviceStore = defineStore('devices', () => {
     const q = filter.value.search.toLowerCase()
     if (q) {
       list = list.filter(
-        (d) => (d.name ?? '').toLowerCase().includes(q) || (d.bluetooth.mac ?? '').toLowerCase().includes(q),
+        (d) => (d.name ?? '').toLowerCase().includes(q) || (d.bluetooth?.mac ?? '').toLowerCase().includes(q),
       )
     }
     if (filter.value.status.length) list = list.filter((d) => filter.value.status.includes(deviceState(d)))
-    if (filter.value.adapter) list = list.filter((d) => d.bluetooth.adapter.hci === filter.value.adapter)
+    if (filter.value.adapter) list = list.filter((d) => d.bluetooth?.adapter.hci === filter.value.adapter)
     if (filter.value.group) list = list.filter((d) => d.playback.group.id === filter.value.group)
 
     list.sort((a, b) => {
       let cmp = 0
       if (sortBy.value === 'name') cmp = (a.name ?? '').localeCompare(b.name ?? '')
       else if (sortBy.value === 'status') cmp = deviceState(a).localeCompare(deviceState(b))
-      else cmp = a.bluetooth.adapter.hci.localeCompare(b.bluetooth.adapter.hci)
+      else cmp = (a.bluetooth?.adapter.hci ?? '').localeCompare(b.bluetooth?.adapter.hci ?? '')
       return sortDir.value === 'asc' ? cmp : -cmp
     })
     return list

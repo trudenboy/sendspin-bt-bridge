@@ -14,6 +14,7 @@ import { ApiError } from '@/api/client'
 import DeviceSettingsPanel from './DeviceSettingsPanel.vue'
 import DeviceTimingPanel from './DeviceTimingPanel.vue'
 import type { Device } from '@/api/types'
+import { canDo } from '@/utils/supportedActions'
 import { Power, RotateCw, Info, MoreHorizontal } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -36,9 +37,9 @@ const managementLoading = ref(false)
 const btInfoOpen = ref(false)
 
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
-const released = computed(() => device.value?.bluetooth.management_enabled === false)
-const adapterId = computed(() => device.value?.bluetooth.adapter.hci || '')
-const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth.mac ?? ''))
+const released = computed(() => device.value?.bluetooth?.management_enabled === false)
+const adapterId = computed(() => device.value?.bluetooth?.adapter.hci || '')
+const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''))
 const events = computed(() => device.value?.recent_events ?? [])
 
 // A speaker that disappears (removed) takes its panel with it.
@@ -59,7 +60,7 @@ const signalSegments = computed(() => {
   if (!d) return []
   const sinkStatus = d.audio.streaming
     ? ('active' as const)
-    : d.bluetooth.connected
+    : d.bluetooth?.connected
       ? ('inactive' as const)
       : ('error' as const)
   return [
@@ -197,12 +198,12 @@ function onAdapterReboot() {
               <div>
                 <span class="text-text-secondary">{{ t('drawer.status.connected') }}</span>
                 <p class="mt-1 text-text-primary">
-                  {{ device.bluetooth.connected ? t('common.yes') : t('common.no') }}
+                  {{ device.bluetooth?.connected ? t('common.yes') : t('common.no') }}
                 </p>
               </div>
               <div>
                 <span class="text-text-secondary">{{ t('drawer.status.codec') }}</span>
-                <p class="mt-1 text-text-primary">{{ device.bluetooth.codec_name ?? '—' }}</p>
+                <p class="mt-1 text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</p>
               </div>
               <div>
                 <span class="text-text-secondary">{{ t('drawer.status.sampleRate') }}</span>
@@ -245,9 +246,9 @@ function onAdapterReboot() {
                     <MoreHorizontal />
                   </SbButton>
                 </template>
-                <SbDropdownItem @click="runAction('reconnect')">{{ t('drawer.actions.reconnect') }}</SbDropdownItem>
-                <SbDropdownItem @click="runAction('repair')">{{ t('drawer.actions.repair') }}</SbDropdownItem>
-                <SbDropdownItem @click="runAction('pairing')">{{ t('drawer.actions.pairing') }}</SbDropdownItem>
+                <SbDropdownItem v-if="canDo(device, 'reconnect')" @click="runAction('reconnect')">{{ t('drawer.actions.reconnect') }}</SbDropdownItem>
+                <SbDropdownItem v-if="canDo(device, 'repair')" @click="runAction('repair')">{{ t('drawer.actions.repair') }}</SbDropdownItem>
+                <SbDropdownItem v-if="canDo(device, 'pairing_window')" @click="runAction('pairing')">{{ t('drawer.actions.pairing') }}</SbDropdownItem>
                 <SbDropdownItem @click="runAction('unmute')">{{ t('drawer.actions.unmute') }}</SbDropdownItem>
                 <SbDropdownItem @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
                 <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
@@ -326,7 +327,7 @@ function onAdapterReboot() {
                 <dt class="text-text-secondary">{{ t('diagnostics.audioSink') }}</dt>
                 <dd class="font-mono text-xs text-text-primary">{{ device.audio.sink_name ?? '—' }}</dd>
                 <dt class="text-text-secondary">{{ t('diagnostics.codec') }}</dt>
-                <dd class="text-text-primary">{{ device.bluetooth.codec_name ?? '—' }}</dd>
+                <dd class="text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</dd>
                 <dt class="text-text-secondary">{{ t('diagnostics.sampleRate') }}</dt>
                 <dd class="text-text-primary">{{ device.audio.format ?? '—' }}</dd>
                 <dt class="text-text-secondary">{{ t('diagnostics.reanchorCount') }}</dt>
@@ -341,8 +342,8 @@ function onAdapterReboot() {
     <!-- BT Device Info Modal -->
     <BtDeviceInfoModal
       v-if="device"
-      :mac="device.bluetooth.mac ?? ''"
-      :adapter="device.bluetooth.adapter.mac ?? ''"
+      :mac="device.bluetooth?.mac ?? ''"
+      :adapter="device.bluetooth?.adapter.mac ?? ''"
       :open="btInfoOpen"
       @update:open="btInfoOpen = $event"
     />

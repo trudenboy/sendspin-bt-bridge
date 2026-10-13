@@ -51,7 +51,7 @@ const showViewToggle = computed(() => bridge.devices.length >= 4)
 
 /** One line of context above the speakers: Music Assistant, playing, adapters. */
 const playing = computed(() => bridge.devices.filter((d) => d.playback.playing && d.audio.streaming).length)
-const connected = computed(() => bridge.devices.filter((d) => d.bluetooth.connected).length)
+const connected = computed(() => bridge.devices.filter((d) => d.bluetooth?.connected).length)
 const selectable = computed(() => bridge.devices.length >= 2)
 
 
@@ -81,7 +81,7 @@ function onToggleFilter(key: string) {
 const uniqueAdapters = computed(() => {
   const set = new Set<string>()
   for (const d of bridge.devices) {
-    if (d.bluetooth.adapter.hci) set.add(d.bluetooth.adapter.hci)
+    if (d.bluetooth?.adapter.hci) set.add(d.bluetooth.adapter.hci)
   }
   return [...set].sort()
 })
