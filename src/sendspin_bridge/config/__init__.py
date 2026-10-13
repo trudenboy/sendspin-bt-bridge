@@ -77,6 +77,7 @@ __all__ = [
     "hash_password",
     "is_ha_addon_runtime",
     "load_config",
+    "load_player_volume",
     "migrate_config_payload",
     "normalize_update_channel",
     "resolve_additional_web_port",
@@ -87,6 +88,7 @@ __all__ = [
     "save_device_sink",
     "save_device_static_delay",
     "save_device_volume",
+    "save_player_volume",
     "update_config",
     "write_config_file",
 ]
@@ -422,6 +424,44 @@ def save_device_volume(mac: str | None, volume: int) -> None:
         update_config(_set_vol)
     except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.warning("Could not save volume for %s: %s", mac, e)
+
+
+def save_player_volume(player_id: str | None, volume: int) -> None:
+    """Persist a player's volume under PLAYER_STATE[<player id>].volume, by its id.
+
+    The id-keyed twin of :func:`save_device_volume`, for players without a MAC
+    (``pulse_sink``).
+    """
+    if not player_id or not CONFIG_FILE.exists():
+        return
+
+    def _set_vol(cfg: dict) -> None:
+        from sendspin_bridge.config.players import find_player_by_id, player_state
+
+        if find_player_by_id(cfg, player_id) is None:
+            logger.warning("Skipping saved volume for unknown player %s", player_id)
+            return
+        player_state(cfg, player_id)["volume"] = volume
+
+    try:
+        update_config(_set_vol)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("Could not save volume for player %s: %s", player_id, e)
+
+
+def load_player_volume(player_id: str) -> int | None:
+    """The saved volume (0–100) of the player with *player_id*, read from disk."""
+    try:
+        with config_lock, open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    all_state = cfg.get("PLAYER_STATE") if isinstance(cfg, dict) else None
+    state = all_state.get(player_id) if isinstance(all_state, dict) else None
+    volume = state.get("volume") if isinstance(state, dict) else None
+    if isinstance(volume, int) and not isinstance(volume, bool) and 0 <= volume <= 100:
+        return volume
+    return None
 
 
 def save_device_sink(mac: str | None, sink_name: str) -> None:

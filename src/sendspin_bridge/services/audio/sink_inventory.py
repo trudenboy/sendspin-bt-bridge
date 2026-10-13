@@ -26,7 +26,14 @@ from sendspin_bridge.services.audio.pulse import STANDBY_SINK_NAME
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["LocalSink", "SinkMatch", "list_local_sinks", "match_sink", "parse_pactl_sinks"]
+__all__ = [
+    "LocalSink",
+    "SinkInventoryUnavailable",
+    "SinkMatch",
+    "list_local_sinks",
+    "match_sink",
+    "parse_pactl_sinks",
+]
 
 _EXCLUDED_PREFIXES = ("bluez_", "sendspin_")
 _STANDBY_SINK_NAMES = frozenset({STANDBY_SINK_NAME, "sendspin_standby"})
@@ -59,6 +66,10 @@ _SAMPLE_FORMATS = {
 _PORT_AVAILABILITY = ("not available", "availability unknown", "available")
 _PROP_RE = re.compile(r'^\s*([\w.\-]+) = "(.*)"\s*$')
 _PERCENT_RE = re.compile(r"(\d+)%")
+
+
+class SinkInventoryUnavailable(RuntimeError):
+    """Neither pulsectl nor ``pactl`` could list the sinks — the list is unknown, not empty."""
 
 
 @dataclass(frozen=True)
@@ -181,7 +192,8 @@ def _from_pulsectl(info: Any) -> LocalSink:
     )
 
 
-async def _list_all_sinks_pactl() -> list[LocalSink]:
+async def _pactl_list_sinks_text() -> str | None:
+    """``pactl list sinks`` output, or ``None`` when it could not be run."""
     proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -198,28 +210,56 @@ async def _list_all_sinks_pactl() -> list[LocalSink]:
         if proc is not None and proc.returncode is None:
             proc.kill()
             await proc.wait()
-        return []
-    return parse_pactl_sinks(out.decode(errors="replace"))
+        return None
+    if proc.returncode not in (0, None):
+        logger.debug("pactl list sinks exited with %s", proc.returncode)
+        return None
+    return out.decode(errors="replace")
+
+
+async def _list_all_sinks_pactl() -> list[LocalSink]:
+    text = await _pactl_list_sinks_text()
+    return parse_pactl_sinks(text) if text is not None else []
+
+
+async def _list_all_sinks_pulsectl() -> list[LocalSink] | None:
+    """The sinks through pulsectl, or ``None`` when it is missing or failed."""
+    if not pulse._PULSECTL_AVAILABLE:
+        return None
+    try:
+        async with asyncio.timeout(pulse._TIMEOUT):
+            async with pulse.pulsectl_asyncio.PulseAsync(pulse._CLIENT_NAME) as client:
+                return [_from_pulsectl(s) for s in await client.sink_list()]
+    except Exception as exc:
+        logger.debug("list_local_sinks pulsectl error: %s — falling back to pactl", exc)
+        return None
+
+
+async def _list_all_sinks_strict() -> list[LocalSink]:
+    """Like :func:`_list_all_sinks`, but a failure to read raises instead of reading as no sinks."""
+    sinks = await _list_all_sinks_pulsectl()
+    if sinks is not None:
+        return sinks
+    text = await _pactl_list_sinks_text()
+    if text is None:
+        raise SinkInventoryUnavailable("could not list PulseAudio sinks")
+    return parse_pactl_sinks(text)
 
 
 async def _list_all_sinks() -> list[LocalSink]:
-    if pulse._PULSECTL_AVAILABLE:
-        try:
-            async with asyncio.timeout(pulse._TIMEOUT):
-                async with pulse.pulsectl_asyncio.PulseAsync(pulse._CLIENT_NAME) as client:
-                    return [_from_pulsectl(s) for s in await client.sink_list()]
-        except Exception as exc:
-            logger.debug("list_local_sinks pulsectl error: %s — falling back to pactl", exc)
-    return await _list_all_sinks_pactl()
+    sinks = await _list_all_sinks_pulsectl()
+    return sinks if sinks is not None else await _list_all_sinks_pactl()
 
 
-async def list_local_sinks() -> list[LocalSink]:
-    """Local playback sinks, without Bluetooth and bridge-internal sinks."""
-    return [
-        s
-        for s in await _list_all_sinks()
-        if not s.name.startswith(_EXCLUDED_PREFIXES) and s.name not in _STANDBY_SINK_NAMES
-    ]
+async def list_local_sinks(*, strict: bool = False) -> list[LocalSink]:
+    """Local playback sinks, without Bluetooth and bridge-internal sinks.
+
+    An unreadable sink list reads as empty, unless *strict*: then it raises
+    :class:`SinkInventoryUnavailable`, so a caller that acts on absence (an
+    unplugged output) never mistakes a PulseAudio hiccup for an unplug.
+    """
+    sinks = await (_list_all_sinks_strict() if strict else _list_all_sinks())
+    return [s for s in sinks if not s.name.startswith(_EXCLUDED_PREFIXES) and s.name not in _STANDBY_SINK_NAMES]
 
 
 # ---------------------------------------------------------------------------

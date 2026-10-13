@@ -347,3 +347,48 @@ def test_pactl_timeout_kills_stray_process(monkeypatch):
     monkeypatch.setattr(sink_inventory.pulse, "_TIMEOUT", 0.01)
     assert asyncio.run(sink_inventory._list_all_sinks_pactl()) == []
     assert events == ["kill", "wait"]
+
+
+def test_strict_listing_raises_when_no_source_can_be_read(monkeypatch):
+    async def fake_exec(*args, **kwargs):
+        raise FileNotFoundError("pactl")
+
+    monkeypatch.setattr(sink_inventory.pulse, "_PULSECTL_AVAILABLE", False)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert asyncio.run(list_local_sinks()) == []
+    with pytest.raises(sink_inventory.SinkInventoryUnavailable):
+        asyncio.run(list_local_sinks(strict=True))
+
+
+def test_strict_listing_treats_a_failing_pactl_as_unreadable(monkeypatch):
+    class _Proc:
+        returncode = 1
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_exec(*args, **kwargs):
+        return _Proc()
+
+    monkeypatch.setattr(sink_inventory.pulse, "_PULSECTL_AVAILABLE", False)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    with pytest.raises(sink_inventory.SinkInventoryUnavailable):
+        asyncio.run(list_local_sinks(strict=True))
+
+
+def test_strict_listing_returns_an_empty_list_when_nothing_is_plugged_in(monkeypatch):
+    class _Proc:
+        returncode = 0
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_exec(*args, **kwargs):
+        return _Proc()
+
+    monkeypatch.setattr(sink_inventory.pulse, "_PULSECTL_AVAILABLE", False)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    assert asyncio.run(list_local_sinks(strict=True)) == []

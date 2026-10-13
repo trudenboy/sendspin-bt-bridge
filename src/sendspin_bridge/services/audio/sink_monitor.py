@@ -28,13 +28,22 @@ import contextlib
 import errno
 import logging
 import os
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.services.audio.pulse import _PULSECTL_AVAILABLE
+from sendspin_bridge.services.audio.sink_inventory import (
+    SinkInventoryUnavailable,
+    SinkMatch,
+    list_local_sinks,
+    match_sink,
+)
 from sendspin_bridge.services.audio.sink_names import address_from_sink_name, is_bluez_sink_name
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
+
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
 
 if _PULSECTL_AVAILABLE:
     import pulsectl_asyncio  # type: ignore[import-untyped]
@@ -101,6 +110,24 @@ def _describe_pa_failure(exc: BaseException) -> tuple[str, str]:
     )
 
 
+async def _strict_inventory() -> list[LocalSink]:
+    return await list_local_sinks(strict=True)
+
+
+@dataclass
+class _Presence:
+    """One local output a player follows: how to find it, and whom to tell."""
+
+    match: dict[str, Any]
+    stored_name: str | None
+    on_present: Callable[[str], None]
+    on_absent: Callable[[], None]
+    on_active: Callable[[], None] | None = None
+    on_idle: Callable[[], None] | None = None
+    owner: object | None = None
+    sink: str | None = None  # the sink it plays to right now; None while unplugged
+
+
 def extract_mac_from_sink(sink_name: str) -> str | None:
     """Extract a colon-delimited MAC address from a bluez sink name.
 
@@ -126,7 +153,8 @@ class SinkMonitor:
         await monitor.stop()
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, inventory: Callable[[], Awaitable[list[LocalSink]]] | None = None) -> None:
+        # Keys are a Bluetooth MAC or, for a local output, the player id.
         self._callbacks: dict[str, tuple[Callable[[], None], Callable[[], None]]] = {}
         self._sink_names: dict[str, str] = {}  # MAC → sink_name
         self._sink_name_to_mac: dict[str, str] = {}  # sink_name → MAC (reverse index)
@@ -136,6 +164,11 @@ class SinkMonitor:
         self._consecutive_connect_failures: int = 0
         self._ever_connected: bool = False
         self._transient_warning_logged: bool = False
+        # Local (non-Bluetooth) outputs followed across unplug/replug, by player id.
+        self._inventory = inventory or _strict_inventory
+        self._presence: dict[str, _Presence] = {}
+        self._presence_lock: asyncio.Lock | None = None
+        self._poll_task: asyncio.Task[None] | None = None
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -200,14 +233,193 @@ class SinkMonitor:
         self._task = asyncio.create_task(self._monitor_loop())
 
     async def stop(self) -> None:
-        """Cancel the monitor task and clean up."""
-        task = self._task
-        if task is None:
+        """Cancel the monitor task (and the presence poll) and clean up."""
+        for attr in ("_poll_task", "_task"):
+            task = getattr(self, attr)
+            if task is None:
+                continue
+            setattr(self, attr, None)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    # ── Local outputs: presence across unplug / replug ────────────────
+
+    def register_presence(
+        self,
+        key: str,
+        match: dict[str, Any],
+        stored_name: str | None,
+        on_present: Callable[[str], None],
+        on_absent: Callable[[], None],
+        *,
+        current_sink: str | None = None,
+        on_active: Callable[[], None] | None = None,
+        on_idle: Callable[[], None] | None = None,
+        owner: object | None = None,
+    ) -> None:
+        """Follow a local output for player *key*.
+
+        *on_absent* fires when the sink it plays to (*current_sink*) goes away;
+        *on_present* fires with the sink name when ``match_sink`` finds it again
+        (possibly under a new name).  While a sink is held, its running/idle
+        transitions go to *on_active* / *on_idle* like a Bluetooth sink's.
+        *owner* lets a retiring client unregister without removing its successor.
+        """
+        self.unregister(key)
+        self._presence[key] = _Presence(
+            match=dict(match or {}),
+            stored_name=stored_name,
+            on_present=on_present,
+            on_absent=on_absent,
+            on_active=on_active,
+            on_idle=on_idle,
+            owner=owner,
+        )
+        if current_sink:
+            self._hold(key, current_sink)
+
+    def unregister_presence(self, key: str, *, owner: object | None = None) -> None:
+        """Stop following *key* — only if *owner* is the one that registered it."""
+        entry = self._presence.get(key)
+        if entry is None or (owner is not None and entry.owner is not owner):
             return
-        self._task = None
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        del self._presence[key]
+        self.unregister(key)
+
+    def has_presence(self, key: str) -> bool:
+        return key in self._presence
+
+    def presence_sink(self, key: str) -> str | None:
+        """The sink player *key* plays to now, ``None`` while it is unplugged."""
+        entry = self._presence.get(key)
+        return entry.sink if entry else None
+
+    def set_presence_stored_name(self, key: str, stored_name: str | None) -> None:
+        """The config now names another sink (after a rematch)."""
+        entry = self._presence.get(key)
+        if entry is not None:
+            entry.stored_name = stored_name
+
+    async def rematch(self, key: str) -> SinkMatch:
+        """Match *key*'s output against the current inventory and remember the result.
+
+        Fires no callback — the caller acts on the result.  Raises
+        :class:`SinkInventoryUnavailable` when the sinks cannot be listed.
+        """
+        entry = self._presence.get(key)
+        sinks = await self._inventory()
+        if entry is None:
+            return SinkMatch(None, None, "sink_missing")
+        claimed = {p.sink for k, p in self._presence.items() if k != key and p.sink}
+        found = match_sink(entry.match, entry.stored_name, sinks, claimed=claimed)
+        if found.status == "ok" and found.sink is not None:
+            self._seed_state(found.sink)
+            self._hold(key, found.sink.name)
+        else:
+            self._release(key)
+        return found
+
+    async def refresh_presence(self) -> None:
+        """Re-read the inventory: report outputs that went away and those that came back.
+
+        Used on a new sink, after a (re)connect to PulseAudio and by the
+        polling fallback.  An unreadable inventory changes nothing.
+        """
+        if not self._presence:
+            return
+        if self._presence_lock is None:
+            self._presence_lock = asyncio.Lock()
+        async with self._presence_lock:
+            try:
+                sinks = await self._inventory()
+            except SinkInventoryUnavailable as exc:
+                logger.debug("SinkMonitor: sink inventory unavailable: %s", exc)
+                return
+            present = {s.name for s in sinks}
+            for key, entry in list(self._presence.items()):
+                if entry.sink and entry.sink not in present:
+                    self._lose(key, entry)
+            claimed = {p.sink for p in self._presence.values() if p.sink}
+            for key, entry in list(self._presence.items()):
+                if entry.sink:
+                    # Still here: keep its running/idle state current.
+                    current = next((s for s in sinks if s.name == entry.sink), None)
+                    if current is not None:
+                        self._observe_state(current.name, current.state)
+                    continue
+                found = match_sink(entry.match, entry.stored_name, sinks, claimed=claimed)
+                if found.status != "ok" or found.sink is None:
+                    continue
+                claimed.add(found.sink.name)
+                self._seed_state(found.sink)
+                self._hold(key, found.sink.name)
+                logger.info("SinkMonitor: output for %s present as %s (%s)", key, found.sink.name, found.method)
+                _call(entry.on_present, found.sink.name)
+
+    def start_presence_polling(self, interval: float) -> None:
+        """Poll the inventory every *interval* seconds while sink events are unavailable."""
+        if self._poll_task is not None and not self._poll_task.done():
+            return
+        self._poll_task = asyncio.create_task(self._presence_poll_loop(max(0.001, float(interval))))
+
+    async def _presence_poll_loop(self, interval: float) -> None:
+        while True:
+            await asyncio.sleep(interval)
+            if self.available or not self._presence:
+                continue
+            try:
+                await self.refresh_presence()
+            except Exception:  # pragma: no cover - a poll must never end the loop
+                logger.exception("SinkMonitor: presence poll failed")
+
+    def _hold(self, key: str, sink_name: str) -> None:
+        entry = self._presence[key]
+        if entry.sink == sink_name and key in self._callbacks:
+            return
+        entry.sink = sink_name
+        if entry.on_active is not None and entry.on_idle is not None:
+            self.register(key, sink_name, entry.on_active, entry.on_idle)
+
+    def _release(self, key: str) -> None:
+        entry = self._presence.get(key)
+        if entry is not None:
+            entry.sink = None
+        self.unregister(key)
+
+    def _lose(self, key: str, entry: _Presence) -> None:
+        logger.info("SinkMonitor: output %s for %s is gone", entry.sink, key)
+        self._release(key)
+        _call(entry.on_absent)
+
+    def _seed_state(self, sink: LocalSink) -> None:
+        """Learn a sink's state from the inventory, before its callbacks are registered."""
+        if sink.state in ("running", "idle", "suspended") and sink.name not in self._sink_name_to_mac:
+            self._sink_states[sink.name] = sink.state
+
+    def _observe_state(self, sink_name: str, state: str) -> None:
+        """A state read for a held sink (poll / scan) — dispatched like a change event."""
+        if state not in ("running", "idle", "suspended"):
+            return
+        old_state = self._sink_states.get(sink_name)
+        if state == old_state:
+            return
+        self._sink_states[sink_name] = state
+        self._dispatch_transition(sink_name, old_state, state)
+
+    def _dispatch_transition(self, sink_name: str, old_state: str | None, new_state: str) -> None:
+        key = self._sink_name_to_mac.get(sink_name)
+        if key is None:
+            return
+        on_active, on_idle = self._callbacks.get(key, (None, None))
+        if on_active is None or on_idle is None:
+            return
+        if new_state == "running" and old_state != "running":
+            logger.debug("SinkMonitor: %s [%s] → running", sink_name, key)
+            on_active()
+        elif new_state in ("idle", "suspended") and old_state in ("running", None):
+            logger.debug("SinkMonitor: %s [%s] → %s", sink_name, key, new_state)
+            on_idle()
 
     # ── Event loop ────────────────────────────────────────────────────
 
@@ -227,12 +439,10 @@ class SinkMonitor:
                     # subscribing — avoids stale cache after PA reconnect and
                     # ensures register() dispatches correctly on first call.
                     await self._scan_all_sinks(pulse)
+                    # Outputs unplugged or replugged while we were not listening.
+                    await self.refresh_presence()
                     async for event in pulse.subscribe_events("sink"):
-                        ev_type = str(event.t)
-                        if ev_type == "change" or ev_type == "new":
-                            await self._handle_sink_change(pulse, event.index)
-                        elif ev_type == "remove":
-                            self._handle_sink_remove(event.index)
+                        await self._dispatch_event(pulse, str(event.t), event.index)
             except asyncio.CancelledError:
                 return
             except Exception as exc:
@@ -293,6 +503,25 @@ class SinkMonitor:
 
     # ── Event handlers ────────────────────────────────────────────────
 
+    async def _dispatch_event(self, pulse: Any, ev_type: str, sink_index: int) -> None:
+        """Route one PulseAudio sink event."""
+        if ev_type == "change":
+            await self._handle_sink_change(pulse, sink_index)
+        elif ev_type == "new":
+            await self._handle_sink_change(pulse, sink_index)
+            name = self._sink_index_to_name.get(sink_index)
+            # Only a local output can bring back a followed one; Bluetooth
+            # connects (and the bridge's own null sinks) never need the inventory.
+            if (
+                name
+                and not is_bluez_sink_name(name)
+                and not name.startswith("sendspin_")
+                and any(p.sink is None for p in self._presence.values())
+            ):
+                await self.refresh_presence()
+        elif ev_type == "remove":
+            self._handle_sink_remove(sink_index)
+
     async def _handle_sink_change(self, pulse: Any, sink_index: int) -> None:
         """Query the sink, store state for all bluez sinks, and fire callbacks."""
         try:
@@ -303,8 +532,8 @@ class SinkMonitor:
         sink_name: str = sink_info.name
         self._sink_index_to_name[sink_index] = sink_name
 
-        # Only track bluez sinks (Bluetooth audio)
-        if not is_bluez_sink_name(sink_name):
+        # Track Bluetooth sinks, and the local outputs players are registered on.
+        if not is_bluez_sink_name(sink_name) and sink_name not in self._sink_name_to_mac:
             return
 
         new_state = self._classify_state(sink_info.state)
@@ -334,10 +563,16 @@ class SinkMonitor:
             on_idle()  # type: ignore[misc]
 
     def _handle_sink_remove(self, sink_index: int) -> None:
-        """Handle sink removal — treat as idle if it was running."""
+        """Handle sink removal — a followed output is lost; otherwise idle if it was running."""
         sink_name = self._sink_index_to_name.pop(sink_index, None)
         if sink_name is None:
             return
+
+        for key, entry in list(self._presence.items()):
+            if entry.sink == sink_name:
+                self._sink_states.pop(sink_name, None)
+                self._lose(key, entry)
+                return
 
         old_state = self._sink_states.pop(sink_name, None)
         mac = self._sink_name_to_mac.get(sink_name)
@@ -369,7 +604,7 @@ class SinkMonitor:
             sink_name: str = sink_info.name
             self._sink_index_to_name[sink_info.index] = sink_name
 
-            if not is_bluez_sink_name(sink_name):
+            if not is_bluez_sink_name(sink_name) and sink_name not in self._sink_name_to_mac:
                 continue
 
             new_state = self._classify_state(sink_info.state)
@@ -421,3 +656,11 @@ class SinkMonitor:
                 _PA_SINK_SUSPENDED: "suspended",
             }.get(state, "unknown")
         return "unknown"
+
+
+def _call(callback: Callable[..., None], *args: Any) -> None:
+    """Run a player's callback; one failing player must not stop the monitor."""
+    try:
+        callback(*args)
+    except Exception:
+        logger.exception("SinkMonitor: presence callback failed")

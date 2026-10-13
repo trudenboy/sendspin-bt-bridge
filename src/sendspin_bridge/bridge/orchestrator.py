@@ -613,6 +613,7 @@ class BridgeOrchestrator:
         filter_devices_fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
         load_saved_volume_fn: Callable[[str], int | None] | None = None,
         persist_enabled_fn: Callable[[str, bool], None] | None = None,
+        load_player_volume_fn: Callable[[str], int | None] | None = None,
         base_listen_port: int = 8928,
         default_player_name: str | None = None,
         local_sinks: list[LocalSink] | None = None,
@@ -666,6 +667,7 @@ class BridgeOrchestrator:
             bt_manager_factory=bt_manager_factory,
             default_player_name=resolved_default_name,
             load_saved_volume_fn=load_saved_volume_fn,
+            load_player_volume_fn=load_player_volume_fn,
             persist_enabled_fn=persist_enabled_fn,
         )
         # Published so reconfig_orchestrator._apply_start_client() can reach
@@ -992,6 +994,7 @@ class BridgeOrchestrator:
         load_saved_volume_fn: Callable[[str], int | None] | None = None,
         persist_enabled_fn: Callable[[str, bool], None] | None = None,
         app_factory: Callable[[], Any] | None = None,
+        load_player_volume_fn: Callable[[str], int | None] | None = None,
     ) -> Any:
         """Run the remaining bridge lifecycle after runtime bootstrap is complete."""
         startup_phase = "devices"
@@ -1003,6 +1006,7 @@ class BridgeOrchestrator:
             filter_devices_fn=filter_devices_fn,
             load_saved_volume_fn=load_saved_volume_fn,
             persist_enabled_fn=persist_enabled_fn,
+            load_player_volume_fn=load_player_volume_fn,
             base_listen_port=bootstrap.base_listen_port,
             local_sinks=local_sinks,
         )
@@ -1010,10 +1014,13 @@ class BridgeOrchestrator:
 
         # Start PA sink state monitor (idle disconnect ground truth).
         from sendspin_bridge.services.audio.sink_monitor import SinkMonitor
+        from sendspin_bridge.services.lifecycle.bridge_runtime_state import set_sink_monitor
 
         sink_monitor = SinkMonitor()
         for client in clients:
             client._sink_monitor = sink_monitor
+        # Players added later (live reconfig) follow their output through it too.
+        set_sink_monitor(sink_monitor)
 
         from sendspin_bridge.services.bluetooth.hci_avrcp_monitor import get_monitor as _get_hci_monitor
 
@@ -1021,6 +1028,8 @@ class BridgeOrchestrator:
 
         try:
             await sink_monitor.start()
+            # Without sink events (no pulsectl, PA unreachable) local outputs are polled.
+            sink_monitor.start_presence_polling(float(getattr(bootstrap, "bt_check_interval", 15) or 15))
             await hci_monitor.start()
             startup_phase = "web"
             loop = asyncio.get_running_loop()
@@ -1045,6 +1054,7 @@ class BridgeOrchestrator:
                 phase=startup_phase,
                 details={"error_type": type(exc).__name__},
             )
+            set_sink_monitor(None)
             await sink_monitor.stop()
             await hci_monitor.stop()
             raise
@@ -1056,5 +1066,6 @@ class BridgeOrchestrator:
                 version=version,
             )
         finally:
+            set_sink_monitor(None)
             await sink_monitor.stop()
             await hci_monitor.stop()

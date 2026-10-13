@@ -184,3 +184,39 @@ def test_a_bluetooth_player_takes_the_bluetooth_path():
     # The Bluetooth runtime id is left as the client computed it (Music Assistant identity).
     assert result.client.player_id == "uuid5-of-Kitchen"
     assert result.client.config_id == "bt-1"
+
+
+def test_the_saved_volume_is_restored_by_player_id():
+    from dataclasses import replace
+
+    sinks = [_sink(USB_SINK, serial="Generic_USB_DAC_0000A1")]
+    asked: list[str] = []
+
+    def load_volume(player_id: str) -> int | None:
+        asked.append(player_id)
+        return 42
+
+    ctx = replace(_context(), load_player_volume_fn=load_volume)
+
+    result = activate_player(_player(), index=0, context=ctx, default_player_name="F", local_sinks=sinks)
+
+    assert asked == [PLAYER_ID]
+    # The start volume the daemon applies to its stream (``volume_controller: sendspin``).
+    assert result.client.status["volume"] == 42
+
+
+def test_an_out_of_range_saved_volume_is_ignored():
+    from dataclasses import replace
+
+    ctx = replace(_context(), load_player_volume_fn=lambda _pid: 140)
+
+    result = activate_player(_player(), index=0, context=ctx, default_player_name="F", local_sinks=[])
+
+    assert "volume" not in result.client.status
+
+
+def test_the_client_keeps_its_match_and_configured_sink_for_hotplug():
+    result = activate_player(_player(), index=0, context=_context(), default_player_name="F", local_sinks=[])
+
+    assert result.client.sink_match == {"serial": "Generic_USB_DAC_0000A1"}
+    assert result.client.configured_sink == USB_SINK

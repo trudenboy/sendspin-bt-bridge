@@ -415,6 +415,8 @@ class DeviceActivationContext:
     # downstream identity mapping (MA, UI) breaks across a restart.
     default_player_name: str = "Sendspin"
     load_saved_volume_fn: Callable[[str], int | None] | None = None
+    # A pulse_sink player's saved volume, by player id (``PLAYER_STATE``).
+    load_player_volume_fn: Callable[[str], int | None] | None = None
     persist_enabled_fn: Callable[[str, bool], None] | None = None
     # Gate for the periodic mgmt-socket RSSI refresh.  When False the
     # ``on_rssi_update`` callback is left None so ``_rssi_refresh_tick``
@@ -657,6 +659,14 @@ def _activate_pulse_sink(
     client.volume_controller = str(player.get("volume_controller") or "sendspin")
 
     match = backend.get("match") if isinstance(backend.get("match"), dict) else {}
+    # Kept on the client so it can find its output again after an unplug.
+    client.sink_match = dict(match)
+    client.configured_sink = stored_sink
+    if context.load_player_volume_fn is not None:
+        saved_volume = context.load_player_volume_fn(player_id)
+        # The daemon applies it to its stream (``sendspin``), or to the sink under ``pa``.
+        if isinstance(saved_volume, int) and 0 <= saved_volume <= 100:
+            client._update_status({"volume": saved_volume})
     found = match_sink(match, stored_sink, list(local_sinks), claimed=claimed)
     sink_name = found.sink.name if found.status == "ok" and found.sink is not None else None
     client.bluetooth_sink_name = sink_name
@@ -673,12 +683,13 @@ def _activate_pulse_sink(
     else:
         logger.info("  Player '%s': audio output %s (matched by %s)", player_name, sink_name, found.method)
         if sink_name != stored_sink:
-            _record_rematched_sink(player_id, stored_sink, sink_name, found.method)
+            record_rematched_sink(player_id, stored_sink, sink_name, found.method)
+            client.configured_sink = sink_name
 
     return ActivationResult(client=client, bt_manager=None, bt_available=False, listen_port=listen_port)
 
 
-def _record_rematched_sink(player_id: str, previous: str | None, sink_name: str, method: str | None) -> None:
+def record_rematched_sink(player_id: str, previous: str | None, sink_name: str, method: str | None) -> None:
     """The output came back under another name: keep it in the config and say so."""
     import sendspin_bridge.bridge.state as _state
     from sendspin_bridge.config import update_config
