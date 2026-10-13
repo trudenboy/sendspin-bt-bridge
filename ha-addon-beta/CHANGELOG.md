@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.2] - 2026-10-14
+
+### Changed
+
+- The Sendspin library is updated to aiosendspin 10.0.2, which carries the
+  upstream bug fixes since 10.0.0, including pairing records that stay
+  readable and match after an interrupted pairing.
+
 ## [3.1.0-beta.1] - 2026-10-14
 
 ### Added
