@@ -1,6 +1,7 @@
 """Enabled / released flags persist into players and PLAYER_STATE (schema v6)."""
 
 import json
+import uuid
 
 import pytest
 
@@ -130,3 +131,45 @@ def test_unmigratable_v5_file_keeps_its_speakers_through_update_config(tmp_path)
     disk = _disk(tmp_path)
     assert disk["BLUETOOTH_DEVICES"] == original["BLUETOOTH_DEVICES"]
     assert disk["LAST_VOLUMES"] == original["LAST_VOLUMES"]
+
+
+class _FakeBt:
+    mac_address = MAC
+
+
+class _FakeClient:
+    """A running speaker: its runtime id is uuid5 of the name, not of the MAC."""
+
+    player_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, "kitchen @ bridge"))
+    bt_manager = _FakeBt()
+
+
+def _running(monkeypatch):
+    import sendspin_bridge.services.bluetooth.bt_commands as bt_commands
+
+    assert _FakeClient.player_id != PID
+    client = _FakeClient()
+    monkeypatch.setattr(
+        bt_commands, "find_client_by_player_id", lambda pid: client if pid == client.player_id else None
+    )
+    monkeypatch.setattr(bt_commands, "diff_configs", lambda old, new: [])
+    return bt_commands
+
+
+def test_config_change_finds_running_speaker_by_runtime_id(tmp_path, monkeypatch):
+    bt_commands = _running(monkeypatch)
+    result = bt_commands.apply_device_config_change(_FakeClient.player_id, "idle_mode", "power_save")
+    assert result.success, result.error
+    assert _disk(tmp_path)["players"][0]["idle_mode"] == "power_save"
+
+
+def test_enabled_finds_running_speaker_by_runtime_id(tmp_path, monkeypatch):
+    bt_commands = _running(monkeypatch)
+    result = bt_commands.apply_device_enabled(_FakeClient.player_id, False)
+    assert result.success, result.error
+    assert _disk(tmp_path)["players"][0]["enabled"] is False
+
+
+def test_config_change_unknown_runtime_id_is_404(monkeypatch):
+    bt_commands = _running(monkeypatch)
+    assert bt_commands.apply_device_config_change("nope", "idle_mode", "power_save").code == 404
