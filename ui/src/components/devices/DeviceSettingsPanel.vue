@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAudioStore } from '@/stores/audio'
 import { useBridgeStore } from '@/stores/bridge'
 import { useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
@@ -9,8 +10,8 @@ import { ApiError } from '@/api/client'
 import { SbButton, SbSpinner, SbToggle } from '@/kit'
 import SettingField from '@/components/settings/SettingField.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
-import { DEVICE_GROUPS } from '@/settings/device'
-import { getPath, setPath, type FieldDef } from '@/settings/layout'
+import { DEVICE_GROUPS, deviceFieldFor, deviceFieldVisible, type DeviceField } from '@/settings/device'
+import { getPath, setPath } from '@/settings/layout'
 import { confirmDialog } from '@/composables/useConfirm'
 import { speakerName } from '@/utils/speakerName'
 import type { Device } from '@/api/types'
@@ -19,6 +20,7 @@ const props = defineProps<{ device: Device }>()
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
+const audio = useAudioStore()
 const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
 
@@ -41,12 +43,24 @@ try {
 const configId = computed(() => props.device.config_id ?? props.device.id)
 const dirty = computed(() => entry.value !== null && JSON.stringify(entry.value) !== original.value)
 const adapterChoices = computed(() => bridge.adapters.map((a) => ({ value: a.id, label: a.name ? `${a.id} — ${a.name}` : a.id })))
+// Outputs another player already plays to are not offered; the saved one always is.
+const sinkChoices = computed(() => {
+  const current = String(getPath(entry.value, 'backend.sink') ?? '')
+  const list = audio.sinks
+    .filter((s) => !s.in_use_by || s.in_use_by === configId.value)
+    .map((s) => ({ value: s.name, label: s.description && s.description !== s.name ? `${s.description} — ${s.name}` : s.name }))
+  if (current && !list.some((o) => o.value === current)) list.unshift({ value: current, label: current })
+  return list
+})
+const choicesFor = (f: DeviceField) => (f.optionsFrom === 'sinks' ? sinkChoices.value : adapterChoices.value)
 // Timing is applied live from its own tab.
 const groups = computed(() => DEVICE_GROUPS.filter((g) => g.id !== 'sync'))
 // The port the running speaker really listens on, when none is pinned.
 const effectivePort = computed(() => entry.value?._effective_listen_port)
-const fieldFor = (f: FieldDef): FieldDef =>
-  f.key === 'listen_port' && effectivePort.value != null ? { ...f, placeholder: String(effectivePort.value) } : f
+const fieldFor = (f: DeviceField): DeviceField => {
+  const shown = deviceFieldFor(f, entry.value ?? {})
+  return f.key === 'listen_port' && effectivePort.value != null ? { ...shown, placeholder: String(effectivePort.value) } : shown
+}
 
 async function load() {
   loading.value = true
@@ -65,6 +79,13 @@ async function load() {
   }
 }
 watch(configId, load, { immediate: true })
+watch(
+  () => (entry.value ? getPath(entry.value, 'backend.type') : null),
+  (type) => {
+    if (type === 'pulse_sink') void audio.fetchSinks()
+  },
+  { immediate: true },
+)
 
 const read = (key: string) => getPath(entry.value, key)
 function write(key: string, value: unknown) {
@@ -72,8 +93,8 @@ function write(key: string, value: unknown) {
   setPath(entry.value, key, value === null || value === '' ? undefined : value)
 }
 
-function visible(f: (typeof DEVICE_GROUPS)[number]['fields'][number]) {
-  return (showAdvanced.value || !f.advanced) && (!f.visible || f.visible(entry.value ?? {}))
+function visible(f: DeviceField) {
+  return (showAdvanced.value || !f.advanced) && deviceFieldVisible(f, entry.value ?? {})
 }
 
 /** Writes this speaker's entry back into the full document and saves it. */
@@ -154,7 +175,7 @@ async function toggleEnabled(enabled: boolean) {
               i18n-base="settings.device"
               :read="read"
               :write="write"
-              :dynamic-options="adapterChoices"
+              :dynamic-options="choicesFor(f)"
             />
           </template>
         </div>

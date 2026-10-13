@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
+import { isDeviceConnected } from '@/utils/deviceBackend'
 import { setLatency } from '@/api/devices'
 import { createSession, endSession, getLatencyHistory, setMetronome, uploadRecording, type TimingSample } from '@/api/calibration'
 import { ApiError } from '@/api/client'
@@ -65,7 +66,7 @@ async function toggleMetronome() {
 
 /* Microphone comparison against another connected speaker. */
 const peers = computed(() =>
-  bridge.devices.filter((d) => d.id !== props.device.id && d.enabled && d.bluetooth?.connected),
+  bridge.devices.filter((d) => d.id !== props.device.id && d.enabled && isDeviceConnected(d)),
 )
 const referenceId = ref('')
 const micStep = ref('')

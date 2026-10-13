@@ -22,8 +22,8 @@ export interface FieldDef {
   key: string
   kind: FieldKind
   options?: readonly string[]
-  /** Choices supplied at runtime (the bridge's adapters) instead of a schema enum. */
-  optionsFrom?: 'adapters'
+  /** Choices supplied at runtime (the bridge's adapters or audio outputs) instead of a schema enum. */
+  optionsFrom?: 'adapters' | 'sinks'
   min?: number
   max?: number
   step?: number

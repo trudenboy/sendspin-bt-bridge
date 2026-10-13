@@ -48,7 +48,8 @@
       "recovering": "Reconnecting…",
       "transitioning": "Connecting…",
       "disabled": "Disabled",
-      "released": "Handed over"
+      "released": "Handed over",
+      "output_missing": "Output missing"
     },
     "actions": {
       "reconnect": "Reconnect",
@@ -916,6 +917,10 @@
         "adapter": {
           "label": "Bluetooth adapter",
           "help": "The adapter that connects this speaker. Automatic uses the default adapter."
+        },
+        "sink": {
+          "label": "Audio output",
+          "help": "The sound output of this computer this player plays to. Outputs another player uses are not offered."
         }
       },
       "room_name": {
@@ -1118,7 +1123,20 @@
     "testHelp": "Play a short click to check that you hear it.",
     "waiting": "Connecting the speaker's audio — this takes a few seconds.",
     "testSound": "Play test sound",
-    "done": "Done"
+    "done": "Done",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "Audio output"
+    },
+    "audio": {
+      "intro": "Play to an audio output of this computer, such as a USB DAC, a sound card or HDMI.",
+      "none": "No audio outputs found.",
+      "refresh": "Refresh",
+      "inUse": "Already used by another player",
+      "named": "Choose a name and a room for this output.",
+      "looking": "Looking for audio outputs…",
+      "taken": "Another player already uses this output."
+    }
   },
   "connection": {
     "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."

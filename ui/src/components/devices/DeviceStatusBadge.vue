@@ -22,6 +22,7 @@ const STATES: Record<string, { tone: Tone; dot: DotStatus }> = {
   offline: { tone: 'neutral', dot: 'offline' },
   standby: { tone: 'neutral', dot: 'standby' },
   released: { tone: 'warning', dot: 'standby' },
+  output_missing: { tone: 'error', dot: 'error' },
   disabled: { tone: 'neutral', dot: 'offline' },
 }
 

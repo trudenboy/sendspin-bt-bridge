@@ -5,7 +5,8 @@ import { useBluetoothStore } from '@/stores/bluetooth'
 import { useBridgeStore } from '@/stores/bridge'
 import { playClick } from '@/api/calibration'
 import { ApiError } from '@/api/client'
-import { SbBadge, SbButton, SbDialog, SbInput, SbSpinner } from '@/kit'
+import { SbBadge, SbButton, SbDialog, SbInput, SbSpinner, SbTabs } from '@/kit'
+import AudioOutputPicker from './AudioOutputPicker.vue'
 import PairedDevicesList from './PairedDevicesList.vue'
 import { CheckCircle2, RotateCw, Speaker } from 'lucide-vue-next'
 import type { ScanDevice } from '@/api/types'
@@ -24,6 +25,14 @@ const bridge = useBridgeStore()
 
 type Step = 'find' | 'name' | 'test' | 'paired'
 const step = ref<Step>('find')
+// A speaker over Bluetooth, or an audio output of this computer.
+const mode = ref<'bluetooth' | 'audio'>('bluetooth')
+const audioStage = ref<'pick' | 'name' | 'done'>('pick')
+const tabs = computed(() => [
+  { id: 'bluetooth', label: t('addSpeaker.tabs.bluetooth') },
+  { id: 'audio', label: t('addSpeaker.tabs.audio') },
+])
+const showTabs = computed(() => (mode.value === 'audio' ? audioStage.value === 'pick' : step.value === 'find'))
 const adapter = ref('')
 const audioOnly = ref(true)
 const options = ref({ quiesceAdapter: false, noInputNoOutputAgent: false, allowHfpProfile: false })
@@ -52,6 +61,8 @@ async function scan() {
 }
 
 function reset() {
+  mode.value = 'bluetooth'
+  audioStage.value = 'pick'
   step.value = 'find'
   chosen.value = null
   name.value = ''
@@ -122,8 +133,12 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
 
 <template>
   <SbDialog :model-value="open" :title="t('addSpeaker.title')" size="md" @update:model-value="(v: unknown) => !v && close()">
+    <SbTabs v-if="showTabs" :model-value="mode" :tabs="tabs" class="mb-4" @update:model-value="(v: unknown) => (mode = v as typeof mode)" />
+
+    <AudioOutputPicker v-if="mode === 'audio'" @stage="(s) => (audioStage = s)" @close="close" />
+
     <!-- 1. Find -->
-    <div v-if="step === 'find'" class="space-y-4">
+    <div v-else-if="step === 'find'" class="space-y-4">
       <p class="text-sm text-text-secondary">{{ t('addSpeaker.findHelp') }}</p>
 
       <div class="flex flex-wrap items-center gap-3">
@@ -225,7 +240,10 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
     <p v-if="error" class="mt-3 text-sm text-error" role="alert">{{ error }}</p>
 
     <template #footer>
-      <template v-if="step === 'name'">
+      <template v-if="mode === 'audio'">
+        <SbButton v-if="audioStage !== 'done'" variant="ghost" @click="close">{{ t('common.close') }}</SbButton>
+      </template>
+      <template v-else-if="step === 'name'">
         <SbButton variant="ghost" @click="reset">{{ t('common.cancel') }}</SbButton>
         <SbButton :loading="saving" @click="addToBridge">{{ t('addSpeaker.addToBridge') }}</SbButton>
       </template>

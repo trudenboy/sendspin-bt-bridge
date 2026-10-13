@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
+import { isDeviceConnected } from '@/utils/deviceBackend'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
@@ -42,7 +43,7 @@ const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
 
 const state = computed(() => deviceState(props.device))
-const connected = computed(() => props.device.bluetooth?.connected)
+const connected = computed(() => isDeviceConnected(props.device))
 const isStreaming = computed(() => props.device.playback.playing && props.device.audio.streaming)
 const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
 
