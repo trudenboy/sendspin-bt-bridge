@@ -22,7 +22,7 @@ from typing import Any
 import sendspin_bridge.bridge.state as state
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config, write_config_file
 from sendspin_bridge.config.migration import migrate_v5_to_v6
-from sendspin_bridge.config.players import find_player_by_id
+from sendspin_bridge.config.players import find_player_by_id, find_player_by_mac
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.infrastructure.config_diff import diff_configs
 
@@ -378,6 +378,21 @@ def _read_migrated_config() -> tuple[dict, CommandResult | None]:
     return config, None
 
 
+def _resolve_config_player(config: dict, player_id: str) -> dict | None:
+    """The ``players[]`` entry for *player_id* (a runtime or a config id).
+
+    A running speaker's runtime id differs from its config id (it is derived
+    from the name), so go through the client's Bluetooth MAC.  Disabled or
+    stopped speakers have no client; their ids are config ids.
+    """
+    client = find_client_by_player_id(player_id)
+    if client is not None:
+        mac = getattr(getattr(client, "bt_manager", None), "mac_address", "")
+        if mac:
+            return find_player_by_mac(config, mac)
+    return find_player_by_id(config, player_id)
+
+
 def apply_device_config_change(player_id: str, key: str, value: Any) -> CommandResult:
     """Persist a per-device config change and dispatch HOT_APPLY.
 
@@ -401,7 +416,7 @@ def apply_device_config_change(player_id: str, key: str, value: Any) -> CommandR
         if err is not None:
             return err
         new_config = json.loads(json.dumps(old_config))  # deep copy
-        target = find_player_by_id(new_config, player_id)
+        target = _resolve_config_player(new_config, player_id)
         if target is None:
             return _err(f"Device {player_id} missing from config", code=404)
 
@@ -452,7 +467,7 @@ def apply_device_enabled(player_id: str, enabled: bool) -> CommandResult:
         if err is not None:
             return err
         new_config = json.loads(json.dumps(old_config))
-        target = find_player_by_id(new_config, player_id)
+        target = _resolve_config_player(new_config, player_id)
         if target is None:
             return _err("Unknown device", code=404)
 
