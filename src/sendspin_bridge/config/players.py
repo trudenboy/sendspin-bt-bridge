@@ -110,11 +110,20 @@ class Player(BaseModel):
     idle_mode: Literal["default", "power_save", "auto_disconnect", "keep_alive"] | None = None
     power_save_delay_minutes: int | None = Field(1, ge=0, le=60)
     idle_disconnect_minutes: int | None = Field(0, ge=0)
-    keepalive_interval: int | None = Field(30, ge=30)
+    # 0 switches keep-alive off; otherwise 30-3600 s. The schema advertises the
+    # smallest value the UI lets a user enter (30); the validator also accepts 0.
+    keepalive_interval: Annotated[int, Field(json_schema_extra={"minimum": 30})] | None = 30
     keep_alive_method: Literal["infrasound", "silence", "none"] | None = None
     room_id: str | None = None
     room_name: str | None = None
     backend: Backend
+
+    @field_validator("keepalive_interval")
+    @classmethod
+    def _keepalive_interval_range(cls, value: int | None) -> int | None:
+        if value is not None and value != 0 and not 30 <= value <= 3600:
+            raise ValueError("keepalive_interval must be 0 (off) or between 30 and 3600")
+        return value
 
     @model_validator(mode="after")
     def _backend_options(self) -> Player:
