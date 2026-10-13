@@ -141,3 +141,32 @@ def test_a_pulse_sink_player_port_index_follows_all_bluetooth_players():
 
     assert start.player_id == "dac-2"
     assert start.payload["device_index"] == 2 + 1
+
+
+def test_a_bluetooth_player_given_a_new_mac_is_stopped_before_the_new_one_starts():
+    old = _cfg({"mac": A, "player_name": "Kitchen"})
+    new = _cfg({"mac": B, "player_name": "Kitchen"})
+    new["players"][0]["id"] = old["players"][0]["id"]
+
+    actions = diff_configs(old, new)
+
+    pid = old["players"][0]["id"]
+    assert [(a.kind, a.mac, a.player_id, a.fields) for a in actions] == [
+        (ActionKind.STOP_CLIENT, A, pid, ["removed"]),
+        (ActionKind.START_CLIENT, B, pid, ["added"]),
+    ]
+    assert actions[1].payload["device"]["mac"] == B
+
+
+def test_a_duplicate_player_id_is_ignored_and_logged(caplog):
+    import logging
+
+    cfg = _with(_cfg(), _sink_player("dac-1"), _sink_player("dac-1", sink="alsa_output.other"))
+
+    with caplog.at_level(logging.DEBUG, logger="sendspin_bridge.services.infrastructure.config_diff"):
+        actions = diff_configs(_cfg(), cfg)
+
+    assert [(a.kind, a.payload["device"]["backend"]["sink"]) for a in actions] == [
+        (ActionKind.START_CLIENT, "alsa_output.usb-dac")
+    ]
+    assert "second player with id dac-1" in caplog.text

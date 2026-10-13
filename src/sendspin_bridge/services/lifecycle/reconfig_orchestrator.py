@@ -148,6 +148,11 @@ class _ClientIndex:
         if mac:
             self._by_mac[mac.upper()] = client
 
+    def discard(self, client: Any) -> None:
+        """Forget *client*, so a later action in the same apply() cannot reach it."""
+        self._by_id = {key: c for key, c in self._by_id.items() if c is not client}
+        self._by_mac = {key: c for key, c in self._by_mac.items() if c is not client}
+
     def clients(self) -> list[Any]:
         """Every indexed client once."""
         unique: dict[int, Any] = {}
@@ -418,6 +423,10 @@ class ReconfigOrchestrator:
                 except Exception as exc:
                     logger.debug("bt_manager.shutdown failed for %s: %s", action.label or action.mac, exc)
             self._drop_from_registry(action.player_id, action.mac)
+            # Gone for the rest of this apply() too: a START_CLIENT for the
+            # same id (the player moved to another MAC) must build a new
+            # client, not re-enable this shut-down one.
+            clients.discard(client)
         summary.stopped.append(action.to_summary())
 
     def _apply_start_client(

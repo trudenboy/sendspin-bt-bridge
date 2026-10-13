@@ -8,11 +8,14 @@ apply without restarting the whole bridge.  Keeps the classification of
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 from sendspin_bridge.config.players import BLUETOOTH, device_entries, player_to_device_entry
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Field classification
@@ -257,10 +260,10 @@ def _players_by_id(config: dict[str, Any]) -> dict[str, _PlayerView]:
     for player in players:
         if player_to_device_entry(player) is not None:
             entry = next(bt_iter)
-            views.setdefault(
-                entry["id"],
-                _PlayerView(entry["id"], BLUETOOTH, entry["mac"], entry, entry, bt_pos),
-            )
+            if entry["id"] in views:
+                logger.debug("Reconfig diff: ignoring a second player with id %s", entry["id"])
+            else:
+                views[entry["id"]] = _PlayerView(entry["id"], BLUETOOTH, entry["mac"], entry, entry, bt_pos)
             bt_pos += 1
             continue
         player_id = player.get("id")
@@ -273,10 +276,10 @@ def _players_by_id(config: dict[str, Any]) -> dict[str, _PlayerView]:
         settings = {key: value for key, value in player.items() if key not in ("id", "name", "backend")}
         settings["player_name"] = player.get("name")
         settings["sink"] = backend.get("sink")
-        views.setdefault(
-            player_id,
-            _PlayerView(player_id, backend_type, None, settings, dict(player), bt_count + other_pos),
-        )
+        if player_id in views:
+            logger.debug("Reconfig diff: ignoring a second player with id %s", player_id)
+        else:
+            views[player_id] = _PlayerView(player_id, backend_type, None, settings, dict(player), bt_count + other_pos)
         other_pos += 1
     return views
 

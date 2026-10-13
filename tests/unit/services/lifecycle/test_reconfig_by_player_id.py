@@ -157,3 +157,67 @@ def test_global_restart_reaches_clients_without_a_mac(monkeypatch):
 
     assert len(restarted) == 1
     assert {id(c) for c in restarted[0]} == {id(dac), id(speaker)}
+
+
+def test_a_player_moved_to_a_new_mac_stops_the_old_client_and_activates_a_new_one(monkeypatch):
+    from sendspin_bridge.services.bluetooth.device_activation import ActivationResult
+
+    old_client = MagicMock(config_id="bt-1")
+    old_client.bt_manager.mac_address = MAC
+    new_mac = "11:22:33:44:55:66"
+    new_client = SimpleNamespace(
+        config_id="bt-1", bt_manager=SimpleNamespace(mac_address=new_mac), run=lambda: _noop_coro()
+    )
+    activate = MagicMock(
+        return_value=ActivationResult(
+            client=new_client, bt_manager=new_client.bt_manager, bt_available=True, listen_port=8928
+        )
+    )
+    monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", activate)
+
+    class _Future:
+        def add_done_callback(self, _cb):
+            pass
+
+    def _schedule(coro, _loop):
+        coro.close()
+        return _Future()
+
+    monkeypatch.setattr(
+        "sendspin_bridge.services.lifecycle.reconfig_orchestrator.asyncio.run_coroutine_threadsafe", _schedule
+    )
+    device_registry.mutate_active_clients(lambda _current: [old_client])
+    loop = asyncio.new_event_loop()
+    try:
+        orch = ReconfigOrchestrator(
+            loop, device_registry.get_device_registry_snapshot(), activation_context=MagicMock()
+        )
+        summary = orch.apply(
+            [
+                ReconfigAction(kind=ActionKind.STOP_CLIENT, player_id="bt-1", mac=MAC, fields=["removed"], label="K"),
+                ReconfigAction(
+                    kind=ActionKind.START_CLIENT,
+                    player_id="bt-1",
+                    mac=new_mac,
+                    fields=["added"],
+                    payload={"device": {"id": "bt-1", "mac": new_mac, "player_name": "K"}, "device_index": 0},
+                    label="K",
+                ),
+            ]
+        )
+        active = device_registry.get_device_registry_snapshot().active_clients
+    finally:
+        loop.close()
+        device_registry.mutate_active_clients(lambda _current: [])
+
+    old_client.bt_manager.shutdown.assert_called_once()
+    old_client.set_bt_management_enabled.assert_called_once_with(False)
+    activate.assert_called_once()
+    assert activate.call_args.args[0]["mac"] == new_mac
+    assert active == [new_client]
+    assert summary.errors == []
+    assert len(summary.started) == 1
+
+
+async def _noop_coro():
+    return None
