@@ -182,6 +182,7 @@ def _from_pulsectl(info: Any) -> LocalSink:
 
 
 async def _list_all_sinks_pactl() -> list[LocalSink]:
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             "pactl",
@@ -194,6 +195,9 @@ async def _list_all_sinks_pactl() -> list[LocalSink]:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=pulse._TIMEOUT)
     except (OSError, TimeoutError) as exc:
         logger.debug("pactl list sinks failed: %s", exc)
+        if proc is not None and proc.returncode is None:
+            proc.kill()
+            await proc.wait()
         return []
     return parse_pactl_sinks(out.decode(errors="replace"))
 
@@ -245,6 +249,12 @@ def _resolve(
     return None, None, True
 
 
+def _same_port(match: dict, sink: LocalSink) -> bool:
+    """A different ``bus_path`` is a different physical device, even if identical hardware."""
+    stored, current = match.get("bus_path"), sink.identifiers.get("bus_path")
+    return not stored or not current or stored == current
+
+
 def match_sink(
     match: dict,
     stored_name: str | None,
@@ -277,6 +287,7 @@ def match_sink(
                     for s in sinks
                     if s.identifiers.get("vendor_id") == match["vendor_id"]
                     and s.identifiers.get("product_id") == match["product_id"]
+                    and _same_port(match, s)
                 ],
             )
         )

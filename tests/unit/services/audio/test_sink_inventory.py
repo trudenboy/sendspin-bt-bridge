@@ -182,3 +182,168 @@ def test_fixture_sinks_match_their_own_identifiers(fixture):
     for s in sinks:
         res = match_sink(s.identifiers, s.name, sinks)
         assert (res.status, res.sink) == ("ok", s)
+
+
+def test_unplugged_identical_dac_is_not_replaced_by_its_twin():
+    first, second = _load("two_usb_dacs_no_serial.txt")
+    ids_first = {k: v for k, v in first.identifiers.items() if k != "alsa_long_card_name"}
+    ids_second = {k: v for k, v in second.identifiers.items() if k != "alsa_long_card_name"}
+    only_b = [second]  # DAC A unplugged
+    res_a = match_sink(ids_first, first.name, only_b)
+    assert (res_a.sink, res_a.status) == (None, "sink_missing")
+    res_b = match_sink(ids_second, second.name, only_b, claimed=set())
+    assert (res_b.sink, res_b.method, res_b.status) == (second, "bus_path", "ok")
+
+
+def test_vendor_product_still_matches_when_device_moved_port_without_stored_bus_path():
+    a = _sink("a", bus_path="p9", vendor_id="0x1", product_id="0x2")
+    res = match_sink({"vendor_id": "0x1", "product_id": "0x2"}, None, [a])
+    assert (res.sink, res.method) == (a, "vendor_product")
+
+
+# ---------------------------------------------------------------------------
+# pulsectl source and pactl fallback
+# ---------------------------------------------------------------------------
+
+
+class _Enum:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+
+class _Obj:
+    def __init__(self, **kw: object) -> None:
+        self.__dict__.update(kw)
+
+
+def _fake_info(fmt: int = 3, available: str = "yes", mute: int = 0, state: str = "idle") -> _Obj:
+    return _Obj(
+        name="alsa_output.usb-x",
+        description="USB DAC",
+        state=_Enum(state),
+        sample_spec=_Obj(format=fmt, channels=2, rate=48000),
+        mute=mute,
+        volume=_Obj(values=[0.25, 0.8]),
+        port_active=_Obj(name="analog-output", available=_Enum(available)),
+        proplist={
+            "device.serial": "SER1",
+            "device.bus_path": "pci-0:1",
+            "device.vendor.id": "0x1",
+            "device.product.id": "0x2",
+            "alsa.long_card_name": "Card",
+            "device.description": "ignored",
+        },
+    )
+
+
+def test_from_pulsectl_maps_fields():
+    sink = sink_inventory._from_pulsectl(_fake_info(mute=1))
+    assert sink == LocalSink(
+        "alsa_output.usb-x",
+        "USB DAC",
+        "idle",
+        "s16le 2ch 48000Hz",
+        True,
+        80,
+        "analog-output",
+        "available",
+        {
+            "serial": "SER1",
+            "bus_path": "pci-0:1",
+            "vendor_id": "0x1",
+            "product_id": "0x2",
+            "alsa_long_card_name": "Card",
+        },
+    )
+
+
+@pytest.mark.parametrize("fmt,text", [(3, "s16le"), (5, "float32le"), (7, "s32le")])
+def test_from_pulsectl_sample_formats(fmt, text):
+    assert sink_inventory._from_pulsectl(_fake_info(fmt=fmt)).sample_spec == f"{text} 2ch 48000Hz"
+
+
+@pytest.mark.parametrize(
+    "raw,expected", [("yes", "available"), ("no", "not available"), ("unknown", "availability unknown")]
+)
+def test_from_pulsectl_port_availability(raw, expected):
+    assert sink_inventory._from_pulsectl(_fake_info(available=raw)).active_port_available == expected
+
+
+def test_from_pulsectl_unknown_state_and_no_port():
+    info = _fake_info(state="weird")
+    info.port_active = None
+    sink = sink_inventory._from_pulsectl(info)
+    assert sink.state == "unknown"
+    assert sink.active_port is None and sink.active_port_available is None
+
+
+def test_list_all_sinks_uses_pulsectl_when_available(monkeypatch):
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def sink_list(self):
+            return [_fake_info()]
+
+    fake_module = _Obj(PulseAsync=lambda name: _Client())
+    monkeypatch.setattr(sink_inventory.pulse, "_PULSECTL_AVAILABLE", True)
+    monkeypatch.setattr(sink_inventory.pulse, "pulsectl_asyncio", fake_module)
+    (sink,) = asyncio.run(sink_inventory._list_all_sinks())
+    assert sink.name == "alsa_output.usb-x" and sink.identifiers["serial"] == "SER1"
+
+
+def test_list_local_sinks_falls_back_to_pactl_when_pulsectl_raises(monkeypatch):
+    class _Broken:
+        async def __aenter__(self):
+            raise ConnectionError("no pulse")
+
+        async def __aexit__(self, *a):
+            return False
+
+    class _Proc:
+        returncode = 0
+
+        async def communicate(self):
+            return (FIXTURES / "usb_dac_with_serial.txt").read_bytes(), b""
+
+    seen: dict = {}
+
+    async def fake_exec(*args, **kwargs):
+        seen["args"] = args
+        seen["env"] = kwargs["env"]
+        return _Proc()
+
+    monkeypatch.setattr(sink_inventory.pulse, "_PULSECTL_AVAILABLE", True)
+    monkeypatch.setattr(sink_inventory.pulse, "pulsectl_asyncio", _Obj(PulseAsync=lambda name: _Broken()))
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    (sink,) = asyncio.run(list_local_sinks())
+    assert sink.identifiers["serial"] == "Generic_USB_DAC_0000A1"
+    assert seen["args"] == ("pactl", "list", "sinks")
+    assert seen["env"]["LC_ALL"] == "C"
+
+
+def test_pactl_timeout_kills_stray_process(monkeypatch):
+    events: list[str] = []
+
+    class _Proc:
+        returncode = None
+
+        async def communicate(self):
+            await asyncio.sleep(10)
+
+        def kill(self):
+            events.append("kill")
+
+        async def wait(self):
+            events.append("wait")
+
+    async def fake_exec(*args, **kwargs):
+        return _Proc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(sink_inventory.pulse, "_TIMEOUT", 0.01)
+    assert asyncio.run(sink_inventory._list_all_sinks_pactl()) == []
+    assert events == ["kill", "wait"]
