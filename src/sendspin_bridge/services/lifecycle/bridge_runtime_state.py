@@ -232,6 +232,20 @@ def get_activation_context() -> DeviceActivationContext | None:
     return _activation_context
 
 
+_sink_monitor: Any | None = None
+
+
+def set_sink_monitor(monitor: Any | None) -> None:
+    """Publish the bridge's :class:`SinkMonitor` so players started later can follow their output."""
+    global _sink_monitor
+    _sink_monitor = monitor
+
+
+def get_sink_monitor() -> Any | None:
+    """The running :class:`SinkMonitor`, or ``None`` before startup / after shutdown."""
+    return _sink_monitor
+
+
 def notify_status_changed() -> None:
     """Signal that at least one client status has changed."""
     global _notify_timer

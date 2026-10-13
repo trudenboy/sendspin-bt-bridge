@@ -2,7 +2,9 @@
 
 Volume and mute go straight to the speaker's PulseAudio sink; the daemon's
 volume controller sees the sink change and tells Music Assistant, so MA's UI
-follows without a round trip through MA.
+follows without a round trip through MA.  A player with ``volume_controller:
+sendspin`` never has its sink changed: the daemon scales its own stream and
+tells Music Assistant itself.
 """
 
 from __future__ import annotations
@@ -65,9 +67,16 @@ def _require_sink(client) -> str:
     return sink
 
 
+def _scales_stream(client) -> bool:
+    """The player's volume is its stream's, not the sink's (``volume_controller: sendspin``)."""
+    return getattr(client, "volume_controller", "pa") == "sendspin"
+
+
 def _apply_volume(client, volume: int) -> bool:
     sink = getattr(client, "bluetooth_sink_name", None)
-    if not sink or not set_sink_volume(sink, volume):
+    if not sink:
+        return False
+    if not _scales_stream(client) and not set_sink_volume(sink, volume):
         return False
     client._update_status({"volume": volume})
     submit_on_loop(
@@ -117,11 +126,14 @@ def set_device_mute(device_id: str, muted: bool | None) -> dict[str, Any]:
     """Set mute, or toggle when *muted* is ``None``."""
     client = find_client(device_id)
     sink = _require_sink(client)
-    if not set_sink_mute(sink, muted):
-        raise UseCaseError(502, "sink_update_failed", "The audio server rejected the mute change")
-    actual = get_sink_mute(sink)
-    if actual is None:
-        actual = bool(muted) if muted is not None else not bool(client.status.get("muted"))
+    reported: bool | None = None
+    if not _scales_stream(client):
+        if not set_sink_mute(sink, muted):
+            raise UseCaseError(502, "sink_update_failed", "The audio server rejected the mute change")
+        reported = get_sink_mute(sink)
+    actual = (
+        reported if reported is not None else (bool(muted) if muted is not None else not client.status.get("muted"))
+    )
     client._update_status({"muted": actual})
     submit_on_loop(
         client._send_subprocess_command(SetMute(muted=actual)), description=f"set_mute for {client.player_name}"

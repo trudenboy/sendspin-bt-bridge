@@ -27,6 +27,7 @@ from sendspin_bridge.services.bluetooth.device_health_state import (
     compute_device_health_state,
 )
 from sendspin_bridge.services.ipc.bridge_state_model import build_normalized_device_state
+from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
 UTC = timezone.utc
 
@@ -364,6 +365,7 @@ def _build_transfer_readiness(
 ) -> dict[str, Any]:
     reason = "ready"
     severity = "info"
+    facts = DeviceFacts(device)
     if not device.enabled:
         reason = "disabled"
         severity = "warning"
@@ -382,10 +384,14 @@ def _build_transfer_readiness(
     elif bool(status.get("reanchoring")):
         reason = "reanchoring"
         severity = "warning"
+    elif facts.is_local_output and not facts.output_present:
+        # The daemon never starts without its output: the output is the reason.
+        reason = "output_missing"
+        severity = "error"
     elif not device.connected:
         reason = "daemon_unavailable"
         severity = "error"
-    elif not device.bluetooth_connected:
+    elif not facts.is_local_output and not device.bluetooth_connected:
         reason = "bluetooth_disconnected"
         severity = "error"
     elif not device.server_connected:

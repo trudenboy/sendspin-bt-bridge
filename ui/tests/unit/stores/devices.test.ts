@@ -51,6 +51,37 @@ describe('deviceState', () => {
   })
 })
 
+describe('deviceState for a local audio output', () => {
+  const pulse = (audio: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
+    makeDevice({
+      backend: { type: 'pulse_sink', sink: 'alsa_output.usb', mac: null, adapter: null },
+      bluetooth: null as never,
+      audio: { has_sink: true, sink_missing: false, ...audio },
+      ...extra,
+    })
+
+  it('is ready while its output is present, although it has no Bluetooth link', () => {
+    expect(deviceState(pulse({}, { health: { state: 'unknown' } }))).toBe('ready')
+  })
+
+  it('is never offline for a Bluetooth reason while its output is present', () => {
+    const health = { state: 'offline', summary: 'Bluetooth speaker disconnected', reasons: ['bluetooth_disconnected'] }
+    expect(deviceState(pulse({}, { health }))).toBe('ready')
+  })
+
+  it('follows the bridge health for anything else', () => {
+    expect(deviceState(pulse({}, { health: { state: 'degraded' } }))).toBe('degraded')
+  })
+
+  it('says the output is missing when the sink is gone', () => {
+    expect(deviceState(pulse({ has_sink: false, sink_missing: true }))).toBe('output_missing')
+  })
+
+  it('is offline without a sink that is not reported missing', () => {
+    expect(deviceState(pulse({ has_sink: false }, { health: { state: 'unknown' } }))).toBe('offline')
+  })
+})
+
 describe('useDeviceStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

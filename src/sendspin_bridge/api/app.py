@@ -16,6 +16,7 @@ from sendspin_bridge.api.events import EventHub
 from sendspin_bridge.api.events import router as events_router
 from sendspin_bridge.api.middleware import IngressMiddleware, SecurityHeadersMiddleware
 from sendspin_bridge.api.routers import (
+    audio,
     auth,
     bluetooth,
     bridge,
@@ -62,6 +63,7 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
     v1 = APIRouter(prefix=API_PREFIX)
     v1.include_router(bridge.public)
     v1.include_router(auth.router)
+    v1.include_router(audio.router)
     v1.include_router(bridge.router)
     v1.include_router(devices.router)
     v1.include_router(bluetooth.router)

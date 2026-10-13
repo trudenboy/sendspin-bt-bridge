@@ -355,3 +355,102 @@ def test_stored_pulse_sink_match_survives_a_save(client, tmp_path):
     assert client.put("/api/v1/config", json=payload).status_code == 200
     saved = _disk(tmp_path)["players"][2]
     assert saved["name"] == "DAC renamed" and saved["backend"]["match"] == {"serial": "S123"}
+
+
+def _sink_present(monkeypatch, *sinks):
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
+
+    async def fake():
+        return [
+            LocalSink(
+                name=name,
+                description=name,
+                state="idle",
+                sample_spec="s16le 2ch 48000Hz",
+                muted=False,
+                volume=50,
+                active_port=None,
+                active_port_available=None,
+                identifiers=ids,
+            )
+            for name, ids in sinks
+        ]
+
+    monkeypatch.setattr("sendspin_bridge.application.audio.list_local_sinks", fake)
+
+
+def test_new_pulse_sink_player_stores_the_sink_identifiers_as_match(client, tmp_path, monkeypatch):
+    _sink_present(monkeypatch, ("alsa_output.other", {"serial": "S9", "bus_path": "/p"}))
+    payload = client.get("/api/v1/config").json()
+    payload["players"].append({"name": "DAC 2", "backend": {"type": "pulse_sink", "sink": "alsa_output.other"}})
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert _disk(tmp_path)["players"][-1]["backend"]["match"] == {"serial": "S9", "bus_path": "/p"}
+
+
+def test_pulse_sink_saves_with_an_empty_match_when_its_sink_is_absent(client, tmp_path, monkeypatch):
+    _sink_present(monkeypatch)
+    payload = client.get("/api/v1/config").json()
+    payload["players"].append({"name": "DAC 2", "backend": {"type": "pulse_sink", "sink": "alsa_output.gone"}})
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    added = _disk(tmp_path)["players"][-1]
+    assert added["name"] == "DAC 2" and not added["backend"].get("match")
+
+
+def test_changing_the_sink_recomputes_the_match(client, tmp_path, monkeypatch):
+    disk = _disk(tmp_path)
+    disk["players"][2]["backend"]["match"] = {"serial": "OLD"}
+    (tmp_path / "config.json").write_text(json.dumps(disk))
+    _sink_present(monkeypatch, ("alsa_output.new", {"serial": "NEW"}))
+    payload = client.get("/api/v1/config").json()
+    payload["players"][2]["backend"]["sink"] = "alsa_output.new"
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert _disk(tmp_path)["players"][2]["backend"]["match"] == {"serial": "NEW"}
+
+
+def test_an_empty_stored_match_is_filled_on_the_next_save(client, tmp_path, monkeypatch):
+    _sink_present(monkeypatch, ("alsa_output.usb-dac", {"serial": "S1"}))
+    payload = client.get("/api/v1/config").json()
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert _disk(tmp_path)["players"][2]["backend"]["match"] == {"serial": "S1"}
+
+
+def test_client_sent_match_is_ignored_when_the_sink_is_present(client, tmp_path, monkeypatch):
+    _sink_present(monkeypatch, ("alsa_output.usb-dac", {"serial": "REAL"}))
+    payload = client.get("/api/v1/config").json()
+    payload["players"][2]["backend"]["match"] = {"serial": "forged"}
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert _disk(tmp_path)["players"][2]["backend"]["match"] == {"serial": "REAL"}
+
+
+def test_inventory_is_read_outside_config_lock_and_only_for_pulse_sinks(client, monkeypatch):
+    import threading
+
+    import sendspin_bridge.application.audio as audio
+    import sendspin_bridge.application.config as config_uc
+
+    calls = []
+
+    def fake_read():
+        got = []
+
+        def probe():
+            free = config_uc.config_lock.acquire(blocking=False)
+            got.append(free)
+            if free:
+                config_uc.config_lock.release()
+
+        t = threading.Thread(target=probe)
+        t.start()
+        t.join()
+        calls.append(got[0])
+        return []
+
+    monkeypatch.setattr(audio, "read_local_sinks", fake_read)
+    payload = client.get("/api/v1/config").json()
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert calls == [True]  # lock was free while the inventory was read
+
+    calls.clear()
+    payload["players"] = [p for p in payload["players"] if p["backend"]["type"] != "pulse_sink"]
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert calls == []

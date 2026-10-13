@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
+import { isDeviceConnected } from '@/utils/deviceBackend'
 import { claimAudio } from '@/api/devices'
 import { ApiError } from '@/api/client'
 import { confirmDialog } from '@/composables/useConfirm'
@@ -28,7 +29,7 @@ const infoOpen = ref(false)
 const name = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
 const standby = computed(() => props.device.bluetooth?.standby === true)
-const connected = computed(() => props.device.bluetooth?.connected)
+const connected = computed(() => isDeviceConnected(props.device))
 
 async function run(action: () => Promise<unknown>) {
   try {

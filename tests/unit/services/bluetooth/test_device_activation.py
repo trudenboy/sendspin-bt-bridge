@@ -680,3 +680,26 @@ async def test_transport_callback_waits_for_hci_monitor_to_populate_tracker():
     assert result is True
     wh_client.send_transport_command.assert_awaited_once_with("pause")
     eneby_client.send_transport_command.assert_not_awaited()
+
+
+def test_activate_device_records_the_player_config_id():
+    ctx, _ = _make_context()
+    device = {"id": "player-1", "mac": "AA:BB:CC:DD:EE:FF", "adapter": "hci0", "player_name": "Kitchen"}
+
+    result = activate_device(device, index=0, context=ctx, default_player_name="Fallback")
+
+    assert result.client.config_id == "player-1"
+
+
+def test_activate_device_without_an_id_leaves_config_id_unset():
+    ctx, _ = _make_context()
+
+    result = activate_device({"mac": "AA:BB:CC:DD:EE:FF"}, index=0, context=ctx, default_player_name="Fallback")
+
+    assert result.client.config_id is None
+
+
+def test_a_client_built_outside_activation_has_no_config_id():
+    from sendspin_bridge.bridge.client import SendspinClient
+
+    assert SendspinClient("Kitchen", "localhost", 9000).config_id is None

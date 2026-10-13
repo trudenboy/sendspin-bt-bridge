@@ -159,6 +159,38 @@ class DeviceFacts:
         return self._field("sink_name") or self._fact("sink_name")
 
     @property
+    def backend_type(self) -> str:
+        return str(self._fact("backend_type") or "bluetooth_a2dp")
+
+    @property
+    def is_local_output(self) -> bool:
+        """A ``pulse_sink`` player: it plays to a local output, not a Bluetooth speaker."""
+        return self.backend_type == "pulse_sink"
+
+    @property
+    def sink_missing(self) -> bool:
+        return bool(self._fact("sink_missing", False))
+
+    @property
+    def output_present(self) -> bool:
+        """A local output player's sink is there to play to — its "connected"."""
+        return self.has_sink and not self.sink_missing
+
+    @property
+    def connected(self) -> bool:
+        """Its audio path is up: a Bluetooth speaker is connected, a local output is present."""
+        return self.output_present if self.is_local_output else self.bluetooth_connected
+
+    @property
+    def sink_match_status(self) -> str | None:
+        return self._fact("sink_match_status")
+
+    @property
+    def audio_sink(self) -> str | None:
+        """The output a ``pulse_sink`` player plays to, as configured or matched."""
+        return self._fact("audio_sink")
+
+    @property
     def audio_streaming(self) -> bool:
         return bool(self._fact("audio_streaming", False))
 

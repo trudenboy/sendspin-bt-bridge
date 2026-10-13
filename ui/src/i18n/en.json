@@ -48,7 +48,8 @@
       "recovering": "Reconnecting…",
       "transitioning": "Connecting…",
       "disabled": "Disabled",
-      "released": "Handed over"
+      "released": "Handed over",
+      "output_missing": "Output missing"
     },
     "actions": {
       "reconnect": "Reconnect",
@@ -649,6 +650,10 @@
         "label": "Stop PulseAudio moving streams",
         "help": "Unload module-rescue-streams so a reconnecting speaker never borrows another's audio."
       },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "Wake audio outputs on start",
+        "help": "Suspend and resume each local audio output once before its player first starts. Helps an output that comes up silent."
+      },
       "BT_CHECK_INTERVAL": {
         "label": "Connection check interval",
         "help": "How often the bridge checks that each speaker is still connected."
@@ -912,6 +917,10 @@
         "adapter": {
           "label": "Bluetooth adapter",
           "help": "The adapter that connects this speaker. Automatic uses the default adapter."
+        },
+        "sink": {
+          "label": "Audio output",
+          "help": "The sound output of this computer this player plays to. Outputs another player uses are not offered."
         }
       },
       "room_name": {
@@ -1095,7 +1104,9 @@
   "addSpeaker": {
     "title": "Add speaker",
     "findHelp": "Put the speaker in pairing mode. Speakers nearby appear below.",
+    "scan": "Search",
     "scanAgain": "Search again",
+    "scanHint": "Put the speaker in pairing mode, then press Search.",
     "looking": "Looking for speakers…",
     "add": "Add",
     "signal": {
@@ -1114,7 +1125,20 @@
     "testHelp": "Play a short click to check that you hear it.",
     "waiting": "Connecting the speaker's audio — this takes a few seconds.",
     "testSound": "Play test sound",
-    "done": "Done"
+    "done": "Done",
+    "tabs": {
+      "bluetooth": "Bluetooth",
+      "audio": "Audio output"
+    },
+    "audio": {
+      "intro": "Play to an audio output of this computer, such as a USB DAC, a sound card or HDMI.",
+      "none": "No audio outputs found.",
+      "refresh": "Refresh",
+      "inUse": "Already used by another player",
+      "named": "Choose a name and a room for this output.",
+      "looking": "Looking for audio outputs…",
+      "taken": "Another player already uses this output."
+    }
   },
   "connection": {
     "lost": "Lost connection to the bridge — reconnecting. What you see may be out of date."

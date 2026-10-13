@@ -51,7 +51,7 @@ def play_tone(device_id: str) -> None:
         logger.exception("Calibration tone playback failed")
         raise UseCaseError(503, "playback_failed", "Calibration tone playback failed") from exc
     if not played:
-        raise UseCaseError(409, "no_sink", "Bluetooth audio sink is unavailable")
+        raise UseCaseError(409, "no_sink", "Audio output is unavailable")
 
 
 def set_metronome(device_id: str, action: Literal["start", "stop"]) -> bool:
@@ -60,7 +60,7 @@ def set_metronome(device_id: str, action: Literal["start", "stop"]) -> bool:
     if action == "start":
         started = bool(run_on_loop(client.start_calibration_metronome(), timeout=5.0, description="Metronome start"))
         if not started:
-            raise UseCaseError(409, "no_sink", "Bluetooth audio sink is unavailable")
+            raise UseCaseError(409, "no_sink", "Audio output is unavailable")
         return True
     run_on_loop(client.stop_calibration_metronome(), timeout=5.0, description="Metronome stop")
     return False

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import spec from '../../../openapi.json'
 import en from '@/i18n/en.json'
 import ru from '@/i18n/ru.json'
-import { DEVICE_FIELDS, DEVICE_GROUPS, DEVICE_MANAGED_KEYS } from '@/settings/device'
+import { DEVICE_FIELDS, DEVICE_GROUPS, DEVICE_MANAGED_KEYS, deviceFieldFor, deviceFieldVisible } from '@/settings/device'
 
 type Schema = Record<string, any>
 const schemas = (spec as Schema).components.schemas as Record<string, Schema>
@@ -15,9 +15,12 @@ function resolve(s: Schema | undefined): Schema | undefined {
 }
 
 const props = schemas.Player.properties as Record<string, Schema>
-// Dotted keys (``backend.adapter``) resolve through the Bluetooth backend schema.
-const fieldSchema = (key: string): Schema | undefined =>
-  key.startsWith('backend.') ? schemas.BluetoothBackend!.properties[key.slice('backend.'.length)] : props[key]
+// Dotted keys (``backend.adapter``, ``backend.sink``) resolve through the backend schemas.
+const fieldSchema = (key: string): Schema | undefined => {
+  if (!key.startsWith('backend.')) return props[key]
+  const name = key.slice('backend.'.length)
+  return schemas.BluetoothBackend!.properties[name] ?? schemas.PulseSinkBackend!.properties[name]
+}
 const lookup = (m: Schema, k: string) => k.split('.').reduce<any>((o, p) => (o == null ? undefined : o[p]), m)
 
 describe('device settings layout', () => {
@@ -59,5 +62,39 @@ describe('device settings layout', () => {
 
   it('names every group in en and ru', () => {
     for (const g of DEVICE_GROUPS) for (const m of [en, ru]) expect(lookup(m, `settings.deviceGroups.${g.id}`)).toBeTypeOf('string')
+  })
+
+  describe('by backend', () => {
+    const bt = { backend: { type: 'bluetooth_a2dp', mac: 'AA:BB', adapter: 'hci0' } }
+    const pulse = { backend: { type: 'pulse_sink', sink: 'alsa_output.usb' } }
+    const field = (key: string) => DEVICE_FIELDS.find((f) => f.key === key)!
+
+    it('shows the adapter only for a Bluetooth speaker', () => {
+      expect(deviceFieldVisible(field('backend.adapter'), bt)).toBe(true)
+      expect(deviceFieldVisible(field('backend.adapter'), pulse)).toBe(false)
+    })
+
+    it('shows the output choice only for a local audio output', () => {
+      expect(deviceFieldVisible(field('backend.sink'), pulse)).toBe(true)
+      expect(deviceFieldVisible(field('backend.sink'), bt)).toBe(false)
+    })
+
+    it('keeps the idle-mode dependent fields working', () => {
+      expect(deviceFieldVisible(field('keep_alive_method'), { ...pulse, idle_mode: 'keep_alive' })).toBe(true)
+      expect(deviceFieldVisible(field('keep_alive_method'), pulse)).toBe(false)
+    })
+
+    it('offers no disconnect idle mode or infrasound for an output', () => {
+      expect(deviceFieldFor(field('idle_mode'), pulse).options).toEqual(['default', 'power_save', 'keep_alive'])
+      expect(deviceFieldFor(field('keep_alive_method'), pulse).options).toEqual(['silence', 'none'])
+      expect(deviceFieldFor(field('idle_mode'), bt).options).toContain('auto_disconnect')
+      expect(deviceFieldFor(field('keep_alive_method'), bt).options).toContain('infrasound')
+    })
+
+    it('defaults an output to the Sendspin volume controller and silent keep-alive', () => {
+      expect(deviceFieldFor(field('volume_controller'), pulse).default).toBe('sendspin')
+      expect(deviceFieldFor(field('keep_alive_method'), pulse).default).toBe('silence')
+      expect(deviceFieldFor(field('volume_controller'), bt).default).toBe('pa')
+    })
   })
 })

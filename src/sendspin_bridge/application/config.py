@@ -141,7 +141,29 @@ def _internal_view(file_or_payload: dict) -> dict:
     return view
 
 
-def _players_from_internal(internal: dict, payload_players: list, existing_file: dict) -> list[dict]:
+def _read_sinks_for(payload_players: list) -> list:
+    """The local sink inventory when a payload player needs it, else nothing.
+
+    Read before ``config_lock`` is taken: the read runs on the bridge loop,
+    and code there takes the lock.
+    """
+    needs = any(
+        isinstance(p, dict)
+        and isinstance(p.get("backend"), dict)
+        and p["backend"].get("type") == "pulse_sink"
+        and p["backend"].get("sink")
+        for p in payload_players
+    )
+    if not needs:
+        return []
+    from sendspin_bridge.application.audio import read_local_sinks
+
+    return read_local_sinks()
+
+
+def _players_from_internal(
+    internal: dict, payload_players: list, existing_file: dict, sinks_now: list | None = None
+) -> list[dict]:
     """The ``players`` to write, in payload order.
 
     A Bluetooth player is rebuilt from the pipeline's entry with its MAC and
@@ -149,9 +171,19 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
     never used). Any other player is taken as validated; it keeps a client id
     only when a stored player of that backend type has it, else gets a new
     ``uuid4``, and its ``backend.match`` is taken from the stored player of
-    that id (the server owns it; a client value is never used).
+    that id (the server owns it; a client value is never used). A
+    ``pulse_sink`` player keeps a stored non-empty ``match`` while its sink is
+    unchanged; otherwise it is read from the sink now present (empty when the
+    sink is absent). *sinks_now* is the inventory, read by the caller outside
+    ``config_lock`` (see :func:`_read_sinks_for`).
     """
-    from sendspin_bridge.config.players import BLUETOOTH, legacy_device_to_player, normalize_mac, player_id_for_mac
+    from sendspin_bridge.config.players import (
+        BLUETOOTH,
+        PULSE_SINK,
+        legacy_device_to_player,
+        normalize_mac,
+        player_id_for_mac,
+    )
 
     existing = _as_v6(existing_file) if existing_file else {}
     existing_players = [p for p in existing.get("players") or [] if isinstance(p, dict)]
@@ -167,6 +199,7 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
         if isinstance(entry, dict) and normalize_mac(entry.get("mac"))
     }
     players: list[dict] = []
+    sinks_now = sinks_now or []
     for player in payload_players:
         if not isinstance(player, dict):
             continue
@@ -192,10 +225,12 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
         stored = existing_by_id.get(built["id"]) or {}
         raw_stored_backend = stored.get("backend")
         stored_backend: dict[str, Any] = raw_stored_backend if isinstance(raw_stored_backend, dict) else {}
-        if stored_backend.get("match"):
+        built_backend.pop("match", None)
+        if stored_backend.get("match") and stored_backend.get("sink") == built_backend.get("sink"):
             built_backend["match"] = copy.deepcopy(stored_backend["match"])
-        else:
-            built_backend.pop("match", None)
+        elif built_backend.get("type") == PULSE_SINK and built_backend.get("sink"):
+            present = next((s for s in sinks_now if s.name == built_backend["sink"]), None)
+            built_backend["match"] = dict(present.identifiers) if present else {}
         built["backend"] = built_backend
         players.append(built)
     return players
@@ -758,10 +793,11 @@ def import_config(raw: bytes) -> dict:
     from sendspin_bridge.config.store import ConfigStore
 
     store = ConfigStore(CONFIG_FILE)
+    sinks_now = _read_sinks_for(uploaded_players)
     try:
         with config_lock:
             stored = store.read_stored() or {}
-            players = _players_from_internal(_internal_view(uploaded), uploaded_players, stored)
+            players = _players_from_internal(_internal_view(uploaded), uploaded_players, stored, sinks_now)
             new_config = {**uploaded, "players": players, "PLAYER_STATE": _kept_player_state(stored, players)}
             store.replace(new_config, preserve=(), owned=_PRESERVED_KEYS)
     except ValueError as exc:
@@ -896,6 +932,7 @@ def save_config(config: dict) -> dict:
     for bool_key in (
         "PREFER_SBC_CODEC",
         "DISABLE_PA_RESCUE_STREAMS",
+        "PULSE_SINK_RESET_ON_START",
         "AUTH_ENABLED",
         "BRUTE_FORCE_PROTECTION",
         "MA_AUTO_SILENT_AUTH",
@@ -1012,6 +1049,7 @@ def save_config(config: dict) -> dict:
     _require_password_for_auth(config)
 
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    sinks_now = _read_sinks_for(payload_players)
     with config_lock:
         existing: dict = {}
         existing_file: dict = {}
@@ -1145,7 +1183,7 @@ def save_config(config: dict) -> dict:
 
         effective_before = ConfigStore(CONFIG_FILE).load() if existing else {}
 
-        players = _players_from_internal(config, payload_players, existing_file)
+        players = _players_from_internal(config, payload_players, existing_file, sinks_now)
         new_file = {k: v for k, v in config.items() if k != "BLUETOOTH_DEVICES"}
         new_file["players"] = players
         new_file["PLAYER_STATE"] = _kept_player_state(existing_file, players)

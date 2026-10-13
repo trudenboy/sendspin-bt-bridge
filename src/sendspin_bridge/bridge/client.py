@@ -7,6 +7,7 @@ Runs the sendspin CLI player with Bluetooth speaker management
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -50,9 +51,12 @@ from sendspin_bridge.config import (
     _player_id_from_mac,
     get_runtime_version,
     load_config,
+    load_player_volume,
     save_device_static_delay,
     save_device_volume,
+    save_player_volume,
 )
+from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
 )
@@ -381,6 +385,12 @@ class DeviceStatus:
     volume: int = 100
     muted: bool = False
     sink_muted: bool = False
+    # What the player plays to (``players[].backend.type``).  A pulse_sink
+    # player also reports its configured sink and whether it is present.
+    backend_type: str = BLUETOOTH
+    audio_sink: str | None = None
+    sink_missing: bool = False
+    sink_match_status: str | None = None
     audio_format: str | None = None
     bt_transport_path: str | None = None
     bt_transport_state: str | None = None
@@ -673,6 +683,25 @@ class SendspinClient:
             if _mac
             else str(__import__("uuid").uuid5(__import__("uuid").NAMESPACE_DNS, player_name.lower()))
         )
+        # The player's id in the config (``players[].id``); set by
+        # ``activate_device``. Live reconfig finds the client by it.
+        self.config_id: str | None = None
+        # ``players[].backend.type``.  A pulse_sink client has no Bluetooth
+        # manager and plays only to ``bluetooth_sink_name``, its matched sink.
+        self.backend_type: str = BLUETOOTH
+        # ``pa`` sets the sink's own level; ``sendspin`` scales the stream and
+        # leaves the sink (possibly shared with other software) alone.
+        self.volume_controller: str = "pa"
+        # A pulse_sink player's stored identifiers and sink name (``backend.match``
+        # / ``backend.sink``), used to find its output again after an unplug.
+        self.sink_match: dict[str, Any] = {}
+        # ``PULSE_SINK_RESET_ON_START``: suspend and resume the output once,
+        # before the first daemon start, to wake a card that came up stuck.
+        self.reset_output_on_start: bool = False
+        self.configured_sink: str | None = None
+        self._output_monitor: Any | None = None
+        self._output_lock: asyncio.Lock | None = None
+        self._output_tasks: set[asyncio.Future[None]] = set()
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
@@ -1126,6 +1155,161 @@ class SendspinClient:
         finally:
             lease.release()
 
+    # ── Local output (pulse_sink): unplug, replug, rename ────────────────
+
+    def follow_output(self, monitor: Any) -> None:
+        """Have *monitor* report this pulse_sink player's output going and coming back."""
+        self._output_monitor = monitor
+        self._sink_monitor = monitor
+        monitor.register_presence(
+            self.player_id,
+            self.sink_match,
+            self.configured_sink,
+            self._on_output_present,
+            self._on_output_absent,
+            current_sink=self.bluetooth_sink_name,
+            on_active=self._on_sink_active,
+            on_idle=self._on_sink_idle,
+            owner=self,
+        )
+
+    def stop_following_output(self) -> None:
+        monitor = self._output_monitor
+        if monitor is not None:
+            monitor.unregister_presence(self.player_id, owner=self)
+
+    def _on_output_absent(self) -> None:
+        self._schedule_output_change(self._output_lost())
+
+    def _on_output_present(self, sink_name: str) -> None:
+        self._schedule_output_change(self._output_found(sink_name))
+
+    def _schedule_output_change(self, coro: Any) -> None:
+        try:
+            task: asyncio.Future[None] = asyncio.get_running_loop().create_task(coro)
+        except RuntimeError:
+            schedule_on_bridge_loop(coro, description="audio output change")
+            return
+        self._output_tasks.add(task)
+        task.add_done_callback(self._output_tasks.discard)
+        task.add_done_callback(self._log_output_change_failure)
+
+    def _log_output_change_failure(self, task: asyncio.Future[None]) -> None:
+        """Nobody awaits an output change: its failure would only surface at garbage collection."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("[%s] Audio output change failed", self.player_name, exc_info=exc)
+
+    def _output_change_lock(self) -> asyncio.Lock:
+        if self._output_lock is None:
+            self._output_lock = asyncio.Lock()
+        return self._output_lock
+
+    async def _output_lost(self) -> None:
+        """The output was unplugged: park the daemon on the standby null sink.
+
+        Nothing may play to another output meanwhile, so the only move target
+        is the bridge's own null sink; without it the daemon is stopped.
+        """
+        async with self._output_change_lock():
+            daemon_pid = self._daemon_proc.pid if self.is_running() and self._daemon_proc else None
+            self._mark_output_missing("sink_missing")
+            if not daemon_pid:
+                return
+            from sendspin_bridge.services.audio import pulse
+
+            if not await pulse.aensure_null_sink():
+                logger.warning("[%s] No standby sink — stopping the player until its output is back", self.player_name)
+                await self.stop_sendspin()
+                return
+            try:
+                await self._send_subprocess_command(SetStandby(sink=pulse.STANDBY_SINK_NAME))
+            except IPCError as exc:
+                logger.debug("[%s] set_standby IPC failed (daemon may have exited): %s", self.player_name, exc)
+            moved = await pulse.amove_pid_sink_inputs(daemon_pid, pulse.STANDBY_SINK_NAME)
+            logger.info("[%s] Output unplugged — moved %d stream(s) to the standby sink", self.player_name, moved)
+
+    async def _output_found(self, sink_name: str) -> None:
+        """The output is back (possibly renamed): play to it again, or start the player."""
+        async with self._output_change_lock():
+            if not self.running:
+                return
+            was_missing = bool(self.status.get("sink_missing"))
+            await self._adopt_output(sink_name, method=None)
+            daemon = self._daemon_proc if self.is_running() else None
+            if daemon is not None:
+                from sendspin_bridge.services.audio import pulse
+
+                try:
+                    await self._send_subprocess_command(SetStandby(sink=sink_name))
+                except IPCError as exc:
+                    logger.debug("[%s] set_standby IPC failed: %s", self.player_name, exc)
+                moved = await pulse.amove_pid_sink_inputs(daemon.pid, sink_name)
+                logger.info("[%s] Output back as %s — moved %d stream(s)", self.player_name, sink_name, moved)
+            if was_missing:
+                _state.publish_device_event(
+                    self._event_device_id(),
+                    DeviceEventType.SINK_RESTORED,
+                    message=f"Audio output is back: {sink_name}",
+                    details={"sink": sink_name},
+                )
+        if daemon is None:
+            # Outside the lock: the spawn takes it to read the sink it plays to.
+            await self.start_sendspin()
+
+    async def _adopt_output(self, sink_name: str, *, method: str | None) -> None:
+        """Play to *sink_name* from now on; a new name is saved to the config."""
+        self.bluetooth_sink_name = sink_name
+        self._update_status(
+            {"audio_sink": sink_name, "sink_missing": False, "sink_match_status": "ok"},
+        )
+        if sink_name == self.configured_sink:
+            return
+        from sendspin_bridge.services.bluetooth.device_activation import record_rematched_sink
+
+        previous = self.configured_sink
+        self.configured_sink = sink_name
+        if self._output_monitor is not None:
+            self._output_monitor.set_presence_stored_name(self.player_id, sink_name)
+        # A config write: off the loop that serves every player's IPC.
+        await asyncio.get_running_loop().run_in_executor(
+            None, record_rematched_sink, self.player_id, previous, sink_name, method
+        )
+
+    def _mark_output_missing(self, match_status: str) -> None:
+        """No output to play to: never start, and say so once if it was there."""
+        was_present = self.bluetooth_sink_name is not None
+        self.bluetooth_sink_name = None
+        self._update_status({"sink_missing": True, "sink_match_status": match_status, "bt_power_save": False})
+        if was_present:
+            _state.publish_device_event(
+                self._event_device_id(),
+                DeviceEventType.SINK_LOST,
+                level="warning",
+                message="Audio output unplugged — the player waits on the standby sink",
+                details={"sink": self.configured_sink, "status": match_status},
+            )
+
+    async def _rematch_output(self) -> None:
+        """Before a (re)start: find the output again rather than trust a stale name."""
+        monitor = self._output_monitor
+        if monitor is None or not monitor.has_presence(self.player_id):
+            return
+        from sendspin_bridge.services.audio.sink_inventory import SinkInventoryUnavailable
+
+        try:
+            found = await monitor.rematch(self.player_id)
+        except SinkInventoryUnavailable as exc:
+            # PulseAudio is unreachable — so is any other output; keep the name.
+            logger.debug("[%s] Could not re-read the audio outputs: %s", self.player_name, exc)
+            return
+        if found.status == "ok" and found.sink is not None:
+            await self._adopt_output(found.sink.name, method=found.method)
+        else:
+            self._mark_output_missing(found.status)
+
     async def _enter_standby(self) -> None:
         """Disconnect BT and park daemon on null sink to let the speaker save power.
 
@@ -1549,6 +1733,21 @@ class SendspinClient:
 
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
+        is_pulse_sink = getattr(self, "backend_type", BLUETOOTH) == PULSE_SINK
+        if is_pulse_sink:
+            await self._rematch_output()
+        if is_pulse_sink and not self.bluetooth_sink_name:
+            # Without its sink the daemon would play to the default sink —
+            # someone else's output.  It starts once the sink is found.
+            logger.info("[%s] Audio output not present — player not started", self.player_name)
+            self._update_status({"sink_missing": True})
+            return
+        if is_pulse_sink and self.reset_output_on_start and self.bluetooth_sink_name:
+            self.reset_output_on_start = False
+            from sendspin_bridge.services.audio import pulse
+
+            await pulse.asuspend_sink(self.bluetooth_sink_name, True)
+            await pulse.asuspend_sink(self.bluetooth_sink_name, False)
         try:
             # Pre-flight gate (#291): refuse to spawn when SENDSPIN_SERVER is
             # malformed (scheme prefix, embedded port, slashes, whitespace).
@@ -1721,72 +1920,87 @@ class SendspinClient:
                 bt_product_name = identity.name
                 bt_manufacturer = vendor_from_modalias(identity.modalias)
 
-            params = json.dumps(
-                with_protocol_version(
-                    {
-                        "player_name": self.player_name,
-                        "client_id": str(client_id),
-                        "listen_port": self.listen_port,
-                        "url": server_url,
-                        "static_delay_ms": static_delay_ms,
-                        "required_lead_time_ms": self.required_lead_time_ms,
-                        "min_buffer_ms": self.min_buffer_ms,
-                        "bluetooth_sink_name": self.bluetooth_sink_name,
-                        # Where BlueZ actually has this speaker, for the daemon's
-                        # own logs and for a bug report to name the controller.
-                        "bluetooth_device_path": device.object_path if device is not None else None,
-                        "volume": self.status.get("volume", 100),
-                        "muted": bool(self.status.get("muted", False)),
-                        "settings_dir": f"/tmp/sendspin-{self._safe_id}",
-                        "preferred_format": self.preferred_format,
-                        "config_schema_version": CONFIG_SCHEMA_VERSION,
-                        "bt_product_name": bt_product_name,
-                        "bt_manufacturer": bt_manufacturer,
-                        "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
-                    }
+            # An unplug may land in any await since the rematch.  The sink is
+            # read once under the output-change lock; an unplug during the spawn
+            # waits for the daemon to exist and then parks it on the standby sink.
+            spawn_guard = self._output_change_lock() if is_pulse_sink else contextlib.nullcontext()
+            async with spawn_guard:
+                spawn_sink = self.bluetooth_sink_name
+                if is_pulse_sink and not spawn_sink:
+                    logger.info("[%s] Audio output gone before the start — player not started", self.player_name)
+                    self._update_status({"sink_missing": True})
+                    return
+                params = json.dumps(
+                    with_protocol_version(
+                        {
+                            "player_name": self.player_name,
+                            "client_id": str(client_id),
+                            "listen_port": self.listen_port,
+                            "url": server_url,
+                            "static_delay_ms": static_delay_ms,
+                            "required_lead_time_ms": self.required_lead_time_ms,
+                            "min_buffer_ms": self.min_buffer_ms,
+                            "bluetooth_sink_name": spawn_sink,
+                            # Where BlueZ actually has this speaker, for the daemon's
+                            # own logs and for a bug report to name the controller.
+                            "bluetooth_device_path": device.object_path if device is not None else None,
+                            "volume": self.status.get("volume", 100),
+                            "muted": bool(self.status.get("muted", False)),
+                            "settings_dir": f"/tmp/sendspin-{self._safe_id}",
+                            "preferred_format": self.preferred_format,
+                            "volume_controller": getattr(self, "volume_controller", "pa"),
+                            "config_schema_version": CONFIG_SCHEMA_VERSION,
+                            "bt_product_name": bt_product_name,
+                            "bt_manufacturer": bt_manufacturer,
+                            "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
+                        }
+                    )
                 )
-            )
 
-            env = os.environ.copy()
-            env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
+                env = os.environ.copy()
+                env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
+                if is_pulse_sink and spawn_sink:
+                    env["PULSE_SINK"] = spawn_sink
 
-            self._daemon_proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "sendspin_bridge.services.ipc.daemon_process",
-                params,
-                stdout=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-                cwd=os.path.dirname(os.path.abspath(__file__)),
-                limit=1024
-                * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
-                # The kernel reaps the daemon if this process dies outright.
-                # Graceful stop is still the normal path; this covers OOM,
-                # `docker kill` and the Supervisor watchdog, after which a
-                # surviving daemon would hold its listen port against the
-                # next start.
-                **spawn_kwargs(),
-            )
-            self._update_status({"playing": False})
-            self._clear_ma_reconnecting()
-            self._pending_reconnect_unmute_sync = True
+                self._daemon_proc = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    "-m",
+                    "sendspin_bridge.services.ipc.daemon_process",
+                    params,
+                    stdout=asyncio.subprocess.PIPE,
+                    stdin=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                    cwd=os.path.dirname(os.path.abspath(__file__)),
+                    limit=1024
+                    * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
+                    # The kernel reaps the daemon if this process dies outright.
+                    # Graceful stop is still the normal path; this covers OOM,
+                    # `docker kill` and the Supervisor watchdog, after which a
+                    # surviving daemon would hold its listen port against the
+                    # next start.
+                    **spawn_kwargs(),
+                )
+                self._update_status({"playing": False})
+                self._clear_ma_reconnecting()
+                self._pending_reconnect_unmute_sync = True
 
-            # Start async tasks to consume subprocess stdout and stderr
-            self._daemon_task = asyncio.create_task(self._read_subprocess_output())
-            self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
+                # Start async tasks to consume subprocess stdout and stderr
+                self._daemon_task = asyncio.create_task(self._read_subprocess_output())
+                self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
 
-            handler = self._make_reader_done_handler()
-            self._daemon_task.add_done_callback(handler)
-            self._stderr_task.add_done_callback(handler)
-            logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
-            # Open a spawn-history entry — the death handler fills the rest.
-            self._current_spawn = SpawnRecord(
-                pid=int(self._daemon_proc.pid),
-                spawn_at=datetime.now(tz=UTC),
-            )
-            self._supervisor.record(self._current_spawn)
+                handler = self._make_reader_done_handler()
+                self._daemon_task.add_done_callback(handler)
+                self._stderr_task.add_done_callback(handler)
+                logger.info(
+                    "Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name
+                )
+                # Open a spawn-history entry — the death handler fills the rest.
+                self._current_spawn = SpawnRecord(
+                    pid=int(self._daemon_proc.pid),
+                    spawn_at=datetime.now(tz=UTC),
+                )
+                self._supervisor.record(self._current_spawn)
 
         except Exception as e:
             logger.error("Failed to start Sendspin daemon subprocess: %s", e)
@@ -1930,6 +2144,8 @@ class SendspinClient:
         _mac = self.bt_manager.mac_address if self.bt_manager else None
         if isinstance(new_volume, int) and _mac:
             self._schedule_persist("volume", save_device_volume, _mac, new_volume)
+        elif isinstance(new_volume, int) and self.backend_type == PULSE_SINK and self.config_id:
+            self._schedule_persist("volume", save_player_volume, self.config_id, new_volume)
         # MA-driven static_delay_ms changes flow through the daemon's
         # status mirror (BridgeDaemon._handle_server_command). Persist
         # to the player's ``static_delay_ms`` so the value
@@ -2436,9 +2652,21 @@ class SendspinClient:
         except Exception as exc:
             logger.debug("[%s] Keepalive burst failed: %s", self.player_name, exc)
 
+    def _calibration_sink(self) -> str | None:
+        """The sink calibration audio can play on right now, or None.
+
+        A local audio output is usable while its sink is present; a Bluetooth
+        speaker only while it is connected.
+        """
+        if not self.bluetooth_sink_name:
+            return None
+        if self.backend_type == PULSE_SINK:
+            return None if self.status.get("sink_missing") else self.bluetooth_sink_name
+        return self.bluetooth_sink_name if self.status.get("bluetooth_connected") else None
+
     async def play_calibration_tone(self) -> bool:
-        """Play a bounded calibration chirp directly on this device's BT sink."""
-        if not self.bluetooth_sink_name or not self.status.get("bluetooth_connected"):
+        """Play a bounded calibration chirp directly on this device's sink."""
+        if self._calibration_sink() is None:
             return False
         try:
             logger.info(
@@ -2500,8 +2728,8 @@ class SendspinClient:
         return metronome
 
     async def start_calibration_metronome(self) -> bool:
-        """Start a phase-aligned continuous metronome on this device's BT sink."""
-        if not self.status.get("bluetooth_connected"):
+        """Start a phase-aligned continuous metronome on this device's sink."""
+        if self._calibration_sink() is None:
             return False
         metronome = await self._metronome_for_current_sink()
         return await metronome.start()
@@ -2602,6 +2830,13 @@ class SendspinClient:
         self._start_sendspin_lock = asyncio.Lock()
         self._start_sendspin_requests = 0
         self._start_sendspin_processed = 0
+
+        if self.backend_type == PULSE_SINK:
+            from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_sink_monitor
+
+            monitor = self._sink_monitor or get_sink_monitor()
+            if monitor is not None and hasattr(monitor, "register_presence"):
+                self.follow_output(monitor)
 
         # Start Sendspin player: immediately if no BT device, deferred if BT configured
         if not self.bt_management_enabled:
@@ -2716,6 +2951,7 @@ class SendspinClient:
             if self._keepalive_task is not None:
                 self._keepalive_task.cancel()
                 self._keepalive_task = None
+            self.stop_following_output()
             await self.stop_sendspin()
 
     async def stop(self) -> None:
@@ -2805,6 +3041,7 @@ async def main():
             filter_devices_fn=_filter_duplicate_bluetooth_devices,
             load_saved_volume_fn=_load_saved_device_volume,
             persist_enabled_fn=_persist_enabled,
+            load_player_volume_fn=load_player_volume,
         )
     except asyncio.CancelledError:
         logger.info("Client shutting down...")

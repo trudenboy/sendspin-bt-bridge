@@ -3,13 +3,48 @@
  * device drawer shows them. Checked against the ``Player`` schema by
  * a unit test, like the bridge layout. Text: ``settings.device.<key>``.
  */
-import type { ConfigDoc, FieldDef } from './layout'
+import { getPath, type ConfigDoc, type FieldDef } from './layout'
 
 const idle = (mode: string) => (d: ConfigDoc) => (d.idle_mode ?? 'default') === mode
 
+export type PlayerBackend = 'bluetooth_a2dp' | 'pulse_sink'
+
+/** A player field; ``backend`` limits it to one kind of player (all by default). */
+export interface DeviceField extends FieldDef {
+  backend?: PlayerBackend
+}
+
 export interface DeviceGroup {
   id: 'speaker' | 'idle' | 'sync'
-  fields: FieldDef[]
+  fields: DeviceField[]
+}
+
+/** The kind of a config entry; entries without a backend are Bluetooth speakers. */
+export function playerBackend(doc: ConfigDoc): PlayerBackend {
+  return getPath(doc, 'backend.type') === 'pulse_sink' ? 'pulse_sink' : 'bluetooth_a2dp'
+}
+
+/** Whether the field applies to this player's backend and its own visibility rule. */
+export function deviceFieldVisible(f: DeviceField, doc: ConfigDoc): boolean {
+  return (!f.backend || f.backend === playerBackend(doc)) && (!f.visible || f.visible(doc))
+}
+
+// A local audio output has no link to drop and cannot play the infrasound burst
+// (the bridge never wakes a shared output with sound it cannot hear).
+const NOT_FOR_OUTPUT: Record<string, readonly string[]> = {
+  idle_mode: ['auto_disconnect'],
+  keep_alive_method: ['infrasound'],
+}
+const OUTPUT_DEFAULTS: Record<string, unknown> = { volume_controller: 'sendspin', keep_alive_method: 'silence' }
+
+/** The field as this player shows it: options and displayed default per backend. */
+export function deviceFieldFor(f: DeviceField, doc: ConfigDoc): DeviceField {
+  if (playerBackend(doc) !== 'pulse_sink') return f
+  const drop = NOT_FOR_OUTPUT[f.key]
+  const out: DeviceField = { ...f }
+  if (drop && f.options) out.options = f.options.filter((o) => !drop.includes(o))
+  if (f.key in OUTPUT_DEFAULTS) out.default = OUTPUT_DEFAULTS[f.key]
+  return out
 }
 
 export const DEVICE_GROUPS: readonly DeviceGroup[] = [
@@ -17,7 +52,8 @@ export const DEVICE_GROUPS: readonly DeviceGroup[] = [
     id: 'speaker',
     fields: [
       { key: 'name', kind: 'text', default: '' },
-      { key: 'backend.adapter', kind: 'select', optionsFrom: 'adapters', nullable: true },
+      { key: 'backend.adapter', kind: 'select', optionsFrom: 'adapters', nullable: true, backend: 'bluetooth_a2dp' },
+      { key: 'backend.sink', kind: 'select', optionsFrom: 'sinks', backend: 'pulse_sink' },
       { key: 'room_name', kind: 'text' },
       { key: 'room_id', kind: 'text', advanced: true },
       { key: 'volume_controller', kind: 'select', options: ['pa', 'sendspin'], default: 'pa', advanced: true },
@@ -61,4 +97,4 @@ export const DEVICE_MANAGED_KEYS: readonly string[] = [
   'static_delay_calibrated_at',
 ]
 
-export const DEVICE_FIELDS: readonly FieldDef[] = DEVICE_GROUPS.flatMap((g) => g.fields)
+export const DEVICE_FIELDS: readonly DeviceField[] = DEVICE_GROUPS.flatMap((g) => g.fields)

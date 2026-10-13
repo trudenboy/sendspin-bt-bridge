@@ -23,6 +23,15 @@ const bridge = reactive({
   devices: [] as ReturnType<typeof makeDevice>[],
 })
 
+const audio = reactive({
+  sinks: [] as Record<string, unknown>[],
+  loading: false,
+  error: null as string | null,
+  fetchSinks: vi.fn(),
+  addAudioOutput: vi.fn(),
+})
+
+vi.mock('@/stores/audio', () => ({ useAudioStore: () => audio }))
 vi.mock('@/stores/bluetooth', () => ({ useBluetoothStore: () => bt }))
 vi.mock('@/stores/bridge', () => ({ useBridgeStore: () => bridge }))
 vi.mock('@/api/calibration', () => ({ playClick: vi.fn().mockResolvedValue(undefined) }))
@@ -46,9 +55,27 @@ describe('AddSpeakerDialog', () => {
     bridge.devices = []
   })
 
-  it('starts searching as soon as it opens', () => {
+  it('does not search when it opens', () => {
     mountDialog()
+    expect(bt.startScan).not.toHaveBeenCalled()
+  })
+
+  it('hints at pairing mode and offers Search before any scan', () => {
+    bt.scanResults = []
+    const w = mountDialog()
+    expect(w.text()).toContain('Put the speaker in pairing mode, then press Search.')
+    expect(w.text()).not.toContain('No devices found')
+    expect(button(w, 'Search')).toBeDefined()
+  })
+
+  it('searches only when Search is pressed, then offers Search again', async () => {
+    bt.scanResults = []
+    const w = mountDialog()
+    await button(w, 'Search').trigger('click')
+    await flushPromises()
     expect(bt.startScan).toHaveBeenCalledWith('hci0', true)
+    expect(button(w, 'Search again')).toBeDefined()
+    expect(w.text()).not.toContain('Put the speaker in pairing mode, then press Search.')
   })
 
   it('pairs, then adds with the chosen name and room', async () => {
@@ -90,5 +117,43 @@ describe('AddSpeakerDialog', () => {
     await flushPromises()
     expect(w.get('[role="alert"]').text()).toContain('PIN required')
     expect(bt.addToBridge).not.toHaveBeenCalled()
+  })
+
+  describe('Audio output tab', () => {
+    const sink = (name: string, description: string, in_use_by: string | null = null) => ({ name, description, in_use_by, state: 'idle' })
+    beforeEach(() => {
+      audio.sinks = [sink('alsa_output.usb', 'USB DAC'), sink('alsa_output.hdmi', 'HDMI', 'p1')]
+      audio.addAudioOutput.mockResolvedValue(true)
+    })
+    const openTab = async (w: ReturnType<typeof mountDialog>) => {
+      await w.findAll('[role="tab"]').find((t) => t.text() === 'Audio output')!.trigger('click')
+      await flushPromises()
+    }
+
+    it('lists the outputs when the tab opens and greys out the ones in use', async () => {
+      const w = mountDialog()
+      await openTab(w)
+      expect(audio.fetchSinks).toHaveBeenCalled()
+      expect(w.text()).toContain('USB DAC')
+      const addButtons = w.findAll('button').filter((b) => b.text() === 'Add')
+      expect(addButtons).toHaveLength(2)
+      expect(addButtons[0]!.attributes('disabled')).toBeUndefined()
+      expect(addButtons[1]!.attributes('disabled')).toBeDefined()
+      expect(w.text()).toContain('Already used by another player')
+    })
+
+    it('names the output and adds it as a player', async () => {
+      const w = mountDialog()
+      await openTab(w)
+      await w.findAll('button').filter((b) => b.text() === 'Add')[0]!.trigger('click')
+      const [nameInput, roomInput] = w.findAll('input[type="text"]')
+      expect((nameInput!.element as HTMLInputElement).value).toBe('USB DAC')
+      await nameInput!.setValue('Desk speakers')
+      await roomInput!.setValue('Study')
+      await button(w, 'Add to bridge').trigger('click')
+      await flushPromises()
+      expect(audio.addAudioOutput).toHaveBeenCalledWith('alsa_output.usb', 'Desk speakers', { room: 'Study' })
+      expect(w.text()).toContain('Desk speakers is on the bridge.')
+    })
   })
 })

@@ -55,6 +55,9 @@ class DaemonArgs:
     identity_path: str | None = None
     pairing_store_path: str | None = None
     require_pairing: bool = False
+    # ``pa``: volume and mute are the sink's own (PulseVolumeController).
+    # ``sendspin``: they scale this daemon's stream; the sink is never touched.
+    volume_controller: str = "pa"
 
 
 class BridgeDaemon:
@@ -147,7 +150,9 @@ class BridgeDaemon:
             )
         )
         self._audio_handler = self._player
-        if self._bluetooth_sink_name:
+        if self._scales_stream:
+            self._apply_stream_volume()
+        elif self._bluetooth_sink_name:
             try:
                 from sendspin_bridge.services.audio.pa_volume_controller import PulseVolumeController
 
@@ -337,6 +342,36 @@ class BridgeDaemon:
             )
         )
         self._audio_handler = self._player
+        if self._scales_stream:
+            self._apply_stream_volume()
+
+    # ── Stream volume (volume_controller: sendspin) ──────────────────────────
+
+    @property
+    def _scales_stream(self) -> bool:
+        return self._args.volume_controller == "sendspin"
+
+    def _apply_stream_volume(self) -> None:
+        """Set the stream's gain on PulseAudio's cubic percent scale, never the sink's."""
+        if self._player is None:
+            return
+        self._player.set_volume((self._volume / 100) ** 3, self._muted)
+
+    def apply_bridge_volume(self, *, volume: int | None = None, muted: bool | None = None) -> None:
+        """Apply a volume or mute change made on the bridge (its slider or API), not by MA.
+
+        Under ``pa`` the parent already changed the sink and the controller
+        reports it to Music Assistant: nothing to do here.  Under ``sendspin``
+        the change is the stream's, so the daemon applies it and tells MA.
+        """
+        if not self._scales_stream:
+            return
+        if volume is not None:
+            self._volume = volume
+        if muted is not None:
+            self._muted = muted
+        self._apply_stream_volume()
+        self._report_player_state()
 
     # ── Client creation ──────────────────────────────────────────────────────
 
@@ -642,14 +677,12 @@ class BridgeDaemon:
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
     def _handle_server_command(self, payload: ServerCommandPayload) -> None:
-        # The actual sink-level volume / mute application is performed by
-        # ``services.pa_volume_controller.PulseVolumeController.set_state``,
-        # which sendspin invokes upstream of this callback.  We only mirror
-        # the new state into the bridge status dict so the parent-process
-        # SendspinClient surfaces it to the web UI.  Pinned ``sendspin==7.0.0``
-        # always provides the controller — the legacy <5.5.0 fallback that
-        # called ``aset_sink_volume`` from inside this method was dropped
-        # in 2.62.0-rc.9.
+        # Volume and mute are mirrored into the bridge status (the parent
+        # surfaces them to the web UI), applied by ``_apply_sink_volume`` and
+        # echoed to Music Assistant.  Where they land depends on the player's
+        # ``volume_controller``: ``sendspin`` scales this daemon's own stream
+        # and never touches the sink (a local output may be shared); ``pa``
+        # sets the sink through ``PulseVolumeController.set_state``.
         if payload.player is None:
             return
         cmd = payload.player
@@ -809,6 +842,9 @@ class BridgeDaemon:
             self._bridge_status["visualizer"] = viz
 
     def _apply_sink_volume(self) -> None:
+        if self._scales_stream:
+            self._apply_stream_volume()
+            return
         controller = getattr(self, "_volume_controller", None)
         if controller is None:
             return

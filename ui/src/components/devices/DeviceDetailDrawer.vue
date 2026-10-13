@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
+import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
 import { SbDrawer, SbTabs, SbTimeline, SbSignalPath, SbBadge, SbButton, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
@@ -37,6 +38,7 @@ const managementLoading = ref(false)
 const btInfoOpen = ref(false)
 
 const device = computed<Device | undefined>(() => (props.deviceId ? bridge.deviceById(props.deviceId) : undefined))
+const pulse = computed(() => (device.value ? isPulseSink(device.value) : false))
 const released = computed(() => device.value?.bluetooth?.management_enabled === false)
 const adapterId = computed(() => device.value?.bluetooth?.adapter.hci || '')
 const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''))
@@ -60,7 +62,7 @@ const signalSegments = computed(() => {
   if (!d) return []
   const sinkStatus = d.audio.streaming
     ? ('active' as const)
-    : d.bluetooth?.connected
+    : isDeviceConnected(d)
       ? ('inactive' as const)
       : ('error' as const)
   return [
@@ -181,7 +183,7 @@ function onAdapterReboot() {
                   <DeviceStatusBadge :state="deviceState(device)" />
                 </div>
               </div>
-              <div>
+              <div v-if="!pulse">
                 <span class="text-text-secondary">{{ t('drawer.config.adapter') }}</span>
                 <div class="mt-1">
                   <SbBadge tone="neutral" size="sm">
@@ -198,10 +200,10 @@ function onAdapterReboot() {
               <div>
                 <span class="text-text-secondary">{{ t('drawer.status.connected') }}</span>
                 <p class="mt-1 text-text-primary">
-                  {{ device.bluetooth?.connected ? t('common.yes') : t('common.no') }}
+                  {{ isDeviceConnected(device) ? t('common.yes') : t('common.no') }}
                 </p>
               </div>
-              <div>
+              <div v-if="!pulse">
                 <span class="text-text-secondary">{{ t('drawer.status.codec') }}</span>
                 <p class="mt-1 text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</p>
               </div>
@@ -217,7 +219,7 @@ function onAdapterReboot() {
             <!-- Release/Reclaim + BT Info actions -->
             <div class="flex items-center gap-2 border-t border-border pt-3">
               <SbButton
-                v-if="!released"
+                v-if="!pulse && !released"
                 variant="outline"
                 size="sm"
                 :loading="managementLoading"
@@ -226,7 +228,7 @@ function onAdapterReboot() {
                 {{ t('bluetooth.release') }}
               </SbButton>
               <SbButton
-                v-else
+                v-else-if="!pulse"
                 variant="outline"
                 size="sm"
                 :loading="managementLoading"
@@ -234,7 +236,7 @@ function onAdapterReboot() {
               >
                 {{ t('bluetooth.reclaim') }}
               </SbButton>
-              <SbButton variant="outline" size="sm" @click="onBtInfo">
+              <SbButton v-if="!pulse" variant="outline" size="sm" @click="onBtInfo">
                 <template #icon-left>
                   <Info class="h-3.5 w-3.5" />
                 </template>
@@ -250,10 +252,10 @@ function onAdapterReboot() {
                 <SbDropdownItem v-if="canDo(device, 'repair')" @click="runAction('repair')">{{ t('drawer.actions.repair') }}</SbDropdownItem>
                 <SbDropdownItem v-if="canDo(device, 'pairing_window')" @click="runAction('pairing')">{{ t('drawer.actions.pairing') }}</SbDropdownItem>
                 <SbDropdownItem @click="runAction('unmute')">{{ t('drawer.actions.unmute') }}</SbDropdownItem>
-                <SbDropdownItem @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
+                <SbDropdownItem v-if="!pulse" @click="runAction('release')">{{ t('drawer.actions.release') }}</SbDropdownItem>
                 <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
               </SbDropdown>
-              <SbBadge v-if="released" tone="warning" size="sm">
+              <SbBadge v-if="!pulse && released" tone="warning" size="sm">
                 {{ t('bluetooth.released') }}
               </SbBadge>
             </div>
@@ -326,8 +328,10 @@ function onAdapterReboot() {
               <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <dt class="text-text-secondary">{{ t('diagnostics.audioSink') }}</dt>
                 <dd class="font-mono text-xs text-text-primary">{{ device.audio.sink_name ?? '—' }}</dd>
-                <dt class="text-text-secondary">{{ t('diagnostics.codec') }}</dt>
-                <dd class="text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</dd>
+                <template v-if="!pulse">
+                  <dt class="text-text-secondary">{{ t('diagnostics.codec') }}</dt>
+                  <dd class="text-text-primary">{{ device.bluetooth?.codec_name ?? '—' }}</dd>
+                </template>
                 <dt class="text-text-secondary">{{ t('diagnostics.sampleRate') }}</dt>
                 <dd class="text-text-primary">{{ device.audio.format ?? '—' }}</dd>
                 <dt class="text-text-secondary">{{ t('diagnostics.reanchorCount') }}</dt>

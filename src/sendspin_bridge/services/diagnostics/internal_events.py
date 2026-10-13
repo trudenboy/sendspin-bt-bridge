@@ -41,6 +41,9 @@ class DeviceEventType(str, Enum):
     BLUETOOTH_STANDBY_EXITED = "bluetooth-standby-exited"
     SINK_MUTED = "sink-muted"
     SINK_UNMUTED = "sink-unmuted"
+    SINK_REMATCHED = "sink-rematched"
+    SINK_LOST = "sink-lost"
+    SINK_RESTORED = "sink-restored"
 
 
 _DEFAULT_EVENT_LEVELS: dict[str, str] = {
@@ -65,6 +68,9 @@ _DEFAULT_EVENT_LEVELS: dict[str, str] = {
     DeviceEventType.BLUETOOTH_STANDBY_EXITED.value: "info",
     DeviceEventType.SINK_MUTED.value: "warning",
     DeviceEventType.SINK_UNMUTED.value: "info",
+    DeviceEventType.SINK_REMATCHED.value: "info",
+    DeviceEventType.SINK_LOST.value: "warning",
+    DeviceEventType.SINK_RESTORED.value: "info",
 }
 
 

@@ -437,11 +437,13 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     continue
                 daemon._bridge_status["volume"] = vol
                 daemon._notify()
+                daemon.apply_bridge_volume(volume=vol)
         elif cmd.cmd == "set_mute":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and "muted" in cmd.payload:
                 daemon._bridge_status["muted"] = bool(cmd.payload["muted"])
                 daemon._notify()
+                daemon.apply_bridge_volume(muted=bool(cmd.payload["muted"]))
         elif cmd.cmd == "reconnect":
             daemon = daemon_ref[0] if daemon_ref else None
             if daemon and getattr(daemon, "_client", None):
@@ -664,6 +666,7 @@ async def _run(params: dict) -> None:
         identity_path=str(identity_path),
         pairing_store_path=str(pairing_path),
         require_pairing=bool(params.get("require_pairing", False)),
+        volume_controller="sendspin" if params.get("volume_controller") == "sendspin" else "pa",
     )
 
     status = StatusStore(

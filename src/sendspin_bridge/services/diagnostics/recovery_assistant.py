@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
 
 from sendspin_bridge.config import get_config_migration_error
@@ -19,6 +20,7 @@ from sendspin_bridge.services.infrastructure._helpers import (
     _device_extra,
     _device_ma_reconnecting,
 )
+from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
 UTC = timezone.utc
 
@@ -283,6 +285,8 @@ def build_recovery_issue_actions(
             0,
             _recovery_action("open_diagnostics", "Open diagnostics", device_names=names),
         )
+    elif issue_key == "output_missing":
+        primary_action = _recovery_action("open_devices_settings", "Open player settings", device_names=names)
     elif issue_key == "duplicate_device":
         primary_action = _recovery_action(
             "open_devices_settings",
@@ -403,6 +407,13 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
+        facts = DeviceFacts(device)
+        local_output = facts.is_local_output
+        if local_output and not facts.output_present:
+            # No Bluetooth link to repair: the device is unplugged, renamed
+            # away, or cannot be told apart from another one.
+            issues.append(_output_missing_issue(name, facts))
+            continue
         # Samsung Q-series Class-of-Device filter quirk
         # (bluez/bluez#1025).  Surfaced *before* the generic
         # bluetooth-disconnected / repair-required branches because
@@ -478,7 +489,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
             continue
-        if not bluetooth_connected:
+        if not local_output and not bluetooth_connected:
             attempt_summary = _reconnect_attempt_summary(device)
             bluetooth_paired = bluetooth.get("paired") if bluetooth else _device_extra(device).get("bluetooth_paired")
             # v2.70.0-rc.2 (#260) — three-way branch: never_paired beats
@@ -548,7 +559,10 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         device_name=name,
                     )
                 )
-            else:
+                continue
+            if not local_output:
+                # Its remedy is a Bluetooth reconnect; a local output's
+                # daemon falls through to the generic attention card.
                 primary_action, secondary_actions = build_recovery_issue_actions("transport_down", device_names)
                 issues.append(
                     RecoveryIssue(
@@ -561,7 +575,7 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                         device_name=name,
                     )
                 )
-            continue
+                continue
         health_state = str(health.get("state") or "")
         if ma_reconnecting:
             continue
@@ -577,6 +591,32 @@ def _build_device_issues(devices: list[Any]) -> list[RecoveryIssue]:
                 )
             )
     return issues
+
+
+_OUTPUT_MISSING_CAUSES = {
+    "sink_in_use": "Another player already plays to it.",
+    "sink_ambiguous": "Several identical outputs match it and none can be told apart.",
+}
+
+
+def _output_missing_issue(name: str, facts: DeviceFacts) -> RecoveryIssue:
+    """A ``pulse_sink`` player without its output: plug it in or pick another one."""
+    sink = facts.audio_sink or "its audio output"
+    cause = _OUTPUT_MISSING_CAUSES.get(str(facts.sink_match_status or ""), "It is unplugged or was renamed.")
+    primary_action, secondary_actions = build_recovery_issue_actions("output_missing", [name])
+    return RecoveryIssue(
+        key="output_missing",
+        severity="warning",
+        title=f"{name}: the audio output is missing",
+        summary=(
+            f"The output {sink} is not available. {cause} Plug the device back in, or pick another "
+            "output in the player's settings. Until then the player stays in its Music Assistant "
+            "groups, silent."
+        ),
+        primary_action=primary_action,
+        secondary_actions=secondary_actions,
+        device_name=name,
+    )
 
 
 def _build_duplicate_device_issues() -> list[RecoveryIssue]:
@@ -645,6 +685,78 @@ def _build_config_writable_issue(preflight: dict[str, Any] | None = None) -> Rec
         primary_action=primary_action,
         secondary_actions=secondary_actions,
     )
+
+
+def device_output_sink(device: Any) -> str | None:
+    """The local output a ``pulse_sink`` device plays to; None for any other device."""
+    audio = _device_state_model(device).get("audio") or {}
+    if audio:
+        backend, sink = audio.get("backend_type"), audio.get("output_sink")
+    else:
+        extra = _device_extra(device)
+        backend, sink = extra.get("backend_type"), extra.get("audio_sink")
+    return str(sink) if backend == "pulse_sink" and sink else None
+
+
+def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None) -> list[RecoveryIssue]:
+    """Muted, silent or unplugged local outputs of ``pulse_sink`` players.
+
+    Music Assistant's volume is the player's own stream volume; it cannot undo
+    any of these.  ``availability unknown`` is not a warning: many cards never
+    report jack detection.
+    """
+    by_name = {sink.name: sink for sink in local_sinks or []}
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        if not getattr(device, "enabled", True):
+            continue
+        sink_name = device_output_sink(device)
+        sink = by_name.get(sink_name) if sink_name else None
+        if sink is None:
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        found: list[tuple[str, str, str]] = []
+        if sink.muted:
+            found.append(
+                (
+                    "output_muted",
+                    f"{name}: the audio output is muted",
+                    f"The output {sink.name} is muted in the system mixer, so nothing is audible. "
+                    "Music Assistant's volume cannot unmute it: unmute it in the system sound settings.",
+                )
+            )
+        if sink.volume == 0:
+            found.append(
+                (
+                    "output_volume_zero",
+                    f"{name}: the audio output volume is 0 %",
+                    f"The output {sink.name} is set to 0 % in the system mixer. "
+                    "Music Assistant's volume cannot raise it: raise it in the system sound settings.",
+                )
+            )
+        if sink.active_port_available == "not available":
+            found.append(
+                (
+                    "output_port_unavailable",
+                    f"{name}: nothing is plugged into the audio output",
+                    f"The active port {sink.active_port or ''} of {sink.name} reports no connection. "
+                    "Check the cable or the speakers.",
+                )
+            )
+        for key, title, summary in found:
+            primary_action, secondary_actions = build_recovery_issue_actions(key, [name])
+            issues.append(
+                RecoveryIssue(
+                    key=key,
+                    severity="warning",
+                    title=title,
+                    summary=summary,
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
+                    device_name=name,
+                )
+            )
+    return issues
 
 
 def _build_config_migration_issue() -> RecoveryIssue | None:
@@ -965,6 +1077,7 @@ def build_recovery_assistant_snapshot(
     startup_progress: dict[str, Any],
     bridge_state: BridgeStateModel | None = None,
     preflight: dict[str, Any] | None = None,
+    local_sinks: list[LocalSink] | None = None,
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
         delay_by_name: dict[str, Any] = {}
@@ -984,6 +1097,7 @@ def build_recovery_assistant_snapshot(
             for state in bridge_state.devices
         ]
     issues = _build_device_issues(devices)
+    issues.extend(_build_output_issues(devices, local_sinks))
     issues.extend(_build_duplicate_device_issues())
     config_writable_issue = _build_config_writable_issue(preflight=preflight)
     if config_writable_issue:

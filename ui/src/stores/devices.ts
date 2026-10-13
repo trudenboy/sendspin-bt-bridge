@@ -4,6 +4,7 @@ import { useBridgeStore } from './bridge'
 import { reconnectDevice, removeDevice, setDeviceEnabled, setManagement, standbyDevice, wakeDevice } from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
+import { isDeviceConnected, isOutputMissing, isPulseSink } from '@/utils/deviceBackend'
 import type { Device } from '@/api/types'
 
 export type DeviceSortField = 'name' | 'status' | 'adapter'
@@ -25,9 +26,13 @@ export function deviceState(d: Device): string {
   if (!d.enabled) return 'disabled'
   if (d.bluetooth?.management_enabled === false) return 'released'
   if (d.bluetooth?.standby) return 'standby'
+  if (isOutputMissing(d)) return 'output_missing'
   if (d.playback.playing && d.audio.streaming) return 'streaming'
+  // A local output has no Bluetooth link: present means connected, whatever an
+  // older bridge's Bluetooth-only health said.
+  if (isPulseSink(d) && d.health.state === 'offline') return isDeviceConnected(d) ? 'ready' : 'offline'
   if (d.health.state && d.health.state !== 'unknown') return d.health.state
-  return d.bluetooth?.connected ? 'ready' : 'offline'
+  return isDeviceConnected(d) ? 'ready' : 'offline'
 }
 
 export const useDeviceStore = defineStore('devices', () => {

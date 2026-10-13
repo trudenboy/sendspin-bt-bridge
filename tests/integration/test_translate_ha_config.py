@@ -145,6 +145,17 @@ def test_sendspin_pairing_defaults_false_and_survives_addon_restart(tmp_path):
     assert cfg["SENDSPIN_PAIRING"] is True
 
 
+def test_pulse_sink_reset_on_start_survives_addon_restart(tmp_path):
+    _write_json(tmp_path / "config.json", {"PULSE_SINK_RESET_ON_START": True})
+    _write_json(tmp_path / "options.json", _minimal_options())
+
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["PULSE_SINK_RESET_ON_START"] is True
+
+
 def test_sendspin_pairing_defaults_false_without_persisted_web_config(tmp_path):
     _write_json(tmp_path / "options.json", _minimal_options())
 

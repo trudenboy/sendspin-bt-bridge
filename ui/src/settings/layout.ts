@@ -22,8 +22,8 @@ export interface FieldDef {
   key: string
   kind: FieldKind
   options?: readonly string[]
-  /** Choices supplied at runtime (the bridge's adapters) instead of a schema enum. */
-  optionsFrom?: 'adapters'
+  /** Choices supplied at runtime (the bridge's adapters or audio outputs) instead of a schema enum. */
+  optionsFrom?: 'adapters' | 'sinks'
   min?: number
   max?: number
   step?: number
@@ -123,6 +123,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'PREFER_SBC_CODEC', kind: 'toggle' },
       { key: 'SMOOTH_RESTART', kind: 'toggle', advanced: true },
       { key: 'DISABLE_PA_RESCUE_STREAMS', kind: 'toggle', advanced: true },
+      { key: 'PULSE_SINK_RESET_ON_START', kind: 'toggle', advanced: true },
     ],
     after: ['latencyAssistant'],
   },

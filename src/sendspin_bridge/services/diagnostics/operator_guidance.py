@@ -16,6 +16,7 @@ from sendspin_bridge.services.infrastructure._helpers import (
     _device_ma_reconnecting,
     _parse_timestamp,
 )
+from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
 UTC = timezone.utc
 
@@ -609,9 +610,12 @@ def _build_issue_groups(
     # v2.70.0-rc.2 (#260) — never_paired devices form their own group with
     # Start pairing remediation; exclude them from repair_needed/disconnected
     # so they don't double-fire.
+    # A local output (pulse_sink) has no Bluetooth link: it never joins the
+    # Bluetooth groups below.  A missing output is its own card further down.
+    bluetooth_devices = [device for device in devices if not DeviceFacts(device).is_local_output]
     never_paired_devices = [
         device
-        for device in devices
+        for device in bluetooth_devices
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
         and not _device_extra(device).get("bt_standby", False)
@@ -619,7 +623,7 @@ def _build_issue_groups(
     ]
     repair_needed = [
         device
-        for device in devices
+        for device in bluetooth_devices
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
         and not _device_extra(device).get("bt_standby", False)
@@ -628,7 +632,7 @@ def _build_issue_groups(
     ]
     disconnected = [
         str(getattr(device, "player_name", None) or "Unknown")
-        for device in devices
+        for device in bluetooth_devices
         if getattr(device, "bt_management_enabled", True)
         and not getattr(device, "bluetooth_connected", False)
         and not _device_extra(device).get("bt_standby", False)
@@ -637,14 +641,14 @@ def _build_issue_groups(
     ]
     missing_sink = [
         str(getattr(device, "player_name", None) or "Unknown")
-        for device in devices
+        for device in bluetooth_devices
         if getattr(device, "bt_management_enabled", True)
         and getattr(device, "bluetooth_connected", False)
         and not getattr(device, "has_sink", False)
     ]
     transport_down = [
         str(getattr(device, "player_name", None) or "Unknown")
-        for device in devices
+        for device in bluetooth_devices
         if getattr(device, "bt_management_enabled", True)
         and getattr(device, "bluetooth_connected", False)
         and getattr(device, "has_sink", False)
@@ -897,6 +901,34 @@ def _build_issue_groups(
             title=title,
             summary=summary,
             device_names=auto_released,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+        )
+
+    # A pulse_sink player's local output: missing, muted, at zero or unplugged.  The
+    # recovery assistant did the inventory read; the cards are its issues.
+    for output_key in ("output_missing", "output_muted", "output_volume_zero", "output_port_unavailable"):
+        output_issues = [
+            item
+            for item in recovery_assistant.get("issues") or []
+            if isinstance(item, dict) and item.get("key") == output_key
+        ]
+        if not output_issues:
+            continue
+        output_names = [str(item["device_name"]) for item in output_issues if item.get("device_name")]
+        if len(output_issues) == 1:
+            title, summary = str(output_issues[0]["title"]), str(output_issues[0]["summary"])
+        else:
+            title = f"{len(output_issues)} audio outputs need attention"
+            summary = f"{output_issues[0]['summary']} The same applies to: {_format_device_label(output_names[1:])}."
+        primary_action, secondary_actions = _guidance_actions_from_recovery(output_key, output_names)
+        _append_group(
+            groups,
+            key=output_key,
+            severity="warning",
+            title=title,
+            summary=summary,
+            device_names=output_names,
             primary_action=primary_action,
             secondary_actions=secondary_actions,
         )
@@ -1298,7 +1330,7 @@ def _build_header_status(
         )
 
     ready_devices = sum(1 for device in active_devices if getattr(device, "has_sink", False))
-    connected_devices = sum(1 for device in active_devices if getattr(device, "bluetooth_connected", False))
+    connected_devices = sum(1 for device in active_devices if DeviceFacts(device).connected)
     recovery_summary = recovery_assistant.get("summary") or {}
     if active_devices:
         return GuidanceHeaderStatus(

@@ -93,3 +93,5 @@ export interface NowPlaying {
   syncgroup_id?: string
   [key: string]: unknown
 }
+
+export type AudioSink = Schemas['AudioSinkOut']

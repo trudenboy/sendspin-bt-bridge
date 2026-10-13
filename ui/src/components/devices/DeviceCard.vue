@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deviceState, useDeviceStore } from '@/stores/devices'
 import { useNotificationStore } from '@/stores/notifications'
+import { isDeviceConnected } from '@/utils/deviceBackend'
 import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import { speakerName } from '@/utils/speakerName'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
@@ -60,7 +61,7 @@ const signal = computed(() => {
   if (rssi >= -75) return { level: 'fair', icon: SignalMedium }
   return { level: 'weak', icon: SignalLow }
 })
-const connected = computed(() => props.device.bluetooth?.connected)
+const connected = computed(() => isDeviceConnected(props.device))
 const released = computed(() => props.device.bluetooth?.management_enabled === false)
 const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
 

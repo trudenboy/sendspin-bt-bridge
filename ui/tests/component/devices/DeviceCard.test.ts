@@ -80,6 +80,35 @@ describe('DeviceCard', () => {
     expect(mountCard(makeDevice({ bluetooth: { connected: false } })).find('input[type="range"]').exists()).toBe(false)
   })
 
+  describe('a local audio output', () => {
+    const output = (audio: Record<string, unknown> = {}) =>
+      makeDevice({
+        backend: { type: 'pulse_sink', sink: 'alsa_output.usb', mac: null, adapter: null },
+        bluetooth: null as never,
+        health: { state: 'unknown' },
+        supported_actions: ['volume', 'transport', 'power_save'],
+        audio: { has_sink: true, sink_missing: false, ...audio },
+      })
+
+    it('counts as connected while its output is present', () => {
+      const w = mountCard(output())
+      expect(w.text()).toContain('Connected')
+      expect(w.find('input[type="range"]').exists()).toBe(true)
+    })
+
+    it('says the output is missing, with no volume slider', () => {
+      const w = mountCard(output({ has_sink: false, sink_missing: true }))
+      expect(w.text()).toContain('Output missing')
+      expect(w.find('input[type="range"]').exists()).toBe(false)
+    })
+
+    it('shows no Bluetooth details and no handed-over label', () => {
+      const w = mountCard(output())
+      expect(w.text()).not.toContain('Handed over')
+      expect(w.text()).not.toMatch(/dBm|Strong|Fair|Weak/)
+    })
+  })
+
   it('shows the battery level when the speaker reports one', () => {
     expect(mountCard(makeDevice({ bluetooth: { battery_level: 42 } })).text()).toContain('42%')
   })
