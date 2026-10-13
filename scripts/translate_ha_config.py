@@ -280,6 +280,7 @@ def main() -> None:
             "AUTO_UPDATE",
             "CHECK_UPDATES",
             "SMOOTH_RESTART",
+            "PULSE_SINK_RESET_ON_START",
             "TRUSTED_PROXIES",
         )
         for key in web_ui_only_keys:
