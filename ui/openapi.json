@@ -1206,6 +1206,19 @@
             "description": "PulseAudio latency in milliseconds.",
             "title": "Pulse Latency Msec"
           },
+          "PULSE_SINK_RESET_ON_START": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Suspend and resume each local audio output once before its player first starts, to wake an output that came up stuck.",
+            "title": "Pulse Sink Reset On Start"
+          },
           "RECOVERY_BANNER_GRACE_SECONDS": {
             "anyOf": [
               {

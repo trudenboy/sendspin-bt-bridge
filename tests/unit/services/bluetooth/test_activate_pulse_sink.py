@@ -220,3 +220,20 @@ def test_the_client_keeps_its_match_and_configured_sink_for_hotplug():
 
     assert result.client.sink_match == {"serial": "Generic_USB_DAC_0000A1"}
     assert result.client.configured_sink == USB_SINK
+
+
+def test_the_startup_reset_is_asked_for_only_when_the_setting_is_on():
+    sinks = [_sink(USB_SINK, serial="Generic_USB_DAC_0000A1")]
+    from dataclasses import replace
+
+    off = activate_player(_player(), index=0, context=_context(), default_player_name="x", local_sinks=sinks)
+    on = activate_player(
+        _player(),
+        index=0,
+        context=replace(_context(), pulse_sink_reset_on_start=True),
+        default_player_name="x",
+        local_sinks=sinks,
+    )
+
+    assert off.client.reset_output_on_start is False
+    assert on.client.reset_output_on_start is True

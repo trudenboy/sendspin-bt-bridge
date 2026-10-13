@@ -501,3 +501,93 @@ async def test_a_player_started_later_follows_its_output_through_the_published_m
 
     # Its run loop ended: it no longer follows the output.
     assert not mon.has_presence("dac-1")
+
+
+# ── Optional reset of the output before the first start ─────────────────
+
+
+def _record_suspends(monkeypatch) -> list[tuple[str, bool]]:
+    calls: list[tuple[str, bool]] = []
+
+    async def fake_suspend(sink_name: str, suspend: bool) -> bool:
+        calls.append((sink_name, suspend))
+        return True
+
+    monkeypatch.setattr("sendspin_bridge.services.audio.pulse.asuspend_sink", fake_suspend)
+    return calls
+
+
+async def test_a_reset_suspends_and_resumes_the_sink_once_before_the_first_start(monkeypatch):
+    audio = _Audio(monkeypatch)
+    suspends = _record_suspends(monkeypatch)
+    inv = _Inventory(_sink(SINK, serial=SERIAL))
+    client, _mon = _wired(audio, inv, SINK, daemon_running=False)
+    client.reset_output_on_start = True
+
+    await client.start_sendspin()
+    await client.start_sendspin()
+
+    assert suspends == [(SINK, True), (SINK, False)]
+    assert len(audio.spawned) == 2
+
+
+async def test_without_a_reset_the_sink_is_never_suspended(monkeypatch):
+    audio = _Audio(monkeypatch)
+    suspends = _record_suspends(monkeypatch)
+    inv = _Inventory(_sink(SINK, serial=SERIAL))
+    client, _mon = _wired(audio, inv, SINK, daemon_running=False)
+
+    await client.start_sendspin()
+
+    assert suspends == []
+    assert len(audio.spawned) == 1
+
+
+async def test_a_reset_waits_for_the_sink_to_be_present(monkeypatch):
+    audio = _Audio(monkeypatch)
+    suspends = _record_suspends(monkeypatch)
+    inv = _Inventory()
+    client, _mon = _wired(audio, inv, None, daemon_running=False)
+    client.reset_output_on_start = True
+
+    await client.start_sendspin()
+
+    assert suspends == []
+    assert audio.spawned == []
+    assert client.reset_output_on_start is True
+
+
+@pytest.mark.parametrize("setting", [True, False])
+def test_the_startup_reset_setting_reaches_the_activation_context(setting):
+    from sendspin_bridge.bridge.orchestrator import BridgeOrchestrator
+    from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_activation_context
+
+    bootstrap = SimpleNamespace(
+        config={"PULSE_SINK_RESET_ON_START": setting},
+        device_configs=[],
+        server_host="localhost",
+        server_port=9000,
+        effective_bridge="",
+        prefer_sbc=False,
+        bt_check_interval=10,
+        bt_max_reconnect_fails=0,
+        bt_churn_threshold=0,
+        bt_churn_window=300.0,
+        enable_a2dp_sink_recovery_dance=False,
+        enable_pa_module_reload=False,
+        enable_adapter_auto_recovery=False,
+        enable_rssi_badge=False,
+        log_level="INFO",
+        pulse_latency_msec=200,
+    )
+
+    BridgeOrchestrator().initialize_devices(
+        bootstrap,  # type: ignore[arg-type]
+        client_factory=MagicMock(),
+        bt_manager_factory=MagicMock(),
+        filter_devices_fn=lambda devices: devices,
+    )
+
+    context = get_activation_context()
+    assert context is not None
+    assert context.pulse_sink_reset_on_start is setting

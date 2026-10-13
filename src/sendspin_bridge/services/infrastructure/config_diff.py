@@ -93,6 +93,8 @@ _RESTART_REQUIRED_FIELDS: frozenset[str] = frozenset(
         # here stops the UI reporting a no-op as "applied live".
         "MA_API_URL",
         "MA_API_TOKEN",
+        # Read when a player first starts; a running one has had its turn.
+        "PULSE_SINK_RESET_ON_START",
         "MA_AUTO_SILENT_AUTH",
         "MA_WEBSOCKET_MONITOR",
         "WEB_PORT",

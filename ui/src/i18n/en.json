@@ -649,6 +649,10 @@
         "label": "Stop PulseAudio moving streams",
         "help": "Unload module-rescue-streams so a reconnecting speaker never borrows another's audio."
       },
+      "PULSE_SINK_RESET_ON_START": {
+        "label": "Wake audio outputs on start",
+        "help": "Suspend and resume each local audio output once before its player first starts. Helps an output that comes up silent."
+      },
       "BT_CHECK_INTERVAL": {
         "label": "Connection check interval",
         "help": "How often the bridge checks that each speaker is still connected."

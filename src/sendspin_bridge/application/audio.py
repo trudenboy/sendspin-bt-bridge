@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.models.audio import AudioSinkOut
@@ -63,3 +65,25 @@ def read_local_sinks() -> list[LocalSink]:
     except Exception as exc:
         logger.warning("Could not read the local sinks: %s", exc)
         return []
+
+
+_RECENT_MAX_AGE_S = 2.0
+_recent_lock = threading.Lock()
+_recent: tuple[float, list[LocalSink]] | None = None
+
+
+def read_local_sinks_recent() -> list[LocalSink]:
+    """The inventory for guidance builders, reused for a couple of seconds.
+
+    A status build runs on every status change, which during playback can be
+    several a second; one inventory read each would spawn a PulseAudio round
+    trip per build.  Builders run in worker threads, never on the loop.
+    """
+    global _recent
+    with _recent_lock:
+        now = time.monotonic()
+        if _recent is not None and now - _recent[0] < _RECENT_MAX_AGE_S:
+            return list(_recent[1])
+        sinks = read_local_sinks()
+        _recent = (time.monotonic(), sinks)
+        return list(sinks)

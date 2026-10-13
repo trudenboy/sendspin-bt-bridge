@@ -148,6 +148,8 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
             "has_sink": facts.has_sink,
             "sink_name": facts.sink_name,
             "streaming": facts.audio_streaming,
+            "backend_type": facts.backend_type,
+            "output_sink": facts.audio_sink if facts.backend_type == "pulse_sink" else None,
         },
         transport={
             "daemon_connected": bool(_obj_get(device, "server_connected", False)),

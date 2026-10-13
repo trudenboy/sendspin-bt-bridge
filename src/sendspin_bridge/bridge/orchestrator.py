@@ -668,6 +668,9 @@ class BridgeOrchestrator:
             default_player_name=resolved_default_name,
             load_saved_volume_fn=load_saved_volume_fn,
             load_player_volume_fn=load_player_volume_fn,
+            pulse_sink_reset_on_start=bool(
+                (getattr(bootstrap, "config", None) or {}).get("PULSE_SINK_RESET_ON_START", False)
+            ),
             persist_enabled_fn=persist_enabled_fn,
         )
         # Published so reconfig_orchestrator._apply_start_client() can reach

@@ -319,6 +319,19 @@ def _build_onboarding_assistant_payload(
     return assistant.to_dict()
 
 
+def _local_sinks_for_guidance(bridge_state: Any) -> list | None:
+    """The local sink inventory, read once, only when a pulse_sink player has an output to check.
+
+    Called from worker threads (the status build runs in an executor, routes are
+    sync), so waiting on the bridge loop is safe.
+    """
+    if not any((state.audio or {}).get("output_sink") for state in getattr(bridge_state, "devices", None) or []):
+        return None
+    from sendspin_bridge.application.audio import read_local_sinks_recent
+
+    return read_local_sinks_recent()
+
+
 def _build_recovery_assistant_payload(
     *,
     preflight: dict | None = None,
@@ -359,6 +372,7 @@ def _build_recovery_assistant_payload(
     recovery = build_recovery_assistant_snapshot(
         config=config,
         devices=devices,
+        local_sinks=_local_sinks_for_guidance(bridge_state),
         onboarding_assistant=onboarding_assistant,
         startup_progress=startup_progress,
         bridge_state=bridge_state,

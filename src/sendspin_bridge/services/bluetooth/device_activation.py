@@ -417,6 +417,9 @@ class DeviceActivationContext:
     load_saved_volume_fn: Callable[[str], int | None] | None = None
     # A pulse_sink player's saved volume, by player id (``PLAYER_STATE``).
     load_player_volume_fn: Callable[[str], int | None] | None = None
+    # ``PULSE_SINK_RESET_ON_START``: each pulse_sink output is suspended and
+    # resumed once before its player first starts.
+    pulse_sink_reset_on_start: bool = False
     persist_enabled_fn: Callable[[str, bool], None] | None = None
     # Gate for the periodic mgmt-socket RSSI refresh.  When False the
     # ``on_rssi_update`` callback is left None so ``_rssi_refresh_tick``
@@ -661,6 +664,7 @@ def _activate_pulse_sink(
     match = backend.get("match") if isinstance(backend.get("match"), dict) else {}
     # Kept on the client so it can find its output again after an unplug.
     client.sink_match = dict(match)
+    client.reset_output_on_start = context.pulse_sink_reset_on_start
     client.configured_sink = stored_sink
     if context.load_player_volume_fn is not None:
         saved_volume = context.load_player_volume_fn(player_id)

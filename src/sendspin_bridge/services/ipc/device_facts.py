@@ -159,6 +159,15 @@ class DeviceFacts:
         return self._field("sink_name") or self._fact("sink_name")
 
     @property
+    def backend_type(self) -> str:
+        return str(self._fact("backend_type") or "bluetooth_a2dp")
+
+    @property
+    def audio_sink(self) -> str | None:
+        """The output a ``pulse_sink`` player plays to, as configured or matched."""
+        return self._fact("audio_sink")
+
+    @property
     def audio_streaming(self) -> bool:
         return bool(self._fact("audio_streaming", False))
 

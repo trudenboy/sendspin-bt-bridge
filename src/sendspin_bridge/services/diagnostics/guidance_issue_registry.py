@@ -97,6 +97,28 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="warning",
         default_reason_codes=("sink_muted_at_system_level",),
     ),
+    # A pulse_sink player's local output: Music Assistant volume cannot fix these.
+    "output_muted": GuidanceIssueDefinition(
+        key="output_muted",
+        layer="sink_verification",
+        priority=43,
+        severity="warning",
+        default_reason_codes=("output_muted",),
+    ),
+    "output_volume_zero": GuidanceIssueDefinition(
+        key="output_volume_zero",
+        layer="sink_verification",
+        priority=43,
+        severity="warning",
+        default_reason_codes=("output_volume_zero",),
+    ),
+    "output_port_unavailable": GuidanceIssueDefinition(
+        key="output_port_unavailable",
+        layer="sink_verification",
+        priority=43,
+        severity="warning",
+        default_reason_codes=("output_port_unavailable",),
+    ),
     "device_disconnected": GuidanceIssueDefinition(
         key="device-disconnected",
         layer="sink_verification",

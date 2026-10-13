@@ -2250,6 +2250,12 @@ export interface components {
              */
             PULSE_LATENCY_MSEC?: number | null;
             /**
+             * Pulse Sink Reset On Start
+             * @description Suspend and resume each local audio output once before its player first starts, to wake an output that came up stuck.
+             * @default false
+             */
+            PULSE_SINK_RESET_ON_START?: boolean | null;
+            /**
              * Recovery Banner Grace Seconds
              * @description Grace period before showing recovery guidance banners.
              * @default 15

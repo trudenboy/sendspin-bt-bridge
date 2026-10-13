@@ -298,6 +298,11 @@
       "default": false,
       "description": "Disable PulseAudio module-rescue-streams correction on BT reconnect."
     },
+    "PULSE_SINK_RESET_ON_START": {
+      "type": "boolean",
+      "default": false,
+      "description": "Suspend and resume each local audio output once before its player first starts, to wake an output that came up stuck."
+    },
     "DUPLICATE_DEVICE_CHECK": {
       "type": "boolean",
       "default": true,

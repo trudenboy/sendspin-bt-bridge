@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
     from sendspin_bridge.services.ipc.bridge_state_model import BridgeStateModel
 
 from sendspin_bridge.config import get_config_migration_error
@@ -647,6 +648,78 @@ def _build_config_writable_issue(preflight: dict[str, Any] | None = None) -> Rec
     )
 
 
+def device_output_sink(device: Any) -> str | None:
+    """The local output a ``pulse_sink`` device plays to; None for any other device."""
+    audio = _device_state_model(device).get("audio") or {}
+    if audio:
+        backend, sink = audio.get("backend_type"), audio.get("output_sink")
+    else:
+        extra = _device_extra(device)
+        backend, sink = extra.get("backend_type"), extra.get("audio_sink")
+    return str(sink) if backend == "pulse_sink" and sink else None
+
+
+def _build_output_issues(devices: list[Any], local_sinks: list[LocalSink] | None) -> list[RecoveryIssue]:
+    """Muted, silent or unplugged local outputs of ``pulse_sink`` players.
+
+    Music Assistant's volume is the player's own stream volume; it cannot undo
+    any of these.  ``availability unknown`` is not a warning: many cards never
+    report jack detection.
+    """
+    by_name = {sink.name: sink for sink in local_sinks or []}
+    issues: list[RecoveryIssue] = []
+    for device in devices:
+        if not getattr(device, "enabled", True):
+            continue
+        sink_name = device_output_sink(device)
+        sink = by_name.get(sink_name) if sink_name else None
+        if sink is None:
+            continue
+        name = str(getattr(device, "player_name", None) or "Unknown")
+        found: list[tuple[str, str, str]] = []
+        if sink.muted:
+            found.append(
+                (
+                    "output_muted",
+                    f"{name}: the audio output is muted",
+                    f"The output {sink.name} is muted in the system mixer, so nothing is audible. "
+                    "Music Assistant's volume cannot unmute it: unmute it in the system sound settings.",
+                )
+            )
+        if sink.volume == 0:
+            found.append(
+                (
+                    "output_volume_zero",
+                    f"{name}: the audio output volume is 0 %",
+                    f"The output {sink.name} is set to 0 % in the system mixer. "
+                    "Music Assistant's volume cannot raise it: raise it in the system sound settings.",
+                )
+            )
+        if sink.active_port_available == "not available":
+            found.append(
+                (
+                    "output_port_unavailable",
+                    f"{name}: nothing is plugged into the audio output",
+                    f"The active port {sink.active_port or ''} of {sink.name} reports no connection. "
+                    "Check the cable or the speakers.",
+                )
+            )
+        for key, title, summary in found:
+            primary_action, secondary_actions = build_recovery_issue_actions(key, [name])
+            issues.append(
+                RecoveryIssue(
+                    key=key,
+                    severity="warning",
+                    title=title,
+                    summary=summary,
+                    primary_action=primary_action,
+                    secondary_actions=secondary_actions,
+                    device_name=name,
+                )
+            )
+    return issues
+
+
 def _build_config_migration_issue() -> RecoveryIssue | None:
     """The config file could not be moved to the current schema; speakers are not loaded."""
     error = get_config_migration_error()
@@ -965,6 +1038,7 @@ def build_recovery_assistant_snapshot(
     startup_progress: dict[str, Any],
     bridge_state: BridgeStateModel | None = None,
     preflight: dict[str, Any] | None = None,
+    local_sinks: list[LocalSink] | None = None,
 ) -> RecoveryAssistantSnapshot:
     if bridge_state is not None:
         delay_by_name: dict[str, Any] = {}
@@ -984,6 +1058,7 @@ def build_recovery_assistant_snapshot(
             for state in bridge_state.devices
         ]
     issues = _build_device_issues(devices)
+    issues.extend(_build_output_issues(devices, local_sinks))
     issues.extend(_build_duplicate_device_issues())
     config_writable_issue = _build_config_writable_issue(preflight=preflight)
     if config_writable_issue:

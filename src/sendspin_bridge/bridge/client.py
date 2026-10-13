@@ -694,6 +694,9 @@ class SendspinClient:
         # A pulse_sink player's stored identifiers and sink name (``backend.match``
         # / ``backend.sink``), used to find its output again after an unplug.
         self.sink_match: dict[str, Any] = {}
+        # ``PULSE_SINK_RESET_ON_START``: suspend and resume the output once,
+        # before the first daemon start, to wake a card that came up stuck.
+        self.reset_output_on_start: bool = False
         self.configured_sink: str | None = None
         self._output_monitor: Any | None = None
         self._output_lock: asyncio.Lock | None = None
@@ -1728,6 +1731,12 @@ class SendspinClient:
             logger.info("[%s] Audio output not present — player not started", self.player_name)
             self._update_status({"sink_missing": True})
             return
+        if is_pulse_sink and self.reset_output_on_start and self.bluetooth_sink_name:
+            self.reset_output_on_start = False
+            from sendspin_bridge.services.audio import pulse
+
+            await pulse.asuspend_sink(self.bluetooth_sink_name, True)
+            await pulse.asuspend_sink(self.bluetooth_sink_name, False)
         try:
             # Pre-flight gate (#291): refuse to spawn when SENDSPIN_SERVER is
             # malformed (scheme prefix, embedded port, slashes, whitespace).

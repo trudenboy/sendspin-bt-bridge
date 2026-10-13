@@ -901,6 +901,34 @@ def _build_issue_groups(
             secondary_actions=secondary_actions,
         )
 
+    # A pulse_sink player's local output: muted, at zero or unplugged.  The
+    # recovery assistant did the inventory read; the cards are its issues.
+    for output_key in ("output_muted", "output_volume_zero", "output_port_unavailable"):
+        output_issues = [
+            item
+            for item in recovery_assistant.get("issues") or []
+            if isinstance(item, dict) and item.get("key") == output_key
+        ]
+        if not output_issues:
+            continue
+        output_names = [str(item["device_name"]) for item in output_issues if item.get("device_name")]
+        if len(output_issues) == 1:
+            title, summary = str(output_issues[0]["title"]), str(output_issues[0]["summary"])
+        else:
+            title = f"{len(output_issues)} audio outputs need attention"
+            summary = f"{output_issues[0]['summary']} The same applies to: {_format_device_label(output_names[1:])}."
+        primary_action, secondary_actions = _guidance_actions_from_recovery(output_key, output_names)
+        _append_group(
+            groups,
+            key=output_key,
+            severity="warning",
+            title=title,
+            summary=summary,
+            device_names=output_names,
+            primary_action=primary_action,
+            secondary_actions=secondary_actions,
+        )
+
     # Cross-bridge duplicate device detection
     from sendspin_bridge.services.music_assistant.ma_runtime_state import get_duplicate_device_warnings
 

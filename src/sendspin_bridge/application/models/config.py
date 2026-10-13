@@ -340,6 +340,10 @@ class BridgeConfig(BaseModel):
     """
     Disable PulseAudio module-rescue-streams correction on BT reconnect.
     """
+    PULSE_SINK_RESET_ON_START: bool | None = False
+    """
+    Suspend and resume each local audio output once before its player first starts, to wake an output that came up stuck.
+    """
     DUPLICATE_DEVICE_CHECK: bool | None = True
     """
     Check MA API for duplicate device registrations across bridges.
