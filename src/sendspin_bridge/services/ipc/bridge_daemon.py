@@ -677,14 +677,12 @@ class BridgeDaemon:
     # ── Server commands (volume / mute) ──────────────────────────────────────
 
     def _handle_server_command(self, payload: ServerCommandPayload) -> None:
-        # The actual sink-level volume / mute application is performed by
-        # ``services.pa_volume_controller.PulseVolumeController.set_state``,
-        # which sendspin invokes upstream of this callback.  We only mirror
-        # the new state into the bridge status dict so the parent-process
-        # SendspinClient surfaces it to the web UI.  Pinned ``sendspin==7.0.0``
-        # always provides the controller — the legacy <5.5.0 fallback that
-        # called ``aset_sink_volume`` from inside this method was dropped
-        # in 2.62.0-rc.9.
+        # Volume and mute are mirrored into the bridge status (the parent
+        # surfaces them to the web UI), applied by ``_apply_sink_volume`` and
+        # echoed to Music Assistant.  Where they land depends on the player's
+        # ``volume_controller``: ``sendspin`` scales this daemon's own stream
+        # and never touches the sink (a local output may be shared); ``pa``
+        # sets the sink through ``PulseVolumeController.set_state``.
         if payload.player is None:
             return
         cmd = payload.player
