@@ -16,6 +16,15 @@ from sendspin_bridge.application.jobs import Job
 router = APIRouter(tags=["devices"], dependencies=[Depends(require_principal)], responses=PROBLEM_RESPONSES)
 
 
+def supports(action: str) -> Any:
+    """Route dependency: 409 unless the device's backend supports *action*."""
+
+    def _check(device_id: str) -> None:
+        dev.require_action(device_id, action)
+
+    return Depends(_check)
+
+
 class VolumeIn(BaseModel):
     level: int = Field(ge=0, le=100)
 
@@ -93,12 +102,19 @@ def delete_device(device_id: str) -> RemovedOut:
     return RemovedOut(**dev.remove(device_id))
 
 
-@router.put("/devices/{device_id}/volume", response_model=VolumeOut, summary="Set volume")
+@router.put(
+    "/devices/{device_id}/volume", response_model=VolumeOut, summary="Set volume", dependencies=[supports("volume")]
+)
 def put_volume(device_id: str, body: VolumeIn) -> VolumeOut:
     return VolumeOut(**playback.set_device_volume(device_id, body.level))
 
 
-@router.put("/devices/{device_id}/mute", response_model=MuteOut, summary="Mute, unmute or toggle")
+@router.put(
+    "/devices/{device_id}/mute",
+    response_model=MuteOut,
+    summary="Mute, unmute or toggle",
+    dependencies=[supports("volume")],
+)
 def put_mute(device_id: str, body: MuteIn) -> MuteOut:
     return MuteOut(**playback.set_device_mute(device_id, body.muted))
 
@@ -109,13 +125,20 @@ def post_unmute_sink(device_id: str) -> Response:
     return Response(status_code=204)
 
 
-@router.post("/devices/{device_id}/playback", status_code=202, summary="Pause or play")
+@router.post(
+    "/devices/{device_id}/playback", status_code=202, summary="Pause or play", dependencies=[supports("transport")]
+)
 def post_playback(device_id: str, body: PlaybackIn) -> Response:
     playback.device_playback(device_id, body.action)
     return Response(status_code=202)
 
 
-@router.post("/devices/{device_id}/transport", status_code=204, summary="Native Sendspin transport command")
+@router.post(
+    "/devices/{device_id}/transport",
+    status_code=204,
+    summary="Native Sendspin transport command",
+    dependencies=[supports("transport")],
+)
 def post_transport(device_id: str, body: TransportIn) -> Response:
     playback.transport(device_id, body.command, body.value)
     return Response(status_code=204)
@@ -140,41 +163,75 @@ def put_management(device_id: str, body: ManagementIn) -> Response:
     return Response(status_code=204)
 
 
-@router.put("/devices/{device_id}/power-save", status_code=204, summary="Suspend or resume the audio sink")
+@router.put(
+    "/devices/{device_id}/power-save",
+    status_code=204,
+    summary="Suspend or resume the audio sink",
+    dependencies=[supports("power_save")],
+)
 def put_power_save(device_id: str, body: PowerSaveIn) -> Response:
     dev.set_power_save(device_id, body.enabled)
     return Response(status_code=204)
 
 
-@router.post("/devices/{device_id}/standby", status_code=204, summary="Disconnect and park the player")
+@router.post(
+    "/devices/{device_id}/standby",
+    status_code=204,
+    summary="Disconnect and park the player",
+    dependencies=[supports("standby")],
+)
 def post_standby(device_id: str) -> Response:
     dev.standby(device_id)
     return Response(status_code=204)
 
 
-@router.post("/devices/{device_id}/wake", status_code=204, summary="Wake from standby")
+@router.post(
+    "/devices/{device_id}/wake", status_code=204, summary="Wake from standby", dependencies=[supports("standby")]
+)
 def post_wake(device_id: str) -> Response:
     dev.wake(device_id)
     return Response(status_code=204)
 
 
-@router.post("/devices/{device_id}/reconnect", status_code=202, response_model=Job, summary="Reconnect")
+@router.post(
+    "/devices/{device_id}/reconnect",
+    status_code=202,
+    response_model=Job,
+    summary="Reconnect",
+    dependencies=[supports("reconnect")],
+)
 def post_reconnect(device_id: str) -> Job:
     return dev.reconnect(device_id)
 
 
-@router.post("/devices/{device_id}/repair", status_code=202, response_model=Job, summary="Pair again and connect")
+@router.post(
+    "/devices/{device_id}/repair",
+    status_code=202,
+    response_model=Job,
+    summary="Pair again and connect",
+    dependencies=[supports("repair")],
+)
 def post_repair(device_id: str, body: RepairIn | None = None) -> Job:
     return dev.repair(device_id, quiesce_adapter=bool(body and body.quiesce_adapter))
 
 
-@router.post("/devices/{device_id}/claim", status_code=204, summary="Become the multipoint speaker's active source")
+@router.post(
+    "/devices/{device_id}/claim",
+    status_code=204,
+    summary="Become the multipoint speaker's active source",
+    dependencies=[supports("claim")],
+)
 def post_claim(device_id: str) -> Response:
     dev.claim_audio(device_id)
     return Response(status_code=204)
 
 
-@router.post("/devices/{device_id}/pairing-window", status_code=202, summary="Let Music Assistant pair (Sendspin)")
+@router.post(
+    "/devices/{device_id}/pairing-window",
+    status_code=202,
+    summary="Let Music Assistant pair (Sendspin)",
+    dependencies=[supports("pairing_window")],
+)
 def post_pairing_window(device_id: str) -> Response:
     playback.open_pairing_window(device_id)
     return Response(status_code=202)

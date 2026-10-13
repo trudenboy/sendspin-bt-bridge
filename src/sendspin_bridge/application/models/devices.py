@@ -12,6 +12,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field
 
 from sendspin_bridge.application.models.base import ResponseModel
+from sendspin_bridge.config.players import BLUETOOTH, supported_actions_for
 
 IdleMode = Literal["default", "power_save", "auto_disconnect", "keep_alive"]
 
@@ -41,6 +42,13 @@ class AdapterRecovery(ResponseModel):
     adapter: str | None = None
     result: str | None = None
     failure_reason: str | None = None
+
+
+class DeviceBackend(ResponseModel):
+    type: str = Field(description="What the player plays to: 'bluetooth_a2dp' or 'pulse_sink'.")
+    mac: str | None = None
+    adapter: str | None = None
+    sink: str | None = None
 
 
 class DeviceBluetooth(ResponseModel):
@@ -199,7 +207,11 @@ class Device(ResponseModel):
     last_error_at: str | None = None
     health: DeviceHealth
     room: DeviceRoom
-    bluetooth: DeviceBluetooth
+    backend: DeviceBackend
+    supported_actions: list[str] = Field(
+        default_factory=list, description="Commands this player's backend can do; others answer 409."
+    )
+    bluetooth: DeviceBluetooth | None = Field(default=None, description="Present for Bluetooth players only.")
     audio: DeviceAudio
     timing: DeviceTiming
     playback: DevicePlayback
@@ -230,6 +242,9 @@ class Device(ResponseModel):
             room=DeviceRoom(
                 id=g("room_id"), name=g("room_name"), source=g("room_source"), confidence=g("room_confidence")
             ),
+            # Every running client is Bluetooth until a second backend gets a runtime.
+            backend=DeviceBackend(type=BLUETOOTH, mac=g("bluetooth_mac"), adapter=g("bluetooth_adapter_hci") or None),
+            supported_actions=supported_actions_for(BLUETOOTH),
             bluetooth=DeviceBluetooth(
                 mac=g("bluetooth_mac"),
                 adapter=AdapterRef(
@@ -372,4 +387,5 @@ class DisabledDevice(ResponseModel):
 
     id: str | None = Field(default=None, description="The id /devices/{id} commands take (enable, remove).")
     mac: str | None = None
+    backend_type: str = BLUETOOTH
     player_name: str | None = None

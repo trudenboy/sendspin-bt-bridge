@@ -19,6 +19,20 @@ from sendspin_bridge.services.bluetooth.pairing_quiesce import quiesce_adapter_p
 logger = logging.getLogger(__name__)
 
 
+def require_action(device_id: str, action: str) -> None:
+    """409 when the player's backend cannot do *action*; unknown ids fall through to the command's 404."""
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.config.players import find_player_by_id, supported_actions_for
+
+    player = find_player_by_id(load_config(), device_id)
+    backend = player.get("backend") if player else None
+    backend_type = str(backend.get("type") or "") if isinstance(backend, dict) else ""
+    if backend_type and action not in supported_actions_for(backend_type):
+        raise UseCaseError(
+            409, "not_supported_for_backend", f"A {backend_type} player does not support {action.replace('_', ' ')}"
+        )
+
+
 def _bt_manager(client):
     bt = getattr(client, "bt_manager", None)
     if bt is None:
