@@ -211,6 +211,30 @@ async def test_the_poll_loop_stays_quiet_while_events_arrive():
     assert rec.calls == []
 
 
+async def test_the_poll_loop_runs_with_a_mock_sink_file_even_while_events_arrive(monkeypatch):
+    # A mock sink file produces no PulseAudio events, so it must be polled.
+    monkeypatch.setenv("SENDSPIN_MOCK_SINKS", "/dev/null")
+    inv = _Inventory(_sink(SINK, serial=MATCH["serial"]))
+    rec = _Recorder()
+    mon = _monitor(inv, rec, current=SINK)
+    inv.sinks = []
+
+    async def _forever():
+        await asyncio.sleep(3600)
+
+    mon._task = asyncio.create_task(_forever())
+    mon.start_presence_polling(0.01)
+    try:
+        for _ in range(100):
+            if rec.calls:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        await mon.stop()
+
+    assert rec.calls == [("absent", None)]
+
+
 # ── Sink state (power_save idle detection) ─────────────────────────────
 
 

@@ -235,8 +235,25 @@ async def _list_all_sinks_pulsectl() -> list[LocalSink] | None:
         return None
 
 
+def _mock_sinks_text() -> str | None:
+    """Dev-only: ``SENDSPIN_MOCK_SINKS=<file in pactl format>`` replaces the real sink source.
+
+    ``None`` when the variable is unset; an unreadable file raises :class:`OSError`.
+    """
+    path = os.environ.get("SENDSPIN_MOCK_SINKS")
+    if not path:
+        return None
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        return fh.read()
+
+
 async def _list_all_sinks_strict() -> list[LocalSink]:
     """Like :func:`_list_all_sinks`, but a failure to read raises instead of reading as no sinks."""
+    if os.environ.get("SENDSPIN_MOCK_SINKS"):
+        try:
+            return parse_pactl_sinks(_mock_sinks_text() or "")
+        except OSError as exc:
+            raise SinkInventoryUnavailable(f"could not read SENDSPIN_MOCK_SINKS: {exc}") from exc
     sinks = await _list_all_sinks_pulsectl()
     if sinks is not None:
         return sinks
@@ -247,6 +264,12 @@ async def _list_all_sinks_strict() -> list[LocalSink]:
 
 
 async def _list_all_sinks() -> list[LocalSink]:
+    if os.environ.get("SENDSPIN_MOCK_SINKS"):
+        try:
+            return parse_pactl_sinks(_mock_sinks_text() or "")
+        except OSError as exc:
+            logger.debug("SENDSPIN_MOCK_SINKS unreadable: %s", exc)
+            return []
     sinks = await _list_all_sinks_pulsectl()
     return sinks if sinks is not None else await _list_all_sinks_pactl()
 

@@ -392,3 +392,29 @@ def test_strict_listing_returns_an_empty_list_when_nothing_is_plugged_in(monkeyp
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     assert asyncio.run(list_local_sinks(strict=True)) == []
+
+
+def test_mock_sinks_file_replaces_the_real_source(monkeypatch, tmp_path):
+    mock = tmp_path / "sinks.txt"
+    mock.write_text((FIXTURES / "usb_dac_with_serial.txt").read_text())
+    monkeypatch.setenv("SENDSPIN_MOCK_SINKS", str(mock))
+
+    async def _boom(*_a, **_k):
+        raise AssertionError("real sink source must not be used")
+
+    monkeypatch.setattr(sink_inventory, "_list_all_sinks_pulsectl", _boom)
+    monkeypatch.setattr(sink_inventory, "_pactl_list_sinks_text", _boom)
+
+    for strict in (False, True):
+        (sink,) = asyncio.run(list_local_sinks(strict=strict))
+        assert sink.name == _load("usb_dac_with_serial.txt")[0].name
+
+    mock.write_text("")
+    assert asyncio.run(list_local_sinks(strict=True)) == []
+
+
+def test_mock_sinks_unreadable_file_is_unavailable_in_strict_mode(monkeypatch, tmp_path):
+    monkeypatch.setenv("SENDSPIN_MOCK_SINKS", str(tmp_path / "missing.txt"))
+    with pytest.raises(sink_inventory.SinkInventoryUnavailable):
+        asyncio.run(list_local_sinks(strict=True))
+    assert asyncio.run(list_local_sinks()) == []

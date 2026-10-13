@@ -366,7 +366,8 @@ class SinkMonitor:
     async def _presence_poll_loop(self, interval: float) -> None:
         while True:
             await asyncio.sleep(interval)
-            if self.available or not self._presence:
+            # A mock sink file (dev only) raises no PulseAudio events: always poll it.
+            if (self.available and not os.environ.get("SENDSPIN_MOCK_SINKS")) or not self._presence:
                 continue
             try:
                 await self.refresh_presence()
