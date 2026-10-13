@@ -111,3 +111,18 @@ class TestMalformedNumericValuesDoNotBootLoop:
         devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
         # Non-numeric legacy value → default 0 → clamped to a 1-minute floor.
         assert devices[0].get("power_save_delay_minutes") == 1
+
+
+class TestPowerSaveDelayClamp:
+    """A power-save delay outside 0-60 minutes is corrected, never kept."""
+
+    def test_legacy_seconds_over_an_hour_clamp_to_sixty(self):
+        config = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "power_save_delay_seconds": 7200}]}
+        devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
+        assert devices[0]["power_save_delay_minutes"] == 60
+
+    def test_stored_out_of_range_minutes_clamp(self):
+        for stored, expected in ((99, 60), (-3, 0)):
+            config = {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF", "power_save_delay_minutes": stored}]}
+            devices = _normalize_bluetooth_devices(config, defaults=_DEFAULTS)
+            assert devices[0]["power_save_delay_minutes"] == expected

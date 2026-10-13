@@ -15,11 +15,11 @@ def _validate(minutes):
     return validate_uploaded_config({"CONFIG_SCHEMA_VERSION": 6, "players": [player]}, default_base_listen_port=8928)
 
 
-@pytest.mark.parametrize("minutes", [61, 120, -1])
-def test_power_save_delay_out_of_range_is_a_field_error(minutes):
+@pytest.mark.parametrize(("minutes", "clamped"), [(61, 60), (120, 60), (-1, 0)])
+def test_power_save_delay_out_of_range_is_clamped_not_an_error(minutes, clamped):
     result = _validate(minutes)
-    assert not result.is_valid
-    assert any(e.field == "players[0].power_save_delay_minutes" for e in result.errors)
+    assert result.is_valid
+    assert result.normalized_config["players"][0]["power_save_delay_minutes"] == clamped
 
 
 @pytest.mark.parametrize("minutes", [0, 1, 60])

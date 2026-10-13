@@ -251,6 +251,29 @@ def _migrate_power_save_delay(device: dict) -> None:
     if old is not None and "power_save_delay_minutes" not in device:
         seconds = _coerce_int(old)
         device["power_save_delay_minutes"] = max(1, round(seconds / 60))
+    _clamp_power_save_delay(device)
+
+
+def _clamp_power_save_delay(device: dict) -> None:
+    """Keep ``power_save_delay_minutes`` within 0-60; drop a value that is not a number."""
+    raw = device.get("power_save_delay_minutes")
+    if raw is None or isinstance(raw, bool):
+        return
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        device.pop("power_save_delay_minutes", None)
+        return
+    clamped = max(0, min(60, value))
+    if clamped != raw:
+        if clamped != value:
+            logger.warning(
+                "Device %s: power_save_delay_minutes=%r is outside 0-60; clamping to %d",
+                device.get("mac", device.get("id", "?")),
+                raw,
+                clamped,
+            )
+        device["power_save_delay_minutes"] = clamped
 
 
 def _normalize_mac_key(raw_mac: object) -> str:
@@ -372,6 +395,8 @@ def _normalize_players(config: dict) -> None:
     kept: list[dict] = []
     if isinstance(raw_players, list):
         for entry in raw_players:
+            if isinstance(entry, dict):
+                _clamp_power_save_delay(entry)
             try:
                 kept.append(Player.model_validate(entry).model_dump(mode="json", exclude_unset=True))
                 continue

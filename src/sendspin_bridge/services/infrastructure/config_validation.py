@@ -260,14 +260,7 @@ def _validate_player_settings(player: dict[str, Any], result: ConfigValidationRe
         min_value=0,
         max_value=5000,
     )
-    _normalize_optional_field_int(
-        player,
-        result,
-        "power_save_delay_minutes",
-        issue_field=f"{field_prefix}.power_save_delay_minutes",
-        min_value=0,
-        max_value=60,
-    )
+    # power_save_delay_minutes is clamped to 0-60 by normalize_device_settings, not rejected.
     if keepalive_interval is not None and keepalive_interval != 0 and keepalive_interval < 30:
         result.errors.append(
             ConfigValidationIssue(

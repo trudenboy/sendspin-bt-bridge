@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A speaker's power-save delay outside 0-60 minutes (for example after
+  updating from a long legacy delay) is corrected to the nearest limit instead
+  of blocking every settings save.
 - Saving the settings without changing anything no longer restarts the running
   speakers.
 - Duplicate-device warnings name the speaker instead of showing its Bluetooth
