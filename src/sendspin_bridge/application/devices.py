@@ -143,12 +143,12 @@ def set_enabled(device_id: str, enabled: bool) -> dict[str, Any]:
     except UseCaseError:
         # A disabled speaker has no running client; find it in the config.
         from sendspin_bridge.config import load_config
-        from sendspin_bridge.config.players import device_entries
+        from sendspin_bridge.config.players import find_player_by_id
 
-        configured = next((d for d in device_entries(load_config()) if d["id"] == device_id), None)
+        configured = find_player_by_id(load_config(), device_id)
         if configured is None:
             raise
-        _persist_device_enabled(str(configured.get("player_name") or ""), enabled)
+        _persist_device_enabled(str(configured.get("name") or ""), enabled)
         _sync_ha_options_later()
         return {"enabled": enabled, "restart_required": True}
     _persist_device_enabled(str(client.player_name), enabled)
@@ -169,32 +169,31 @@ def remove(device_id: str) -> dict[str, Any]:
     """
     from sendspin_bridge.application import config as config_uc
     from sendspin_bridge.config import load_config
-    from sendspin_bridge.config.players import device_entries
+    from sendspin_bridge.config.players import BLUETOOTH, find_player_by_id, find_player_by_mac, normalize_mac
 
-    # A running speaker's id is its player id; a disabled one is found by
-    # its player id in the config. Either way the MAC names the entry.
-    file_config = load_config()
-    try:
-        target_mac = str(getattr(getattr(find_client(device_id), "bt_manager", None), "mac_address", "") or "")
-    except UseCaseError:
-        target_mac = next((d["mac"] for d in device_entries(file_config) if d["id"] == device_id), "")
-
-    def _is_target(entry: dict) -> bool:
-        mac = str(entry.get("mac") or "")
-        return bool(mac and target_mac) and mac.upper() == target_mac.upper()
-
-    config = config_uc._to_api_view(file_config)
-    entries = list(config.get("BLUETOOTH_DEVICES") or [])
-    kept = [d for d in entries if not _is_target(d)]
-    if len(kept) == len(entries):
+    config = load_config()
+    target = find_player_by_id(config, device_id)
+    if target is None:
+        # A running speaker's id is the one its client reports; its MAC names the player.
+        try:
+            client_mac = str(getattr(getattr(find_client(device_id), "bt_manager", None), "mac_address", "") or "")
+        except UseCaseError:
+            client_mac = ""
+        target = find_player_by_mac(config, client_mac) if client_mac else None
+    if target is None:
         raise UseCaseError(404, "unknown_device", f"Unknown device: {device_id}")
-    config["BLUETOOTH_DEVICES"] = kept
+    raw_backend = target.get("backend")
+    backend: dict[str, Any] = raw_backend if isinstance(raw_backend, dict) else {}
+    target_mac = normalize_mac(backend.get("mac")) if backend.get("type") == BLUETOOTH else ""
+
+    config.pop("PLAYER_STATE", None)
+    config["players"] = [p for p in config.get("players") or [] if p is not target]
     result = config_uc.save_config(config)
     # The disabled list is built at startup; a removed speaker leaves it now.
     from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot, set_disabled_devices
 
     disabled = get_device_registry_snapshot().disabled_devices
-    remaining = [d for d in disabled if not _is_target(d)]
+    remaining = [d for d in disabled if not (target_mac and normalize_mac(d.get("mac")) == target_mac)]
     if len(remaining) != len(disabled):
         set_disabled_devices(remaining)
     return {"removed": True, "reconfig": result.get("reconfig") or {}}

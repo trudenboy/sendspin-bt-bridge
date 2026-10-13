@@ -89,4 +89,4 @@ def test_settings_load_a_config_the_bridge_accepts_but_the_schema_is_stricter_ab
     resp = client.get("/api/v1/config")
 
     assert resp.status_code == 200
-    assert resp.json()["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 0
+    assert resp.json()["players"][0]["keepalive_interval"] == 0

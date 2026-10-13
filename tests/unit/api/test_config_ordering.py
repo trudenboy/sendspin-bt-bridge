@@ -15,10 +15,11 @@ import sys
 
 import pytest
 
-from sendspin_bridge.config.players import device_entries
+from sendspin_bridge.config.players import device_entries, legacy_device_to_player
 
 MAC = "AA:BB:CC:DD:EE:FF"
 DEVICE = {"mac": MAC, "player_name": "Kitchen", "enabled": True}
+PLAYER = legacy_device_to_player(DEVICE)
 
 
 @pytest.fixture()
@@ -58,7 +59,7 @@ def client(tmp_path, monkeypatch):
 def test_a_deleted_speaker_is_unpaired_once_the_change_is_saved(client):
     cl, cfg_file, _mod, removed = client
 
-    response = cl.put("/api/v1/config", json={"BRIDGE_NAME": "TestBridge", "BLUETOOTH_DEVICES": []})
+    response = cl.put("/api/v1/config", json={"BRIDGE_NAME": "TestBridge", "players": []})
 
     assert response.status_code == 200
     assert removed == [MAC]
@@ -74,7 +75,7 @@ def test_a_failed_save_leaves_the_speaker_paired(client, monkeypatch):
 
     monkeypatch.setattr(mod, "write_config_file", _cannot_write)
 
-    response = cl.put("/api/v1/config", json={"BRIDGE_NAME": "TestBridge", "BLUETOOTH_DEVICES": []})
+    response = cl.put("/api/v1/config", json={"BRIDGE_NAME": "TestBridge", "players": []})
 
     assert response.status_code == 500
     assert removed == [], "the speaker was unpaired for a change that failed to save"
@@ -87,7 +88,7 @@ def test_a_failed_save_leaves_the_speaker_paired(client, monkeypatch):
 def test_an_unchanged_device_list_unpairs_nothing(client):
     cl, _cfg_file, _mod, removed = client
 
-    response = cl.put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "BLUETOOTH_DEVICES": [DEVICE]})
+    response = cl.put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "players": [PLAYER]})
 
     assert response.status_code == 200
     assert removed == []
