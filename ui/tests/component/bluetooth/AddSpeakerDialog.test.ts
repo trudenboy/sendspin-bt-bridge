@@ -55,9 +55,27 @@ describe('AddSpeakerDialog', () => {
     bridge.devices = []
   })
 
-  it('starts searching as soon as it opens', () => {
+  it('does not search when it opens', () => {
     mountDialog()
+    expect(bt.startScan).not.toHaveBeenCalled()
+  })
+
+  it('hints at pairing mode and offers Search before any scan', () => {
+    bt.scanResults = []
+    const w = mountDialog()
+    expect(w.text()).toContain('Put the speaker in pairing mode, then press Search.')
+    expect(w.text()).not.toContain('No devices found')
+    expect(button(w, 'Search')).toBeDefined()
+  })
+
+  it('searches only when Search is pressed, then offers Search again', async () => {
+    bt.scanResults = []
+    const w = mountDialog()
+    await button(w, 'Search').trigger('click')
+    await flushPromises()
     expect(bt.startScan).toHaveBeenCalledWith('hci0', true)
+    expect(button(w, 'Search again')).toBeDefined()
+    expect(w.text()).not.toContain('Put the speaker in pairing mode, then press Search.')
   })
 
   it('pairs, then adds with the chosen name and room', async () => {

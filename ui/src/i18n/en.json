@@ -1104,7 +1104,9 @@
   "addSpeaker": {
     "title": "Add speaker",
     "findHelp": "Put the speaker in pairing mode. Speakers nearby appear below.",
+    "scan": "Search",
     "scanAgain": "Search again",
+    "scanHint": "Put the speaker in pairing mode, then press Search.",
     "looking": "Looking for speakers…",
     "add": "Add",
     "signal": {

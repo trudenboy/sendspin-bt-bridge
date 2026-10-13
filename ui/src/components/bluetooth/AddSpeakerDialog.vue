@@ -53,9 +53,12 @@ function hciOf(result: ScanDevice) {
   return bridge.adapters.find((a) => a.mac === result.adapter)?.id ?? adapter.value
 }
 
+const scanned = ref(false)
+
 async function scan() {
   if (!adapter.value) return
   error.value = ''
+  scanned.value = true
   await bt.startScan(adapter.value, audioOnly.value)
   if (bt.scanError) error.value = bt.scanError
 }
@@ -68,6 +71,7 @@ function reset() {
   name.value = ''
   room.value = ''
   error.value = ''
+  scanned.value = false
 }
 
 watch(
@@ -76,7 +80,6 @@ watch(
     if (!open) return
     reset()
     if (!adapter.value && adapters.value.length) adapter.value = adapters.value[0]!.id
-    if (adapter.value && !bt.scanning) void scan()
   },
   { immediate: true },
 )
@@ -154,7 +157,7 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
         </label>
         <SbButton class="ml-auto" variant="outline" size="sm" :loading="bt.scanning" :disabled="!adapter" @click="scan">
           <template #icon-left><RotateCw class="size-4" /></template>
-          {{ bt.scanning ? t('bluetooth.scan.scanning') : t('addSpeaker.scanAgain') }}
+          {{ bt.scanning ? t('bluetooth.scan.scanning') : (scanned ? t('addSpeaker.scanAgain') : t('addSpeaker.scan')) }}
         </SbButton>
       </div>
 
@@ -184,7 +187,9 @@ function signal(rssi?: number | null): 'success' | 'warning' | 'error' | 'neutra
         </li>
       </ul>
 
-      <p v-else-if="!bt.scanning" class="py-6 text-center text-sm text-text-secondary">{{ t('bluetooth.scan.noDevices') }}</p>
+      <p v-else-if="!bt.scanning" class="py-6 text-center text-sm text-text-secondary">
+        {{ scanned ? t('bluetooth.scan.noDevices') : t('addSpeaker.scanHint') }}
+      </p>
 
       <details class="text-sm">
         <summary class="cursor-pointer text-text-secondary">{{ t('addSpeaker.trouble') }}</summary>
