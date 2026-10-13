@@ -20,6 +20,10 @@ class _FakeSnapshot:
     def client_map_by_mac(self) -> dict[str, object]:
         return self._map
 
+    def client_map_by_config_id(self) -> dict[str, object]:
+        # These clients predate config ids: the orchestrator finds them by MAC.
+        return {}
+
 
 def _fake_loop() -> asyncio.AbstractEventLoop:
     # Return an already-closed loop stand-in; the orchestrator only uses it as

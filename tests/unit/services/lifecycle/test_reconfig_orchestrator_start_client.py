@@ -22,6 +22,13 @@ class _FakeSnapshot:
             if (mac := getattr(getattr(client, "bt_manager", None), "mac_address", None))
         }
 
+    def client_map_by_config_id(self) -> dict[str, object]:
+        return {
+            config_id: client
+            for client in self.active_clients
+            if isinstance(config_id := getattr(client, "config_id", None), str) and config_id
+        }
+
 
 def _make_context(**overrides) -> DeviceActivationContext:
     base = DeviceActivationContext(

@@ -508,6 +508,8 @@ def activate_device(
         None,
         **client_kwargs,
     )
+    raw_config_id = device.get("id")
+    client.config_id = str(raw_config_id) if raw_config_id else None
 
     bt_mgr: Any | None = None
     bt_available = False

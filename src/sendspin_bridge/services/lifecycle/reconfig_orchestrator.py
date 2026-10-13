@@ -15,6 +15,7 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from sendspin_bridge.config.players import BLUETOOTH
 from sendspin_bridge.services.infrastructure.config_diff import ActionKind, ReconfigAction
 from sendspin_bridge.services.ipc.commands import SetLogLevel
 
@@ -95,6 +96,67 @@ class ReconfigSummary:
 
 
 # ---------------------------------------------------------------------------
+# Client lookup
+# ---------------------------------------------------------------------------
+
+
+def _config_id_of(client: Any) -> str | None:
+    config_id = getattr(client, "config_id", None)
+    return config_id if isinstance(config_id, str) and config_id else None
+
+
+def _mac_of(client: Any) -> str:
+    return (getattr(getattr(client, "bt_manager", None), "mac_address", "") or "").upper()
+
+
+def _is_client_of(client: Any, player_id: str | None, mac: str | None) -> bool:
+    """Whether *client* runs the player with *player_id* / Bluetooth *mac*.
+
+    The config id decides; the MAC is the fallback for a client that has no
+    config id (or an action that carries none).
+    """
+    config_id = _config_id_of(client)
+    if player_id and config_id == player_id:
+        return True
+    if not mac or _mac_of(client) != mac.upper():
+        return False
+    return player_id is None or config_id is None
+
+
+class _ClientIndex:
+    """Running clients by config id, with the Bluetooth MAC as fallback."""
+
+    def __init__(self, snapshot: DeviceRegistrySnapshot) -> None:
+        self._by_id: dict[str, Any] = dict(snapshot.client_map_by_config_id())
+        # MAC strings arrive uppercase from config validation but the BT
+        # manager may cache them in whatever case the adapter reported,
+        # so index case-insensitively.
+        self._by_mac: dict[str, Any] = {(mac or "").upper(): c for mac, c in snapshot.client_map_by_mac().items()}
+
+    def find(self, player_id: str | None, mac: str | None) -> Any | None:
+        if player_id and (client := self._by_id.get(player_id)) is not None:
+            return client
+        client = self._by_mac.get(mac.upper()) if mac else None
+        # The MAC only finds a client that has no config id of its own.
+        if client is not None and (player_id is None or _config_id_of(client) is None):
+            return client
+        return None
+
+    def add(self, client: Any, player_id: str | None, mac: str | None) -> None:
+        if player_id:
+            self._by_id[player_id] = client
+        if mac:
+            self._by_mac[mac.upper()] = client
+
+    def clients(self) -> list[Any]:
+        """Every indexed client once."""
+        unique: dict[int, Any] = {}
+        for client in (*self._by_id.values(), *self._by_mac.values()):
+            unique.setdefault(id(client), client)
+        return list(unique.values())
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -144,14 +206,11 @@ class ReconfigOrchestrator:
         if not actions:
             return summary
 
-        # MAC strings arrive uppercase from config validation but the BT
-        # manager may cache them in whatever case the adapter reported,
-        # so index case-insensitively.
-        clients_by_mac = {(mac or "").upper(): client for mac, client in self._snapshot.client_map_by_mac().items()}
+        clients = _ClientIndex(self._snapshot)
 
         for action in actions:
             try:
-                self._dispatch(action, clients_by_mac, summary)
+                self._dispatch(action, clients, summary)
             except Exception as exc:
                 logger.exception("Reconfig action %s for %s failed", action.kind.value, action.label or action.mac)
                 summary.errors.append(
@@ -171,24 +230,24 @@ class ReconfigOrchestrator:
     def _dispatch(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
         kind = action.kind
         if kind is ActionKind.HOT_APPLY:
-            self._apply_hot(action, clients_by_mac, summary)
+            self._apply_hot(action, clients, summary)
         elif kind is ActionKind.WARM_RESTART:
-            self._apply_warm(action, clients_by_mac, summary)
+            self._apply_warm(action, clients, summary)
         elif kind is ActionKind.BT_REMOVE:
             self._apply_bt_remove(action, summary)
         elif kind is ActionKind.STOP_CLIENT:
-            self._apply_stop(action, clients_by_mac, summary)
+            self._apply_stop(action, clients, summary)
         elif kind is ActionKind.START_CLIENT:
-            self._apply_start_client(action, clients_by_mac, summary)
+            self._apply_start_client(action, clients, summary)
         elif kind is ActionKind.GLOBAL_BROADCAST:
-            self._apply_global_broadcast(action, clients_by_mac, summary)
+            self._apply_global_broadcast(action, clients, summary)
         elif kind is ActionKind.GLOBAL_RESTART:
-            self._apply_global_restart(action, clients_by_mac, summary)
+            self._apply_global_restart(action, clients, summary)
         elif kind is ActionKind.RESTART_REQUIRED:
             summary.restart_required.append(action.to_summary())
         elif kind is ActionKind.HA_INTEGRATION_LIFECYCLE:
@@ -199,10 +258,10 @@ class ReconfigOrchestrator:
     def _apply_hot(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
-        client = clients_by_mac.get((action.mac or "").upper())
+        client = clients.find(action.player_id, action.mac)
         if client is None or self._loop is None:
             # Device isn't running — values already persisted; nothing to do.
             summary.hot_applied.append(action.to_summary())
@@ -300,10 +359,10 @@ class ReconfigOrchestrator:
     def _apply_warm(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
-        client = clients_by_mac.get((action.mac or "").upper())
+        client = clients.find(action.player_id, action.mac)
         if client is None or self._loop is None:
             summary.warm_restarting.append(action.to_summary())
             return
@@ -323,10 +382,10 @@ class ReconfigOrchestrator:
     def _apply_stop(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
-        client = clients_by_mac.get((action.mac or "").upper())
+        client = clients.find(action.player_id, action.mac)
         if client is None:
             summary.stopped.append(action.to_summary())
             return
@@ -358,13 +417,13 @@ class ReconfigOrchestrator:
                     bt_manager.shutdown()
                 except Exception as exc:
                     logger.debug("bt_manager.shutdown failed for %s: %s", action.label or action.mac, exc)
-            self._drop_from_registry((action.mac or "").upper())
+            self._drop_from_registry(action.player_id, action.mac)
         summary.stopped.append(action.to_summary())
 
     def _apply_start_client(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
         """Materialize a brand-new SendspinClient for a just-added device.
@@ -374,13 +433,27 @@ class ReconfigOrchestrator:
         in unit tests that instantiate the orchestrator directly without
         going through :mod:`bridge_orchestrator`.
         """
+        device_payload = action.payload.get("device")
+        backend = device_payload.get("backend") if isinstance(device_payload, dict) else None
+        backend_type = backend.get("type") if isinstance(backend, dict) else BLUETOOTH
+        if backend_type != BLUETOOTH:
+            # Only Bluetooth players are activated live so far; the player
+            # is saved and the runtime picks it up once it can run it.
+            logger.info(
+                "START_CLIENT for %s: %s activation not implemented yet",
+                action.label or action.player_id,
+                backend_type,
+            )
+            summary.restart_required.append(action.to_summary())
+            return
+
         context = self._activation_context
         if context is None or self._loop is None:
             summary.restart_required.append(action.to_summary())
             return
 
         mac_key = (action.mac or "").upper()
-        existing_client = clients_by_mac.get(mac_key) if mac_key else None
+        existing_client = clients.find(action.player_id, action.mac)
         if existing_client is not None:
             # Re-enable path: a client whose BT management was released at
             # runtime (``enabled: false`` flipped via UI → STOP_CLIENT) keeps
@@ -507,17 +580,16 @@ class ReconfigOrchestrator:
         # and our write doesn't get clobbered.
         def _append_new_client(current: list[Any]) -> list[Any]:
             # Race guard: a parallel request may have already added a client
-            # for the same MAC. If so, drop our just-built duplicate to avoid
-            # two clients fighting for the same adapter.
-            if mac_key:
-                for existing in current:
-                    existing_mac = (getattr(getattr(existing, "bt_manager", None), "mac_address", "") or "").upper()
-                    if existing_mac == mac_key:
-                        logger.warning(
-                            "START_CLIENT for %s lost the append race — peer request already created a client; dropping duplicate",
-                            action.label or action.mac,
-                        )
-                        return current
+            # for the same player or the same MAC. If so, drop our just-built
+            # duplicate to avoid two clients fighting for the same adapter.
+            for existing in current:
+                same_player = bool(action.player_id) and _config_id_of(existing) == action.player_id
+                if same_player or (mac_key and _mac_of(existing) == mac_key):
+                    logger.warning(
+                        "START_CLIENT for %s lost the append race — peer request already created a client; dropping duplicate",
+                        action.label or action.mac,
+                    )
+                    return current
             return [*current, result.client]
 
         try:
@@ -574,29 +646,33 @@ class ReconfigOrchestrator:
 
         label = action.label or action.mac or "new client"
 
-        def _on_run_done(done_future: Future, _mac: str = mac_key, _label: str = label) -> None:
+        def _on_run_done(
+            done_future: Future,
+            _player_id: str | None = action.player_id,
+            _mac: str | None = action.mac,
+            _label: str = label,
+        ) -> None:
             try:
                 done_future.result()
             except Exception as run_exc:
                 logger.warning("client.run() for %s exited with error: %s", _label, run_exc)
-                self._rollback_started_client(_mac)
+                self._rollback_started_client(_player_id, _mac)
 
         future.add_done_callback(_on_run_done)
-        # Keep the dispatch-time MAC index consistent with the live
-        # registry so a subsequent action for the same MAC within this
-        # apply() call (e.g. a second duplicate START_CLIENT, or an
-        # immediate HOT_APPLY added alongside the START_CLIENT) sees the
-        # fresh client instead of re-running activate_device.
-        if mac_key:
-            clients_by_mac[mac_key] = result.client
+        # Keep the dispatch-time index consistent with the live registry so
+        # a subsequent action for the same player within this apply() call
+        # (e.g. a second duplicate START_CLIENT, or an immediate HOT_APPLY
+        # added alongside the START_CLIENT) sees the fresh client instead of
+        # re-running activate_device.
+        clients.add(result.client, action.player_id, action.mac)
         summary.started.append(action.to_summary())
 
-    def _rollback_started_client(self, mac_key: str) -> None:
+    def _rollback_started_client(self, player_id: str | None, mac: str | None) -> None:
         """Remove a client that failed its ``run()`` bootstrap from the registry."""
-        self._drop_from_registry(mac_key)
+        self._drop_from_registry(player_id, mac)
 
-    def _drop_from_registry(self, mac_key: str) -> None:
-        """Remove the client for *mac_key* from the registry and tell listeners."""
+    def _drop_from_registry(self, player_id: str | None, mac: str | None) -> None:
+        """Remove the client of the player from the registry and tell listeners."""
         try:
             import sendspin_bridge.bridge.state as _state
             from sendspin_bridge.services.bluetooth.device_registry import mutate_active_clients
@@ -605,18 +681,14 @@ class ReconfigOrchestrator:
 
         removed: list[bool] = [False]
 
-        def _drop_by_mac(current: list[Any]) -> list[Any]:
-            surviving = [
-                c
-                for c in current
-                if (getattr(getattr(c, "bt_manager", None), "mac_address", "") or "").upper() != mac_key
-            ]
+        def _drop_player(current: list[Any]) -> list[Any]:
+            surviving = [c for c in current if not _is_client_of(c, player_id, mac)]
             if len(surviving) != len(current):
                 removed[0] = True
             return surviving
 
         try:
-            mutate_active_clients(_drop_by_mac)
+            mutate_active_clients(_drop_player)
         except Exception as exc:  # pragma: no cover
             logger.debug("mutate_active_clients failed: %s", exc)
             return
@@ -629,7 +701,7 @@ class ReconfigOrchestrator:
     def _apply_global_broadcast(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
         payload = dict(action.payload)
@@ -643,7 +715,7 @@ class ReconfigOrchestrator:
             level_upper = apply_log_level(log_level)
             if self._loop is not None:
                 cmd = SetLogLevel(level=level_upper)
-                for client in clients_by_mac.values():
+                for client in clients.clients():
                     if not getattr(client, "is_running", None):
                         continue
                     if not client.is_running():
@@ -657,7 +729,7 @@ class ReconfigOrchestrator:
     def _apply_global_restart(
         self,
         action: ReconfigAction,
-        clients_by_mac: dict[str, Any],
+        clients: _ClientIndex,
         summary: ReconfigSummary,
     ) -> None:
         if self._loop is None:
@@ -665,7 +737,7 @@ class ReconfigOrchestrator:
             return
         running = [
             client
-            for client in clients_by_mac.values()
+            for client in clients.clients()
             if callable(getattr(client, "is_running", None)) and client.is_running()
         ]
         if running:

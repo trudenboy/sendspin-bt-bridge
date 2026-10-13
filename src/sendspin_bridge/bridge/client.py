@@ -673,6 +673,9 @@ class SendspinClient:
             if _mac
             else str(__import__("uuid").uuid5(__import__("uuid").NAMESPACE_DNS, player_name.lower()))
         )
+        # The player's id in the config (``players[].id``); set by
+        # ``activate_device``. Live reconfig finds the client by it.
+        self.config_id: str | None = None
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)

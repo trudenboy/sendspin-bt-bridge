@@ -63,3 +63,14 @@ def test_device_registry_snapshot_reports_released_clients():
     snapshot = build_device_registry_snapshot(active_clients=active, disabled_devices=[])
 
     assert snapshot.released_clients() == [active[1]]
+
+
+def test_device_registry_snapshot_indexes_clients_by_config_id():
+    dac = SimpleNamespace(config_id="dac-1", bt_manager=None)
+    speaker = SimpleNamespace(config_id="bt-1", bt_manager=SimpleNamespace(mac_address="AA:BB:CC:DD:EE:FF"))
+    legacy = SimpleNamespace(config_id=None, bt_manager=SimpleNamespace(mac_address="11:22:33:44:55:66"))
+    bare = SimpleNamespace(player_name="no attribute")
+
+    snapshot = build_device_registry_snapshot(active_clients=[dac, speaker, legacy, bare], disabled_devices=[])
+
+    assert snapshot.client_map_by_config_id() == {"dac-1": dac, "bt-1": speaker}

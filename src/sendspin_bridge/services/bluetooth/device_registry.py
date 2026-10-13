@@ -55,6 +55,14 @@ class DeviceRegistrySnapshot:
             if (mac := getattr(getattr(client, "bt_manager", None), "mac_address", None))
         }
 
+    def client_map_by_config_id(self) -> dict[str, Any]:
+        """Index active clients by their player id in the config (``config_id``)."""
+        return {
+            config_id: client
+            for client in self.active_clients
+            if isinstance(config_id := getattr(client, "config_id", None), str) and config_id
+        }
+
     def released_clients(self) -> list[Any]:
         """Return active clients whose BT management is currently released/disabled."""
         return [client for client in self.active_clients if not getattr(client, "bt_management_enabled", True)]

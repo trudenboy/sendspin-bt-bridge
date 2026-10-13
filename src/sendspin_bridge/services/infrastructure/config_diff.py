@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from sendspin_bridge.config.players import device_entries
+from sendspin_bridge.config.players import BLUETOOTH, device_entries, player_to_device_entry
 
 # ---------------------------------------------------------------------------
 # Field classification
@@ -47,6 +47,9 @@ _DEVICE_WARM_FIELDS: frozenset[str] = frozenset(
         "preferred_format",
         "adapter",
         "volume_controller",
+        # ``backend.sink`` of a non-Bluetooth player: the daemon is spawned
+        # with ``PULSE_SINK`` set to it.
+        "sink",
     }
 )
 
@@ -184,7 +187,8 @@ class ReconfigAction:
     """A single unit of work produced by :func:`diff_configs`."""
 
     kind: ActionKind
-    # ``mac`` identifies the device for per-device actions; ``None`` for global.
+    # ``mac`` is the Bluetooth MAC of the player a per-device action is for;
+    # ``None`` for global actions and for players without a MAC.
     mac: str | None = None
     # ``fields`` lists the config keys that motivated the action — useful for
     # UI summaries ("restart because listen_port, preferred_format changed").
@@ -195,6 +199,9 @@ class ReconfigAction:
     # ``label`` is a human-readable identifier for the affected entity
     # (player name or global).  Populated so routes don't have to re-resolve.
     label: str = ""
+    # ``player_id`` is the player's id in the config (``players[].id``) — what
+    # identifies a player across the two snapshots; ``None`` for global.
+    player_id: str | None = None
 
     def to_summary(self) -> dict[str, Any]:
         """Render as a JSON-serialisable summary dict for API responses."""
@@ -211,35 +218,67 @@ class ReconfigAction:
 # ---------------------------------------------------------------------------
 
 
-def _devices_by_mac(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    result: dict[str, dict[str, Any]] = {}
-    for dev in device_entries(config):
-        if not isinstance(dev, dict):
-            continue
-        mac = dev.get("mac")
-        if isinstance(mac, str) and mac:
-            result[mac.upper()] = dev
-    return result
+@dataclass(frozen=True)
+class _PlayerView:
+    """One player of a config snapshot, as the diff sees it."""
+
+    player_id: str
+    backend_type: str
+    # Bluetooth MAC; ``None`` for other backends.
+    mac: str | None
+    # Flat, v5-named settings the field classification compares.
+    settings: dict[str, Any]
+    # What START_CLIENT / WARM_RESTART hand to the runtime: the v5-shaped
+    # device entry for a Bluetooth player, the player dict otherwise.
+    device: dict[str, Any]
+    # ``base_listen_port + port_index`` is the listen port of a player that
+    # does not pin ``listen_port``.  See :func:`_players_by_id`.
+    port_index: int
 
 
-def _device_index_in(config: dict[str, Any], mac: str) -> int | None:
-    """Return the position of ``mac`` inside the device entries (``players``).
+def _players_by_id(config: dict[str, Any]) -> dict[str, _PlayerView]:
+    """Every player of *config* by id, in list order.
 
-    This is the index the startup path (``bridge_orchestrator``) would use
-    when computing the ``base_listen_port + index`` fallback for a device
-    that didn't pin an explicit ``listen_port``.  START_CLIENT needs the
-    same index so online-activation picks the same port a bridge restart
-    would — otherwise multiple newly-added devices collide on the base
-    listen port.
+    Port index rule (the ``base_listen_port + index`` fallback): a Bluetooth
+    player's index is its position among the Bluetooth players — the index
+    the startup path has always used, so their ports do not move when other
+    players are added.  Any other player gets the number of Bluetooth players
+    plus its position among the non-Bluetooth players, which places it after
+    every Bluetooth port.
     """
-    mac_upper = mac.upper()
-    for idx, dev in enumerate(device_entries(config)):
-        if not isinstance(dev, dict):
+    raw = config.get("players") if isinstance(config, dict) else None
+    players = [p for p in raw if isinstance(p, dict)] if isinstance(raw, list) else []
+    bt_entries = device_entries(config)
+    bt_count = len(bt_entries)
+    # ``device_entries`` yields one entry per Bluetooth player, in list order.
+    bt_iter = iter(bt_entries)
+    views: dict[str, _PlayerView] = {}
+    bt_pos = other_pos = 0
+    for player in players:
+        if player_to_device_entry(player) is not None:
+            entry = next(bt_iter)
+            views.setdefault(
+                entry["id"],
+                _PlayerView(entry["id"], BLUETOOTH, entry["mac"], entry, entry, bt_pos),
+            )
+            bt_pos += 1
             continue
-        dev_mac = dev.get("mac")
-        if isinstance(dev_mac, str) and dev_mac.upper() == mac_upper:
-            return idx
-    return None
+        player_id = player.get("id")
+        backend = player.get("backend")
+        if not isinstance(player_id, str) or not player_id or not isinstance(backend, dict):
+            continue
+        backend_type = backend.get("type")
+        if not isinstance(backend_type, str) or backend_type == BLUETOOTH:
+            continue
+        settings = {key: value for key, value in player.items() if key not in ("id", "name", "backend")}
+        settings["player_name"] = player.get("name")
+        settings["sink"] = backend.get("sink")
+        views.setdefault(
+            player_id,
+            _PlayerView(player_id, backend_type, None, settings, dict(player), bt_count + other_pos),
+        )
+        other_pos += 1
+    return views
 
 
 def _normalize_scalar(value: Any) -> Any:
@@ -264,43 +303,42 @@ def _label_for_device(dev: dict[str, Any]) -> str:
     return str(dev.get("player_name") or dev.get("mac") or "device")
 
 
-def _diff_device(
-    mac: str,
-    old_dev: dict[str, Any] | None,
-    new_dev: dict[str, Any] | None,
-    *,
-    device_index: int | None = None,
-) -> list[ReconfigAction]:
-    """Compute actions for a single device MAC's config change."""
+def _diff_device(old: _PlayerView | None, new: _PlayerView | None) -> list[ReconfigAction]:
+    """Compute actions for a single player's config change."""
     actions: list[ReconfigAction] = []
-
-    old_enabled = bool(old_dev.get("enabled", True)) if old_dev else False
-    new_enabled = bool(new_dev.get("enabled", True)) if new_dev else False
+    view = new or old
+    if view is None:
+        return actions
+    mac = view.mac
+    player_id = view.player_id
 
     # Device removed entirely. Stop it even when it was disabled: a speaker
     # disabled at runtime keeps its client until restart, and the stop is a
     # no-op when there is none.
-    if old_dev and not new_dev:
+    if new is None:
         actions.append(
             ReconfigAction(
                 kind=ActionKind.STOP_CLIENT,
                 mac=mac,
+                player_id=player_id,
                 fields=["removed"],
-                label=_label_for_device(old_dev),
+                label=_label_for_device(view.settings),
             )
         )
         return actions
 
+    new_dev = new.settings
+    new_enabled = bool(new_dev.get("enabled", True))
+
     # Newly added device.
-    if new_dev and not old_dev:
+    if old is None:
         if new_enabled:
-            payload: dict[str, Any] = {"device": dict(new_dev)}
-            if device_index is not None:
-                payload["device_index"] = device_index
+            payload: dict[str, Any] = {"device": dict(new.device), "device_index": new.port_index}
             actions.append(
                 ReconfigAction(
                     kind=ActionKind.START_CLIENT,
                     mac=mac,
+                    player_id=player_id,
                     fields=["added"],
                     payload=payload,
                     label=_label_for_device(new_dev),
@@ -308,7 +346,8 @@ def _diff_device(
             )
         return actions
 
-    assert old_dev is not None and new_dev is not None  # for type-checker
+    old_dev = old.settings
+    old_enabled = bool(old_dev.get("enabled", True))
 
     # Enable transition.
     if old_enabled and not new_enabled:
@@ -316,19 +355,19 @@ def _diff_device(
             ReconfigAction(
                 kind=ActionKind.STOP_CLIENT,
                 mac=mac,
+                player_id=player_id,
                 fields=["enabled"],
                 label=_label_for_device(new_dev),
             )
         )
         return actions
     if not old_enabled and new_enabled:
-        payload_reenable: dict[str, Any] = {"device": dict(new_dev)}
-        if device_index is not None:
-            payload_reenable["device_index"] = device_index
+        payload_reenable: dict[str, Any] = {"device": dict(new.device), "device_index": new.port_index}
         actions.append(
             ReconfigAction(
                 kind=ActionKind.START_CLIENT,
                 mac=mac,
+                player_id=player_id,
                 fields=["enabled"],
                 payload=payload_reenable,
                 label=_label_for_device(new_dev),
@@ -348,6 +387,7 @@ def _diff_device(
             ReconfigAction(
                 kind=ActionKind.BT_REMOVE,
                 mac=mac,
+                player_id=player_id,
                 fields=["adapter"],
                 payload={"old_adapter": old_dev.get("adapter") or ""},
                 label=label,
@@ -364,8 +404,9 @@ def _diff_device(
             ReconfigAction(
                 kind=ActionKind.WARM_RESTART,
                 mac=mac,
+                player_id=player_id,
                 fields=warm_fields,
-                payload={"device": dict(new_dev)},
+                payload={"device": dict(new.device)},
                 label=label,
             )
         )
@@ -377,6 +418,7 @@ def _diff_device(
             ReconfigAction(
                 kind=ActionKind.HOT_APPLY,
                 mac=mac,
+                player_id=player_id,
                 fields=hot_fields,
                 payload=payload,
                 label=label,
@@ -486,8 +528,8 @@ def diff_configs(old: dict[str, Any] | None, new: dict[str, Any] | None) -> list
 
     Ordering guarantees (required by the orchestrator):
 
-    1. Per-device BT_REMOVE precedes the WARM_RESTART for the same MAC.
-    2. Per-device actions are grouped by MAC, in stable insertion order.
+    1. Per-device BT_REMOVE precedes the WARM_RESTART for the same player.
+    2. Per-device actions are grouped by player id, in stable insertion order.
     3. Global actions come after per-device actions so any hot-applied global
        field can observe the post-restart subprocesses.
     """
@@ -496,29 +538,26 @@ def diff_configs(old: dict[str, Any] | None, new: dict[str, Any] | None) -> list
 
     actions: list[ReconfigAction] = []
 
-    old_devices = _devices_by_mac(old)
-    new_devices = _devices_by_mac(new)
+    old_players = _players_by_id(old)
+    new_players = _players_by_id(new)
 
     # Preserve the order of the new config (user-visible order in the UI),
-    # append any removed devices last.
-    ordered_macs: list[str] = []
-    seen: set[str] = set()
-    for mac in new_devices:
-        ordered_macs.append(mac)
-        seen.add(mac)
-    for mac in old_devices:
-        if mac not in seen:
-            ordered_macs.append(mac)
+    # append any removed players last.
+    ordered_ids = [*new_players, *(pid for pid in old_players if pid not in new_players)]
 
-    for mac in ordered_macs:
-        actions.extend(
-            _diff_device(
-                mac,
-                old_devices.get(mac),
-                new_devices.get(mac),
-                device_index=_device_index_in(new, mac),
-            )
-        )
+    for player_id in ordered_ids:
+        old_view = old_players.get(player_id)
+        new_view = new_players.get(player_id)
+        if (
+            old_view is not None
+            and new_view is not None
+            and (old_view.backend_type, old_view.mac) != (new_view.backend_type, new_view.mac)
+        ):
+            # Same id, different output: stop the old one, start the new one.
+            actions.extend(_diff_device(old_view, None))
+            actions.extend(_diff_device(None, new_view))
+            continue
+        actions.extend(_diff_device(old_view, new_view))
 
     actions.extend(_diff_global(old, new))
 
