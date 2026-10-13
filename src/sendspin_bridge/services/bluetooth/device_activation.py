@@ -19,18 +19,23 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
+from sendspin_bridge.config.players import PULSE_SINK
 from sendspin_bridge.services.audio.mpris_player import (
     MprisPlayer,
     get_registry,
     resolve_avrcp_source_client,
 )
+from sendspin_bridge.services.audio.sink_inventory import match_sink
 from sendspin_bridge.services.bluetooth.avrcp_source_tracker import get_tracker as _get_avrcp_source_tracker
 from sendspin_bridge.services.bluetooth.mpris_export import MPRIS_PATH_PREFIX, MprisExport, mpris_dbus_path
+from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.infrastructure.call_kwargs import filter_supported_call_kwargs
 from sendspin_bridge.services.ipc.commands import SetVolume
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Collection, Sequence
+
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
 
 logger = logging.getLogger(__name__)
 
@@ -425,6 +430,44 @@ class DeviceActivationContext:
     bluetooth_adapters: list[dict[str, Any]] = field(default_factory=list)
 
 
+def _client_kwargs(
+    entry: dict[str, Any],
+    *,
+    listen_port: int,
+    context: DeviceActivationContext,
+    keep_alive_default: str,
+) -> dict[str, Any]:
+    """The ``client_factory`` keyword arguments for one player's settings."""
+    static_delay_ms = entry.get("static_delay_ms")
+    if static_delay_ms is not None:
+        static_delay_ms = float(static_delay_ms)
+    preferred_format = entry.get("preferred_format", "flac:44100:16:2")
+    keepalive_interval = int(entry.get("keepalive_interval") or 0)
+    keepalive_enabled = keepalive_interval > 0
+    keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
+    return filter_supported_call_kwargs(
+        context.client_factory,
+        {
+            "listen_port": listen_port,
+            "static_delay_ms": static_delay_ms,
+            "listen_host": entry.get("listen_host"),
+            "effective_bridge": context.effective_bridge,
+            "preferred_format": preferred_format or None,
+            "keepalive_enabled": keepalive_enabled,
+            "keepalive_interval": keepalive_interval,
+            "idle_disconnect_minutes": int(entry.get("idle_disconnect_minutes") or 0),
+            "idle_mode": str(entry.get("idle_mode") or "default"),
+            "power_save_delay_minutes": int(entry.get("power_save_delay_minutes") or 1),
+            "keep_alive_method": str(entry.get("keep_alive_method") or keep_alive_default),
+            "required_lead_time_ms": int(entry.get("required_lead_time_ms", 250)),
+            "min_buffer_ms": int(entry.get("min_buffer_ms", 250)),
+            "static_delay_source": str(entry.get("static_delay_source") or "default"),
+            "static_delay_calibrated_at": entry.get("static_delay_calibrated_at"),
+            "static_delay_codec": entry.get("static_delay_codec"),
+        },
+    )
+
+
 @dataclass
 class ActivationResult:
     """Outcome of :func:`activate_device`."""
@@ -465,48 +508,12 @@ def activate_device(
         player_name = f"{player_name} @ {context.effective_bridge}"
 
     listen_port = int(device.get("listen_port") or context.base_listen_port + index)
-    listen_host = device.get("listen_host")
-    static_delay_ms = device.get("static_delay_ms")
-    if static_delay_ms is not None:
-        static_delay_ms = float(static_delay_ms)
-    preferred_format = device.get("preferred_format", "flac:44100:16:2")
-    keepalive_interval = int(device.get("keepalive_interval") or 0)
-    keepalive_enabled = keepalive_interval > 0
-    keepalive_interval = max(30, keepalive_interval) if keepalive_enabled else 30
-    idle_disconnect_minutes = int(device.get("idle_disconnect_minutes") or 0)
-    idle_mode = str(device.get("idle_mode") or "default")
-    power_save_delay_minutes = int(device.get("power_save_delay_minutes") or 1)
-    keep_alive_method = str(device.get("keep_alive_method") or "infrasound")
-    required_lead_time_ms = int(device.get("required_lead_time_ms", 250))
-    min_buffer_ms = int(device.get("min_buffer_ms", 250))
-
-    client_kwargs = filter_supported_call_kwargs(
-        context.client_factory,
-        {
-            "listen_port": listen_port,
-            "static_delay_ms": static_delay_ms,
-            "listen_host": listen_host,
-            "effective_bridge": context.effective_bridge,
-            "preferred_format": preferred_format or None,
-            "keepalive_enabled": keepalive_enabled,
-            "keepalive_interval": keepalive_interval,
-            "idle_disconnect_minutes": idle_disconnect_minutes,
-            "idle_mode": idle_mode,
-            "power_save_delay_minutes": power_save_delay_minutes,
-            "keep_alive_method": keep_alive_method,
-            "required_lead_time_ms": required_lead_time_ms,
-            "min_buffer_ms": min_buffer_ms,
-            "static_delay_source": str(device.get("static_delay_source") or "default"),
-            "static_delay_calibrated_at": device.get("static_delay_calibrated_at"),
-            "static_delay_codec": device.get("static_delay_codec"),
-        },
-    )
     client = context.client_factory(
         player_name,
         context.server_host,
         context.server_port,
         None,
-        **client_kwargs,
+        **_client_kwargs(device, listen_port=listen_port, context=context, keep_alive_default="infrasound"),
     )
     raw_config_id = device.get("id")
     client.config_id = str(raw_config_id) if raw_config_id else None
@@ -587,4 +594,109 @@ def activate_device(
         bt_manager=bt_mgr,
         bt_available=bt_available,
         listen_port=listen_port,
+    )
+
+
+def activate_player(
+    player: dict[str, Any],
+    *,
+    index: int,
+    context: DeviceActivationContext,
+    default_player_name: str,
+    local_sinks: Sequence[LocalSink] = (),
+    claimed: Collection[str] = frozenset(),
+) -> ActivationResult:
+    """Build the client for one player, by its backend.
+
+    A ``pulse_sink`` player (a ``backend`` of that type) gets a client without
+    Bluetooth, matched to a sink from *local_sinks* — *claimed* holds the sinks
+    earlier players already play to.  Anything else is a Bluetooth entry in
+    the v5 shape and goes through :func:`activate_device` unchanged.
+    """
+    backend = player.get("backend")
+    if isinstance(backend, dict) and backend.get("type") == PULSE_SINK:
+        return _activate_pulse_sink(
+            player,
+            index=index,
+            context=context,
+            default_player_name=default_player_name,
+            local_sinks=local_sinks,
+            claimed=claimed,
+        )
+    return activate_device(player, index=index, context=context, default_player_name=default_player_name)
+
+
+def _activate_pulse_sink(
+    player: dict[str, Any],
+    *,
+    index: int,
+    context: DeviceActivationContext,
+    default_player_name: str,
+    local_sinks: Sequence[LocalSink],
+    claimed: Collection[str],
+) -> ActivationResult:
+    player_id = str(player["id"])
+    backend = player["backend"]
+    stored_sink = str(backend.get("sink") or "") or None
+    player_name = str(player.get("name") or default_player_name)
+    if context.effective_bridge:
+        player_name = f"{player_name} @ {context.effective_bridge}"
+
+    listen_port = int(player.get("listen_port") or context.base_listen_port + index)
+    client = context.client_factory(
+        player_name,
+        context.server_host,
+        context.server_port,
+        None,
+        # Infrasound is a Bluetooth wake trick; an audio output stays awake on silence.
+        **_client_kwargs(player, listen_port=listen_port, context=context, keep_alive_default="silence"),
+    )
+    # Music Assistant knows a pulse_sink player by its config id, stable from creation.
+    client.player_id = client.config_id = player_id
+    client.backend_type = PULSE_SINK
+    client.volume_controller = str(player.get("volume_controller") or "sendspin")
+
+    match = backend.get("match") if isinstance(backend.get("match"), dict) else {}
+    found = match_sink(match, stored_sink, list(local_sinks), claimed=claimed)
+    sink_name = found.sink.name if found.status == "ok" and found.sink is not None else None
+    client.bluetooth_sink_name = sink_name
+    client._update_status(
+        {
+            "backend_type": PULSE_SINK,
+            "audio_sink": sink_name or stored_sink,
+            "sink_missing": sink_name is None,
+            "sink_match_status": found.status,
+        }
+    )
+    if sink_name is None:
+        logger.warning("  Player '%s': audio output %s — %s", player_name, stored_sink, found.status)
+    else:
+        logger.info("  Player '%s': audio output %s (matched by %s)", player_name, sink_name, found.method)
+        if sink_name != stored_sink:
+            _record_rematched_sink(player_id, stored_sink, sink_name, found.method)
+
+    return ActivationResult(client=client, bt_manager=None, bt_available=False, listen_port=listen_port)
+
+
+def _record_rematched_sink(player_id: str, previous: str | None, sink_name: str, method: str | None) -> None:
+    """The output came back under another name: keep it in the config and say so."""
+    import sendspin_bridge.bridge.state as _state
+    from sendspin_bridge.config import update_config
+    from sendspin_bridge.config.players import find_player_by_id
+
+    def _set_sink(cfg: dict[str, Any]) -> None:
+        entry = find_player_by_id(cfg, player_id)
+        backend = entry.get("backend") if entry else None
+        if isinstance(backend, dict) and backend.get("type") == PULSE_SINK:
+            backend["sink"] = sink_name
+
+    try:
+        update_config(_set_sink)
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not save the new sink name for player %s: %s", player_id, exc)
+    _state.publish_device_event(
+        player_id,
+        DeviceEventType.SINK_REMATCHED,
+        message=f"Audio output found under a new name: {sink_name}",
+        details={"sink": sink_name, "previous_sink": previous, "method": method},
     )

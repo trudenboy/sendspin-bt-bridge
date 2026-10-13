@@ -43,6 +43,8 @@ class StreamPlayer:
         self._sync_error_ns: int | None = None
         self._rendered = 0
         self._stream_closed = False
+        # Stream volume/mute once set; re-applied to every new sink element.
+        self._volume: tuple[float, bool] | None = None
 
     def start(self, audio_format: PcmFormat) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
@@ -65,6 +67,7 @@ class StreamPlayer:
         pipeline.set_start_time(Gst.CLOCK_TIME_NONE)
         pipeline.set_base_time(0)
         self._attach_sink_probe()
+        self._apply_volume()
         self._set_caps(audio_format)
         if pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
             raise RuntimeError("failed to set GStreamer pipeline to PLAYING")
@@ -116,13 +119,19 @@ class StreamPlayer:
         self._poll_bus()
 
     def set_volume(self, value: float, muted: bool) -> None:
+        """The stream's own volume (linear) and mute, kept for later sinks too."""
+        self._volume = (max(0.0, min(1.0, float(value))), bool(muted))
+        self._apply_volume()
+
+    def _apply_volume(self) -> None:
         sink = self._sink
-        if sink is None:
+        if sink is None or self._volume is None:
             return
+        value, muted = self._volume
         if sink.find_property("volume") is not None:
-            sink.set_property("volume", max(0.0, min(1.0, float(value))))
+            sink.set_property("volume", value)
         if sink.find_property("mute") is not None:
-            sink.set_property("mute", bool(muted))
+            sink.set_property("mute", muted)
 
     def stop(self) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst

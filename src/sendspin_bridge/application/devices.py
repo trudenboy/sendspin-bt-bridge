@@ -24,8 +24,9 @@ def require_action(device_id: str, action: str) -> None:
     from sendspin_bridge.config.players import BLUETOOTH, find_player_by_id, supported_actions_for
 
     try:
-        find_client(device_id)
-        backend_type = BLUETOOTH  # every running client is Bluetooth until a second backend gets a runtime
+        client = find_client(device_id)
+        runtime_type = getattr(client, "backend_type", None)
+        backend_type = runtime_type if isinstance(runtime_type, str) and runtime_type else BLUETOOTH
     except UseCaseError:
         from sendspin_bridge.config import load_config
 

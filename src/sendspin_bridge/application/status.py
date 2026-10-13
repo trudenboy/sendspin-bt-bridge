@@ -50,12 +50,19 @@ def _disabled_running(device) -> DisabledDevice:
 
 
 def _device(running_device, config: dict) -> Device:
-    """The /devices entry for a running speaker, tied to its configuration entry by Bluetooth MAC."""
-    from sendspin_bridge.config.players import find_player_by_mac
+    """The /devices entry for a running speaker, tied to its configuration entry.
+
+    A Bluetooth speaker is found by its MAC; a pulse_sink player's runtime id
+    is its config id.
+    """
+    from sendspin_bridge.config.players import PULSE_SINK, find_player_by_id, find_player_by_mac
 
     status = running_device.to_dict()
     mac = status.get("bluetooth_mac")
-    player = find_player_by_mac(config, str(mac)) if mac else None
+    if status.get("backend_type") == PULSE_SINK:
+        player = find_player_by_id(config, str(status.get("player_id") or ""))
+    else:
+        player = find_player_by_mac(config, str(mac)) if mac else None
     return Device.from_status(status, config_id=str(player["id"]) if player and player.get("id") else None)
 
 

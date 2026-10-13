@@ -210,3 +210,56 @@ def _wait_until(predicate, *, timeout_s: float = 2.0) -> None:
             return
         time.sleep(0.01)
     raise AssertionError("condition not met before timeout")
+
+
+class _VolumeSink:
+    """A sink element stand-in that records volume/mute property writes."""
+
+    def __init__(self) -> None:
+        self.props: dict[str, object] = {}
+
+    def find_property(self, name):
+        return object() if name in ("volume", "mute") else None
+
+    def set_property(self, name, value):
+        self.props[name] = value
+
+    def get_static_pad(self, _name):
+        return None
+
+
+@requires_gst
+def test_a_stream_volume_set_before_playback_reaches_every_new_sink(monkeypatch):
+    from unittest.mock import MagicMock
+
+    import sendspin_bridge.services.audio.player.pipeline as pipeline_module
+
+    monkeypatch.setattr(pipeline_module, "build_pipeline", lambda *, sink: (MagicMock(), MagicMock()))
+    sinks: list[_VolumeSink] = []
+
+    def factory():
+        sinks.append(_VolumeSink())
+        return sinks[-1]
+
+    player = StreamPlayer(sink_factory=factory, clock=MagicMock())
+    player.set_volume(0.25, True)
+    player.start(PCM_S16_STEREO_48K)
+    player.stop()
+    player.start(PCM_S16_STEREO_48K)
+
+    assert [s.props for s in sinks] == [{"volume": 0.25, "mute": True}] * 2
+
+
+@requires_gst
+def test_a_player_never_given_a_volume_leaves_the_sink_alone(monkeypatch):
+    from unittest.mock import MagicMock
+
+    import sendspin_bridge.services.audio.player.pipeline as pipeline_module
+
+    monkeypatch.setattr(pipeline_module, "build_pipeline", lambda *, sink: (MagicMock(), MagicMock()))
+    sink = _VolumeSink()
+    player = StreamPlayer(sink_factory=lambda: sink, clock=MagicMock())
+
+    player.start(PCM_S16_STEREO_48K)
+
+    assert sink.props == {}

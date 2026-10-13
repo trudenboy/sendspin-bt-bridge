@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -104,34 +103,6 @@ def test_removing_a_player_drops_only_its_client_by_config_id():
         assert len(summary.stopped) == 1
     finally:
         device_registry.mutate_active_clients(lambda _current: [])
-
-
-def test_starting_a_pulse_sink_player_is_not_implemented_yet_and_does_not_crash(monkeypatch, caplog):
-    activate = MagicMock()
-    monkeypatch.setattr("sendspin_bridge.services.bluetooth.device_activation.activate_device", activate)
-    player = {"id": "dac-1", "name": "DAC", "backend": {"type": "pulse_sink", "sink": "alsa_output.usb"}}
-    action = ReconfigAction(
-        kind=ActionKind.START_CLIENT,
-        player_id="dac-1",
-        fields=["added"],
-        payload={"device": player, "device_index": 1},
-        label="DAC",
-    )
-    loop = asyncio.new_event_loop()
-    try:
-        orch = ReconfigOrchestrator(
-            loop, build_device_registry_snapshot(active_clients=[], disabled_devices=[]), activation_context=MagicMock()
-        )
-        with caplog.at_level(logging.INFO):
-            summary = orch.apply([action])
-    finally:
-        loop.close()
-
-    activate.assert_not_called()
-    assert summary.errors == []
-    assert summary.started == []
-    assert [s["label"] for s in summary.restart_required] == ["DAC"]
-    assert "pulse_sink activation not implemented yet" in caplog.text
 
 
 def test_global_restart_reaches_clients_without_a_mac(monkeypatch):

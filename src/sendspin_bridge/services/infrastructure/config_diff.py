@@ -284,6 +284,15 @@ def _players_by_id(config: dict[str, Any]) -> dict[str, _PlayerView]:
     return views
 
 
+def player_port_indexes(config: dict[str, Any]) -> dict[str, int]:
+    """Each player's ``base_listen_port + index`` fallback index, by player id.
+
+    The rule of :func:`_players_by_id`, for the startup path to use the same
+    ports the live reconfig path does.
+    """
+    return {player_id: view.port_index for player_id, view in _players_by_id(config).items()}
+
+
 def _normalize_scalar(value: Any) -> Any:
     """Canonical form for comparing config values.
 
@@ -409,7 +418,9 @@ def _diff_device(old: _PlayerView | None, new: _PlayerView | None) -> list[Recon
                 mac=mac,
                 player_id=player_id,
                 fields=warm_fields,
-                payload={"device": dict(new.device)},
+                # ``device_index``: a non-Bluetooth player restarts as a new
+                # client and needs the same port fallback a start uses.
+                payload={"device": dict(new.device), "device_index": new.port_index},
                 label=label,
             )
         )

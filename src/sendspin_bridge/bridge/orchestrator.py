@@ -28,14 +28,20 @@ from sendspin_bridge.config import (
     resolve_web_port,
 )
 from sendspin_bridge.config.logging_setup import apply_log_level
-from sendspin_bridge.config.players import device_entries
-from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext, activate_device
+from sendspin_bridge.config.players import PULSE_SINK, PulseSinkBackend, device_entries, get_players
+from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_sinks
+from sendspin_bridge.services.bluetooth.device_activation import (
+    DeviceActivationContext,
+    activate_device,
+    activate_player,
+)
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.diagnostics.sendspin_compat import (
     format_dependency_versions,
     get_runtime_dependency_versions,
 )
 from sendspin_bridge.services.diagnostics.update_checker import run_update_checker
+from sendspin_bridge.services.infrastructure.config_diff import player_port_indexes
 from sendspin_bridge.services.infrastructure.port_bind_probe import is_port_available
 from sendspin_bridge.services.infrastructure.runtime_detection import detect_installation_type
 from sendspin_bridge.services.lifecycle.bridge_runtime_state import set_activation_context
@@ -245,6 +251,28 @@ class MaBootstrap:
     ma_api_url: str
     ma_api_token: str
     ma_monitor_task: asyncio.Task[None] | None
+
+
+def _pulse_sink_players(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """The valid ``pulse_sink`` players of *config*, in list order, as stored.
+
+    ``get_players`` decides validity (an invalid entry is skipped with a
+    warning); the stored dicts are what activation reads, as on live reconfig.
+    A repeated id keeps its first entry, as the reconfig diff does.
+    """
+    valid = {player.id for player in get_players(config) if isinstance(player.backend, PulseSinkBackend)}
+    players: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in (config.get("players") or []) if isinstance(config, dict) else []:
+        player_id = entry.get("id") if isinstance(entry, dict) else None
+        backend = entry.get("backend") if isinstance(entry, dict) else None
+        if player_id not in valid or player_id in seen or not isinstance(backend, dict):
+            continue
+        if backend.get("type") != PULSE_SINK:
+            continue
+        seen.add(player_id)
+        players.append(entry)
+    return players
 
 
 @dataclass
@@ -468,6 +496,10 @@ class BridgeOrchestrator:
         muted: list[str] = []
         for client in shutdown_clients:
             sink = getattr(client, "bluetooth_sink_name", None)
+            if getattr(client, "volume_controller", "pa") == "sendspin":
+                # An output the bridge only plays to (often shared, e.g. the
+                # HA audio sink) keeps its level and mute state.
+                continue
             mac = getattr(getattr(client, "bt_manager", None), "mac_address", None)
             if sink and mac:
                 try:
@@ -583,22 +615,29 @@ class BridgeOrchestrator:
         persist_enabled_fn: Callable[[str, bool], None] | None = None,
         base_listen_port: int = 8928,
         default_player_name: str | None = None,
+        local_sinks: list[LocalSink] | None = None,
     ) -> DeviceBootstrap:
-        """Build device clients, register disabled devices, and publish startup progress."""
+        """Build device clients, register disabled devices, and publish startup progress.
+
+        Bluetooth players come from ``bootstrap.device_configs``; ``pulse_sink``
+        players from the config's ``players`` in list order, each matched
+        against *local_sinks* (read on the loop by :meth:`read_local_sinks_for`).
+        """
         bt_devices = (
             filter_devices_fn(bootstrap.device_configs)
             if filter_devices_fn is not None
             else list(bootstrap.device_configs)
         )
+        pulse_players = _pulse_sink_players(getattr(bootstrap, "config", None) or {})
         self.lifecycle_state.publish_runtime_prepared(
-            configured_devices=len(bt_devices),
+            configured_devices=len(bt_devices) + len(pulse_players),
             log_level=bootstrap.log_level,
             pulse_latency_msec=bootstrap.pulse_latency_msec,
         )
 
-        logger.info("Starting %s player instance(s)", len(bt_devices))
-        if not bt_devices:
-            logger.warning("No Bluetooth devices configured — bridge will run without players")
+        logger.info("Starting %s player instance(s)", len(bt_devices) + len(pulse_players))
+        if not bt_devices and not pulse_players:
+            logger.warning("No players configured — bridge will run without players")
         if bootstrap.server_host and bootstrap.server_host.lower() not in ["auto", "discover", ""]:
             logger.info("Server: %s:%s", bootstrap.server_host, bootstrap.server_port)
         else:
@@ -683,9 +722,46 @@ class BridgeOrchestrator:
             clients.append(result.client)
             logger.info("  Player: '%s', BT: %s, Adapter: %s", player_name, mac or "none", adapter or "default")
 
+        # Same port fallback as live reconfig: after every Bluetooth player.
+        port_indexes = player_port_indexes(getattr(bootstrap, "config", None) or {})
+        claimed: set[str] = set()
+        for player in pulse_players:
+            player_name_raw = str(player.get("name") or resolved_default_name)
+            player_name = (
+                f"{player_name_raw} @ {bootstrap.effective_bridge}" if bootstrap.effective_bridge else player_name_raw
+            )
+            if not player.get("enabled", True):
+                disabled_list.append(
+                    {
+                        "id": player["id"],
+                        "player_name": player_name,
+                        "backend_type": PULSE_SINK,
+                        "mac": None,
+                        "enabled": False,
+                    }
+                )
+                logger.info("  Player '%s': globally disabled — skipping", player_name)
+                continue
+            result = activate_player(
+                player,
+                index=port_indexes.get(player["id"], len(bootstrap.device_configs)),
+                context=activation_context,
+                default_player_name=resolved_default_name,
+                local_sinks=local_sinks or [],
+                claimed=claimed,
+            )
+            if result.client.bluetooth_sink_name:
+                claimed.add(result.client.bluetooth_sink_name)
+            clients.append(result.client)
+            logger.info(
+                "  Player: '%s', output: %s",
+                player_name,
+                result.client.bluetooth_sink_name or "missing",
+            )
+
         logger.info("Client instance(s) registered")
         self.lifecycle_state.publish_device_registry(
-            configured_devices=len(bt_devices),
+            configured_devices=len(bt_devices) + len(pulse_players),
             active_clients=clients,
             disabled_devices=disabled_list,
         )
@@ -724,6 +800,12 @@ class BridgeOrchestrator:
             used_ports.add(listen_port)
 
         return DeviceBootstrap(bt_devices=bt_devices, clients=clients, disabled_devices=disabled_list)
+
+    async def read_local_sinks_for(self, bootstrap: RuntimeBootstrap) -> list[LocalSink]:
+        """The local sink inventory, read only when a ``pulse_sink`` player is configured."""
+        if not _pulse_sink_players(getattr(bootstrap, "config", None) or {}):
+            return []
+        return await list_local_sinks()
 
     def assemble_runtime_tasks(
         self,
@@ -913,6 +995,7 @@ class BridgeOrchestrator:
     ) -> Any:
         """Run the remaining bridge lifecycle after runtime bootstrap is complete."""
         startup_phase = "devices"
+        local_sinks = await self.read_local_sinks_for(bootstrap)
         device_bootstrap = self.initialize_devices(
             bootstrap,
             client_factory=client_factory,
@@ -921,6 +1004,7 @@ class BridgeOrchestrator:
             load_saved_volume_fn=load_saved_volume_fn,
             persist_enabled_fn=persist_enabled_fn,
             base_listen_port=bootstrap.base_listen_port,
+            local_sinks=local_sinks,
         )
         clients = device_bootstrap.clients
 

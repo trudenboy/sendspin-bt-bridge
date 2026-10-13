@@ -1751,6 +1751,24 @@
             "title": "Muted",
             "type": "boolean"
           },
+          "sink_match_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How a pulse_sink player's output was found: ok, sink_missing, sink_ambiguous, sink_in_use.",
+            "title": "Sink Match Status"
+          },
+          "sink_missing": {
+            "default": false,
+            "description": "A pulse_sink player's output is not present (or not usable).",
+            "title": "Sink Missing",
+            "type": "boolean"
+          },
           "sink_muted": {
             "default": false,
             "title": "Sink Muted",
@@ -1813,6 +1831,8 @@
         "required": [
           "sink_name",
           "has_sink",
+          "sink_missing",
+          "sink_match_status",
           "volume",
           "muted",
           "sink_muted",

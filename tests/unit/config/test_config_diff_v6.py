@@ -170,3 +170,26 @@ def test_a_duplicate_player_id_is_ignored_and_logged(caplog):
         (ActionKind.START_CLIENT, "alsa_output.usb-dac")
     ]
     assert "second player with id dac-1" in caplog.text
+
+
+def test_a_restarted_pulse_sink_player_carries_its_port_index():
+    """A pulse_sink restart builds a new client, so it needs the same port fallback a start uses."""
+    old = _with(_cfg({"mac": A}), _sink_player())
+    new = _with(_cfg({"mac": A}), _sink_player(sink="alsa_output.other"))
+
+    (warm,) = diff_configs(old, new)
+
+    assert warm.kind is ActionKind.WARM_RESTART
+    assert warm.payload["device_index"] == 1
+
+
+def test_player_port_indexes_match_the_diff_rule():
+    from sendspin_bridge.services.infrastructure.config_diff import player_port_indexes
+
+    cfg = _cfg({"mac": A}, {"mac": B})
+    cfg["players"] = [_sink_player(), *cfg["players"], {**_sink_player(), "id": "dac-2"}]
+
+    indexes = player_port_indexes(cfg)
+
+    bt_ids = [p["id"] for p in cfg["players"] if p["backend"]["type"] == "bluetooth_a2dp"]
+    assert indexes == {_sink_player()["id"]: 2, bt_ids[0]: 0, bt_ids[1]: 1, "dac-2": 3}

@@ -2475,6 +2475,17 @@ export interface components {
              */
             muted: boolean;
             /**
+             * Sink Match Status
+             * @description How a pulse_sink player's output was found: ok, sink_missing, sink_ambiguous, sink_in_use.
+             */
+            sink_match_status: string | null;
+            /**
+             * Sink Missing
+             * @description A pulse_sink player's output is not present (or not usable).
+             * @default false
+             */
+            sink_missing: boolean;
+            /**
              * Sink Muted
              * @default false
              */

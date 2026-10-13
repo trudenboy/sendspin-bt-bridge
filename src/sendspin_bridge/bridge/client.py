@@ -53,6 +53,7 @@ from sendspin_bridge.config import (
     save_device_static_delay,
     save_device_volume,
 )
+from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK
 from sendspin_bridge.services.audio.latency_calibration import (
     build_calibration_pcm,
 )
@@ -381,6 +382,12 @@ class DeviceStatus:
     volume: int = 100
     muted: bool = False
     sink_muted: bool = False
+    # What the player plays to (``players[].backend.type``).  A pulse_sink
+    # player also reports its configured sink and whether it is present.
+    backend_type: str = BLUETOOTH
+    audio_sink: str | None = None
+    sink_missing: bool = False
+    sink_match_status: str | None = None
     audio_format: str | None = None
     bt_transport_path: str | None = None
     bt_transport_state: str | None = None
@@ -676,6 +683,12 @@ class SendspinClient:
         # The player's id in the config (``players[].id``); set by
         # ``activate_device``. Live reconfig finds the client by it.
         self.config_id: str | None = None
+        # ``players[].backend.type``.  A pulse_sink client has no Bluetooth
+        # manager and plays only to ``bluetooth_sink_name``, its matched sink.
+        self.backend_type: str = BLUETOOTH
+        # ``pa`` sets the sink's own level; ``sendspin`` scales the stream and
+        # leaves the sink (possibly shared with other software) alone.
+        self.volume_controller: str = "pa"
         self.bt_management_enabled: bool = True
         self.bluetooth_sink_name: str | None = None  # Store Bluetooth sink name for volume sync
         self.connected_server_url: str = ""  # actual resolved ws:// URL (populated after connect)
@@ -1552,6 +1565,13 @@ class SendspinClient:
 
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
+        is_pulse_sink = getattr(self, "backend_type", BLUETOOTH) == PULSE_SINK
+        if is_pulse_sink and not self.bluetooth_sink_name:
+            # Without its sink the daemon would play to the default sink —
+            # someone else's output.  It starts once the sink is found.
+            logger.info("[%s] Audio output not present — player not started", self.player_name)
+            self._update_status({"sink_missing": True})
+            return
         try:
             # Pre-flight gate (#291): refuse to spawn when SENDSPIN_SERVER is
             # malformed (scheme prefix, embedded port, slashes, whitespace).
@@ -1742,6 +1762,7 @@ class SendspinClient:
                         "muted": bool(self.status.get("muted", False)),
                         "settings_dir": f"/tmp/sendspin-{self._safe_id}",
                         "preferred_format": self.preferred_format,
+                        "volume_controller": getattr(self, "volume_controller", "pa"),
                         "config_schema_version": CONFIG_SCHEMA_VERSION,
                         "bt_product_name": bt_product_name,
                         "bt_manufacturer": bt_manufacturer,
@@ -1752,6 +1773,8 @@ class SendspinClient:
 
             env = os.environ.copy()
             env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
+            if is_pulse_sink and self.bluetooth_sink_name:
+                env["PULSE_SINK"] = self.bluetooth_sink_name
 
             self._daemon_proc = await asyncio.create_subprocess_exec(
                 sys.executable,

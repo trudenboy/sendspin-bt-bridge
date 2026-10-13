@@ -12,7 +12,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field
 
 from sendspin_bridge.application.models.base import ResponseModel
-from sendspin_bridge.config.players import BLUETOOTH, supported_actions_for
+from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, supported_actions_for
 
 IdleMode = Literal["default", "power_save", "auto_disconnect", "keep_alive"]
 
@@ -83,6 +83,13 @@ class DeviceBluetooth(ResponseModel):
 class DeviceAudio(ResponseModel):
     sink_name: str | None = None
     has_sink: bool = False
+    sink_missing: bool = Field(
+        default=False, description="A pulse_sink player's output is not present (or not usable)."
+    )
+    sink_match_status: str | None = Field(
+        default=None,
+        description="How a pulse_sink player's output was found: ok, sink_missing, sink_ambiguous, sink_in_use.",
+    )
     volume: int = 100
     muted: bool = False
     sink_muted: bool = False
@@ -233,6 +240,11 @@ class Device(ResponseModel):
                 kind=str(g("pair_failure_kind")), adapter_mac=g("pair_failure_adapter_mac"), at=g("pair_failure_at")
             )
         health = g("health_summary") or {}
+        backend_type = str(g("backend_type") or BLUETOOTH)
+        if backend_type == PULSE_SINK:
+            backend = DeviceBackend(type=PULSE_SINK, sink=g("audio_sink"))
+        else:
+            backend = DeviceBackend(type=BLUETOOTH, mac=g("bluetooth_mac"), adapter=g("bluetooth_adapter_hci") or None)
         return cls(
             id=str(g("player_id") or ""),
             config_id=config_id,
@@ -246,10 +258,11 @@ class Device(ResponseModel):
             room=DeviceRoom(
                 id=g("room_id"), name=g("room_name"), source=g("room_source"), confidence=g("room_confidence")
             ),
-            # Every running client is Bluetooth until a second backend gets a runtime.
-            backend=DeviceBackend(type=BLUETOOTH, mac=g("bluetooth_mac"), adapter=g("bluetooth_adapter_hci") or None),
-            supported_actions=supported_actions_for(BLUETOOTH),
-            bluetooth=DeviceBluetooth(
+            backend=backend,
+            supported_actions=supported_actions_for(backend_type),
+            bluetooth=None
+            if backend_type == PULSE_SINK
+            else DeviceBluetooth(
                 mac=g("bluetooth_mac"),
                 adapter=AdapterRef(
                     mac=g("bluetooth_adapter"), hci=g("bluetooth_adapter_hci") or "", name=g("bluetooth_adapter_name")
@@ -288,6 +301,8 @@ class Device(ResponseModel):
             audio=DeviceAudio(
                 sink_name=g("sink_name"),
                 has_sink=bool(g("has_sink")),
+                sink_missing=bool(g("sink_missing")),
+                sink_match_status=g("sink_match_status"),
                 volume=_int_or(g("volume"), 100),
                 muted=bool(g("muted")),
                 sink_muted=bool(g("sink_muted")),

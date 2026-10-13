@@ -15,7 +15,7 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from sendspin_bridge.config.players import BLUETOOTH
+from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK
 from sendspin_bridge.services.infrastructure.config_diff import ActionKind, ReconfigAction
 from sendspin_bridge.services.ipc.commands import SetLogLevel
 
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from concurrent.futures import Future
 
+    from sendspin_bridge.services.audio.sink_inventory import LocalSink
     from sendspin_bridge.services.bluetooth.device_activation import DeviceActivationContext
     from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
@@ -41,6 +42,49 @@ _HOT_APPLY_TIMEOUT_S = 1.5
 # to absorb each daemon stop+respawn without piling up reconnect storms,
 # without serializing all clients and stretching the cascade to N x T(restart).
 _GLOBAL_RESTART_STAGGER_S = 0.3
+
+# How long a config save waits for the local sink inventory when it starts a
+# pulse_sink player.  An unreadable inventory starts the player without its
+# sink (reported missing) rather than holding the request.
+_SINK_READ_TIMEOUT_S = 3.0
+
+
+def _read_local_sinks(loop: asyncio.AbstractEventLoop | None) -> list[LocalSink]:
+    """The local sink inventory, read on the bridge loop from a request thread."""
+    from sendspin_bridge.services.audio.sink_inventory import list_local_sinks
+
+    if loop is None:
+        return []
+    try:
+        if asyncio.get_running_loop() is loop:
+            # Waiting here would block the loop that has to do the read.
+            logger.warning("Local sink inventory requested on the bridge loop; starting without it")
+            return []
+    except RuntimeError:
+        pass  # a request thread: no running loop, as expected
+    coro = list_local_sinks()
+    try:
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+    except RuntimeError as exc:
+        coro.close()
+        logger.warning("Could not read the local sinks: %s", exc)
+        return []
+    try:
+        return list(future.result(timeout=_SINK_READ_TIMEOUT_S))
+    except Exception as exc:
+        future.cancel()
+        logger.warning("Could not read the local sinks: %s", exc)
+        return []
+
+
+def _is_pulse_sink_client(client: Any) -> bool:
+    return getattr(client, "backend_type", None) == PULSE_SINK
+
+
+def _is_pulse_sink_payload(action: ReconfigAction) -> bool:
+    device = action.payload.get("device")
+    backend = device.get("backend") if isinstance(device, dict) else None
+    return isinstance(backend, dict) and backend.get("type") == PULSE_SINK
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +415,12 @@ class ReconfigOrchestrator:
         if client is None or self._loop is None:
             summary.warm_restarting.append(action.to_summary())
             return
+        if _is_pulse_sink_client(client) and _is_pulse_sink_payload(action):
+            # Name, sink and volume controller are all fixed at activation:
+            # replace the client, keeping its id (its Music Assistant identity).
+            self._retire_pulse_sink_client(client, action, clients)
+            self._start_pulse_sink(action, clients, summary, after=client, record=summary.warm_restarting)
+            return
         device_payload = action.payload.get("device") or {}
         self._schedule_background(
             client.warm_restart(dict(device_payload)),
@@ -392,6 +442,17 @@ class ReconfigOrchestrator:
     ) -> None:
         client = clients.find(action.player_id, action.mac)
         if client is None:
+            summary.stopped.append(action.to_summary())
+            return
+        if _is_pulse_sink_client(client):
+            # No Bluetooth to release: stop the daemon and let the client go.
+            # Enabling the player again activates a fresh client.
+            self._retire_pulse_sink_client(client, action, clients)
+            if self._loop is not None:
+                self._schedule_background(
+                    client.stop_sendspin(),
+                    description=f"stop_sendspin:{action.label or action.player_id}",
+                )
             summary.stopped.append(action.to_summary())
             return
         # Release BT management so the bt_monitor won't reclaim the adapter
@@ -445,11 +506,12 @@ class ReconfigOrchestrator:
         device_payload = action.payload.get("device")
         backend = device_payload.get("backend") if isinstance(device_payload, dict) else None
         backend_type = backend.get("type") if isinstance(backend, dict) else BLUETOOTH
+        if backend_type == PULSE_SINK:
+            self._start_pulse_sink(action, clients, summary, record=summary.started)
+            return
         if backend_type != BLUETOOTH:
-            # Only Bluetooth players are activated live so far; the player
-            # is saved and the runtime picks it up once it can run it.
             logger.info(
-                "START_CLIENT for %s: %s activation not implemented yet",
+                "START_CLIENT for %s: %s players cannot run on this bridge",
                 action.label or action.player_id,
                 backend_type,
             )
@@ -675,6 +737,110 @@ class ReconfigOrchestrator:
         # re-running activate_device.
         clients.add(result.client, action.player_id, action.mac)
         summary.started.append(action.to_summary())
+
+    # -- pulse_sink players ---------------------------------------------
+
+    def _retire_pulse_sink_client(self, client: Any, action: ReconfigAction, clients: _ClientIndex) -> None:
+        """Take a pulse_sink client out of service: its run loop ends, the registry forgets it."""
+        client.running = False
+        self._drop_from_registry(action.player_id, None)
+        clients.discard(client)
+
+    def _start_pulse_sink(
+        self,
+        action: ReconfigAction,
+        clients: _ClientIndex,
+        summary: ReconfigSummary,
+        *,
+        record: list[dict[str, Any]],
+        after: Any | None = None,
+    ) -> None:
+        """Activate a pulse_sink player and run it; *after* is a client whose daemon must stop first."""
+        context = self._activation_context
+        player = action.payload.get("device")
+        if context is None or self._loop is None or not isinstance(player, dict):
+            summary.restart_required.append(action.to_summary())
+            return
+        if clients.find(action.player_id, None) is not None:
+            logger.warning("START_CLIENT for %s ignored — the player is already running", action.label)
+            return
+
+        import sendspin_bridge.bridge.state as _state
+        from sendspin_bridge.services.bluetooth.device_activation import activate_player
+        from sendspin_bridge.services.bluetooth.device_registry import mutate_active_clients
+
+        # Sinks other running players play to are taken, whatever their list position.
+        claimed = {
+            str(c.bluetooth_sink_name)
+            for c in _state.get_clients_snapshot()
+            if _is_pulse_sink_client(c) and getattr(c, "bluetooth_sink_name", None) and c is not after
+        }
+        payload_index = action.payload.get("device_index")
+        try:
+            result = activate_player(
+                player,
+                index=payload_index if isinstance(payload_index, int) and payload_index >= 0 else 0,
+                context=context,
+                default_player_name=context.default_player_name,
+                local_sinks=_read_local_sinks(self._loop),
+                claimed=claimed,
+            )
+        except Exception as exc:
+            logger.exception("START_CLIENT activation failed for %s", action.label or action.player_id)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": None,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"activation failed: {exc}",
+                }
+            )
+            return
+
+        def _append(current: list[Any]) -> list[Any]:
+            if any(_config_id_of(existing) == action.player_id for existing in current):
+                logger.warning("START_CLIENT for %s lost the append race; dropping duplicate", action.label)
+                return current
+            return [*current, result.client]
+
+        updated = mutate_active_clients(_append)
+        if not any(c is result.client for c in updated.active_clients):
+            return
+
+        async def _run() -> None:
+            if after is not None:
+                # Its daemon holds the sink and the port until it is gone.
+                await after.stop_sendspin()
+            await result.client.run()
+
+        coro = _run()
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except RuntimeError as exc:
+            coro.close()
+            self._drop_from_registry(action.player_id, None)
+            summary.errors.append(
+                {
+                    "kind": action.kind.value,
+                    "mac": None,
+                    "label": action.label,
+                    "fields": list(action.fields),
+                    "error": f"run schedule failed ({type(exc).__name__})",
+                }
+            )
+            return
+
+        def _on_run_done(done: Future, _player_id: str | None = action.player_id) -> None:
+            try:
+                done.result()
+            except Exception as run_exc:
+                logger.warning("client.run() for %s exited with error: %s", action.label, run_exc)
+                self._rollback_started_client(_player_id, None)
+
+        future.add_done_callback(_on_run_done)
+        clients.add(result.client, action.player_id, None)
+        record.append(action.to_summary())
 
     def _rollback_started_client(self, player_id: str | None, mac: str | None) -> None:
         """Remove a client that failed its ``run()`` bootstrap from the registry."""
