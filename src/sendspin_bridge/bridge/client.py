@@ -7,6 +7,7 @@ Runs the sendspin CLI player with Bluetooth speaker management
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -1191,6 +1192,15 @@ class SendspinClient:
             return
         self._output_tasks.add(task)
         task.add_done_callback(self._output_tasks.discard)
+        task.add_done_callback(self._log_output_change_failure)
+
+    def _log_output_change_failure(self, task: asyncio.Future[None]) -> None:
+        """Nobody awaits an output change: its failure would only surface at garbage collection."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("[%s] Audio output change failed", self.player_name, exc_info=exc)
 
     def _output_change_lock(self) -> asyncio.Lock:
         if self._output_lock is None:
@@ -1228,18 +1238,16 @@ class SendspinClient:
                 return
             was_missing = bool(self.status.get("sink_missing"))
             await self._adopt_output(sink_name, method=None)
-            if self.is_running() and self._daemon_proc is not None:
-                daemon_pid = self._daemon_proc.pid
+            daemon = self._daemon_proc if self.is_running() else None
+            if daemon is not None:
                 from sendspin_bridge.services.audio import pulse
 
                 try:
                     await self._send_subprocess_command(SetStandby(sink=sink_name))
                 except IPCError as exc:
                     logger.debug("[%s] set_standby IPC failed: %s", self.player_name, exc)
-                moved = await pulse.amove_pid_sink_inputs(daemon_pid, sink_name)
+                moved = await pulse.amove_pid_sink_inputs(daemon.pid, sink_name)
                 logger.info("[%s] Output back as %s — moved %d stream(s)", self.player_name, sink_name, moved)
-            else:
-                await self.start_sendspin()
             if was_missing:
                 _state.publish_device_event(
                     self._event_device_id(),
@@ -1247,6 +1255,9 @@ class SendspinClient:
                     message=f"Audio output is back: {sink_name}",
                     details={"sink": sink_name},
                 )
+        if daemon is None:
+            # Outside the lock: the spawn takes it to read the sink it plays to.
+            await self.start_sendspin()
 
     async def _adopt_output(self, sink_name: str, *, method: str | None) -> None:
         """Play to *sink_name* from now on; a new name is saved to the config."""
@@ -1909,75 +1920,87 @@ class SendspinClient:
                 bt_product_name = identity.name
                 bt_manufacturer = vendor_from_modalias(identity.modalias)
 
-            params = json.dumps(
-                with_protocol_version(
-                    {
-                        "player_name": self.player_name,
-                        "client_id": str(client_id),
-                        "listen_port": self.listen_port,
-                        "url": server_url,
-                        "static_delay_ms": static_delay_ms,
-                        "required_lead_time_ms": self.required_lead_time_ms,
-                        "min_buffer_ms": self.min_buffer_ms,
-                        "bluetooth_sink_name": self.bluetooth_sink_name,
-                        # Where BlueZ actually has this speaker, for the daemon's
-                        # own logs and for a bug report to name the controller.
-                        "bluetooth_device_path": device.object_path if device is not None else None,
-                        "volume": self.status.get("volume", 100),
-                        "muted": bool(self.status.get("muted", False)),
-                        "settings_dir": f"/tmp/sendspin-{self._safe_id}",
-                        "preferred_format": self.preferred_format,
-                        "volume_controller": getattr(self, "volume_controller", "pa"),
-                        "config_schema_version": CONFIG_SCHEMA_VERSION,
-                        "bt_product_name": bt_product_name,
-                        "bt_manufacturer": bt_manufacturer,
-                        "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
-                    }
+            # An unplug may land in any await since the rematch.  The sink is
+            # read once under the output-change lock; an unplug during the spawn
+            # waits for the daemon to exist and then parks it on the standby sink.
+            spawn_guard = self._output_change_lock() if is_pulse_sink else contextlib.nullcontext()
+            async with spawn_guard:
+                spawn_sink = self.bluetooth_sink_name
+                if is_pulse_sink and not spawn_sink:
+                    logger.info("[%s] Audio output gone before the start — player not started", self.player_name)
+                    self._update_status({"sink_missing": True})
+                    return
+                params = json.dumps(
+                    with_protocol_version(
+                        {
+                            "player_name": self.player_name,
+                            "client_id": str(client_id),
+                            "listen_port": self.listen_port,
+                            "url": server_url,
+                            "static_delay_ms": static_delay_ms,
+                            "required_lead_time_ms": self.required_lead_time_ms,
+                            "min_buffer_ms": self.min_buffer_ms,
+                            "bluetooth_sink_name": spawn_sink,
+                            # Where BlueZ actually has this speaker, for the daemon's
+                            # own logs and for a bug report to name the controller.
+                            "bluetooth_device_path": device.object_path if device is not None else None,
+                            "volume": self.status.get("volume", 100),
+                            "muted": bool(self.status.get("muted", False)),
+                            "settings_dir": f"/tmp/sendspin-{self._safe_id}",
+                            "preferred_format": self.preferred_format,
+                            "volume_controller": getattr(self, "volume_controller", "pa"),
+                            "config_schema_version": CONFIG_SCHEMA_VERSION,
+                            "bt_product_name": bt_product_name,
+                            "bt_manufacturer": bt_manufacturer,
+                            "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
+                        }
+                    )
                 )
-            )
 
-            env = os.environ.copy()
-            env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
-            if is_pulse_sink and self.bluetooth_sink_name:
-                env["PULSE_SINK"] = self.bluetooth_sink_name
+                env = os.environ.copy()
+                env["PULSE_PROP_application.name"] = f"sendspin-{self.player_id}"
+                if is_pulse_sink and spawn_sink:
+                    env["PULSE_SINK"] = spawn_sink
 
-            self._daemon_proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "sendspin_bridge.services.ipc.daemon_process",
-                params,
-                stdout=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-                cwd=os.path.dirname(os.path.abspath(__file__)),
-                limit=1024
-                * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
-                # The kernel reaps the daemon if this process dies outright.
-                # Graceful stop is still the normal path; this covers OOM,
-                # `docker kill` and the Supervisor watchdog, after which a
-                # surviving daemon would hold its listen port against the
-                # next start.
-                **spawn_kwargs(),
-            )
-            self._update_status({"playing": False})
-            self._clear_ma_reconnecting()
-            self._pending_reconnect_unmute_sync = True
+                self._daemon_proc = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    "-m",
+                    "sendspin_bridge.services.ipc.daemon_process",
+                    params,
+                    stdout=asyncio.subprocess.PIPE,
+                    stdin=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                    cwd=os.path.dirname(os.path.abspath(__file__)),
+                    limit=1024
+                    * 1024,  # 1 MB readline buffer — leaves headroom for occasional fat status frames (track metadata + queue context)
+                    # The kernel reaps the daemon if this process dies outright.
+                    # Graceful stop is still the normal path; this covers OOM,
+                    # `docker kill` and the Supervisor watchdog, after which a
+                    # surviving daemon would hold its listen port against the
+                    # next start.
+                    **spawn_kwargs(),
+                )
+                self._update_status({"playing": False})
+                self._clear_ma_reconnecting()
+                self._pending_reconnect_unmute_sync = True
 
-            # Start async tasks to consume subprocess stdout and stderr
-            self._daemon_task = asyncio.create_task(self._read_subprocess_output())
-            self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
+                # Start async tasks to consume subprocess stdout and stderr
+                self._daemon_task = asyncio.create_task(self._read_subprocess_output())
+                self._stderr_task = asyncio.create_task(self._read_subprocess_stderr())
 
-            handler = self._make_reader_done_handler()
-            self._daemon_task.add_done_callback(handler)
-            self._stderr_task.add_done_callback(handler)
-            logger.info("Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name)
-            # Open a spawn-history entry — the death handler fills the rest.
-            self._current_spawn = SpawnRecord(
-                pid=int(self._daemon_proc.pid),
-                spawn_at=datetime.now(tz=UTC),
-            )
-            self._supervisor.record(self._current_spawn)
+                handler = self._make_reader_done_handler()
+                self._daemon_task.add_done_callback(handler)
+                self._stderr_task.add_done_callback(handler)
+                logger.info(
+                    "Sendspin daemon subprocess started (PID %s) for '%s'", self._daemon_proc.pid, self.player_name
+                )
+                # Open a spawn-history entry — the death handler fills the rest.
+                self._current_spawn = SpawnRecord(
+                    pid=int(self._daemon_proc.pid),
+                    spawn_at=datetime.now(tz=UTC),
+                )
+                self._supervisor.record(self._current_spawn)
 
         except Exception as e:
             logger.error("Failed to start Sendspin daemon subprocess: %s", e)

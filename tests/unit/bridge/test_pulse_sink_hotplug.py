@@ -334,6 +334,85 @@ async def test_a_restart_keeps_the_sink_when_the_inventory_is_unreadable(monkeyp
     assert audio.spawned[0][1]["PULSE_SINK"] == SINK
 
 
+# ── Unplug racing a start ───────────────────────────────────────────────
+
+
+async def _unplug(inv: _Inventory, mon: SinkMonitor) -> None:
+    inv.sinks = [_sink(OTHER)]
+    await mon._dispatch_event(AsyncMock(), "remove", 7)
+
+
+async def test_an_unplug_after_the_rematch_but_before_the_spawn_starts_nothing(monkeypatch):
+    """The output goes while the old daemon stops: never start without PULSE_SINK."""
+    audio = _Audio(monkeypatch)
+    inv = _Inventory(_sink(SINK, serial=SERIAL), _sink(OTHER))
+    client, mon = _wired(audio, inv, SINK, daemon_running=False)
+
+    async def stop_then_unplug():
+        audio.commands.append("stop_sendspin")
+        client._daemon_proc = None
+        await _unplug(inv, mon)
+        await _settle(client)
+
+    client.stop_sendspin = stop_then_unplug  # type: ignore[method-assign]
+    await client.start_sendspin()
+    await _settle(client)
+
+    assert audio.spawned == []
+    assert client.status["sink_missing"] is True
+
+
+async def test_an_unplug_during_the_spawn_parks_the_new_daemon_on_the_standby_sink(monkeypatch):
+    """The remove event lands while the subprocess is being created."""
+    audio = _Audio(monkeypatch)
+    inv = _Inventory(_sink(SINK, serial=SERIAL), _sink(OTHER))
+    client, mon = _wired(audio, inv, SINK, daemon_running=False)
+
+    async def exec_while_unplugging(*args, env=None, **_kw):
+        audio.spawned.append((json.loads(args[3]), dict(env or {})))
+        await _unplug(inv, mon)
+        for _ in range(5):  # let the scheduled output change run if it can
+            await asyncio.sleep(0)
+        return SimpleNamespace(pid=5151, returncode=None)
+
+    async def idle_reader():
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr("sendspin_bridge.bridge.client.asyncio.create_subprocess_exec", exec_while_unplugging)
+    client._read_subprocess_output = idle_reader  # type: ignore[method-assign]
+    client._read_subprocess_stderr = idle_reader  # type: ignore[method-assign]
+
+    await client.start_sendspin()
+    await _settle(client)
+    try:
+        assert audio.spawned[0][1]["PULSE_SINK"] == SINK
+        assert client.status["sink_missing"] is True
+        assert SetStandby(sink=STANDBY_SINK_NAME) in audio.commands
+        assert audio.moves == [(5151, STANDBY_SINK_NAME)]
+    finally:
+        for task in (client._daemon_task, client._stderr_task):
+            if task is not None:
+                task.cancel()
+
+
+async def test_a_failing_output_change_is_logged_when_it_fails(monkeypatch, caplog):
+    audio = _Audio(monkeypatch)
+    client, _mon = _wired(audio, _Inventory(), None, daemon_running=False)
+
+    async def broken():
+        raise RuntimeError("pulse went away mid-move")
+
+    with caplog.at_level("ERROR", logger="sendspin_bridge.bridge.client"):
+        client._schedule_output_change(broken())
+        for _ in range(3):
+            await asyncio.sleep(0)
+
+    assert client._output_tasks == set()
+    failures = [r for r in caplog.records if r.name == "sendspin_bridge.bridge.client" and r.exc_info]
+    assert len(failures) == 1
+    assert "pulse went away mid-move" in str(failures[0].exc_info[1])
+
+
 # ── power_save idle detection ───────────────────────────────────────────
 
 
