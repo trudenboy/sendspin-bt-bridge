@@ -1,0 +1,35 @@
+Sink #41
+	State: IDLE
+	Name: alsa_output.usb-Generic_USB_DAC_0000A1-00.analog-stereo
+	Description: USB DAC Analog Stereo
+	Driver: PipeWire
+	Sample Specification: s24le 2ch 96000Hz
+	Channel Map: front-left,front-right
+	Owner Module: 4294967295
+	Mute: no
+	Volume: front-left: 52428 /  80% / -9.60 dB,   front-right: 52428 /  80% / -9.60 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor Source: alsa_output.usb-Generic_USB_DAC_0000A1-00.analog-stereo.monitor
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY 
+	Properties:
+		alsa.card = "1"
+		alsa.card_name = "USB DAC"
+		alsa.long_card_name = "Generic USB DAC at usb-0000:00:14.0-2, high speed"
+		api.alsa.path = "hw:1"
+		device.api = "alsa"
+		device.bus = "usb"
+		device.bus_path = "pci-0000:00:14.0-usb-0:2:1.0"
+		device.class = "sound"
+		device.name = "alsa_card.usb-Generic_USB_DAC_0000A1-00"
+		device.product.id = "0x3b3c"
+		device.serial = "Generic_USB_DAC_0000A1"
+		device.product.name = "USB DAC"
+		device.vendor.id = "0x262a"
+		device.vendor.name = "Generic"
+	Ports:
+		analog-output: Analog Output (type: Analog, priority: 9900, availability unknown)
+	Active Port: analog-output
+	Formats:
+		pcm

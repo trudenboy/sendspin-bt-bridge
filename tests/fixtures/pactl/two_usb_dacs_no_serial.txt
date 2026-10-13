@@ -1,0 +1,69 @@
+Sink #41
+	State: RUNNING
+	Name: alsa_output.usb-Generic_USB_DAC-00.analog-stereo
+	Description: USB DAC Analog Stereo
+	Driver: PipeWire
+	Sample Specification: s16le 2ch 48000Hz
+	Channel Map: front-left,front-right
+	Owner Module: 4294967295
+	Mute: no
+	Volume: front-left: 65536 / 100% / -9.60 dB,   front-right: 65536 / 100% / -9.60 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor Source: alsa_output.usb-Generic_USB_DAC-00.analog-stereo.monitor
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY 
+	Properties:
+		alsa.card = "1"
+		alsa.card_name = "USB DAC"
+		alsa.long_card_name = "Generic USB DAC at usb-0000:00:14.0-2, high speed"
+		api.alsa.path = "hw:1"
+		device.api = "alsa"
+		device.bus = "usb"
+		device.bus_path = "pci-0000:00:14.0-usb-0:2:1.0"
+		device.class = "sound"
+		device.name = "alsa_card.usb-Generic_USB_DAC-00"
+		device.product.id = "0x3b3c"
+		device.product.name = "USB DAC"
+		device.vendor.id = "0x262a"
+		device.vendor.name = "Generic"
+	Ports:
+		analog-output: Analog Output (type: Analog, priority: 9900, availability unknown)
+	Active Port: analog-output
+	Formats:
+		pcm
+
+Sink #42
+	State: SUSPENDED
+	Name: alsa_output.usb-Generic_USB_DAC-01.analog-stereo.2
+	Description: USB DAC Analog Stereo
+	Driver: PipeWire
+	Sample Specification: s16le 2ch 48000Hz
+	Channel Map: front-left,front-right
+	Owner Module: 4294967295
+	Mute: yes
+	Volume: front-left: 0 /   0% / -9.60 dB,   front-right: 0 /   0% / -9.60 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor Source: alsa_output.usb-Generic_USB_DAC-01.analog-stereo.2.monitor
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY 
+	Properties:
+		alsa.card = "1"
+		alsa.card_name = "USB DAC"
+		alsa.long_card_name = "Generic USB DAC at usb-0000:00:14.0-3, high speed"
+		api.alsa.path = "hw:1"
+		device.api = "alsa"
+		device.bus = "usb"
+		device.bus_path = "pci-0000:00:14.0-usb-0:3:1.0"
+		device.class = "sound"
+		device.name = "alsa_card.usb-Generic_USB_DAC-01"
+		device.product.id = "0x3b3c"
+		device.product.name = "USB DAC"
+		device.vendor.id = "0x262a"
+		device.vendor.name = "Generic"
+	Ports:
+		analog-output: Analog Output (type: Analog, priority: 9900, availability unknown)
+	Active Port: analog-output
+	Formats:
+		pcm

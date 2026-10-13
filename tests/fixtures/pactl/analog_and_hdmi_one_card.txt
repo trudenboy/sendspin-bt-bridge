@@ -1,0 +1,62 @@
+Sink #5602
+	State: SUSPENDED
+	Name: alsa_output.pci-0000_00_1b.0.analog-stereo
+	Description: Built-in Audio Analog Stereo
+	Driver: PipeWire
+	Sample Specification: s32le 2ch 48000Hz
+	Channel Map: front-left,front-right
+	Owner Module: 4294967295
+	Mute: no
+	Volume: front-left: 33423 /  51% / -9.60 dB,   front-right: 33423 /  51% / -9.60 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor Source: alsa_output.pci-0000_00_1b.0.analog-stereo.monitor
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY 
+	Properties:
+		alsa.card = "0"
+		alsa.card_name = "HDA Intel PCH"
+		alsa.long_card_name = "HDA Intel PCH at 0xf7d20000 irq 29"
+		device.api = "alsa"
+		device.bus = "pci"
+		device.bus_path = "pci-0000:00:1b.0"
+		device.name = "alsa_card.pci-0000_00_1b.0"
+		device.product.id = "0x8c20"
+		device.vendor.id = "0x8086"
+	Ports:
+		analog-output-lineout: Line Out (type: Line, priority: 9000, availability group: Legacy 3, not available)
+		analog-output-speaker: Speakers (type: Speaker, priority: 10000, availability group: Legacy 4, availability unknown)
+	Active Port: analog-output-speaker
+	Formats:
+		pcm
+
+Sink #5604
+	State: SUSPENDED
+	Name: alsa_output.pci-0000_00_1b.0.hdmi-stereo
+	Description: Built-in Audio Digital Stereo (HDMI)
+	Driver: PipeWire
+	Sample Specification: s32le 2ch 48000Hz
+	Channel Map: front-left,front-right
+	Owner Module: 4294967295
+	Mute: no
+	Volume: front-left: 37355 /  57% / -9.60 dB,   front-right: 37355 /  57% / -9.60 dB
+	        balance 0.00
+	Base Volume: 65536 / 100% / 0.00 dB
+	Monitor Source: alsa_output.pci-0000_00_1b.0.hdmi-stereo.monitor
+	Latency: 0 usec, configured 0 usec
+	Flags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY 
+	Properties:
+		alsa.card = "0"
+		alsa.card_name = "HDA Intel PCH"
+		alsa.long_card_name = "HDA Intel PCH at 0xf7d20000 irq 29"
+		device.api = "alsa"
+		device.bus = "pci"
+		device.bus_path = "pci-0000:00:1b.0"
+		device.name = "alsa_card.pci-0000_00_1b.0"
+		device.product.id = "0x8c20"
+		device.vendor.id = "0x8086"
+	Ports:
+		hdmi-output-0: HDMI / DisplayPort (type: HDMI, priority: 5900, available)
+	Active Port: hdmi-output-0
+	Formats:
+		pcm
