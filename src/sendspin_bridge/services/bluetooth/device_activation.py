@@ -87,7 +87,7 @@ def _is_single_speaker_adapter(default_client: Any) -> bool:
 def _resolve_adapter_device_class(device_adapter: str, adapters: list[dict[str, Any]]) -> str:
     """Look up the configured ``device_class`` for a device's adapter.
 
-    *device_adapter* is the value of ``BLUETOOTH_DEVICES[].adapter`` —
+    *device_adapter* is the value of the player's ``adapter`` —
     either an ``hciN`` label or a MAC address. *adapters* is the
     ``BLUETOOTH_ADAPTERS`` config list. Returns the matching adapter's
     ``device_class`` hex string (e.g. ``"0x00010c"``) or empty string

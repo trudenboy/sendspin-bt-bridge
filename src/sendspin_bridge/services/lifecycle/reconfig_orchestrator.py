@@ -462,7 +462,7 @@ class ReconfigOrchestrator:
             return
 
         # Prefer the explicit ``device_index`` the diff computed over
-        # ``len(existing_clients)``.  Position in BLUETOOTH_DEVICES is what
+        # ``len(existing_clients)``.  Position in the players list is what
         # the startup path uses for the ``base_listen_port + index`` fallback
         # when a device didn't pin its own ``listen_port``; falling back to
         # the live-clients length would assign a different port (and risk

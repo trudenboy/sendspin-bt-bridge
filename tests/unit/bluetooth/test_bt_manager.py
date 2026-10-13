@@ -300,8 +300,11 @@ def test_fast_path_falls_back_when_transport_active(bt_manager, monkeypatch, tmp
     sink_name = f"bluez_output.{pa_mac}.1"
 
     cfg_file = tmp_path / "config.json"
-    cfg_file.write_text(json.dumps({"LAST_SINKS": {bt_manager.mac_address: sink_name}}))
-    monkeypatch.setattr(bt_audio, "CONFIG_FILE", cfg_file)
+    cfg_file.write_text(
+        json.dumps(
+            {"BLUETOOTH_DEVICES": [{"mac": bt_manager.mac_address}], "LAST_SINKS": {bt_manager.mac_address: sink_name}}
+        )
+    )
 
     waits: list[float] = []
 
@@ -333,14 +336,15 @@ def test_fast_path_taken_when_transport_idle(bt_manager, monkeypatch, tmp_path):
     cached sink + no delay. This protects boot-time restarts."""
     import json
 
-    import sendspin_bridge.bluetooth.audio as bt_audio
-
     bt_manager._dbus_device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
     pa_mac = bt_manager.mac_address.replace(":", "_")
     sink_name = f"bluez_output.{pa_mac}.1"
     cfg_file = tmp_path / "config.json"
-    cfg_file.write_text(json.dumps({"LAST_SINKS": {bt_manager.mac_address: sink_name}}))
-    monkeypatch.setattr(bt_audio, "CONFIG_FILE", cfg_file)
+    cfg_file.write_text(
+        json.dumps(
+            {"BLUETOOTH_DEVICES": [{"mac": bt_manager.mac_address}], "LAST_SINKS": {bt_manager.mac_address: sink_name}}
+        )
+    )
 
     waits: list[float] = []
 
@@ -368,13 +372,14 @@ def test_fast_path_taken_when_transport_unknown(bt_manager, monkeypatch, tmp_pat
     can't be introspected."""
     import json
 
-    import sendspin_bridge.bluetooth.audio as bt_audio
-
     pa_mac = bt_manager.mac_address.replace(":", "_")
     sink_name = f"bluez_output.{pa_mac}.1"
     cfg_file = tmp_path / "config.json"
-    cfg_file.write_text(json.dumps({"LAST_SINKS": {bt_manager.mac_address: sink_name}}))
-    monkeypatch.setattr(bt_audio, "CONFIG_FILE", cfg_file)
+    cfg_file.write_text(
+        json.dumps(
+            {"BLUETOOTH_DEVICES": [{"mac": bt_manager.mac_address}], "LAST_SINKS": {bt_manager.mac_address: sink_name}}
+        )
+    )
 
     waits: list[float] = []
 

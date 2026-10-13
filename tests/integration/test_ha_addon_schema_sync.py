@@ -40,7 +40,6 @@ ALWAYS_PUSHED_KEYS: tuple[str, ...] = (
     "bt_check_interval",
     "bt_max_reconnect_fails",
     "ma_auto_silent_auth",
-    "bluetooth_devices",
     "bluetooth_adapters",
 )
 

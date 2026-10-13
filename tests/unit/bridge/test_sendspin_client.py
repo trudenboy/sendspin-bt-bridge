@@ -247,29 +247,34 @@ class TestLoadSavedDeviceVolume:
     def test_returns_saved_volume(self, tmp_path):
         import sendspin_bridge.config as config
 
-        config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 42}}))
+        config.CONFIG_FILE.write_text(
+            json.dumps({"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}], "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 42}})
+        )
         from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
-            assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") == 42
+        assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") == 42
 
     def test_returns_none_for_missing_mac(self, tmp_path):
         import sendspin_bridge.config as config
 
-        config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {}}))
+        config.CONFIG_FILE.write_text(
+            json.dumps({"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}], "LAST_VOLUMES": {}})
+        )
         from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
-            assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
+        assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
     def test_returns_none_for_out_of_range(self, tmp_path):
         import sendspin_bridge.config as config
 
-        config.CONFIG_FILE.write_text(json.dumps({"LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 150}}))
+        config.CONFIG_FILE.write_text(
+            json.dumps(
+                {"BLUETOOTH_DEVICES": [{"mac": "AA:BB:CC:DD:EE:FF"}], "LAST_VOLUMES": {"AA:BB:CC:DD:EE:FF": 150}}
+            )
+        )
         from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
-            assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
+        assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
     def test_returns_none_on_corrupted_file(self, tmp_path):
         import sendspin_bridge.config as config
@@ -277,8 +282,7 @@ class TestLoadSavedDeviceVolume:
         config.CONFIG_FILE.write_text("{bad json")
         from sendspin_bridge.bridge.client import _load_saved_device_volume
 
-        with patch("sendspin_bridge.bridge.client.CONFIG_FILE", config.CONFIG_FILE):
-            assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
+        assert _load_saved_device_volume("AA:BB:CC:DD:EE:FF") is None
 
 
 # ===================================================================

@@ -27,6 +27,7 @@ from sendspin_bridge.config import (
 from sendspin_bridge.config import (
     VERSION as _CONFIG_VERSION,
 )
+from sendspin_bridge.config.players import device_entries, normalize_mac
 from sendspin_bridge.security.redaction import redact
 from sendspin_bridge.services.audio.pulse import get_audio_server_snapshot, get_server_name, list_cards, list_sinks
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
@@ -1218,12 +1219,20 @@ def _sanitized_config() -> dict:
             result[k] = "***"
         elif k == "MA_API_URL" and v:
             result[k] = _mask_text(str(v))
-        elif k == "BLUETOOTH_DEVICES" and isinstance(v, list):
-            masked_devs: list = [
-                {dk: (_mask_text(str(dv)) if dk == "mac" else dv) for dk, dv in d.items()} if isinstance(d, dict) else d
-                for d in v
+        elif k == "players" and isinstance(v, list):
+            result[k] = [
+                {
+                    **p,
+                    # A nameless player is named after its MAC.
+                    "name": _mask_text(str(p["name"])) if normalize_mac(p.get("name")) else p.get("name"),
+                    "backend": {
+                        bk: (_mask_text(str(bv)) if bk == "mac" else bv) for bk, bv in (p.get("backend") or {}).items()
+                    },
+                }
+                if isinstance(p, dict)
+                else p
+                for p in v
             ]
-            result[k] = masked_devs
         else:
             result[k] = v
     return result
@@ -1303,14 +1312,11 @@ def _collect_bt_device_info() -> list[dict]:
         cfg = load_config()
     except Exception:
         return results
-    devices = cfg.get("BLUETOOTH_DEVICES", [])
-    if not isinstance(devices, list):
-        return results
-    for dev in devices:
+    for dev in device_entries(cfg):
         mac = dev.get("mac", "") if isinstance(dev, dict) else ""
         if not mac:
             continue
-        entry: dict = {"mac": mac, "name": dev.get("name", "?")}
+        entry: dict = {"mac": mac, "name": dev.get("player_name", "?")}
         info = get_bluez().device_info(mac)
         if info.outcome is not Outcome.OK:
             logger.warning("Failed to get BT info for %s: outcome=%s", mac, info.outcome.value)

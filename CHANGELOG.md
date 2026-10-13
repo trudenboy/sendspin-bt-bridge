@@ -7,8 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The configuration file moves to a new format on the first start: speakers
+  are stored as players, and their saved volume, audio output and "released"
+  state are kept apart from the settings. A copy of the previous file is saved
+  as `config.v5.bak.json`. Going back to a 2.x version after this update starts
+  without speakers. On Docker and LXC installs, restore `config.v5.bak.json` as
+  `config.json` before going back to keep them. In the Home Assistant add-on,
+  go back by restoring the add-on backup Home Assistant offers to take before
+  the update.
+
+### Removed
+
+- The Home Assistant add-on no longer lists speakers in its Configuration tab.
+  Speakers are added, changed and removed in the bridge's web interface; the
+  speakers already set up are kept when updating, and the add-on's old list is
+  ignored from then on.
+
 ### Fixed
 
+- Duplicate-device warnings name the speaker instead of showing its Bluetooth
+  address.
 - In the Home Assistant add-on, the bridge kept asking to connect Music
   Assistant ("Music Assistant API URL is not configured") although Music
   Assistant was found automatically and connected. The check now follows

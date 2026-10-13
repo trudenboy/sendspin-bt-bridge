@@ -181,7 +181,6 @@ def main() -> None:
         "BASE_LISTEN_PORT": _optional_int_opt(opts, "base_listen_port"),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
         "HA_AREA_NAME_ASSIST_ENABLED": bool(opts.get("ha_area_name_assist_enabled", True)),
-        "BLUETOOTH_DEVICES": list(opts.get("bluetooth_devices") or []),
         "BLUETOOTH_ADAPTERS": adapters,
         "TZ": tz,
         "PULSE_LATENCY_MSEC": _int_opt(opts, "pulse_latency_msec", 600),
@@ -203,8 +202,42 @@ def main() -> None:
         "HA_INTEGRATION": _translate_ha_integration(opts.get("ha_integration") or {}),
     }
 
+    # Previous config.json (best effort: a missing / malformed file is fine).
+    existing: dict = {}
+    try:
+        with open(CONFIG_FILE) as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            existing = loaded
+    except Exception as exc:
+        logger.warning("Skipping preservation of existing config settings: %s", exc)
+
+    # Speakers: once config.json holds v6 ``players`` it is the only source of
+    # truth and the add-on's ``bluetooth_devices`` option is ignored.  Otherwise
+    # (first start after upgrade / fresh install) hand the legacy list to the
+    # bridge, whose load_config() migrates it into ``players``.
+    existing_players = existing.get("players") if isinstance(existing.get("players"), list) else None
+    options_devices = list(opts.get("bluetooth_devices") or [])
+    if existing_players is not None:
+        config["players"] = existing_players
+        config["PLAYER_STATE"] = existing.get("PLAYER_STATE") or {}
+        if options_devices:
+            print(
+                "[translate_ha_config] bluetooth_devices in the add-on options is ignored: "
+                "speakers are managed in the bridge's web interface"
+            )
+    else:
+        legacy_devices = existing.get("BLUETOOTH_DEVICES")
+        if not options_devices and isinstance(legacy_devices, list):
+            # The add-on schema no longer has ``bluetooth_devices`` and the
+            # Supervisor strips unknown options, so on the first start after the
+            # upgrade options.json carries no list.  Keep the v5 speakers; the
+            # bridge's load_config() migrates them into ``players``.
+            options_devices = legacy_devices
+        config["BLUETOOTH_DEVICES"] = options_devices
+
     # Normalize: devices without explicit 'enabled' field default to True
-    for dev in config["BLUETOOTH_DEVICES"]:
+    for dev in config.get("BLUETOOTH_DEVICES", []):
         if isinstance(dev, dict):
             dev.setdefault("enabled", True)
             raw_delay = dev.get("static_delay_ms")
@@ -217,12 +250,11 @@ def main() -> None:
 
     # Preserve runtime state from previous config
     try:
-        with open(CONFIG_FILE) as f:
-            existing: dict = json.load(f)
-        if "LAST_VOLUMES" in existing:
-            config["LAST_VOLUMES"] = existing["LAST_VOLUMES"]
-        if "LAST_SINKS" in existing:
-            config["LAST_SINKS"] = existing["LAST_SINKS"]
+        if "BLUETOOTH_DEVICES" in config:
+            if "LAST_VOLUMES" in existing:
+                config["LAST_VOLUMES"] = existing["LAST_VOLUMES"]
+            if "LAST_SINKS" in existing:
+                config["LAST_SINKS"] = existing["LAST_SINKS"]
         if "HA_AREA_NAME_ASSIST_ENABLED" in existing and "ha_area_name_assist_enabled" not in opts:
             config["HA_AREA_NAME_ASSIST_ENABLED"] = bool(existing["HA_AREA_NAME_ASSIST_ENABLED"])
         if "HA_ADAPTER_AREA_MAP" in existing:
@@ -313,7 +345,7 @@ def main() -> None:
             for d in existing.get("BLUETOOTH_DEVICES", [])
             if isinstance(d, dict) and isinstance(d.get("mac"), str) and d["mac"].strip()
         }
-        for dev in config["BLUETOOTH_DEVICES"]:
+        for dev in config.get("BLUETOOTH_DEVICES", []):
             raw_mac = dev.get("mac") if isinstance(dev, dict) else None
             mac = raw_mac.strip().upper() if isinstance(raw_mac, str) else None
             if mac and mac in existing_devs:
@@ -358,7 +390,7 @@ def main() -> None:
 
     print(
         f"[translate_ha_config] Generated {CONFIG_FILE} with "
-        f"{len(config['BLUETOOTH_DEVICES'])} device(s), "
+        f"{len(config.get('players') or config.get('BLUETOOTH_DEVICES') or [])} device(s), "
         f"TZ={config['TZ']}, "
         f"{len(config['BLUETOOTH_ADAPTERS'])} adapter(s)"
     )

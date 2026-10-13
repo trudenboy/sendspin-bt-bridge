@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.bluetooth.device_health_state import compute_device_health_state
 from sendspin_bridge.services.ipc.device_facts import DeviceFacts
 
@@ -183,7 +184,7 @@ def build_bridge_state_model(
     update_available: bool = False,
     disabled_devices: list[dict[str, Any]] | None = None,
 ) -> BridgeStateModel:
-    device_configs = list(config.get("devices") or config.get("BLUETOOTH_DEVICES") or [])
+    device_configs = list(config.get("devices") or device_entries(config))
     enabled_device_count = sum(1 for device in device_configs if device.get("enabled", True))
     disabled_device_count = len(device_configs) - enabled_device_count
     runtime_substrate = build_runtime_substrate_status(preflight)

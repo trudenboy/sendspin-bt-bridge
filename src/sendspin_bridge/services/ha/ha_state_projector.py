@@ -252,7 +252,7 @@ def _project_disabled_device(
     ``bt_management_enabled``) are carried through from the
     ``disabled_devices`` entry — see ``bridge_orchestrator.initialize_devices``,
     which enriches each entry with these saved values from
-    ``BLUETOOTH_DEVICES``.  Falls back to defaults only when a key is
+    the device entries.  Falls back to defaults only when a key is
     truly missing (legacy entries that pre-date the enrichment).
     """
     synthetic: dict[str, Any] = {

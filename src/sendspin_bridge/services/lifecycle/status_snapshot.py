@@ -20,6 +20,7 @@ from sendspin_bridge.bridge.state import (
     is_ma_connected,
 )
 from sendspin_bridge.config import BUILD_DATE, get_runtime_version, load_config, resolve_device_room_context
+from sendspin_bridge.config.players import device_entries
 from sendspin_bridge.services.bluetooth import _match_player_name
 from sendspin_bridge.services.bluetooth.device_health_state import (
     build_device_capabilities,
@@ -326,7 +327,7 @@ def build_mock_runtime_snapshot() -> MockRuntimeSnapshot:
 
 def _configured_enabled_by_player_name() -> dict[str, bool]:
     configured: dict[str, bool] = {}
-    for dev in load_config().get("BLUETOOTH_DEVICES", []) or []:
+    for dev in device_entries(load_config()):
         player_name = str(dev.get("player_name") or "").strip()
         if not player_name:
             continue

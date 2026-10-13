@@ -205,8 +205,12 @@ def _validate_effective_listen_ports(
 def validate_uploaded_config(
     uploaded: dict[str, Any], *, default_base_listen_port: int = DEFAULT_LISTEN_PORT_BASE
 ) -> ConfigValidationResult:
-    """Validate an uploaded config payload and normalize additive defaults."""
-    migration = migrate_config_payload(uploaded)
+    """Validate an uploaded config payload and normalize additive defaults.
+
+    The payload and the result keep the v5 ``BLUETOOTH_DEVICES`` shape API v1
+    speaks; the caller converts to the v6 file.
+    """
+    migration = migrate_config_payload(uploaded, to_v6=False)
     normalized = migration.normalized_config
     result = ConfigValidationResult(normalized_config=normalized)
     result.warnings.extend(

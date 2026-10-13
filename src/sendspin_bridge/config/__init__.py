@@ -18,7 +18,6 @@ import socket as _socket
 import tempfile
 import threading
 import time
-import uuid as _uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -104,13 +103,12 @@ DEFAULT_CONFIG = {
     "WEB_PORT": None,
     "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",
-    "BLUETOOTH_DEVICES": [],
+    "players": [],
+    "PLAYER_STATE": {},
     "BLUETOOTH_ADAPTERS": [],
     "HA_AREA_NAME_ASSIST_ENABLED": False,
     "HA_ADAPTER_AREA_MAP": {},
     "TZ": "Australia/Melbourne",
-    "LAST_VOLUMES": {},
-    "LAST_SINKS": {},
     "PULSE_LATENCY_MSEC": 600,
     "PREFER_SBC_CODEC": False,
     "BT_CHECK_INTERVAL": 10,
@@ -199,11 +197,13 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/config"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
+V5_BACKUP_NAME = "config.v5.bak.json"
+_config_migration_error: str | None = None
 config_lock = threading.RLock()  # serializes all config.json read-modify-write ops
 _config_load_log_lock = threading.Lock()
 _config_load_logged_once = False
 CONFIG_ALLOWED_KEYS = frozenset(DEFAULT_CONFIG)
-RUNTIME_STATE_CONFIG_KEYS = frozenset(("LAST_VOLUMES", "LAST_SINKS"))
+RUNTIME_STATE_CONFIG_KEYS = frozenset(("PLAYER_STATE",))
 SENSITIVE_CONFIG_KEYS = frozenset(
     (
         "AUTH_PASSWORD_HASH",
@@ -298,7 +298,7 @@ def get_runtime_version() -> str:
     return VERSION
 
 
-def migrate_config_payload(config: dict[str, Any]) -> ConfigMigrationResult:
+def migrate_config_payload(config: dict[str, Any], *, to_v6: bool = True) -> ConfigMigrationResult:
     """Run schema migration on a raw config dict.
 
     Delegates to config_migration, passing the allowed-keys set that lives
@@ -306,7 +306,7 @@ def migrate_config_payload(config: dict[str, Any]) -> ConfigMigrationResult:
     """
     from sendspin_bridge.config.migration import migrate_config_payload as _mig_migrate
 
-    return _mig_migrate(config, allowed_keys=CONFIG_ALLOWED_KEYS)
+    return _mig_migrate(config, allowed_keys=CONFIG_ALLOWED_KEYS, to_v6=to_v6)
 
 
 def write_config_file(
@@ -333,6 +333,29 @@ def write_config_file(
         raise
 
 
+def get_config_migration_error() -> str | None:
+    """Why the last load could not move the config to the current schema, if it could not."""
+    return _config_migration_error
+
+
+def _backup_v5_config(raw: bytes) -> None:
+    """Keep the pre-v6 file once, owner-only (it holds the secret key and tokens)."""
+    backup = CONFIG_DIR / V5_BACKUP_NAME
+    try:
+        fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return
+    except OSError as exc:
+        logger.warning("Could not save %s: %s", backup, exc)
+        return
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
+        logger.info("Saved the pre-v6 config as %s", backup)
+    except OSError as exc:
+        logger.warning("Could not save %s: %s", backup, exc)
+
+
 def update_config(mutator) -> None:
     """Atomically read-modify-write config.json under config_lock.
 
@@ -347,12 +370,25 @@ def update_config(mutator) -> None:
             if not isinstance(existing, dict):
                 raise ValueError("Config file must contain a JSON object")
         before = copy.deepcopy(existing)
+        from sendspin_bridge.config.migration import LEGACY_V5_KEYS, migrate_v5_to_v6
+
+        global _config_migration_error
+        had_legacy = raw is not None and any(key in before for key in LEGACY_V5_KEYS)
+        try:
+            migrate_v5_to_v6(existing)
+        except Exception as exc:  # writers must keep working on a file we cannot migrate
+            _config_migration_error = f"{type(exc).__name__}: {exc}"
+            logger.exception("Config migration failed; applying the update to the unmigrated file")
+            existing = copy.deepcopy(before)
+            had_legacy = False
         mutator(existing)
         existing.setdefault("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION)
         changed_keys = _changed_config_keys(before, existing)
         if not changed_keys:
             logger.debug("Config update made no changes for %s", CONFIG_FILE)
             return
+        if had_legacy and raw is not None:
+            _backup_v5_config(raw)
         write_config_file(existing)
     changed_key_list = ", ".join(changed_keys)
     if set(changed_keys).issubset(RUNTIME_STATE_CONFIG_KEYS):
@@ -363,27 +399,24 @@ def update_config(mutator) -> None:
 
 def _player_id_from_mac(mac: str) -> str:
     """Stable, globally-unique player ID derived from BT MAC address."""
-    return str(_uuid.uuid5(_uuid.NAMESPACE_DNS, mac.lower()))
+    from sendspin_bridge.config.players import player_id_for_mac
+
+    return player_id_for_mac(mac)
 
 
 def save_device_volume(mac: str | None, volume: int) -> None:
-    """Persist per-device volume to config.json under LAST_VOLUMES[mac]."""
+    """Persist a speaker's volume under PLAYER_STATE[<player id>].volume."""
     if not mac or not CONFIG_FILE.exists():
         return
 
     def _set_vol(cfg: dict) -> None:
-        devices = cfg.get("BLUETOOTH_DEVICES", [])
-        known_macs = {
-            device.get("mac", "").strip().upper()
-            for device in devices
-            if isinstance(device, dict) and isinstance(device.get("mac"), str)
-        }
-        normalized_mac = mac.strip().upper()
-        if normalized_mac not in known_macs:
-            cfg.setdefault("LAST_VOLUMES", {}).pop(normalized_mac, None)
-            logger.warning("Skipping saved volume for unknown Bluetooth device %s", normalized_mac)
+        from sendspin_bridge.config.players import find_player_by_mac, player_state
+
+        player = find_player_by_mac(cfg, mac)
+        if player is None:
+            logger.warning("Skipping saved volume for unknown Bluetooth device %s", mac.strip().upper())
             return
-        cfg.setdefault("LAST_VOLUMES", {})[normalized_mac] = volume
+        player_state(cfg, player["id"])["volume"] = volume
 
     try:
         update_config(_set_vol)
@@ -392,17 +425,16 @@ def save_device_volume(mac: str | None, volume: int) -> None:
 
 
 def save_device_sink(mac: str | None, sink_name: str) -> None:
-    """Persist per-device PA sink name to config.json under LAST_SINKS[mac]."""
+    """Persist a speaker's PA sink name under PLAYER_STATE[<player id>].sink."""
     if not mac or not CONFIG_FILE.exists():
         return
 
     def _set_sink(cfg: dict) -> None:
-        from sendspin_bridge.config.migration import _normalize_mac_key
+        from sendspin_bridge.config.players import find_player_by_mac, player_state
 
-        normalized_mac = _normalize_mac_key(mac)
-        if not normalized_mac:
-            return
-        cfg.setdefault("LAST_SINKS", {})[normalized_mac] = sink_name.strip()
+        player = find_player_by_mac(cfg, mac)
+        if player is not None:
+            player_state(cfg, player["id"])["sink"] = sink_name.strip()
 
     try:
         update_config(_set_sink)
@@ -417,7 +449,7 @@ def save_device_static_delay(
     source: str | None = None,
     codec: str | None = None,
 ) -> None:
-    """Persist per-device static_delay_ms to BLUETOOTH_DEVICES[i].static_delay_ms.
+    """Persist per-device static_delay_ms into the matching player.
 
     Used when MA pushes a SET_STATIC_DELAY command — the parent extracts the
     new value from the daemon's status update and writes it through to config
@@ -434,20 +466,18 @@ def save_device_static_delay(
         return
 
     def _set_delay(cfg: dict) -> None:
-        normalized_mac = mac.strip().upper()
-        for device in cfg.get("BLUETOOTH_DEVICES", []):
-            if not isinstance(device, dict):
-                continue
-            device_mac = device.get("mac", "")
-            if isinstance(device_mac, str) and device_mac.strip().upper() == normalized_mac:
-                device["static_delay_ms"] = clamped
-                if source:
-                    device["static_delay_source"] = source
-                    device["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                if codec:
-                    device["static_delay_codec"] = codec
-                return
-        logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", normalized_mac)
+        from sendspin_bridge.config.players import find_player_by_mac
+
+        player = find_player_by_mac(cfg, mac)
+        if player is None:
+            logger.warning("Skipping static_delay_ms save for unknown Bluetooth device %s", mac.strip().upper())
+            return
+        player["static_delay_ms"] = clamped
+        if source:
+            player["static_delay_source"] = source
+            player["static_delay_calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if codec:
+            player["static_delay_codec"] = codec
 
     try:
         update_config(_set_delay)
@@ -465,11 +495,11 @@ def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> No
         return
 
     def _set_value(cfg: dict) -> None:
-        normalized_mac = mac.strip().upper()
-        for device in cfg.get("BLUETOOTH_DEVICES", []):
-            if isinstance(device, dict) and str(device.get("mac") or "").strip().upper() == normalized_mac:
-                device[field] = clamped
-                return
+        from sendspin_bridge.config.players import find_player_by_mac
+
+        player = find_player_by_mac(cfg, mac)
+        if player is not None:
+            player[field] = clamped
 
     try:
         update_config(_set_value)
@@ -477,8 +507,32 @@ def save_device_buffer_setting(mac: str | None, field: str, value_ms: int) -> No
         logger.warning("Could not save %s for %s: %s", field, mac, exc)
 
 
+def load_player_state_for_mac(mac: str) -> dict:
+    """The saved PLAYER_STATE entry of the speaker with *mac*, read from disk."""
+    from sendspin_bridge.config.migration import migrate_v5_to_v6
+    from sendspin_bridge.config.players import find_player_by_mac
+
+    try:
+        with config_lock, open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(cfg, dict):
+        return {}
+    try:
+        migrate_v5_to_v6(cfg)
+        player = find_player_by_mac(cfg, mac)
+        all_state = cfg.get("PLAYER_STATE")
+        state = all_state.get(player["id"]) if player and isinstance(all_state, dict) else None
+    except Exception as exc:  # reader must degrade, never break device construction
+        logger.debug("Could not read saved state for %s: %s", mac, exc)
+        return {}
+    return dict(state) if isinstance(state, dict) else {}
+
+
 def load_config() -> dict:
     """Load configuration from file, falling back to defaults."""
+    global _config_migration_error
     result = copy.deepcopy(DEFAULT_CONFIG)
     has_explicit_ha_area_name_assist = False
 
@@ -489,7 +543,21 @@ def load_config() -> dict:
             saved_config = json.loads(raw)
             if not isinstance(saved_config, dict):
                 raise ValueError("Config file must contain a JSON object")
-            migrated = migrate_config_payload(saved_config)
+            try:
+                migrated = migrate_config_payload(saved_config)
+            except Exception as exc:  # a migration bug must not cost the operator their settings
+                _config_migration_error = f"{type(exc).__name__}: {exc}"
+                logger.exception("Config migration failed; leaving %s untouched", CONFIG_FILE)
+                migrated = ConfigMigrationResult(
+                    normalized_config={
+                        k: v
+                        for k, v in saved_config.items()
+                        if k in CONFIG_ALLOWED_KEYS and k not in ("players", "PLAYER_STATE")
+                    },
+                    needs_persist=False,
+                )
+            else:
+                _config_migration_error = None
             result.update(migrated.normalized_config)
             has_explicit_ha_area_name_assist = "HA_AREA_NAME_ASSIST_ENABLED" in migrated.normalized_config
             for issue in migrated.warnings:

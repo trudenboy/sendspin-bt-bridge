@@ -22,7 +22,9 @@ def redirected_config(tmp_path, monkeypatch):
 
     cfg = tmp_path / "elsewhere" / "config.json"
     cfg.parent.mkdir()
-    cfg.write_text(json.dumps({"BLUETOOTH_DEVICES": [{"player_name": "Kitchen", "enabled": True}]}))
+    cfg.write_text(
+        json.dumps({"CONFIG_SCHEMA_VERSION": 6, "players": [{"id": "pid-kitchen", "name": "Kitchen", "enabled": True}]})
+    )
     monkeypatch.setattr(config, "CONFIG_DIR", cfg.parent)
     monkeypatch.setattr(config, "CONFIG_FILE", cfg)
     return cfg
@@ -32,12 +34,12 @@ def test_the_enabled_flag_lands_in_the_live_config(redirected_config):
     persist_device_enabled("Kitchen", False)
 
     saved = json.loads(redirected_config.read_text())
-    assert saved["BLUETOOTH_DEVICES"][0]["enabled"] is False
+    assert saved["players"][0]["enabled"] is False
 
 
 def test_a_release_lands_in_the_live_config(redirected_config):
     persist_device_released("Kitchen", True, released_by="user")
 
     saved = json.loads(redirected_config.read_text())
-    assert saved["BLUETOOTH_DEVICES"][0]["released"] is True
-    assert saved["BLUETOOTH_DEVICES"][0]["released_by"] == "user"
+    assert saved["PLAYER_STATE"]["pid-kitchen"]["released"] is True
+    assert saved["PLAYER_STATE"]["pid-kitchen"]["released_by"] == "user"

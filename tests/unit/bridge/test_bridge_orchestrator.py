@@ -115,6 +115,34 @@ async def test_initialize_runtime_loads_config_and_updates_progress():
 
 
 @pytest.mark.asyncio
+async def test_bootstrap_keeps_who_released_a_speaker_across_restart(tmp_path):
+    """A v6 file's PLAYER_STATE release marker reaches the bootstrap device config.
+
+    The auto-reclaim gate reads ``released_by`` from the device config, so a
+    restart must not forget that a speaker was released automatically.
+    """
+    from sendspin_bridge.config.players import legacy_device_to_player
+
+    player = legacy_device_to_player({"player_name": "Kitchen", "mac": "AA:BB:CC:DD:EE:01"})
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "SENDSPIN_SERVER": "music-assistant.local",
+                "players": [player],
+                "PLAYER_STATE": {player["id"]: {"released": True, "released_by": "auto"}},
+            }
+        )
+    )
+
+    bootstrap = await BridgeOrchestrator().initialize_runtime()
+
+    assert len(bootstrap.device_configs) == 1
+    assert bootstrap.device_configs[0]["released"] is True
+    assert bootstrap.device_configs[0]["released_by"] == "auto"
+
+
+@pytest.mark.asyncio
 async def test_initialize_runtime_wires_the_dbus_hci_resolver_into_the_transport(monkeypatch):
     """Startup must hand the transport the D-Bus ``hciN`` lookup.
 

@@ -23,6 +23,13 @@ ISSUE_REGISTRY: dict[str, GuidanceIssueDefinition] = {
         severity="error",
         default_reason_codes=("runtime_access_unavailable",),
     ),
+    "config_migration_failed": GuidanceIssueDefinition(
+        key="config_migration_failed",
+        layer="storage",
+        priority=14,
+        severity="error",
+        default_reason_codes=("config_migration_failed",),
+    ),
     "config_dir_not_writable": GuidanceIssueDefinition(
         # Issue #190 — bind-mount target left as ``root:root`` while the
         # bridge runs as a dropped UID.  Surfaces in the recovery

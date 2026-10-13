@@ -21,6 +21,8 @@ from typing import Any
 
 import sendspin_bridge.bridge.state as state
 from sendspin_bridge.config import CONFIG_FILE, config_lock, load_config, write_config_file
+from sendspin_bridge.config.migration import migrate_v5_to_v6
+from sendspin_bridge.config.players import find_player_by_id, find_player_by_mac
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.infrastructure.config_diff import diff_configs
 
@@ -361,10 +363,40 @@ _PER_DEVICE_HOT_CONFIG_KEYS = {
 }
 
 
+def _read_migrated_config() -> tuple[dict, CommandResult | None]:
+    """Read the current config (migrated to v6); caller holds ``config_lock``."""
+    try:
+        with open(CONFIG_FILE) as fh:
+            config = json.load(fh)
+    except FileNotFoundError:
+        config = load_config()
+    try:
+        migrate_v5_to_v6(config)
+    except Exception as exc:
+        logger.exception("Config migration failed for HA dispatch")
+        return config, _err(f"Config migration failed: {exc}", code=500)
+    return config, None
+
+
+def _resolve_config_player(config: dict, player_id: str) -> dict | None:
+    """The ``players[]`` entry for *player_id* (a runtime or a config id).
+
+    A running speaker's runtime id differs from its config id (it is derived
+    from the name), so go through the client's Bluetooth MAC.  Disabled or
+    stopped speakers have no client; their ids are config ids.
+    """
+    client = find_client_by_player_id(player_id)
+    if client is not None:
+        mac = getattr(getattr(client, "bt_manager", None), "mac_address", "")
+        if mac:
+            return find_player_by_mac(config, mac)
+    return find_player_by_id(config, player_id)
+
+
 def apply_device_config_change(player_id: str, key: str, value: Any) -> CommandResult:
     """Persist a per-device config change and dispatch HOT_APPLY.
 
-    Updates ``BLUETOOTH_DEVICES[<mac>].{key} = value`` in ``config.json``
+    Updates ``players[<id>].{key} = value`` in ``config.json``
     and runs ``diff_configs`` + ``ReconfigOrchestrator.apply`` so the
     change reaches the running daemon subprocess via IPC without a restart.
 
@@ -379,30 +411,16 @@ def apply_device_config_change(player_id: str, key: str, value: Any) -> CommandR
     if client is None:
         return _err(f"Unknown player_id: {player_id}", code=404)
 
-    bt = getattr(client, "bt_manager", None)
-    target_mac = (getattr(bt, "mac_address", "") or "").upper().strip()
-    if not target_mac:
-        return _err("Device has no MAC address yet", code=503)
-
     with config_lock:
-        try:
-            with open(CONFIG_FILE) as fh:
-                old_config = json.load(fh)
-        except FileNotFoundError:
-            old_config = load_config()
-
+        old_config, err = _read_migrated_config()
+        if err is not None:
+            return err
         new_config = json.loads(json.dumps(old_config))  # deep copy
-        devices = new_config.get("BLUETOOTH_DEVICES") or []
-        target = None
-        for dev in devices:
-            if isinstance(dev, dict) and str(dev.get("mac", "")).upper() == target_mac:
-                target = dev
-                break
+        target = _resolve_config_player(new_config, player_id)
         if target is None:
-            return _err(f"Device {target_mac} missing from config", code=404)
+            return _err(f"Device {player_id} missing from config", code=404)
 
         target[key] = value
-        new_config["BLUETOOTH_DEVICES"] = devices
 
         try:
             write_config_file(new_config)
@@ -442,43 +460,18 @@ def apply_device_enabled(player_id: str, enabled: bool) -> CommandResult:
     a START / STOP action in the reconfig diff which the orchestrator runs
     out of band.  The route equivalent is ``/api/device/enabled``.
     """
-    client = find_client_by_player_id(player_id)
-    if client is None:
-        # Disabled clients aren't in the active registry; look them up by
-        # MAC in the config directly so users can re-enable from HA.
-        target_mac = None
-    else:
-        bt = getattr(client, "bt_manager", None)
-        target_mac = (getattr(bt, "mac_address", "") or "").upper().strip()
-
+    # Disabled clients aren't in the active registry, so look the player up
+    # by id in the config directly (lets users re-enable from HA).
     with config_lock:
-        try:
-            with open(CONFIG_FILE) as fh:
-                old_config = json.load(fh)
-        except FileNotFoundError:
-            old_config = load_config()
+        old_config, err = _read_migrated_config()
+        if err is not None:
+            return err
         new_config = json.loads(json.dumps(old_config))
-        devices = new_config.get("BLUETOOTH_DEVICES") or []
-        target = None
-        for dev in devices:
-            if not isinstance(dev, dict):
-                continue
-            mac_upper = str(dev.get("mac", "")).upper()
-            if target_mac and mac_upper == target_mac:
-                target = dev
-                break
-            # Fallback: match by player_id derived from MAC if active client lookup failed.
-            if target_mac is None:
-                from sendspin_bridge.config import _player_id_from_mac
-
-                if _player_id_from_mac(mac_upper) == player_id:
-                    target = dev
-                    break
+        target = _resolve_config_player(new_config, player_id)
         if target is None:
             return _err("Unknown device", code=404)
 
         target["enabled"] = bool(enabled)
-        new_config["BLUETOOTH_DEVICES"] = devices
 
         try:
             write_config_file(new_config)

@@ -346,17 +346,18 @@ def test_persist_device_enabled(tmp_config, monkeypatch):
     monkeypatch.setattr(_config, "CONFIG_FILE", tmp_config)
 
     data = {
-        "BLUETOOTH_DEVICES": [
-            {"player_name": "Speaker1", "enabled": True},
-            {"player_name": "Speaker2", "enabled": True},
-        ]
+        "CONFIG_SCHEMA_VERSION": 6,
+        "players": [
+            {"id": "pid-1", "name": "Speaker1", "enabled": True},
+            {"id": "pid-2", "name": "Speaker2", "enabled": True},
+        ],
     }
     tmp_config.write_text(json.dumps(data))
 
     persist_device_enabled("Speaker1", False)
 
     result = json.loads(tmp_config.read_text())
-    devs = result["BLUETOOTH_DEVICES"]
+    devs = result["players"]
     assert devs[0]["enabled"] is False
     assert devs[1]["enabled"] is True
 
@@ -369,19 +370,21 @@ def test_persist_device_released(tmp_config, monkeypatch):
     monkeypatch.setattr(_config, "CONFIG_FILE", tmp_config)
 
     data = {
-        "BLUETOOTH_DEVICES": [
-            {"player_name": "Speaker1", "released": False},
-            {"player_name": "Speaker2", "released": False},
-        ]
+        "CONFIG_SCHEMA_VERSION": 6,
+        "players": [
+            {"id": "pid-1", "name": "Speaker1"},
+            {"id": "pid-2", "name": "Speaker2"},
+        ],
+        "PLAYER_STATE": {"pid-1": {"released": False}, "pid-2": {"released": False}},
     }
     tmp_config.write_text(json.dumps(data))
 
     persist_device_released("Speaker1", True)
 
     result = json.loads(tmp_config.read_text())
-    devs = result["BLUETOOTH_DEVICES"]
-    assert devs[0]["released"] is True
-    assert devs[1]["released"] is False
+    state = result["PLAYER_STATE"]
+    assert state["pid-1"]["released"] is True
+    assert state["pid-2"]["released"] is False
 
 
 # ---------------------------------------------------------------------------

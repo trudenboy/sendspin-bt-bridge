@@ -10,6 +10,7 @@ from sendspin_bridge.services.bluetooth.duplicate_device_check import (
     find_duplicate_devices,
     find_scan_device_conflicts,
 )
+from tests.support.config_v6 import v6_players
 
 # ---------------------------------------------------------------------------
 # _is_own_bridge_player
@@ -45,7 +46,7 @@ def _make_config(
     check: bool = True,
 ) -> dict:
     return {
-        "BLUETOOTH_DEVICES": devices or [],
+        **v6_players(devices),
         "MA_API_URL": ma_url,
         "MA_API_TOKEN": ma_token,
         "BRIDGE_NAME": bridge_name,
@@ -61,7 +62,7 @@ def test_find_duplicate_devices_detects_conflict(mock_fetch):
     pid = _player_id_from_mac(mac)
     mock_fetch.return_value = [{"player_id": pid, "display_name": "ENEBY20 @ Other Bridge"}]
 
-    cfg = _make_config(devices=[{"mac": mac, "name": "ENEBY20"}])
+    cfg = _make_config(devices=[{"mac": mac, "player_name": "ENEBY20"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
 
     assert len(warnings) == 1
@@ -84,7 +85,7 @@ def test_find_duplicate_devices_matches_output_protocol_id(mock_fetch):
         }
     ]
 
-    cfg = _make_config(devices=[{"mac": mac, "name": "ENEBY20"}])
+    cfg = _make_config(devices=[{"mac": mac, "player_name": "ENEBY20"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
 
     assert len(warnings) == 1
@@ -95,7 +96,7 @@ def test_find_duplicate_devices_matches_output_protocol_id(mock_fetch):
 def test_find_duplicate_devices_matches_display_name_on_another_bridge(mock_fetch):
     mock_fetch.return_value = [{"player_id": "ma-generated-id", "display_name": "ENEBY20 @ Other Bridge"}]
 
-    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "name": "ENEBY20"}])
+    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "ENEBY20"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
 
     assert len(warnings) == 1
@@ -110,7 +111,7 @@ def test_find_duplicate_devices_no_conflict_own_bridge(mock_fetch):
     pid = _player_id_from_mac(mac)
     mock_fetch.return_value = [{"player_id": pid, "display_name": "ENEBY20 @ HAOS"}]
 
-    cfg = _make_config(devices=[{"mac": mac, "name": "ENEBY20"}])
+    cfg = _make_config(devices=[{"mac": mac, "player_name": "ENEBY20"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
 
     assert warnings == []
@@ -120,7 +121,7 @@ def test_find_duplicate_devices_no_conflict_own_bridge(mock_fetch):
 def test_find_duplicate_devices_no_conflict_unknown_player(mock_fetch):
     mock_fetch.return_value = [{"player_id": "unknown-id", "display_name": "Kitchen"}]
 
-    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "name": "ENEBY20"}])
+    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "ENEBY20"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
 
     assert warnings == []
@@ -149,7 +150,7 @@ def test_find_duplicate_devices_no_devices():
     side_effect=ConnectionError("no MA"),
 )
 def test_find_duplicate_devices_api_failure(mock_fetch):
-    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "name": "Speaker"}])
+    cfg = _make_config(devices=[{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Speaker"}])
     warnings = find_duplicate_devices(cfg, "HAOS")
     assert warnings == []
 
@@ -311,3 +312,16 @@ def test_annotate_scan_conflicts_exception_safe(mock_load):
     devices = [{"mac": "AA:BB:CC:DD:EE:FF"}]
     _annotate_scan_conflicts(devices)
     assert "warning" not in devices[0]
+
+
+@patch("sendspin_bridge.services.music_assistant.ma_client.fetch_all_players_snapshot")
+def test_find_duplicate_devices_nameless_player_is_named_by_its_mac(mock_fetch):
+    from sendspin_bridge.config import _player_id_from_mac
+
+    mac = "AA:BB:CC:DD:EE:FF"
+    mock_fetch.return_value = [{"player_id": _player_id_from_mac(mac), "display_name": "Other Bridge"}]
+
+    warnings = find_duplicate_devices(_make_config(devices=[{"mac": mac}]), "HAOS")
+
+    assert len(warnings) == 1
+    assert warnings[0].device_name == mac

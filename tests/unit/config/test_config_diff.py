@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sendspin_bridge.services.infrastructure.config_diff import ActionKind, diff_configs
+from tests.support.config_v6 import v6_players
 
 
 def _device(mac: str, **overrides):
@@ -22,13 +23,13 @@ def _device(mac: str, **overrides):
 
 def _config(devices=None, **globals_):
     cfg = {
-        "CONFIG_SCHEMA_VERSION": 1,
+        "CONFIG_SCHEMA_VERSION": 6,
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9000,
         "BRIDGE_NAME": "bridge-a",
         "PULSE_LATENCY_MSEC": 600,
         "LOG_LEVEL": "INFO",
-        "BLUETOOTH_DEVICES": devices or [],
+        **v6_players(devices),
     }
     cfg.update(globals_)
     return cfg

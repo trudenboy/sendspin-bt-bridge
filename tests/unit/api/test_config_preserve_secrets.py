@@ -16,6 +16,8 @@ import sys
 
 import pytest
 
+from sendspin_bridge.config.players import player_id_for_mac
+
 _MAC = "AA:BB:CC:DD:EE:FF"
 
 _SECRETS = {
@@ -84,7 +86,7 @@ def test_successful_save_preserves_never_submitted_secrets(client):
     assert saved["BRIDGE_NAME"] == "Renamed"
     for key, value in _SECRETS.items():
         assert saved[key] == value
-    assert saved["LAST_VOLUMES"] == {_MAC: 42}
+    assert saved["PLAYER_STATE"][player_id_for_mac(_MAC)]["volume"] == 42
 
 
 def test_first_run_without_a_config_file_still_saves(client):

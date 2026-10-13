@@ -497,12 +497,25 @@ if $INTERACTIVE && $BT_OK && command -v bluetoothctl &>/dev/null; then
 import json
 with open('$CONFIG_FILE') as f:
     cfg = json.load(f)
-devs = cfg.get('BLUETOOTH_DEVICES', [])
-if not any(d.get('mac') == '$SEL_MAC' for d in devs):
-    devs.append({'mac': '$SEL_MAC', 'adapter': '', 'player_name': ''})
-    cfg['BLUETOOTH_DEVICES'] = devs
-    with open('$CONFIG_FILE', 'w') as f:
-        json.dump(cfg, f, indent=2)
+mac = '$SEL_MAC'
+if isinstance(cfg.get('players'), list):
+    # Config schema 6: speakers live in players[]; BLUETOOTH_DEVICES is ignored.
+    import uuid
+    if not any((p.get('backend') or {}).get('mac', '').upper() == mac.upper() for p in cfg['players']):
+        cfg['players'].append({
+            'id': str(uuid.uuid5(uuid.NAMESPACE_DNS, mac.lower())),
+            'name': mac.upper(),
+            'backend': {'type': 'bluetooth_a2dp', 'mac': mac.upper(), 'adapter': ''},
+        })
+        with open('$CONFIG_FILE', 'w') as f:
+            json.dump(cfg, f, indent=2)
+else:
+    devs = cfg.get('BLUETOOTH_DEVICES', [])
+    if not any(d.get('mac') == mac for d in devs):
+        devs.append({'mac': mac, 'adapter': '', 'player_name': ''})
+        cfg['BLUETOOTH_DEVICES'] = devs
+        with open('$CONFIG_FILE', 'w') as f:
+            json.dump(cfg, f, indent=2)
 " 2>/dev/null && ok "Added $SEL_MAC to config.json" || true
           fi
         else

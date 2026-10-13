@@ -1,0 +1,14 @@
+{
+  "CONFIG_SCHEMA_VERSION": 5,
+  "BRIDGE_NAME": "HAOS",
+  "BLUETOOTH_DEVICES": [
+    {"mac": "FC:58:FA:EB:08:6C", "adapter": "hci0", "player_name": "ENEBY20", "listen_port": 8928, "static_delay_ms": 0, "static_delay_source": "manual", "enabled": true, "idle_mode": "power_save", "power_save_delay_minutes": 1},
+    {"mac": "2C:D2:6B:B8:EC:5B", "adapter": "hci1", "player_name": "Yandex mini 2 007 a", "listen_port": 8929, "enabled": true},
+    {"mac": "80:99:E7:C2:0B:D3", "adapter": "hci0", "player_name": "WH-1000XM4", "listen_port": 8931, "enabled": false},
+    {"mac": "30:21:0E:0A:AE:5A", "adapter": "hci1", "player_name": "Lenco LS-500", "listen_port": 8932, "enabled": true, "released": true, "released_by": "user"},
+    {"mac": "20:74:CF:61:FB:D8", "adapter": "hci0", "player_name": "OpenMove AfterShokz", "listen_port": 8933, "enabled": false},
+    {"mac": "6C:5C:3D:35:17:99", "adapter": "hci1", "player_name": "ENEBY Portable", "listen_port": 8933, "enabled": false, "keepalive_interval": 30}
+  ],
+  "LAST_VOLUMES": {"FC:58:FA:EB:08:6C": 45, "2c:d2:6b:b8:ec:5b": 30, "00:00:00:00:00:01": 99},
+  "LAST_SINKS": {"FC:58:FA:EB:08:6C": "bluez_sink.FC_58_FA_EB_08_6C.a2dp_sink"}
+}

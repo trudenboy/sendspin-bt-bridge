@@ -15,8 +15,8 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from sendspin_bridge.bluetooth.address import DeviceAddress
-from sendspin_bridge.config import CONFIG_FILE, save_device_sink
 from sendspin_bridge.config import config_lock as config_lock
+from sendspin_bridge.config import save_device_sink
 from sendspin_bridge.services.audio.pulse import (
     cycle_card_profile,
     get_sink_volume,
@@ -201,14 +201,9 @@ def configure_bluetooth_audio(
         pa_mac = address.underscores
 
         # Try cached sink name first — avoids 3s A2DP delay on service restart
-        cached_sink = None
-        try:
-            if CONFIG_FILE.exists():
-                with config_lock, open(CONFIG_FILE) as f:
-                    cfg = json.load(f)
-                cached_sink = cfg.get("LAST_SINKS", {}).get(mac_address)
-        except (OSError, json.JSONDecodeError, ValueError):
-            pass
+        from sendspin_bridge.config import load_player_state_for_mac
+
+        cached_sink = load_player_state_for_mac(mac_address).get("sink")
 
         fast_path_taken = False
         configured_sink: str | None = None
@@ -322,16 +317,12 @@ def configure_bluetooth_audio(
             # Resolve last saved volume for this device
             restored_volume = None
             try:
-                if CONFIG_FILE.exists():
-                    with config_lock, open(CONFIG_FILE) as f:
-                        cfg = json.load(f)
-                    volumes = cfg.get("LAST_VOLUMES", {})
-                    last_volume = volumes.get(mac_address)
-                    if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
-                        if set_sink_volume(configured_sink, last_volume):
-                            logger.info("✓ Restored volume to %s%% for %s", last_volume, mac_address)
-                            restored_volume = last_volume
-            except (OSError, json.JSONDecodeError, ValueError) as e:
+                last_volume = load_player_state_for_mac(mac_address).get("volume")
+                if last_volume is not None and isinstance(last_volume, int) and 0 <= last_volume <= 100:
+                    if set_sink_volume(configured_sink, last_volume):
+                        logger.info("✓ Restored volume to %s%% for %s", last_volume, mac_address)
+                        restored_volume = last_volume
+            except (OSError, ValueError) as e:
                 logger.warning("Could not restore volume: %s", e)
 
             if restored_volume is None:
