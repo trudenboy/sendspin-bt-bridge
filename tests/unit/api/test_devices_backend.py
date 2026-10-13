@@ -89,3 +89,31 @@ def test_disabled_device_reports_backend_type(api_client, running, tmp_config):
         assert disabled[0]["backend_type"] == "bluetooth_a2dp"
     finally:
         state.set_disabled_devices([])
+
+
+def test_running_device_reports_the_config_player_id(api_client, running, tmp_config):
+    from sendspin_bridge.config.players import player_id_for_mac
+
+    _write_v6(
+        tmp_config,
+        [
+            {"id": "other", "name": "Other", "backend": {"type": "bluetooth_a2dp", "mac": "11:22:33:44:55:66"}},
+            {"id": player_id_for_mac(MAC), "name": "Kitchen", "backend": {"type": "bluetooth_a2dp", "mac": MAC}},
+        ],
+    )
+    d = api_client.get("/api/v1/devices").json()[0]
+    assert d["id"] == "kitchen"  # runtime id, unchanged
+    assert d["config_id"] == player_id_for_mac(MAC)
+
+
+def test_running_device_missing_from_config_has_no_config_id(api_client, running, tmp_config):
+    _write_v6(tmp_config, [])
+    assert api_client.get("/api/v1/devices").json()[0]["config_id"] is None
+
+
+def test_running_speaker_takes_its_backend_from_the_client_not_the_config(api_client, running, tmp_config):
+    # A config entry that happens to share the runtime id must not decide what the running speaker can do.
+    _write_v6(tmp_config, [{"id": "kitchen", "name": "DAC", "backend": {"type": "pulse_sink", "sink": "s"}}])
+    for path in ("reconnect", "standby"):
+        resp = api_client.post(f"/api/v1/devices/kitchen/{path}")
+        assert resp.json().get("code") != "not_supported_for_backend", path

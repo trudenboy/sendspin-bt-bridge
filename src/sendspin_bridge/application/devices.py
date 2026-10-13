@@ -21,12 +21,17 @@ logger = logging.getLogger(__name__)
 
 def require_action(device_id: str, action: str) -> None:
     """409 when the player's backend cannot do *action*; unknown ids fall through to the command's 404."""
-    from sendspin_bridge.config import load_config
-    from sendspin_bridge.config.players import find_player_by_id, supported_actions_for
+    from sendspin_bridge.config.players import BLUETOOTH, find_player_by_id, supported_actions_for
 
-    player = find_player_by_id(load_config(), device_id)
-    backend = player.get("backend") if player else None
-    backend_type = str(backend.get("type") or "") if isinstance(backend, dict) else ""
+    try:
+        find_client(device_id)
+        backend_type = BLUETOOTH  # every running client is Bluetooth until a second backend gets a runtime
+    except UseCaseError:
+        from sendspin_bridge.config import load_config
+
+        player = find_player_by_id(load_config(), device_id)
+        backend = player.get("backend") if player else None
+        backend_type = str(backend.get("type") or "") if isinstance(backend, dict) else ""
     if backend_type and action not in supported_actions_for(backend_type):
         raise UseCaseError(
             409, "not_supported_for_backend", f"A {backend_type} player does not support {action.replace('_', ' ')}"

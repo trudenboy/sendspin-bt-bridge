@@ -37,6 +37,8 @@ try {
   /* default off */
 }
 
+// The speaker's entry in the configuration; its runtime id may differ.
+const configId = computed(() => props.device.config_id ?? props.device.id)
 const dirty = computed(() => entry.value !== null && JSON.stringify(entry.value) !== original.value)
 const adapterChoices = computed(() => bridge.adapters.map((a) => ({ value: a.id, label: a.name ? `${a.id} — ${a.name}` : a.id })))
 // Timing is applied live from its own tab.
@@ -51,7 +53,7 @@ async function load() {
   loadError.value = null
   try {
     const doc = (await getConfig()) as Record<string, unknown>
-    const found = ((doc.players as Entry[] | undefined) ?? []).find((p) => p.id === props.device.id)
+    const found = ((doc.players as Entry[] | undefined) ?? []).find((p) => p.id === configId.value)
     config.value = doc
     // Deep copy: the backend is nested and edited in place.
     entry.value = found ? (JSON.parse(JSON.stringify(found)) as Entry) : null
@@ -62,7 +64,7 @@ async function load() {
     loading.value = false
   }
 }
-watch(() => props.device.id, load, { immediate: true })
+watch(configId, load, { immediate: true })
 
 const read = (key: string) => getPath(entry.value, key)
 function write(key: string, value: unknown) {
@@ -81,7 +83,7 @@ async function save() {
   try {
     // ``_effective_*`` is read-only display data; it is kept for display and dropped here.
     const mine = Object.fromEntries(Object.entries(entry.value).filter(([k]) => !k.startsWith('_')))
-    const players = ((config.value.players as Entry[] | undefined) ?? []).map((p) => (p.id === props.device.id ? mine : p))
+    const players = ((config.value.players as Entry[] | undefined) ?? []).map((p) => (p.id === configId.value ? mine : p))
     const result = await saveConfig({ ...config.value, players } as never)
     const restart = ((result?.reconfig ?? {}) as { restart_required?: unknown[] }).restart_required?.length
     notifications.success(t(restart ? 'settings.restartNeeded' : 'drawer.config.saved'))

@@ -47,6 +47,16 @@ def _disabled_running(device) -> DisabledDevice:
     )
 
 
+def _device(running_device, config: dict) -> Device:
+    """The /devices entry for a running speaker, tied to its configuration entry by Bluetooth MAC."""
+    from sendspin_bridge.config.players import find_player_by_mac
+
+    status = running_device.to_dict()
+    mac = status.get("bluetooth_mac")
+    player = find_player_by_mac(config, str(mac)) if mac else None
+    return Device.from_status(status, config_id=str(player["id"]) if player and player.get("id") else None)
+
+
 def build_status(*, auth_enabled: bool) -> BridgeStatus:
     """Bridge, devices and groups, with guidance — what the dashboard renders."""
     from sendspin_bridge.bridge import state
@@ -126,7 +136,7 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
     )
     return BridgeStatus(
         bridge=bridge,
-        devices=[Device.from_status(device.to_dict()) for device in running],
+        devices=[_device(device, config) for device in running],
         groups=[Group.from_snapshot(group.to_dict()) for group in snapshot.groups],
     )
 

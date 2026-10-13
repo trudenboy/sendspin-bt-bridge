@@ -198,7 +198,10 @@ class DeviceHealth(ResponseModel):
 
 
 class Device(ResponseModel):
-    id: str = Field(description="Stable player id (UUID derived from the speaker's MAC).")
+    id: str = Field(description="The player's runtime id: what device commands take and Music Assistant knows it by.")
+    config_id: str | None = Field(
+        default=None, description="The id of this speaker's entry in the configuration's players, when it has one."
+    )
     name: str | None = None
     enabled: bool = True
     state_changed_at: str | None = None
@@ -222,7 +225,7 @@ class Device(ResponseModel):
     recent_events: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
-    def from_status(cls, d: dict[str, Any]) -> Device:
+    def from_status(cls, d: dict[str, Any], config_id: str | None = None) -> Device:
         g = d.get
         pair_failure = None
         if g("pair_failure_kind"):
@@ -232,6 +235,7 @@ class Device(ResponseModel):
         health = g("health_summary") or {}
         return cls(
             id=str(g("player_id") or ""),
+            config_id=config_id,
             name=g("player_name"),
             enabled=bool(g("enabled", True)),
             state_changed_at=g("state_changed_at"),

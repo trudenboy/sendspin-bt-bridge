@@ -2336,6 +2336,11 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
+             * Config Id
+             * @description The id of this speaker's entry in the configuration's players, when it has one.
+             */
+            config_id: string | null;
+            /**
              * Enabled
              * @default true
              */
@@ -2343,7 +2348,7 @@ export interface components {
             health: components["schemas"]["DeviceHealth"];
             /**
              * Id
-             * @description Stable player id (UUID derived from the speaker's MAC).
+             * @description The player's runtime id: what device commands take and Music Assistant knows it by.
              */
             id: string;
             /** Last Error */

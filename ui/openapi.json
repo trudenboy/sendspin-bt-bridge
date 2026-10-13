@@ -1476,6 +1476,18 @@
             "title": "Capabilities",
             "type": "object"
           },
+          "config_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The id of this speaker's entry in the configuration's players, when it has one.",
+            "title": "Config Id"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
@@ -1485,7 +1497,7 @@
             "$ref": "#/components/schemas/DeviceHealth"
           },
           "id": {
-            "description": "Stable player id (UUID derived from the speaker's MAC).",
+            "description": "The player's runtime id: what device commands take and Music Assistant knows it by.",
             "title": "Id",
             "type": "string"
           },
@@ -1590,6 +1602,7 @@
         },
         "required": [
           "id",
+          "config_id",
           "name",
           "enabled",
           "state_changed_at",
