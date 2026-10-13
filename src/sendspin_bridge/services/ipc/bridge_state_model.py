@@ -146,6 +146,7 @@ def build_normalized_device_state(device: Any) -> NormalizedDeviceState:
         },
         audio={
             "has_sink": facts.has_sink,
+            "sink_missing": facts.sink_missing,
             "sink_name": facts.sink_name,
             "streaming": facts.audio_streaming,
             "backend_type": facts.backend_type,

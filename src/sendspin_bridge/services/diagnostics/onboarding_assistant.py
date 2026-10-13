@@ -426,18 +426,33 @@ def build_onboarding_assistant_snapshot(
         runtime_mode=runtime_mode,
     )
     normalized_devices = bridge_state.devices
-    configured_count = int(bridge_state.configuration.configured_device_count)
+    bluetooth_configured_count = int(bridge_state.configuration.configured_device_count)
+    # The model counts Bluetooth players only; a local audio output
+    # (``pulse_sink``) is a configured speaker too.
+    local_players = [
+        player
+        for player in (config.get("players") or [])
+        if isinstance(player, dict)
+        and isinstance(player.get("backend"), dict)
+        and player["backend"].get("type") == "pulse_sink"
+    ]
+    configured_count = bluetooth_configured_count + len(local_players)
     active_devices = [device for device in normalized_devices if device.management.get("bridge_managed", True)]
     released_devices = [device for device in normalized_devices if device.management.get("released")]
     standby_devices = sum(1 for device in active_devices if device.bluetooth.get("standby"))
-    connected_devices = sum(1 for device in active_devices if device.bluetooth.get("connected"))
+    local_active = [device for device in active_devices if device.audio.get("backend_type") == "pulse_sink"]
+    local_present = [
+        device for device in local_active if device.audio.get("has_sink") and not device.audio.get("sink_missing")
+    ]
+    bluetooth_active = [device for device in active_devices if device not in local_active]
+    connected_devices = sum(1 for device in bluetooth_active if device.bluetooth.get("connected")) + len(local_present)
     # Devices in idle-standby were fully connected before the bridge
     # intentionally disconnected BT to save power.  Treat them as
     # "logically connected" so onboarding doesn't regress.
     connected_or_standby = connected_devices + standby_devices
-    sink_ready_devices = sum(
+    sink_ready_devices = len(local_present) + sum(
         1
-        for device in active_devices
+        for device in bluetooth_active
         if (device.bluetooth.get("connected") and device.audio.get("has_sink")) or device.bluetooth.get("standby")
     )
     missing_sink_devices = [
@@ -458,7 +473,9 @@ def build_onboarding_assistant_snapshot(
     audio_sinks = int(audio.get("sinks") or 0)
     paired_devices = int(bluetooth.get("paired_devices") or 0)
     controller_present = bool(bluetooth.get("controller", False))
-    disabled_configured_count = int(bridge_state.configuration.disabled_device_count)
+    disabled_configured_count = int(bridge_state.configuration.disabled_device_count) + sum(
+        1 for player in local_players if player.get("enabled") is False
+    )
     user_released_devices = [
         device for device in released_devices if str(device.management.get("release_reason") or "") != "auto"
     ]
@@ -549,12 +566,12 @@ def build_onboarding_assistant_snapshot(
                 actions=bluetooth_actions,
             )
         )
-    elif configured_count > 0 and paired_devices == 0:
+    elif bluetooth_configured_count > 0 and paired_devices == 0:
         bluetooth_summary = "No paired Bluetooth speakers are currently available to the bridge."
         bluetooth_actions = [
             "Put a speaker in pairing mode, then open Bluetooth scan to pair or rediscover it.",
         ]
-        bluetooth_details = {"paired_devices": paired_devices, "configured_devices": configured_count}
+        bluetooth_details = {"paired_devices": paired_devices, "configured_devices": bluetooth_configured_count}
         if disabled_configured_count >= configured_count:
             bluetooth_summary = (
                 "No paired Bluetooth speakers are currently available, and the saved speaker is disabled."
@@ -771,16 +788,30 @@ def build_onboarding_assistant_snapshot(
             )
         )
     elif connected_or_standby == 0:
+        has_bluetooth = bool(bluetooth_active) or bluetooth_configured_count > 0
+        if has_bluetooth and local_active:
+            summary = "Devices are configured, but none are connected over Bluetooth or have their output present."
+        elif has_bluetooth:
+            summary = "Devices are configured, but none are currently connected over Bluetooth."
+        else:
+            summary = "Devices are configured, but none of their audio outputs are present."
+        sink_actions: list[str] = []
+        if has_bluetooth:
+            sink_actions += [
+                "Power on a configured speaker and wait for the bridge to acquire its sink.",
+                "If the speaker stays offline, open device settings and run reconnect or re-pair.",
+            ]
+        if local_active or not has_bluetooth:
+            sink_actions.append(
+                "For a local audio output, plug the device in or pick another output in device settings."
+            )
         checks.append(
             OnboardingCheck(
                 key="sink_verification",
                 status="warning",
-                summary="Devices are configured, but none are currently connected over Bluetooth.",
+                summary=summary,
                 details={"configured_devices": configured_count},
-                actions=[
-                    "Power on a configured speaker and wait for the bridge to acquire its sink.",
-                    "If the speaker stays offline, open device settings and run reconnect or re-pair.",
-                ],
+                actions=sink_actions,
             )
         )
     else:

@@ -579,3 +579,91 @@ def test_onboarding_ma_auth_ok_when_connected_with_auto_detected_url():
 
     checks = {check.key: check for check in snapshot.checks}
     assert checks["ma_auth"].status == "ok"
+
+
+def _local_player(name="Desk DAC"):
+    return {"id": "desk", "name": name, "backend": {"type": "pulse_sink", "sink": "alsa_output.usb"}}
+
+
+def _local_device(*, present=True, name="Desk DAC"):
+    return SimpleNamespace(
+        player_name=name,
+        bluetooth_connected=False,
+        has_sink=present,
+        static_delay_ms=0.0,
+        extra={"backend_type": "pulse_sink", "audio_sink": "alsa_output.usb", "sink_missing": not present},
+    )
+
+
+def _bt_device(*, connected, name="Kitchen"):
+    return SimpleNamespace(
+        player_name=name,
+        bluetooth_connected=connected,
+        has_sink=connected,
+        static_delay_ms=0.0,
+        extra={},
+    )
+
+
+def _snapshot(config, devices, *, paired=0):
+    return build_onboarding_assistant_snapshot(
+        config={**config, "PULSE_LATENCY_MSEC": 300},
+        preflight={
+            "audio": {"system": "pulseaudio", "sinks": 1},
+            "bluetooth": {"controller": True, "paired_devices": paired},
+        },
+        devices=devices,
+        ma_connected=False,
+        runtime_mode="production",
+    )
+
+
+def test_local_output_only_setup_counts_as_connected_and_sink_ready():
+    snapshot = _snapshot({"players": [_local_player()], "PLAYER_STATE": {}}, [_local_device()])
+
+    checkpoints = {cp.key: cp for cp in snapshot.checklist.checkpoints}
+    assert checkpoints["bluetooth_connected"].reached is True
+    assert checkpoints["sink_ready"].reached is True
+    checks = {check.key: check for check in snapshot.checks}
+    assert checks["sink_verification"].status == "ok"
+    assert checks["bluetooth"].status == "ok"
+    assert snapshot.checklist.current_step_key != "bluetooth"
+    text = " ".join(a for c in snapshot.checks for a in c.actions) + " ".join(c.summary for c in snapshot.checks)
+    assert "re-pair" not in text
+    assert "over Bluetooth" not in text
+
+
+def test_local_output_missing_gets_output_advice_not_bluetooth_reconnect():
+    snapshot = _snapshot({"players": [_local_player()], "PLAYER_STATE": {}}, [_local_device(present=False)])
+
+    checkpoints = {cp.key: cp for cp in snapshot.checklist.checkpoints}
+    assert checkpoints["bluetooth_connected"].reached is False
+    check = next(c for c in snapshot.checks if c.key == "sink_verification")
+    assert check.status == "warning"
+    joined = check.summary + " " + " ".join(check.actions)
+    assert "plug the device in or pick another output" in joined
+    assert "Bluetooth" not in joined
+    assert "re-pair" not in joined
+
+
+def test_mixed_setup_with_only_local_output_connected_reaches_first_speaker():
+    config = {
+        **v6_players([{"mac": "AA"}]),
+        "players": [*v6_players([{"mac": "AA"}])["players"], _local_player()],
+    }
+    snapshot = _snapshot(config, [_bt_device(connected=False), _local_device()], paired=1)
+
+    checkpoints = {cp.key: cp for cp in snapshot.checklist.checkpoints}
+    assert checkpoints["bluetooth_connected"].reached is True
+    assert checkpoints["sink_ready"].reached is True
+    check = next(c for c in snapshot.checks if c.key == "sink_verification")
+    assert check.status == "ok"
+
+
+def test_bluetooth_only_unconnected_keeps_bluetooth_advice():
+    snapshot = _snapshot(v6_players([{"mac": "AA"}]), [_bt_device(connected=False)], paired=1)
+
+    check = next(c for c in snapshot.checks if c.key == "sink_verification")
+    assert check.status == "warning"
+    assert "over Bluetooth" in check.summary
+    assert "re-pair" in " ".join(check.actions)
