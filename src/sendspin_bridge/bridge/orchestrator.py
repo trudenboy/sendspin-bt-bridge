@@ -652,13 +652,13 @@ class BridgeOrchestrator:
                 # from HA would silently overwrite the operator's saved
                 # settings.
                 disabled_entry: dict[str, Any] = {
-                    "id": device.get("id"),
                     "player_name": player_name,
                     "mac": mac,
                     "adapter": adapter,
                     "enabled": False,
                 }
                 for cfg_key in (
+                    "id",
                     "idle_mode",
                     "keep_alive_method",
                     "static_delay_ms",
