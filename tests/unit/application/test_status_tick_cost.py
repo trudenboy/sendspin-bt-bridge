@@ -136,7 +136,7 @@ def test_saving_the_config_makes_the_next_status_measure_again(api_status, monke
     from tests.support.api_client import make_client
 
     monkeypatch.setattr(api_config, "CONFIG_FILE", tmp_path / "config.json")
-    response = make_client().put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "BLUETOOTH_DEVICES": []})
+    response = make_client().put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "players": []})
     assert response.status_code == 200
 
     _status(module)

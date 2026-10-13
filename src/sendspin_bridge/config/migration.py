@@ -162,19 +162,31 @@ def _normalize_bluetooth_devices(config: dict, *, defaults: Mapping[str, Any]) -
             normalized.pop("room_name", None)
         normalized.pop("handoff_mode", None)
         _migrate_negative_static_delay(normalized)
-        if "static_delay_ms" in normalized and not normalized.get("static_delay_source"):
-            normalized["static_delay_source"] = "legacy"
-        for latency_key in ("required_lead_time_ms", "min_buffer_ms"):
-            if latency_key not in normalized:
-                continue
-            try:
-                normalized[latency_key] = max(0, min(30000, int(normalized[latency_key])))
-            except (TypeError, ValueError):
-                normalized.pop(latency_key, None)
-        _migrate_device_idle_mode(normalized)
-        _migrate_power_save_delay(normalized)
+        normalize_device_settings(normalized)
         normalized_devices.append(normalized)
     return normalized_devices
+
+
+def normalize_device_settings(device: dict) -> None:
+    """Clamp-and-continue clean-up of a speaker's settings, in place.
+
+    Shared by the v5 device migration and upload validation of Bluetooth
+    players: latency hints clamped to 0-30000 (dropped when not a number),
+    an invalid ``idle_mode`` removed or a legacy one derived, legacy
+    ``power_save_delay_seconds`` converted. Never raises. ``static_delay_ms``
+    range is left to the caller (migration clamps it, validation rejects it).
+    """
+    if "static_delay_ms" in device and not device.get("static_delay_source"):
+        device["static_delay_source"] = "legacy"
+    for latency_key in ("required_lead_time_ms", "min_buffer_ms"):
+        if latency_key not in device:
+            continue
+        try:
+            device[latency_key] = max(0, min(30000, int(device[latency_key])))
+        except (TypeError, ValueError):
+            device.pop(latency_key, None)
+    _migrate_device_idle_mode(device)
+    _migrate_power_save_delay(device)
 
 
 _warned_static_delay_issues: set[tuple[str, str]] = set()
@@ -239,6 +251,29 @@ def _migrate_power_save_delay(device: dict) -> None:
     if old is not None and "power_save_delay_minutes" not in device:
         seconds = _coerce_int(old)
         device["power_save_delay_minutes"] = max(1, round(seconds / 60))
+    _clamp_power_save_delay(device)
+
+
+def _clamp_power_save_delay(device: dict) -> None:
+    """Keep ``power_save_delay_minutes`` within 0-60; drop a value that is not a number."""
+    raw = device.get("power_save_delay_minutes")
+    if raw is None or isinstance(raw, bool):
+        return
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        device.pop("power_save_delay_minutes", None)
+        return
+    clamped = max(0, min(60, value))
+    if clamped != raw:
+        if clamped != value:
+            logger.warning(
+                "Device %s: power_save_delay_minutes=%r is outside 0-60; clamping to %d",
+                device.get("mac", device.get("id", "?")),
+                raw,
+                clamped,
+            )
+        device["power_save_delay_minutes"] = clamped
 
 
 def _normalize_mac_key(raw_mac: object) -> str:
@@ -360,6 +395,8 @@ def _normalize_players(config: dict) -> None:
     kept: list[dict] = []
     if isinstance(raw_players, list):
         for entry in raw_players:
+            if isinstance(entry, dict):
+                _clamp_power_save_delay(entry)
             try:
                 kept.append(Player.model_validate(entry).model_dump(mode="json", exclude_unset=True))
                 continue
@@ -653,14 +690,8 @@ def _filter_allowed_config_keys(config: dict[str, Any], *, allowed_keys: frozens
     return {key: copy.deepcopy(value) for key, value in config.items() if key in allowed_keys}
 
 
-def migrate_config_payload(
-    config: dict[str, Any], *, allowed_keys: frozenset[str], to_v6: bool = True
-) -> ConfigMigrationResult:
-    """Normalise a raw config; with ``to_v6=False`` the v5 device list is left in place.
-
-    API v1 still sends the v5 shape (stage 1 of config v6): its validator needs
-    ``BLUETOOTH_DEVICES`` as sent, before the conversion drops bad entries.
-    """
+def migrate_config_payload(config: dict[str, Any], *, allowed_keys: frozenset[str]) -> ConfigMigrationResult:
+    """Normalise a raw config and bring it to schema v6 (``players`` + ``PLAYER_STATE``)."""
     from sendspin_bridge.config import ConfigMigrationIssue, ConfigMigrationResult
 
     normalized = _filter_allowed_config_keys(config, allowed_keys=allowed_keys | LEGACY_V5_KEYS)
@@ -773,15 +804,14 @@ def migrate_config_payload(
         )
         needs_persist = True
 
-    if to_v6:
-        if normalized.get("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION) <= CONFIG_SCHEMA_VERSION:
-            v6_issues = migrate_v5_to_v6(normalized)
-            if v6_issues:
-                warnings.extend(v6_issues)
-                needs_persist = True
-        else:
-            for key in LEGACY_V5_KEYS:
-                normalized.pop(key, None)
+    if normalized.get("CONFIG_SCHEMA_VERSION", CONFIG_SCHEMA_VERSION) <= CONFIG_SCHEMA_VERSION:
+        v6_issues = migrate_v5_to_v6(normalized)
+        if v6_issues:
+            warnings.extend(v6_issues)
+            needs_persist = True
+    else:
+        for key in LEGACY_V5_KEYS:
+            normalized.pop(key, None)
 
     # Detection-only check for malformed SENDSPIN_SERVER values written before
     # the strict validator landed (issue #291). We do NOT auto-strip — Strict

@@ -17,7 +17,7 @@ def client(tmp_path, monkeypatch):
         json.dumps(
             {
                 "BRIDGE_NAME": "TestBridge",
-                "BLUETOOTH_DEVICES": [],
+                "players": [],
                 "AUTH_TOKENS": [],
             }
         )
@@ -617,7 +617,7 @@ def test_mqtt_test_resolves_redacted_password_from_saved_config(client, monkeypa
     # Override config to seed a saved password.
     cfg_payload = {
         "BRIDGE_NAME": "TestBridge",
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "AUTH_TOKENS": [],
         "HA_INTEGRATION": {
             "enabled": True,

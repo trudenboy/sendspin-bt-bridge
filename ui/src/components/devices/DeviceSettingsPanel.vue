@@ -10,6 +10,7 @@ import { SbButton, SbSpinner, SbToggle } from '@/kit'
 import SettingField from '@/components/settings/SettingField.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { DEVICE_GROUPS } from '@/settings/device'
+import { getPath, setPath, type FieldDef } from '@/settings/layout'
 import { confirmDialog } from '@/composables/useConfirm'
 import { speakerName } from '@/utils/speakerName'
 import type { Device } from '@/api/types'
@@ -36,22 +37,26 @@ try {
   /* default off */
 }
 
-const mac = computed(() => props.device.bluetooth.mac?.toUpperCase() ?? '')
+// The speaker's entry in the configuration; its runtime id may differ.
+const configId = computed(() => props.device.config_id ?? props.device.id)
 const dirty = computed(() => entry.value !== null && JSON.stringify(entry.value) !== original.value)
 const adapterChoices = computed(() => bridge.adapters.map((a) => ({ value: a.id, label: a.name ? `${a.id} — ${a.name}` : a.id })))
 // Timing is applied live from its own tab.
 const groups = computed(() => DEVICE_GROUPS.filter((g) => g.id !== 'sync'))
+// The port the running speaker really listens on, when none is pinned.
+const effectivePort = computed(() => entry.value?._effective_listen_port)
+const fieldFor = (f: FieldDef): FieldDef =>
+  f.key === 'listen_port' && effectivePort.value != null ? { ...f, placeholder: String(effectivePort.value) } : f
 
 async function load() {
   loading.value = true
   loadError.value = null
   try {
     const doc = (await getConfig()) as Record<string, unknown>
-    const found = ((doc.BLUETOOTH_DEVICES as Entry[] | undefined) ?? []).find(
-      (e) => String(e.mac ?? '').toUpperCase() === mac.value,
-    )
+    const found = ((doc.players as Entry[] | undefined) ?? []).find((p) => p.id === configId.value)
     config.value = doc
-    entry.value = found ? { ...found } : null
+    // Deep copy: the backend is nested and edited in place.
+    entry.value = found ? (JSON.parse(JSON.stringify(found)) as Entry) : null
     original.value = JSON.stringify(entry.value)
   } catch (e) {
     loadError.value = e instanceof ApiError ? e.message : String(e)
@@ -59,13 +64,12 @@ async function load() {
     loading.value = false
   }
 }
-watch(() => props.device.id, load, { immediate: true })
+watch(configId, load, { immediate: true })
 
-const read = (key: string) => entry.value?.[key]
+const read = (key: string) => getPath(entry.value, key)
 function write(key: string, value: unknown) {
   if (!entry.value) return
-  if (value === null || value === '') delete entry.value[key]
-  else entry.value[key] = value
+  setPath(entry.value, key, value === null || value === '' ? undefined : value)
 }
 
 function visible(f: (typeof DEVICE_GROUPS)[number]['fields'][number]) {
@@ -77,10 +81,10 @@ async function save() {
   if (!config.value || !entry.value) return
   saving.value = true
   try {
-    const devices = ((config.value.BLUETOOTH_DEVICES as Entry[] | undefined) ?? []).map((e) =>
-      String(e.mac ?? '').toUpperCase() === mac.value ? entry.value! : e,
-    )
-    const result = await saveConfig({ ...config.value, BLUETOOTH_DEVICES: devices } as never)
+    // ``_effective_*`` is read-only display data; it is kept for display and dropped here.
+    const mine = Object.fromEntries(Object.entries(entry.value).filter(([k]) => !k.startsWith('_')))
+    const players = ((config.value.players as Entry[] | undefined) ?? []).map((p) => (p.id === configId.value ? mine : p))
+    const result = await saveConfig({ ...config.value, players } as never)
     const restart = ((result?.reconfig ?? {}) as { restart_required?: unknown[] }).restart_required?.length
     notifications.success(t(restart ? 'settings.restartNeeded' : 'drawer.config.saved'))
     await load()
@@ -95,7 +99,7 @@ const removing = ref(false)
 
 /** The same removal as the speaker menu, at the end of its settings (as on a Home Assistant device page). */
 async function removeSpeaker() {
-  const name = speakerName(props.device.name, props.device.bluetooth.mac ?? props.device.id)
+  const name = speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id)
   const ok = await confirmDialog({
     title: t('speaker.removeTitle', { name }),
     message: t('speaker.removeMessage'),
@@ -135,8 +139,8 @@ async function toggleEnabled(enabled: boolean) {
         <SettingsRow :label="t('drawer.config.enabled')" :help="t('drawer.config.enabledHelp')">
           <SbToggle :model-value="device.enabled" @update:model-value="toggleEnabled" />
         </SettingsRow>
-        <SettingsRow :label="t('drawer.config.mac')">
-          <span class="font-mono text-sm text-text-secondary">{{ device.bluetooth.mac }}</span>
+        <SettingsRow v-if="device.bluetooth?.mac" :label="t('drawer.config.mac')">
+          <span class="font-mono text-sm text-text-secondary">{{ device.bluetooth?.mac }}</span>
         </SettingsRow>
       </div>
 
@@ -146,7 +150,7 @@ async function toggleEnabled(enabled: boolean) {
           <template v-for="f in g.fields" :key="f.key">
             <SettingField
               v-if="visible(f)"
-              :field="f"
+              :field="fieldFor(f)"
               i18n-base="settings.device"
               :read="read"
               :write="write"

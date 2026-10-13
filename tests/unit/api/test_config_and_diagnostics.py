@@ -34,6 +34,12 @@ def client():
     return make_client()
 
 
+def _bt(mac: str, player_name: str = "", **settings) -> dict:
+    """A Bluetooth player as the settings page sends it (a new one has no id yet)."""
+    adapter = settings.pop("adapter", "")
+    return {"name": player_name, "backend": {"type": "bluetooth_a2dp", "mac": mac, "adapter": adapter}, **settings}
+
+
 def _saved_volumes(saved: dict) -> dict:
     """The saved volumes by MAC (schema v6 keeps them in PLAYER_STATE by player id)."""
     state = saved.get("PLAYER_STATE") or {}
@@ -105,7 +111,7 @@ def test_config_upload_rejects_duplicate_effective_listen_ports(client):
     assert resp.status_code == 400
     data = resp.json()
     assert data["detail"].startswith("Duplicate effective listen_port 8928")
-    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].listen_port"
+    assert data["errors"][0]["field"] == "players[1].listen_port"
 
 
 def test_config_upload_returns_validation_warnings_on_success(client, tmp_path, monkeypatch):
@@ -142,7 +148,7 @@ def test_config_validate_returns_normalized_preview(client):
             "SENDSPIN_PORT": "9000",
             "WEB_PORT": "18080",
             "BASE_LISTEN_PORT": "19000",
-            "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
+            "players": [_bt("aa:bb:cc:dd:ee:ff")],
         },
     )
 
@@ -153,7 +159,7 @@ def test_config_validate_returns_normalized_preview(client):
     assert data["normalized_config"]["SENDSPIN_PORT"] == 9000
     assert data["normalized_config"]["WEB_PORT"] == 18080
     assert data["normalized_config"]["BASE_LISTEN_PORT"] == 19000
-    assert data["normalized_config"]["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert data["normalized_config"]["players"][0]["backend"]["mac"] == "AA:BB:CC:DD:EE:FF"
 
 
 def test_config_validate_warns_when_new_mac_already_exists_in_ma(client, tmp_path, monkeypatch):
@@ -174,7 +180,7 @@ def test_config_validate_warns_when_new_mac_already_exists_in_ma(client, tmp_pat
         json={
             "MA_API_URL": "http://ma:8095",
             "MA_API_TOKEN": "token",
-            "BLUETOOTH_DEVICES": [{"mac": mac}],
+            "players": [_bt(mac)],
         },
     )
 
@@ -182,7 +188,7 @@ def test_config_validate_warns_when_new_mac_already_exists_in_ma(client, tmp_pat
     data = resp.json()
     messages = [warning["message"] for warning in data["warnings"]]
     assert any("may belong to another bridge" in message for message in messages)
-    assert any(warning["field"] == "BLUETOOTH_DEVICES[0].mac" for warning in data["warnings"])
+    assert any(warning["field"] == "players[0].backend.mac" for warning in data["warnings"])
 
 
 def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, tmp_path, monkeypatch):
@@ -203,7 +209,7 @@ def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, t
         json={
             "MA_API_URL": "http://ma:8095",
             "MA_API_TOKEN": "token",
-            "BLUETOOTH_DEVICES": [{"mac": mac}],
+            "players": [_bt(mac)],
         },
     )
 
@@ -224,14 +230,14 @@ def test_config_validate_does_not_warn_for_existing_mac_on_same_bridge(client, t
 def test_config_validate_returns_errors_for_invalid_payload(client):
     resp = client.post(
         "/api/v1/config/validate",
-        json={"BLUETOOTH_DEVICES": [{"mac": "not-a-mac"}]},
+        json={"players": [_bt("not-a-mac")]},
     )
 
     # Validation answered: the request succeeded, the config did not.
     assert resp.status_code == 200
     data = resp.json()
     assert data["valid"] is False
-    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[0].mac"
+    assert data["errors"][0]["field"] == "players[0].backend.mac"
 
 
 def test_config_validate_rejects_duplicate_effective_listen_ports(client):
@@ -240,9 +246,9 @@ def test_config_validate_rejects_duplicate_effective_listen_ports(client):
         json={
             "CONFIG_SCHEMA_VERSION": 1,
             "BASE_LISTEN_PORT": 8928,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
-                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:01", "Kitchen"),
+                _bt("AA:BB:CC:DD:EE:02", "Office", listen_port=8928),
             ],
         },
     )
@@ -251,14 +257,14 @@ def test_config_validate_rejects_duplicate_effective_listen_ports(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["valid"] is False
-    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].listen_port"
+    assert data["errors"][0]["field"] == "players[1].listen_port"
     assert "Duplicate effective listen_port 8928" in data["errors"][0]["message"]
 
 
 def test_config_validate_rejects_future_schema_version(client):
     resp = client.post(
         "/api/v1/config/validate",
-        json={"CONFIG_SCHEMA_VERSION": 999, "BLUETOOTH_DEVICES": []},
+        json={"CONFIG_SCHEMA_VERSION": 999, "players": []},
     )
 
     # Validation answered: the request succeeded, the config did not.
@@ -631,8 +637,9 @@ def test_api_config_get_enriches_devices_from_registry_snapshot(client, tmp_path
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
-    assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "bridge.local"
+    assert data["players"][0]["_effective_listen_port"] == 8930
+    assert data["players"][0]["_effective_listen_host"] == "bridge.local"
+    assert "listen_port" not in data["players"][0] and "listen_host" not in data["players"][0]
 
 
 def test_api_config_get_uses_snapshot_ip_address_for_listen_host_fallback(client, tmp_path, monkeypatch):
@@ -669,7 +676,8 @@ def test_api_config_get_uses_snapshot_ip_address_for_listen_host_fallback(client
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["BLUETOOTH_DEVICES"][0]["listen_host"] == "192.168.10.20"
+    assert data["players"][0]["_effective_listen_host"] == "192.168.10.20"
+    assert "listen_host" not in data["players"][0]
 
 
 def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path, monkeypatch):
@@ -681,7 +689,7 @@ def test_api_config_post_accepts_security_and_monitor_settings(client, tmp_path,
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9000,
         "BRIDGE_NAME": "",
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [
             {"id": "hci0", "mac": "AA:BB:CC:DD:EE:FF", "name": "Living room"},
             {"id": "hci1", "mac": "11:22:33:44:55:66"},
@@ -739,7 +747,7 @@ def test_api_config_post_uses_installed_addon_channel_in_ha_runtime(client, tmp_
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9000,
         "BRIDGE_NAME": "",
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 200,
@@ -783,15 +791,15 @@ def test_api_config_post_normalizes_numeric_strings(client, tmp_path, monkeypatc
         "WEB_PORT": "18080",
         "BASE_LISTEN_PORT": "19000",
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [
-            {
-                "mac": "AA:BB:CC:DD:EE:FF",
-                "player_name": "Kitchen",
-                "listen_port": "8930",
-                "keepalive_interval": "60",
-                "room_name": "Living Room",
-                "room_id": "living-room",
-            }
+        "players": [
+            _bt(
+                "AA:BB:CC:DD:EE:FF",
+                "Kitchen",
+                listen_port="8930",
+                keepalive_interval="60",
+                room_name="Living Room",
+                room_id="living-room",
+            )
         ],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
@@ -850,7 +858,7 @@ def test_api_config_post_accepts_empty_manual_port_overrides(client, tmp_path, m
         "WEB_PORT": "",
         "BASE_LISTEN_PORT": "",
         "BRIDGE_NAME": "",
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 200,
@@ -899,13 +907,13 @@ def test_config_post_preserves_zero_reconnect_threshold(client, tmp_path, monkey
             {
                 "CONFIG_SCHEMA_VERSION": CONFIG_SCHEMA_VERSION,
                 "BT_MAX_RECONNECT_FAILS": 5,
-                "BLUETOOTH_DEVICES": [],
+                "players": [],
             }
         )
     )
     payload = {
         "SENDSPIN_SERVER": "auto",
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "BT_MAX_RECONNECT_FAILS": 0,  # operator opts out of auto-disable
@@ -1073,7 +1081,7 @@ def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypa
         "SENDSPIN_PORT": 9000,
         "BRIDGE_NAME": "",
         "HA_AREA_NAME_ASSIST_ENABLED": False,
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [{"id": "hci0", "mac": "AA:BB:CC:DD:EE:FF"}],
         "HA_ADAPTER_AREA_MAP": {"aa:bb:cc:dd:ee:ff": {"area_id": "living-room", "area_name": "Living Room"}},
         "TZ": "UTC",
@@ -1108,19 +1116,16 @@ def test_api_config_post_persists_ha_adapter_area_map(client, tmp_path, monkeypa
 
 
 def test_api_config_post_returns_structured_validation_errors(client):
-    payload = {
-        "BLUETOOTH_DEVICES": [
-            {"mac": "AA:BB:CC:DD:EE:FF"},
-            {"mac": "aa:bb:cc:dd:ee:ff"},
-        ]
-    }
+    # Two players with one MAC are a 422 duplicate_player now (test_config_v6_api);
+    # a field error still answers 400 with every error named.
+    payload = {"players": [_bt("AA:BB:CC:DD:EE:FF"), _bt("not-a-mac")]}
 
     resp = client.put("/api/v1/config", json=payload)
 
     assert resp.status_code == 400
     data = resp.json()
-    assert data["detail"] == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"
-    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].mac"
+    assert data["detail"] == "Invalid MAC address: NOT-A-MAC"
+    assert data["errors"][0]["field"] == "players[1].backend.mac"
 
 
 def test_api_config_post_rejects_duplicate_effective_listen_ports(client):
@@ -1131,9 +1136,9 @@ def test_api_config_post_rejects_duplicate_effective_listen_ports(client):
         "WEB_PORT": 18080,
         "BASE_LISTEN_PORT": 8928,
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [
-            {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
-            {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+        "players": [
+            _bt("AA:BB:CC:DD:EE:01", "Kitchen"),
+            _bt("AA:BB:CC:DD:EE:02", "Office", listen_port=8928),
         ],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
@@ -1162,7 +1167,7 @@ def test_api_config_post_rejects_duplicate_effective_listen_ports(client):
     assert resp.status_code == 400
     data = resp.json()
     assert data["detail"].startswith("Duplicate effective listen_port 8928")
-    assert data["errors"][0]["field"] == "BLUETOOTH_DEVICES[1].listen_port"
+    assert data["errors"][0]["field"] == "players[1].listen_port"
 
 
 def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_path, monkeypatch):
@@ -1197,9 +1202,7 @@ def test_api_config_post_uses_registry_snapshot_for_adapter_removal(client, tmp_
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9001,
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [
-            {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen", "adapter": "hci1"},
-        ],
+        "players": [_bt("AA:BB:CC:DD:EE:FF", "Kitchen", adapter="hci1")],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 250,
@@ -1250,9 +1253,7 @@ def test_api_config_post_does_not_remove_device_for_default_adapter_equivalence(
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9001,
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [
-            {"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen", "adapter": ""},
-        ],
+        "players": [_bt("AA:BB:CC:DD:EE:FF", "Kitchen", adapter="")],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 250,
@@ -1303,7 +1304,7 @@ def test_api_config_post_prunes_last_volumes_for_removed_devices(client, tmp_pat
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": 9001,
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff", "player_name": "Kitchen"}],
+        "players": [_bt("aa:bb:cc:dd:ee:ff", "Kitchen")],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 250,
@@ -1355,15 +1356,10 @@ def test_api_config_post_marks_only_unconfigured_new_device_for_initial_delay(cl
     monkeypatch.setattr(api_config_mod, "CONFIG_FILE", config_file)
     monkeypatch.setattr(api_config_mod, "_sync_ha_options", lambda _config: None)
     payload = {
-        "BLUETOOTH_DEVICES": [
-            {
-                "mac": "AA:BB:CC:DD:EE:FF",
-                "player_name": "Existing",
-                "static_delay_ms": 210,
-                "static_delay_source": "manual",
-            },
-            {"mac": "11:22:33:44:55:66", "player_name": "Automatic"},
-            {"mac": "22:33:44:55:66:77", "player_name": "Explicit", "static_delay_ms": 90},
+        "players": [
+            _bt("AA:BB:CC:DD:EE:FF", "Existing", static_delay_ms=210, static_delay_source="manual"),
+            _bt("11:22:33:44:55:66", "Automatic"),
+            _bt("22:33:44:55:66:77", "Explicit", static_delay_ms=90),
         ]
     }
 
@@ -1387,7 +1383,7 @@ def test_api_config_post_returns_validation_warnings(client, tmp_path, monkeypat
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": "9001",
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff", "player_name": "Kitchen"}],
+        "players": [_bt("aa:bb:cc:dd:ee:ff", "Kitchen")],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 250,
@@ -1433,7 +1429,7 @@ def test_api_config_post_includes_ma_duplicate_warning(client, tmp_path, monkeyp
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": "9001",
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [{"mac": mac, "player_name": "Kitchen"}],
+        "players": [_bt(mac, "Kitchen")],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 250,
@@ -1480,7 +1476,7 @@ def test_api_config_post_preserves_ma_token_metadata(client, tmp_path, monkeypat
         "SENDSPIN_SERVER": "auto",
         "SENDSPIN_PORT": "9001",
         "BRIDGE_NAME": "Bridge",
-        "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff", "player_name": "Kitchen"}],
+        "players": [_bt("aa:bb:cc:dd:ee:ff", "Kitchen")],
         "BLUETOOTH_ADAPTERS": [],
         "TZ": "UTC",
         "PULSE_LATENCY_MSEC": 250,
@@ -1630,7 +1626,7 @@ def test_api_config_get_redacts_oauth_tokens(client, tmp_path, monkeypatch):
             "SECRET_KEY": "secret",
             "MA_ACCESS_TOKEN": "oauth-access",
             "MA_REFRESH_TOKEN": "oauth-refresh",
-            "BLUETOOTH_DEVICES": [],
+            "players": [],
             "WEB_PORT": None,
         },
     )

@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 from sendspin_bridge.config import CONFIG_SCHEMA_VERSION
+from sendspin_bridge.config.players import player_id_for_mac
 from sendspin_bridge.services.infrastructure.config_validation import validate_uploaded_config
+
+
+def _bt(mac, **extra):
+    return {"name": mac, "backend": {"type": "bluetooth_a2dp", "mac": mac}, **extra}
 
 
 def test_validate_uploaded_config_adds_schema_version_warning_when_missing():
     result = validate_uploaded_config(
         {
             "SENDSPIN_PORT": "9000",
-            "BLUETOOTH_DEVICES": [{"mac": "aa:bb:cc:dd:ee:ff"}],
+            "players": [_bt("aa:bb:cc:dd:ee:ff")],
         }
     )
 
     assert result.is_valid is True
     assert result.normalized_config["CONFIG_SCHEMA_VERSION"] == CONFIG_SCHEMA_VERSION
     assert result.normalized_config["SENDSPIN_PORT"] == 9000
-    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["mac"] == "AA:BB:CC:DD:EE:FF"
+    assert result.normalized_config["players"][0]["backend"]["mac"] == "AA:BB:CC:DD:EE:FF"
     assert result.warnings[0].field == "CONFIG_SCHEMA_VERSION"
 
 
@@ -23,15 +28,15 @@ def test_validate_uploaded_config_reports_duplicate_device_macs():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 1,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:FF"},
-                {"mac": "aa:bb:cc:dd:ee:ff"},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:FF"),
+                _bt("aa:bb:cc:dd:ee:ff"),
             ],
         }
     )
 
     assert result.is_valid is False
-    assert result.errors[0].field == "BLUETOOTH_DEVICES[1].mac"
+    assert result.errors[0].field == "players[1].backend.mac"
     assert result.errors[0].message == "Duplicate MAC address: AA:BB:CC:DD:EE:FF"
 
 
@@ -41,35 +46,29 @@ def test_validate_uploaded_config_reports_every_extra_duplicate_mac():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 1,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:FF"},
-                {"mac": "AA:BB:CC:DD:EE:FF"},
-                {"mac": "AA:BB:CC:DD:EE:FF"},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:FF"),
+                _bt("AA:BB:CC:DD:EE:FF"),
+                _bt("AA:BB:CC:DD:EE:FF"),
             ],
         }
     )
 
     dup_fields = [issue.field for issue in result.errors if "Duplicate MAC" in issue.message]
-    assert dup_fields == ["BLUETOOTH_DEVICES[1].mac", "BLUETOOTH_DEVICES[2].mac"]
+    assert dup_fields == ["players[1].backend.mac", "players[2].backend.mac"]
 
 
 def test_validate_uploaded_config_normalizes_device_listen_port_and_keepalive_interval():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 1,
-            "BLUETOOTH_DEVICES": [
-                {
-                    "mac": "AA:BB:CC:DD:EE:FF",
-                    "listen_port": "8930",
-                    "keepalive_interval": "60",
-                }
-            ],
+            "players": [_bt("AA:BB:CC:DD:EE:FF", listen_port="8930", keepalive_interval="60")],
         }
     )
 
     assert result.is_valid is True
-    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["listen_port"] == 8930
-    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 60
+    assert result.normalized_config["players"][0]["listen_port"] == 8930
+    assert result.normalized_config["players"][0]["keepalive_interval"] == 60
 
 
 def test_validate_uploaded_config_rejects_duplicate_effective_listen_ports():
@@ -77,15 +76,15 @@ def test_validate_uploaded_config_rejects_duplicate_effective_listen_ports():
         {
             "CONFIG_SCHEMA_VERSION": 1,
             "BASE_LISTEN_PORT": 8928,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
-                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8928},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:01", name="Kitchen"),
+                _bt("AA:BB:CC:DD:EE:02", name="Office", listen_port=8928),
             ],
         }
     )
 
     assert result.is_valid is False
-    assert result.errors[-1].field == "BLUETOOTH_DEVICES[1].listen_port"
+    assert result.errors[-1].field == "players[1].listen_port"
     assert "Duplicate effective listen_port 8928" in result.errors[-1].message
 
 
@@ -94,9 +93,9 @@ def test_validate_uploaded_config_allows_unique_effective_listen_ports():
         {
             "CONFIG_SCHEMA_VERSION": 1,
             "BASE_LISTEN_PORT": 8928,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
-                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8930},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:01", name="Kitchen"),
+                _bt("AA:BB:CC:DD:EE:02", name="Office", listen_port=8930),
             ],
         }
     )
@@ -109,9 +108,9 @@ def test_validate_uploaded_config_ignores_boolean_base_listen_port_for_effective
         {
             "CONFIG_SCHEMA_VERSION": 1,
             "BASE_LISTEN_PORT": True,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen"},
-                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": 8929},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:01", name="Kitchen"),
+                _bt("AA:BB:CC:DD:EE:02", name="Office", listen_port=8929),
             ],
         }
     )
@@ -125,16 +124,16 @@ def test_validate_uploaded_config_skips_boolean_listen_port_in_effective_port_ch
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 1,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:01", "player_name": "Kitchen", "listen_port": 1},
-                {"mac": "AA:BB:CC:DD:EE:02", "player_name": "Office", "listen_port": True},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:01", name="Kitchen", listen_port=1),
+                _bt("AA:BB:CC:DD:EE:02", name="Office", listen_port=True),
             ],
         }
     )
 
     assert result.is_valid is False
-    assert any(issue.field == "BLUETOOTH_DEVICES[0].listen_port" for issue in result.errors)
-    assert any(issue.field == "BLUETOOTH_DEVICES[1].listen_port" for issue in result.errors)
+    assert any(issue.field == "players[0].listen_port" for issue in result.errors)
+    assert any(issue.field == "players[1].listen_port" for issue in result.errors)
     assert not any("Duplicate effective listen_port" in issue.message for issue in result.errors)
 
 
@@ -143,7 +142,7 @@ def test_validate_uploaded_config_normalizes_update_channel():
         {
             "CONFIG_SCHEMA_VERSION": 1,
             "UPDATE_CHANNEL": "RC",
-            "BLUETOOTH_DEVICES": [],
+            "players": [],
         }
     )
 
@@ -157,7 +156,7 @@ def test_validate_uploaded_config_normalizes_optional_top_level_ports():
             "CONFIG_SCHEMA_VERSION": 1,
             "WEB_PORT": "18080",
             "BASE_LISTEN_PORT": "19000",
-            "BLUETOOTH_DEVICES": [],
+            "players": [],
         }
     )
 
@@ -171,7 +170,7 @@ def test_validate_uploaded_config_rejects_invalid_optional_top_level_ports():
         {
             "CONFIG_SCHEMA_VERSION": 1,
             "WEB_PORT": "99999",
-            "BLUETOOTH_DEVICES": [],
+            "players": [],
         }
     )
 
@@ -185,7 +184,7 @@ def test_validate_uploaded_config_rejects_invalid_update_channel():
         {
             "CONFIG_SCHEMA_VERSION": 1,
             "UPDATE_CHANNEL": "nightly",
-            "BLUETOOTH_DEVICES": [],
+            "players": [],
         }
     )
 
@@ -198,7 +197,7 @@ def test_validate_uploaded_config_rejects_future_schema_version():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 999,
-            "BLUETOOTH_DEVICES": [],
+            "players": [],
         }
     )
 
@@ -216,10 +215,15 @@ def test_validate_uploaded_config_migrates_legacy_shape():
     )
 
     assert result.is_valid is True
-    assert result.normalized_config["BLUETOOTH_DEVICES"] == [
-        {"mac": "AA:BB:CC:DD:EE:FF", "adapter": "", "player_name": "Sendspin Player"}
+    player_id = player_id_for_mac("AA:BB:CC:DD:EE:FF")
+    assert result.normalized_config["players"] == [
+        {
+            "id": player_id,
+            "name": "Sendspin Player",
+            "backend": {"type": "bluetooth_a2dp", "mac": "AA:BB:CC:DD:EE:FF", "adapter": ""},
+        }
     ]
-    assert result.normalized_config["LAST_VOLUMES"] == {"AA:BB:CC:DD:EE:FF": 40}
+    assert result.normalized_config["PLAYER_STATE"] == {player_id: {"volume": 40}}
     assert any(issue.field == "BLUETOOTH_DEVICES" for issue in result.warnings)
 
 
@@ -227,8 +231,8 @@ def test_validate_uploaded_config_rejects_negative_static_delay():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 2,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": -10},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:FF", static_delay_ms=-10),
             ],
         }
     )
@@ -239,8 +243,8 @@ def test_validate_uploaded_config_rejects_excessive_static_delay():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 2,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 6000},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:FF", static_delay_ms=6000),
             ],
         }
     )
@@ -251,32 +255,32 @@ def test_validate_uploaded_config_accepts_valid_static_delay():
     result = validate_uploaded_config(
         {
             "CONFIG_SCHEMA_VERSION": 2,
-            "BLUETOOTH_DEVICES": [
-                {"mac": "AA:BB:CC:DD:EE:FF", "static_delay_ms": 150},
+            "players": [
+                _bt("AA:BB:CC:DD:EE:FF", static_delay_ms=150),
             ],
         }
     )
     assert result.is_valid is True
-    assert result.normalized_config["BLUETOOTH_DEVICES"][0]["static_delay_ms"] == 150
+    assert result.normalized_config["players"][0]["static_delay_ms"] == 150
 
 
 def test_validate_uploaded_config_accepts_latency_tuning_metadata():
     result = validate_uploaded_config(
         {
-            "BLUETOOTH_DEVICES": [
-                {
-                    "mac": "AA:BB:CC:DD:EE:FF",
-                    "required_lead_time_ms": 400,
-                    "min_buffer_ms": 600,
-                    "static_delay_source": "bluez_report",
-                    "static_delay_calibrated_at": "2026-07-17T10:00:00+00:00",
-                    "static_delay_codec": "sbc",
-                }
+            "players": [
+                _bt(
+                    "AA:BB:CC:DD:EE:FF",
+                    required_lead_time_ms=400,
+                    min_buffer_ms=600,
+                    static_delay_source="bluez_report",
+                    static_delay_calibrated_at="2026-07-17T10:00:00+00:00",
+                    static_delay_codec="sbc",
+                )
             ]
         }
     )
 
     assert result.errors == []
-    device = result.normalized_config["BLUETOOTH_DEVICES"][0]
+    device = result.normalized_config["players"][0]
     assert device["required_lead_time_ms"] == 400
     assert device["min_buffer_ms"] == 600

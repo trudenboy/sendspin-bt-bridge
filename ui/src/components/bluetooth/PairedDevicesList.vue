@@ -25,7 +25,7 @@ onMounted(() => {
 const bridgeMacs = computed(() => {
   const set = new Set<string>()
   for (const d of bridge.devices) {
-    if (d.bluetooth.mac) set.add(d.bluetooth.mac.toUpperCase())
+    if (d.bluetooth?.mac) set.add(d.bluetooth?.mac.toUpperCase())
   }
   for (const d of bridge.bridge?.disabled_devices ?? []) {
     if (typeof d.mac === 'string') set.add(d.mac.toUpperCase())

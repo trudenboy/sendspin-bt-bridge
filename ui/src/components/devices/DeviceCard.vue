@@ -49,20 +49,20 @@ const notifications = useNotificationStore()
 const transportLoading = ref(false)
 
 const state = computed(() => deviceState(props.device))
-const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth.mac ?? props.device.id))
+const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const room = computed(() => props.device.room?.name || null)
 
 /** Signal strength in words; the dBm value is in the tooltip. */
 const signal = computed(() => {
-  const rssi = props.device.bluetooth.rssi_dbm
-  if (rssi == null || !props.device.bluetooth.connected) return null
+  const rssi = props.device.bluetooth?.rssi_dbm
+  if (rssi == null || !props.device.bluetooth?.connected) return null
   if (rssi >= -60) return { level: 'strong', icon: Signal }
   if (rssi >= -75) return { level: 'fair', icon: SignalMedium }
   return { level: 'weak', icon: SignalLow }
 })
-const connected = computed(() => props.device.bluetooth.connected)
-const released = computed(() => !props.device.bluetooth.management_enabled)
-const battery = computed(() => props.device.bluetooth.battery_level ?? null)
+const connected = computed(() => props.device.bluetooth?.connected)
+const released = computed(() => props.device.bluetooth?.management_enabled === false)
+const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
 
 const BatteryIcon = computed(() => {
   const level = battery.value
@@ -169,7 +169,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
           <span v-if="battery != null && BatteryIcon" class="inline-flex items-center gap-0.5" :class="batteryColor" :title="t('device.battery', { level: battery })">
             <component :is="BatteryIcon" class="size-3.5" aria-hidden="true" />{{ battery }}%
           </span>
-          <span v-if="signal" class="inline-flex items-center gap-0.5" :title="t('device.signal', { dbm: device.bluetooth.rssi_dbm })">
+          <span v-if="signal" class="inline-flex items-center gap-0.5" :title="t('device.signal', { dbm: device.bluetooth?.rssi_dbm })">
             <component :is="signal.icon" class="size-3.5" aria-hidden="true" />{{ t(`device.signalLevel.${signal.level}`) }}
           </span>
           <span v-if="released" class="text-warning">{{ t('bluetooth.released') }}</span>
@@ -223,7 +223,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <VolumeSlider
       v-if="connected"
       class="relative z-10"
-      :mac="device.bluetooth.mac ?? device.id"
+      :mac="device.bluetooth?.mac ?? device.id"
       :name="displayName"
       :volume="device.audio.volume"
       :muted="device.audio.muted"

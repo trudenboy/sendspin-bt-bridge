@@ -8,6 +8,7 @@ import en from '@/i18n/en.json'
 import { makeDevice } from '../../fixtures/device'
 
 const mockDevice = makeDevice({ bluetooth: { codec_name: 'SBC' }, audio: { static_delay_ms: 120 } })
+const DEVICE_ID = mockDevice.id
 
 vi.mock('@/stores/bridge', () => ({
   useBridgeStore: () => ({
@@ -20,7 +21,7 @@ vi.mock('@/stores/bridge', () => ({
 }))
 
 vi.mock('@/api/config', () => ({
-  getConfig: vi.fn().mockResolvedValue({ BLUETOOTH_DEVICES: [] }),
+  getConfig: vi.fn().mockResolvedValue({ players: [] }),
   saveConfig: vi.fn().mockResolvedValue({ warnings: [], reconfig: {} }),
 }))
 vi.mock('@/api/calibration', () => ({
@@ -94,6 +95,27 @@ describe('DeviceDetailDrawer', () => {
     expect(w.text()).toContain('SBC')
   })
 
+  it('offers repair and the pairing window only when the backend supports them', async () => {
+    setActivePinia(createPinia())
+    const all = mockDevice.supported_actions
+    const open = async () => {
+      const w = await mountDrawer()
+      const more = w.findAll('button').find((b) => b.attributes('title') === 'More actions')!
+      await more.trigger('click')
+      return w.findAll('[role="menuitem"]').map((i) => i.text())
+    }
+    try {
+      expect(await open()).toEqual(expect.arrayContaining(['Reconnect', 'Pair again', 'Let Music Assistant pair']))
+      mockDevice.supported_actions = ['volume', 'transport', 'power_save']
+      const items = await open()
+      expect(items).not.toContain('Reconnect')
+      expect(items).not.toContain('Pair again')
+      expect(items).not.toContain('Let Music Assistant pair')
+    } finally {
+      mockDevice.supported_actions = all
+    }
+  })
+
   it('emits update:open on close', async () => {
     setActivePinia(createPinia())
     const w = await mountDrawer()
@@ -108,7 +130,9 @@ describe('DeviceDetailDrawer', () => {
     setActivePinia(createPinia())
     const api = await import('@/api/config')
     vi.spyOn(api, 'getConfig').mockResolvedValue({
-      BLUETOOTH_DEVICES: [{ mac: 'AA:BB:CC:DD:EE:FF', player_name: 'Test Speaker', adapter: 'hci0' }],
+      players: [
+        { id: DEVICE_ID, name: 'Test Speaker', backend: { type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF', adapter: 'hci0' } },
+      ],
     } as never)
     const w = await mountDrawer()
     await w.find('[data-tab-id="settings"]').trigger('click')
@@ -126,9 +150,15 @@ describe('DeviceDetailDrawer config save', () => {
     const stored = {
       BRIDGE_NAME: 'Bridge',
       MA_API_URL: 'http://ma:8095',
-      BLUETOOTH_DEVICES: [
-        { mac: 'AA:BB:CC:DD:EE:FF', player_name: 'Test Speaker', enabled: true },
-        { mac: '11:22:33:44:55:66', player_name: 'Other', enabled: true },
+      players: [
+        {
+          id: DEVICE_ID,
+          name: 'Test Speaker',
+          enabled: true,
+          backend: { type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF', adapter: 'hci0' },
+          _effective_listen_port: 8928,
+        },
+        { id: 'other-id', name: 'Other', enabled: true, backend: { type: 'bluetooth_a2dp', mac: '11:22:33:44:55:66', adapter: '' } },
       ],
     }
     const getConfig = vi.spyOn(api, 'getConfig').mockResolvedValue(structuredClone(stored) as never)
@@ -146,7 +176,31 @@ describe('DeviceDetailDrawer config save', () => {
     const saved = saveConfig.mock.calls[0]![0] as typeof stored
     expect(saved.BRIDGE_NAME).toBe('Bridge')
     expect(saved.MA_API_URL).toBe('http://ma:8095')
-    expect(saved.BLUETOOTH_DEVICES[0]!.player_name).toBe('Kitchen')
-    expect(saved.BLUETOOTH_DEVICES[1]).toEqual(stored.BLUETOOTH_DEVICES[1])
+    expect(saved.players[0]!.name).toBe('Kitchen')
+    expect(saved.players[0]!.backend).toEqual({ type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF', adapter: 'hci0' })
+    expect(saved.players[0]).not.toHaveProperty('_effective_listen_port')
+    expect(saved.players[1]).toEqual(stored.players[1])
+  })
+
+  it('writes the adapter into backend, not a dotted top-level key', async () => {
+    setActivePinia(createPinia())
+    const api = await import('@/api/config')
+    const stored = {
+      players: [
+        { id: DEVICE_ID, name: 'Test Speaker', enabled: true, backend: { type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF', adapter: 'hci0' } },
+      ],
+    }
+    vi.spyOn(api, 'getConfig').mockResolvedValue(structuredClone(stored) as never)
+    const saveConfig = vi.spyOn(api, 'saveConfig').mockResolvedValue({ warnings: [], reconfig: {} } as never)
+    const w = await mountDrawer()
+    await w.find('[data-tab-id="settings"]').trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    const adapter = w.findAll('select').find((sel) => sel.findAll('option').some((o) => o.text().startsWith('hci0')))!
+    await adapter.setValue('')
+    await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
+    await new Promise((r) => setTimeout(r, 0))
+    const saved = saveConfig.mock.calls.at(-1)![0] as typeof stored
+    expect(Object.keys(saved.players[0]!)).not.toContain('backend.adapter')
+    expect(saved.players[0]!.backend).toEqual({ type: 'bluetooth_a2dp', mac: 'AA:BB:CC:DD:EE:FF' })
   })
 })

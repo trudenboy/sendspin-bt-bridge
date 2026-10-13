@@ -65,7 +65,7 @@ async function toggleMetronome() {
 
 /* Microphone comparison against another connected speaker. */
 const peers = computed(() =>
-  bridge.devices.filter((d) => d.id !== props.device.id && d.enabled && d.bluetooth.connected),
+  bridge.devices.filter((d) => d.id !== props.device.id && d.enabled && d.bluetooth?.connected),
 )
 const referenceId = ref('')
 const micStep = ref('')

@@ -14,17 +14,20 @@ function resolve(s: Schema | undefined): Schema | undefined {
   return s
 }
 
-const props = schemas.BluetoothDevice.properties as Record<string, Schema>
+const props = schemas.Player.properties as Record<string, Schema>
+// Dotted keys (``backend.adapter``) resolve through the Bluetooth backend schema.
+const fieldSchema = (key: string): Schema | undefined =>
+  key.startsWith('backend.') ? schemas.BluetoothBackend!.properties[key.slice('backend.'.length)] : props[key]
 const lookup = (m: Schema, k: string) => k.split('.').reduce<any>((o, p) => (o == null ? undefined : o[p]), m)
 
 describe('device settings layout', () => {
-  it('accounts for every BluetoothDevice key', () => {
+  it('accounts for every Player key', () => {
     const covered = new Set([...DEVICE_FIELDS.map((f) => f.key), ...DEVICE_MANAGED_KEYS])
     expect(Object.keys(props).filter((k) => !covered.has(k))).toEqual([])
   })
 
   it.each(DEVICE_FIELDS.map((f) => [f.key, f] as const))('%s matches the API schema', (_k, field) => {
-    const s = resolve(props[field.key])!
+    const s = resolve(fieldSchema(field.key))!
     expect(s, field.key).toBeDefined()
     if (field.kind === 'number') {
       expect(['integer', 'number']).toContain(s.type)
@@ -39,7 +42,7 @@ describe('device settings layout', () => {
 
   it('shows the schema default for every key that has one', () => {
     const wrong = DEVICE_FIELDS.filter((f) => {
-      const raw = props[f.key]!
+      const raw = fieldSchema(f.key)!
       if (!('default' in raw) || f.optionsFrom) return false
       return f.default !== raw.default
     }).map((f) => f.key)

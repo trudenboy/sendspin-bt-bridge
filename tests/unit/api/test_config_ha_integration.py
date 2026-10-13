@@ -27,7 +27,7 @@ def client(tmp_path, monkeypatch):
         json.dumps(
             {
                 "BRIDGE_NAME": "TestBridge",
-                "BLUETOOTH_DEVICES": [],
+                "players": [],
                 "BLUETOOTH_ADAPTERS": [],
                 "HA_INTEGRATION": {
                     "enabled": True,
@@ -145,7 +145,7 @@ def test_post_clears_password_when_explicit_empty(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -173,7 +173,7 @@ def test_post_preserves_password_when_field_omitted_or_none(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -201,7 +201,7 @@ def test_post_preserves_password_on_whitespace(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -227,7 +227,7 @@ def test_post_preserves_password_when_redacted_marker(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -253,7 +253,7 @@ def test_post_overwrites_password_when_explicit(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -279,7 +279,7 @@ def test_post_disable_round_trips(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -313,7 +313,7 @@ def test_post_strips_mqtt_scheme_from_broker_host(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -344,7 +344,7 @@ def test_post_mqtts_scheme_promotes_tls(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -378,7 +378,7 @@ def test_post_url_port_wins_over_form_port_field(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -407,7 +407,7 @@ def test_post_no_url_port_preserves_form_port_field(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)
@@ -433,7 +433,7 @@ def test_post_bare_hostname_passes_through_unchanged(client):
             },
             "rest": {"advertise_mdns": True, "supervisor_pair": True},
         },
-        "BLUETOOTH_DEVICES": [],
+        "players": [],
         "BLUETOOTH_ADAPTERS": [],
     }
     resp = cl.put("/api/v1/config", json=payload)

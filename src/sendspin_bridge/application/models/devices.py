@@ -12,6 +12,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field
 
 from sendspin_bridge.application.models.base import ResponseModel
+from sendspin_bridge.config.players import BLUETOOTH, supported_actions_for
 
 IdleMode = Literal["default", "power_save", "auto_disconnect", "keep_alive"]
 
@@ -41,6 +42,13 @@ class AdapterRecovery(ResponseModel):
     adapter: str | None = None
     result: str | None = None
     failure_reason: str | None = None
+
+
+class DeviceBackend(ResponseModel):
+    type: str = Field(description="What the player plays to: 'bluetooth_a2dp' or 'pulse_sink'.")
+    mac: str | None = None
+    adapter: str | None = None
+    sink: str | None = None
 
 
 class DeviceBluetooth(ResponseModel):
@@ -190,7 +198,10 @@ class DeviceHealth(ResponseModel):
 
 
 class Device(ResponseModel):
-    id: str = Field(description="Stable player id (UUID derived from the speaker's MAC).")
+    id: str = Field(description="The player's runtime id: what device commands take and Music Assistant knows it by.")
+    config_id: str | None = Field(
+        default=None, description="The id of this speaker's entry in the configuration's players, when it has one."
+    )
     name: str | None = None
     enabled: bool = True
     state_changed_at: str | None = None
@@ -199,7 +210,11 @@ class Device(ResponseModel):
     last_error_at: str | None = None
     health: DeviceHealth
     room: DeviceRoom
-    bluetooth: DeviceBluetooth
+    backend: DeviceBackend
+    supported_actions: list[str] = Field(
+        default_factory=list, description="Commands this player's backend can do; others answer 409."
+    )
+    bluetooth: DeviceBluetooth | None = Field(default=None, description="Present for Bluetooth players only.")
     audio: DeviceAudio
     timing: DeviceTiming
     playback: DevicePlayback
@@ -210,7 +225,7 @@ class Device(ResponseModel):
     recent_events: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
-    def from_status(cls, d: dict[str, Any]) -> Device:
+    def from_status(cls, d: dict[str, Any], config_id: str | None = None) -> Device:
         g = d.get
         pair_failure = None
         if g("pair_failure_kind"):
@@ -220,6 +235,7 @@ class Device(ResponseModel):
         health = g("health_summary") or {}
         return cls(
             id=str(g("player_id") or ""),
+            config_id=config_id,
             name=g("player_name"),
             enabled=bool(g("enabled", True)),
             state_changed_at=g("state_changed_at"),
@@ -230,6 +246,9 @@ class Device(ResponseModel):
             room=DeviceRoom(
                 id=g("room_id"), name=g("room_name"), source=g("room_source"), confidence=g("room_confidence")
             ),
+            # Every running client is Bluetooth until a second backend gets a runtime.
+            backend=DeviceBackend(type=BLUETOOTH, mac=g("bluetooth_mac"), adapter=g("bluetooth_adapter_hci") or None),
+            supported_actions=supported_actions_for(BLUETOOTH),
             bluetooth=DeviceBluetooth(
                 mac=g("bluetooth_mac"),
                 adapter=AdapterRef(
@@ -372,4 +391,5 @@ class DisabledDevice(ResponseModel):
 
     id: str | None = Field(default=None, description="The id /devices/{id} commands take (enable, remove).")
     mac: str | None = None
+    backend_type: str = BLUETOOTH
     player_name: str | None = None

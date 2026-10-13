@@ -7,6 +7,7 @@ import { claimAudio } from '@/api/devices'
 import { ApiError } from '@/api/client'
 import { confirmDialog } from '@/composables/useConfirm'
 import { speakerName } from '@/utils/speakerName'
+import { canDo } from '@/utils/supportedActions'
 import { SbDropdown, SbDropdownItem } from '@/kit'
 import BtDeviceInfoModal from '@/components/bluetooth/BtDeviceInfoModal.vue'
 import { MoreVertical } from 'lucide-vue-next'
@@ -24,10 +25,10 @@ const store = useDeviceStore()
 const notifications = useNotificationStore()
 const infoOpen = ref(false)
 
-const name = computed(() => speakerName(props.device.name, props.device.bluetooth.mac ?? props.device.id))
-const handedOver = computed(() => props.device.bluetooth.management_enabled === false)
-const standby = computed(() => props.device.bluetooth.standby === true)
-const connected = computed(() => props.device.bluetooth.connected)
+const name = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
+const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
+const standby = computed(() => props.device.bluetooth?.standby === true)
+const connected = computed(() => props.device.bluetooth?.connected)
 
 async function run(action: () => Promise<unknown>) {
   try {
@@ -62,12 +63,14 @@ const heading = 'px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary'
       </button>
     </template>
 
-    <template v-if="device.enabled && !handedOver">
+    <template v-if="device.enabled && !handedOver && (canDo(device, 'reconnect') || canDo(device, 'standby') || canDo(device, 'claim'))">
       <p :class="heading">{{ t('speaker.groups.connection') }}</p>
-      <SbDropdownItem @click="run(() => store.reconnect(device.id))">{{ t('speaker.reconnect') }}</SbDropdownItem>
-      <SbDropdownItem v-if="standby" @click="run(() => store.wake(device.id))">{{ t('speaker.wake') }}</SbDropdownItem>
-      <SbDropdownItem v-else @click="run(() => store.standby(device.id))">{{ t('speaker.standby') }}</SbDropdownItem>
-      <SbDropdownItem v-if="connected" @click="run(() => claimAudio(device.id))">{{ t('speaker.claim') }}</SbDropdownItem>
+      <SbDropdownItem v-if="canDo(device, 'reconnect')" @click="run(() => store.reconnect(device.id))">{{ t('speaker.reconnect') }}</SbDropdownItem>
+      <template v-if="canDo(device, 'standby')">
+        <SbDropdownItem v-if="standby" @click="run(() => store.wake(device.id))">{{ t('speaker.wake') }}</SbDropdownItem>
+        <SbDropdownItem v-else @click="run(() => store.standby(device.id))">{{ t('speaker.standby') }}</SbDropdownItem>
+      </template>
+      <SbDropdownItem v-if="connected && canDo(device, 'claim')" @click="run(() => claimAudio(device.id))">{{ t('speaker.claim') }}</SbDropdownItem>
     </template>
 
     <p :class="heading">{{ t('speaker.groups.bridge') }}</p>
@@ -80,16 +83,16 @@ const heading = 'px-3 pt-2 pb-1 text-xs font-medium text-text-tertiary'
     <SbDropdownItem @click="run(() => store.setEnabled(device.id, !device.enabled))">
       {{ device.enabled ? t('speaker.disable') : t('speaker.enable') }}
     </SbDropdownItem>
-    <SbDropdownItem v-if="device.bluetooth.mac" @click="infoOpen = true">{{ t('speaker.bluetoothInfo') }}</SbDropdownItem>
+    <SbDropdownItem v-if="device.bluetooth?.mac" @click="infoOpen = true">{{ t('speaker.bluetoothInfo') }}</SbDropdownItem>
 
     <div class="my-1 border-t border-border" />
     <SbDropdownItem :destructive="true" @click="remove">{{ t('speaker.remove') }}…</SbDropdownItem>
   </SbDropdown>
 
   <BtDeviceInfoModal
-    v-if="device.bluetooth.mac"
-    :mac="device.bluetooth.mac"
-    :adapter="device.bluetooth.adapter.mac ?? ''"
+    v-if="device.bluetooth?.mac"
+    :mac="device.bluetooth?.mac"
+    :adapter="device.bluetooth?.adapter.mac ?? ''"
     :open="infoOpen"
     @update:open="infoOpen = $event"
   />

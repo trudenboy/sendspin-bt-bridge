@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -74,16 +75,15 @@ logger = logging.getLogger(__name__)
 _ALLOWED_POST_CONFIG_KEYS = (
     CONFIG_ALLOWED_KEYS - SENSITIVE_CONFIG_KEYS - RUNTIME_STATE_CONFIG_KEYS - {"MA_AUTH_PROVIDER"}
 ) | {
-    # API v1 speaks the v5 device list; the save turns it into ``players``.
+    # The save pipeline's v5-shaped view of the Bluetooth players (see
+    # ``_internal_view``); the payload itself carries ``players``.
     "BLUETOOTH_DEVICES",
-    "LAST_VOLUMES",
     "MA_API_TOKEN",
     # ``HA_INTEGRATION`` round-trips through the Settings → Home Assistant
     # tab; it's in SENSITIVE_CONFIG_KEYS only because it nests an MQTT
     # password.  POSTing the block back is fine because the password
     # is redacted at download time (see ``_sanitize_download_config``).
     "HA_INTEGRATION",
-    "_new_device_default_volume",
 }
 
 
@@ -125,73 +125,185 @@ def _as_v6(file_config: dict) -> dict:
     return converted
 
 
-def _to_api_view(file_config: dict) -> dict:
-    """The v5 shape API v1 still speaks (stage 1 of config v6; removed in stage 2).
+def _internal_view(file_or_payload: dict) -> dict:
+    """The v5-shaped dict the save pipeline runs on (config v6 stage 2; goes in stage 3).
 
-    ``BLUETOOTH_DEVICES`` lists the Bluetooth players (without ``id`` and the
-    ``released`` state), ``LAST_VOLUMES`` their saved volumes by MAC.
+    ``BLUETOOTH_DEVICES`` lists the Bluetooth players as v5 device entries,
+    each carrying its player ``id``; ``players``, ``PLAYER_STATE`` and the v5
+    state keys are left out. Players of other backends are not in it: the
+    pipeline only acts on Bluetooth speakers.
     """
-    from sendspin_bridge.config.players import LEGACY_DEVICE_STATE_KEYS, device_entries
+    from sendspin_bridge.config.players import device_entries
 
-    file_config = _as_v6(file_config)
-    view = {k: v for k, v in file_config.items() if k not in ("players", "PLAYER_STATE")}
-    entries = device_entries(file_config)
-    raw_state = file_config.get("PLAYER_STATE")
-    state: dict[str, Any] = raw_state if isinstance(raw_state, dict) else {}
-    view["BLUETOOTH_DEVICES"] = [
-        {k: v for k, v in entry.items() if k not in ("id", *LEGACY_DEVICE_STATE_KEYS)} for entry in entries
-    ]
-    volumes: dict[str, int] = {}
-    for entry in entries:
-        saved = state.get(entry["id"])
-        if isinstance(saved, dict) and isinstance(saved.get("volume"), int):
-            volumes[entry["mac"]] = saved["volume"]
-    view["LAST_VOLUMES"] = volumes
+    converted = _as_v6(file_or_payload)
+    view = {k: v for k, v in converted.items() if k not in ("players", "PLAYER_STATE")}
+    view["BLUETOOTH_DEVICES"] = device_entries({"players": converted.get("players")})
     return view
 
 
-def _from_api_view(payload: dict, existing_file: dict) -> dict:
-    """Turn a v5-shaped payload back into the v6 file, keeping ids, order and state.
+def _players_from_internal(internal: dict, payload_players: list, existing_file: dict) -> list[dict]:
+    """The ``players`` to write, in payload order.
 
-    Bluetooth players follow the payload's ``BLUETOOTH_DEVICES`` order and keep
-    the id they have in *existing_file* (matched by MAC). Players of other
-    backends, which the v5 shape cannot express, are carried over unchanged.
-    ``PLAYER_STATE`` keeps the existing state of every kept player, with the
-    payload's ``LAST_VOLUMES`` written over it.
+    A Bluetooth player is rebuilt from the pipeline's entry with its MAC and
+    keeps the id its MAC already has, else the MAC's uuid5 (a client id is
+    never used). Any other player is taken as validated; it keeps a client id
+    only when a stored player of that backend type has it, else gets a new
+    ``uuid4``, and its ``backend.match`` is taken from the stored player of
+    that id (the server owns it; a client value is never used).
     """
     from sendspin_bridge.config.players import BLUETOOTH, legacy_device_to_player, normalize_mac, player_id_for_mac
 
-    existing = _as_v6(existing_file)
+    existing = _as_v6(existing_file) if existing_file else {}
     existing_players = [p for p in existing.get("players") or [] if isinstance(p, dict)]
+    existing_by_id = {p["id"]: p for p in existing_players if isinstance(p.get("id"), str) and p["id"]}
     ids_by_mac = {
-        normalize_mac((p.get("backend") or {}).get("mac")): p["id"]
-        for p in existing_players
-        if p.get("id") and isinstance(p.get("backend"), dict) and p["backend"].get("type") == BLUETOOTH
+        normalize_mac(stored_bt.get("mac")): p["id"]
+        for p in existing_by_id.values()
+        if isinstance(stored_bt := p.get("backend"), dict) and stored_bt.get("type") == BLUETOOTH
     }
-    players = []
-    for device in payload.get("BLUETOOTH_DEVICES") or []:
-        if not isinstance(device, dict) or not normalize_mac(device.get("mac")):
+    entries_by_mac = {
+        normalize_mac(entry.get("mac")): entry
+        for entry in internal.get("BLUETOOTH_DEVICES") or []
+        if isinstance(entry, dict) and normalize_mac(entry.get("mac"))
+    }
+    players: list[dict] = []
+    for player in payload_players:
+        if not isinstance(player, dict):
             continue
-        players.append(legacy_device_to_player(device, existing_id=ids_by_mac.get(normalize_mac(device["mac"]))))
-    players.extend(
-        p
-        for p in existing_players
-        if not (isinstance(p.get("backend"), dict) and p["backend"].get("type") == BLUETOOTH)
-    )
+        raw_backend = player.get("backend")
+        backend: dict[str, Any] = raw_backend if isinstance(raw_backend, dict) else {}
+        if backend.get("type") == BLUETOOTH:
+            mac = normalize_mac(backend.get("mac"))
+            entry = entries_by_mac.get(mac)
+            if entry is None:
+                continue
+            player_id = ids_by_mac.get(mac) or player_id_for_mac(mac)
+            players.append(legacy_device_to_player(entry, existing_id=player_id))
+            continue
+        built = copy.deepcopy(player)
+        client_id = built.get("id")
+        stored_by_client_id = existing_by_id.get(client_id) if isinstance(client_id, str) else None
+        stored_by_client_backend = stored_by_client_id.get("backend") if stored_by_client_id else None
+        keeps_id = isinstance(stored_by_client_backend, dict) and stored_by_client_backend.get("type") == backend.get(
+            "type"
+        )
+        built["id"] = client_id if keeps_id else str(uuid.uuid4())
+        built_backend = dict(backend)
+        stored = existing_by_id.get(built["id"]) or {}
+        raw_stored_backend = stored.get("backend")
+        stored_backend: dict[str, Any] = raw_stored_backend if isinstance(raw_stored_backend, dict) else {}
+        if stored_backend.get("match"):
+            built_backend["match"] = copy.deepcopy(stored_backend["match"])
+        else:
+            built_backend.pop("match", None)
+        built["backend"] = built_backend
+        players.append(built)
+    return players
+
+
+def _kept_player_state(existing_file: dict, players: list[dict]) -> dict[str, Any]:
+    """The stored ``PLAYER_STATE`` of the players still there (a client never supplies it)."""
+    existing = _as_v6(existing_file) if existing_file else {}
+    raw_state = existing.get("PLAYER_STATE")
+    state: dict[str, Any] = raw_state if isinstance(raw_state, dict) else {}
     kept = {p.get("id") for p in players}
-    raw_existing_state = existing.get("PLAYER_STATE")
-    existing_state: dict[str, Any] = raw_existing_state if isinstance(raw_existing_state, dict) else {}
-    state = {pid: dict(entry) for pid, entry in existing_state.items() if pid in kept and isinstance(entry, dict)}
-    last_volumes = payload.get("LAST_VOLUMES")
-    for raw_mac, volume in (last_volumes if isinstance(last_volumes, dict) else {}).items():
-        mac = normalize_mac(raw_mac)
-        pid = ids_by_mac.get(mac) or (player_id_for_mac(mac) if mac else "")
-        if pid in kept and isinstance(volume, int) and 0 <= volume <= 100:
-            state.setdefault(pid, {})["volume"] = volume
-    out = {k: v for k, v in payload.items() if k not in ("BLUETOOTH_DEVICES", "LAST_VOLUMES", "LAST_SINKS")}
-    out["players"] = players
-    out["PLAYER_STATE"] = state
-    return out
+    return {pid: copy.deepcopy(entry) for pid, entry in state.items() if pid in kept and isinstance(entry, dict)}
+
+
+def _without_private_player_keys(payload: dict) -> dict:
+    """*payload* without ``PLAYER_STATE`` and without the read-only ``_`` keys of its players."""
+    cleaned = {k: v for k, v in payload.items() if k != "PLAYER_STATE"}
+    if isinstance(payload.get("players"), list):
+        cleaned["players"] = [
+            {k: copy.deepcopy(v) for k, v in player.items() if not str(k).startswith("_")}
+            if isinstance(player, dict)
+            else player
+            for player in payload["players"]
+        ]
+    return cleaned
+
+
+class PlayerPayloadError(UseCaseError):
+    """A refused ``players`` payload, with the position of the offending player."""
+
+    def __init__(self, index: int, status: int, code: str, detail: str) -> None:
+        super().__init__(status, code, detail)
+        self.player_index = index
+
+
+def _check_payload_players(players: list, existing: dict) -> None:
+    """The spec rules on a save's ``players``, checked before field validation.
+
+    An existing player's backend type and Bluetooth MAC cannot change; two
+    players cannot share a MAC or a sink; Bluetooth-only options on a
+    ``pulse_sink`` player are refused with their own code. Raises
+    :class:`PlayerPayloadError`.
+    """
+    from pydantic import ValidationError
+
+    from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK, Player, normalize_mac
+
+    existing_by_id = {
+        p["id"]: p for p in existing.get("players") or [] if isinstance(p, dict) and isinstance(p.get("id"), str)
+    }
+    backends = [
+        (index, player, player["backend"])
+        for index, player in enumerate(players)
+        if isinstance(player, dict) and isinstance(player.get("backend"), dict)
+    ]
+
+    seen_ids: set[str] = set()
+    for index, player, _backend in backends:
+        raw_id = player.get("id")
+        if isinstance(raw_id, str) and raw_id:
+            if raw_id in seen_ids:
+                raise PlayerPayloadError(index, 422, "duplicate_player", f"Two players share the id {raw_id}")
+            seen_ids.add(raw_id)
+
+    for index, player, backend in backends:
+        player_id = player.get("id")
+        stored = existing_by_id.get(player_id) if isinstance(player_id, str) else None
+        stored_backend = stored.get("backend") if isinstance(stored, dict) else None
+        if not isinstance(stored_backend, dict):
+            continue
+        if backend.get("type") != stored_backend.get("type") or (
+            stored_backend.get("type") == BLUETOOTH
+            and normalize_mac(backend.get("mac")) != normalize_mac(stored_backend.get("mac"))
+        ):
+            raise PlayerPayloadError(
+                index,
+                422,
+                "player_backend_immutable",
+                f"Player {player_id} cannot change what it plays to; remove it and add a new player instead",
+            )
+
+    seen: set[tuple[str, str]] = set()
+    for index, _player, backend in backends:
+        if backend.get("type") == BLUETOOTH:
+            key = (BLUETOOTH, normalize_mac(backend.get("mac")))
+        elif backend.get("type") == PULSE_SINK:
+            key = (PULSE_SINK, str(backend.get("sink") or "").strip())
+        else:
+            continue
+        if not key[1]:
+            continue
+        if key in seen:
+            raise PlayerPayloadError(index, 422, "duplicate_player", f"Two players use {key[1]}")
+        seen.add(key)
+
+    for index, player, backend in backends:
+        if backend.get("type") != PULSE_SINK:
+            continue
+        try:
+            Player.model_validate({**player, "id": player.get("id") or "new-player"})
+        except ValidationError as exc:
+            for error in exc.errors(include_url=False):
+                # The model-level check is the one about backend-specific options.
+                if not error["loc"] and error["type"] == "value_error":
+                    reason = (error.get("ctx") or {}).get("error")
+                    raise PlayerPayloadError(
+                        index, 422, "option_not_supported_for_backend", str(reason) if reason else error["msg"]
+                    ) from exc
 
 
 def _error(message: str, status: int = 400, code: str = "invalid_config") -> UseCaseError:
@@ -228,7 +340,8 @@ def _parse_optional_int(
 
 def get_config() -> dict:
     """The config for the settings screen: secrets removed, effective ports and live device facts added."""
-    config = _to_api_view(load_config())
+    config = load_config()
+    config.pop("PLAYER_STATE", None)
     runtime = _detect_runtime()
 
     # Never expose secrets to the browser — but indicate whether password is set
@@ -259,20 +372,39 @@ def get_config() -> dict:
     config["_effective_base_listen_port"] = resolve_base_listen_port()
     config["_compatibility_capabilities"] = get_compatibility_capabilities()
 
-    # Enrich BLUETOOTH_DEVICES with resolved listen_port / listen_host from running clients
-    registry = get_device_registry_snapshot()
-    client_map = registry.client_map_by_player_name()
-    mac_map = registry.client_map_by_mac()
-    for dev in config.get("BLUETOOTH_DEVICES", []):
-        client = client_map.get(dev.get("player_name")) or mac_map.get(dev.get("mac"))
-        if client:
-            device = build_device_snapshot(client)
-            if "listen_port" not in dev or not dev["listen_port"]:
-                dev["listen_port"] = getattr(client, "listen_port", None)
-            if "listen_host" not in dev or not dev["listen_host"]:
-                dev["listen_host"] = getattr(client, "listen_host", None) or device.extra.get("ip_address")
+    # The running client's port and host, reported read-only: writing them
+    # into the speaker made an unchanged save restart every speaker.
+    config["players"] = _with_effective_listen_values(config.get("players"))
 
     return config
+
+
+def _with_effective_listen_values(players: object) -> list:
+    """*players* with ``_effective_listen_port``/``_host`` on each Bluetooth player whose client runs."""
+    from sendspin_bridge.config.players import BLUETOOTH, normalize_mac
+
+    if not isinstance(players, list):
+        return []
+    registry = get_device_registry_snapshot()
+    by_mac = {normalize_mac(mac): client for mac, client in registry.client_map_by_mac().items()}
+    by_name = registry.client_map_by_player_name()
+    enriched: list = []
+    for player in players:
+        backend = player.get("backend") if isinstance(player, dict) else None
+        if not isinstance(backend, dict) or backend.get("type") != BLUETOOTH:
+            enriched.append(player)
+            continue
+        client = by_mac.get(normalize_mac(backend.get("mac"))) or by_name.get(str(player.get("name") or ""))
+        if client is None:
+            enriched.append(player)
+            continue
+        player = dict(player)
+        player["_effective_listen_port"] = getattr(client, "listen_port", None)
+        player["_effective_listen_host"] = getattr(client, "listen_host", None) or build_device_snapshot(
+            client
+        ).extra.get("ip_address")
+        enriched.append(player)
+    return enriched
 
 
 def _normalize_device_mac(raw_mac) -> str:
@@ -289,17 +421,6 @@ def _normalize_device_adapter(raw_adapter) -> str:
     if not adapter or adapter.lower() == "default":
         return ""
     return adapter.upper() if ":" in adapter else adapter.lower()
-
-
-def _sanitize_last_volumes(last_volumes, valid_macs: set[str]) -> dict[str, int]:
-    """Keep saved per-device volumes only for currently configured devices."""
-    if not isinstance(last_volumes, dict):
-        return {}
-    return {
-        mac: volume
-        for mac, volume in last_volumes.items()
-        if mac in valid_macs and isinstance(volume, int) and 0 <= volume <= 100
-    }
 
 
 def _normalize_ha_adapter_area_map(raw_mapping) -> dict[str, dict[str, str]]:
@@ -335,28 +456,28 @@ def _load_existing_config_for_validation() -> dict:
     except Exception as exc:
         logger.debug("Could not read existing config for validation warnings: %s", exc)
         return {}
-    return _to_api_view(data) if isinstance(data, dict) else {}
+    return _as_v6(data) if isinstance(data, dict) else {}
 
 
 def _append_ma_duplicate_device_warnings(
     config: dict, warnings: list[dict[str, str]], *, existing_config: dict | None = None
 ) -> list[dict[str, str]]:
-    """Warn when newly added MACs already appear in MA under the same player_id."""
+    """Warn when newly added Bluetooth players already appear in MA under the same player_id."""
     ma_url = str(config.get("MA_API_URL") or "").strip()
     ma_token = str(config.get("MA_API_TOKEN") or "").strip()
     if not ma_url or not ma_token:
         return warnings
 
+    from sendspin_bridge.config.players import BLUETOOTH, device_entries, normalize_mac
+
     existing = existing_config if isinstance(existing_config, dict) else _load_existing_config_for_validation()
-    existing_macs = {
-        _normalize_device_mac(dev.get("mac"))
-        for dev in existing.get("BLUETOOTH_DEVICES", [])
-        if isinstance(dev, dict) and dev.get("mac")
-    }
+    existing_macs = {entry["mac"] for entry in device_entries(_as_v6(existing))}
     candidates = [
-        (index, _normalize_device_mac(dev.get("mac")))
-        for index, dev in enumerate(config.get("BLUETOOTH_DEVICES", []))
-        if isinstance(dev, dict)
+        (index, normalize_mac(player["backend"].get("mac")))
+        for index, player in enumerate(config.get("players") or [])
+        if isinstance(player, dict)
+        and isinstance(player.get("backend"), dict)
+        and player["backend"].get("type") == BLUETOOTH
     ]
     if not any(mac and mac not in existing_macs for _, mac in candidates):
         return warnings
@@ -381,7 +502,7 @@ def _append_ma_duplicate_device_warnings(
             continue
         warnings.append(
             {
-                "field": f"BLUETOOTH_DEVICES[{index}].mac",
+                "field": f"players[{index}].backend.mac",
                 "message": (
                     f"This device already appears in Music Assistant as '{existing_name}' and may belong "
                     "to another bridge. Disconnect or remove it there first to avoid conflicts."
@@ -614,19 +735,23 @@ def import_config(raw: bytes) -> dict:
         raise _error(f"Invalid JSON: {exc}") from exc
     if not isinstance(uploaded, dict):
         raise _error("Config must be a JSON object")
-    # A v6 file (an export) is validated in the v5 shape like everything else
-    # API v1 takes; its own players then name the ids to keep.
-    uploaded_players = uploaded.get("players") if isinstance(uploaded.get("players"), list) else None
-    if uploaded_players is not None:
-        uploaded = _to_api_view(uploaded)
+    # A v5 file (BLUETOOTH_DEVICES) or a v6 one (an export); validation
+    # brings both to v6. The per-player state is the bridge's, never the file's.
+    is_v6_upload = isinstance(uploaded.get("players"), list)
+    uploaded.pop("PLAYER_STATE", None)
     validation = validate_uploaded_config(uploaded, default_base_listen_port=resolve_base_listen_port())
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
     if not validation.is_valid:
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
         raise _validation_error(errors, warnings)
     uploaded = validation.normalized_config
+    uploaded.pop("PLAYER_STATE", None)
     warnings = _append_ma_duplicate_device_warnings(uploaded, warnings)
     _require_password_for_auth(uploaded)
+    uploaded_players = [p for p in uploaded.get("players") or [] if isinstance(p, dict)]
+    if not is_v6_upload:
+        # A v5 speaker keeps the id its MAC already has here, not the converted one.
+        uploaded_players = [{k: v for k, v in p.items() if k != "id"} for p in uploaded_players]
 
     # The sensitive keys belong to the stored file, not the upload. The store
     # refuses rather than writes when the existing file cannot be read.
@@ -636,8 +761,9 @@ def import_config(raw: bytes) -> dict:
     try:
         with config_lock:
             stored = store.read_stored() or {}
-            id_source = stored if uploaded_players is None else {**_as_v6(stored), "players": uploaded_players}
-            store.replace(_from_api_view(uploaded, id_source), preserve=(), owned=_PRESERVED_KEYS)
+            players = _players_from_internal(_internal_view(uploaded), uploaded_players, stored)
+            new_config = {**uploaded, "players": players, "PLAYER_STATE": _kept_player_state(stored, players)}
+            store.replace(new_config, preserve=(), owned=_PRESERVED_KEYS)
     except ValueError as exc:
         logger.error("Refusing to save uploaded config: %s is unreadable (%s)", CONFIG_FILE, exc)
         raise _error(
@@ -666,17 +792,27 @@ def sendspin_test(server: str | None = None, port: int | str | None = None) -> d
 
 
 def validate_config(config: dict) -> dict:
-    """Validate without saving: errors, warnings and the normalized config."""
-    validation = validate_uploaded_config(config, default_base_listen_port=resolve_base_listen_port())
+    """Validate without saving: errors, warnings and the normalized config (v6, no ``PLAYER_STATE``)."""
+    validation = validate_uploaded_config(
+        _without_private_player_keys(config), default_base_listen_port=resolve_base_listen_port()
+    )
+    normalized = validation.normalized_config
+    normalized.pop("PLAYER_STATE", None)
     errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
-    if validation.is_valid:
-        warnings = _append_ma_duplicate_device_warnings(validation.normalized_config, warnings)
+    payload_players = config.get("players")
+    if isinstance(payload_players, list):
+        try:
+            _check_payload_players(payload_players, _load_existing_config_for_validation())
+        except PlayerPayloadError as exc:
+            errors.append({"field": f"players[{exc.player_index}]", "message": f"{exc.code}: {exc.detail}"})
+    if validation.is_valid and not errors:
+        warnings = _append_ma_duplicate_device_warnings(normalized, warnings)
     return {
-        "valid": validation.is_valid,
+        "valid": validation.is_valid and not errors,
         "errors": errors,
         "warnings": warnings,
-        "normalized_config": validation.normalized_config,
+        "normalized_config": normalized,
     }
 
 
@@ -688,17 +824,37 @@ def save_config(config: dict) -> dict:
     if not isinstance(config, dict):
         raise _error("Invalid JSON body")
 
+    from sendspin_bridge.config.migration import LEGACY_V5_KEYS
+    from sendspin_bridge.config.players import BLUETOOTH, normalize_mac
+
+    config = _without_private_player_keys(config)
+    if "players" not in config:
+        if any(key in config for key in LEGACY_V5_KEYS):
+            # A page loaded before the upgrade: never read its list as "no speakers".
+            raise _error("This bridge expects `players` (config schema 6); reload the page")
+        # A partial save that does not mention the players leaves them as they are.
+        config["players"] = copy.deepcopy(_load_existing_config_for_validation().get("players") or [])
+    else:
+        for key in LEGACY_V5_KEYS:
+            config.pop(key, None)
+    payload_players = config["players"]
+    if isinstance(payload_players, list):
+        _check_payload_players(payload_players, _load_existing_config_for_validation())
+
     # Preserve the caller's delay intent across schema normalization.  The
     # migration layer labels an explicit source-less static_delay_ms as
-    # ``legacy``; for a newly registered device we need to distinguish that
-    # explicit value from a device which omitted delay altogether.
+    # ``legacy``; for a newly registered speaker we need to distinguish that
+    # explicit value from a speaker which omitted delay altogether.
     incoming_delay_intent = {
-        _normalize_device_mac(device.get("mac")): {
-            "has_delay": "static_delay_ms" in device,
-            "has_source": bool(device.get("static_delay_source")),
+        normalize_mac(player["backend"].get("mac")): {
+            "has_delay": "static_delay_ms" in player,
+            "has_source": bool(player.get("static_delay_source")),
         }
-        for device in config.get("BLUETOOTH_DEVICES", [])
-        if isinstance(device, dict) and _normalize_device_mac(device.get("mac"))
+        for player in (payload_players if isinstance(payload_players, list) else [])
+        if isinstance(player, dict)
+        and isinstance(player.get("backend"), dict)
+        and player["backend"].get("type") == BLUETOOTH
+        and normalize_mac(player["backend"].get("mac"))
     }
 
     # The settings form submits a partial config that never includes
@@ -720,9 +876,11 @@ def save_config(config: dict) -> dict:
     if not validation.is_valid:
         errors = [{"field": issue.field, "message": issue.message} for issue in validation.errors]
         raise _validation_error(errors, warnings)
-    config = validation.normalized_config
-    config = {k: v for k, v in config.items() if k in _ALLOWED_POST_CONFIG_KEYS}
-    warnings = _append_ma_duplicate_device_warnings(config, warnings)
+    normalized = validation.normalized_config
+    normalized.pop("PLAYER_STATE", None)
+    warnings = _append_ma_duplicate_device_warnings(normalized, warnings)
+    payload_players = [p for p in normalized.get("players") or [] if isinstance(p, dict)]
+    config = {k: v for k, v in _internal_view(normalized).items() if k in _ALLOWED_POST_CONFIG_KEYS}
 
     # Validate top-level string fields
     for str_key in ("SENDSPIN_SERVER", "BRIDGE_NAME", "TZ", "LOG_LEVEL", "UPDATE_CHANNEL"):
@@ -882,11 +1040,11 @@ def save_config(config: dict) -> dict:
                     "The existing configuration is corrupted; refusing to overwrite it", 500, "config_corrupted"
                 ) from exc
             existing_file = loaded or {}
-            # API v1 speaks the v5 shape; compare and preserve against that view.
-            existing = _to_api_view(existing_file) if existing_file else {}
+            # The pipeline compares and preserves against the v5-shaped view.
+            existing = _internal_view(existing_file) if existing_file else {}
 
             # Preserve keys that are never submitted via the form.  The
-            # per-player state comes across in ``_from_api_view``.
+            # per-player state comes across in ``_kept_player_state``.
             for key in (
                 "HA_ADAPTER_AREA_MAP",
                 "AUTH_PASSWORD_HASH",
@@ -987,20 +1145,13 @@ def save_config(config: dict) -> dict:
 
         effective_before = ConfigStore(CONFIG_FILE).load() if existing else {}
 
-        default_vol = config.pop("_new_device_default_volume", None)
-        last_volumes = config.setdefault("LAST_VOLUMES", existing.get("LAST_VOLUMES", {}))
-        if not isinstance(last_volumes, dict):
-            last_volumes = {}
-        if default_vol is not None:
-            for mac in new_devices:
-                if mac and mac not in last_volumes:
-                    last_volumes[mac] = default_vol
-        config["LAST_VOLUMES"] = _sanitize_last_volumes(last_volumes, set(new_devices))
+        players = _players_from_internal(config, payload_players, existing_file)
+        new_file = {k: v for k, v in config.items() if k != "BLUETOOTH_DEVICES"}
+        new_file["players"] = players
+        new_file["PLAYER_STATE"] = _kept_player_state(existing_file, players)
 
         try:
-            write_config_file(
-                _from_api_view(config, existing_file), config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent
-            )
+            write_config_file(new_file, config_file=CONFIG_FILE, config_dir=CONFIG_FILE.parent)
         except OSError as exc:
             raise config_write_error(exc, context="Cannot save bridge config") from exc
 

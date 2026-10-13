@@ -658,6 +658,7 @@ class BridgeOrchestrator:
                     "enabled": False,
                 }
                 for cfg_key in (
+                    "id",
                     "idle_mode",
                     "keep_alive_method",
                     "static_delay_ms",

@@ -89,4 +89,18 @@ def test_settings_load_a_config_the_bridge_accepts_but_the_schema_is_stricter_ab
     resp = client.get("/api/v1/config")
 
     assert resp.status_code == 200
-    assert resp.json()["BLUETOOTH_DEVICES"][0]["keepalive_interval"] == 0
+    assert resp.json()["players"][0]["keepalive_interval"] == 0
+
+
+def test_a_stored_out_of_range_power_save_delay_does_not_block_saving(client, tmp_path):
+    """A migrated or hand-edited delay outside 0-60 is corrected on load, so
+    the unchanged settings page still saves."""
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    cfg["BLUETOOTH_DEVICES"] = [{"mac": "AA:BB:CC:DD:EE:FF", "player_name": "Kitchen", "power_save_delay_minutes": 99}]
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+
+    shown = client.get("/api/v1/config").json()
+    resp = client.put("/api/v1/config", json=shown)
+
+    assert resp.status_code == 200, resp.data
+    assert client.get("/api/v1/config").json()["players"][0]["power_save_delay_minutes"] == 60

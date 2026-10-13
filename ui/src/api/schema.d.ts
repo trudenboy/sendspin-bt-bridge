@@ -1811,115 +1811,20 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** BluetoothDevice */
-        BluetoothDevice: {
+        /** BluetoothBackend */
+        BluetoothBackend: {
             /**
              * Adapter
-             * @description Bluetooth adapter to use (e.g. 'hci0'). Empty = default adapter.
              * @default
              */
-            adapter?: string | null;
-            /**
-             * Enabled
-             * @description Whether this device is active.
-             * @default true
-             */
-            enabled?: boolean | null;
-            /**
-             * Idle Disconnect Minutes
-             * @description Minutes of idle before BT standby disconnect. 0 = disabled. Legacy field — prefer idle_mode.
-             * @default 0
-             */
-            idle_disconnect_minutes?: number | null;
-            /**
-             * @description Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts).
-             * @default default
-             */
-            idle_mode?: components["schemas"]["IdleMode"] | null;
-            /**
-             * @description Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally).
-             * @default infrasound
-             */
-            keep_alive_method?: components["schemas"]["KeepAliveMethod"] | null;
-            /**
-             * Keepalive Enabled
-             * @description Send periodic silence to prevent BT speaker auto-sleep. Legacy field — prefer idle_mode.
-             * @default false
-             */
-            keepalive_enabled?: boolean | null;
-            /**
-             * Keepalive Interval
-             * @description Seconds between keepalive infrasound bursts.
-             * @default 30
-             */
-            keepalive_interval?: number | null;
-            /**
-             * Listen Port
-             * @description Override Sendspin listener port for this device.
-             */
-            listen_port?: number | null;
-            /**
-             * Mac
-             * @description Bluetooth MAC address (XX:XX:XX:XX:XX:XX).
-             */
+            adapter?: string;
+            /** Mac */
             mac: string;
             /**
-             * Min Buffer Ms
-             * @description Sendspin minimum ongoing buffer advertised by this device.
-             * @default 250
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            min_buffer_ms?: number | null;
-            /**
-             * Player Name
-             * @description Display name for the speaker. Falls back to MAC if empty.
-             */
-            player_name?: string | null;
-            /**
-             * Power Save Delay Minutes
-             * @description Minutes after sink idle before suspending PA sink in power_save mode.
-             * @default 1
-             */
-            power_save_delay_minutes?: number | null;
-            /**
-             * Required Lead Time Ms
-             * @description Sendspin startup lead time advertised by this device.
-             * @default 250
-             */
-            required_lead_time_ms?: number | null;
-            /**
-             * Room Id
-             * @description Home Assistant area/room ID for this device.
-             */
-            room_id?: string | null;
-            /**
-             * Room Name
-             * @description Human-readable room name.
-             */
-            room_name?: string | null;
-            /**
-             * Static Delay Calibrated At
-             * @description ISO-8601 timestamp of the last confirmed calibration.
-             */
-            static_delay_calibrated_at?: string | null;
-            /**
-             * Static Delay Codec
-             * @description Codec active when the delay was calibrated.
-             */
-            static_delay_codec?: string | null;
-            /**
-             * Static Delay Ms
-             * @description Per-device static audio delay in milliseconds (0-5000). Added on top of DAC-anchored sync.
-             */
-            static_delay_ms?: number | null;
-            /** @description Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker. */
-            static_delay_source?: components["schemas"]["StaticDelaySource"] | null;
-            /**
-             * @description Volume control backend: 'pa' (PulseAudio) or 'sendspin'.
-             * @default pa
-             */
-            volume_controller?: components["schemas"]["VolumeController"] | null;
-        } & {
-            [key: string]: unknown;
+            type: "bluetooth_a2dp";
         };
         /** Body_import_config_api_v1_config_import_post */
         Body_import_config_api_v1_config_import_post: {
@@ -2062,12 +1967,6 @@ export interface components {
              */
             BLUETOOTH_ADAPTERS?: components["schemas"]["BluetoothAdapter"][] | null;
             /**
-             * Bluetooth Devices
-             * @description List of configured Bluetooth speaker devices.
-             * @default []
-             */
-            BLUETOOTH_DEVICES?: components["schemas"]["BluetoothDevice"][] | null;
-            /**
              * Bridge Name
              * @description Bridge instance name. Empty or 'auto' resolves to hostname.
              * @default
@@ -2131,7 +2030,7 @@ export interface components {
              * Config Schema Version
              * @description Schema version; managed by the application — do not change.
              */
-            CONFIG_SCHEMA_VERSION?: 5 | null;
+            CONFIG_SCHEMA_VERSION?: 6 | null;
             /**
              * Disable Pa Rescue Streams
              * @description Disable PulseAudio module-rescue-streams correction on BT reconnect.
@@ -2197,22 +2096,6 @@ export interface components {
              *     }
              */
             HA_INTEGRATION?: components["schemas"]["HAINTEGRATION"] | null;
-            /**
-             * Last Sinks
-             * @description Runtime state: persisted per-device PulseAudio sink names keyed by MAC.
-             * @default {}
-             */
-            LAST_SINKS?: {
-                [key: string]: string;
-            } | null;
-            /**
-             * Last Volumes
-             * @description Runtime state: persisted per-device volumes keyed by MAC.
-             * @default {}
-             */
-            LAST_VOLUMES?: {
-                [key: string]: components["schemas"]["LASTVOLUMES"];
-            } | null;
             /**
              * @description Root logger level.
              * @default INFO
@@ -2378,6 +2261,12 @@ export interface components {
              * @description Web UI port. null = use WEB_PORT env var or 8080.
              */
             WEB_PORT?: number | null;
+            /**
+             * Players
+             * @description Configured players. Each has a stable id and a backend: a Bluetooth speaker
+             *     (bluetooth_a2dp) or a local audio output (pulse_sink).
+             */
+            players?: components["schemas"]["Player"][];
         } & {
             [key: string]: unknown;
         };
@@ -2436,7 +2325,9 @@ export interface components {
         /** Device */
         Device: {
             audio: components["schemas"]["DeviceAudio"];
-            bluetooth: components["schemas"]["DeviceBluetooth"];
+            backend: components["schemas"]["DeviceBackend"];
+            /** @description Present for Bluetooth players only. */
+            bluetooth: components["schemas"]["DeviceBluetooth"] | null;
             /**
              * Capabilities
              * @description Per-action availability and remediation.
@@ -2445,6 +2336,11 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
+             * Config Id
+             * @description The id of this speaker's entry in the configuration's players, when it has one.
+             */
+            config_id: string | null;
+            /**
              * Enabled
              * @default true
              */
@@ -2452,7 +2348,7 @@ export interface components {
             health: components["schemas"]["DeviceHealth"];
             /**
              * Id
-             * @description Stable player id (UUID derived from the speaker's MAC).
+             * @description The player's runtime id: what device commands take and Music Assistant knows it by.
              */
             id: string;
             /** Last Error */
@@ -2471,6 +2367,11 @@ export interface components {
             sendspin: components["schemas"]["DeviceSendspin"];
             /** State Changed At */
             state_changed_at: string | null;
+            /**
+             * Supported Actions
+             * @description Commands this player's backend can do; others answer 409.
+             */
+            supported_actions: string[];
             timing: components["schemas"]["DeviceTiming"];
             /** Transfer Readiness */
             transfer_readiness: {
@@ -2534,6 +2435,20 @@ export interface components {
              * @default 100
              */
             volume: number;
+        };
+        /** DeviceBackend */
+        DeviceBackend: {
+            /** Adapter */
+            adapter: string | null;
+            /** Mac */
+            mac: string | null;
+            /** Sink */
+            sink: string | null;
+            /**
+             * Type
+             * @description What the player plays to: 'bluetooth_a2dp' or 'pulse_sink'.
+             */
+            type: string;
         };
         /** DeviceBluetooth */
         DeviceBluetooth: {
@@ -2832,6 +2747,11 @@ export interface components {
          */
         DisabledDevice: {
             /**
+             * Backend Type
+             * @default bluetooth_a2dp
+             */
+            backend_type: string;
+            /**
              * Id
              * @description The id /devices/{id} commands take (enable, remove).
              */
@@ -3018,12 +2938,6 @@ export interface components {
             /** Url */
             url: string;
         };
-        /**
-         * IdleMode
-         * @description Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts).
-         * @enum {string}
-         */
-        IdleMode: "default" | "power_save" | "auto_disconnect" | "keep_alive";
         /** ImportResult */
         ImportResult: {
             /** Warnings */
@@ -3089,12 +3003,6 @@ export interface components {
              */
             status: number;
         };
-        /**
-         * KeepAliveMethod
-         * @description Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally).
-         * @enum {string}
-         */
-        KeepAliveMethod: "infrasound" | "silence" | "none";
         /** KnownDevice */
         KnownDevice: {
             /** Adapters */
@@ -3104,8 +3012,6 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** LASTVOLUMES */
-        LASTVOLUMES: number;
         /**
          * LOGLEVEL
          * @description Root logger level.
@@ -3350,6 +3256,68 @@ export interface components {
              */
             action: "pause" | "play";
         };
+        /** Player */
+        Player: {
+            /** Backend */
+            backend: components["schemas"]["BluetoothBackend"] | components["schemas"]["PulseSinkBackend"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled?: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Idle Disconnect Minutes
+             * @default 0
+             */
+            idle_disconnect_minutes?: number | null;
+            /** Idle Mode */
+            idle_mode?: ("default" | "power_save" | "auto_disconnect" | "keep_alive") | null;
+            /** Keep Alive Method */
+            keep_alive_method?: ("infrasound" | "silence" | "none") | null;
+            /**
+             * Keepalive Interval
+             * @default 30
+             */
+            keepalive_interval?: number | null;
+            /** Listen Host */
+            listen_host?: string | null;
+            /** Listen Port */
+            listen_port?: number | null;
+            /** Min Buffer Ms */
+            min_buffer_ms?: number | null;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /**
+             * Power Save Delay Minutes
+             * @default 1
+             */
+            power_save_delay_minutes?: number | null;
+            /** Preferred Format */
+            preferred_format?: string | null;
+            /** Required Lead Time Ms */
+            required_lead_time_ms?: number | null;
+            /** Room Id */
+            room_id?: string | null;
+            /** Room Name */
+            room_name?: string | null;
+            /** Static Delay Calibrated At */
+            static_delay_calibrated_at?: string | null;
+            /** Static Delay Codec */
+            static_delay_codec?: string | null;
+            /** Static Delay Ms */
+            static_delay_ms?: number | null;
+            /** Static Delay Source */
+            static_delay_source?: string | null;
+            /** Volume Controller */
+            volume_controller?: ("pa" | "sendspin") | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** PowerIn */
         PowerIn: {
             /** On */
@@ -3415,6 +3383,17 @@ export interface components {
         PulseLatencyIn: {
             /** Pulse Latency Msec */
             pulse_latency_msec: number;
+        };
+        /** PulseSinkBackend */
+        PulseSinkBackend: {
+            match?: components["schemas"]["SinkMatch"];
+            /** Sink */
+            sink: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pulse_sink";
         };
         /** QueueCommandIn */
         QueueCommandIn: {
@@ -3647,6 +3626,19 @@ export interface components {
             /** User */
             user?: string | null;
         };
+        /** SinkMatch */
+        SinkMatch: {
+            /** Alsa Long Card Name */
+            alsa_long_card_name?: string | null;
+            /** Bus Path */
+            bus_path?: string | null;
+            /** Product Id */
+            product_id?: string | null;
+            /** Serial */
+            serial?: string | null;
+            /** Vendor Id */
+            vendor_id?: string | null;
+        };
         /** StartupProgress */
         StartupProgress: {
             /**
@@ -3680,12 +3672,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * StaticDelaySource
-         * @description Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker.
-         * @enum {string}
-         */
-        StaticDelaySource: "auto_pending" | "legacy" | "manual" | "music_assistant" | "bluez_report" | "bluez_delay_report" | "codec_fallback" | "manual_calibration" | "microphone_calibration";
         /** TokenList */
         TokenList: {
             /** Tokens */
@@ -3804,12 +3790,6 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /**
-         * VolumeController
-         * @description Volume control backend: 'pa' (PulseAudio) or 'sendspin'.
-         * @enum {string}
-         */
-        VolumeController: "pa" | "sendspin";
         /** VolumeIn */
         VolumeIn: {
             /** Level */

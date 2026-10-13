@@ -71,6 +71,19 @@ export function getPath(config: ConfigDoc | null | undefined, key: string): unkn
   return cur
 }
 
+/** Writes a dotted path, creating objects on the way; ``undefined`` removes the leaf. */
+export function setPath(config: ConfigDoc, key: string, value: unknown): void {
+  const parts = key.split('.')
+  const last = parts.pop()!
+  let cur = config
+  for (const part of parts) {
+    if (typeof cur[part] !== 'object' || cur[part] === null) cur[part] = {}
+    cur = cur[part] as ConfigDoc
+  }
+  if (value === undefined) delete cur[last]
+  else cur[last] = value
+}
+
 const haMode = (c: ConfigDoc) => getPath(c, 'HA_INTEGRATION.mode')
 const bruteForceOn = (c: ConfigDoc) => getPath(c, 'BRUTE_FORCE_PROTECTION') !== false
 
@@ -218,7 +231,7 @@ export const SECTIONS: readonly SectionDef[] = [
 /** Config keys a section component edits instead of a plain field. */
 export const COMPONENT_OWNED_KEYS: Readonly<Record<string, SectionComponent | 'devices'>> = {
   BLUETOOTH_ADAPTERS: 'adapters',
-  BLUETOOTH_DEVICES: 'devices',
+  players: 'devices',
   MA_API_URL: 'maConnection',
   AUTH_TOKENS: 'tokens',
   HA_ADAPTER_AREA_MAP: 'areaMap',
@@ -229,8 +242,6 @@ export const MANAGED_KEYS: readonly string[] = [
   'AUTH_PASSWORD_HASH',
   'SECRET_KEY',
   'CONFIG_SCHEMA_VERSION',
-  'LAST_SINKS',
-  'LAST_VOLUMES',
   'MA_API_TOKEN',
   'MA_ACCESS_TOKEN',
   'MA_REFRESH_TOKEN',

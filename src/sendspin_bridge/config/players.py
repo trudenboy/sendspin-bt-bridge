@@ -20,6 +20,21 @@ logger = logging.getLogger(__name__)
 _MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 BLUETOOTH: Final = "bluetooth_a2dp"
 PULSE_SINK: Final = "pulse_sink"
+SUPPORTED_ACTIONS: dict[str, tuple[str, ...]] = {
+    BLUETOOTH: (
+        "volume",
+        "transport",
+        "power_save",
+        "reconnect",
+        "repair",
+        "standby",
+        "claim",
+        "pairing_window",
+        "rssi",
+        "battery",
+    ),
+    PULSE_SINK: ("volume", "transport", "power_save"),
+}
 LEGACY_DEVICE_STATE_KEYS = ("released", "released_by")
 # v5 device keys that move into ``backend``.
 _LEGACY_BACKEND_KEYS = ("mac", "adapter")
@@ -93,12 +108,22 @@ class Player(BaseModel):
     min_buffer_ms: int | None = Field(None, ge=0, le=30000)
     volume_controller: Literal["pa", "sendspin"] | None = None
     idle_mode: Literal["default", "power_save", "auto_disconnect", "keep_alive"] | None = None
-    power_save_delay_minutes: int | None = None
-    idle_disconnect_minutes: int | None = None
+    power_save_delay_minutes: int | None = Field(1, ge=0, le=60)
+    idle_disconnect_minutes: int | None = Field(0, ge=0)
+    # 0 switches keep-alive off; otherwise 30-3600 s. The schema advertises the
+    # smallest value the UI lets a user enter (30); the validator also accepts 0.
+    keepalive_interval: Annotated[int, Field(json_schema_extra={"minimum": 30})] | None = 30
     keep_alive_method: Literal["infrasound", "silence", "none"] | None = None
     room_id: str | None = None
     room_name: str | None = None
     backend: Backend
+
+    @field_validator("keepalive_interval")
+    @classmethod
+    def _keepalive_interval_range(cls, value: int | None) -> int | None:
+        if value is not None and value != 0 and not 30 <= value <= 3600:
+            raise ValueError("keepalive_interval must be 0 (off) or between 30 and 3600")
+        return value
 
     @model_validator(mode="after")
     def _backend_options(self) -> Player:
@@ -223,3 +248,8 @@ def player_state(config: dict[str, Any], player_id: str) -> dict[str, Any]:
     if not isinstance(entry, dict):
         entry = state[player_id] = {}
     return entry
+
+
+def supported_actions_for(backend_type: str) -> list[str]:
+    """What a player of this backend can do (``Device.supported_actions``)."""
+    return list(SUPPORTED_ACTIONS.get(backend_type, ()))

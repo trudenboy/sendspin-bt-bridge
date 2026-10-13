@@ -65,29 +65,40 @@ describe('useBluetoothStore', () => {
     expect(store.pairing).toBe(false)
   })
 
-  it('adds a paired device to the full configuration once', async () => {
-    vi.mocked(getConfig).mockResolvedValue({ BRIDGE_NAME: 'B', BLUETOOTH_DEVICES: [{ mac: 'BB:00', player_name: 'x' }] } as never)
+  it('adds a paired device as a Bluetooth player once, without an id', async () => {
+    const existing = { id: 'p-bb', name: 'x', enabled: true, backend: { type: 'bluetooth_a2dp', mac: 'BB:00', adapter: '' } }
+    vi.mocked(getConfig).mockResolvedValue({ BRIDGE_NAME: 'B', players: [existing] } as never)
     const store = useBluetoothStore()
     expect(await store.addToBridge('aa:00', 'Kitchen', 'hci1')).toBe(true)
     expect(saveConfig).toHaveBeenCalledWith({
       BRIDGE_NAME: 'B',
-      BLUETOOTH_DEVICES: [
-        { mac: 'BB:00', player_name: 'x' },
-        { mac: 'AA:00', player_name: 'Kitchen', enabled: true, adapter: 'hci1' },
+      players: [
+        existing,
+        { name: 'Kitchen', enabled: true, backend: { type: 'bluetooth_a2dp', mac: 'AA:00', adapter: 'hci1' } },
       ],
     })
 
     vi.mocked(saveConfig).mockClear()
-    expect(await store.addToBridge('BB:00', 'dup')).toBe(false)
+    expect(await store.addToBridge('bb:00', 'dup')).toBe(false)
     expect(saveConfig).not.toHaveBeenCalled()
   })
 
+  it('does not mistake a pulse_sink player for a MAC duplicate', async () => {
+    vi.mocked(getConfig).mockResolvedValue({
+      players: [{ id: 'p', name: 'Sink', backend: { type: 'pulse_sink', sink: 'AA:00' } }],
+    } as never)
+    const store = useBluetoothStore()
+    expect(await store.addToBridge('AA:00', 'Desk')).toBe(true)
+  })
+
   it('stores the room chosen when adding', async () => {
-    vi.mocked(getConfig).mockResolvedValue({ BLUETOOTH_DEVICES: [] } as never)
+    vi.mocked(getConfig).mockResolvedValue({ players: [] } as never)
     const store = useBluetoothStore()
     await store.addToBridge('CC:00', 'Desk', 'hci0', { room: ' Office ' })
     expect(saveConfig).toHaveBeenCalledWith({
-      BLUETOOTH_DEVICES: [{ mac: 'CC:00', player_name: 'Desk', enabled: true, adapter: 'hci0', room_name: 'Office' }],
+      players: [
+        { name: 'Desk', enabled: true, backend: { type: 'bluetooth_a2dp', mac: 'CC:00', adapter: 'hci0' }, room_name: 'Office' },
+      ],
     })
   })
 

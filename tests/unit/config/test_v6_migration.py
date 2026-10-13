@@ -277,3 +277,35 @@ def test_failed_migration_leaves_the_config_untouched():
     with pytest.raises(TypeError):
         migrate_v5_to_v6(cfg)
     assert cfg == snapshot
+
+
+def test_load_config_clamps_stored_out_of_range_power_save_delay(tmp_path, monkeypatch):
+    import sendspin_bridge.config as config
+
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    pid = player_id_for_mac(ENEBY)
+    other = player_id_for_mac("AA:BB:CC:DD:EE:02")
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "players": [
+                    {
+                        "id": pid,
+                        "name": "A",
+                        "power_save_delay_minutes": -3,
+                        "backend": {"type": "bluetooth_a2dp", "mac": ENEBY},
+                    },
+                    {
+                        "id": other,
+                        "name": "B",
+                        "power_save_delay_minutes": 99,
+                        "backend": {"type": "bluetooth_a2dp", "mac": "AA:BB:CC:DD:EE:02"},
+                    },
+                ],
+            }
+        )
+    )
+    loaded = config.load_config()
+    assert [p["power_save_delay_minutes"] for p in loaded["players"]] == [0, 60]

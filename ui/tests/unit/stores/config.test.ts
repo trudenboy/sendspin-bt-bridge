@@ -24,7 +24,6 @@ const MOCK_CONFIG: BridgeConfig = {
   WEB_PORT: 8080,
   TZ: 'UTC',
   LOG_LEVEL: 'INFO',
-  BLUETOOTH_DEVICES: [],
   players: [],
   adapters: [],
   MA_API_URL: '',
@@ -106,7 +105,7 @@ describe('useConfigStore', () => {
       valid: false,
       errors: [
         { field: 'WEB_PORT', message: 'Invalid port' },
-        { field: 'BLUETOOTH_DEVICES[0].player_name', message: 'Missing name' },
+        { field: 'players[0].name', message: 'Missing name' },
       ],
       warnings: [],
       normalized_config: {},

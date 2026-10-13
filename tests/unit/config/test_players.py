@@ -134,3 +134,39 @@ def test_player_state_creates_and_returns_live_entry():
     config: dict = {}
     player_state(config, "abc")["volume"] = 30
     assert config == {"PLAYER_STATE": {"abc": {"volume": 30}}}
+
+
+def test_supported_actions_per_backend():
+    from sendspin_bridge.config.players import supported_actions_for
+
+    assert supported_actions_for("bluetooth_a2dp") == [
+        "volume",
+        "transport",
+        "power_save",
+        "reconnect",
+        "repair",
+        "standby",
+        "claim",
+        "pairing_window",
+        "rssi",
+        "battery",
+    ]
+    assert supported_actions_for("pulse_sink") == ["volume", "transport", "power_save"]
+    assert supported_actions_for("unknown") == []
+
+
+@pytest.mark.parametrize("value", [0, 30, 3600])
+def test_keepalive_interval_accepts_off_and_the_30_to_3600_range(value):
+    player = Player.model_validate(legacy_device_to_player({"mac": MAC, "keepalive_interval": value}))
+    assert player.keepalive_interval == value
+
+
+@pytest.mark.parametrize("value", [1, 15, 29, 3601])
+def test_keepalive_interval_rejects_values_outside_the_range(value):
+    with pytest.raises(ValidationError):
+        Player.model_validate(legacy_device_to_player({"mac": MAC, "keepalive_interval": value}))
+
+
+def test_get_players_keeps_a_player_with_keepalive_off():
+    config = {"players": [legacy_device_to_player({"mac": MAC, "keepalive_interval": 0})]}
+    assert [p.id for p in get_players(config)] == [player_id_for_mac(MAC)]

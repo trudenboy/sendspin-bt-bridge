@@ -322,267 +322,29 @@
         "title": "BluetoothAdapter",
         "type": "object"
       },
-      "BluetoothDevice": {
-        "additionalProperties": true,
+      "BluetoothBackend": {
+        "additionalProperties": false,
         "properties": {
           "adapter": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "default": "",
-            "description": "Bluetooth adapter to use (e.g. 'hci0'). Empty = default adapter.",
-            "title": "Adapter"
-          },
-          "enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": true,
-            "description": "Whether this device is active.",
-            "title": "Enabled"
-          },
-          "idle_disconnect_minutes": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": 0,
-            "description": "Minutes of idle before BT standby disconnect. 0 = disabled. Legacy field — prefer idle_mode.",
-            "title": "Idle Disconnect Minutes"
-          },
-          "idle_mode": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/IdleMode"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": "default",
-            "description": "Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts)."
-          },
-          "keep_alive_method": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/KeepAliveMethod"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": "infrasound",
-            "description": "Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally)."
-          },
-          "keepalive_enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": false,
-            "description": "Send periodic silence to prevent BT speaker auto-sleep. Legacy field — prefer idle_mode.",
-            "title": "Keepalive Enabled"
-          },
-          "keepalive_interval": {
-            "anyOf": [
-              {
-                "minimum": 30.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": 30,
-            "description": "Seconds between keepalive infrasound bursts.",
-            "title": "Keepalive Interval"
-          },
-          "listen_port": {
-            "anyOf": [
-              {
-                "maximum": 65535.0,
-                "minimum": 1024.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Override Sendspin listener port for this device.",
-            "title": "Listen Port"
+            "title": "Adapter",
+            "type": "string"
           },
           "mac": {
-            "description": "Bluetooth MAC address (XX:XX:XX:XX:XX:XX).",
-            "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
             "title": "Mac",
             "type": "string"
           },
-          "min_buffer_ms": {
-            "anyOf": [
-              {
-                "maximum": 30000.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": 250,
-            "description": "Sendspin minimum ongoing buffer advertised by this device.",
-            "title": "Min Buffer Ms"
-          },
-          "player_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Display name for the speaker. Falls back to MAC if empty.",
-            "title": "Player Name"
-          },
-          "power_save_delay_minutes": {
-            "anyOf": [
-              {
-                "maximum": 60.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": 1,
-            "description": "Minutes after sink idle before suspending PA sink in power_save mode.",
-            "title": "Power Save Delay Minutes"
-          },
-          "required_lead_time_ms": {
-            "anyOf": [
-              {
-                "maximum": 30000.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": 250,
-            "description": "Sendspin startup lead time advertised by this device.",
-            "title": "Required Lead Time Ms"
-          },
-          "room_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Home Assistant area/room ID for this device.",
-            "title": "Room Id"
-          },
-          "room_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Human-readable room name.",
-            "title": "Room Name"
-          },
-          "static_delay_calibrated_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "ISO-8601 timestamp of the last confirmed calibration.",
-            "title": "Static Delay Calibrated At"
-          },
-          "static_delay_codec": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Codec active when the delay was calibrated.",
-            "title": "Static Delay Codec"
-          },
-          "static_delay_ms": {
-            "anyOf": [
-              {
-                "maximum": 5000.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Per-device static audio delay in milliseconds (0-5000). Added on top of DAC-anchored sync.",
-            "title": "Static Delay Ms"
-          },
-          "static_delay_source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StaticDelaySource"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker."
-          },
-          "volume_controller": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VolumeController"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": "pa",
-            "description": "Volume control backend: 'pa' (PulseAudio) or 'sendspin'."
+          "type": {
+            "const": "bluetooth_a2dp",
+            "default": "bluetooth_a2dp",
+            "title": "Type",
+            "type": "string"
           }
         },
         "required": [
           "mac"
         ],
-        "title": "BluetoothDevice",
+        "title": "BluetoothBackend",
         "type": "object"
       },
       "Body_import_config_api_v1_config_import_post": {
@@ -909,22 +671,6 @@
             "description": "List of Bluetooth adapter configurations.",
             "title": "Bluetooth Adapters"
           },
-          "BLUETOOTH_DEVICES": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/BluetoothDevice"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": [],
-            "description": "List of configured Bluetooth speaker devices.",
-            "title": "Bluetooth Devices"
-          },
           "BRIDGE_NAME": {
             "anyOf": [
               {
@@ -1066,7 +812,7 @@
           "CONFIG_SCHEMA_VERSION": {
             "anyOf": [
               {
-                "const": 5,
+                "const": 6,
                 "type": "integer"
               },
               {
@@ -1197,38 +943,6 @@
               }
             },
             "description": "Home Assistant integration: MQTT discovery (transport B) and/or mDNS-advertised REST surface for the custom_component (transport A1). Bridge-only entities — never duplicates Music Assistant's media_player.<name>."
-          },
-          "LAST_SINKS": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": {},
-            "description": "Runtime state: persisted per-device PulseAudio sink names keyed by MAC.",
-            "title": "Last Sinks"
-          },
-          "LAST_VOLUMES": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/LASTVOLUMES"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": {},
-            "description": "Runtime state: persisted per-device volumes keyed by MAC.",
-            "title": "Last Volumes"
           },
           "LOG_LEVEL": {
             "anyOf": [
@@ -1602,6 +1316,14 @@
             ],
             "description": "Web UI port. null = use WEB_PORT env var or 8080.",
             "title": "Web Port"
+          },
+          "players": {
+            "description": "Configured players. Each has a stable id and a backend: a Bluetooth speaker\n(bluetooth_a2dp) or a local audio output (pulse_sink).",
+            "items": {
+              "$ref": "#/components/schemas/Player"
+            },
+            "title": "Players",
+            "type": "array"
           }
         },
         "title": "BridgeConfig",
@@ -1734,14 +1456,37 @@
           "audio": {
             "$ref": "#/components/schemas/DeviceAudio"
           },
+          "backend": {
+            "$ref": "#/components/schemas/DeviceBackend"
+          },
           "bluetooth": {
-            "$ref": "#/components/schemas/DeviceBluetooth"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceBluetooth"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present for Bluetooth players only."
           },
           "capabilities": {
             "additionalProperties": true,
             "description": "Per-action availability and remediation.",
             "title": "Capabilities",
             "type": "object"
+          },
+          "config_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The id of this speaker's entry in the configuration's players, when it has one.",
+            "title": "Config Id"
           },
           "enabled": {
             "default": true,
@@ -1752,7 +1497,7 @@
             "$ref": "#/components/schemas/DeviceHealth"
           },
           "id": {
-            "description": "Stable player id (UUID derived from the speaker's MAC).",
+            "description": "The player's runtime id: what device commands take and Music Assistant knows it by.",
             "title": "Id",
             "type": "string"
           },
@@ -1820,6 +1565,14 @@
             ],
             "title": "State Changed At"
           },
+          "supported_actions": {
+            "description": "Commands this player's backend can do; others answer 409.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Actions",
+            "type": "array"
+          },
           "timing": {
             "$ref": "#/components/schemas/DeviceTiming"
           },
@@ -1849,6 +1602,7 @@
         },
         "required": [
           "id",
+          "config_id",
           "name",
           "enabled",
           "state_changed_at",
@@ -1857,6 +1611,8 @@
           "last_error_at",
           "health",
           "room",
+          "backend",
+          "supported_actions",
           "bluetooth",
           "audio",
           "timing",
@@ -1991,6 +1747,56 @@
           "static_delay_codec"
         ],
         "title": "DeviceAudio",
+        "type": "object"
+      },
+      "DeviceBackend": {
+        "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter"
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mac"
+          },
+          "sink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sink"
+          },
+          "type": {
+            "description": "What the player plays to: 'bluetooth_a2dp' or 'pulse_sink'.",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "mac",
+          "adapter",
+          "sink"
+        ],
+        "title": "DeviceBackend",
         "type": "object"
       },
       "DeviceBluetooth": {
@@ -2868,6 +2674,11 @@
         "additionalProperties": true,
         "description": "A configured speaker the bridge is not running (``enabled: false``).",
         "properties": {
+          "backend_type": {
+            "default": "bluetooth_a2dp",
+            "title": "Backend Type",
+            "type": "string"
+          },
           "id": {
             "anyOf": [
               {
@@ -2906,6 +2717,7 @@
         "required": [
           "id",
           "mac",
+          "backend_type",
           "player_name"
         ],
         "title": "DisabledDevice",
@@ -3327,17 +3139,6 @@
         "title": "HookIn",
         "type": "object"
       },
-      "IdleMode": {
-        "description": "Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts).",
-        "enum": [
-          "default",
-          "power_save",
-          "auto_disconnect",
-          "keep_alive"
-        ],
-        "title": "IdleMode",
-        "type": "string"
-      },
       "ImportResult": {
         "properties": {
           "warnings": {
@@ -3493,16 +3294,6 @@
         "title": "JobError",
         "type": "object"
       },
-      "KeepAliveMethod": {
-        "description": "Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally).",
-        "enum": [
-          "infrasound",
-          "silence",
-          "none"
-        ],
-        "title": "KeepAliveMethod",
-        "type": "string"
-      },
       "KnownDevice": {
         "properties": {
           "adapters": {
@@ -3527,12 +3318,6 @@
         ],
         "title": "KnownDevice",
         "type": "object"
-      },
-      "LASTVOLUMES": {
-        "maximum": 100.0,
-        "minimum": 0.0,
-        "title": "LASTVOLUMES",
-        "type": "integer"
       },
       "LOGLEVEL": {
         "description": "Root logger level.",
@@ -4037,6 +3822,267 @@
         "title": "PlaybackIn",
         "type": "object"
       },
+      "Player": {
+        "additionalProperties": true,
+        "properties": {
+          "backend": {
+            "discriminator": {
+              "mapping": {
+                "bluetooth_a2dp": "#/components/schemas/BluetoothBackend",
+                "pulse_sink": "#/components/schemas/PulseSinkBackend"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BluetoothBackend"
+              },
+              {
+                "$ref": "#/components/schemas/PulseSinkBackend"
+              }
+            ],
+            "title": "Backend"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "idle_disconnect_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0,
+            "title": "Idle Disconnect Minutes"
+          },
+          "idle_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "default",
+                  "power_save",
+                  "auto_disconnect",
+                  "keep_alive"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle Mode"
+          },
+          "keep_alive_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "infrasound",
+                  "silence",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Alive Method"
+          },
+          "keepalive_interval": {
+            "anyOf": [
+              {
+                "minimum": 30.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 30,
+            "title": "Keepalive Interval"
+          },
+          "listen_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listen Host"
+          },
+          "listen_port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1024.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listen Port"
+          },
+          "min_buffer_ms": {
+            "anyOf": [
+              {
+                "maximum": 30000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Buffer Ms"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "power_save_delay_minutes": {
+            "anyOf": [
+              {
+                "maximum": 60.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "title": "Power Save Delay Minutes"
+          },
+          "preferred_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Format"
+          },
+          "required_lead_time_ms": {
+            "anyOf": [
+              {
+                "maximum": 30000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Lead Time Ms"
+          },
+          "room_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room Id"
+          },
+          "room_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room Name"
+          },
+          "static_delay_calibrated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Static Delay Calibrated At"
+          },
+          "static_delay_codec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Static Delay Codec"
+          },
+          "static_delay_ms": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Static Delay Ms"
+          },
+          "static_delay_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Static Delay Source"
+          },
+          "volume_controller": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pa",
+                  "sendspin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Controller"
+          }
+        },
+        "required": [
+          "id",
+          "backend"
+        ],
+        "title": "Player",
+        "type": "object"
+      },
       "PowerIn": {
         "properties": {
           "on": {
@@ -4164,6 +4210,30 @@
           "pulse_latency_msec"
         ],
         "title": "PulseLatencyIn",
+        "type": "object"
+      },
+      "PulseSinkBackend": {
+        "additionalProperties": false,
+        "properties": {
+          "match": {
+            "$ref": "#/components/schemas/SinkMatch"
+          },
+          "sink": {
+            "minLength": 1,
+            "title": "Sink",
+            "type": "string"
+          },
+          "type": {
+            "const": "pulse_sink",
+            "default": "pulse_sink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sink"
+        ],
+        "title": "PulseSinkBackend",
         "type": "object"
       },
       "QueueCommandIn": {
@@ -4710,6 +4780,68 @@
         "title": "SignInResult",
         "type": "object"
       },
+      "SinkMatch": {
+        "additionalProperties": false,
+        "properties": {
+          "alsa_long_card_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alsa Long Card Name"
+          },
+          "bus_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bus Path"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "vendor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Id"
+          }
+        },
+        "title": "SinkMatch",
+        "type": "object"
+      },
       "StartupProgress": {
         "additionalProperties": true,
         "properties": {
@@ -4758,22 +4890,6 @@
         ],
         "title": "StartupProgress",
         "type": "object"
-      },
-      "StaticDelaySource": {
-        "description": "Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker.",
-        "enum": [
-          "auto_pending",
-          "legacy",
-          "manual",
-          "music_assistant",
-          "bluez_report",
-          "bluez_delay_report",
-          "codec_fallback",
-          "manual_calibration",
-          "microphone_calibration"
-        ],
-        "title": "StaticDelaySource",
-        "type": "string"
       },
       "TokenList": {
         "properties": {
@@ -5210,15 +5326,6 @@
         ],
         "title": "ValidationError",
         "type": "object"
-      },
-      "VolumeController": {
-        "description": "Volume control backend: 'pa' (PulseAudio) or 'sendspin'.",
-        "enum": [
-          "pa",
-          "sendspin"
-        ],
-        "title": "VolumeController",
-        "type": "string"
       },
       "VolumeIn": {
         "properties": {

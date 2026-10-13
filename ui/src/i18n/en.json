@@ -904,13 +904,15 @@
     },
     "leaveConfirm": "You have unsaved settings. Leave anyway?",
     "device": {
-      "player_name": {
+      "name": {
         "label": "Name",
         "help": "Shown as the player in Music Assistant."
       },
-      "adapter": {
-        "label": "Bluetooth adapter",
-        "help": "The adapter that connects this speaker. Automatic uses the default adapter."
+      "backend": {
+        "adapter": {
+          "label": "Bluetooth adapter",
+          "help": "The adapter that connects this speaker. Automatic uses the default adapter."
+        }
       },
       "room_name": {
         "label": "Room",

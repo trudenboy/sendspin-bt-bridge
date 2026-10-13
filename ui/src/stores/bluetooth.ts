@@ -111,12 +111,20 @@ export const useBluetoothStore = defineStore('bluetooth', () => {
    */
   async function addToBridge(mac: string, name: string, adapter = '', extra: { room?: string } = {}) {
     const config = (await getConfig()) as Record<string, unknown>
-    const entries = (config.BLUETOOTH_DEVICES as Record<string, unknown>[] | undefined) ?? []
-    if (entries.some((e) => String(e.mac ?? '').toUpperCase() === mac.toUpperCase())) return false
-    const entry: Record<string, unknown> = { mac: mac.toUpperCase(), player_name: name || mac, enabled: true }
-    if (adapter) entry.adapter = adapter
-    if (extra.room?.trim()) entry.room_name = extra.room.trim()
-    await saveConfig({ ...config, BLUETOOTH_DEVICES: [...entries, entry] } as never)
+    const players = (config.players as Record<string, unknown>[] | undefined) ?? []
+    const taken = players.some((p) => {
+      const backend = p.backend as { type?: string; mac?: string } | undefined
+      return backend?.type === 'bluetooth_a2dp' && String(backend.mac ?? '').toUpperCase() === mac.toUpperCase()
+    })
+    if (taken) return false
+    // No id: the bridge assigns it.
+    const player: Record<string, unknown> = {
+      name: name || mac,
+      enabled: true,
+      backend: { type: 'bluetooth_a2dp', mac: mac.toUpperCase(), adapter },
+    }
+    if (extra.room?.trim()) player.room_name = extra.room.trim()
+    await saveConfig({ ...config, players: [...players, player] } as never)
     return true
   }
 

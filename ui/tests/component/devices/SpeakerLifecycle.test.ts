@@ -29,6 +29,20 @@ async function menuItems(device = makeDevice()) {
 describe('speaker actions', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('hides the actions the backend does not support', async () => {
+    const items = await menuItems(makeDevice({ supported_actions: ['volume', 'transport', 'power_save'] }))
+    for (const gone of ['Reconnect', 'Put on standby', 'Make this bridge the active source']) expect(items).not.toContain(gone)
+    expect(items).toContain('Disable')
+    expect(items).toContain('Remove speaker…')
+  })
+
+  it('treats a missing supported_actions list as nothing supported', async () => {
+    const device = makeDevice()
+    delete (device as { supported_actions?: string[] }).supported_actions
+    const items = await menuItems(device)
+    expect(items).not.toContain('Reconnect')
+  })
+
   it('groups connection, bridge and removal in the same words everywhere', async () => {
     const items = await menuItems()
     expect(items).toEqual([

@@ -16,7 +16,7 @@ import sys
 
 import pytest
 
-from sendspin_bridge.config.players import player_id_for_mac
+from sendspin_bridge.config.players import legacy_device_to_player, player_id_for_mac
 
 _MAC = "AA:BB:CC:DD:EE:FF"
 
@@ -28,6 +28,7 @@ _SECRETS = {
 }
 
 _DEVICE = {"mac": _MAC, "player_name": "Speaker", "enabled": True}
+_PLAYER = legacy_device_to_player(_DEVICE)
 
 
 @pytest.fixture
@@ -69,7 +70,7 @@ def test_corrupt_existing_config_fails_the_request(client):
     cfg_file.write_text('{"BRIDGE_NAME": "TestBridge", "SECRET_KEY": "0123456')
     before = cfg_file.read_text()
 
-    resp = cl.put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "BLUETOOTH_DEVICES": [_DEVICE]})
+    resp = cl.put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "players": [_PLAYER]})
 
     assert resp.status_code == 500
     assert resp.json()["code"] == "config_corrupted"
@@ -79,7 +80,7 @@ def test_corrupt_existing_config_fails_the_request(client):
 def test_successful_save_preserves_never_submitted_secrets(client):
     cl, cfg_file, _ = client
 
-    resp = cl.put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "BLUETOOTH_DEVICES": [_DEVICE]})
+    resp = cl.put("/api/v1/config", json={"BRIDGE_NAME": "Renamed", "players": [_PLAYER]})
 
     assert resp.status_code == 200
     saved = json.loads(cfg_file.read_text())

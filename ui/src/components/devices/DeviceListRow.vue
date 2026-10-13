@@ -42,9 +42,9 @@ const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
 
 const state = computed(() => deviceState(props.device))
-const connected = computed(() => props.device.bluetooth.connected)
+const connected = computed(() => props.device.bluetooth?.connected)
 const isStreaming = computed(() => props.device.playback.playing && props.device.audio.streaming)
-const battery = computed(() => props.device.bluetooth.battery_level ?? null)
+const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
 
 const BatteryIcon = computed(() => {
   const level = battery.value
@@ -111,7 +111,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
           class="truncate text-sm font-medium text-text-primary hover:text-primary-text"
           @click="emit('openDetail', device.id)"
         >
-          {{ speakerName(device.name, device.bluetooth.mac ?? device.id) }}
+          {{ speakerName(device.name, device.bluetooth?.mac ?? device.id) }}
         </button>
         <span
           v-if="battery != null && BatteryIcon"
@@ -134,7 +134,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <td class="w-48 px-2 py-2">
       <VolumeSlider
         v-if="connected"
-        :mac="device.bluetooth.mac ?? device.id"
+        :mac="device.bluetooth?.mac ?? device.id"
         :name="device.name"
         :volume="device.audio.volume"
         :muted="device.audio.muted"
@@ -180,7 +180,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
 
     <!-- Adapter -->
     <td class="hidden px-2 py-2 text-xs text-text-secondary md:table-cell">
-      {{ device.bluetooth.adapter.hci || '—' }}
+      {{ device.bluetooth?.adapter.hci || '—' }}
     </td>
 
     <!-- Actions -->
