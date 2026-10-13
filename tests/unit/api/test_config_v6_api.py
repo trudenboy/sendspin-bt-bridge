@@ -420,3 +420,37 @@ def test_client_sent_match_is_ignored_when_the_sink_is_present(client, tmp_path,
     payload["players"][2]["backend"]["match"] = {"serial": "forged"}
     assert client.put("/api/v1/config", json=payload).status_code == 200
     assert _disk(tmp_path)["players"][2]["backend"]["match"] == {"serial": "REAL"}
+
+
+def test_inventory_is_read_outside_config_lock_and_only_for_pulse_sinks(client, monkeypatch):
+    import threading
+
+    import sendspin_bridge.application.audio as audio
+    import sendspin_bridge.application.config as config_uc
+
+    calls = []
+
+    def fake_read():
+        got = []
+
+        def probe():
+            free = config_uc.config_lock.acquire(blocking=False)
+            got.append(free)
+            if free:
+                config_uc.config_lock.release()
+
+        t = threading.Thread(target=probe)
+        t.start()
+        t.join()
+        calls.append(got[0])
+        return []
+
+    monkeypatch.setattr(audio, "read_local_sinks", fake_read)
+    payload = client.get("/api/v1/config").json()
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert calls == [True]  # lock was free while the inventory was read
+
+    calls.clear()
+    payload["players"] = [p for p in payload["players"] if p["backend"]["type"] != "pulse_sink"]
+    assert client.put("/api/v1/config", json=payload).status_code == 200
+    assert calls == []

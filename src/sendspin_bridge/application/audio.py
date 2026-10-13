@@ -13,7 +13,7 @@ from sendspin_bridge.services.audio.sink_inventory import LocalSink, list_local_
 
 logger = logging.getLogger(__name__)
 
-_READ_TIMEOUT_S = 10.0
+_READ_TIMEOUT_S = 3.0
 
 
 async def list_sinks() -> list[AudioSinkOut]:
@@ -42,7 +42,10 @@ async def list_sinks() -> list[AudioSinkOut]:
 
 
 def read_local_sinks() -> list[LocalSink]:
-    """The sink inventory for a worker thread (a config save); empty when it cannot be read."""
+    """The sink inventory for a worker thread (a config save); empty when it cannot be read.
+
+    Never call this while holding ``config_lock``: it waits on the bridge loop.
+    """
     coro = list_local_sinks()
     try:
         return run_on_loop(coro, timeout=_READ_TIMEOUT_S, description="local sink inventory")
@@ -52,7 +55,11 @@ def read_local_sinks() -> list[LocalSink]:
             logger.warning("Could not read the local sinks: %s", exc)
             return []
     try:
-        return asyncio.run(list_local_sinks())
+        fallback = list_local_sinks()
+        try:
+            return asyncio.run(fallback)
+        finally:
+            fallback.close()
     except Exception as exc:
         logger.warning("Could not read the local sinks: %s", exc)
         return []
