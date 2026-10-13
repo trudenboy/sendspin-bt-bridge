@@ -2652,9 +2652,21 @@ class SendspinClient:
         except Exception as exc:
             logger.debug("[%s] Keepalive burst failed: %s", self.player_name, exc)
 
+    def _calibration_sink(self) -> str | None:
+        """The sink calibration audio can play on right now, or None.
+
+        A local audio output is usable while its sink is present; a Bluetooth
+        speaker only while it is connected.
+        """
+        if not self.bluetooth_sink_name:
+            return None
+        if self.backend_type == PULSE_SINK:
+            return None if self.status.get("sink_missing") else self.bluetooth_sink_name
+        return self.bluetooth_sink_name if self.status.get("bluetooth_connected") else None
+
     async def play_calibration_tone(self) -> bool:
-        """Play a bounded calibration chirp directly on this device's BT sink."""
-        if not self.bluetooth_sink_name or not self.status.get("bluetooth_connected"):
+        """Play a bounded calibration chirp directly on this device's sink."""
+        if self._calibration_sink() is None:
             return False
         try:
             logger.info(
@@ -2716,8 +2728,8 @@ class SendspinClient:
         return metronome
 
     async def start_calibration_metronome(self) -> bool:
-        """Start a phase-aligned continuous metronome on this device's BT sink."""
-        if not self.status.get("bluetooth_connected"):
+        """Start a phase-aligned continuous metronome on this device's sink."""
+        if self._calibration_sink() is None:
             return False
         metronome = await self._metronome_for_current_sink()
         return await metronome.start()
