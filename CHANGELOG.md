@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Local audio output players: besides Bluetooth speakers, the bridge can play
+  to an audio output of the computer it runs on (a USB DAC, a sound card,
+  HDMI) as its own Music Assistant player. Add one from the new "Audio output"
+  tab of the Add speaker dialog. The output is found again by its hardware
+  identity, so it keeps working after a replug or a rename. When it is
+  unplugged the card shows "Output missing" and playback waits for it; when it
+  comes back the player resumes by itself.
+- The bridge's own volume control is used for outputs by default, so a shared
+  sound card's volume is not changed unless the player is set to use the
+  system volume. Diagnostics warn when an output is muted, at zero volume or
+  unplugged, and the optional `PULSE_SINK_RESET_ON_START` setting wakes
+  each output once when the bridge starts.
+
 ### Changed
 
 - The configuration file moves to a new format on the first start: speakers
