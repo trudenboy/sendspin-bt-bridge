@@ -264,6 +264,85 @@
         "title": "AreasIn",
         "type": "object"
       },
+      "AudioSinkOut": {
+        "properties": {
+          "active_port_available": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "available | not available | availability unknown, when the sink has ports.",
+            "title": "Active Port Available"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "identifiers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Stable hardware identifiers kept as the player's match.",
+            "title": "Identifiers",
+            "type": "object"
+          },
+          "in_use_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Config id of the pulse_sink player using this sink.",
+            "title": "In Use By"
+          },
+          "muted": {
+            "default": false,
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "PulseAudio/PipeWire sink name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "sample_spec": {
+            "default": "",
+            "title": "Sample Spec",
+            "type": "string"
+          },
+          "state": {
+            "description": "running | idle | suspended | unknown",
+            "title": "State",
+            "type": "string"
+          },
+          "volume": {
+            "description": "Loudest channel, percent.",
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "state",
+          "sample_spec",
+          "muted",
+          "volume",
+          "active_port_available",
+          "identifiers",
+          "in_use_by"
+        ],
+        "title": "AudioSinkOut",
+        "type": "object"
+      },
       "BluetoothAdapter": {
         "additionalProperties": true,
         "properties": {
@@ -5487,6 +5566,54 @@
         "summary": "Power a controller on or off",
         "tags": [
           "bluetooth"
+        ]
+      }
+    },
+    "/api/v1/audio/sinks": {
+      "get": {
+        "description": "Sinks a ``pulse_sink`` player can use (Bluetooth and bridge-internal sinks left out).",
+        "operationId": "list_sinks_api_v1_audio_sinks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AudioSinkOut"
+                  },
+                  "title": "Response List Sinks Api V1 Audio Sinks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Local audio outputs",
+        "tags": [
+          "audio"
         ]
       }
     },

@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audio/sinks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Local audio outputs
+         * @description Sinks a ``pulse_sink`` player can use (Bluetooth and bridge-internal sinks left out).
+         */
+        get: operations["list_sinks_api_v1_audio_sinks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/ha-pair": {
         parameters: {
             query?: never;
@@ -1784,6 +1804,56 @@ export interface components {
              * @default false
              */
             include_devices?: boolean;
+        };
+        /** AudioSinkOut */
+        AudioSinkOut: {
+            /**
+             * Active Port Available
+             * @description available | not available | availability unknown, when the sink has ports.
+             */
+            active_port_available: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Identifiers
+             * @description Stable hardware identifiers kept as the player's match.
+             */
+            identifiers: {
+                [key: string]: string;
+            };
+            /**
+             * In Use By
+             * @description Config id of the pulse_sink player using this sink.
+             */
+            in_use_by: string | null;
+            /**
+             * Muted
+             * @default false
+             */
+            muted: boolean;
+            /**
+             * Name
+             * @description PulseAudio/PipeWire sink name.
+             */
+            name: string;
+            /**
+             * Sample Spec
+             * @default
+             */
+            sample_spec: string;
+            /**
+             * State
+             * @description running | idle | suspended | unknown
+             */
+            state: string;
+            /**
+             * Volume
+             * @description Loudest channel, percent.
+             */
+            volume: number;
         };
         /** BluetoothAdapter */
         BluetoothAdapter: {
@@ -3875,6 +3945,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PowerOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    list_sinks_api_v1_audio_sinks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioSinkOut"][];
                 };
             };
             /** @description Client error */

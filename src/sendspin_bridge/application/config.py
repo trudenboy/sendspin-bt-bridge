@@ -149,9 +149,18 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
     never used). Any other player is taken as validated; it keeps a client id
     only when a stored player of that backend type has it, else gets a new
     ``uuid4``, and its ``backend.match`` is taken from the stored player of
-    that id (the server owns it; a client value is never used).
+    that id (the server owns it; a client value is never used). A
+    ``pulse_sink`` player keeps a stored non-empty ``match`` while its sink is
+    unchanged; otherwise it is read from the sink now present (empty when the
+    sink is absent).
     """
-    from sendspin_bridge.config.players import BLUETOOTH, legacy_device_to_player, normalize_mac, player_id_for_mac
+    from sendspin_bridge.config.players import (
+        BLUETOOTH,
+        PULSE_SINK,
+        legacy_device_to_player,
+        normalize_mac,
+        player_id_for_mac,
+    )
 
     existing = _as_v6(existing_file) if existing_file else {}
     existing_players = [p for p in existing.get("players") or [] if isinstance(p, dict)]
@@ -167,6 +176,7 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
         if isinstance(entry, dict) and normalize_mac(entry.get("mac"))
     }
     players: list[dict] = []
+    sinks_now: list | None = None  # read once, only when a pulse_sink match must be computed
     for player in payload_players:
         if not isinstance(player, dict):
             continue
@@ -192,10 +202,16 @@ def _players_from_internal(internal: dict, payload_players: list, existing_file:
         stored = existing_by_id.get(built["id"]) or {}
         raw_stored_backend = stored.get("backend")
         stored_backend: dict[str, Any] = raw_stored_backend if isinstance(raw_stored_backend, dict) else {}
-        if stored_backend.get("match"):
+        built_backend.pop("match", None)
+        if stored_backend.get("match") and stored_backend.get("sink") == built_backend.get("sink"):
             built_backend["match"] = copy.deepcopy(stored_backend["match"])
-        else:
-            built_backend.pop("match", None)
+        elif built_backend.get("type") == PULSE_SINK and built_backend.get("sink"):
+            if sinks_now is None:
+                from sendspin_bridge.application.audio import read_local_sinks
+
+                sinks_now = read_local_sinks()
+            present = next((s for s in sinks_now if s.name == built_backend["sink"]), None)
+            built_backend["match"] = dict(present.identifiers) if present else {}
         built["backend"] = built_backend
         players.append(built)
     return players
