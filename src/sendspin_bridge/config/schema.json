@@ -7,7 +7,7 @@
   "properties": {
     "CONFIG_SCHEMA_VERSION": {
       "type": "integer",
-      "const": 5,
+      "const": 6,
       "description": "Schema version; managed by the application — do not change."
     },
     "SENDSPIN_SERVER": {
@@ -46,31 +46,12 @@
       "default": "",
       "description": "Bridge instance name. Empty or 'auto' resolves to hostname."
     },
-    "BLUETOOTH_DEVICES": {
-      "type": "array",
-      "default": [],
-      "description": "List of configured Bluetooth speaker devices.",
-      "items": {
-        "$ref": "#/$defs/BluetoothDevice"
-      }
-    },
     "players": {
       "type": "array",
       "default": [],
       "description": "Configured players (schema v6). Each has an id, a name and a backend (bluetooth_a2dp or pulse_sink).",
       "items": {
-        "type": "object",
-        "required": ["id", "backend"],
-        "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string" },
-          "enabled": { "type": "boolean" },
-          "backend": {
-            "type": "object",
-            "required": ["type"],
-            "properties": { "type": { "enum": ["bluetooth_a2dp", "pulse_sink"] } }
-          }
-        }
+        "$ref": "#/$defs/Player"
       }
     },
     "PLAYER_STATE": {
@@ -80,10 +61,20 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
-          "volume": { "type": "integer", "minimum": 0, "maximum": 100 },
-          "sink": { "type": "string" },
-          "released": { "type": "boolean" },
-          "released_by": { "type": "string" }
+          "volume": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "sink": {
+            "type": "string"
+          },
+          "released": {
+            "type": "boolean"
+          },
+          "released_by": {
+            "type": "string"
+          }
         }
       }
     },
@@ -108,8 +99,12 @@
         "type": "object",
         "required": ["area_id"],
         "properties": {
-          "area_id": { "type": "string" },
-          "area_name": { "type": "string" }
+          "area_id": {
+            "type": "string"
+          },
+          "area_name": {
+            "type": "string"
+          }
         }
       }
     },
@@ -117,22 +112,6 @@
       "type": "string",
       "default": "Australia/Melbourne",
       "description": "Timezone (IANA format)."
-    },
-    "LAST_VOLUMES": {
-      "type": "object",
-      "default": {},
-      "description": "Runtime state: persisted per-device volumes keyed by MAC.",
-      "additionalProperties": {
-        "type": "integer",
-        "minimum": 0,
-        "maximum": 100
-      }
-    },
-    "LAST_SINKS": {
-      "type": "object",
-      "default": {},
-      "description": "Runtime state: persisted per-device PulseAudio sink names keyed by MAC.",
-      "additionalProperties": { "type": "string" }
     },
     "PULSE_LATENCY_MSEC": {
       "type": "integer",
@@ -328,7 +307,9 @@
       "type": "array",
       "default": [],
       "description": "Additional trusted proxy IP addresses for X-Forwarded-For.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE": {
       "type": "boolean",
@@ -371,27 +352,74 @@
       },
       "description": "Home Assistant integration: MQTT discovery (transport B) and/or mDNS-advertised REST surface for the custom_component (transport A1). Bridge-only entities — never duplicates Music Assistant's media_player.<name>.",
       "properties": {
-        "enabled": {"type": "boolean", "default": false},
-        "mode": {"type": "string", "enum": ["off", "mqtt", "rest"], "default": "off", "description": "Transport selector — pick exactly one. ``both`` was removed in v2.65.0-rc.3 because it caused duplicate HA entities; legacy stored values are normalised to ``mqtt`` on load."},
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["off", "mqtt", "rest"],
+          "default": "off",
+          "description": "Transport selector — pick exactly one. ``both`` was removed in v2.65.0-rc.3 because it caused duplicate HA entities; legacy stored values are normalised to ``mqtt`` on load."
+        },
         "mqtt": {
           "type": "object",
           "properties": {
-            "broker": {"type": "string", "description": "Broker host or 'auto' (Supervisor MQTT add-on auto-detect)."},
-            "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 1883},
-            "username": {"type": "string"},
-            "password": {"type": "string"},
-            "discovery_prefix": {"type": "string", "default": "homeassistant"},
-            "tls": {"type": "boolean", "default": false},
-            "client_id": {"type": "string", "description": "Optional MQTT client_id; empty = auto-derived from bridge_id."}
+            "broker": {
+              "type": "string",
+              "description": "Broker host or 'auto' (Supervisor MQTT add-on auto-detect)."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "default": 1883
+            },
+            "username": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            },
+            "discovery_prefix": {
+              "type": "string",
+              "default": "homeassistant"
+            },
+            "tls": {
+              "type": "boolean",
+              "default": false
+            },
+            "client_id": {
+              "type": "string",
+              "description": "Optional MQTT client_id; empty = auto-derived from bridge_id."
+            }
           }
         },
         "rest": {
           "type": "object",
           "properties": {
-            "advertise_mdns": {"type": "boolean", "default": true, "description": "Publish _sendspin-bridge._tcp.local. so HA's Zeroconf discovery offers our integration."},
-            "supervisor_pair": {"type": "boolean", "default": true, "description": "On HAOS, allow the custom_component to obtain a long-lived bearer token via the SUPERVISOR_TOKEN round-trip pairing endpoint."},
-            "advertise_host": {"type": "string", "default": "", "description": "Address announced to Home Assistant instead of the detected one (reverse proxy, NAT). Empty = detect."},
-            "advertise_port": {"type": "integer", "minimum": 0, "maximum": 65535, "default": 0, "description": "Port announced to Home Assistant instead of the web port. 0 = the web port."}
+            "advertise_mdns": {
+              "type": "boolean",
+              "default": true,
+              "description": "Publish _sendspin-bridge._tcp.local. so HA's Zeroconf discovery offers our integration."
+            },
+            "supervisor_pair": {
+              "type": "boolean",
+              "default": true,
+              "description": "On HAOS, allow the custom_component to obtain a long-lived bearer token via the SUPERVISOR_TOKEN round-trip pairing endpoint."
+            },
+            "advertise_host": {
+              "type": "string",
+              "default": "",
+              "description": "Address announced to Home Assistant instead of the detected one (reverse proxy, NAT). Empty = detect."
+            },
+            "advertise_port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535,
+              "default": 0,
+              "description": "Port announced to Home Assistant instead of the web port. 0 = the web port."
+            }
           }
         }
       }
@@ -403,130 +431,402 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": {"type": "string"},
-          "label": {"type": "string"},
-          "token_hash": {"type": "string"},
-          "created": {"type": "string"},
-          "last_used": {"type": ["string", "null"]}
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "token_hash": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "last_used": {
+            "type": ["string", "null"]
+          }
         }
       }
     }
   },
   "$defs": {
-    "BluetoothDevice": {
-      "type": "object",
-      "required": ["mac"],
+    "Player": {
+      "additionalProperties": true,
       "properties": {
-        "mac": {
+        "id": {
+          "minLength": 1,
           "type": "string",
-          "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
-          "description": "Bluetooth MAC address (XX:XX:XX:XX:XX:XX)."
+          "description": "Stable player id. A Bluetooth player's id is uuid5 of its MAC unless a file says otherwise; never changes."
         },
-        "player_name": {
-          "type": "string",
-          "description": "Display name for the speaker. Falls back to MAC if empty."
-        },
-        "adapter": {
-          "type": "string",
+        "name": {
           "default": "",
-          "description": "Bluetooth adapter to use (e.g. 'hci0'). Empty = default adapter."
+          "type": "string"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean",
+          "description": "Whether this device is active."
         },
         "listen_port": {
-          "type": "integer",
-          "minimum": 1024,
-          "maximum": 65535,
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 1024,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Override Sendspin listener port for this device."
         },
+        "listen_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "preferred_format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "static_delay_ms": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 5000,
+          "anyOf": [
+            {
+              "maximum": 5000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Per-device static audio delay in milliseconds (0–5000). Added on top of DAC-anchored sync."
         },
         "static_delay_source": {
-          "type": "string",
-          "enum": ["auto_pending", "legacy", "manual", "music_assistant", "bluez_report", "bluez_delay_report", "codec_fallback", "manual_calibration", "microphone_calibration"],
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "auto_pending",
+                "legacy",
+                "manual",
+                "music_assistant",
+                "bluez_report",
+                "bluez_delay_report",
+                "codec_fallback",
+                "manual_calibration",
+                "microphone_calibration"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Provenance of the per-device static delay. auto_pending is an internal one-shot initialization marker."
         },
         "static_delay_calibrated_at": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "ISO-8601 timestamp of the last confirmed calibration."
         },
         "static_delay_codec": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Codec active when the delay was calibrated."
         },
         "required_lead_time_ms": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 30000,
-          "default": 250,
+          "anyOf": [
+            {
+              "maximum": 30000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Sendspin startup lead time advertised by this device."
         },
         "min_buffer_ms": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 30000,
-          "default": 250,
+          "anyOf": [
+            {
+              "maximum": 30000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Sendspin minimum ongoing buffer advertised by this device."
         },
-        "enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether this device is active."
-        },
         "volume_controller": {
-          "type": "string",
-          "enum": ["pa", "sendspin"],
-          "default": "pa",
+          "anyOf": [
+            {
+              "enum": ["pa", "sendspin"],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Volume control backend: 'pa' (PulseAudio) or 'sendspin'."
         },
-        "idle_disconnect_minutes": {
-          "type": "integer",
-          "minimum": 0,
-          "default": 0,
-          "description": "Minutes of idle before BT standby disconnect. 0 = disabled. Legacy field — prefer idle_mode."
-        },
-        "keepalive_enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Send periodic silence to prevent BT speaker auto-sleep. Legacy field — prefer idle_mode."
-        },
-        "keepalive_interval": {
-          "type": "integer",
-          "minimum": 30,
-          "default": 30,
-          "description": "Seconds between keepalive infrasound bursts."
-        },
         "idle_mode": {
-          "type": "string",
-          "enum": ["default", "power_save", "auto_disconnect", "keep_alive"],
-          "default": "default",
+          "anyOf": [
+            {
+              "enum": [
+                "default",
+                "power_save",
+                "auto_disconnect",
+                "keep_alive"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Per-device idle behavior: 'default' (no action), 'power_save' (suspend PA sink to release A2DP), 'auto_disconnect' (full BT disconnect after timeout), 'keep_alive' (periodic infrasound bursts)."
         },
         "power_save_delay_minutes": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 60,
+          "anyOf": [
+            {
+              "maximum": 60,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": 1,
           "description": "Minutes after sink idle before suspending PA sink in power_save mode."
         },
+        "idle_disconnect_minutes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0,
+          "description": "Minutes of idle before BT standby disconnect. 0 = disabled. Legacy field — prefer idle_mode."
+        },
+        "keepalive_interval": {
+          "anyOf": [
+            {
+              "const": 0
+            },
+            {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 3600
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 30,
+          "description": "Seconds between keepalive infrasound bursts; 0 turns them off."
+        },
         "keep_alive_method": {
-          "type": "string",
-          "enum": ["infrasound", "silence", "none"],
-          "default": "infrasound",
+          "anyOf": [
+            {
+              "enum": ["infrasound", "silence", "none"],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Payload for keepalive bursts: 'infrasound' (default — 2 Hz subsonic stereo), 'silence' (zero PCM, same length, for speakers that misbehave on the 2 Hz tone), 'none' (skip — let speaker time out naturally)."
         },
         "room_id": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Home Assistant area/room ID for this device."
         },
         "room_name": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "Human-readable room name."
+        },
+        "backend": {
+          "discriminator": {
+            "mapping": {
+              "bluetooth_a2dp": "#/$defs/BluetoothBackend",
+              "pulse_sink": "#/$defs/PulseSinkBackend"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BluetoothBackend"
+            },
+            {
+              "$ref": "#/$defs/PulseSinkBackend"
+            }
+          ],
+          "description": "What the player plays to: a Bluetooth A2DP speaker or a local PulseAudio/PipeWire sink. The type of an existing player cannot change."
         }
       },
-      "additionalProperties": false
+      "required": ["id", "backend"],
+      "type": "object",
+      "description": "One player: a speaker the bridge keeps connected and fed with a Sendspin stream."
+    },
+    "BluetoothBackend": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "bluetooth_a2dp",
+          "default": "bluetooth_a2dp",
+          "type": "string"
+        },
+        "mac": {
+          "type": "string"
+        },
+        "adapter": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": ["mac"],
+      "type": "object"
+    },
+    "PulseSinkBackend": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "pulse_sink",
+          "default": "pulse_sink",
+          "type": "string"
+        },
+        "sink": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/SinkMatch",
+          "description": "Server-owned hardware identity of the sink; ignored when sent by a client."
+        }
+      },
+      "required": ["sink"],
+      "type": "object"
+    },
+    "SinkMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "serial": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bus_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vendor_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "alsa_long_card_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
     },
     "BluetoothAdapter": {
       "type": "object",

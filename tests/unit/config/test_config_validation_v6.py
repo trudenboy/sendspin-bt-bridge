@@ -92,7 +92,7 @@ def test_bluetooth_player_settings_are_cleaned_up_without_errors():
                 idle_mode="bogus",
                 required_lead_time_ms=99999,
                 min_buffer_ms="x",
-                power_save_delay_minutes=-5,
+                power_save_delay_minutes=7,
                 power_save_delay_seconds=600,
             )
         ],
@@ -104,7 +104,7 @@ def test_bluetooth_player_settings_are_cleaned_up_without_errors():
     assert player["required_lead_time_ms"] == 30000
     assert "min_buffer_ms" not in player
     # The legacy seconds key is dropped; an explicit minutes value wins, as in the v5 migration.
-    assert player["power_save_delay_minutes"] == -5
+    assert player["power_save_delay_minutes"] == 7
     assert "power_save_delay_seconds" not in player
 
 

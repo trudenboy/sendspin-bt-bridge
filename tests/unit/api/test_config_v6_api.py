@@ -292,7 +292,7 @@ def test_client_id_never_replaces_the_id_of_a_known_bluetooth_mac(client, tmp_pa
     payload["players"][0]["id"] = "other-id"
     assert client.put("/api/v1/config", json=payload).status_code == 200
     disk = _disk(tmp_path)
-    assert [p["id"] for p in disk["players"]][0] == "custom-a"
+    assert disk["players"][0]["id"] == "custom-a"
     assert disk["PLAYER_STATE"]["custom-a"]["volume"] == 40
 
 
