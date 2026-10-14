@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.runtime import bridge_loop, run_on_loop, submit_on_loop
@@ -297,7 +297,7 @@ TransportAction = Literal[
 ]
 
 
-def _positive(value: Any) -> bool:
+def _positive(value: Any) -> TypeGuard[int | float]:
     return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
 
 
