@@ -246,11 +246,22 @@ def _enrich_device_snapshot_with_ma(device: DeviceSnapshot, client_or_player_id=
         ma_group_by_id = state.get_ma_group_by_id(device.extra["group_id"])
         if ma_group_by_id and ma_group_by_id.get("id"):
             device.ma_syncgroup_id = ma_group_by_id["id"]
+    device.ma_now_playing = ma_now_playing_for_player(player_id, device.extra.get("group_id"), ma_group=ma_group)
+
+
+def ma_now_playing_for_player(
+    player_id: str, group_id: Any = None, *, ma_group: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Music Assistant's now-playing for one player, as the status snapshot shows it.
+
+    The player's MA syncgroup first; without one, the Sendspin group id, then
+    the player's own id. ``ma_group`` saves a second lookup when the caller has it.
+    """
+    if ma_group is None and player_id:
+        ma_group = get_ma_group_for_player_id(player_id)
     if ma_group:
-        device.ma_now_playing = get_ma_now_playing_for_group(ma_group["id"])
-    else:
-        group_id = str(device.extra.get("group_id") or "")
-        device.ma_now_playing = get_ma_now_playing_for_group(group_id) or get_ma_now_playing_for_group(player_id) or {}
+        return get_ma_now_playing_for_group(ma_group["id"])
+    return get_ma_now_playing_for_group(str(group_id or "")) or get_ma_now_playing_for_group(player_id) or {}
 
 
 def _get_device_event_id(client_or_player_id, device: DeviceSnapshot) -> str:

@@ -38,6 +38,18 @@ describe('PlaybackProgress seek', () => {
     expect(w.emitted('seek')).toEqual([[100_000]])
   })
 
+  it("takes the track's length from Music Assistant first, as the seek API checks it", async () => {
+    const both = makeDevice({
+      playback: { track: { duration_ms: 179_000, progress_ms: 0 } },
+      music_assistant: { now_playing: { state: 'paused', elapsed: 50, duration: 180.4 } },
+    })
+    const w = mountBar({ seekable: true, device: both })
+    const slider = w.get('[role="slider"]')
+    slider.element.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 8, right: 100, bottom: 8, x: 0, y: 0, toJSON: () => ({}) })
+    await slider.trigger('click', { clientX: 100 })
+    expect(w.emitted('seek')).toEqual([[180_400]])
+  })
+
   it('steps with the arrow keys and jumps to the start with Home', async () => {
     const w = mountBar({ seekable: true })
     const slider = w.get('[role="slider"]')

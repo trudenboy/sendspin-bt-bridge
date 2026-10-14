@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import sendspin_bridge.application.status as status
+import sendspin_bridge.bridge.state as state
 from sendspin_bridge.services.bluetooth.device_registry import DeviceRegistrySnapshot
 
 ALL_COMMANDS = [
@@ -103,13 +104,45 @@ def test_seek_sends_the_position_to_the_native_controller(api_client, registry, 
     registry[0].send_transport_command.assert_awaited_once_with("seek", value=90_000)
 
 
-def test_seek_uses_music_assistants_duration_when_the_daemon_has_none(api_client, registry, bridge_loop):
-    registry.append(_client("kitchen", supported=["seek"], ma_now_playing={"duration": 180}))
+@pytest.fixture
+def ma_now_playing():
+    """Music Assistant's now-playing cache, seeded the way the MA monitor fills it."""
+    state.clear_ma_now_playing()
+    state.set_ma_groups({})
+    yield state
+    state.clear_ma_now_playing()
+    state.set_ma_groups({})
+
+
+def test_seek_uses_music_assistants_duration_when_the_daemon_has_none(
+    api_client, registry, bridge_loop, ma_now_playing
+):
+    """The real client status carries no MA now-playing: the length comes from MA's cache."""
+    registry.append(_client("kitchen", supported=["seek"]))
+    ma_now_playing.set_ma_now_playing_for_group("kitchen", {"duration": 180})
     ok = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 180_000})
     assert ok.status_code == 204
     past = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 180_001})
     assert past.status_code == 400
     assert past.json()["code"] == "out_of_range"
+
+
+def test_seek_finds_the_length_through_the_players_ma_syncgroup(api_client, registry, bridge_loop, ma_now_playing):
+    registry.append(_client("kitchen", supported=["seek"]))
+    ma_now_playing.set_ma_groups({"kitchen": {"id": "syncgroup_1", "name": "Downstairs"}})
+    ma_now_playing.set_ma_now_playing_for_group("syncgroup_1", {"duration": 120.5})
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 120_500})
+    assert resp.status_code == 204
+
+
+def test_seek_checks_music_assistants_length_first_as_the_bar_does(api_client, registry, bridge_loop, ma_now_playing):
+    """The bar is drawn from MA's length first; a click at its very end must not be rejected
+    because the daemon reports a slightly shorter track."""
+    registry.append(_client("kitchen", supported=["seek"], track_duration_ms=179_000))
+    ma_now_playing.set_ma_now_playing_for_group("kitchen", {"duration": 180.4})
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 180_400})
+    assert resp.status_code == 204
+    registry[0].send_transport_command.assert_awaited_once_with("seek", value=180_400)
 
 
 @pytest.mark.parametrize("value", [-1, 200_001])
