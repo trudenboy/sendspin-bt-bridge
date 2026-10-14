@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.3] - 2026-10-14
+
+### Added
+
+- Speaker cards show what the previous interface showed: album art (click to
+  enlarge), a sync badge with the drift and re-anchor count, the Music
+  Assistant group (opens the group in Music Assistant), the Bluetooth adapter
+  (opens its settings) or the audio output, signal-strength bars that grey out
+  when the reading is old, how long a speaker has been in standby, and whether
+  it was released automatically or handed over.
+- More precise speaker states: buffering, muted output, stopping and
+  reconnecting.
+- A short "Why?" note on a card when an action is unavailable for a reason
+  its status does not already show.
+- In the list view a row opens in place to show playback, controls and
+  details; the most active speaker opens on load.
+- Sorting by activity (playing first, members of a Music Assistant group kept
+  together), by name or by status, remembered in the browser, and a filter for
+  Bluetooth speakers or audio outputs when both are present.
+- Power save, standby and hand-over for the selected speakers. Bulk actions
+  skip speakers they cannot apply to and name each speaker that failed.
+- A runtime line under the header: install type, host name, IP address,
+  uptime, connected speakers, Music Assistant and playback.
+- The API reports when a speaker's signal strength was last measured
+  (`bluetooth.rssi_at`).
+
+### Fixed
+
+- In the list view, local audio outputs show an output icon instead of a
+  Bluetooth one.
+- On narrow screens the guidance banner puts its button under the text
+  instead of squeezing the text into a narrow column.
+
 ## [3.1.0-beta.2] - 2026-10-14
 
 ### Changed

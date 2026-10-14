@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.3] - 2026-10-14
+
 ### Added
 
 - Speaker cards show what the previous interface showed: album art (click to
