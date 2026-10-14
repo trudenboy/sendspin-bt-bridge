@@ -433,6 +433,25 @@
       "transport": "Transport",
       "adapter": "Adapter",
       "actions": "Actions"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Power save",
+        "title": "Suspend the audio output of {count} of {total} selected (Bluetooth stays connected)"
+      },
+      "standby": {
+        "label": "Standby",
+        "title": "Disconnect Bluetooth on {count} of {total} selected to save the speakers' battery",
+        "confirmTitle": "Put {count} speaker(s) on standby?",
+        "confirmMessage": "Bluetooth disconnects and playback stops on: {names}. Wake them from their menu."
+      },
+      "release": {
+        "label": "Release",
+        "title": "Hand {count} of {total} selected over to other devices",
+        "confirmTitle": "Hand over {count} speaker(s)?",
+        "confirmMessage": "The bridge lets go of: {names}. They will not reconnect until you take them back."
+      },
+      "failed": "{action} failed for: {names}"
     }
   },
   "drawer": {

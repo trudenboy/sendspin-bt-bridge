@@ -2,13 +2,20 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationStore } from '@/stores/notifications'
+import { useDeviceStore } from '@/stores/devices'
 import { SbSlider } from '@/kit'
 import { setVolume, setMute, setDevicePlayback } from '@/api/playback'
 import { reconnectDevice } from '@/api/devices'
+import { confirmDialog } from '@/composables/useConfirm'
+import { bulkEligible, type BulkAction } from '@/utils/bulkActions'
+import { speakerName } from '@/utils/speakerName'
 import {
   VolumeX,
   PauseCircle,
   RefreshCw,
+  Moon,
+  PowerOff,
+  LogOut,
 } from 'lucide-vue-next'
 import type { Device } from '@/api/types'
 
@@ -29,6 +36,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const notifications = useNotificationStore()
+const deviceStore = useDeviceStore()
 
 const groupVolume = ref(50)
 const actionLoading = ref(false)
@@ -97,6 +105,53 @@ async function onReconnectAll() {
   }
 }
 
+/* Power save, standby and hand-over: only for the selected devices that can take them. */
+const BULK: { action: BulkAction; icon: typeof Moon; confirm: boolean }[] = [
+  { action: 'power_save', icon: Moon, confirm: false },
+  { action: 'standby', icon: PowerOff, confirm: true },
+  { action: 'release', icon: LogOut, confirm: true },
+]
+
+const eligible = computed(() =>
+  Object.fromEntries(
+    BULK.map(({ action }) => [action, props.selectedDevices.filter((d) => bulkEligible(d, action))]),
+  ) as Record<BulkAction, Device[]>,
+)
+
+const bulkButtons = computed(() => BULK.filter(({ action }) => eligible.value[action].length > 0))
+
+const nameOf = (d: Device) => speakerName(d.name, d.bluetooth?.mac ?? d.id)
+
+function runOne(action: BulkAction, id: string): Promise<unknown> {
+  if (action === 'power_save') return deviceStore.setPowerSave(id, true)
+  if (action === 'standby') return deviceStore.standby(id)
+  return deviceStore.release(id, true)
+}
+
+async function onBulk(action: BulkAction, ask: boolean) {
+  const targets = eligible.value[action]
+  if (!targets.length) return
+  if (ask) {
+    const names = targets.map(nameOf).join(', ')
+    const ok = await confirmDialog({
+      title: t(`devices.bulk.${action}.confirmTitle`, { count: targets.length }),
+      message: t(`devices.bulk.${action}.confirmMessage`, { names }),
+      confirmLabel: t(`devices.bulk.${action}.label`),
+    })
+    if (!ok) return
+  }
+  actionLoading.value = true
+  try {
+    const results = await Promise.allSettled(targets.map((d) => runOne(action, d.id)))
+    const failed = targets.filter((_, i) => results[i]!.status === 'rejected').map(nameOf)
+    if (failed.length) {
+      notifications.error(t('devices.bulk.failed', { action: t(`devices.bulk.${action}.label`), names: failed.join(', ') }))
+    }
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 const selectionLabel = computed(() => {
   if (props.selectedCount === 0) return t('devices.noneSelected')
   return t('devices.selected', {
@@ -159,7 +214,7 @@ watch(
       </div>
 
       <!-- Action buttons -->
-      <div class="flex items-center gap-1">
+      <div class="flex flex-wrap items-center gap-1">
         <button
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
@@ -189,6 +244,20 @@ watch(
         >
           <RefreshCw class="h-4 w-4" />
           <span class="hidden sm:inline">{{ t('devices.reconnectAll') }}</span>
+        </button>
+        <button
+          v-for="b in bulkButtons"
+          :key="b.action"
+          type="button"
+          :data-bulk="b.action"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
+          :disabled="actionLoading"
+          :title="t(`devices.bulk.${b.action}.title`, { count: eligible[b.action].length, total: selectedCount })"
+          :aria-label="t(`devices.bulk.${b.action}.label`)"
+          @click="onBulk(b.action, b.confirm)"
+        >
+          <component :is="b.icon" class="h-4 w-4" aria-hidden="true" />
+          <span class="hidden sm:inline">{{ t(`devices.bulk.${b.action}.label`) }}</span>
         </button>
       </div>
     </div>

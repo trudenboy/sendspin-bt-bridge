@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useBridgeStore } from './bridge'
-import { reconnectDevice, removeDevice, setDeviceEnabled, setManagement, standbyDevice, wakeDevice } from '@/api/devices'
+import {
+  reconnectDevice,
+  removeDevice,
+  setDeviceEnabled,
+  setManagement,
+  setPowerSave as apiSetPowerSave,
+  standbyDevice,
+  wakeDevice,
+} from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
 import { isDeviceConnected, isOutputMissing, isPulseSink } from '@/utils/deviceBackend'
@@ -117,6 +125,11 @@ export const useDeviceStore = defineStore('devices', () => {
     await standbyDevice(id)
   }
 
+  /** Suspend (true) or resume the speaker's audio output; the Bluetooth link stays up. */
+  async function setPowerSave(id: string, enabled: boolean) {
+    await apiSetPowerSave(id, enabled)
+  }
+
   async function release(id: string, released: boolean) {
     await setManagement(id, !released)
   }
@@ -144,6 +157,7 @@ export const useDeviceStore = defineStore('devices', () => {
     reconnect,
     wake,
     standby,
+    setPowerSave,
     release,
     remove,
     setEnabled,
