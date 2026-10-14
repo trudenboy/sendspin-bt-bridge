@@ -9,6 +9,7 @@ import type { AudioSink, Device, Group } from '@/api/types'
 import { isDeviceConnected, isPulseSink } from './deviceBackend'
 import { deviceState } from '@/stores/devices'
 import { safeHttpUrl } from './safeUrl'
+import { queueControls } from './queueControls'
 
 export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 
@@ -198,7 +199,7 @@ const SELF_EXPLAINED = new Set(['offline', 'standby', 'released', 'disabled', 'o
  * Up to two controls the speaker cannot use right now, each with the bridge's
  * reason. Nothing when the state badge already says why (handed over,
  * standby, offline, output missing, disabled), and queue controls only while
- * the player streams: an idle player has no queue to control.
+ * the player streams without them: an idle player has no queue to control.
  */
 export function blockedHints(d: Device, limit = 2): BlockedHint[] {
   if (SELF_EXPLAINED.has(deviceState(d))) return []
@@ -210,7 +211,8 @@ export function blockedHints(d: Device, limit = 2): BlockedHint[] {
   const actions = ((d.capabilities as { actions?: Record<string, Capability> }).actions ?? {}) as Record<string, Capability>
   for (const key of HINT_ACTIONS) {
     if (isPulseSink(d) && BLUETOOTH_ONLY.has(key)) continue
-    if (key === 'queue_control' && !streaming) continue
+    // Only while streaming, and only when the card has no shuffle/repeat to show.
+    if (key === 'queue_control' && (!streaming || queueControls(d).any)) continue
     const cap = actions[key]
     if (!cap || cap.supported === false || cap.currently_available !== false || !cap.blocked_reason) continue
     hints.push({

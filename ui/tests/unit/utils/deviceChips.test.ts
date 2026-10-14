@@ -236,6 +236,16 @@ describe('blockedHints', () => {
     expect(blockedHints(playing).map((h) => h.key)).toEqual(['queue_control'])
   })
 
+  it('says queue controls are unavailable only when the card cannot show them', () => {
+    const actions = { queue_control: cap('No queue.') }
+    const native = makeDevice({
+      playback: { playing: true, supported_commands: ['shuffle', 'unshuffle', 'repeat_off', 'repeat_one', 'repeat_all'] },
+      audio: { streaming: true },
+      capabilities: { actions },
+    })
+    expect(blockedHints(native).map((h) => h.key)).toEqual([])
+  })
+
   it('never offers Bluetooth-only hints for a local output', () => {
     const d = output({
       capabilities: { actions: { reconnect: cap('No Bluetooth.'), toggle_bt_management: cap('No Bluetooth.'), volume: cap('No sink.') } },

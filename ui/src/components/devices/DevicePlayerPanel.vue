@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDeviceStore } from '@/stores/devices'
+import { useBridgeStore } from '@/stores/bridge'
 import { useNotificationStore } from '@/stores/notifications'
 import { isDeviceConnected } from '@/utils/deviceBackend'
 import { speakerName } from '@/utils/speakerName'
@@ -16,7 +17,8 @@ import BlockedHints from './chips/BlockedHints.vue'
 import { SbBadge } from '@/kit'
 import { transferChip } from '@/utils/deviceChips'
 import { apiUrl } from '@/api/client'
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-vue-next'
+import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1 } from 'lucide-vue-next'
+import { queueControls, sendQueueCommand } from '@/utils/queueControls'
 import { transport } from '@/api/playback'
 import type { Device } from '@/api/types'
 import type { MaNowPlaying } from '@/composables/usePlaybackProgress'
@@ -84,6 +86,44 @@ function onMuteUpdate(muted: boolean) {
   void run(() => deviceStore.setMute(props.device.id, muted), 'device.actions.enableFailed')
 }
 
+/* Shuffle, repeat and seek: one command at a time, none while Music Assistant confirms one. */
+const bridge = useBridgeStore()
+const queue = computed(() => queueControls(props.device))
+const queueBusy = ref(false)
+const queueLocked = computed(() => queueBusy.value || queue.value.pending)
+const showQueueRow = computed(() => connected.value && (isStreaming.value || (!!nowPlaying.value && queue.value.any)))
+const shuffleLabel = computed(() => t(queue.value.shuffle.on ? 'transport.shuffleOn' : 'transport.shuffleOff'))
+const repeatLabel = computed(() => t(`transport.repeat.${queue.value.repeat.mode}`))
+
+/** Native commands echo back with the next status; show the change now, as stable does. */
+function predict(kind: 'shuffle' | 'repeat', before: ReturnType<typeof queueControls>) {
+  const live = bridge.deviceById(props.device.id)
+  if (!live) return
+  const np = live.music_assistant.now_playing as Record<string, unknown> | null
+  if (kind === 'shuffle' && before.shuffle.native) {
+    live.playback.shuffle = !before.shuffle.on
+    if (np) np.shuffle = !before.shuffle.on
+  } else if (kind === 'repeat' && before.repeat.native) {
+    const next = ({ off: 'all', all: 'one', one: 'off' } as const)[before.repeat.mode]
+    live.playback.repeat_mode = next
+    if (np) np.repeat = next
+  }
+}
+
+async function onQueue(kind: 'shuffle' | 'repeat' | 'seek', positionMs?: number) {
+  if (queueLocked.value) return
+  const before = queue.value
+  queueBusy.value = true
+  try {
+    await sendQueueCommand(props.device, kind, positionMs)
+    if (kind !== 'seek') predict(kind, before)
+  } catch {
+    notifications.error(t('transport.failed'))
+  } finally {
+    queueBusy.value = false
+  }
+}
+
 async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   transportLoading.value = true
   try {
@@ -149,7 +189,52 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       <SkipForward class="size-4" />
     </button>
   </div>
-  <PlaybackProgress v-if="isStreaming" :device="device" class="relative z-10" />
+  <!-- Shuffle, the (seekable) progress, repeat -->
+  <div
+    v-if="showQueueRow"
+    class="relative z-10 flex items-center gap-2 empty:hidden"
+    role="group"
+    :aria-label="t('transport.queue')"
+  >
+    <button
+      v-if="queue.shuffle.available"
+      type="button"
+      data-queue="shuffle"
+      class="inline-flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-secondary disabled:cursor-wait disabled:opacity-50"
+      :class="queue.shuffle.on ? 'text-primary-text' : 'text-text-secondary hover:text-text-primary'"
+      :aria-pressed="queue.shuffle.on ? 'true' : 'false'"
+      :aria-label="shuffleLabel"
+      :title="queue.pending ? t('transport.pending') : shuffleLabel"
+      :disabled="queueLocked"
+      @click="onQueue('shuffle')"
+    >
+      <Shuffle class="size-4" aria-hidden="true" />
+    </button>
+    <PlaybackProgress
+      v-if="isStreaming"
+      :device="device"
+      class="min-w-0 flex-1"
+      :seekable="queue.seek.available"
+      :disabled="queueLocked"
+      @seek="onQueue('seek', $event)"
+    />
+    <span v-else class="flex-1" />
+    <button
+      v-if="queue.repeat.available"
+      type="button"
+      data-queue="repeat"
+      class="inline-flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-secondary disabled:cursor-wait disabled:opacity-50"
+      :class="queue.repeat.mode !== 'off' ? 'text-primary-text' : 'text-text-secondary hover:text-text-primary'"
+      :aria-pressed="queue.repeat.mode !== 'off' ? 'true' : 'false'"
+      :aria-label="repeatLabel"
+      :title="queue.pending ? t('transport.pending') : repeatLabel"
+      :disabled="queueLocked"
+      @click="onQueue('repeat')"
+    >
+      <Repeat1 v-if="queue.repeat.mode === 'one'" class="size-4" aria-hidden="true" />
+      <Repeat v-else class="size-4" aria-hidden="true" />
+    </button>
+  </div>
 
   <VolumeSlider
     v-if="volume && connected"

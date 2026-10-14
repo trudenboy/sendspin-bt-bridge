@@ -628,7 +628,17 @@
     "next": "Next track",
     "previous": "Previous track",
     "failed": "Transport command failed",
-    "progress": "Playback progress"
+    "progress": "Playback progress",
+    "position": "Track position",
+    "shuffleOn": "Shuffle on — turn off",
+    "shuffleOff": "Shuffle off — turn on",
+    "repeat": {
+      "off": "Repeat off — repeat all",
+      "all": "Repeat all — repeat one",
+      "one": "Repeat one — turn off"
+    },
+    "pending": "Waiting for Music Assistant to confirm",
+    "queue": "Queue controls"
   },
   "adapter": {
     "management": "Adapter Management",
