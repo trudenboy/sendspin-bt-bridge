@@ -6,6 +6,8 @@ import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import en from '@/i18n/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
+import { setMute, setDevicePlayback } from '@/api/playback'
+import { reconnectDevice } from '@/api/devices'
 
 const store = vi.hoisted(() => ({
   standby: vi.fn(),
@@ -143,5 +145,50 @@ describe('GroupActionBar bulk power actions', () => {
     const message = String(notify.error.mock.calls[0]![0])
     expect(message).toContain('Bravo')
     expect(message).not.toContain('Alpha')
+  })
+})
+
+describe('GroupActionBar mute, pause and reconnect all', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.mocked(setMute).mockResolvedValue(undefined as never)
+    vi.mocked(setDevicePlayback).mockResolvedValue(undefined as never)
+    vi.mocked(reconnectDevice).mockResolvedValue(undefined as never)
+  })
+
+  it.each([
+    ['mute', () => vi.mocked(setMute), 'Mute all'],
+    ['pause', () => vi.mocked(setDevicePlayback), 'Pause all'],
+    ['reconnect', () => vi.mocked(reconnectDevice), 'Reconnect all'],
+  ] as const)('names each speaker %s failed for, and stays quiet when all succeed', async (action, api, label) => {
+    const w = mountBar([speaker('a', 'Alpha'), speaker('b', 'Bravo')])
+    await w.get(`[data-bulk="${action}"]`).trigger('click')
+    await flushPromises()
+    expect(api()).toHaveBeenCalledTimes(2)
+    expect(notify.error).not.toHaveBeenCalled()
+
+    api().mockImplementation((async (id: string) => {
+      if (id === 'b') throw new Error('nope')
+    }) as never)
+    await w.get(`[data-bulk="${action}"]`).trigger('click')
+    await flushPromises()
+    expect(notify.error).toHaveBeenCalledTimes(1)
+    const message = String(notify.error.mock.calls[0]![0])
+    expect(message).toContain(label)
+    expect(message).toContain('Bravo')
+    expect(message).not.toContain('Alpha')
+  })
+
+  it('reconnects only the speakers that can reconnect', async () => {
+    const w = mountBar([speaker('a', 'Alpha'), output('o', 'Output')])
+    await w.get('[data-bulk="reconnect"]').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(reconnectDevice).mock.calls).toEqual([['a']])
+    expect(notify.error).not.toHaveBeenCalled()
+  })
+
+  it('hides Reconnect all when no selected device can reconnect', () => {
+    expect(mountBar([output('o', 'Output')]).find('[data-bulk="reconnect"]').exists()).toBe(false)
   })
 })

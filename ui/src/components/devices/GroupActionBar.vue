@@ -9,6 +9,7 @@ import { reconnectDevice } from '@/api/devices'
 import { confirmDialog } from '@/composables/useConfirm'
 import { bulkEligible, type BulkAction } from '@/utils/bulkActions'
 import { speakerName } from '@/utils/speakerName'
+import { canDo } from '@/utils/supportedActions'
 import {
   VolumeX,
   PauseCircle,
@@ -68,41 +69,33 @@ async function applyGroupVolume(vol: number) {
   await Promise.allSettled(names.map((id) => setVolume(id, vol)))
 }
 
-async function onMuteAll() {
+const nameOf = (d: Device) => speakerName(d.name, d.bluetooth?.mac ?? d.id)
+
+/** Run one command on each target and name every speaker it failed for in one toast. */
+async function runEach(targets: Device[], label: string, run: (id: string) => Promise<unknown>) {
+  if (!targets.length) return
   actionLoading.value = true
   try {
-    await Promise.allSettled(
-      props.selectedNames.map((id) => setMute(id, true)),
-    )
-  } catch {
-    notifications.error(t('devices.actionFailed'))
+    const results = await Promise.allSettled(targets.map((d) => run(d.id)))
+    const failed = targets.filter((_, i) => results[i]!.status === 'rejected').map(nameOf)
+    if (failed.length) notifications.error(t('devices.bulk.failed', { action: label, names: failed.join(', ') }))
   } finally {
     actionLoading.value = false
   }
 }
 
-async function onPauseAll() {
-  actionLoading.value = true
-  try {
-    await Promise.allSettled(
-      props.selectedNames.map((id) => setDevicePlayback(id, 'pause')),
-    )
-  } catch {
-    notifications.error(t('devices.actionFailed'))
-  } finally {
-    actionLoading.value = false
-  }
+const reconnectable = computed(() => props.selectedDevices.filter((d) => canDo(d, 'reconnect')))
+
+function onMuteAll() {
+  return runEach(props.selectedDevices, t('devices.muteAll'), (id) => setMute(id, true))
 }
 
-async function onReconnectAll() {
-  actionLoading.value = true
-  try {
-    await Promise.allSettled(props.selectedNames.map((id) => reconnectDevice(id)))
-  } catch {
-    notifications.error(t('devices.actionFailed'))
-  } finally {
-    actionLoading.value = false
-  }
+function onPauseAll() {
+  return runEach(props.selectedDevices, t('devices.pauseAll'), (id) => setDevicePlayback(id, 'pause'))
+}
+
+function onReconnectAll() {
+  return runEach(reconnectable.value, t('devices.reconnectAll'), (id) => reconnectDevice(id))
 }
 
 /* Power save, standby and hand-over: only for the selected devices that can take them. */
@@ -119,8 +112,6 @@ const eligible = computed(() =>
 )
 
 const bulkButtons = computed(() => BULK.filter(({ action }) => eligible.value[action].length > 0))
-
-const nameOf = (d: Device) => speakerName(d.name, d.bluetooth?.mac ?? d.id)
 
 function runOne(action: BulkAction, id: string): Promise<unknown> {
   if (action === 'power_save') return deviceStore.setPowerSave(id, true)
@@ -140,16 +131,7 @@ async function onBulk(action: BulkAction, ask: boolean) {
     })
     if (!ok) return
   }
-  actionLoading.value = true
-  try {
-    const results = await Promise.allSettled(targets.map((d) => runOne(action, d.id)))
-    const failed = targets.filter((_, i) => results[i]!.status === 'rejected').map(nameOf)
-    if (failed.length) {
-      notifications.error(t('devices.bulk.failed', { action: t(`devices.bulk.${action}.label`), names: failed.join(', ') }))
-    }
-  } finally {
-    actionLoading.value = false
-  }
+  await runEach(targets, t(`devices.bulk.${action}.label`), (id) => runOne(action, id))
 }
 
 const selectionLabel = computed(() => {
@@ -219,6 +201,7 @@ watch(
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
           :disabled="actionLoading"
+          data-bulk="mute"
           :title="t('devices.muteAll')"
           @click="onMuteAll"
         >
@@ -229,6 +212,7 @@ watch(
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
           :disabled="actionLoading"
+          data-bulk="pause"
           :title="t('devices.pauseAll')"
           @click="onPauseAll"
         >
@@ -236,7 +220,9 @@ watch(
           <span class="hidden sm:inline">{{ t('devices.pauseAll') }}</span>
         </button>
         <button
+          v-if="reconnectable.length"
           type="button"
+          data-bulk="reconnect"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
           :disabled="actionLoading"
           :title="t('devices.reconnectAll')"
