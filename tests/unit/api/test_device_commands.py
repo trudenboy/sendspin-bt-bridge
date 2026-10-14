@@ -245,3 +245,113 @@ def test_removing_a_running_speaker_finds_it_by_its_player_id(api_client, regist
     saved = json.loads(config_on_disk.file.read_text())
     assert [d["mac"] for d in device_entries(saved)] == [MAC]
     assert config_on_disk.unpaired == [config_on_disk.other]
+
+
+# -- enabling a configured player that is not running starts it online -------------------------
+
+
+PULSE_ID = "dac-1"
+
+
+@pytest.fixture
+def disabled_players(tmp_config, monkeypatch):
+    """One disabled Bluetooth speaker and one disabled sound card, neither running."""
+    from sendspin_bridge.config import _player_id_from_mac
+
+    monkeypatch.setattr(devices, "_sync_ha_options_later", lambda: None)
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "players": [
+                    {
+                        "id": _player_id_from_mac(MAC),
+                        "name": "Garage",
+                        "enabled": False,
+                        "backend": {"type": "bluetooth_a2dp", "mac": MAC},
+                    },
+                    {
+                        "id": PULSE_ID,
+                        "name": "DAC",
+                        "enabled": False,
+                        "backend": {"type": "pulse_sink", "sink": "alsa_output.usb-dac"},
+                    },
+                ],
+            }
+        )
+    )
+    return {"bluetooth_a2dp": _player_id_from_mac(MAC), "pulse_sink": PULSE_ID}
+
+
+@pytest.fixture
+def recording_orchestrator(monkeypatch):
+    """Stand-in orchestrator that starts every START_CLIENT it is handed."""
+    from sendspin_bridge.services.infrastructure.config_diff import ActionKind
+    from sendspin_bridge.services.lifecycle import reconfig_orchestrator as ro
+
+    applied: list = []
+
+    class _Recording:
+        def __init__(self, *_a, **_kw):
+            pass
+
+        def apply(self, actions):
+            applied.extend(actions)
+            summary = ro.ReconfigSummary()
+            summary.started = [a.to_summary() for a in actions if a.kind is ActionKind.START_CLIENT]
+            return summary
+
+    monkeypatch.setattr(ro, "ReconfigOrchestrator", _Recording)
+    return applied
+
+
+@pytest.mark.parametrize("backend", ["bluetooth_a2dp", "pulse_sink"])
+def test_enabling_a_player_that_is_not_running_starts_it_without_a_restart(
+    api_client, registry, disabled_players, recording_orchestrator, backend
+):
+    from sendspin_bridge.config import load_config
+    from sendspin_bridge.config.players import find_player_by_id
+    from sendspin_bridge.services.infrastructure.config_diff import ActionKind
+
+    player_id = disabled_players[backend]
+
+    resp = api_client.patch(f"/api/v1/devices/{player_id}", json={"enabled": True})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"enabled": True, "restart_required": False}
+    starts = [a for a in recording_orchestrator if a.kind is ActionKind.START_CLIENT]
+    assert [a.player_id for a in starts] == [player_id]
+    assert find_player_by_id(load_config(), player_id)["enabled"] is True
+
+
+@pytest.mark.parametrize("backend", ["bluetooth_a2dp", "pulse_sink"])
+def test_enabling_a_player_the_bridge_cannot_start_still_asks_for_a_restart(
+    api_client, registry, disabled_players, monkeypatch, backend
+):
+    """Without an activation context the orchestrator reports the player in restart_required."""
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+
+    monkeypatch.setattr(bridge_runtime_state, "get_activation_context", lambda: None)
+
+    resp = api_client.patch(f"/api/v1/devices/{disabled_players[backend]}", json={"enabled": True})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"enabled": True, "restart_required": True}
+
+
+def test_a_started_player_leaves_the_disabled_list(api_client, registry, disabled_players, recording_orchestrator):
+    from sendspin_bridge.services.bluetooth import device_registry
+
+    device_registry.set_disabled_devices(
+        [
+            {"mac": MAC, "player_name": "Garage", "enabled": False},
+            {"mac": "AA:AA:AA:AA:AA:AA", "player_name": "Attic", "enabled": False},
+        ]
+    )
+    try:
+        resp = api_client.patch(f"/api/v1/devices/{disabled_players['bluetooth_a2dp']}", json={"enabled": True})
+        assert resp.json()["restart_required"] is False
+        left = [d["mac"] for d in device_registry.get_device_registry_snapshot().disabled_devices]
+        assert left == ["AA:AA:AA:AA:AA:AA"]
+    finally:
+        device_registry.set_disabled_devices([])

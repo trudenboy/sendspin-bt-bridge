@@ -104,6 +104,18 @@ describe('a disabled player', () => {
     w.unmount()
   })
 
+  it('says nothing about a restart when the bridge started it at once', async () => {
+    store.setEnabled.mockResolvedValue({ enabled: true, restart_required: false })
+    const w = await mountCard(speaker())
+    await (await openMenu(w))[0]!.trigger('click')
+    await flushPromises()
+    expect(store.setEnabled).toHaveBeenCalledWith('garage-id', true)
+    expect(bridge.value.refresh).toHaveBeenCalled()
+    expect(notify.warning).not.toHaveBeenCalled()
+    expect(notify.error).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
   it('opens its settings from the menu', async () => {
     const w = await mountCard(speaker())
     await (await openMenu(w))[1]!.trigger('click')
