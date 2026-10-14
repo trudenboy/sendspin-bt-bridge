@@ -30,4 +30,20 @@ describe('useDeviceSelection with disabled players', () => {
     expect(s.allSelected.value).toBe(true)
     expect(s.selectedDisabledIds.value).toEqual([])
   })
+
+  it('stops counting players that are no longer listed (a bulk Remove took them off)', () => {
+    const shown = ref(['off', 'gone'])
+    const s = useDeviceSelection(devices, shown)
+    s.toggle('a')
+    s.toggle('off')
+    s.toggle('gone')
+    shown.value = ['off']
+    expect(s.selectedCount.value).toBe(2)
+    expect(s.selectedNames.value).toEqual(['a', 'off'])
+    shown.value = []
+    s.toggle('a')
+    expect(s.selectedCount.value).toBe(0)
+    expect(s.someSelected.value).toBe(false)
+    expect(s.selectedNames.value).toEqual([])
+  })
 })

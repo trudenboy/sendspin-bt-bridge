@@ -10,14 +10,17 @@ export function useDeviceSelection(devices: Ref<Device[]>, disabledIds: Ref<stri
 
   const allIds = computed(() => [...devices.value.map((d) => d.id), ...disabledIds.value])
 
-  const selectedCount = computed(() => selected.value.size)
+  /** Selected among the listed: a removed (or filtered-out) player stops counting. */
+  const listedSelected = computed(() => allIds.value.filter((id) => selected.value.has(id)))
+
+  const selectedCount = computed(() => listedSelected.value.length)
 
   const allSelected = computed(
     () => allIds.value.length > 0 && allIds.value.every((id) => selected.value.has(id)),
   )
 
   const someSelected = computed(
-    () => selected.value.size > 0 && !allSelected.value,
+    () => listedSelected.value.length > 0 && !allSelected.value,
   )
 
   const selectedDevices = computed(() =>
@@ -26,7 +29,7 @@ export function useDeviceSelection(devices: Ref<Device[]>, disabledIds: Ref<stri
 
   const selectedDisabledIds = computed(() => disabledIds.value.filter((id) => selected.value.has(id)))
 
-  const selectedNames = computed(() => [...selected.value])
+  const selectedNames = computed(() => listedSelected.value)
 
   function toggle(id: string) {
     const next = new Set(selected.value)
