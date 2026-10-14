@@ -35,15 +35,15 @@ def _disabled(entry: dict, config: dict) -> DisabledDevice:
     mac = entry.get("mac")
     player_id = entry.get("id") or (_player_id_from_mac(str(mac)) if mac else None)
     player = find_player_by_id(config, str(player_id)) if player_id else None
-    extra: dict = {}
+    from_config: dict = {}
     if player:
         raw_backend = player.get("backend")
         backend: dict = raw_backend if isinstance(raw_backend, dict) else {}
         if not entry.get("sink") and backend.get("type") == PULSE_SINK and backend.get("sink"):
-            extra["sink"] = backend["sink"]
+            from_config["sink"] = backend["sink"]
         if not entry.get("room_name") and player.get("room_name"):
-            extra["room_name"] = player["room_name"]
-    return DisabledDevice.model_validate({**entry, **extra, "id": player_id})
+            from_config["room_name"] = player["room_name"]
+    return DisabledDevice.model_validate({**entry, **from_config, "id": player_id})
 
 
 def _disabled_running(device) -> DisabledDevice:
