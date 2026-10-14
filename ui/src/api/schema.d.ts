@@ -2605,6 +2605,11 @@ export interface components {
             released_by: string | null;
             /** Reported Delay Ms */
             reported_delay_ms: number | null;
+            /**
+             * Rssi At
+             * @description When rssi_dbm was sampled (ISO-8601 UTC).
+             */
+            rssi_at: string | null;
             /** Rssi Dbm */
             rssi_dbm: number | null;
             /**
@@ -2612,7 +2617,10 @@ export interface components {
              * @default false
              */
             standby: boolean;
-            /** Standby Since */
+            /**
+             * Standby Since
+             * @description When the speaker entered standby (ISO-8601 UTC).
+             */
             standby_since: string | null;
             /** Transport State */
             transport_state: string | null;
