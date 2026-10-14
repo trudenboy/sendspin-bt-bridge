@@ -17,6 +17,7 @@ import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import DisabledSpeakers from '@/components/devices/DisabledSpeakers.vue'
+import { useMediaQuery } from '@/composables/useMediaQuery'
 import { Plus, LayoutGrid, List, ChevronDown, ArrowUpDown } from 'lucide-vue-next'
 
 type ViewMode = 'grid' | 'list'
@@ -61,6 +62,9 @@ function readViewMode(): ViewMode {
   }
 }
 const viewMode = ref<ViewMode>(readViewMode())
+/* The list's columns need a tablet's width; on a phone it is always the grid (the choice is kept). */
+const wide = useMediaQuery('(min-width: 640px)')
+const shownView = computed<ViewMode>(() => (wide.value ? viewMode.value : 'grid'))
 
 const selection = useDeviceSelection(
   computed(() => deviceStore.filteredDevices),
@@ -70,7 +74,7 @@ const showGroupBar = computed(() => bridge.devices.length >= 2)
 /* Search and filters earn their space only on larger setups. */
 const FILTER_FROM = 6
 const showFilters = computed(() => bridge.devices.length >= FILTER_FROM)
-const showViewToggle = computed(() => bridge.devices.length >= 4)
+const showViewToggle = computed(() => bridge.devices.length >= 1)
 
 /** One line of context above the speakers: Music Assistant, playing, adapters. */
 const fleet = computed(() => fleetSummary(bridge.devices))
@@ -182,6 +186,7 @@ function openDetail(id: string) {
             class="rounded-l-lg p-2.5 transition-colors"
             :class="viewMode === 'grid' ? 'bg-primary-fill text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
             :aria-label="t('devices.viewGrid')"
+            :aria-pressed="viewMode === 'grid' ? 'true' : 'false'"
             @click="setViewMode('grid')"
           >
             <LayoutGrid class="h-4 w-4" />
@@ -191,6 +196,7 @@ function openDetail(id: string) {
             class="rounded-r-lg p-2.5 transition-colors"
             :class="viewMode === 'list' ? 'bg-primary-fill text-on-primary' : 'text-text-secondary hover:bg-surface-secondary'"
             :aria-label="t('devices.viewList')"
+            :aria-pressed="viewMode === 'list' ? 'true' : 'false'"
             @click="setViewMode('list')"
           >
             <List class="h-4 w-4" />
@@ -363,7 +369,7 @@ function openDetail(id: string) {
 
       <!-- Device grid -->
       <div
-        v-else-if="viewMode === 'grid' && deviceStore.filteredDevices.length > 0"
+        v-else-if="shownView === 'grid' && deviceStore.filteredDevices.length > 0"
         class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"
       >
         <DeviceCard
@@ -379,7 +385,7 @@ function openDetail(id: string) {
 
       <!-- Device list -->
       <div
-        v-else-if="viewMode === 'list' && deviceStore.filteredDevices.length > 0"
+        v-else-if="shownView === 'list' && deviceStore.filteredDevices.length > 0"
         class="overflow-x-auto rounded-lg border border-border"
       >
         <table class="w-full text-left text-sm">

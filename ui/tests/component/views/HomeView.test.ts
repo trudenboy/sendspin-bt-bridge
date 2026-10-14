@@ -127,3 +127,43 @@ describe('HomeView list rows', () => {
     expect(details()).toEqual([])
   })
 })
+
+describe('HomeView view toggle', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('is there as soon as there is one player, saying which view is on', async () => {
+    const w = mountHome([idle('a', 'Alpha')])
+    const grid = w.get('button[aria-label="Grid view"]')
+    const list = w.get('button[aria-label="List view"]')
+    expect(grid.attributes('aria-pressed')).toBe('true')
+    await list.trigger('click')
+    expect(list.attributes('aria-pressed')).toBe('true')
+    expect(localStorage.getItem('sb-view-mode')).toBe('list')
+    expect(w.find('table').exists()).toBe(true)
+  })
+
+  it('is absent without players', () => {
+    expect(mountHome([]).find('button[aria-label="List view"]').exists()).toBe(false)
+  })
+
+  it('shows the grid on a phone, where the list does not fit, keeping the saved choice', () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      const w = mountHome([idle('a', 'Alpha')], 'list')
+      expect(w.find('table').exists()).toBe(false)
+      expect(cardNames(w)).toEqual(['Alpha'])
+      expect(localStorage.getItem('sb-view-mode')).toBe('list')
+    } finally {
+      window.matchMedia = original
+    }
+  })
+})
