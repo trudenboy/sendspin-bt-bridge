@@ -6,7 +6,7 @@
  * dashboard.
  */
 import type { AudioSink, Device, Group } from '@/api/types'
-import { isDeviceConnected, isPulseSink } from './deviceBackend'
+import { isDeviceConnected, isPulseSink, resolveAdapter } from './deviceBackend'
 import { deviceState } from '@/stores/devices'
 import { safeHttpUrl } from './safeUrl'
 import { queueControls } from './queueControls'
@@ -182,9 +182,7 @@ export function disabledLinkChip(
     return { kind: 'output', label: sinks.find((s) => s.name === p.sink)?.description || p.sink, sink: p.sink }
   }
   if (!p.adapter) return null
-  const wanted = p.adapter.toUpperCase()
-  const adapter = adapters.find((a) => a.id === p.adapter || a.mac.toUpperCase() === wanted)
-  const hci = adapter?.id ?? (p.adapter.startsWith('hci') ? p.adapter : '')
+  const { adapter, hci } = resolveAdapter(p.adapter, adapters)
   return {
     kind: 'adapter',
     label: adapter?.name || hci || p.adapter,

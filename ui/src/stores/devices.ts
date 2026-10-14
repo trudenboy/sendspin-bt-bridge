@@ -12,7 +12,7 @@ import {
 } from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
-import { isDeviceConnected, isOutputMissing, isPulseSink } from '@/utils/deviceBackend'
+import { isDeviceConnected, isOutputMissing, isPulseSink, resolveAdapter } from '@/utils/deviceBackend'
 import type { Device, DisabledDevice } from '@/api/types'
 
 export type DeviceSortField = 'activity' | 'name' | 'status' | 'adapter'
@@ -204,7 +204,10 @@ export const useDeviceStore = defineStore('devices', () => {
 
   const disabledPlayers = computed<DisabledPlayer[]>(() => toDisabledPlayers(bridge.bridge?.disabled_devices))
 
-  /** Disabled players through the same filters: status "disabled", no group, their own adapter and backend. */
+  /**
+   * Disabled players through the same filters: status "disabled", no group, their
+   * own backend, and their adapter resolved to its hci (the config may name it by MAC).
+   */
   const filteredDisabled = computed<DisabledPlayer[]>(() => {
     const f = filter.value
     const q = f.search.toLowerCase()
@@ -212,7 +215,7 @@ export const useDeviceStore = defineStore('devices', () => {
       (p) =>
         (!q || p.name.toLowerCase().includes(q) || (p.mac ?? '').toLowerCase().includes(q)) &&
         (!f.status.length || f.status.includes('disabled')) &&
-        (!f.adapter || p.adapter === f.adapter) &&
+        (!f.adapter || (!!p.adapter && resolveAdapter(p.adapter, bridge.adapters ?? []).hci === f.adapter)) &&
         !f.group &&
         (!f.backend || p.output === (f.backend === 'output')),
     )

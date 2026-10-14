@@ -20,3 +20,16 @@ export function isDeviceConnected(device: BackendAware): boolean {
   if (isPulseSink(device)) return device.audio.has_sink === true && !device.audio.sink_missing
   return device.bluetooth?.connected === true
 }
+
+/**
+ * An adapter as the config names it (hci name or MAC, any case), resolved
+ * against the bridge's adapters; '' when it is a MAC the bridge does not know.
+ */
+export function resolveAdapter<A extends { id: string; mac: string }>(
+  configured: string,
+  adapters: A[] = [],
+): { adapter: A | undefined; hci: string } {
+  const wanted = configured.toUpperCase()
+  const adapter = adapters.find((a) => a.id === configured || a.mac.toUpperCase() === wanted)
+  return { adapter, hci: adapter?.id ?? (configured.startsWith('hci') ? configured : '') }
+}

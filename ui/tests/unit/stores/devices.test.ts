@@ -369,6 +369,24 @@ describe('disabled players among the others', () => {
     expect(ids(store)).toEqual(['b'])
   })
 
+  it('matches a disabled speaker set to its adapter by MAC under that adapter\'s hci', () => {
+    const bridge = useBridgeStore()
+    const status = makeStatus([A(), B()])
+    status.bridge.disabled_devices = [
+      { id: 'off-mac', player_name: 'Delta', mac: 'AA:00:00:00:00:04', adapter: 'c0:fb:f9:62:d7:d6', backend_type: 'bluetooth_a2dp', enabled: false },
+    ] as never
+    bridge.snapshot = status
+    bridge.adapters = [
+      { id: 'hci0', mac: 'C0:FB:F9:62:D6:9D', name: 'Audio' },
+      { id: 'hci1', mac: 'C0:FB:F9:62:D7:D6', name: 'BLE' },
+    ] as never
+    const store = useDeviceStore()
+    store.filter.adapter = 'hci1'
+    expect(ids(store)).toEqual(['b', 'off-mac'])
+    store.filter.adapter = 'hci0'
+    expect(ids(store)).toEqual(['a'])
+  })
+
   it('leaves filteredDevices to the running players', () => {
     const { store } = setupWithDisabled()
     expect(store.filteredDevices.map((d) => d.id)).toEqual(['a', 'b'])
