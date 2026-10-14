@@ -452,6 +452,18 @@
         "confirmMessage": "The bridge lets go of: {names}. They will not reconnect until you take them back."
       },
       "failed": "{action} failed for: {names}"
+    },
+    "sort": {
+      "label": "Sort by",
+      "activity": "Activity",
+      "name": "Name",
+      "status": "Status"
+    },
+    "backendFilter": {
+      "label": "Player type",
+      "all": "All players",
+      "bluetooth": "Bluetooth speakers",
+      "output": "Audio outputs"
     }
   },
   "drawer": {

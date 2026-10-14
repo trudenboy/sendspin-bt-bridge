@@ -452,6 +452,18 @@
         "confirmMessage": "Мост отпустит: {names}. Они не переподключатся, пока вы их не заберёте обратно."
       },
       "failed": "{action}: не удалось для {names}"
+    },
+    "sort": {
+      "label": "Сортировка",
+      "activity": "По активности",
+      "name": "По имени",
+      "status": "По статусу"
+    },
+    "backendFilter": {
+      "label": "Тип плеера",
+      "all": "Все плееры",
+      "bluetooth": "Bluetooth-колонки",
+      "output": "Аудиовыходы"
     }
   },
   "drawer": {

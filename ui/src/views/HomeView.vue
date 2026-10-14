@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
-import { deviceState, useDeviceStore } from '@/stores/devices'
+import { deviceState, useDeviceStore, SORT_OPTIONS, type BackendFilter, type DeviceSortField } from '@/stores/devices'
 import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
@@ -50,9 +50,15 @@ watch(
   { immediate: true },
 )
 
-const viewMode = ref<ViewMode>(
-  (localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid',
-)
+/* Storage can be missing or throw (private windows, blocked site data). */
+function readViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+const viewMode = ref<ViewMode>(readViewMode())
 
 const selection = useDeviceSelection(
   computed(() => deviceStore.filteredDevices),
@@ -72,8 +78,27 @@ const selectable = computed(() => bridge.devices.length >= 2)
 
 function setViewMode(mode: ViewMode) {
   viewMode.value = mode
-  localStorage.setItem(STORAGE_KEY, mode)
+  try {
+    localStorage.setItem(STORAGE_KEY, mode)
+  } catch {
+    /* not remembered */
+  }
 }
+
+/* Order (both views) and, on mixed setups, which kind of player to show. */
+const showSort = computed(() => bridge.devices.length >= 2)
+const mixedBackends = computed(() => bridge.devices.some(isPulseSink) && bridge.devices.some((d) => !isPulseSink(d)))
+watch(mixedBackends, (mixed) => {
+  if (!mixed) deviceStore.filter.backend = ''
+})
+function onSort(e: Event) {
+  deviceStore.setSort((e.target as HTMLSelectElement).value as DeviceSortField)
+}
+function onBackendFilter(e: Event) {
+  deviceStore.filter.backend = (e.target as HTMLSelectElement).value as BackendFilter
+}
+const selectClass =
+  'cursor-pointer rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary'
 
 /** Only the states some device is in right now, so every chip filters something. */
 const statusFilters = computed(() => {
@@ -188,9 +213,10 @@ function openDetail(id: string) {
         <span v-if="playing">{{ t('home.playing', { n: playing }) }}</span>
       </p>
 
-      <!-- Filter bar -->
-      <div v-if="showFilters" class="mb-4 flex flex-wrap items-center gap-2">
+      <!-- Filter bar, order and backend -->
+      <div v-if="showFilters || showSort" class="mb-4 flex flex-wrap items-center gap-2">
         <SbFilterBar
+          v-if="showFilters"
           v-model="deviceStore.filter.search"
           :placeholder="t('common.search')"
           :filters="statusFilters"
@@ -199,7 +225,7 @@ function openDetail(id: string) {
         />
 
         <!-- Adapter filter dropdown -->
-        <SbDropdown v-if="uniqueAdapters.length > 1" align="right">
+        <SbDropdown v-if="showFilters && uniqueAdapters.length > 1" align="right">
           <template #trigger>
             <button
               type="button"
@@ -223,7 +249,7 @@ function openDetail(id: string) {
         </SbDropdown>
 
         <!-- Group filter dropdown -->
-        <SbDropdown v-if="bridge.groups.length > 0" align="right">
+        <SbDropdown v-if="showFilters && bridge.groups.length > 0" align="right">
           <template #trigger>
             <button
               type="button"
@@ -245,6 +271,32 @@ function openDetail(id: string) {
             {{ group.name }}
           </SbDropdownItem>
         </SbDropdown>
+
+        <select
+          v-if="mixedBackends"
+          data-backend-filter
+          :class="selectClass"
+          :value="deviceStore.filter.backend"
+          :aria-label="t('devices.backendFilter.label')"
+          @change="onBackendFilter"
+        >
+          <option value="">{{ t('devices.backendFilter.all') }}</option>
+          <option value="bluetooth">{{ t('devices.backendFilter.bluetooth') }}</option>
+          <option value="output">{{ t('devices.backendFilter.output') }}</option>
+        </select>
+
+        <select
+          v-if="showSort"
+          data-sort
+          :class="[selectClass, showFilters ? '' : 'ml-auto']"
+          :value="deviceStore.sortBy"
+          :aria-label="t('devices.sort.label')"
+          @change="onSort"
+        >
+          <option v-for="option in SORT_OPTIONS" :key="option" :value="option">
+            {{ t(`devices.sort.${option}`) }}
+          </option>
+        </select>
       </div>
 
       <!-- Group action bar -->

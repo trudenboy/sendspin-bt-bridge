@@ -15,14 +15,115 @@ import { useJobsStore } from './jobs'
 import { isDeviceConnected, isOutputMissing, isPulseSink } from '@/utils/deviceBackend'
 import type { Device } from '@/api/types'
 
-export type DeviceSortField = 'name' | 'status' | 'adapter'
+export type DeviceSortField = 'activity' | 'name' | 'status' | 'adapter'
 export type SortDirection = 'asc' | 'desc'
+/** Which kind of player: a Bluetooth speaker or a local audio output ('' = both). */
+export type BackendFilter = '' | 'bluetooth' | 'output'
 
 export interface DeviceFilter {
   search: string
   status: string[]
   adapter: string
   group: string
+  backend: BackendFilter
+}
+
+export const SORT_OPTIONS: DeviceSortField[] = ['activity', 'name', 'status']
+const SORT_STORAGE_KEY = 'sb-device-sort'
+
+/* Storage can be missing or throw (private windows, blocked site data). */
+function readSort(): DeviceSortField {
+  try {
+    const saved = localStorage.getItem(SORT_STORAGE_KEY) as DeviceSortField | null
+    if (saved && (SORT_OPTIONS as string[]).includes(saved)) return saved
+  } catch {
+    /* fall through */
+  }
+  return 'activity'
+}
+
+function writeSort(value: DeviceSortField) {
+  try {
+    localStorage.setItem(SORT_STORAGE_KEY, value)
+  } catch {
+    /* the choice just isn't remembered */
+  }
+}
+
+/** States that are neither playing nor merely idle: parked, handed over, gone, off. */
+const RESTING = new Set(['disabled', 'released', 'standby', 'output_missing', 'offline', 'stopping'])
+
+/** 0 playing (or about to), 1 connected and idle, 2 everything else. */
+export function activityTier(d: Device): 0 | 1 | 2 {
+  const state = deviceState(d)
+  if (state === 'streaming' || state === 'buffering') return 0
+  if (!RESTING.has(state) && isDeviceConnected(d)) return 1
+  return 2
+}
+
+/** Status order for the "status" sort: most active first, switched off last. */
+const STATUS_RANK = [
+  'streaming',
+  'buffering',
+  'sink_muted',
+  'ready',
+  'degraded',
+  'reconnecting',
+  'stopping',
+  'standby',
+  'released',
+  'output_missing',
+  'offline',
+  'disabled',
+]
+const statusRank = (d: Device) => {
+  const i = STATUS_RANK.indexOf(deviceState(d))
+  return i < 0 ? STATUS_RANK.length - 2 : i
+}
+
+const byName = (a: Device, b: Device) => (a.name ?? '').localeCompare(b.name ?? '')
+const groupKey = (d: Device) => d.music_assistant.syncgroup_id || d.playback.group.id || ''
+
+/**
+ * Activity order (stable 2.76's dashboard): playing first, then connected,
+ * then the rest; within a tier, members of one Music Assistant group sit
+ * together where the group's first name would, otherwise by name.
+ */
+function sortByActivity(list: Device[]): Device[] {
+  const tier = new Map(list.map((d) => [d.id, activityTier(d)]))
+  const anchor = new Map<string, string>()
+  for (const d of list) {
+    const g = groupKey(d)
+    if (!g) continue
+    const key = `${tier.get(d.id)}|${g}`
+    const name = d.name ?? ''
+    const current = anchor.get(key)
+    if (current === undefined || name.localeCompare(current) < 0) anchor.set(key, name)
+  }
+  const anchorOf = (d: Device) => {
+    const g = groupKey(d)
+    return g ? anchor.get(`${tier.get(d.id)}|${g}`)! : (d.name ?? '')
+  }
+  return [...list].sort(
+    (a, b) =>
+      tier.get(a.id)! - tier.get(b.id)! ||
+      anchorOf(a).localeCompare(anchorOf(b)) ||
+      groupKey(a).localeCompare(groupKey(b)) ||
+      byName(a, b),
+  )
+}
+
+/** The devices in the requested order. */
+export function sortDevices(list: Device[], by: DeviceSortField, dir: SortDirection = 'asc'): Device[] {
+  let sorted: Device[]
+  if (by === 'activity') sorted = sortByActivity(list)
+  else if (by === 'status') sorted = [...list].sort((a, b) => statusRank(a) - statusRank(b) || byName(a, b))
+  else if (by === 'adapter')
+    sorted = [...list].sort(
+      (a, b) => (a.bluetooth?.adapter.hci ?? '').localeCompare(b.bluetooth?.adapter.hci ?? '') || byName(a, b),
+    )
+  else sorted = [...list].sort(byName)
+  return dir === 'asc' ? sorted : sorted.reverse()
 }
 
 /**
@@ -58,8 +159,8 @@ function isBuffering(d: Device): boolean {
 
 export const useDeviceStore = defineStore('devices', () => {
   const selectedDeviceId = ref<string | null>(null)
-  const filter = ref<DeviceFilter>({ search: '', status: [], adapter: '', group: '' })
-  const sortBy = ref<DeviceSortField>('name')
+  const filter = ref<DeviceFilter>({ search: '', status: [], adapter: '', group: '', backend: '' })
+  const sortBy = ref<DeviceSortField>(readSort())
   const sortDir = ref<SortDirection>('asc')
 
   const bridge = useBridgeStore()
@@ -75,16 +176,14 @@ export const useDeviceStore = defineStore('devices', () => {
     if (filter.value.status.length) list = list.filter((d) => filter.value.status.includes(deviceState(d)))
     if (filter.value.adapter) list = list.filter((d) => d.bluetooth?.adapter.hci === filter.value.adapter)
     if (filter.value.group) list = list.filter((d) => d.playback.group.id === filter.value.group)
-
-    list.sort((a, b) => {
-      let cmp = 0
-      if (sortBy.value === 'name') cmp = (a.name ?? '').localeCompare(b.name ?? '')
-      else if (sortBy.value === 'status') cmp = deviceState(a).localeCompare(deviceState(b))
-      else cmp = (a.bluetooth?.adapter.hci ?? '').localeCompare(b.bluetooth?.adapter.hci ?? '')
-      return sortDir.value === 'asc' ? cmp : -cmp
-    })
-    return list
+    if (filter.value.backend) list = list.filter((d) => isPulseSink(d) === (filter.value.backend === 'output'))
+    return sortDevices(list, sortBy.value, sortDir.value)
   })
+
+  function setSort(value: DeviceSortField) {
+    sortBy.value = value
+    writeSort(value)
+  }
 
   const selectedDevice = computed<Device | undefined>(() =>
     selectedDeviceId.value ? bridge.deviceById(selectedDeviceId.value) : undefined,
@@ -149,6 +248,7 @@ export const useDeviceStore = defineStore('devices', () => {
     filter,
     sortBy,
     sortDir,
+    setSort,
     filteredDevices,
     selectedDevice,
     selectDevice,
