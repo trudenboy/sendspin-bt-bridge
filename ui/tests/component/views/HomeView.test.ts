@@ -72,3 +72,23 @@ describe('HomeView toolbar', () => {
     expect(cardNames(w)).toEqual(['Alpha'])
   })
 })
+
+describe('HomeView list rows', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('opens the first streaming row on load and keeps one row open at a time', async () => {
+    const w = mountHome([idle('a', 'Alpha'), streaming('b', 'Bravo'), idle('c', 'Charlie')], 'list')
+    await flushPromises()
+    const details = () => w.findAll('[data-row-detail]').map((d) => d.attributes('id'))
+    expect(details()).toEqual(['device-row-detail-b'])
+    const toggles = w.findAll('[data-row-toggle]')
+    // activity order: Bravo, Alpha, Charlie
+    await toggles[1]!.trigger('click')
+    expect(details()).toEqual(['device-row-detail-a'])
+    await w.findAll('[data-row-toggle]')[1]!.trigger('click')
+    expect(details()).toEqual([])
+  })
+})

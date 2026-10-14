@@ -432,7 +432,10 @@
       "volume": "Громкость",
       "transport": "Управление",
       "adapter": "Адаптер",
-      "actions": "Действия"
+      "actions": "Действия",
+      "expand": "Показать подробности: {name}",
+      "collapse": "Скрыть подробности: {name}",
+      "quickActions": "Быстрые действия"
     },
     "bulk": {
       "power_save": {

@@ -432,7 +432,10 @@
       "volume": "Volume",
       "transport": "Transport",
       "adapter": "Adapter",
-      "actions": "Actions"
+      "actions": "Actions",
+      "expand": "Show details for {name}",
+      "collapse": "Hide details for {name}",
+      "quickActions": "Quick actions"
     },
     "bulk": {
       "power_save": {

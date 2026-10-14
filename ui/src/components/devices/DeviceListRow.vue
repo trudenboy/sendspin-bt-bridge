@@ -10,6 +10,7 @@ import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
 import {
   Bluetooth,
+  ChevronRight,
   CircleAlert,
   Speaker,
   Pause,
@@ -24,9 +25,12 @@ import SyncChip from './chips/SyncChip.vue'
 import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
 import LinkChip from './chips/LinkChip.vue'
+import DevicePlayerPanel from './DevicePlayerPanel.vue'
+import { canDo } from '@/utils/supportedActions'
 import { blockedHints } from '@/utils/deviceChips'
 import { isPulseSink } from '@/utils/deviceBackend'
 import { transport } from '@/api/playback'
+import { SbButton } from '@/kit'
 import type { Device } from '@/api/types'
 
 const props = withDefaults(
@@ -34,16 +38,20 @@ const props = withDefaults(
     device: Device
     selectable?: boolean
     selected?: boolean
+    /** Show the card-equivalent block under the row. */
+    expanded?: boolean
   }>(),
   {
     selectable: false,
     selected: false,
+    expanded: false,
   },
 )
 
 const emit = defineEmits<{
   openDetail: [id: string]
   toggleSelect: [id: string]
+  toggleExpand: [id: string]
 }>()
 
 const { t } = useI18n()
@@ -98,6 +106,29 @@ function onMuteUpdate(muted: boolean) {
   void run(() => deviceStore.setMute(props.device.id, muted), 'device.actions.enableFailed')
 }
 
+const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
+const detailId = computed(() => `device-row-detail-${props.device.id}`)
+/* The expanded row spans every column: checkbox, name, status, volume, transport, adapter, actions. */
+const columns = computed(() => (props.selectable ? 7 : 6))
+
+/** A click on the row's own surface (not one of its controls) opens or closes it. */
+const INTERACTIVE = 'button, a, input, select, textarea, label, summary, [role="slider"], [role="menu"], [role="menuitem"]'
+function onRowClick(e: MouseEvent) {
+  if (!props.device.enabled) return
+  const target = e.target as HTMLElement | null
+  if (target?.closest(INTERACTIVE)) return
+  emit('toggleExpand', props.device.id)
+}
+
+/* Quick actions in the expanded row (stable's list detail): Bluetooth only. */
+const isBluetooth = computed(() => !isOutput.value && props.device.bluetooth != null)
+const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
+const standby = computed(() => props.device.bluetooth?.standby === true)
+
+function quick(action: () => Promise<unknown>) {
+  void run(action, 'common.error')
+}
+
 function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   void run(() => transport(props.device.id, command), 'transport.failed')
 }
@@ -108,7 +139,8 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
 <template>
   <tr
     class="border-b border-border transition-colors hover:bg-surface-secondary"
-    :class="{ 'opacity-50': !device.enabled }"
+    :class="{ 'opacity-50': !device.enabled, 'cursor-pointer': device.enabled, 'border-b-0 bg-surface-secondary/60': expanded }"
+    @click="onRowClick"
   >
     <!-- Checkbox -->
     <td v-if="selectable" class="w-10 py-2 pl-3 pr-1">
@@ -125,6 +157,18 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <!-- Name + icon -->
     <td class="py-2 pl-3 pr-2">
       <div class="flex items-center gap-2">
+        <button
+          v-if="device.enabled"
+          type="button"
+          data-row-toggle
+          class="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-text-secondary hover:bg-surface-card hover:text-text-primary"
+          :aria-expanded="expanded ? 'true' : 'false'"
+          :aria-controls="expanded ? detailId : undefined"
+          :aria-label="expanded ? t('devices.list.collapse', { name: displayName }) : t('devices.list.expand', { name: displayName })"
+          @click="emit('toggleExpand', device.id)"
+        >
+          <ChevronRight class="size-4 transition-transform" :class="{ 'rotate-90': expanded }" aria-hidden="true" />
+        </button>
         <span
           data-backend-icon
           class="inline-flex shrink-0 text-text-secondary"
@@ -225,6 +269,46 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <!-- Actions -->
     <td class="py-2 pl-2 pr-3 text-right">
       <SpeakerActionsMenu :device="device" />
+    </td>
+  </tr>
+  <tr
+    v-if="expanded"
+    :id="detailId"
+    data-row-detail
+    class="border-b border-border bg-surface-secondary/60"
+  >
+    <td :colspan="columns" class="px-3 pb-3 pt-1">
+      <div class="flex max-w-3xl flex-col gap-3">
+        <DevicePlayerPanel :device="device" :volume="false" />
+        <div
+          v-if="isBluetooth"
+          class="flex flex-wrap items-center gap-2"
+          role="group"
+          :aria-label="t('devices.list.quickActions')"
+        >
+          <template v-if="handedOver">
+            <SbButton size="sm" variant="secondary" data-quick="reclaim" @click="quick(() => deviceStore.release(device.id, false))">
+              {{ t('speaker.takeBack') }}
+            </SbButton>
+          </template>
+          <template v-else>
+            <SbButton v-if="canDo(device, 'reconnect')" size="sm" variant="secondary" data-quick="reconnect" @click="quick(() => deviceStore.reconnect(device.id))">
+              {{ t('speaker.reconnect') }}
+            </SbButton>
+            <template v-if="canDo(device, 'standby')">
+              <SbButton v-if="standby" size="sm" variant="secondary" data-quick="wake" @click="quick(() => deviceStore.wake(device.id))">
+                {{ t('speaker.wake') }}
+              </SbButton>
+              <SbButton v-else size="sm" variant="secondary" data-quick="standby" @click="quick(() => deviceStore.standby(device.id))">
+                {{ t('speaker.standby') }}
+              </SbButton>
+            </template>
+            <SbButton size="sm" variant="secondary" data-quick="release" @click="quick(() => deviceStore.release(device.id, true))">
+              {{ t('speaker.handOver') }}
+            </SbButton>
+          </template>
+        </div>
+      </div>
     </td>
   </tr>
 </template>

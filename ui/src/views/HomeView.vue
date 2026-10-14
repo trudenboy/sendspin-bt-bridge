@@ -7,6 +7,7 @@ import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
+import { useRowExpansion } from '@/composables/useRowExpansion'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
@@ -99,6 +100,9 @@ function onBackendFilter(e: Event) {
 }
 const selectClass =
   'cursor-pointer rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary'
+
+/* List view: one expanded row, the first streaming one on load. */
+const expansion = useRowExpansion(computed(() => deviceStore.filteredDevices))
 
 /** Only the states some device is in right now, so every chip filters something. */
 const statusFilters = computed(() => {
@@ -368,8 +372,10 @@ function openDetail(id: string) {
               :device="device"
               :selectable="selectable"
               :selected="selection.selected.value.has(device.id)"
+              :expanded="expansion.expandedId.value === device.id"
               @open-detail="openDetail"
               @toggle-select="selection.toggle($event)"
+              @toggle-expand="expansion.toggle($event)"
             />
           </tbody>
         </table>
