@@ -57,19 +57,23 @@ async function act(issue: IssueGroup) {
         :class="issue.severity === 'error' ? 'text-error' : issue.severity === 'warning' ? 'text-warning' : 'text-info'"
         aria-hidden="true"
       />
-      <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium text-text-primary">{{ issue.title }}</p>
-        <p class="mt-0.5 text-[13px] text-text-secondary">{{ issue.summary }}</p>
+      <!-- Phones: the action goes under the text so the text keeps its width. -->
+      <div data-guidance-body class="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-start sm:gap-3">
+        <div data-guidance-text class="min-w-0 sm:flex-1">
+          <p class="text-sm font-medium text-text-primary">{{ issue.title }}</p>
+          <p class="mt-0.5 text-[13px] text-text-secondary">{{ issue.summary }}</p>
+        </div>
+        <SbButton
+          v-if="issue.primary_action"
+          variant="outline"
+          size="sm"
+          class="shrink-0"
+          :loading="busy === issue.key"
+          @click="act(issue)"
+        >
+          {{ issue.primary_action.label }}
+        </SbButton>
       </div>
-      <SbButton
-        v-if="issue.primary_action"
-        variant="outline"
-        size="sm"
-        :loading="busy === issue.key"
-        @click="act(issue)"
-      >
-        {{ issue.primary_action.label }}
-      </SbButton>
     </div>
   </section>
 </template>

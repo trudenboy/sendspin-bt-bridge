@@ -193,16 +193,30 @@ describe('DeviceCard chips', () => {
       const { wrapper } = await mountCard(blocked(null))
       const hint = wrapper.find('[data-hint="play_pause"]')
       expect(hint.text()).toContain('Playback unavailable')
-      expect(hint.find('summary').text()).toContain('Why?')
+      expect(hint.get('[data-hint-why]').text()).toContain('Why?')
       expect(hint.text()).toContain('The Sendspin link is down.')
       expect(hint.text()).toContain('Needs: Sendspin link')
     })
 
     it('links to diagnostics when that is the recommended action', async () => {
       const { wrapper, router } = await mountCard(blocked('open_diagnostics'))
-      await wrapper.find('[data-hint="play_pause"] button').trigger('click')
+      await wrapper.get('[data-hint="play_pause"] [data-hint-diagnostics]').trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.name).toBe('diagnostics')
+    })
+
+    it('opens the explanation from a real button that reports its state', async () => {
+      const { wrapper } = await mountCard(blocked(null))
+      const why = wrapper.get('[data-hint="play_pause"] [data-hint-why]')
+      expect(why.element.tagName).toBe('BUTTON')
+      expect(why.attributes('type')).toBe('button')
+      expect(why.attributes('aria-expanded')).toBe('false')
+      const panel = wrapper.get(`#${why.attributes('aria-controls')}`)
+      expect((panel.element as HTMLElement).style.display).toBe('none')
+      await why.trigger('click')
+      expect(why.attributes('aria-expanded')).toBe('true')
+      expect((panel.element as HTMLElement).style.display).toBe('')
+      expect(panel.text()).toContain('The Sendspin link is down.')
     })
 
     it('shows none when every control is available', async () => {

@@ -81,6 +81,18 @@ describe('signalInfo', () => {
     expect(signalInfo(sampled(31), now)).toMatchObject({ stale: true, bars: 0, tone: 'neutral', value: -5 })
   })
 
+  it("measures the age on the bridge's clock when the speaker reports a timing sample", () => {
+    const bridgeNow = Date.parse('2026-10-14T10:00:00Z')
+    const clientAhead = bridgeNow + 120_000
+    const at = (secondsAgo: number) =>
+      makeDevice({
+        bluetooth: { rssi_dbm: -5, connected: true, rssi_at: new Date(bridgeNow - secondsAgo * 1000).toISOString() },
+        timing: { available: true, sampled_at: new Date(bridgeNow).toISOString() },
+      })
+    expect(signalInfo(at(5), clientAhead)!.stale).toBe(false)
+    expect(signalInfo(at(40), clientAhead)!.stale).toBe(true)
+  })
+
   it('treats a sample without a time (or an unreadable one) as current', () => {
     const now = Date.parse('2026-10-14T10:00:00Z')
     expect(signalInfo(makeDevice({ bluetooth: { rssi_dbm: -5, connected: true, rssi_at: null } }), now)!.stale).toBe(false)
@@ -203,6 +215,25 @@ describe('blockedHints', () => {
     expect(blockedHints(makeDevice({ capabilities: { actions: { reconnect: cap('x', { supported: false }) } } }))).toEqual([])
     expect(blockedHints(makeDevice({ enabled: false, capabilities: { actions: { volume: cap('x') } } }))).toEqual([])
     expect(blockedHints(makeDevice())).toEqual([])
+  })
+
+  it('says nothing the state badge already says: handed over, standby, offline, output missing', () => {
+    const actions = { reconnect: cap('Bluetooth is released.'), play_pause: cap('No Sendspin link.'), volume: cap('No sink.') }
+    expect(blockedHints(makeDevice({ bluetooth: { management_enabled: false }, capabilities: { actions } }))).toEqual([])
+    expect(blockedHints(makeDevice({ bluetooth: { standby: true }, capabilities: { actions } }))).toEqual([])
+    expect(
+      blockedHints(makeDevice({ bluetooth: { connected: false }, health: { state: 'offline' }, capabilities: { actions } })),
+    ).toEqual([])
+    expect(
+      blockedHints(output({ audio: { sink_name: 'x', has_sink: false, sink_missing: true }, capabilities: { actions } })),
+    ).toEqual([])
+  })
+
+  it('explains queue controls only while the player streams', () => {
+    const actions = { queue_control: cap('No queue.') }
+    expect(blockedHints(output({ capabilities: { actions } }))).toEqual([])
+    const playing = makeDevice({ playback: { playing: true }, audio: { streaming: true }, capabilities: { actions } })
+    expect(blockedHints(playing).map((h) => h.key)).toEqual(['queue_control'])
   })
 
   it('never offers Bluetooth-only hints for a local output', () => {

@@ -62,20 +62,25 @@ export interface SignalInfo {
   stale: boolean
 }
 
-/**
- * A connected BR/EDR link's RSSI is a Δ dB offset from the controller's
- * Golden Receive Power Range (0 = in range). The API carries no sample time,
- * so a value is never shown as stale here.
- */
 /** A reading older than this is greyed (stable: 6× the bridge's 5 s refresh). */
 export const SIGNAL_STALE_MS = 30_000
 
+/**
+ * A connected BR/EDR link's RSSI is a Δ dB offset from the controller's
+ * Golden Receive Power Range (0 = in range), greyed once its sample
+ * (``rssi_at``) is older than SIGNAL_STALE_MS. The age is taken on the
+ * bridge's clock when the speaker reports a timing sample (both times come
+ * from the bridge, so a browser clock that runs ahead cannot grey it), else
+ * against ``now``.
+ */
 export function signalInfo(d: Device, now: number = Date.now()): SignalInfo | null {
   const bt = d.bluetooth
   if (!bt || !bt.connected || bt.rssi_dbm == null || Number.isNaN(Number(bt.rssi_dbm))) return null
   const value = Number(bt.rssi_dbm)
   const sampledAt = bt.rssi_at ? Date.parse(bt.rssi_at) : Number.NaN
-  if (!Number.isNaN(sampledAt) && now - sampledAt > SIGNAL_STALE_MS) {
+  const bridgeNow = d.timing.available && d.timing.sampled_at ? Date.parse(d.timing.sampled_at) : Number.NaN
+  const reference = Number.isNaN(bridgeNow) ? now : bridgeNow
+  if (!Number.isNaN(sampledAt) && reference - sampledAt > SIGNAL_STALE_MS) {
     return { value, stale: true, bars: 0, tone: 'neutral', tier: 'stale' }
   }
   const base = { value, stale: false }
@@ -186,9 +191,18 @@ interface Capability {
 const HINT_ACTIONS = ['reconnect', 'toggle_bt_management', 'play_pause', 'volume', 'queue_control'] as const
 const BLUETOOTH_ONLY = new Set(['reconnect', 'toggle_bt_management'])
 
-/** Up to two controls the speaker cannot use right now, each with the bridge's reason. */
+/** States whose badge already explains why controls are unavailable. */
+const SELF_EXPLAINED = new Set(['offline', 'standby', 'released', 'disabled', 'output_missing'])
+
+/**
+ * Up to two controls the speaker cannot use right now, each with the bridge's
+ * reason. Nothing when the state badge already says why (handed over,
+ * standby, offline, output missing, disabled), and queue controls only while
+ * the player streams: an idle player has no queue to control.
+ */
 export function blockedHints(d: Device, limit = 2): BlockedHint[] {
-  if (!d.enabled) return []
+  if (SELF_EXPLAINED.has(deviceState(d))) return []
+  const streaming = d.playback.playing && d.audio.streaming
   const hints: BlockedHint[] = []
   if (d.audio.sink_muted && !d.audio.muted && d.audio.has_sink) {
     hints.push({ key: 'sink_muted', message: '', dependsOn: [], recommendedAction: null })
@@ -196,6 +210,7 @@ export function blockedHints(d: Device, limit = 2): BlockedHint[] {
   const actions = ((d.capabilities as { actions?: Record<string, Capability> }).actions ?? {}) as Record<string, Capability>
   for (const key of HINT_ACTIONS) {
     if (isPulseSink(d) && BLUETOOTH_ONLY.has(key)) continue
+    if (key === 'queue_control' && !streaming) continue
     const cap = actions[key]
     if (!cap || cap.supported === false || cap.currently_available !== false || !cap.blocked_reason) continue
     hints.push({
@@ -217,9 +232,6 @@ export interface TransferChip {
 }
 
 const SEVERITY_TONE: Record<string, Tone> = { error: 'error', warning: 'warning', info: 'info' }
-
-/** States whose badge already explains why a handoff cannot happen. */
-const SELF_EXPLAINED = new Set(['offline', 'standby', 'released', 'disabled', 'output_missing'])
 
 /**
  * Room-handoff readiness, only when it is news: the player is connected (link
