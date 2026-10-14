@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from sendspin_bridge.application.bluetooth import _lease, start_leased_job
@@ -214,8 +215,11 @@ def _persist_enabled_and_apply(device_id: str, player_name: str, enabled: bool) 
     return started
 
 
-def _drop_from_disabled_list(device_id: str) -> None:
-    """The disabled list is built at startup; a player started since leaves it now."""
+def _drop_from_disabled_list(device_id: str, also: Callable[[dict], bool] | None = None) -> None:
+    """The disabled list is built at startup; a player started or removed since leaves it now.
+
+    Entries match by player id; ``also`` matches more (a removed speaker by its MAC).
+    """
     from sendspin_bridge.config import _player_id_from_mac
     from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot, set_disabled_devices
 
@@ -224,7 +228,7 @@ def _drop_from_disabled_list(device_id: str) -> None:
         return str(entry.get("id") or (_player_id_from_mac(str(mac)) if mac else ""))
 
     disabled = get_device_registry_snapshot().disabled_devices
-    remaining = [d for d in disabled if _entry_id(d) != device_id]
+    remaining = [d for d in disabled if _entry_id(d) != device_id and not (also and also(d))]
     if len(remaining) != len(disabled):
         set_disabled_devices(remaining)
 
@@ -258,13 +262,12 @@ def remove(device_id: str) -> dict[str, Any]:
     config.pop("PLAYER_STATE", None)
     config["players"] = [p for p in config.get("players") or [] if p is not target]
     result = config_uc.save_config(config)
-    # The disabled list is built at startup; a removed speaker leaves it now.
-    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot, set_disabled_devices
-
-    disabled = get_device_registry_snapshot().disabled_devices
-    remaining = [d for d in disabled if not (target_mac and normalize_mac(d.get("mac")) == target_mac)]
-    if len(remaining) != len(disabled):
-        set_disabled_devices(remaining)
+    # The disabled list is built at startup; a removed player leaves it now —
+    # by its MAC, or by its id (a local output has no MAC).
+    _drop_from_disabled_list(
+        str(target.get("id") or device_id),
+        also=lambda d: bool(target_mac) and normalize_mac(d.get("mac")) == target_mac,
+    )
     return {"removed": True, "reconfig": result.get("reconfig") or {}}
 
 

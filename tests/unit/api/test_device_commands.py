@@ -355,3 +355,25 @@ def test_a_started_player_leaves_the_disabled_list(api_client, registry, disable
         assert left == ["AA:AA:AA:AA:AA:AA"]
     finally:
         device_registry.set_disabled_devices([])
+
+
+def test_a_removed_disabled_sound_card_leaves_the_disabled_list(api_client, registry, disabled_players, monkeypatch):
+    """A local output has no MAC: it leaves the startup disabled list by its player id."""
+    import sendspin_bridge.application.config as config_uc
+    from sendspin_bridge.config import CONFIG_FILE
+    from sendspin_bridge.services.bluetooth import device_registry
+
+    monkeypatch.setattr(config_uc, "CONFIG_FILE", CONFIG_FILE)
+    monkeypatch.setattr(config_uc, "_bt_remove_device", lambda mac, adapter="": None)
+    device_registry.set_disabled_devices(
+        [
+            {"id": PULSE_ID, "mac": None, "player_name": "DAC", "enabled": False},
+            {"mac": MAC, "player_name": "Garage", "enabled": False},
+        ]
+    )
+    try:
+        assert api_client.delete(f"/api/v1/devices/{PULSE_ID}").status_code == 200
+        left = [d["player_name"] for d in device_registry.get_device_registry_snapshot().disabled_devices]
+        assert left == ["Garage"]
+    finally:
+        device_registry.set_disabled_devices([])
