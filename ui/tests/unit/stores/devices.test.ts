@@ -51,6 +51,32 @@ describe('deviceState', () => {
   })
 })
 
+describe('deviceState: richer runtime states', () => {
+  const connected = (patch: Record<string, unknown> = {}) => makeDevice(patch)
+
+  it('says a speaker is stopping before anything but disabled and released', () => {
+    expect(deviceState(connected({ sendspin: { stopping: true }, playback: { playing: true }, audio: { streaming: true } }))).toBe('stopping')
+    expect(deviceState(connected({ sendspin: { stopping: true }, bluetooth: { management_enabled: false } }))).toBe('released')
+  })
+
+  it('says reconnecting for a Bluetooth or Music Assistant reconnect, ahead of standby', () => {
+    expect(deviceState(connected({ bluetooth: { reconnecting: true, standby: true } }))).toBe('reconnecting')
+    expect(deviceState(connected({ music_assistant: { reconnecting: true } }))).toBe('reconnecting')
+  })
+
+  it('says the sink is muted at system level when the player itself is not muted', () => {
+    expect(deviceState(connected({ audio: { sink_muted: true, muted: false, has_sink: true } }))).toBe('sink_muted')
+    expect(deviceState(connected({ audio: { sink_muted: true, muted: true } }))).not.toBe('sink_muted')
+    expect(deviceState(connected({ audio: { sink_muted: true }, bluetooth: { connected: false } }))).not.toBe('sink_muted')
+  })
+
+  it('says buffering while audio is buffering or Music Assistant plays but the speaker has not started', () => {
+    expect(deviceState(connected({ audio: { buffering: true } }))).toBe('buffering')
+    expect(deviceState(connected({ music_assistant: { now_playing: { state: 'playing' } } }))).toBe('buffering')
+    expect(deviceState(connected({ audio: { buffering: true, streaming: true }, playback: { playing: true } }))).toBe('streaming')
+  })
+})
+
 describe('deviceState for a local audio output', () => {
   const pulse = (audio: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
     makeDevice({

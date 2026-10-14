@@ -46,3 +46,19 @@ describe('DeviceStatusBadge', () => {
     expect(w.find('[role="status"]').exists()).toBe(true)
   })
 })
+
+describe('DeviceStatusBadge: runtime states', () => {
+  it.each([
+    ['buffering', 'Buffering', 'warning'],
+    ['sink_muted', 'Muted by system', 'warning'],
+    ['stopping', 'Stopping', 'warning'],
+    ['reconnecting', 'Reconnecting', 'warning'],
+  ])('renders %s as %s with %s tone', (state, label, tone) => {
+    const w = mount(DeviceStatusBadge, {
+      props: { state },
+      global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] },
+    })
+    expect(w.text()).toContain(label)
+    expect(w.find(`.tone-${tone}`).exists()).toBe(true)
+  })
+})

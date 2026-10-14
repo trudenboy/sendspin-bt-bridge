@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge, SbStatusDot } from '@/kit'
 
-/** A device state as derived by ``deviceState()`` (health states plus standby/disabled). */
+/** A device state as derived by ``deviceState()`` (health states plus runtime states). */
 const props = defineProps<{
   state: string
 }>()
@@ -24,6 +24,10 @@ const STATES: Record<string, { tone: Tone; dot: DotStatus }> = {
   released: { tone: 'warning', dot: 'standby' },
   output_missing: { tone: 'error', dot: 'error' },
   disabled: { tone: 'neutral', dot: 'offline' },
+  stopping: { tone: 'warning', dot: 'connecting' },
+  reconnecting: { tone: 'warning', dot: 'connecting' },
+  buffering: { tone: 'warning', dot: 'connecting' },
+  sink_muted: { tone: 'warning', dot: 'error' },
 }
 
 const look = computed(() => STATES[props.state] ?? { tone: 'neutral' as Tone, dot: 'offline' as DotStatus })
