@@ -18,8 +18,9 @@ const stubs = {
   DeviceDetailDrawer: true,
   AddSpeakerDialog: true,
   GuidanceBanner: true,
-  DisabledSpeakers: true,
   DeviceCard: { props: ['device'], template: '<div data-card>{{ device.name }}</div>' },
+  DisabledPlayerCard: { props: ['player'], template: '<div data-card data-disabled>{{ player.name }}</div>' },
+  DisabledPlayerRow: { props: ['player'], template: '<tr data-disabled-row><td>{{ player.name }}</td></tr>' },
 }
 
 const idle = (id: string, name: string) => makeDevice({ id, name })
@@ -128,6 +129,31 @@ describe('HomeView list rows', () => {
   })
 })
 
+const offDevice = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  player_name: name,
+  mac: null,
+  backend_type: 'bluetooth_a2dp',
+  adapter: null,
+  sink: null,
+  room_name: null,
+  enabled: false,
+  ...extra,
+})
+
+function mountWithDisabled(devices: Device[], disabled: ReturnType<typeof offDevice>[], view: 'grid' | 'list' = 'grid') {
+  localStorage.setItem('sb-view-mode', view)
+  const bridge = useBridgeStore()
+  const status = makeStatus(devices)
+  status.bridge.disabled_devices = disabled as never
+  bridge.snapshot = status
+  bridge.loading = false
+  return mount(HomeView, {
+    attachTo: document.body,
+    global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })], stubs },
+  })
+}
+
 describe('HomeView view toggle', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -143,6 +169,11 @@ describe('HomeView view toggle', () => {
     expect(list.attributes('aria-pressed')).toBe('true')
     expect(localStorage.getItem('sb-view-mode')).toBe('list')
     expect(w.find('table').exists()).toBe(true)
+  })
+
+  it('is there with only disabled players too', () => {
+    const w = mountWithDisabled([], [offDevice('x', 'Xray')])
+    expect(w.find('button[aria-label="List view"]').exists()).toBe(true)
   })
 
   it('is absent without players', () => {
@@ -165,5 +196,44 @@ describe('HomeView view toggle', () => {
     } finally {
       window.matchMedia = original
     }
+  })
+})
+
+describe('HomeView disabled players', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('shows them as cards among the others, last in activity order, with no separate section', () => {
+    const w = mountWithDisabled([idle('a', 'Alpha'), streaming('b', 'Bravo')], [offDevice('x', 'Aaron')])
+    expect(cardNames(w)).toEqual(['Bravo', 'Alpha', 'Aaron'])
+    expect(w.findAll('[data-disabled]')).toHaveLength(1)
+    expect(w.text()).not.toContain('Disabled speakers')
+  })
+
+  it('shows them as rows in the list', () => {
+    const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')], 'list')
+    expect(w.findAll('[data-disabled-row]').map((r) => r.text())).toEqual(['Xray'])
+  })
+
+  it('shows them instead of the empty state when every player is disabled', () => {
+    const w = mountWithDisabled([], [offDevice('x', 'Xray')])
+    expect(cardNames(w)).toEqual(['Xray'])
+    expect(w.text()).not.toContain(en.devices.empty.title)
+  })
+
+  it('offers a Disabled status filter that picks them', async () => {
+    const running = ['a', 'b', 'c', 'd', 'e'].map((id) => idle(id, id.toUpperCase()))
+    const w = mountWithDisabled(running, [offDevice('x', 'Xray')])
+    const chip = w.findAll('button').find((b) => b.text() === 'Disabled')
+    expect(chip).toBeTruthy()
+    await chip!.trigger('click')
+    expect(cardNames(w)).toEqual(['Xray'])
+  })
+
+  it('keeps the header counts to running players', () => {
+    const w = mountWithDisabled([idle('a', 'Alpha')], [offDevice('x', 'Xray')])
+    expect(w.get('[data-home-summary]').text()).toContain('1 of 1 connected')
   })
 })

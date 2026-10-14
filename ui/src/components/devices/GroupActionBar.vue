@@ -2,7 +2,8 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationStore } from '@/stores/notifications'
-import { useDeviceStore } from '@/stores/devices'
+import { useDeviceStore, type DisabledPlayer } from '@/stores/devices'
+import { useDisabledPlayerActions } from '@/composables/useDisabledPlayerActions'
 import { SbSlider } from '@/kit'
 import { setVolume, setMute, setDevicePlayback } from '@/api/playback'
 import { reconnectDevice } from '@/api/devices'
@@ -18,19 +19,26 @@ import {
   Moon,
   PowerOff,
   LogOut,
+  Power,
+  Trash2,
 } from 'lucide-vue-next'
 import type { Device } from '@/api/types'
 
-const props = defineProps<{
-  devices: Device[]
-  total: number
-  selectedCount: number
-  allSelected: boolean
-  someSelected: boolean
-  selectedDevices: Device[]
-  /** Selected device ids. */
-  selectedNames: string[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    devices: Device[]
+    total: number
+    selectedCount: number
+    allSelected: boolean
+    someSelected: boolean
+    selectedDevices: Device[]
+    /** Selected ids (running and disabled players). */
+    selectedNames: string[]
+    /** Selected disabled players: only Enable and Remove apply to them. */
+    selectedDisabled?: DisabledPlayer[]
+  }>(),
+  { selectedDisabled: () => [] },
+)
 
 const emit = defineEmits<{
   toggleAll: []
@@ -66,9 +74,11 @@ function onGroupVolumeChange(vol: number) {
 }
 
 async function applyGroupVolume(vol: number) {
-  const names = props.selectedNames
-  await Promise.allSettled(names.map((id) => setVolume(id, vol)))
+  await Promise.allSettled(props.selectedDevices.map((d) => setVolume(d.id, vol)))
 }
+
+const disabledActions = useDisabledPlayerActions()
+const busy = computed(() => actionLoading.value || disabledActions.busy.value)
 
 const nameOf = (d: Device) => speakerName(d.name, d.bluetooth?.mac ?? d.id)
 
@@ -184,7 +194,7 @@ watch(
       class="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3"
     >
       <!-- Group Volume Slider -->
-      <div class="flex min-w-[200px] flex-1 items-center gap-3">
+      <div v-if="selectedDevices.length" class="flex min-w-[200px] flex-1 items-center gap-3">
         <span class="shrink-0 text-sm font-medium text-text-secondary">
           {{ t('devices.groupVolume') }}
         </span>
@@ -205,7 +215,7 @@ watch(
           v-if="mutable.length"
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
-          :disabled="actionLoading"
+          :disabled="busy"
           data-bulk="mute"
           :title="t('devices.muteAll')"
           @click="onMuteAll"
@@ -217,7 +227,7 @@ watch(
           v-if="pausable.length"
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
-          :disabled="actionLoading"
+          :disabled="busy"
           data-bulk="pause"
           :title="t('devices.pauseAll')"
           @click="onPauseAll"
@@ -230,7 +240,7 @@ watch(
           type="button"
           data-bulk="reconnect"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
-          :disabled="actionLoading"
+          :disabled="busy"
           :title="t('devices.reconnectAll')"
           @click="onReconnectAll"
         >
@@ -243,7 +253,7 @@ watch(
           type="button"
           :data-bulk="b.action"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
-          :disabled="actionLoading"
+          :disabled="busy"
           :title="t(`devices.bulk.${b.action}.title`, { count: eligible[b.action].length, total: selectedCount })"
           :aria-label="t(`devices.bulk.${b.action}.label`)"
           @click="onBulk(b.action, b.confirm)"
@@ -251,6 +261,32 @@ watch(
           <component :is="b.icon" class="h-4 w-4" aria-hidden="true" />
           <span class="hidden sm:inline">{{ t(`devices.bulk.${b.action}.label`) }}</span>
         </button>
+        <template v-if="selectedDisabled.length">
+          <button
+            type="button"
+            data-bulk="enable"
+            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
+            :disabled="busy"
+            :title="t('devices.bulk.enable.title', { count: selectedDisabled.length, total: selectedCount })"
+            :aria-label="t('devices.bulk.enable.label')"
+            @click="disabledActions.enable(selectedDisabled)"
+          >
+            <Power class="h-4 w-4" aria-hidden="true" />
+            <span class="hidden sm:inline">{{ t('devices.bulk.enable.label') }}</span>
+          </button>
+          <button
+            type="button"
+            data-bulk="remove"
+            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-error transition-colors hover:bg-surface-secondary disabled:opacity-50"
+            :disabled="busy"
+            :title="t('devices.bulk.remove.title', { count: selectedDisabled.length, total: selectedCount })"
+            :aria-label="t('devices.bulk.remove.label')"
+            @click="disabledActions.remove(selectedDisabled)"
+          >
+            <Trash2 class="h-4 w-4" aria-hidden="true" />
+            <span class="hidden sm:inline">{{ t('devices.bulk.remove.label') }}</span>
+          </button>
+        </template>
       </div>
     </div>
   </div>

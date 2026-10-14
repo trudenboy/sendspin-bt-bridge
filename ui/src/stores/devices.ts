@@ -13,7 +13,7 @@ import {
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
 import { isDeviceConnected, isOutputMissing, isPulseSink } from '@/utils/deviceBackend'
-import type { Device } from '@/api/types'
+import type { Device, DisabledDevice } from '@/api/types'
 
 export type DeviceSortField = 'activity' | 'name' | 'status' | 'adapter'
 export type SortDirection = 'asc' | 'desc'
@@ -26,6 +26,41 @@ export interface DeviceFilter {
   adapter: string
   group: string
   backend: BackendFilter
+}
+
+/** A configured player the bridge does not run: shown like the others, dimmed. */
+export interface DisabledPlayer {
+  id: string
+  name: string
+  mac: string | null
+  /** Bluetooth adapter it is set to (hci name or MAC). */
+  adapter: string | null
+  /** A local audio output rather than a Bluetooth speaker. */
+  output: boolean
+  sink: string | null
+  room: string | null
+}
+
+/** One entry of the dashboard: a running player or a disabled one. */
+export type PlayerEntry =
+  | { kind: 'device'; id: string; name: string; device: Device }
+  | { kind: 'disabled'; id: string; name: string; player: DisabledPlayer }
+
+const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
+
+/** The bridge's disabled list as players; entries without an id cannot be acted on and are left out. */
+export function toDisabledPlayers(list: DisabledDevice[] | null | undefined): DisabledPlayer[] {
+  return (list ?? [])
+    .filter((d) => !!d.id)
+    .map((d) => ({
+      id: d.id!,
+      name: d.player_name ?? d.mac ?? d.id!,
+      mac: d.mac ?? null,
+      adapter: str(d.adapter),
+      output: d.backend_type === 'pulse_sink',
+      sink: str(d.sink),
+      room: str(d.room_name),
+    }))
 }
 
 export const SORT_OPTIONS: DeviceSortField[] = ['activity', 'name', 'status']
@@ -167,6 +202,36 @@ export const useDeviceStore = defineStore('devices', () => {
 
   const bridge = useBridgeStore()
 
+  const disabledPlayers = computed<DisabledPlayer[]>(() => toDisabledPlayers(bridge.bridge?.disabled_devices))
+
+  /** Disabled players through the same filters: status "disabled", no group, their own adapter and backend. */
+  const filteredDisabled = computed<DisabledPlayer[]>(() => {
+    const f = filter.value
+    const q = f.search.toLowerCase()
+    return disabledPlayers.value.filter(
+      (p) =>
+        (!q || p.name.toLowerCase().includes(q) || (p.mac ?? '').toLowerCase().includes(q)) &&
+        (!f.status.length || f.status.includes('disabled')) &&
+        (!f.adapter || p.adapter === f.adapter) &&
+        !f.group &&
+        (!f.backend || p.output === (f.backend === 'output')),
+    )
+  })
+
+  /**
+   * Running and disabled players in one list: by name they mix; in activity
+   * and status order disabled players come last (they are the least active).
+   */
+  const filteredPlayers = computed<PlayerEntry[]>(() => {
+    const running: PlayerEntry[] = filteredDevices.value.map((d) => ({ kind: 'device', id: d.id, name: d.name ?? '', device: d }))
+    const off: PlayerEntry[] = [...filteredDisabled.value]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((p) => ({ kind: 'disabled', id: p.id, name: p.name, player: p }))
+    if (sortBy.value !== 'name') return [...running, ...off]
+    const merged = [...running, ...off].sort((a, b) => a.name.localeCompare(b.name))
+    return sortDir.value === 'asc' ? merged : merged.reverse()
+  })
+
   const filteredDevices = computed<Device[]>(() => {
     let list = [...bridge.devices]
     const q = filter.value.search.toLowerCase()
@@ -252,6 +317,8 @@ export const useDeviceStore = defineStore('devices', () => {
     sortDir,
     setSort,
     filteredDevices,
+    disabledPlayers,
+    filteredPlayers,
     selectedDevice,
     selectDevice,
     setVolume,

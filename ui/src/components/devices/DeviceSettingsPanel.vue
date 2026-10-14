@@ -16,7 +16,16 @@ import { confirmDialog } from '@/composables/useConfirm'
 import { speakerName } from '@/utils/speakerName'
 import type { Device } from '@/api/types'
 
-const props = defineProps<{ device: Device }>()
+/** What the panel needs of a player: a running Device, or a disabled player shaped like one. */
+export interface SettingsTarget {
+  id: string
+  config_id?: string | null
+  name?: string | null
+  enabled: boolean
+  bluetooth?: { mac?: string | null } | null
+}
+
+const props = defineProps<{ device: SettingsTarget | Device }>()
 
 const { t } = useI18n()
 const bridge = useBridgeStore()
@@ -140,7 +149,9 @@ async function removeSpeaker() {
 
 async function toggleEnabled(enabled: boolean) {
   try {
-    await deviceStore.setEnabled(props.device.id, enabled)
+    const result = (await deviceStore.setEnabled(props.device.id, enabled)) as { restart_required?: boolean } | undefined
+    await bridge.refresh()
+    if (result?.restart_required) notifications.warning(t('settings.restartNeeded'))
   } catch {
     notifications.error(t('device.actions.enableFailed'))
   }

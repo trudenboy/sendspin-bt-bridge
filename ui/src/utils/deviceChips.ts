@@ -168,6 +168,34 @@ export function linkChip(d: Device, sinks: AudioSink[] = []): LinkChip | null {
   return { ...base, tone: 'error', pulse: false, state: 'disconnected' }
 }
 
+/**
+ * A disabled player's adapter (neutral: no link to colour) or output, from
+ * the bridge's disabled list, which names the adapter by hci or MAC.
+ */
+export function disabledLinkChip(
+  p: { output: boolean; adapter: string | null; sink: string | null },
+  adapters: { id: string; mac: string; name: string }[] = [],
+  sinks: AudioSink[] = [],
+): LinkChip | null {
+  if (p.output) {
+    if (!p.sink) return null
+    return { kind: 'output', label: sinks.find((s) => s.name === p.sink)?.description || p.sink, sink: p.sink }
+  }
+  if (!p.adapter) return null
+  const wanted = p.adapter.toUpperCase()
+  const adapter = adapters.find((a) => a.id === p.adapter || a.mac.toUpperCase() === wanted)
+  const hci = adapter?.id ?? (p.adapter.startsWith('hci') ? p.adapter : '')
+  return {
+    kind: 'adapter',
+    label: adapter?.name || hci || p.adapter,
+    hci,
+    mac: adapter?.mac ?? null,
+    tone: 'neutral',
+    pulse: false,
+    state: 'disabled',
+  }
+}
+
 /* ------------------------------------------------------ blocked hints -- */
 
 export interface BlockedHint {

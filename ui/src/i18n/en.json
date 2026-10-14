@@ -476,7 +476,17 @@
         "confirmTitle": "Hand over {count} speaker(s)?",
         "confirmMessage": "The bridge lets go of: {names}. They will not reconnect until you take them back."
       },
-      "failed": "{action} failed for: {names}"
+      "failed": "{action} failed for: {names}",
+      "enable": {
+        "label": "Enable",
+        "title": "Enable {count} of {total} selected (disabled players)"
+      },
+      "remove": {
+        "label": "Remove",
+        "title": "Remove {count} of {total} selected (disabled players)",
+        "confirmTitle": "Remove {count} player(s)?",
+        "confirmMessage": "Their players disappear from Music Assistant and Bluetooth pairings are removed: {names}."
+      }
     },
     "sort": {
       "label": "Sort by",
@@ -1332,7 +1342,6 @@
     "removeMessage": "Its player disappears from Music Assistant and its Bluetooth pairing is removed. To use it again, add it as a new speaker.",
     "suspendOutput": "Suspend audio output",
     "resumeOutput": "Resume audio output",
-    "disabledTitle": "Disabled speakers",
-    "disabledHelp": "Their settings are kept; they get no player until enabled."
+    "settings": "Settings"
   }
 }

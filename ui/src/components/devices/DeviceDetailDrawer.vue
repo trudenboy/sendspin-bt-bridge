@@ -42,11 +42,23 @@ const device = computed<Device | undefined>(() => (props.deviceId ? bridge.devic
 const pulse = computed(() => (device.value ? isPulseSink(device.value) : false))
 const released = computed(() => device.value?.bluetooth?.management_enabled === false)
 const adapterId = computed(() => device.value?.bluetooth?.adapter.hci || '')
-const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''))
+/* A disabled player has no Device: its details are its settings. */
+const disabledPlayer = computed(() =>
+  !device.value && props.deviceId ? deviceStore.disabledPlayers.find((p) => p.id === props.deviceId) : undefined,
+)
+const disabledTarget = computed(() => {
+  const p = disabledPlayer.value
+  return p ? { id: p.id, config_id: p.id, name: p.name, enabled: false, bluetooth: p.mac ? { mac: p.mac } : null } : null
+})
+const drawerTitle = computed(() =>
+  disabledPlayer.value
+    ? speakerName(disabledPlayer.value.name, disabledPlayer.value.mac ?? disabledPlayer.value.id)
+    : speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''),
+)
 const events = computed(() => device.value?.recent_events ?? [])
 
 // A speaker that disappears (removed) takes its panel with it.
-watch(device, (now, before) => {
+watch(() => device.value ?? disabledPlayer.value, (now, before) => {
   if (before && !now && props.open) emit('update:open', false)
 })
 
@@ -343,6 +355,9 @@ function onAdapterReboot() {
         </template>
       </SbTabs>
     </template>
+    <div v-else-if="disabledTarget" class="text-sm">
+      <DeviceSettingsPanel :device="disabledTarget" />
+    </div>
 
     <!-- BT Device Info Modal -->
     <BtDeviceInfoModal

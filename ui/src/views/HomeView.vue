@@ -16,7 +16,8 @@ import DeviceDetailDrawer from '@/components/devices/DeviceDetailDrawer.vue'
 import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
-import DisabledSpeakers from '@/components/devices/DisabledSpeakers.vue'
+import DisabledPlayerCard from '@/components/devices/DisabledPlayerCard.vue'
+import DisabledPlayerRow from '@/components/devices/DisabledPlayerRow.vue'
 import { useMediaQuery } from '@/composables/useMediaQuery'
 import { Plus, LayoutGrid, List, ChevronDown, ArrowUpDown } from 'lucide-vue-next'
 
@@ -66,19 +67,26 @@ const viewMode = ref<ViewMode>(readViewMode())
 const wide = useMediaQuery('(min-width: 640px)')
 const shownView = computed<ViewMode>(() => (wide.value ? viewMode.value : 'grid'))
 
+/* Running and disabled players alike: the dashboard shows both. */
+const playerCount = computed(() => bridge.devices.length + deviceStore.disabledPlayers.length)
+
 const selection = useDeviceSelection(
   computed(() => deviceStore.filteredDevices),
+  computed(() => deviceStore.filteredPlayers.filter((p) => p.kind === 'disabled').map((p) => p.id)),
+)
+const selectedDisabled = computed(() =>
+  deviceStore.disabledPlayers.filter((p) => selection.selectedDisabledIds.value.includes(p.id)),
 )
 
-const showGroupBar = computed(() => bridge.devices.length >= 2)
+const showGroupBar = computed(() => playerCount.value >= 2)
 /* Search and filters earn their space only on larger setups. */
 const FILTER_FROM = 6
-const showFilters = computed(() => bridge.devices.length >= FILTER_FROM)
-const showViewToggle = computed(() => bridge.devices.length >= 1)
+const showFilters = computed(() => playerCount.value >= FILTER_FROM)
+const showViewToggle = computed(() => playerCount.value >= 1)
 
 /** One line of context above the speakers: Music Assistant, playing, adapters. */
 const fleet = computed(() => fleetSummary(bridge.devices))
-const selectable = computed(() => bridge.devices.length >= 2)
+const selectable = computed(() => playerCount.value >= 2)
 
 
 function setViewMode(mode: ViewMode) {
@@ -91,8 +99,12 @@ function setViewMode(mode: ViewMode) {
 }
 
 /* Order (both views) and, on mixed setups, which kind of player to show. */
-const showSort = computed(() => bridge.devices.length >= 2)
-const mixedBackends = computed(() => bridge.devices.some(isPulseSink) && bridge.devices.some((d) => !isPulseSink(d)))
+const showSort = computed(() => playerCount.value >= 2)
+const mixedBackends = computed(() => {
+  const outputs = bridge.devices.some(isPulseSink) || deviceStore.disabledPlayers.some((p) => p.output)
+  const speakers = bridge.devices.some((d) => !isPulseSink(d)) || deviceStore.disabledPlayers.some((p) => !p.output)
+  return outputs && speakers
+})
 /* The filter lives in the store and outlives this view: clear it on return too. */
 watch(
   mixedBackends,
@@ -117,7 +129,9 @@ const expansion = useRowExpansion(computed(() => deviceStore.filteredDevices))
 
 /** Only the states some device is in right now, so every chip filters something. */
 const statusFilters = computed(() => {
-  const present = [...new Set(bridge.devices.map(deviceState))].sort()
+  const states = bridge.devices.map(deviceState)
+  if (deviceStore.disabledPlayers.length) states.push('disabled')
+  const present = [...new Set(states)].sort()
   return present.map((key) => ({
     key,
     label: t(`device.status.${key}`),
@@ -342,18 +356,19 @@ function openDetail(id: string) {
       <GroupActionBar
         v-if="showGroupBar"
         :devices="deviceStore.filteredDevices"
-        :total="deviceStore.filteredDevices.length"
+        :total="deviceStore.filteredPlayers.length"
         :selected-count="selection.selectedCount.value"
         :all-selected="selection.allSelected.value"
         :some-selected="selection.someSelected.value"
         :selected-devices="selection.selectedDevices.value"
         :selected-names="selection.selectedNames.value"
+        :selected-disabled="selectedDisabled"
         @toggle-all="selection.toggleAll()"
       />
 
       <!-- Empty state -->
       <SbEmptyState
-        v-if="bridge.devices.length === 0"
+        v-if="playerCount === 0"
         :title="t('devices.empty.title')"
         :description="t('devices.empty.description')"
       >
@@ -369,23 +384,32 @@ function openDetail(id: string) {
 
       <!-- Device grid -->
       <div
-        v-else-if="shownView === 'grid' && deviceStore.filteredDevices.length > 0"
+        v-else-if="shownView === 'grid' && deviceStore.filteredPlayers.length > 0"
         class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"
       >
-        <DeviceCard
-          v-for="device in deviceStore.filteredDevices"
-          :key="device.id"
-          :device="device"
-          :selectable="selectable"
-          :selected="selection.selected.value.has(device.id)"
-          @open-detail="openDetail"
-          @toggle-select="selection.toggle($event)"
-        />
+        <template v-for="entry in deviceStore.filteredPlayers" :key="entry.id">
+          <DeviceCard
+            v-if="entry.kind === 'device'"
+            :device="entry.device"
+            :selectable="selectable"
+            :selected="selection.selected.value.has(entry.id)"
+            @open-detail="openDetail"
+            @toggle-select="selection.toggle($event)"
+          />
+          <DisabledPlayerCard
+            v-else
+            :player="entry.player"
+            :selectable="selectable"
+            :selected="selection.selected.value.has(entry.id)"
+            @open-detail="openDetail"
+            @toggle-select="selection.toggle($event)"
+          />
+        </template>
       </div>
 
       <!-- Device list -->
       <div
-        v-else-if="shownView === 'list' && deviceStore.filteredDevices.length > 0"
+        v-else-if="shownView === 'list' && deviceStore.filteredPlayers.length > 0"
         class="overflow-x-auto rounded-lg border border-border"
       >
         <table class="w-full text-left text-sm">
@@ -401,28 +425,35 @@ function openDetail(id: string) {
             </tr>
           </thead>
           <tbody>
-            <DeviceListRow
-              v-for="device in deviceStore.filteredDevices"
-              :key="device.id"
-              :device="device"
-              :selectable="selectable"
-              :selected="selection.selected.value.has(device.id)"
-              :expanded="expansion.expandedId.value === device.id"
-              @open-detail="openDetail"
-              @toggle-select="selection.toggle($event)"
-              @toggle-expand="expansion.toggle($event)"
-            />
+            <template v-for="entry in deviceStore.filteredPlayers" :key="entry.id">
+              <DeviceListRow
+                v-if="entry.kind === 'device'"
+                :device="entry.device"
+                :selectable="selectable"
+                :selected="selection.selected.value.has(entry.id)"
+                :expanded="expansion.expandedId.value === entry.id"
+                @open-detail="openDetail"
+                @toggle-select="selection.toggle($event)"
+                @toggle-expand="expansion.toggle($event)"
+              />
+              <DisabledPlayerRow
+                v-else
+                :player="entry.player"
+                :selectable="selectable"
+                :selected="selection.selected.value.has(entry.id)"
+                @open-detail="openDetail"
+                @toggle-select="selection.toggle($event)"
+              />
+            </template>
           </tbody>
         </table>
       </div>
 
       <!-- No filter results -->
-      <div v-else-if="deviceStore.filteredDevices.length === 0" class="py-16 text-center text-text-secondary">
+      <div v-else-if="deviceStore.filteredPlayers.length === 0" class="py-16 text-center text-text-secondary">
         {{ t('common.noResults') }}
       </div>
     </template>
-
-    <DisabledSpeakers v-if="!bridge.loading" />
 
     <!-- Detail drawer -->
     <DeviceDetailDrawer
