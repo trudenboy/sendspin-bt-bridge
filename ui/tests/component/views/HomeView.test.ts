@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import HomeView from '@/views/HomeView.vue'
@@ -44,6 +45,16 @@ function mountHome(devices: Device[], view: 'grid' | 'list' = 'grid') {
   })
 }
 
+/* Toolbar menus are SbDropdowns: open the trigger, pick the item (the menu sits on <body>). */
+async function pick(w: ReturnType<typeof mountHome>, trigger: string, item: string) {
+  await w.get(trigger).trigger('click')
+  await nextTick()
+  const el = document.body.querySelector<HTMLElement>(item)
+  expect(el, item).not.toBeNull()
+  el!.click()
+  await nextTick()
+}
+
 const cardNames = (w: ReturnType<typeof mountHome>) => w.findAll('[data-card]').map((c) => c.text())
 
 describe('HomeView toolbar', () => {
@@ -55,20 +66,22 @@ describe('HomeView toolbar', () => {
   it('orders by activity first and switches order from the toolbar, remembering it', async () => {
     const w = mountHome([idle('a', 'Alpha'), streaming('z', 'Zulu')])
     expect(cardNames(w)).toEqual(['Zulu', 'Alpha'])
-    const sort = w.get<HTMLSelectElement>('select[data-sort]')
-    expect(sort.element.value).toBe('activity')
-    await sort.setValue('name')
+    const sort = w.get('button[data-sort]')
+    expect(sort.text()).toContain('Activity')
+    await pick(w, 'button[data-sort]', '[data-sort-option="name"]')
     expect(cardNames(w)).toEqual(['Alpha', 'Zulu'])
+    expect(w.get('button[data-sort]').text()).toContain('Name')
     expect(localStorage.getItem('sb-device-sort')).toBe('name')
   })
 
   it('offers the backend filter only when both kinds of player exist', async () => {
-    expect(mountHome([idle('a', 'Alpha'), idle('b', 'Bravo')]).find('select[data-backend-filter]').exists()).toBe(false)
+    expect(mountHome([idle('a', 'Alpha'), idle('b', 'Bravo')]).find('[data-backend-filter]').exists()).toBe(false)
     setActivePinia(createPinia())
     const w = mountHome([idle('a', 'Alpha'), output('o', 'Output')])
-    await w.get('select[data-backend-filter]').setValue('output')
+    await pick(w, 'button[data-backend-filter]', '[data-backend-option="output"]')
     expect(cardNames(w)).toEqual(['Output'])
-    await w.get('select[data-backend-filter]').setValue('bluetooth')
+    expect(w.get('button[data-backend-filter]').text()).toContain('Audio outputs')
+    await pick(w, 'button[data-backend-filter]', '[data-backend-option="bluetooth"]')
     expect(cardNames(w)).toEqual(['Alpha'])
   })
 })
