@@ -3810,8 +3810,11 @@ export interface components {
              * Command
              * @enum {string}
              */
-            command: "play" | "pause" | "stop" | "next" | "previous" | "volume" | "mute" | "repeat_off" | "repeat_one" | "repeat_all" | "shuffle" | "unshuffle" | "switch";
-            /** Value */
+            command: "play" | "pause" | "stop" | "next" | "previous" | "volume" | "mute" | "repeat_off" | "repeat_one" | "repeat_all" | "shuffle" | "unshuffle" | "switch" | "seek";
+            /**
+             * Value
+             * @description volume: 0-100; mute: bool; seek: absolute position in ms within the current track.
+             */
             value?: unknown;
         };
         /**

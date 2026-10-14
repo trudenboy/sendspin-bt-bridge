@@ -292,15 +292,45 @@ TransportAction = Literal[
     "shuffle",
     "unshuffle",
     "switch",
+    "seek",
 ]
 
 
+def _track_duration_ms(status) -> int | None:
+    """The current track's length: the daemon's own, else Music Assistant's (seconds)."""
+    native = status.get("track_duration_ms")
+    if isinstance(native, int | float) and not isinstance(native, bool) and native > 0:
+        return int(native)
+    now_playing = status.get("ma_now_playing")
+    duration = now_playing.get("duration") if isinstance(now_playing, dict) else None
+    if isinstance(duration, int | float) and not isinstance(duration, bool) and duration > 0:
+        return round(duration * 1000)
+    return None
+
+
+def _seek_position(status, value: Any) -> int:
+    """A seek target in ms, checked against the track (0..duration)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise UseCaseError(400, "invalid_position", "Seek needs a whole number of milliseconds")
+    duration = _track_duration_ms(status)
+    if duration is None:
+        raise UseCaseError(409, "unknown_duration", "The track's length is not known; cannot seek")
+    if not 0 <= value <= duration:
+        raise UseCaseError(400, "out_of_range", f"Seek position must be between 0 and {duration} ms")
+    return value
+
+
 def transport(device_id: str, action: TransportAction, value: Any = None) -> None:
-    """A native Sendspin controller command (lower latency than going through MA)."""
+    """A native Sendspin controller command (lower latency than going through MA).
+
+    ``seek`` takes an absolute position in ms within the current track.
+    """
     client = find_client(device_id)
     supported = client.status.get("supported_commands")
     if supported is not None and action not in supported:
         raise UseCaseError(409, "unsupported_command", f"Command {action!r} not supported by device")
+    if action == "seek":
+        value = _seek_position(client.status, value)
     if not run_on_loop(
         client.send_transport_command(action, value=value), timeout=5.0, description=f"transport {action}"
     ):

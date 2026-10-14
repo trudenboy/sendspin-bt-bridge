@@ -743,6 +743,7 @@ def _stub_media_command(monkeypatch):
         REPEAT_ALL = "repeat_all"
         SHUFFLE = "shuffle"
         UNSHUFFLE = "unshuffle"
+        SEEK = "seek"
 
     monkeypatch.setattr(
         sys.modules["aiosendspin.models.types"],
@@ -840,6 +841,30 @@ async def test_read_commands_transport_mute_passes_bool(monkeypatch):
     dispatched_mc, kwargs = send_group.calls[0]
     assert dispatched_mc == fake_mc.MUTE
     assert kwargs == {"mute": True}
+
+
+@pytest.mark.asyncio
+async def test_read_commands_transport_seek_passes_position_ms(monkeypatch):
+    fake_mc = _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "seek", "value": 61500})
+
+    assert len(send_group.calls) == 1
+    dispatched_mc, kwargs = send_group.calls[0]
+    assert dispatched_mc == fake_mc.SEEK
+    assert kwargs == {"position_ms": 61500}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, -1, "soon"])
+async def test_read_commands_transport_seek_without_a_valid_position_is_skipped(monkeypatch, value):
+    _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "seek", "value": value})
+
+    assert send_group.calls == []
 
 
 @pytest.mark.asyncio

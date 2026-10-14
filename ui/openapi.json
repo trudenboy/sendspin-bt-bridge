@@ -5205,12 +5205,14 @@
               "repeat_all",
               "shuffle",
               "unshuffle",
-              "switch"
+              "switch",
+              "seek"
             ],
             "title": "Command",
             "type": "string"
           },
           "value": {
+            "description": "volume: 0-100; mute: bool; seek: absolute position in ms within the current track.",
             "title": "Value"
           }
         },

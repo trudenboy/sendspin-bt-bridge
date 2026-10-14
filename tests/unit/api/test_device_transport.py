@@ -23,14 +23,15 @@ ALL_COMMANDS = [
     "shuffle",
     "unshuffle",
     "switch",
+    "seek",
 ]
 
 
-def _client(player_id: str, supported=None, result=True):
+def _client(player_id: str, supported=None, result=True, **status_extra):
     client = MagicMock()
     client.player_id = player_id
     client.player_name = player_id.title()
-    client.status = {"supported_commands": supported}
+    client.status = {"supported_commands": supported, **status_extra}
     client.send_transport_command = AsyncMock(return_value=result)
     return client
 
@@ -90,3 +91,53 @@ def test_a_stopped_daemon_is_409(api_client, registry, bridge_loop):
 def test_every_media_command_is_accepted_by_the_contract(api_client, registry, command):
     # No device: a valid command gets as far as the lookup (404), never 422.
     assert api_client.post("/api/v1/devices/ghost/transport", json={"command": command}).status_code == 404
+
+
+# ── seek: an absolute position in ms, within the track ──────────────────────
+
+
+def test_seek_sends_the_position_to_the_native_controller(api_client, registry, bridge_loop):
+    registry.append(_client("kitchen", supported=["seek"], track_duration_ms=200_000))
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 90_000})
+    assert resp.status_code == 204
+    registry[0].send_transport_command.assert_awaited_once_with("seek", value=90_000)
+
+
+def test_seek_uses_music_assistants_duration_when_the_daemon_has_none(api_client, registry, bridge_loop):
+    registry.append(_client("kitchen", supported=["seek"], ma_now_playing={"duration": 180}))
+    ok = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 180_000})
+    assert ok.status_code == 204
+    past = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 180_001})
+    assert past.status_code == 400
+    assert past.json()["code"] == "out_of_range"
+
+
+@pytest.mark.parametrize("value", [-1, 200_001])
+def test_seek_outside_the_track_is_400(api_client, registry, value):
+    registry.append(_client("kitchen", supported=["seek"], track_duration_ms=200_000))
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": value})
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "out_of_range"
+    registry[0].send_transport_command.assert_not_called()
+
+
+@pytest.mark.parametrize("value", [None, "later", True, 1.5])
+def test_seek_needs_a_whole_number_position(api_client, registry, value):
+    registry.append(_client("kitchen", supported=["seek"], track_duration_ms=200_000))
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": value})
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "invalid_position"
+
+
+def test_seek_without_a_known_duration_is_409(api_client, registry):
+    registry.append(_client("kitchen", supported=["seek"]))
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 1000})
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "unknown_duration"
+
+
+def test_seek_the_server_does_not_offer_is_409(api_client, registry):
+    registry.append(_client("kitchen", supported=["play", "pause"], track_duration_ms=200_000))
+    resp = api_client.post("/api/v1/devices/kitchen/transport", json={"command": "seek", "value": 1000})
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "unsupported_command"

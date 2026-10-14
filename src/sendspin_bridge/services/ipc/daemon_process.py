@@ -574,6 +574,12 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     continue
             elif mc == MediaCommand.MUTE and value is not None:
                 kwargs["mute"] = bool(value)
+            elif mc == MediaCommand.SEEK:
+                # An absolute position in ms; the server bounds it by seek_max_ms.
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    logger.warning("Invalid seek position for transport: %r", value)
+                    continue
+                kwargs["position_ms"] = value
             _task = asyncio.ensure_future(daemon._client.send_group_command(mc, **kwargs))
             _background_tasks.add(_task)
             _task.add_done_callback(_background_tasks.discard)
