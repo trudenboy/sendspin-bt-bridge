@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { deviceState } from '@/stores/devices'
 import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import { speakerName } from '@/utils/speakerName'
+import { releaseKind } from '@/utils/deviceStatusText'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import DevicePlayerPanel from './DevicePlayerPanel.vue'
 import { BatteryLow, BatteryMedium, BatteryFull } from 'lucide-vue-next'
@@ -32,7 +33,12 @@ const state = computed(() => deviceState(props.device))
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const room = computed(() => props.device.room?.name || null)
 
-const released = computed(() => props.device.bluetooth?.management_enabled === false)
+/* The badge names a release; the meta line keeps it visible when another state wins (disabled). */
+const releasedNote = computed(() => {
+  const kind = releaseKind(props.device)
+  if (!kind || state.value === 'released') return null
+  return kind === 'auto' ? t('device.status.autoReleased') : t('bluetooth.released')
+})
 const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
 
 const BatteryIcon = computed(() => {
@@ -89,10 +95,10 @@ function onDetails() {
           <span v-if="battery != null && BatteryIcon" class="inline-flex items-center gap-0.5" :class="batteryColor" :title="t('device.battery', { level: battery })">
             <component :is="BatteryIcon" class="size-3.5" aria-hidden="true" />{{ battery }}%
           </span>
-          <span v-if="released" class="text-warning">{{ t('bluetooth.released') }}</span>
+          <span v-if="releasedNote" class="text-warning">{{ releasedNote }}</span>
         </p>
       </div>
-      <DeviceStatusBadge :state="state" class="relative z-10 shrink-0" />
+      <DeviceStatusBadge :state="state" :device="device" class="relative z-10 shrink-0" />
       <div class="relative z-10 -mt-1.5 -mr-2"><SpeakerActionsMenu :device="device" /></div>
     </header>
 

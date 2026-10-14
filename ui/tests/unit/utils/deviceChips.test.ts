@@ -72,6 +72,20 @@ describe('signalInfo', () => {
     expect(signalInfo(rssi(-5, false))).toBeNull()
     expect(signalInfo(output())).toBeNull()
   })
+
+  it('greys the bars when the sample is older than 30 s, as stable does', () => {
+    const now = Date.parse('2026-10-14T10:00:00Z')
+    const sampled = (secondsAgo: number) =>
+      makeDevice({ bluetooth: { rssi_dbm: -5, connected: true, rssi_at: new Date(now - secondsAgo * 1000).toISOString() } })
+    expect(signalInfo(sampled(10), now)).toMatchObject({ stale: false, bars: 3, tone: 'success' })
+    expect(signalInfo(sampled(31), now)).toMatchObject({ stale: true, bars: 0, tone: 'neutral', value: -5 })
+  })
+
+  it('treats a sample without a time (or an unreadable one) as current', () => {
+    const now = Date.parse('2026-10-14T10:00:00Z')
+    expect(signalInfo(makeDevice({ bluetooth: { rssi_dbm: -5, connected: true, rssi_at: null } }), now)!.stale).toBe(false)
+    expect(signalInfo(makeDevice({ bluetooth: { rssi_dbm: -5, connected: true, rssi_at: 'garbage' } }), now)!.stale).toBe(false)
+  })
 })
 
 describe('groupChip', () => {

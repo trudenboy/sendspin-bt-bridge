@@ -53,7 +53,11 @@
       "buffering": "Buffering",
       "sink_muted": "Muted by system",
       "stopping": "Stopping",
-      "reconnecting": "Reconnecting"
+      "reconnecting": "Reconnecting",
+      "autoReleased": "Auto-released",
+      "autoReleasedTitle": "The bridge let go of this speaker after repeated connection problems. Take it back to retry.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "On standby since {time}"
     },
     "actions": {
       "reconnect": "Reconnect",
@@ -113,7 +117,8 @@
           "poor": "Poor signal",
           "bad": "Bad signal",
           "stale": "Signal reading is out of date"
-        }
+        },
+        "staleTitle": "Last signal reading ({value} Δ dB) is more than 30 s old"
       },
       "group": {
         "title": "Music Assistant group {name}",
@@ -184,6 +189,11 @@
         "bluetooth": "Bluetooth speaker",
         "output": "Audio output"
       }
+    },
+    "elapsed": {
+      "underMinute": "<1 min",
+      "minutes": "{n} min",
+      "hours": "{h} h {m} min"
     }
   },
   "config": {

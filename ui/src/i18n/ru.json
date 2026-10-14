@@ -53,7 +53,11 @@
       "buffering": "Буферизация",
       "sink_muted": "Заглушена системой",
       "stopping": "Останавливается",
-      "reconnecting": "Переподключение"
+      "reconnecting": "Переподключение",
+      "autoReleased": "Отпущена автоматически",
+      "autoReleasedTitle": "Мост отпустил колонку после повторных сбоев связи. Заберите её обратно, чтобы попробовать снова.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "В режиме ожидания с {time}"
     },
     "actions": {
       "reconnect": "Переподключить",
@@ -113,7 +117,8 @@
           "poor": "Слабый сигнал",
           "bad": "Плохой сигнал",
           "stale": "Показание сигнала устарело"
-        }
+        },
+        "staleTitle": "Последнее показание сигнала ({value} Δ dB) старше 30 с"
       },
       "group": {
         "title": "Группа Music Assistant {name}",
@@ -184,6 +189,11 @@
         "bluetooth": "Bluetooth-колонка",
         "output": "Аудиовыход"
       }
+    },
+    "elapsed": {
+      "underMinute": "<1 мин",
+      "minutes": "{n} мин",
+      "hours": "{h} ч {m} мин"
     }
   },
   "config": {

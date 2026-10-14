@@ -158,4 +158,10 @@ describe('DeviceListRow', () => {
     const w = mountRow(makeDevice({ bluetooth: { rssi_dbm: -5 } }))
     expect(w.findAll('[data-signal-bar].is-on')).toHaveLength(3)
   })
+
+  it('shows standby time and an automatic release in the status cell', () => {
+    const since = new Date(Date.now() - 3 * 60_000 - 5_000).toISOString()
+    expect(mountRow(makeDevice({ bluetooth: { standby: true, standby_since: since } })).text()).toContain('Standby · 3 min')
+    expect(mountRow(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()).toContain('Auto-released')
+  })
 })

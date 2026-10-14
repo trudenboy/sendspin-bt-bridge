@@ -67,10 +67,17 @@ export interface SignalInfo {
  * Golden Receive Power Range (0 = in range). The API carries no sample time,
  * so a value is never shown as stale here.
  */
-export function signalInfo(d: Device): SignalInfo | null {
+/** A reading older than this is greyed (stable: 6× the bridge's 5 s refresh). */
+export const SIGNAL_STALE_MS = 30_000
+
+export function signalInfo(d: Device, now: number = Date.now()): SignalInfo | null {
   const bt = d.bluetooth
   if (!bt || !bt.connected || bt.rssi_dbm == null || Number.isNaN(Number(bt.rssi_dbm))) return null
   const value = Number(bt.rssi_dbm)
+  const sampledAt = bt.rssi_at ? Date.parse(bt.rssi_at) : Number.NaN
+  if (!Number.isNaN(sampledAt) && now - sampledAt > SIGNAL_STALE_MS) {
+    return { value, stale: true, bars: 0, tone: 'neutral', tier: 'stale' }
+  }
   const base = { value, stale: false }
   if (value >= 0) return { ...base, bars: 4, tone: 'success', tier: 'excellent' }
   if (value >= -10) return { ...base, bars: 3, tone: 'success', tier: 'strong' }

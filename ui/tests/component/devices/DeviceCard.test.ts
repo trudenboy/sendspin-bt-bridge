@@ -193,4 +193,18 @@ describe('DeviceCard', () => {
     expect(text).toContain('Song')
     expect(text).toContain('Band')
   })
+
+  it('says how long the speaker has been on standby', () => {
+    const since = new Date(Date.now() - 12 * 60_000 - 5_000).toISOString()
+    expect(mountCard(makeDevice({ bluetooth: { standby: true, standby_since: since } })).text()).toContain('Standby · 12 min')
+  })
+
+  it('tells an automatic release from a hand-over', () => {
+    const auto = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()
+    expect(auto).toContain('Auto-released')
+    expect(auto).not.toContain('Handed over')
+    const user = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } })).text()
+    expect(user).toContain('Handed over')
+    expect(user).not.toContain('Auto-released')
+  })
 })

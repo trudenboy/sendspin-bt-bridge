@@ -40,6 +40,7 @@
     "waking": false,
     "power_save": false,
     "rssi_dbm": null,
+    "rssi_at": null,
     "battery_level": null,
     "codec_id": null,
     "codec_name": null,

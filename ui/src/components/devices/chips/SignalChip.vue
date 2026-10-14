@@ -2,13 +2,15 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { signalInfo } from '@/utils/deviceChips'
+import { useNow } from '@/composables/useNow'
 import type { Device } from '@/api/types'
 
 /** Four signal bars and the link's Δ dB offset, coloured by tier (stable's scheme). */
 const props = defineProps<{ device: Device }>()
 const { t } = useI18n()
 
-const info = computed(() => signalInfo(props.device))
+const now = useNow()
+const info = computed(() => signalInfo(props.device, now.value))
 const color = computed(() => {
   const tone = info.value?.tone
   if (info.value?.stale || tone === 'neutral') return 'text-text-disabled'
@@ -23,7 +25,7 @@ const HEIGHTS = ['h-1', 'h-1.5', 'h-2', 'h-2.5']
     data-chip="signal"
     class="inline-flex items-center gap-1 text-xs"
     :class="color"
-    :title="t('device.chips.signal.title', { value: info.value })"
+    :title="t(info.stale ? 'device.chips.signal.staleTitle' : 'device.chips.signal.title', { value: info.value })"
   >
     <span class="inline-flex h-2.5 items-end gap-px" aria-hidden="true">
       <span

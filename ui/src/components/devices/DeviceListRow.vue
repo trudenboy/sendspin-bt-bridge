@@ -204,7 +204,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <!-- Status -->
     <td class="px-2 py-2">
       <div class="flex flex-wrap items-center gap-1.5">
-        <DeviceStatusBadge :state="state" />
+        <DeviceStatusBadge :state="state" :device="device" />
         <SyncChip :device="device" />
         <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning" :title="blockedTitle">
           <CircleAlert class="h-4 w-4" aria-hidden="true" />
