@@ -3,7 +3,8 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore, SORT_OPTIONS, type BackendFilter, type DeviceSortField } from '@/stores/devices'
-import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
+import { isPulseSink } from '@/utils/deviceBackend'
+import { fleetSummary } from '@/utils/fleetSummary'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
@@ -72,8 +73,7 @@ const showFilters = computed(() => bridge.devices.length >= FILTER_FROM)
 const showViewToggle = computed(() => bridge.devices.length >= 4)
 
 /** One line of context above the speakers: Music Assistant, playing, adapters. */
-const playing = computed(() => bridge.devices.filter((d) => d.playback.playing && d.audio.streaming).length)
-const connected = computed(() => bridge.devices.filter((d) => isDeviceConnected(d)).length)
+const fleet = computed(() => fleetSummary(bridge.devices))
 const selectable = computed(() => bridge.devices.length >= 2)
 
 
@@ -208,13 +208,14 @@ function openDetail(id: string) {
     <template v-else>
       <GuidanceBanner />
 
-      <p v-if="bridge.devices.length" class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
+      <!-- From md up the header's runtime row carries these. -->
+      <p v-if="bridge.devices.length" data-home-summary class="mb-4 flex md:hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
         <span class="inline-flex items-center gap-1.5">
           <span class="size-2 rounded-full" :class="bridge.maConnected ? 'bg-success' : 'bg-text-disabled'" aria-hidden="true" />
           {{ bridge.maConnected ? t('home.maConnected') : t('home.maDisconnected') }}
         </span>
-        <span>{{ t('home.connected', { n: connected, total: bridge.devices.length }) }}</span>
-        <span v-if="playing">{{ t('home.playing', { n: playing }) }}</span>
+        <span>{{ t('home.connected', { n: fleet.connected, total: fleet.total }) }}</span>
+        <span v-if="fleet.playing">{{ t('home.playing', { n: fleet.playing }) }}</span>
       </p>
 
       <!-- Filter bar, order and backend -->

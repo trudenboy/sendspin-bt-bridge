@@ -33,7 +33,19 @@
     "openDiagnostics": "Open diagnostics",
     "sponsor": "Sponsor",
     "sponsorHint": "Support the project",
-    "bridgeName": "This bridge"
+    "bridgeName": "This bridge",
+    "runtimeRow": "Bridge runtime",
+    "hostname": "Host name",
+    "ipAddress": "IP address",
+    "upFor": "up {uptime}",
+    "speakersConnected": "{n}/{total} speakers connected",
+    "runtime": {
+      "ha_addon": "Home Assistant add-on",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Standalone"
+    }
   },
   "device": {
     "status": {

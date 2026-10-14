@@ -73,6 +73,20 @@ describe('HomeView toolbar', () => {
   })
 })
 
+describe('HomeView summary', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('keeps the one-line summary for phones only (the header row has it from md up)', () => {
+    const w = mountHome([idle('a', 'Alpha'), streaming('b', 'Bravo')])
+    const line = w.get('[data-home-summary]')
+    expect(line.classes()).toContain('md:hidden')
+    expect(line.text()).toContain('1 playing')
+  })
+})
+
 describe('HomeView list rows', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

@@ -33,7 +33,19 @@
     "openDiagnostics": "Открыть диагностику",
     "sponsor": "Поддержать",
     "sponsorHint": "Поддержать проект",
-    "bridgeName": "Этот мост"
+    "bridgeName": "Этот мост",
+    "runtimeRow": "Среда работы моста",
+    "hostname": "Имя хоста",
+    "ipAddress": "IP-адрес",
+    "upFor": "работает {uptime}",
+    "speakersConnected": "Подключено колонок: {n}/{total}",
+    "runtime": {
+      "ha_addon": "Дополнение Home Assistant",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Отдельная установка"
+    }
   },
   "device": {
     "status": {
