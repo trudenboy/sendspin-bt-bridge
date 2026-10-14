@@ -6,7 +6,8 @@
  * dashboard.
  */
 import type { AudioSink, Device, Group } from '@/api/types'
-import { isPulseSink } from './deviceBackend'
+import { isDeviceConnected, isPulseSink } from './deviceBackend'
+import { deviceState } from '@/stores/devices'
 import { safeHttpUrl } from './safeUrl'
 
 export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
@@ -25,15 +26,18 @@ export interface SyncBadge {
   count30m: number | null
 }
 
-/** Shown while the speaker streams and the daemon reports timing. */
-export function syncBadge(d: Device): SyncBadge | null {
+/**
+ * Shown while the speaker streams and the daemon reports timing. ``held``
+ * keeps "Re-anchoring" a moment after the daemon clears it (see reanchorHold).
+ */
+export function syncBadge(d: Device, held = false): SyncBadge | null {
   if (!(d.playback.playing && d.audio.streaming) || !d.timing.available) return null
   const timing = d.timing
   const count = timing.reanchor_count ?? 0
   const countTone: Tone = count > 100 ? 'error' : count > 10 ? 'warning' : count > 0 ? 'success' : 'neutral'
   const round = (v: number | null | undefined) => (v == null ? null : Math.round(Math.abs(v)))
   const common = { count, countTone, count5m: timing.reanchor_count_5m, count30m: timing.reanchor_count_30m }
-  if (timing.reanchoring) {
+  if (timing.reanchoring || held) {
     return {
       kind: 'reanchoring',
       tone: 'warning',
@@ -207,11 +211,19 @@ export interface TransferChip {
 
 const SEVERITY_TONE: Record<string, Tone> = { error: 'error', warning: 'warning', info: 'info' }
 
-/** Room-handoff readiness, shown (as in stable) whenever the bridge reports it. */
+/** States whose badge already explains why a handoff cannot happen. */
+const SELF_EXPLAINED = new Set(['offline', 'standby', 'released', 'disabled', 'output_missing'])
+
+/**
+ * Room-handoff readiness, only when it is news: the player is connected (link
+ * and output up) yet not ready. Ready players and those whose state badge
+ * already says offline, standby, released, disabled or missing get no chip.
+ */
 export function transferChip(d: Device): TransferChip | null {
   const r = d.transfer_readiness as { ready?: unknown; reason?: unknown; severity?: unknown } | null
-  if (!r || typeof r !== 'object') return null
-  const ready = r.ready === true
+  if (!r || typeof r !== 'object' || r.ready === true) return null
+  if (!isDeviceConnected(d) || !d.audio.has_sink || SELF_EXPLAINED.has(deviceState(d))) return null
+  const ready = false
   const reason = String(r.reason ?? '')
   return { ready, tone: ready ? 'success' : (SEVERITY_TONE[String(r.severity)] ?? 'warning'), reason }
 }

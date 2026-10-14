@@ -204,17 +204,26 @@ describe('transferChip', () => {
     expect(transferChip(makeDevice())).toBeNull()
   })
 
-  it('says ready in green, otherwise colours by severity', () => {
-    expect(transferChip(makeDevice({ transfer_readiness: { ready: true, reason: 'ready', severity: 'info' } }))).toEqual({
-      ready: true,
-      tone: 'success',
-      reason: 'ready',
-    })
+  it('is absent for a ready player: readiness is only news when it is missing', () => {
+    expect(transferChip(makeDevice({ transfer_readiness: { ready: true, reason: 'ready', severity: 'info' } }))).toBeNull()
+  })
+
+  it('colours a connected player that is not ready by severity', () => {
     expect(
       transferChip(makeDevice({ transfer_readiness: { ready: false, reason: 'bluetooth_disconnected', severity: 'error' } })),
     ).toEqual({ ready: false, tone: 'error', reason: 'bluetooth_disconnected' })
     expect(transferChip(makeDevice({ transfer_readiness: { ready: false, reason: 'stopping', severity: 'warning' } }))!.tone).toBe(
       'warning',
     )
+  })
+
+  it('stays out of the way when the link or output is down, or the state already says why', () => {
+    const notReady = { ready: false, reason: 'x', severity: 'warning' }
+    expect(transferChip(makeDevice({ transfer_readiness: notReady, bluetooth: { connected: false } }))).toBeNull()
+    expect(transferChip(makeDevice({ transfer_readiness: notReady, audio: { has_sink: false } }))).toBeNull()
+    expect(transferChip(makeDevice({ transfer_readiness: notReady, bluetooth: { standby: true } }))).toBeNull()
+    expect(transferChip(makeDevice({ transfer_readiness: notReady, bluetooth: { management_enabled: false } }))).toBeNull()
+    expect(transferChip(makeDevice({ transfer_readiness: notReady, enabled: false }))).toBeNull()
+    expect(transferChip(makeDevice({ transfer_readiness: notReady, health: { state: 'offline' } }))).toBeNull()
   })
 })

@@ -1,15 +1,35 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge } from '@/kit'
 import { syncBadge } from '@/utils/deviceChips'
+import { observeReanchor } from '@/utils/reanchorHold'
 import type { Device } from '@/api/types'
 
 /** "Sync" (with the sync error) or "Re-anchoring" while streaming, plus the re-anchor count. */
 const props = defineProps<{ device: Device }>()
 const { t } = useI18n()
 
-const badge = computed(() => syncBadge(props.device))
+/* Re-evaluated on each status update and once more when a hold runs out. */
+const expired = ref(0)
+const holdUntil = computed(() => {
+  void expired.value
+  return observeReanchor(props.device)
+})
+let timer: ReturnType<typeof setTimeout> | null = null
+watch(
+  holdUntil,
+  (until) => {
+    if (timer) clearTimeout(timer)
+    timer = until == null ? null : setTimeout(() => expired.value++, Math.max(0, until - Date.now()) + 50)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => {
+  if (timer) clearTimeout(timer)
+})
+
+const badge = computed(() => syncBadge(props.device, holdUntil.value != null))
 const dash = (n: number | null) => (n == null ? '—' : String(n))
 const countTitle = computed(() =>
   badge.value
