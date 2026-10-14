@@ -33,7 +33,19 @@
     "openDiagnostics": "Открыть диагностику",
     "sponsor": "Поддержать",
     "sponsorHint": "Поддержать проект",
-    "bridgeName": "Этот мост"
+    "bridgeName": "Этот мост",
+    "runtimeRow": "Среда работы моста",
+    "hostname": "Имя хоста",
+    "ipAddress": "IP-адрес",
+    "upFor": "работает {uptime}",
+    "speakersConnected": "Подключено колонок: {n}/{total}",
+    "runtime": {
+      "ha_addon": "Дополнение Home Assistant",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Отдельная установка"
+    }
   },
   "device": {
     "status": {
@@ -49,7 +61,15 @@
       "transitioning": "Подключается…",
       "disabled": "Выключена",
       "released": "Передана",
-      "output_missing": "Выход недоступен"
+      "output_missing": "Выход недоступен",
+      "buffering": "Буферизация",
+      "sink_muted": "Заглушена системой",
+      "stopping": "Останавливается",
+      "reconnecting": "Переподключение",
+      "autoReleased": "Отпущена автоматически",
+      "autoReleasedTitle": "Мост отпустил колонку после повторных сбоев связи. Заберите её обратно, чтобы попробовать снова.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "В режиме ожидания с {time}"
     },
     "actions": {
       "reconnect": "Переподключить",
@@ -88,6 +108,104 @@
       "strong": "Сильный",
       "fair": "Средний",
       "weak": "Слабый"
+    },
+    "chips": {
+      "sync": {
+        "label": "Синхр.",
+        "reanchoring": "Подстройка",
+        "errorMs": "{ms} мс",
+        "title": "Воспроизведение синхронно с группой",
+        "reanchoringTitle": "Подстройка тайминга потока",
+        "count": "×{count}",
+        "countTitle": "Подстроек: {count} за сеанс · {m5} за 5 мин · {m30} за 30 мин"
+      },
+      "signal": {
+        "value": "{value} Δ дБ",
+        "title": "Сигнал {value} Δ дБ от идеального диапазона приёма адаптера",
+        "tier": {
+          "excellent": "Отличный сигнал",
+          "strong": "Сильный сигнал",
+          "fair": "Средний сигнал",
+          "poor": "Слабый сигнал",
+          "bad": "Плохой сигнал",
+          "stale": "Показание сигнала устарело"
+        },
+        "staleTitle": "Последнее показание сигнала ({value} Δ dB) старше 30 с"
+      },
+      "group": {
+        "title": "Группа Music Assistant {name}",
+        "open": "Открыть группу {name} в Music Assistant",
+        "external": "Ещё {n} на других мостах"
+      },
+      "adapter": {
+        "title": "Адаптер {name} ({hci}) · {state}",
+        "open": "Открыть адаптер {name} в настройках",
+        "state": {
+          "connected": "Bluetooth подключён",
+          "disconnected": "Bluetooth отключён",
+          "reconnecting": "Bluetooth переподключается",
+          "released": "Bluetooth передан",
+          "autoReleased": "Bluetooth передан автоматически из-за сбоев связи",
+          "disabled": "Колонка выключена"
+        }
+      },
+      "output": {
+        "title": "Аудиовыход {name}"
+      },
+      "transfer": {
+        "ready": "Передача",
+        "notReady": "Не готова",
+        "readyTitle": "Готова к передаче между комнатами",
+        "notReadyTitle": "Не готова к передаче: {reason}",
+        "reasons": {
+          "ready": "готова",
+          "disabled": "колонка выключена",
+          "bt_management_disabled": "Bluetooth передан",
+          "stopping": "останавливается",
+          "reconnecting": "переподключается",
+          "music_assistant_reconnecting": "Music Assistant переподключается",
+          "reanchoring": "подстройка",
+          "output_missing": "выход недоступен",
+          "daemon_unavailable": "плеер не запущен",
+          "bluetooth_disconnected": "Bluetooth отключён",
+          "music_assistant_disconnected": "нет связи с Music Assistant",
+          "sink_missing": "нет аудиоприёмника"
+        }
+      },
+      "blocked": {
+        "why": "Почему?",
+        "needs": "Нужно: {list}",
+        "openDiagnostics": "Открыть диагностику",
+        "sinkMutedReason": "Аудиовыход заглушён на уровне системы — звука не будет. Включите звук регулятором громкости.",
+        "title": {
+          "sink_muted": "Заглушена системой",
+          "reconnect": "Переподключение недоступно",
+          "toggle_bt_management": "Передача недоступна",
+          "play_pause": "Воспроизведение недоступно",
+          "volume": "Громкость недоступна",
+          "queue_control": "Управление очередью недоступно"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth под управлением этого моста",
+          "bluetooth_paired": "Сопряжение Bluetooth",
+          "reconnect_idle": "Завершение переподключения",
+          "device_not_stopping": "Завершение остановки плеера",
+          "sendspin_connected": "Связь Sendspin",
+          "audio_sink": "Аудиоприёмник",
+          "ma_connected": "Связь с Music Assistant",
+          "ma_player_registered": "Плеер зарегистрирован в Music Assistant"
+        },
+        "summary": "Часть управления недоступна"
+      },
+      "backend": {
+        "bluetooth": "Bluetooth-колонка",
+        "output": "Аудиовыход"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 мин",
+      "minutes": "{n} мин",
+      "hours": "{h} ч {m} мин"
     }
   },
   "config": {
@@ -336,7 +454,41 @@
       "volume": "Громкость",
       "transport": "Управление",
       "adapter": "Адаптер",
-      "actions": "Действия"
+      "actions": "Действия",
+      "expand": "Показать подробности: {name}",
+      "collapse": "Скрыть подробности: {name}",
+      "quickActions": "Быстрые действия"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Энергосбережение",
+        "title": "Приостановить аудиовыход у {count} из {total} выбранных (Bluetooth остаётся подключённым)"
+      },
+      "standby": {
+        "label": "Ожидание",
+        "title": "Отключить Bluetooth у {count} из {total} выбранных, чтобы сберечь батарею колонок",
+        "confirmTitle": "Перевести колонки в ожидание ({count})?",
+        "confirmMessage": "Bluetooth отключится, воспроизведение остановится: {names}. Вывести из ожидания можно в их меню."
+      },
+      "release": {
+        "label": "Передать",
+        "title": "Передать другим устройствам {count} из {total} выбранных",
+        "confirmTitle": "Передать колонки ({count})?",
+        "confirmMessage": "Мост отпустит: {names}. Они не переподключатся, пока вы их не заберёте обратно."
+      },
+      "failed": "{action}: не удалось для {names}"
+    },
+    "sort": {
+      "label": "Сортировка",
+      "activity": "По активности",
+      "name": "По имени",
+      "status": "По статусу"
+    },
+    "backendFilter": {
+      "label": "Тип плеера",
+      "all": "Все плееры",
+      "bluetooth": "Bluetooth-колонки",
+      "output": "Аудиовыходы"
     }
   },
   "drawer": {

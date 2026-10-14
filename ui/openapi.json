@@ -2080,6 +2080,18 @@
             ],
             "title": "Reported Delay Ms"
           },
+          "rssi_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When rssi_dbm was sampled (ISO-8601 UTC).",
+            "title": "Rssi At"
+          },
           "rssi_dbm": {
             "anyOf": [
               {
@@ -2105,6 +2117,7 @@
                 "type": "null"
               }
             ],
+            "description": "When the speaker entered standby (ISO-8601 UTC).",
             "title": "Standby Since"
           },
           "transport_state": {
@@ -2141,6 +2154,7 @@
           "waking",
           "power_save",
           "rssi_dbm",
+          "rssi_at",
           "battery_level",
           "codec_id",
           "codec_name",

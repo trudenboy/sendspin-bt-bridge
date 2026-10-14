@@ -51,6 +51,32 @@ describe('deviceState', () => {
   })
 })
 
+describe('deviceState: richer runtime states', () => {
+  const connected = (patch: Record<string, unknown> = {}) => makeDevice(patch)
+
+  it('says a speaker is stopping before anything but disabled and released', () => {
+    expect(deviceState(connected({ sendspin: { stopping: true }, playback: { playing: true }, audio: { streaming: true } }))).toBe('stopping')
+    expect(deviceState(connected({ sendspin: { stopping: true }, bluetooth: { management_enabled: false } }))).toBe('released')
+  })
+
+  it('says reconnecting for a Bluetooth or Music Assistant reconnect, ahead of standby', () => {
+    expect(deviceState(connected({ bluetooth: { reconnecting: true, standby: true } }))).toBe('reconnecting')
+    expect(deviceState(connected({ music_assistant: { reconnecting: true } }))).toBe('reconnecting')
+  })
+
+  it('says the sink is muted at system level when the player itself is not muted', () => {
+    expect(deviceState(connected({ audio: { sink_muted: true, muted: false, has_sink: true } }))).toBe('sink_muted')
+    expect(deviceState(connected({ audio: { sink_muted: true, muted: true } }))).not.toBe('sink_muted')
+    expect(deviceState(connected({ audio: { sink_muted: true }, bluetooth: { connected: false } }))).not.toBe('sink_muted')
+  })
+
+  it('says buffering while audio is buffering or Music Assistant plays but the speaker has not started', () => {
+    expect(deviceState(connected({ audio: { buffering: true } }))).toBe('buffering')
+    expect(deviceState(connected({ music_assistant: { now_playing: { state: 'playing' } } }))).toBe('buffering')
+    expect(deviceState(connected({ audio: { buffering: true, streaming: true }, playback: { playing: true } }))).toBe('streaming')
+  })
+})
+
 describe('deviceState for a local audio output', () => {
   const pulse = (audio: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
     makeDevice({
@@ -164,5 +190,120 @@ describe('useDeviceStore', () => {
     await store.remove('b')
     expect(removeDevice).toHaveBeenCalledWith('b')
     expect(refresh).toHaveBeenCalled()
+  })
+})
+
+describe('device sorting and backend filter', () => {
+  const streaming = (id: string, name: string, group: string | null = null) =>
+    makeDevice({ id, name, playback: { playing: true, group: { id: group } }, audio: { streaming: true } })
+  const idle = (id: string, name: string, group: string | null = null) =>
+    makeDevice({ id, name, playback: { group: { id: group } } })
+  const off = (id: string, name: string, patch: Record<string, unknown> = {}) =>
+    makeDevice({ id, name, bluetooth: { connected: false }, health: { state: 'offline' }, ...patch })
+  const output = (id: string, name: string) =>
+    makeDevice({ id, name, backend: { type: 'pulse_sink', sink: 'alsa_output.x' }, bluetooth: null, audio: { has_sink: true } } as never)
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    try {
+      localStorage.clear()
+    } catch {
+      /* no storage */
+    }
+  })
+
+  function withDevices(list: ReturnType<typeof makeDevice>[]) {
+    const bridge = useBridgeStore()
+    bridge.snapshot = makeStatus(list)
+    return useDeviceStore()
+  }
+
+  it('sorts by activity by default: streaming, then connected, then the rest, each by name', () => {
+    const store = withDevices([
+      off('z', 'Zulu'),
+      idle('c', 'Charlie'),
+      streaming('s', 'Sierra'),
+      makeDevice({ id: 'd', name: 'Delta', enabled: false }),
+      idle('a', 'Alpha'),
+      makeDevice({ id: 'r', name: 'Romeo', bluetooth: { management_enabled: false } }),
+      makeDevice({ id: 'y', name: 'Yankee', bluetooth: { standby: true } }),
+      streaming('b', 'Bravo'),
+    ])
+    expect(store.sortBy).toBe('activity')
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['b', 's', 'a', 'c', 'd', 'r', 'y', 'z'])
+  })
+
+  it('keeps members of one group together within a tier', () => {
+    const store = withDevices([
+      idle('k', 'Kilo', 'g2'),
+      idle('a', 'Alpha'),
+      idle('m', 'Mike', 'g1'),
+      idle('b', 'Bravo', 'g1'),
+      idle('z', 'Zulu', 'g2'),
+      idle('c', 'Charlie'),
+    ])
+    // g1 sits where its first member (Bravo) would; g2 where Kilo would.
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['a', 'b', 'm', 'c', 'k', 'z'])
+  })
+
+  it('does not pull a group member out of its tier', () => {
+    const store = withDevices([idle('m', 'Mike', 'g1'), streaming('z', 'Zulu', 'g1'), idle('a', 'Alpha')])
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['z', 'a', 'm'])
+  })
+
+  it('sorts by name or by status on request', () => {
+    const store = withDevices([off('a', 'Alpha'), streaming('z', 'Zulu'), idle('m', 'Mike')])
+    store.setSort('name')
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['a', 'm', 'z'])
+    store.setSort('status')
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['z', 'm', 'a'])
+  })
+
+  it('keeps a speaker that plays in the top activity tier although its sink is muted at system level', () => {
+    const store = withDevices([
+      idle('a', 'Alpha'),
+      makeDevice({ id: 'm', name: 'Mike', playback: { playing: true }, audio: { streaming: true, sink_muted: true, muted: false } }),
+    ])
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['m', 'a'])
+  })
+
+  it('ranks a state it does not know just before offline in the status sort', () => {
+    const store = withDevices([off('a', 'Alpha'), makeDevice({ id: 'w', name: 'Whiskey', health: { state: 'weird' } })])
+    store.setSort('status')
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['w', 'a'])
+  })
+
+  it('remembers the chosen order across reloads', () => {
+    withDevices([idle('a', 'Alpha')]).setSort('name')
+    setActivePinia(createPinia())
+    expect(useDeviceStore().sortBy).toBe('name')
+  })
+
+  it('falls back to activity when the remembered order is unknown or storage fails', () => {
+    localStorage.setItem('sb-device-sort', 'bogus')
+    expect(useDeviceStore().sortBy).toBe('activity')
+    setActivePinia(createPinia())
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    const store = useDeviceStore()
+    expect(store.sortBy).toBe('activity')
+    expect(() => store.setSort('name')).not.toThrow()
+    expect(store.sortBy).toBe('name')
+    spy.mockRestore()
+    set.mockRestore()
+  })
+
+  it('filters by backend', () => {
+    const store = withDevices([idle('a', 'Alpha'), output('o', 'Output')])
+    store.filter.backend = 'output'
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['o'])
+    store.filter.backend = 'bluetooth'
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['a'])
+    store.filter.backend = ''
+    expect(store.filteredDevices).toHaveLength(2)
   })
 })

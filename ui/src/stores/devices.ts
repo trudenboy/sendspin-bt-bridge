@@ -1,44 +1,168 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useBridgeStore } from './bridge'
-import { reconnectDevice, removeDevice, setDeviceEnabled, setManagement, standbyDevice, wakeDevice } from '@/api/devices'
+import {
+  reconnectDevice,
+  removeDevice,
+  setDeviceEnabled,
+  setManagement,
+  setPowerSave as apiSetPowerSave,
+  standbyDevice,
+  wakeDevice,
+} from '@/api/devices'
 import { setMute as apiSetMute, setVolume as apiSetVolume } from '@/api/playback'
 import { useJobsStore } from './jobs'
 import { isDeviceConnected, isOutputMissing, isPulseSink } from '@/utils/deviceBackend'
 import type { Device } from '@/api/types'
 
-export type DeviceSortField = 'name' | 'status' | 'adapter'
+export type DeviceSortField = 'activity' | 'name' | 'status' | 'adapter'
 export type SortDirection = 'asc' | 'desc'
+/** Which kind of player: a Bluetooth speaker or a local audio output ('' = both). */
+export type BackendFilter = '' | 'bluetooth' | 'output'
 
 export interface DeviceFilter {
   search: string
   status: string[]
   adapter: string
   group: string
+  backend: BackendFilter
 }
 
-/** A short state for lists and filters, derived from the device's health. */
+export const SORT_OPTIONS: DeviceSortField[] = ['activity', 'name', 'status']
+const SORT_STORAGE_KEY = 'sb-device-sort'
+
+/* Storage can be missing or throw (private windows, blocked site data). */
+function readSort(): DeviceSortField {
+  try {
+    const saved = localStorage.getItem(SORT_STORAGE_KEY) as DeviceSortField | null
+    if (saved && (SORT_OPTIONS as string[]).includes(saved)) return saved
+  } catch {
+    /* fall through */
+  }
+  return 'activity'
+}
+
+function writeSort(value: DeviceSortField) {
+  try {
+    localStorage.setItem(SORT_STORAGE_KEY, value)
+  } catch {
+    /* the choice just isn't remembered */
+  }
+}
+
+/** States that are neither playing nor merely idle: parked, handed over, gone, off. */
+const RESTING = new Set(['disabled', 'released', 'standby', 'output_missing', 'offline', 'stopping'])
+
+/** 0 playing (or about to), 1 connected and idle, 2 everything else. */
+export function activityTier(d: Device): 0 | 1 | 2 {
+  const state = deviceState(d)
+  // A speaker that plays is active even when its sink is muted at system level.
+  if (state === 'streaming' || state === 'buffering' || (d.playback.playing && d.audio.streaming)) return 0
+  if (!RESTING.has(state) && isDeviceConnected(d)) return 1
+  return 2
+}
+
+/** Status order for the "status" sort: most active first, switched off last. */
+const STATUS_RANK = [
+  'streaming',
+  'buffering',
+  'sink_muted',
+  'ready',
+  'degraded',
+  'reconnecting',
+  'stopping',
+  'standby',
+  'released',
+  'output_missing',
+  'offline',
+  'disabled',
+]
+/** A state this list does not know (a newer bridge's) sorts just before offline. */
+const statusRank = (d: Device) => {
+  const i = STATUS_RANK.indexOf(deviceState(d))
+  return i < 0 ? STATUS_RANK.indexOf('offline') - 0.5 : i
+}
+
+const byName = (a: Device, b: Device) => (a.name ?? '').localeCompare(b.name ?? '')
+const groupKey = (d: Device) => d.music_assistant.syncgroup_id || d.playback.group.id || ''
+
 /**
- * One status per speaker, most decisive first: switched off, handed over to
- * other devices, parked on standby, playing, then its health.
+ * Activity order (stable 2.76's dashboard): playing first, then connected,
+ * then the rest; within a tier, members of one Music Assistant group sit
+ * together where the group's first name would, otherwise by name.
+ */
+function sortByActivity(list: Device[]): Device[] {
+  const tier = new Map(list.map((d) => [d.id, activityTier(d)]))
+  const anchor = new Map<string, string>()
+  for (const d of list) {
+    const g = groupKey(d)
+    if (!g) continue
+    const key = `${tier.get(d.id)}|${g}`
+    const name = d.name ?? ''
+    const current = anchor.get(key)
+    if (current === undefined || name.localeCompare(current) < 0) anchor.set(key, name)
+  }
+  const anchorOf = (d: Device) => {
+    const g = groupKey(d)
+    return g ? anchor.get(`${tier.get(d.id)}|${g}`)! : (d.name ?? '')
+  }
+  return [...list].sort(
+    (a, b) =>
+      tier.get(a.id)! - tier.get(b.id)! ||
+      anchorOf(a).localeCompare(anchorOf(b)) ||
+      groupKey(a).localeCompare(groupKey(b)) ||
+      byName(a, b),
+  )
+}
+
+/** The devices in the requested order. */
+export function sortDevices(list: Device[], by: DeviceSortField, dir: SortDirection = 'asc'): Device[] {
+  let sorted: Device[]
+  if (by === 'activity') sorted = sortByActivity(list)
+  else if (by === 'status') sorted = [...list].sort((a, b) => statusRank(a) - statusRank(b) || byName(a, b))
+  else if (by === 'adapter')
+    sorted = [...list].sort(
+      (a, b) => (a.bluetooth?.adapter.hci ?? '').localeCompare(b.bluetooth?.adapter.hci ?? '') || byName(a, b),
+    )
+  else sorted = [...list].sort(byName)
+  return dir === 'asc' ? sorted : sorted.reverse()
+}
+
+/**
+ * One status per speaker, most decisive first (stable 2.76's order): switched
+ * off, handed over to other devices, stopping, reconnecting, parked on
+ * standby, output gone, muted at system level, playing, starting to play,
+ * then its health.
  */
 export function deviceState(d: Device): string {
   if (!d.enabled) return 'disabled'
   if (d.bluetooth?.management_enabled === false) return 'released'
+  if (d.sendspin.stopping) return 'stopping'
+  if (d.bluetooth?.reconnecting || d.music_assistant.reconnecting) return 'reconnecting'
   if (d.bluetooth?.standby) return 'standby'
   if (isOutputMissing(d)) return 'output_missing'
+  const connected = isDeviceConnected(d)
+  if (connected && d.audio.has_sink && d.audio.sink_muted && !d.audio.muted) return 'sink_muted'
   if (d.playback.playing && d.audio.streaming) return 'streaming'
+  if (connected && isBuffering(d)) return 'buffering'
   // A local output has no Bluetooth link: present means connected, whatever an
   // older bridge's Bluetooth-only health said.
-  if (isPulseSink(d) && d.health.state === 'offline') return isDeviceConnected(d) ? 'ready' : 'offline'
+  if (isPulseSink(d) && d.health.state === 'offline') return connected ? 'ready' : 'offline'
   if (d.health.state && d.health.state !== 'unknown') return d.health.state
-  return isDeviceConnected(d) ? 'ready' : 'offline'
+  return connected ? 'ready' : 'offline'
+}
+
+/** Audio is buffering, or Music Assistant plays to the speaker but it has not started yet. */
+function isBuffering(d: Device): boolean {
+  if (d.audio.buffering) return true
+  const np = d.music_assistant.now_playing as { state?: unknown } | null
+  return np?.state === 'playing' && d.playback.server_connected && d.audio.has_sink && !d.playback.playing
 }
 
 export const useDeviceStore = defineStore('devices', () => {
   const selectedDeviceId = ref<string | null>(null)
-  const filter = ref<DeviceFilter>({ search: '', status: [], adapter: '', group: '' })
-  const sortBy = ref<DeviceSortField>('name')
+  const filter = ref<DeviceFilter>({ search: '', status: [], adapter: '', group: '', backend: '' })
+  const sortBy = ref<DeviceSortField>(readSort())
   const sortDir = ref<SortDirection>('asc')
 
   const bridge = useBridgeStore()
@@ -54,16 +178,14 @@ export const useDeviceStore = defineStore('devices', () => {
     if (filter.value.status.length) list = list.filter((d) => filter.value.status.includes(deviceState(d)))
     if (filter.value.adapter) list = list.filter((d) => d.bluetooth?.adapter.hci === filter.value.adapter)
     if (filter.value.group) list = list.filter((d) => d.playback.group.id === filter.value.group)
-
-    list.sort((a, b) => {
-      let cmp = 0
-      if (sortBy.value === 'name') cmp = (a.name ?? '').localeCompare(b.name ?? '')
-      else if (sortBy.value === 'status') cmp = deviceState(a).localeCompare(deviceState(b))
-      else cmp = (a.bluetooth?.adapter.hci ?? '').localeCompare(b.bluetooth?.adapter.hci ?? '')
-      return sortDir.value === 'asc' ? cmp : -cmp
-    })
-    return list
+    if (filter.value.backend) list = list.filter((d) => isPulseSink(d) === (filter.value.backend === 'output'))
+    return sortDevices(list, sortBy.value, sortDir.value)
   })
+
+  function setSort(value: DeviceSortField) {
+    sortBy.value = value
+    writeSort(value)
+  }
 
   const selectedDevice = computed<Device | undefined>(() =>
     selectedDeviceId.value ? bridge.deviceById(selectedDeviceId.value) : undefined,
@@ -104,6 +226,11 @@ export const useDeviceStore = defineStore('devices', () => {
     await standbyDevice(id)
   }
 
+  /** Suspend (true) or resume the speaker's audio output; the Bluetooth link stays up. */
+  async function setPowerSave(id: string, enabled: boolean) {
+    await apiSetPowerSave(id, enabled)
+  }
+
   async function release(id: string, released: boolean) {
     await setManagement(id, !released)
   }
@@ -123,6 +250,7 @@ export const useDeviceStore = defineStore('devices', () => {
     filter,
     sortBy,
     sortDir,
+    setSort,
     filteredDevices,
     selectedDevice,
     selectDevice,
@@ -131,6 +259,7 @@ export const useDeviceStore = defineStore('devices', () => {
     reconnect,
     wake,
     standby,
+    setPowerSave,
     release,
     remove,
     setEnabled,

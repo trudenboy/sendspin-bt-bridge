@@ -7,6 +7,7 @@ the flat field names.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import ConfigDict, Field
@@ -22,6 +23,16 @@ def _int_or(value: Any, default: int) -> int:
         return int(value) if value is not None else default
     except (TypeError, ValueError):
         return default
+
+
+def _iso_from_epoch(value: Any) -> str | None:
+    """An epoch-seconds stamp as an ISO-8601 UTC string; None when absent or unusable."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        return datetime.fromtimestamp(value, tz=UTC).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 class AdapterRef(ResponseModel):
@@ -64,10 +75,11 @@ class DeviceBluetooth(ResponseModel):
     reconnect_attempt: int = 0
     reconnect_attempts_remaining: int | None = None
     standby: bool = False
-    standby_since: str | None = None
+    standby_since: str | None = Field(default=None, description="When the speaker entered standby (ISO-8601 UTC).")
     waking: bool = False
     power_save: bool = False
     rssi_dbm: int | None = None
+    rssi_at: str | None = Field(default=None, description="When rssi_dbm was sampled (ISO-8601 UTC).")
     battery_level: int | None = None
     codec_id: int | None = None
     codec_name: str | None = None
@@ -281,6 +293,7 @@ class Device(ResponseModel):
                 waking=bool(g("bt_waking")),
                 power_save=bool(g("bt_power_save")),
                 rssi_dbm=g("rssi_dbm"),
+                rssi_at=_iso_from_epoch(g("rssi_at_ts")),
                 battery_level=g("battery_level"),
                 codec_id=g("bt_codec_id"),
                 codec_name=g("bt_codec_name"),

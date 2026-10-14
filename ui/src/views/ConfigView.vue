@@ -167,6 +167,11 @@ onMounted(async () => {
   if (id && SECTIONS.some((s) => s.id === id)) {
     await nextTick()
     jump(id)
+    // A device card's adapter chip adds ``?adapter=hci1``: land on that adapter.
+    const adapter = route.query?.adapter
+    if (typeof adapter === 'string') {
+      document.getElementById(`settings-adapter-${adapter}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   }
 })
 </script>

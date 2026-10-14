@@ -16,6 +16,7 @@ import DeviceSettingsPanel from './DeviceSettingsPanel.vue'
 import DeviceTimingPanel from './DeviceTimingPanel.vue'
 import type { Device } from '@/api/types'
 import { canDo } from '@/utils/supportedActions'
+import { releaseKind } from '@/utils/deviceStatusText'
 import { Power, RotateCw, Info, MoreHorizontal } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -180,7 +181,7 @@ function onAdapterReboot() {
               <div>
                 <span class="text-text-secondary">{{ t('drawer.status.playerState') }}</span>
                 <div class="mt-1">
-                  <DeviceStatusBadge :state="deviceState(device)" />
+                  <DeviceStatusBadge :state="deviceState(device)" :device="device" />
                 </div>
               </div>
               <div v-if="!pulse">
@@ -256,7 +257,7 @@ function onAdapterReboot() {
                 <SbDropdownItem @click="runAction('resume')">{{ t('drawer.actions.resume') }}</SbDropdownItem>
               </SbDropdown>
               <SbBadge v-if="!pulse && released" tone="warning" size="sm">
-                {{ t('bluetooth.released') }}
+                {{ releaseKind(device) === 'auto' ? t('device.status.autoReleased') : t('bluetooth.released') }}
               </SbBadge>
             </div>
           </div>

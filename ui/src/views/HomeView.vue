@@ -2,10 +2,13 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
-import { deviceState, useDeviceStore } from '@/stores/devices'
-import { isDeviceConnected } from '@/utils/deviceBackend'
+import { deviceState, useDeviceStore, SORT_OPTIONS, type BackendFilter } from '@/stores/devices'
+import { isPulseSink } from '@/utils/deviceBackend'
+import { fleetSummary } from '@/utils/fleetSummary'
+import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
+import { useRowExpansion } from '@/composables/useRowExpansion'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 import DeviceListRow from '@/components/devices/DeviceListRow.vue'
@@ -14,7 +17,7 @@ import GroupActionBar from '@/components/devices/GroupActionBar.vue'
 import AddSpeakerDialog from '@/components/bluetooth/AddSpeakerDialog.vue'
 import GuidanceBanner from '@/components/GuidanceBanner.vue'
 import DisabledSpeakers from '@/components/devices/DisabledSpeakers.vue'
-import { Plus, LayoutGrid, List, ChevronDown } from 'lucide-vue-next'
+import { Plus, LayoutGrid, List, ChevronDown, ArrowUpDown } from 'lucide-vue-next'
 
 type ViewMode = 'grid' | 'list'
 const STORAGE_KEY = 'sb-view-mode'
@@ -36,9 +39,28 @@ watch(
   },
   { immediate: true },
 )
-const viewMode = ref<ViewMode>(
-  (localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid',
+/* Local audio outputs show their output's description; load the list once. */
+const audio = useAudioStore()
+let sinksRequested = false
+watch(
+  () => bridge.devices.some(isPulseSink),
+  (hasOutput) => {
+    if (!hasOutput || sinksRequested || audio.sinks.length) return
+    sinksRequested = true
+    void audio.fetchSinks()
+  },
+  { immediate: true },
 )
+
+/* Storage can be missing or throw (private windows, blocked site data). */
+function readViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+const viewMode = ref<ViewMode>(readViewMode())
 
 const selection = useDeviceSelection(
   computed(() => deviceStore.filteredDevices),
@@ -51,15 +73,43 @@ const showFilters = computed(() => bridge.devices.length >= FILTER_FROM)
 const showViewToggle = computed(() => bridge.devices.length >= 4)
 
 /** One line of context above the speakers: Music Assistant, playing, adapters. */
-const playing = computed(() => bridge.devices.filter((d) => d.playback.playing && d.audio.streaming).length)
-const connected = computed(() => bridge.devices.filter((d) => isDeviceConnected(d)).length)
+const fleet = computed(() => fleetSummary(bridge.devices))
 const selectable = computed(() => bridge.devices.length >= 2)
 
 
 function setViewMode(mode: ViewMode) {
   viewMode.value = mode
-  localStorage.setItem(STORAGE_KEY, mode)
+  try {
+    localStorage.setItem(STORAGE_KEY, mode)
+  } catch {
+    /* not remembered */
+  }
 }
+
+/* Order (both views) and, on mixed setups, which kind of player to show. */
+const showSort = computed(() => bridge.devices.length >= 2)
+const mixedBackends = computed(() => bridge.devices.some(isPulseSink) && bridge.devices.some((d) => !isPulseSink(d)))
+/* The filter lives in the store and outlives this view: clear it on return too. */
+watch(
+  mixedBackends,
+  (mixed) => {
+    if (!mixed) deviceStore.filter.backend = ''
+  },
+  { immediate: true },
+)
+const BACKEND_OPTIONS: { value: BackendFilter; label: string }[] = [
+  { value: '', label: 'devices.backendFilter.all' },
+  { value: 'bluetooth', label: 'devices.backendFilter.bluetooth' },
+  { value: 'output', label: 'devices.backendFilter.output' },
+]
+const backendLabel = computed(() =>
+  t(BACKEND_OPTIONS.find((o) => o.value === deviceStore.filter.backend)?.label ?? 'devices.backendFilter.all'),
+)
+const triggerClass =
+  'inline-flex cursor-pointer items-center gap-1 rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary'
+
+/* List view: one expanded row, the first streaming one on load. */
+const expansion = useRowExpansion(computed(() => deviceStore.filteredDevices))
 
 /** Only the states some device is in right now, so every chip filters something. */
 const statusFilters = computed(() => {
@@ -165,18 +215,20 @@ function openDetail(id: string) {
     <template v-else>
       <GuidanceBanner />
 
-      <p v-if="bridge.devices.length" class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
+      <!-- From md up the header's runtime row carries these. -->
+      <p v-if="bridge.devices.length" data-home-summary class="mb-4 flex md:hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
         <span class="inline-flex items-center gap-1.5">
           <span class="size-2 rounded-full" :class="bridge.maConnected ? 'bg-success' : 'bg-text-disabled'" aria-hidden="true" />
           {{ bridge.maConnected ? t('home.maConnected') : t('home.maDisconnected') }}
         </span>
-        <span>{{ t('home.connected', { n: connected, total: bridge.devices.length }) }}</span>
-        <span v-if="playing">{{ t('home.playing', { n: playing }) }}</span>
+        <span>{{ t('home.connected', { n: fleet.connected, total: fleet.total }) }}</span>
+        <span v-if="fleet.playing">{{ t('home.playing', { n: fleet.playing }) }}</span>
       </p>
 
-      <!-- Filter bar -->
-      <div v-if="showFilters" class="mb-4 flex flex-wrap items-center gap-2">
+      <!-- Filter bar, order and backend -->
+      <div v-if="showFilters || showSort" class="mb-4 flex flex-wrap items-center gap-2">
         <SbFilterBar
+          v-if="showFilters"
           v-model="deviceStore.filter.search"
           :placeholder="t('common.search')"
           :filters="statusFilters"
@@ -185,7 +237,7 @@ function openDetail(id: string) {
         />
 
         <!-- Adapter filter dropdown -->
-        <SbDropdown v-if="uniqueAdapters.length > 1" align="right">
+        <SbDropdown v-if="showFilters && uniqueAdapters.length > 1" align="right">
           <template #trigger>
             <button
               type="button"
@@ -209,7 +261,7 @@ function openDetail(id: string) {
         </SbDropdown>
 
         <!-- Group filter dropdown -->
-        <SbDropdown v-if="bridge.groups.length > 0" align="right">
+        <SbDropdown v-if="showFilters && bridge.groups.length > 0" align="right">
           <template #trigger>
             <button
               type="button"
@@ -229,6 +281,53 @@ function openDetail(id: string) {
             @click="setGroupFilter(group.id ?? '')"
           >
             {{ group.name }}
+          </SbDropdownItem>
+        </SbDropdown>
+
+        <SbDropdown v-if="mixedBackends" align="right">
+          <template #trigger>
+            <button
+              type="button"
+              data-backend-filter
+              aria-haspopup="true"
+              :aria-label="`${t('devices.backendFilter.label')}: ${backendLabel}`"
+              :class="triggerClass"
+            >
+              {{ backendLabel }}
+              <ChevronDown class="h-4 w-4" aria-hidden="true" />
+            </button>
+          </template>
+          <SbDropdownItem
+            v-for="option in BACKEND_OPTIONS"
+            :key="option.value"
+            :data-backend-option="option.value || 'all'"
+            @click="deviceStore.filter.backend = option.value"
+          >
+            <span :class="deviceStore.filter.backend === option.value ? 'font-medium text-primary-text' : ''">{{ t(option.label) }}</span>
+          </SbDropdownItem>
+        </SbDropdown>
+
+        <SbDropdown v-if="showSort" align="right" :class="showFilters ? '' : 'ml-auto'">
+          <template #trigger>
+            <button
+              type="button"
+              data-sort
+              aria-haspopup="true"
+              :aria-label="`${t('devices.sort.label')}: ${t(`devices.sort.${deviceStore.sortBy}`)}`"
+              :class="triggerClass"
+            >
+              <ArrowUpDown class="h-4 w-4 text-text-secondary" aria-hidden="true" />
+              {{ t(`devices.sort.${deviceStore.sortBy}`) }}
+              <ChevronDown class="h-4 w-4" aria-hidden="true" />
+            </button>
+          </template>
+          <SbDropdownItem
+            v-for="option in SORT_OPTIONS"
+            :key="option"
+            :data-sort-option="option"
+            @click="deviceStore.setSort(option)"
+          >
+            <span :class="deviceStore.sortBy === option ? 'font-medium text-primary-text' : ''">{{ t(`devices.sort.${option}`) }}</span>
           </SbDropdownItem>
         </SbDropdown>
       </div>
@@ -302,8 +401,10 @@ function openDetail(id: string) {
               :device="device"
               :selectable="selectable"
               :selected="selection.selected.value.has(device.id)"
+              :expanded="expansion.expandedId.value === device.id"
               @open-detail="openDetail"
               @toggle-select="selection.toggle($event)"
+              @toggle-expand="expansion.toggle($event)"
             />
           </tbody>
         </table>

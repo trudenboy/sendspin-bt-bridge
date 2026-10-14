@@ -33,7 +33,19 @@
     "openDiagnostics": "Open diagnostics",
     "sponsor": "Sponsor",
     "sponsorHint": "Support the project",
-    "bridgeName": "This bridge"
+    "bridgeName": "This bridge",
+    "runtimeRow": "Bridge runtime",
+    "hostname": "Host name",
+    "ipAddress": "IP address",
+    "upFor": "up {uptime}",
+    "speakersConnected": "{n}/{total} speakers connected",
+    "runtime": {
+      "ha_addon": "Home Assistant add-on",
+      "docker": "Docker",
+      "lxc": "LXC",
+      "systemd": "systemd",
+      "standalone": "Standalone"
+    }
   },
   "device": {
     "status": {
@@ -49,7 +61,15 @@
       "transitioning": "Connecting…",
       "disabled": "Disabled",
       "released": "Handed over",
-      "output_missing": "Output missing"
+      "output_missing": "Output missing",
+      "buffering": "Buffering",
+      "sink_muted": "Muted by system",
+      "stopping": "Stopping",
+      "reconnecting": "Reconnecting",
+      "autoReleased": "Auto-released",
+      "autoReleasedTitle": "The bridge let go of this speaker after repeated connection problems. Take it back to retry.",
+      "standbyFor": "{state} · {elapsed}",
+      "standbySince": "On standby since {time}"
     },
     "actions": {
       "reconnect": "Reconnect",
@@ -88,6 +108,104 @@
       "strong": "Strong",
       "fair": "Fair",
       "weak": "Weak"
+    },
+    "chips": {
+      "sync": {
+        "label": "Sync",
+        "reanchoring": "Re-anchoring",
+        "errorMs": "{ms} ms",
+        "title": "Playback in sync with the group",
+        "reanchoringTitle": "Re-anchoring stream timing",
+        "count": "×{count}",
+        "countTitle": "Re-anchors: {count} this session · {m5} in 5 min · {m30} in 30 min"
+      },
+      "signal": {
+        "value": "{value} Δ dB",
+        "title": "Signal {value} Δ dB from the adapter’s ideal receive range",
+        "tier": {
+          "excellent": "Excellent signal",
+          "strong": "Strong signal",
+          "fair": "Fair signal",
+          "poor": "Poor signal",
+          "bad": "Bad signal",
+          "stale": "Signal reading is out of date"
+        },
+        "staleTitle": "Last signal reading ({value} Δ dB) is more than 30 s old"
+      },
+      "group": {
+        "title": "Music Assistant group {name}",
+        "open": "Open group {name} in Music Assistant",
+        "external": "{n} more on other bridges"
+      },
+      "adapter": {
+        "title": "Adapter {name} ({hci}) · {state}",
+        "open": "Open adapter {name} in Configuration",
+        "state": {
+          "connected": "Bluetooth connected",
+          "disconnected": "Bluetooth disconnected",
+          "reconnecting": "Bluetooth reconnecting",
+          "released": "Bluetooth handed over",
+          "autoReleased": "Bluetooth auto-released after connection issues",
+          "disabled": "Speaker disabled"
+        }
+      },
+      "output": {
+        "title": "Audio output {name}"
+      },
+      "transfer": {
+        "ready": "Transfer",
+        "notReady": "Not ready",
+        "readyTitle": "Ready for room handoff",
+        "notReadyTitle": "Room handoff not ready: {reason}",
+        "reasons": {
+          "ready": "ready",
+          "disabled": "speaker disabled",
+          "bt_management_disabled": "Bluetooth handed over",
+          "stopping": "stopping",
+          "reconnecting": "reconnecting",
+          "music_assistant_reconnecting": "Music Assistant reconnecting",
+          "reanchoring": "re-anchoring",
+          "output_missing": "output missing",
+          "daemon_unavailable": "player not running",
+          "bluetooth_disconnected": "Bluetooth disconnected",
+          "music_assistant_disconnected": "Music Assistant disconnected",
+          "sink_missing": "no audio sink"
+        }
+      },
+      "blocked": {
+        "why": "Why?",
+        "needs": "Needs: {list}",
+        "openDiagnostics": "Open diagnostics",
+        "sinkMutedReason": "The audio output is muted at system level, so no sound will play. Unmute it in the volume control.",
+        "title": {
+          "sink_muted": "Muted by the system",
+          "reconnect": "Reconnect unavailable",
+          "toggle_bt_management": "Hand-over unavailable",
+          "play_pause": "Playback unavailable",
+          "volume": "Volume unavailable",
+          "queue_control": "Queue controls unavailable"
+        },
+        "deps": {
+          "bt_management_enabled": "Bluetooth managed by this bridge",
+          "bluetooth_paired": "Bluetooth pairing",
+          "reconnect_idle": "Reconnect to finish",
+          "device_not_stopping": "Player stop to finish",
+          "sendspin_connected": "Sendspin link",
+          "audio_sink": "An audio sink",
+          "ma_connected": "Music Assistant link",
+          "ma_player_registered": "Player registered in Music Assistant"
+        },
+        "summary": "Some controls are unavailable"
+      },
+      "backend": {
+        "bluetooth": "Bluetooth speaker",
+        "output": "Audio output"
+      }
+    },
+    "elapsed": {
+      "underMinute": "<1 min",
+      "minutes": "{n} min",
+      "hours": "{h} h {m} min"
     }
   },
   "config": {
@@ -336,7 +454,41 @@
       "volume": "Volume",
       "transport": "Transport",
       "adapter": "Adapter",
-      "actions": "Actions"
+      "actions": "Actions",
+      "expand": "Show details for {name}",
+      "collapse": "Hide details for {name}",
+      "quickActions": "Quick actions"
+    },
+    "bulk": {
+      "power_save": {
+        "label": "Power save",
+        "title": "Suspend the audio output of {count} of {total} selected (Bluetooth stays connected)"
+      },
+      "standby": {
+        "label": "Standby",
+        "title": "Disconnect Bluetooth on {count} of {total} selected to save the speakers' battery",
+        "confirmTitle": "Put {count} speaker(s) on standby?",
+        "confirmMessage": "Bluetooth disconnects and playback stops on: {names}. Wake them from their menu."
+      },
+      "release": {
+        "label": "Release",
+        "title": "Hand {count} of {total} selected over to other devices",
+        "confirmTitle": "Hand over {count} speaker(s)?",
+        "confirmMessage": "The bridge lets go of: {names}. They will not reconnect until you take them back."
+      },
+      "failed": "{action} failed for: {names}"
+    },
+    "sort": {
+      "label": "Sort by",
+      "activity": "Activity",
+      "name": "Name",
+      "status": "Status"
+    },
+    "backendFilter": {
+      "label": "Player type",
+      "all": "All players",
+      "bluetooth": "Bluetooth speakers",
+      "output": "Audio outputs"
     }
   },
   "drawer": {

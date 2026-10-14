@@ -70,9 +70,14 @@ describe('DeviceCard', () => {
     expect(mountCard(makeDevice({ bluetooth: { standby: true } })).text()).toContain('Standby')
   })
 
-  it('describes the signal in words', () => {
-    expect(mountCard(makeDevice({ bluetooth: { rssi_dbm: -50 } })).text()).toContain('Strong')
-    expect(mountCard(makeDevice({ bluetooth: { rssi_dbm: -80 } })).text()).toContain('Weak')
+  it('shows the signal as bars with its Δ dB offset, and names the tier for screen readers', () => {
+    const fair = mountCard(makeDevice({ bluetooth: { rssi_dbm: -15 } }))
+    expect(fair.text()).toContain('-15 Δ dB')
+    expect(fair.text()).toContain('Fair signal')
+    expect(fair.findAll('[data-signal-bar].is-on')).toHaveLength(2)
+    const strong = mountCard(makeDevice({ bluetooth: { rssi_dbm: -5 } }))
+    expect(strong.text()).toContain('Strong signal')
+    expect(strong.findAll('[data-signal-bar].is-on')).toHaveLength(3)
   })
 
   it('shows the volume slider only while Bluetooth is connected', () => {
@@ -187,5 +192,19 @@ describe('DeviceCard', () => {
     const text = mountCard(streaming()).text()
     expect(text).toContain('Song')
     expect(text).toContain('Band')
+  })
+
+  it('says how long the speaker has been on standby', () => {
+    const since = new Date(Date.now() - 12 * 60_000 - 5_000).toISOString()
+    expect(mountCard(makeDevice({ bluetooth: { standby: true, standby_since: since } })).text()).toContain('Standby · 12 min')
+  })
+
+  it('tells an automatic release from a hand-over', () => {
+    const auto = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'auto' } })).text()
+    expect(auto).toContain('Auto-released')
+    expect(auto).not.toContain('Handed over')
+    const user = mountCard(makeDevice({ bluetooth: { management_enabled: false, released_by: 'user' } })).text()
+    expect(user).toContain('Handed over')
+    expect(user).not.toContain('Auto-released')
   })
 })

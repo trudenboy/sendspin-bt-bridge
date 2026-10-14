@@ -8,6 +8,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import RestartBanner from '@/components/layout/RestartBanner.vue'
 import ConnectionBanner from '@/components/layout/ConnectionBanner.vue'
 import MobileNav from '@/components/layout/MobileNav.vue'
+import RuntimeRow from '@/components/layout/RuntimeRow.vue'
 import UpdateDialog from '@/components/UpdateDialog.vue'
 import ConfirmHost from '@/components/ConfirmHost.vue'
 import ShortcutsDialog from '@/components/ShortcutsDialog.vue'
@@ -38,6 +39,7 @@ const hideNav = computed(() => route.meta.hideNav === true)
   <div class="min-h-screen bg-surface">
     <AppHeader v-if="!hideNav" />
     <div :class="[hideNav ? '' : 'pt-16']">
+      <RuntimeRow v-if="!hideNav" class="hidden md:block" />
       <RestartBanner v-if="!hideNav" />
       <ConnectionBanner v-if="!hideNav" />
       <div class="flex">
