@@ -26,9 +26,9 @@ const mode = computed(() => {
 })
 
 const speakersTone = computed(() => {
-  const { connected, total } = fleet.value
-  if (connected === total) return 'tone-success'
-  return connected > 0 ? 'tone-warning' : 'tone-error'
+  const { ok, total } = fleet.value
+  if (ok === total) return 'tone-success'
+  return ok > 0 ? 'tone-warning' : 'tone-error'
 })
 
 const pill = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium'

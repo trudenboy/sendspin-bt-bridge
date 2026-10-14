@@ -191,4 +191,38 @@ describe('GroupActionBar mute, pause and reconnect all', () => {
   it('hides Reconnect all when no selected device can reconnect', () => {
     expect(mountBar([output('o', 'Output')]).find('[data-bulk="reconnect"]').exists()).toBe(false)
   })
+
+  it('mutes only the speakers that are connected and have a sink', async () => {
+    const w = mountBar([
+      speaker('a', 'Alpha'),
+      speaker('d', 'Delta', { enabled: false }),
+      speaker('o', 'Offline', { bluetooth: { connected: false }, health: { state: 'offline' } }),
+      speaker('n', 'NoSink', { audio: { has_sink: false } }),
+    ])
+    await w.get('[data-bulk="mute"]').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setMute).mock.calls).toEqual([['a', true]])
+  })
+
+  it('pauses only connected speakers that are not parked, handed over or disabled', async () => {
+    const w = mountBar([
+      speaker('a', 'Alpha'),
+      speaker('d', 'Delta', { enabled: false }),
+      speaker('s', 'Standby', { bluetooth: { standby: true } }),
+      speaker('r', 'Released', { bluetooth: { management_enabled: false } }),
+      speaker('o', 'Offline', { bluetooth: { connected: false }, health: { state: 'offline' } }),
+    ])
+    await w.get('[data-bulk="pause"]').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(setDevicePlayback).mock.calls).toEqual([['a', 'pause']])
+  })
+
+  it('hides Mute all and Pause all when no selected speaker can take them', () => {
+    const w = mountBar([
+      speaker('s', 'Standby', { bluetooth: { standby: true }, audio: { has_sink: false } }),
+      speaker('o', 'Offline', { bluetooth: { connected: false }, health: { state: 'offline' } }),
+    ])
+    expect(w.find('[data-bulk="mute"]').exists()).toBe(false)
+    expect(w.find('[data-bulk="pause"]').exists()).toBe(false)
+  })
 })

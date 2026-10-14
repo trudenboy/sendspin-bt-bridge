@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { observeReanchor, resetReanchorMemory } from '@/utils/reanchorHold'
+import { observeReanchor, resetReanchorMemory, retainReanchor } from '@/utils/reanchorHold'
 import { makeDevice } from '../../fixtures/device'
 
 const dev = (timing: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
@@ -34,5 +34,21 @@ describe('observeReanchor', () => {
     expect(observeReanchor(dev({ reanchor_count: 9, last_reanchor_at: 100 }), 0)).toBeNull()
     observeReanchor(dev({ reanchoring: true }), 0)
     expect(observeReanchor(dev({ reanchoring: false }, { playback: { playing: false } }), 10)).toBeNull()
+  })
+
+  it('forgets a device once no chip shows it, so coming back is a first sight', () => {
+    const release = retainReanchor('x')
+    observeReanchor(dev({ reanchor_count: 2, last_reanchor_at: 100 }), 0)
+    release()
+    expect(observeReanchor(dev({ reanchor_count: 7, last_reanchor_at: 900 }), 60_000)).toBeNull()
+  })
+
+  it('keeps the memory while another chip still shows the device', () => {
+    const first = retainReanchor('x')
+    const second = retainReanchor('x')
+    observeReanchor(dev({ reanchor_count: 2, last_reanchor_at: 100 }), 0)
+    first()
+    expect(observeReanchor(dev({ reanchor_count: 3, last_reanchor_at: 200 }), 1000)).toBe(6000)
+    second()
   })
 })

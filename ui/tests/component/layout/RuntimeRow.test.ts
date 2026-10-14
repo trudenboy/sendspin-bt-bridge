@@ -64,4 +64,20 @@ describe('RuntimeRow', () => {
     expect(pill(off, 'ma').classes()).toContain('tone-neutral')
     expect(pill(off, 'playing').exists()).toBe(false)
   })
+
+  it('counts standby as fine and leaves disabled and handed-over speakers out, as stable does', () => {
+    const parked = (id: string) => makeDevice({ id, bluetooth: { connected: false, standby: true } })
+    const night = pill(mountRow([parked('a'), parked('b')]), 'speakers')
+    expect(night.classes()).toContain('tone-success')
+    const w = mountRow([
+      connected('a'),
+      makeDevice({ id: 'd', enabled: false, bluetooth: { connected: false } }),
+      makeDevice({ id: 'r', bluetooth: { connected: false, management_enabled: false, released_by: 'user' } }),
+    ])
+    expect(pill(w, 'speakers').text()).toBe('1/1 speakers connected')
+    expect(pill(w, 'speakers').classes()).toContain('tone-success')
+    const auto = mountRow([connected('a'), makeDevice({ id: 'x', bluetooth: { connected: false, management_enabled: false, released_by: 'auto' } })])
+    expect(pill(auto, 'speakers').text()).toBe('1/2 speakers connected')
+    expect(pill(auto, 'speakers').classes()).toContain('tone-warning')
+  })
 })

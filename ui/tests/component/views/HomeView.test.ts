@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import HomeView from '@/views/HomeView.vue'
 import { useBridgeStore } from '@/stores/bridge'
+import { useDeviceStore } from '@/stores/devices'
 import en from '@/i18n/en.json'
 import type { Device } from '@/api/types'
 import { makeDevice } from '../../fixtures/device'
@@ -83,6 +84,13 @@ describe('HomeView toolbar', () => {
     expect(w.get('button[data-backend-filter]').text()).toContain('Audio outputs')
     await pick(w, 'button[data-backend-filter]', '[data-backend-option="bluetooth"]')
     expect(cardNames(w)).toEqual(['Alpha'])
+  })
+
+  it('drops a leftover backend filter when the setup is no longer mixed', () => {
+    useDeviceStore().filter.backend = 'output'
+    const w = mountHome([idle('a', 'Alpha'), idle('b', 'Bravo')])
+    expect(useDeviceStore().filter.backend).toBe('')
+    expect(cardNames(w)).toEqual(['Alpha', 'Bravo'])
   })
 })
 

@@ -120,8 +120,8 @@ function onRowClick(e: MouseEvent) {
   emit('toggleExpand', props.device.id)
 }
 
-/* Quick actions in the expanded row (stable's list detail): Bluetooth only. */
-const isBluetooth = computed(() => !isOutput.value && props.device.bluetooth != null)
+/* Quick actions in the expanded row (stable's list detail): enabled Bluetooth speakers only. */
+const isBluetooth = computed(() => !isOutput.value && props.device.bluetooth != null && props.device.enabled)
 const handedOver = computed(() => props.device.bluetooth?.management_enabled === false)
 const standby = computed(() => props.device.bluetooth?.standby === true)
 

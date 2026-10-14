@@ -14,12 +14,37 @@ interface Memory {
 }
 
 const memory = new Map<string, Memory>()
+/** How many mounted chips show each device; the memory goes with the last one. */
+const holders = new Map<string, number>()
 
 const MIN_HOLD_MS = 5000
 
 /** For tests: forget every device. */
 export function resetReanchorMemory() {
   memory.clear()
+  holders.clear()
+}
+
+/**
+ * A chip that shows ``id`` holds its memory while mounted and calls the
+ * returned function on unmount. When the last one goes, the device is
+ * forgotten: re-anchors that happened while nothing watched are not news, so
+ * a chip that comes back (another page, grid/list switch) starts afresh.
+ */
+export function retainReanchor(id: string): () => void {
+  holders.set(id, (holders.get(id) ?? 0) + 1)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const left = (holders.get(id) ?? 1) - 1
+    if (left > 0) {
+      holders.set(id, left)
+      return
+    }
+    holders.delete(id)
+    memory.delete(id)
+  }
 }
 
 /**

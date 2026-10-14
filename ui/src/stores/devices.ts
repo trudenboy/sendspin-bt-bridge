@@ -56,7 +56,8 @@ const RESTING = new Set(['disabled', 'released', 'standby', 'output_missing', 'o
 /** 0 playing (or about to), 1 connected and idle, 2 everything else. */
 export function activityTier(d: Device): 0 | 1 | 2 {
   const state = deviceState(d)
-  if (state === 'streaming' || state === 'buffering') return 0
+  // A speaker that plays is active even when its sink is muted at system level.
+  if (state === 'streaming' || state === 'buffering' || (d.playback.playing && d.audio.streaming)) return 0
   if (!RESTING.has(state) && isDeviceConnected(d)) return 1
   return 2
 }
@@ -76,9 +77,10 @@ const STATUS_RANK = [
   'offline',
   'disabled',
 ]
+/** A state this list does not know (a newer bridge's) sorts just before offline. */
 const statusRank = (d: Device) => {
   const i = STATUS_RANK.indexOf(deviceState(d))
-  return i < 0 ? STATUS_RANK.length - 2 : i
+  return i < 0 ? STATUS_RANK.indexOf('offline') - 0.5 : i
 }
 
 const byName = (a: Device, b: Device) => (a.name ?? '').localeCompare(b.name ?? '')

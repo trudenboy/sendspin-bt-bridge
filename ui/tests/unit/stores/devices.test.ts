@@ -259,6 +259,20 @@ describe('device sorting and backend filter', () => {
     expect(store.filteredDevices.map((d) => d.id)).toEqual(['z', 'm', 'a'])
   })
 
+  it('keeps a speaker that plays in the top activity tier although its sink is muted at system level', () => {
+    const store = withDevices([
+      idle('a', 'Alpha'),
+      makeDevice({ id: 'm', name: 'Mike', playback: { playing: true }, audio: { streaming: true, sink_muted: true, muted: false } }),
+    ])
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['m', 'a'])
+  })
+
+  it('ranks a state it does not know just before offline in the status sort', () => {
+    const store = withDevices([off('a', 'Alpha'), makeDevice({ id: 'w', name: 'Whiskey', health: { state: 'weird' } })])
+    store.setSort('status')
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['w', 'a'])
+  })
+
   it('remembers the chosen order across reloads', () => {
     withDevices([idle('a', 'Alpha')]).setSort('name')
     setActivePinia(createPinia())

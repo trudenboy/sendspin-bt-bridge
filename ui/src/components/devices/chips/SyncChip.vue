@@ -3,12 +3,22 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SbBadge } from '@/kit'
 import { syncBadge } from '@/utils/deviceChips'
-import { observeReanchor } from '@/utils/reanchorHold'
+import { observeReanchor, retainReanchor } from '@/utils/reanchorHold'
 import type { Device } from '@/api/types'
 
 /** "Sync" (with the sync error) or "Re-anchoring" while streaming, plus the re-anchor count. */
 const props = defineProps<{ device: Device }>()
 const { t } = useI18n()
+
+/* The device's re-anchor memory lives while some chip shows it (see reanchorHold). */
+let release = retainReanchor(props.device.id)
+watch(
+  () => props.device.id,
+  (id) => {
+    release()
+    release = retainReanchor(id)
+  },
+)
 
 /* Re-evaluated on each status update and once more when a hold runs out. */
 const expired = ref(0)
@@ -27,6 +37,7 @@ watch(
 )
 onBeforeUnmount(() => {
   if (timer) clearTimeout(timer)
+  release()
 })
 
 const badge = computed(() => syncBadge(props.device, holdUntil.value != null))

@@ -145,4 +145,9 @@ describe('DeviceListRow expansion', () => {
   it('cannot expand a disabled speaker', () => {
     expect(mountRow(makeDevice({ enabled: false })).find('[data-row-toggle]').exists()).toBe(false)
   })
+
+  it('offers no quick actions for a disabled speaker', () => {
+    const w = mountRow(playing({ enabled: false, bluetooth: { management_enabled: false } }), true)
+    expect(w.find('[data-quick]').exists()).toBe(false)
+  })
 })

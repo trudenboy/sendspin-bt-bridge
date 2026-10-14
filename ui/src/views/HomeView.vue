@@ -89,9 +89,14 @@ function setViewMode(mode: ViewMode) {
 /* Order (both views) and, on mixed setups, which kind of player to show. */
 const showSort = computed(() => bridge.devices.length >= 2)
 const mixedBackends = computed(() => bridge.devices.some(isPulseSink) && bridge.devices.some((d) => !isPulseSink(d)))
-watch(mixedBackends, (mixed) => {
-  if (!mixed) deviceStore.filter.backend = ''
-})
+/* The filter lives in the store and outlives this view: clear it on return too. */
+watch(
+  mixedBackends,
+  (mixed) => {
+    if (!mixed) deviceStore.filter.backend = ''
+  },
+  { immediate: true },
+)
 const BACKEND_OPTIONS: { value: BackendFilter; label: string }[] = [
   { value: '', label: 'devices.backendFilter.all' },
   { value: 'bluetooth', label: 'devices.backendFilter.bluetooth' },

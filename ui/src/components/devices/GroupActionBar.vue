@@ -10,6 +10,7 @@ import { confirmDialog } from '@/composables/useConfirm'
 import { bulkEligible, type BulkAction } from '@/utils/bulkActions'
 import { speakerName } from '@/utils/speakerName'
 import { canDo } from '@/utils/supportedActions'
+import { canMute, canPause } from '@/utils/bulkActions'
 import {
   VolumeX,
   PauseCircle,
@@ -85,13 +86,16 @@ async function runEach(targets: Device[], label: string, run: (id: string) => Pr
 }
 
 const reconnectable = computed(() => props.selectedDevices.filter((d) => canDo(d, 'reconnect')))
+/* Only speakers that can take the command: the bridge answers 409 for the rest. */
+const mutable = computed(() => props.selectedDevices.filter(canMute))
+const pausable = computed(() => props.selectedDevices.filter(canPause))
 
 function onMuteAll() {
-  return runEach(props.selectedDevices, t('devices.muteAll'), (id) => setMute(id, true))
+  return runEach(mutable.value, t('devices.muteAll'), (id) => setMute(id, true))
 }
 
 function onPauseAll() {
-  return runEach(props.selectedDevices, t('devices.pauseAll'), (id) => setDevicePlayback(id, 'pause'))
+  return runEach(pausable.value, t('devices.pauseAll'), (id) => setDevicePlayback(id, 'pause'))
 }
 
 function onReconnectAll() {
@@ -198,6 +202,7 @@ watch(
       <!-- Action buttons -->
       <div class="flex flex-wrap items-center gap-1">
         <button
+          v-if="mutable.length"
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
           :disabled="actionLoading"
@@ -209,6 +214,7 @@ watch(
           <span class="hidden sm:inline">{{ t('devices.muteAll') }}</span>
         </button>
         <button
+          v-if="pausable.length"
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"
           :disabled="actionLoading"

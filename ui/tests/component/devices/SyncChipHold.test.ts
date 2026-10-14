@@ -30,4 +30,13 @@ describe('SyncChip re-anchoring hold', () => {
     expect(w.get('[data-chip="sync"]').text()).not.toContain('Re-anchoring')
     expect(w.get('[data-chip="sync"]').text()).toContain('Sync')
   })
+
+  it('does not flash "Re-anchoring" when a chip comes back after re-anchors it did not see', () => {
+    const counted = (n: number) =>
+      makeDevice({ id: 'back', playback: { playing: true }, audio: { streaming: true }, timing: { available: true, reanchor_count: n, last_reanchor_at: n } })
+    const opts = { global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })] } }
+    mount(SyncChip, { props: { device: counted(2) }, ...opts }).unmount()
+    const again = mount(SyncChip, { props: { device: counted(5) }, ...opts })
+    expect(again.get('[data-chip="sync"]').text()).not.toContain('Re-anchoring')
+  })
 })

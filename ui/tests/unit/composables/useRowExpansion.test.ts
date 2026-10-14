@@ -51,4 +51,13 @@ describe('useRowExpansion', () => {
     await nextTick()
     expect(expandedId.value).toBeNull()
   })
+
+  it('closes when the open speaker gets disabled', async () => {
+    const list = ref<Device[]>([idle('a'), idle('b')])
+    const { expandedId, toggle } = useRowExpansion(list)
+    toggle('b')
+    list.value = [idle('a'), makeDevice({ id: 'b', name: 'b', enabled: false })]
+    await nextTick()
+    expect(expandedId.value).toBeNull()
+  })
 })

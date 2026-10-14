@@ -19,7 +19,9 @@ export function useRowExpansion(devices: Ref<Device[]>) {
         expandedId.value = list.find((d) => deviceState(d) === 'streaming')?.id ?? null
         return
       }
-      if (expandedId.value && !list.some((d) => d.id === expandedId.value)) expandedId.value = null
+      // A row closes when its speaker leaves the list or gets disabled (a
+      // disabled row has no toggle to close it with).
+      if (expandedId.value && !list.some((d) => d.id === expandedId.value && d.enabled)) expandedId.value = null
     },
     { immediate: true },
   )

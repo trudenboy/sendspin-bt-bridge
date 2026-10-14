@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
@@ -15,6 +15,18 @@ const route = useRoute()
 const linked = computed(() => {
   const value = route?.query?.adapter
   return typeof value === 'string' ? value : null
+})
+
+/*
+ * The settings page scrolls to the linked adapter on load; when the adapter
+ * list arrives later, scroll once it does.
+ */
+const linkedListed = computed(() => linked.value != null && bridge.adapters.some((a) => a.id === linked.value))
+const stopScrollWatch = watch(linkedListed, async (listed) => {
+  if (!listed) return
+  stopScrollWatch()
+  await nextTick()
+  document.getElementById(`settings-adapter-${linked.value}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 })
 
 type AdapterEntry = Record<string, unknown>
