@@ -254,3 +254,63 @@ def test_a_speaker_disabled_since_start_is_listed_as_disabled(api_client, regist
     (disabled,) = data["bridge"]["disabled_devices"]
     assert (disabled["player_name"], disabled["id"], disabled["enabled"]) == ("Kitchen", "sendspin-kitchen", False)
     assert data["bridge"]["device_count"] == 1
+
+
+def test_a_disabled_output_carries_its_sink_and_room_from_the_config(api_client, registry, tmp_config):
+    """The dashboard shows a disabled player like any other: name, output and room."""
+    import json
+
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "CONFIG_SCHEMA_VERSION": 6,
+                "PLAYER_STATE": {},
+                "players": [
+                    {
+                        "id": "dac-1",
+                        "name": "Desk",
+                        "enabled": False,
+                        "room_name": "Study",
+                        "backend": {"type": "pulse_sink", "sink": "alsa_output.usb"},
+                    }
+                ],
+            }
+        )
+    )
+    state.set_disabled_devices(
+        [{"id": "dac-1", "player_name": "Desk", "backend_type": "pulse_sink", "mac": None, "enabled": False}]
+    )
+
+    (disabled,) = api_client.get("/api/v1/status").json()["bridge"]["disabled_devices"]
+
+    assert (disabled["sink"], disabled["room_name"]) == ("alsa_output.usb", "Study")
+
+
+def test_a_disabled_speaker_without_a_config_entry_has_no_sink_or_room(api_client, registry):
+    state.set_disabled_devices([{"player_name": "Off Speaker", "mac": "AA:BB:CC:DD:EE:FF", "enabled": False}])
+    (disabled,) = api_client.get("/api/v1/status").json()["bridge"]["disabled_devices"]
+    assert (disabled["sink"], disabled["room_name"]) == (None, None)
+
+
+def test_a_speaker_disabled_since_start_keeps_its_room(api_client, registry, tmp_config):
+    import json
+
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "BLUETOOTH_DEVICES": [
+                    {
+                        "player_name": "Kitchen",
+                        "mac": "AA:BB:CC:DD:EE:FF",
+                        "enabled": False,
+                        "room_name": "Kitchen room",
+                    }
+                ]
+            }
+        )
+    )
+    registry.append(_runtime_client("sendspin-kitchen", "Kitchen"))
+
+    (disabled,) = api_client.get("/api/v1/status").json()["bridge"]["disabled_devices"]
+
+    assert disabled["room_name"] == "Kitchen room"

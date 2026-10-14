@@ -2800,6 +2800,18 @@
         "additionalProperties": true,
         "description": "A configured speaker the bridge is not running (``enabled: false``).",
         "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bluetooth adapter (hci name or MAC) the speaker is set to.",
+            "title": "Adapter"
+          },
           "backend_type": {
             "default": "bluetooth_a2dp",
             "title": "Backend Type",
@@ -2838,13 +2850,39 @@
               }
             ],
             "title": "Player Name"
+          },
+          "room_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room Name"
+          },
+          "sink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A local audio output's sink name.",
+            "title": "Sink"
           }
         },
         "required": [
           "id",
           "mac",
           "backend_type",
-          "player_name"
+          "player_name",
+          "adapter",
+          "sink",
+          "room_name"
         ],
         "title": "DisabledDevice",
         "type": "object"

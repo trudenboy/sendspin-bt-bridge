@@ -421,3 +421,6 @@ class DisabledDevice(ResponseModel):
     mac: str | None = None
     backend_type: str = BLUETOOTH
     player_name: str | None = None
+    adapter: str | None = Field(default=None, description="Bluetooth adapter (hci name or MAC) the speaker is set to.")
+    sink: str | None = Field(default=None, description="A local audio output's sink name.")
+    room_name: str | None = None

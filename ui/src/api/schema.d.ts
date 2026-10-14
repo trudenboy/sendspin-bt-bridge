@@ -2842,6 +2842,11 @@ export interface components {
          */
         DisabledDevice: {
             /**
+             * Adapter
+             * @description Bluetooth adapter (hci name or MAC) the speaker is set to.
+             */
+            adapter: string | null;
+            /**
              * Backend Type
              * @default bluetooth_a2dp
              */
@@ -2855,6 +2860,13 @@ export interface components {
             mac: string | null;
             /** Player Name */
             player_name: string | null;
+            /** Room Name */
+            room_name: string | null;
+            /**
+             * Sink
+             * @description A local audio output's sink name.
+             */
+            sink: string | null;
         } & {
             [key: string]: unknown;
         };

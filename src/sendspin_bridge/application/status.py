@@ -27,13 +27,23 @@ def bridge_name(config: dict) -> str:
     return socket.gethostname() if raw.lower() in ("", "auto", "hostname") else raw
 
 
-def _disabled(entry: dict) -> DisabledDevice:
+def _disabled(entry: dict, config: dict) -> DisabledDevice:
+    """A disabled player, with its output and room from its config entry when the startup list lacks them."""
     from sendspin_bridge.config import _player_id_from_mac
+    from sendspin_bridge.config.players import PULSE_SINK, find_player_by_id
 
     mac = entry.get("mac")
-    return DisabledDevice.model_validate(
-        {**entry, "id": entry.get("id") or (_player_id_from_mac(str(mac)) if mac else None)}
-    )
+    player_id = entry.get("id") or (_player_id_from_mac(str(mac)) if mac else None)
+    player = find_player_by_id(config, str(player_id)) if player_id else None
+    extra: dict = {}
+    if player:
+        raw_backend = player.get("backend")
+        backend: dict = raw_backend if isinstance(raw_backend, dict) else {}
+        if not entry.get("sink") and backend.get("type") == PULSE_SINK and backend.get("sink"):
+            extra["sink"] = backend["sink"]
+        if not entry.get("room_name") and player.get("room_name"):
+            extra["room_name"] = player["room_name"]
+    return DisabledDevice.model_validate({**entry, **extra, "id": player_id})
 
 
 def _disabled_running(device) -> DisabledDevice:
@@ -44,6 +54,7 @@ def _disabled_running(device) -> DisabledDevice:
             "mac": device.bluetooth_mac,
             "player_name": device.player_name,
             "adapter": device.bluetooth_adapter,
+            "room_name": device.room_name,
             "enabled": False,
         }
     )
@@ -133,7 +144,8 @@ def build_status(*, auth_enabled: bool) -> BridgeStatus:
         ma_connected=snapshot.ma_connected,
         ma_web_url=snapshot.ma_web_url,
         device_count=len(running),
-        disabled_devices=[_disabled(d) for d in snapshot.disabled_devices] + [_disabled_running(d) for d in off],
+        disabled_devices=[_disabled(d, config) for d in snapshot.disabled_devices]
+        + [_disabled_running(d) for d in off],
         startup=StartupProgress(**startup) if startup else None,
         update_available=UpdateInfo(**snapshot.update_available) if snapshot.update_available else None,
         mock_runtime=snapshot.mock_runtime.to_dict() if snapshot.mock_runtime else None,
