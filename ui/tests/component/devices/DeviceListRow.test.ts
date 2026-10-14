@@ -109,4 +109,53 @@ describe('DeviceListRow', () => {
     const w = mountRow(makeDevice())
     expect(w.text()).toContain('hci0')
   })
+
+  describe('backend', () => {
+    const output = () =>
+      makeDevice({
+        backend: { type: 'pulse_sink', sink: 'alsa_output.usb', mac: null, adapter: null },
+        bluetooth: null as never,
+        health: { state: 'unknown' },
+        audio: { sink_name: 'alsa_output.usb', has_sink: true, sink_missing: false },
+      })
+
+    it('marks a Bluetooth speaker with the Bluetooth icon', () => {
+      expect(mountRow().find('[data-backend-icon]').attributes('title')).toBe('Bluetooth speaker')
+    })
+
+    it('marks a local audio output with the output icon and names its output', () => {
+      const w = mountRow(output())
+      expect(w.find('[data-backend-icon]').attributes('title')).toBe('Audio output')
+      expect(w.find('[data-chip="output"]').text()).toContain('alsa_output.usb')
+      expect(w.find('[data-chip="adapter"]').exists()).toBe(false)
+    })
+  })
+
+  it('shows the sync badge while streaming', () => {
+    const w = mountRow(makeDevice({ playback: { playing: true }, audio: { streaming: true }, timing: { available: true } }))
+    expect(w.find('[data-chip="sync"]').text()).toContain('Sync')
+  })
+
+  it('shows the group chip', () => {
+    const w = mountRow(makeDevice({ music_assistant: { syncgroup_id: 'syncgroup_abcd1234' }, playback: { group: { id: 'syncgroup_abcd1234', name: 'Downstairs' } } }))
+    expect(w.find('[data-chip="group"]').text()).toContain('Downstairs')
+  })
+
+  it('flags unavailable controls with their reasons in a tooltip', () => {
+    const w = mountRow(
+      makeDevice({
+        capabilities: {
+          actions: { volume: { supported: true, currently_available: false, blocked_reason: 'No sink.', depends_on: [], recommended_action: null } },
+        },
+      }),
+    )
+    const flag = w.find('[data-blocked-flag]')
+    expect(flag.attributes('title')).toContain('Volume unavailable')
+    expect(flag.attributes('title')).toContain('No sink.')
+  })
+
+  it('shows signal bars for a connected speaker', () => {
+    const w = mountRow(makeDevice({ bluetooth: { rssi_dbm: -5 } }))
+    expect(w.findAll('[data-signal-bar].is-on')).toHaveLength(3)
+  })
 })

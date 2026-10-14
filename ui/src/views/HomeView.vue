@@ -3,7 +3,8 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore } from '@/stores/devices'
-import { isDeviceConnected } from '@/utils/deviceBackend'
+import { isDeviceConnected, isPulseSink } from '@/utils/deviceBackend'
+import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
 import { useDeviceSelection } from '@/composables/useDeviceSelection'
 import { SbFilterBar, SbButton, SbEmptyState, SbDropdown, SbDropdownItem } from '@/kit'
@@ -36,6 +37,19 @@ watch(
   },
   { immediate: true },
 )
+/* Local audio outputs show their output's description; load the list once. */
+const audio = useAudioStore()
+let sinksRequested = false
+watch(
+  () => bridge.devices.some(isPulseSink),
+  (hasOutput) => {
+    if (!hasOutput || sinksRequested || audio.sinks.length) return
+    sinksRequested = true
+    void audio.fetchSinks()
+  },
+  { immediate: true },
+)
+
 const viewMode = ref<ViewMode>(
   (localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid',
 )

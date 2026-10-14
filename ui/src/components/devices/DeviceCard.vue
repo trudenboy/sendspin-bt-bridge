@@ -9,8 +9,16 @@ import { speakerName } from '@/utils/speakerName'
 import DeviceStatusBadge from './DeviceStatusBadge.vue'
 import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
+import ArtworkThumb from '@/components/playback/ArtworkThumb.vue'
+import SyncChip from './chips/SyncChip.vue'
+import SignalChip from './chips/SignalChip.vue'
+import GroupChip from './chips/GroupChip.vue'
+import LinkChip from './chips/LinkChip.vue'
+import BlockedHints from './chips/BlockedHints.vue'
+import { SbBadge } from '@/kit'
+import { transferChip } from '@/utils/deviceChips'
+import { apiUrl } from '@/api/client'
 import {
-  Music,
   Play,
   Pause,
   SkipBack,
@@ -18,9 +26,6 @@ import {
   BatteryLow,
   BatteryMedium,
   BatteryFull,
-  Signal,
-  SignalMedium,
-  SignalLow,
 } from 'lucide-vue-next'
 import { transport } from '@/api/playback'
 import type { Device } from '@/api/types'
@@ -43,7 +48,7 @@ const emit = defineEmits<{
   toggleSelect: [id: string]
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const deviceStore = useDeviceStore()
 const notifications = useNotificationStore()
 
@@ -53,14 +58,6 @@ const state = computed(() => deviceState(props.device))
 const displayName = computed(() => speakerName(props.device.name, props.device.bluetooth?.mac ?? props.device.id))
 const room = computed(() => props.device.room?.name || null)
 
-/** Signal strength in words; the dBm value is in the tooltip. */
-const signal = computed(() => {
-  const rssi = props.device.bluetooth?.rssi_dbm
-  if (rssi == null || !props.device.bluetooth?.connected) return null
-  if (rssi >= -60) return { level: 'strong', icon: Signal }
-  if (rssi >= -75) return { level: 'fair', icon: SignalMedium }
-  return { level: 'weak', icon: SignalLow }
-})
 const connected = computed(() => isDeviceConnected(props.device))
 const released = computed(() => props.device.bluetooth?.management_enabled === false)
 const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
@@ -90,6 +87,22 @@ const nowPlaying = computed(() => {
   const np = props.device.music_assistant.now_playing as MaNowPlaying | null
   if (np?.track) return { title: String(np.track), artist: np.artist ? String(np.artist) : null }
   return null
+})
+
+/** Music Assistant's artwork, through the bridge's signed same-origin proxy. */
+const artworkUrl = computed(() => {
+  const np = props.device.music_assistant.now_playing as MaNowPlaying | null
+  const path = typeof np?.image_url === 'string' ? np.image_url : ''
+  return path ? apiUrl(`/${path.replace(/^\//, '')}`) : null
+})
+
+const transfer = computed(() => transferChip(props.device))
+const transferTitle = computed(() => {
+  const chip = transfer.value
+  if (!chip) return ''
+  if (chip.ready) return t('device.chips.transfer.readyTitle')
+  const key = `device.chips.transfer.reasons.${chip.reason}`
+  return t('device.chips.transfer.notReadyTitle', { reason: te(key) ? t(key) : chip.reason.replace(/_/g, ' ') })
 })
 
 const supports = (command: string) => {
@@ -170,9 +183,6 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
           <span v-if="battery != null && BatteryIcon" class="inline-flex items-center gap-0.5" :class="batteryColor" :title="t('device.battery', { level: battery })">
             <component :is="BatteryIcon" class="size-3.5" aria-hidden="true" />{{ battery }}%
           </span>
-          <span v-if="signal" class="inline-flex items-center gap-0.5" :title="t('device.signal', { dbm: device.bluetooth?.rssi_dbm })">
-            <component :is="signal.icon" class="size-3.5" aria-hidden="true" />{{ t(`device.signalLevel.${signal.level}`) }}
-          </span>
           <span v-if="released" class="text-warning">{{ t('bluetooth.released') }}</span>
         </p>
       </div>
@@ -180,9 +190,22 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       <div class="relative z-10 -mt-1.5 -mr-2"><SpeakerActionsMenu :device="device" /></div>
     </header>
 
+    <!-- Where it plays through, its group, sync and signal -->
+    <div class="relative z-10 flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
+      <LinkChip :device="device" />
+      <GroupChip :device="device" />
+      <SyncChip :device="device" />
+      <SignalChip :device="device" />
+      <span v-if="transfer" data-chip="transfer" class="inline-flex" :title="transferTitle">
+        <SbBadge :tone="transfer.tone" size="sm">
+          {{ transfer.ready ? t('device.chips.transfer.ready') : t('device.chips.transfer.notReady') }}
+        </SbBadge>
+      </span>
+    </div>
+
     <!-- Now playing with its main control -->
     <div v-if="nowPlaying && connected" class="relative z-10 flex items-center gap-3 rounded-(--radius-button) bg-surface-secondary px-3 py-2">
-      <Music class="size-4 shrink-0 text-primary-text" aria-hidden="true" />
+      <ArtworkThumb :url="artworkUrl" :alt="nowPlaying.title" size-class="size-10" icon-class="size-4" />
       <div class="min-w-0 flex-1">
         <p class="truncate text-sm font-medium text-text-primary">{{ nowPlaying.title }}</p>
         <p v-if="nowPlaying.artist" class="truncate text-xs text-text-secondary">{{ nowPlaying.artist }}</p>
@@ -233,5 +256,6 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       @update:muted="onMuteUpdate"
     />
 
+    <BlockedHints :device="device" class="relative z-10" />
   </article>
 </template>

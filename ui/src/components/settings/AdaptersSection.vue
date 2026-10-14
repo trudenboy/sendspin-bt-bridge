@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useConfigStore } from '@/stores/config'
 import { useBridgeStore } from '@/stores/bridge'
 import { SbBadge } from '@/kit'
@@ -7,6 +9,13 @@ import { SbBadge } from '@/kit'
 const { t } = useI18n()
 const configStore = useConfigStore()
 const bridge = useBridgeStore()
+const route = useRoute()
+
+/** A device card links here with ``?adapter=hci1``; that adapter is highlighted. */
+const linked = computed(() => {
+  const value = route?.query?.adapter
+  return typeof value === 'string' ? value : null
+})
 
 type AdapterEntry = Record<string, unknown>
 
@@ -35,7 +44,14 @@ const inputClass =
     <p class="mt-0.5 text-[13px] text-text-secondary">{{ t('settings.parts.adapters.help') }}</p>
     <p v-if="bridge.adapters.length === 0" class="py-4 text-sm text-text-secondary">{{ t('config.noAdapters') }}</p>
     <ul v-else class="mt-3 divide-y divide-border rounded-(--radius-card) border border-border">
-      <li v-for="a in bridge.adapters" :key="a.id" class="grid gap-2 p-3 sm:grid-cols-[1fr_14rem_10rem] sm:items-center">
+      <li
+        v-for="a in bridge.adapters"
+        :id="`settings-adapter-${a.id}`"
+        :key="a.id"
+        class="grid scroll-mt-24 gap-2 p-3 transition-colors sm:grid-cols-[1fr_14rem_10rem] sm:items-center"
+        :class="{ 'bg-primary/8 ring-2 ring-primary/60 ring-inset': linked === a.id }"
+        :data-highlighted="linked === a.id ? 'true' : undefined"
+      >
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-medium text-text-primary">{{ a.id }}</span>

@@ -10,6 +10,8 @@ import VolumeSlider from '@/components/playback/VolumeSlider.vue'
 import PlaybackProgress from '@/components/playback/PlaybackProgress.vue'
 import {
   Bluetooth,
+  CircleAlert,
+  Speaker,
   Pause,
   SkipBack,
   SkipForward,
@@ -18,6 +20,12 @@ import {
   BatteryFull,
 } from 'lucide-vue-next'
 import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
+import SyncChip from './chips/SyncChip.vue'
+import SignalChip from './chips/SignalChip.vue'
+import GroupChip from './chips/GroupChip.vue'
+import LinkChip from './chips/LinkChip.vue'
+import { blockedHints } from '@/utils/deviceChips'
+import { isPulseSink } from '@/utils/deviceBackend'
 import { transport } from '@/api/playback'
 import type { Device } from '@/api/types'
 
@@ -46,6 +54,17 @@ const state = computed(() => deviceState(props.device))
 const connected = computed(() => isDeviceConnected(props.device))
 const isStreaming = computed(() => props.device.playback.playing && props.device.audio.streaming)
 const battery = computed(() => props.device.bluetooth?.battery_level ?? null)
+const isOutput = computed(() => isPulseSink(props.device))
+
+/** Unavailable controls, compact: one flag whose tooltip carries each reason. */
+const blockedTitle = computed(() =>
+  blockedHints(props.device)
+    .map((h) => {
+      const reason = h.key === 'sink_muted' ? t('device.chips.blocked.sinkMutedReason') : h.message
+      return `${t(`device.chips.blocked.title.${h.key}`)}: ${reason}`
+    })
+    .join('\n'),
+)
 
 const BatteryIcon = computed(() => {
   const level = battery.value
@@ -106,7 +125,15 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <!-- Name + icon -->
     <td class="py-2 pl-3 pr-2">
       <div class="flex items-center gap-2">
-        <Bluetooth class="h-4 w-4 shrink-0 text-text-secondary" />
+        <span
+          data-backend-icon
+          class="inline-flex shrink-0 text-text-secondary"
+          :title="isOutput ? t('device.chips.backend.output') : t('device.chips.backend.bluetooth')"
+        >
+          <Speaker v-if="isOutput" class="h-4 w-4" aria-hidden="true" />
+          <Bluetooth v-else class="h-4 w-4" aria-hidden="true" />
+          <span class="sr-only">{{ isOutput ? t('device.chips.backend.output') : t('device.chips.backend.bluetooth') }}</span>
+        </span>
         <button
           type="button"
           class="truncate text-sm font-medium text-text-primary hover:text-primary-text"
@@ -124,11 +151,22 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
           {{ battery }}%
         </span>
       </div>
+      <div class="mt-1 flex flex-wrap items-center gap-1.5 pl-6 empty:hidden">
+        <GroupChip :device="device" />
+        <SignalChip :device="device" />
+      </div>
     </td>
 
     <!-- Status -->
     <td class="px-2 py-2">
-      <DeviceStatusBadge :state="state" />
+      <div class="flex flex-wrap items-center gap-1.5">
+        <DeviceStatusBadge :state="state" />
+        <SyncChip :device="device" />
+        <span v-if="blockedTitle" data-blocked-flag class="inline-flex text-warning" :title="blockedTitle">
+          <CircleAlert class="h-4 w-4" aria-hidden="true" />
+          <span class="sr-only">{{ t('device.chips.blocked.summary') }}: {{ blockedTitle }}</span>
+        </span>
+      </div>
     </td>
 
     <!-- Volume + mute -->
@@ -181,7 +219,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
 
     <!-- Adapter -->
     <td class="hidden px-2 py-2 text-xs text-text-secondary md:table-cell">
-      {{ device.bluetooth?.adapter.hci || '—' }}
+      <LinkChip :device="device" />
     </td>
 
     <!-- Actions -->

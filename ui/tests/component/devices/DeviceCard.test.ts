@@ -70,9 +70,14 @@ describe('DeviceCard', () => {
     expect(mountCard(makeDevice({ bluetooth: { standby: true } })).text()).toContain('Standby')
   })
 
-  it('describes the signal in words', () => {
-    expect(mountCard(makeDevice({ bluetooth: { rssi_dbm: -50 } })).text()).toContain('Strong')
-    expect(mountCard(makeDevice({ bluetooth: { rssi_dbm: -80 } })).text()).toContain('Weak')
+  it('shows the signal as bars with its Δ dB offset, and names the tier for screen readers', () => {
+    const fair = mountCard(makeDevice({ bluetooth: { rssi_dbm: -15 } }))
+    expect(fair.text()).toContain('-15 Δ dB')
+    expect(fair.text()).toContain('Fair signal')
+    expect(fair.findAll('[data-signal-bar].is-on')).toHaveLength(2)
+    const strong = mountCard(makeDevice({ bluetooth: { rssi_dbm: -5 } }))
+    expect(strong.text()).toContain('Strong signal')
+    expect(strong.findAll('[data-signal-bar].is-on')).toHaveLength(3)
   })
 
   it('shows the volume slider only while Bluetooth is connected', () => {
