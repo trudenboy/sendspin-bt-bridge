@@ -70,4 +70,14 @@ describe('DeviceDetailDrawer server details', () => {
     const w = await mountDrawer('ru')
     expect(w.find('[data-server-warning]').text()).toContain('не к Music Assistant этого моста')
   })
+
+  it('hides a server the player is no longer connected to', async () => {
+    foreign.playback.server_connected = false
+    try {
+      const w = await mountDrawer('en')
+      expect(w.find('[data-server-details]').exists()).toBe(false)
+    } finally {
+      foreign.playback.server_connected = true
+    }
+  })
 })

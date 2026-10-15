@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from sendspin_bridge.services.ipc.own_server import (
     OwnServer,
     RefusalLog,
@@ -12,6 +14,17 @@ from sendspin_bridge.services.ipc.own_server import (
 )
 
 OWN = OwnServer(hosts=frozenset({"192.168.10.10"}), server_ids=frozenset({"srv-own"}))
+
+
+@pytest.fixture(autouse=True)
+def _no_network_adverts(monkeypatch):
+    """Keep resolve_own_server off the real network unless a test says otherwise."""
+    from sendspin_bridge.services.ipc import own_server
+
+    async def none():
+        return []
+
+    monkeypatch.setattr(own_server, "_mdns_server_adverts", none)
 
 
 def test_the_own_host_is_accepted():
@@ -102,12 +115,17 @@ def test_a_loopback_music_assistant_makes_only_this_machine_its_server():
     async def resolver(host):
         return []
 
+    async def adverts():
+        return [("srv-own", ["127.0.0.1"]), ("srv-foreign", ["192.0.2.229"])]
+
     own = asyncio.run(
-        resolve_own_server(sendspin_server="auto", ma_api_urls=["http://localhost:8095"], resolver=resolver)
+        resolve_own_server(
+            sendspin_server="auto", ma_api_urls=["http://localhost:8095"], resolver=resolver, server_adverts=adverts
+        )
     )
     assert own is not None
-    assert decide(own, server_id="srv", peer_host="127.0.0.1").accept
-    assert not decide(own, server_id="srv", peer_host="192.0.2.229").accept
+    assert decide(own, server_id="srv-own", peer_host="127.0.0.1").accept
+    assert not decide(own, server_id="srv-foreign", peer_host="192.0.2.229").accept
 
 
 def test_resolve_own_server_knows_nothing_when_nothing_is_configured():
@@ -142,7 +160,7 @@ def test_a_server_dialling_from_a_local_interface_address_is_accepted(monkeypatc
     from sendspin_bridge.services.ipc import own_server
 
     monkeypatch.setattr(own_server, "is_local_address", lambda host: host == "192.168.10.10")
-    own = OwnServer(hosts=frozenset({"172.30.33.5"}))
+    own = OwnServer(hosts=frozenset({"172.30.33.5"}), server_ids=frozenset({"srv-own"}))
     assert decide(own, server_id="srv", peer_host="192.168.10.10").accept
     assert not decide(own, server_id="srv", peer_host="192.0.2.229").accept
 
@@ -163,3 +181,73 @@ def test_is_local_address_knows_loopback_and_not_a_foreign_address():
     assert is_local_address("127.0.0.1")
     assert not is_local_address("192.0.2.77")
     assert not is_local_address("not-an-ip")
+
+
+# --- Refuse only on positive evidence -------------------------------------
+
+OWN_HOST_ONLY = OwnServer(hosts=frozenset({"192.168.10.10"}))
+
+
+def test_without_the_own_server_id_an_unmatched_server_is_accepted():
+    # The own Music Assistant may dial over IPv6, another interface, or from
+    # behind a proxy the configured name points at: an address mismatch alone
+    # is no proof the server is foreign.
+    verdict = decide(OWN_HOST_ONLY, server_id="srv-x", peer_host="fd00::10")
+    assert verdict.accept and verdict.own is None
+
+
+def test_with_the_own_server_id_known_another_id_is_refused():
+    own = OwnServer(hosts=frozenset({"192.168.10.10"}), server_ids=frozenset({"srv-own"}))
+    verdict = decide(own, server_id="srv-other", peer_host="192.0.2.229")
+    assert not verdict.accept and verdict.own is False
+
+
+def test_the_own_server_id_is_accepted_over_ipv6():
+    own = OwnServer(hosts=frozenset({"192.168.10.10"}), server_ids=frozenset({"srv-own"}))
+    assert decide(own, server_id="srv-own", peer_host="fd00::10").accept
+
+
+def test_an_unknown_peer_address_with_an_unknown_own_id_is_accepted():
+    assert decide(OWN_HOST_ONLY, server_id="srv-x", peer_host=None).accept
+
+
+def test_resolve_own_server_learns_the_server_id_from_its_mdns_advert():
+    async def resolver(host):
+        return []
+
+    async def adverts():
+        return [
+            ("srv-own", ["192.168.10.10", "fd00::10"]),
+            ("srv-other", ["192.168.10.229"]),
+        ]
+
+    own = asyncio.run(
+        resolve_own_server(
+            sendspin_server="auto",
+            ma_api_urls=["http://192.168.10.10:8095"],
+            resolver=resolver,
+            server_adverts=adverts,
+        )
+    )
+    assert own is not None
+    assert own.server_ids == {"srv-own"}
+    assert "fd00::10" in own.hosts
+
+
+def test_resolve_own_server_takes_a_local_advert_for_a_loopback_music_assistant(monkeypatch):
+    from sendspin_bridge.services.ipc import own_server
+
+    monkeypatch.setattr(own_server, "is_local_address", lambda host: host in {"127.0.0.1", "192.168.10.10"})
+
+    async def resolver(host):
+        return []
+
+    async def adverts():
+        return [("srv-own", ["192.168.10.10"]), ("srv-other", ["192.168.10.229"])]
+
+    own = asyncio.run(
+        resolve_own_server(
+            sendspin_server="auto", ma_api_urls=["http://localhost:8095"], resolver=resolver, server_adverts=adverts
+        )
+    )
+    assert own is not None and own.server_ids == {"srv-own"}

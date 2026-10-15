@@ -688,6 +688,9 @@ class BridgeDaemon:
         self._bridge_status["connected"] = False
         self._bridge_status["group_name"] = None
         self._bridge_status["group_id"] = None
+        # A stale "foreign server" warning must not outlive the connection.
+        for key in ("connected_server_name", "connected_server_id", "connected_server_host", "connected_server_own"):
+            self._bridge_status[key] = None
         self._notify()
 
     async def _connection_watchdog(self, delay: float = 30.0, poll_interval: float = 2.0) -> None:

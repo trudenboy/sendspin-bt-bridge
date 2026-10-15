@@ -16,7 +16,7 @@ from sendspin_bridge.services.ipc.own_server import OwnServer, peer_host_var
 if TYPE_CHECKING:
     from pathlib import Path
 
-OWN = OwnServer(hosts=frozenset({"192.168.10.10"}))
+OWN = OwnServer(hosts=frozenset({"192.168.10.10"}), server_ids=frozenset({"srv-own"}))
 
 
 async def _daemon(tmp_path: Path, *, own: OwnServer | None = OWN, only: bool = True) -> BridgeDaemon:
@@ -164,3 +164,16 @@ async def test_the_peer_host_reaches_the_admission_decision(tmp_path: Path):
     daemon._client = SimpleNamespace(attach_websocket=attach, connected=False)
     await daemon._handle_server_connection(SimpleNamespace(_req=SimpleNamespace(remote="192.0.2.229")))
     assert seen == ["192.0.2.229"]
+
+
+@pytest.mark.asyncio
+async def test_a_disconnect_forgets_which_server_the_player_was_on(tmp_path: Path):
+    daemon = await _daemon(tmp_path)
+    daemon._client = SimpleNamespace(server_info=SimpleNamespace(server_id="srv-x", name="Other"))
+    daemon._mark_server_connected(SimpleNamespace(_req=SimpleNamespace(remote="192.0.2.229")))
+    assert daemon._bridge_status["connected_server_own"] is False
+
+    daemon._on_server_disconnect()
+
+    for key in ("connected_server_name", "connected_server_id", "connected_server_host", "connected_server_own"):
+        assert daemon._bridge_status[key] is None, key

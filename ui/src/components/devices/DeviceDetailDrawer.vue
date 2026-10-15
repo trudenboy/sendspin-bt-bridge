@@ -72,8 +72,9 @@ const tabs = computed(() => [
 
 /* Which Music Assistant the player is on, in full; the card's chip is the short form. */
 const serverInfo = computed(() => {
-  const s = device.value?.playback.server
-  if (!s || !(s.name || s.host || s.id)) return null
+  const playback = device.value?.playback
+  const s = playback?.server
+  if (!playback?.server_connected || !s || !(s.name || s.host || s.id)) return null
   const rows = [
     { key: 'name', value: s.name },
     { key: 'host', value: s.host },

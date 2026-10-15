@@ -124,10 +124,57 @@ def decide(
     # by an internal name; a foreign server is always on another machine.
     if peer_host and is_local_address(peer_host):
         return Verdict(True, True, "server on this machine")
+    # Refuse only on positive evidence: the own server's Sendspin id is known
+    # and this server has another one.  An address mismatch alone proves
+    # nothing (IPv6, another interface, a proxy the configured name points at).
+    if not (own.server_ids or set(trusted_ids)) or not server_id:
+        return Verdict(True, None, "own server id unknown")
     return Verdict(False, False, "not the bridge's Music Assistant")
 
 
 Resolver = Callable[[str], Awaitable[list[str]]]
+#: Returns ``(server_id, addresses)`` for each ``_sendspin-server._tcp`` advert.
+ServerAdverts = Callable[[], Awaitable[list[tuple[str, list[str]]]]]
+
+_SERVER_SERVICE = "_sendspin-server._tcp.local."
+_ADVERT_CACHE_S = 60.0
+_advert_cache: tuple[float, list[tuple[str, list[str]]]] | None = None
+
+
+async def _mdns_server_adverts(listen_s: float = 3.0) -> list[tuple[str, list[str]]]:
+    """The Sendspin servers advertising on the network, briefly cached."""
+    global _advert_cache
+    now = time.monotonic()
+    if _advert_cache is not None and now - _advert_cache[0] < _ADVERT_CACHE_S:
+        return _advert_cache[1]
+    found: dict[str, list[str]] = {}
+    try:
+        from zeroconf import ServiceStateChange
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
+
+        azc = AsyncZeroconf()
+        names: set[str] = set()
+
+        def on_change(zeroconf, service_type, name, state_change):
+            if state_change is not ServiceStateChange.Removed:
+                names.add(name)
+
+        browser = AsyncServiceBrowser(azc.zeroconf, _SERVER_SERVICE, handlers=[on_change])
+        try:
+            await asyncio.sleep(listen_s)
+            for name in sorted(names):
+                info = AsyncServiceInfo(_SERVER_SERVICE, name)
+                if await info.async_request(azc.zeroconf, 1500):
+                    server_id = name.removesuffix("." + _SERVER_SERVICE)
+                    found[server_id] = [normalize_host(a) for a in info.parsed_addresses()]
+        finally:
+            await browser.async_cancel()
+            await azc.async_close()
+    except Exception:  # discovery is best effort
+        return []
+    adverts = sorted(found.items())
+    _advert_cache = (now, adverts)
+    return adverts
 
 
 async def _system_resolver(host: str) -> list[str]:
@@ -144,6 +191,7 @@ async def resolve_own_server(
     sendspin_server: str | None,
     ma_api_urls: Iterable[str | None],
     resolver: Resolver | None = None,
+    server_adverts: ServerAdverts | None = None,
 ) -> OwnServer | None:
     """Work out the bridge's Music Assistant from its configuration.
 
@@ -184,7 +232,17 @@ async def resolve_own_server(
                 # away the bridge's own Music Assistant.
                 return None
             hosts.update(normalize_host(a) for a in addresses)
-    return OwnServer(hosts=frozenset(hosts))
+    # The own server's Sendspin id comes from its mDNS advert: the advert
+    # whose addresses include the configured host, or a local one when Music
+    # Assistant is reached over loopback.  Without it the bridge refuses no one.
+    local_owner = any(_is_loopback(n) for n in names)
+    server_ids: set[str] = set()
+    for server_id, addresses in await (server_adverts or _mdns_server_adverts)():
+        normalized = {normalize_host(a) for a in addresses}
+        if normalized & hosts or (local_owner and any(is_local_address(a) for a in normalized)):
+            server_ids.add(server_id)
+            hosts.update(normalized)
+    return OwnServer(hosts=frozenset(hosts), server_ids=frozenset(server_ids))
 
 
 @dataclass
