@@ -1,14 +1,16 @@
 """A thin synchronous face over Music Assistant's WebSocket API for the sync adapters.
 
 Callers are API worker threads: every command runs on the bridge loop through
-``run_on_loop`` (waited, bounded) or ``submit_on_loop`` (fired, never waited),
-so the event loop itself is never blocked.
+``run_on_loop`` (bounded wait), so the event loop itself is never blocked; a call
+made from the bridge loop thread is refused at once.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import re
 from typing import TYPE_CHECKING, Any, Protocol
 
 from sendspin_bridge.application.errors import UseCaseError
@@ -16,13 +18,20 @@ from sendspin_bridge.application.runtime import run_on_loop, submit_on_loop
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from music_assistant_client import MusicAssistantClient
 
 logger = logging.getLogger(__name__)
 
-_FORBIDDEN_ERRORS = ("InsufficientPermissions", "AuthenticationRequired", "AuthenticationFailed", "InvalidToken")
-_FORBIDDEN_WORDS = ("forbidden", "permission", "scope", "unauthorized", "403", "401")
-_UNAVAILABLE_ERRORS = ("TransportError", "NotConnected", "InvalidState")
+_FORBIDDEN_ERRORS = frozenset(
+    {"InsufficientPermissions", "AuthenticationRequired", "AuthenticationFailed", "InvalidToken"}
+)
+# whole words only: a hex player id such as "5f4013ab" must not read as HTTP 401
+_FORBIDDEN_WORDS = re.compile(r"\b(forbidden|permission|permissions|scope|unauthorized|401|403)\b")
+_UNAVAILABLE_ERRORS = frozenset({"TransportError", "NotConnected", "InvalidState"})
+_FIRE_WINDOW_S = 2.0  # a fired command that fails fails fast; after this the clip is playing
+_CONNECT_TIMEOUT_S = 10.0
 
 
 class MaApiError(Exception):
@@ -35,8 +44,16 @@ class MaApiError(Exception):
 
 
 class MaApi(Protocol):
-    def call(self, command: str, args: dict[str, Any], *, timeout: float = 10.0) -> Any: ...
-    def fire(self, command: str, args: dict[str, Any]) -> None: ...
+    def call(self, command: str, args: dict[str, Any], *, timeout: float = 10.0) -> Any:
+        """Send *command* and wait up to *timeout* seconds for its reply."""
+        ...
+
+    def fire(self, command: str, args: dict[str, Any]) -> None:
+        """Send a command whose reply comes late (``play_announcement`` answers when the clip ends).
+
+        Raises only for a rejection that arrives within a short window; the eventual reply is dropped.
+        """
+        ...
 
 
 def _classify(exc: BaseException) -> MaApiError:
@@ -45,10 +62,10 @@ def _classify(exc: BaseException) -> MaApiError:
         return exc
     names = {cls.__name__ for cls in type(exc).__mro__}
     text = str(exc).lower()
-    if names & set(_FORBIDDEN_ERRORS) or any(w in text for w in _FORBIDDEN_WORDS):
+    if names & _FORBIDDEN_ERRORS or _FORBIDDEN_WORDS.search(text):
         return MaApiError("ma_forbidden", str(exc))
     if (
-        names & set(_UNAVAILABLE_ERRORS)
+        names & _UNAVAILABLE_ERRORS
         or isinstance(exc, (ConnectionError, OSError, TimeoutError, asyncio.CancelledError))
         or (isinstance(exc, UseCaseError) and exc.code in ("not_ready", "timeout"))
         or "not connected" in text
@@ -57,75 +74,130 @@ def _classify(exc: BaseException) -> MaApiError:
     return MaApiError("ma_error", str(exc) or type(exc).__name__)
 
 
+def _bridge_loop_or_raise() -> None:
+    from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
+
+    loop = get_main_loop()
+    if loop is None:  # checked before any coroutine exists, so none is left unawaited
+        raise MaApiError("ma_unavailable", "bridge loop not running")
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        raise RuntimeError("MaWsApi blocks; call it from a worker thread, never from the bridge loop")
+
+
+def _log_late_reply(command: str) -> Callable[[asyncio.Future[Any]], None]:
+    def _done(fut: asyncio.Future[Any]) -> None:
+        if fut.cancelled():
+            return
+        exc = fut.exception()
+        if exc is not None:
+            logger.info("Music Assistant %s ended with an error: %s", command, exc)
+
+    return _done
+
+
 class MaWsApi:
     """One ``MusicAssistantClient`` per instance, connected lazily on the bridge loop.
 
-    The client is not started in listening mode, so ``send_command`` reads its own
-    reply off the socket; the lock keeps two such reads from interleaving.  A reply
-    to a fired command (``play_announcement`` answers only when the clip ends) is
-    skipped by the next reader because its message id does not match.
+    The client runs in listening mode (``start_listening`` as a background task), so
+    server pings are answered, pushed events are drained and every reply is routed to
+    its own command by message id — concurrent calls need no lock, and a reply nobody
+    waits for any more is dropped.  When the connection closes, the listener ends and
+    the next call builds a fresh client.
     """
 
-    def __init__(self, url: str, token: str) -> None:
+    def __init__(self, url: str, token: str, *, fire_window: float = _FIRE_WINDOW_S) -> None:
         url = url.strip()
         self._url = url if "://" in url else f"http://{url}"
         self._token = token
+        self._fire_window = fire_window
         self._client: MusicAssistantClient | None = None
-        self._lock = asyncio.Lock()
+        self._listener: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()  # guards building the client, not the commands
+
+    def _alive(self) -> bool:
+        return (
+            self._client is not None
+            and self._listener is not None
+            and not self._listener.done()
+            and self._client.connection.connected
+        )
 
     async def _connected(self) -> MusicAssistantClient:
-        if self._client is None:
+        async with self._lock:
+            if self._alive():
+                assert self._client is not None
+                return self._client
+            await self._drop()
             from music_assistant_client import MusicAssistantClient
 
             client = MusicAssistantClient(self._url, None, token=self._token)
-            await client.__aenter__()  # connects
-            self._client = client
-        return self._client
+            try:
+                await client.connect()
+            except BaseException:
+                with contextlib.suppress(Exception):
+                    await client.disconnect()
+                raise
+            listener = asyncio.get_running_loop().create_task(client.start_listening(), name="ma-sync-listener")
+            # start_listening re-enters connect() (already connected: returns at once) and then
+            # switches the client to routed replies; let that first step run before any command.
+            for _ in range(100):
+                await asyncio.sleep(0)
+                if getattr(client, "_listening", True) or listener.done():
+                    break
+            if listener.done():
+                listener.result()  # raises why it stopped
+                raise MaApiError("ma_unavailable", "Music Assistant listener stopped")
+            self._client, self._listener = client, listener
+            return client
 
     async def _drop(self) -> None:
-        client, self._client = self._client, None
+        client, listener = self._client, self._listener
+        self._client = self._listener = None
         if client is not None:
             try:
-                await client.__aexit__(None, None, None)
+                await client.disconnect()
             except Exception as exc:
                 logger.debug("Closing the Music Assistant client failed: %s", exc)
+        if listener is not None and not listener.done():
+            listener.cancel()
+            with contextlib.suppress(BaseException):
+                await listener
 
     async def _call(self, command: str, args: dict[str, Any]) -> Any:
-        async with self._lock:
-            try:
-                client = await self._connected()
-                return await client.send_command(command, **args)
-            except BaseException as exc:
-                if _classify(exc).code == "ma_unavailable":
-                    await asyncio.shield(self._drop())
-                raise
+        client = await self._connected()
+        return await client.send_command(command, **args)
 
     async def _fire(self, command: str, args: dict[str, Any]) -> None:
-        async with self._lock:
-            try:
-                client = await self._connected()
-                await client.send_command_no_wait(command, **args)
-            except Exception as exc:
-                logger.warning("Music Assistant %s failed: %s", command, exc)
-                if _classify(exc).code == "ma_unavailable":
-                    await self._drop()
-                raise
+        client = await self._connected()
+        reply = asyncio.ensure_future(client.send_command(command, **args))
+        done, _ = await asyncio.wait({reply}, timeout=self._fire_window)
+        if reply in done:
+            reply.result()  # a fast rejection raises here
+            return
+        reply.add_done_callback(_log_late_reply(command))
 
     def call(self, command: str, args: dict[str, Any], *, timeout: float = 10.0) -> Any:
-        from sendspin_bridge.services.lifecycle.bridge_runtime_state import get_main_loop
-
-        if get_main_loop() is None:  # checked first so no coroutine is created and left unawaited
-            raise MaApiError("ma_unavailable", "bridge loop not running")
+        _bridge_loop_or_raise()
         try:
             return run_on_loop(self._call(command, args), timeout=timeout, description=f"MA {command}")
         except Exception as exc:
             raise _classify(exc) from exc
 
     def fire(self, command: str, args: dict[str, Any]) -> None:
-        if not submit_on_loop(self._fire(command, args), description=f"MA {command}"):
-            raise MaApiError("ma_unavailable", "bridge loop not running")
+        _bridge_loop_or_raise()
+        timeout = self._fire_window + _CONNECT_TIMEOUT_S
+        try:
+            run_on_loop(self._fire(command, args), timeout=timeout, description=f"MA {command}")
+        except Exception as exc:
+            raise _classify(exc) from exc
 
     def close(self) -> None:
+        """Disconnect and stop the listener (scheduled on the bridge loop; not waited for)."""
+
         async def _close() -> None:
             async with self._lock:
                 await self._drop()

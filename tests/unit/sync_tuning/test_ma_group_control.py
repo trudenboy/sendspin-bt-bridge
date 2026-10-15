@@ -153,3 +153,32 @@ def test_default_group_control_needs_credentials(monkeypatch):
     with pytest.raises(MaApiError) as exc:
         ma_group_control.default_group_control()
     assert exc.value.code == "ma_unavailable"
+
+
+def test_stopping_the_signal_waits_out_the_group_playback_lock():
+    # MA holds the group's playback lock for the whole announcement; cmd_stop waits up to 30 s for it
+    ctl, ma = make()
+    ctl.start_signal("grp", "http://bridge/x.wav")
+    ctl.stop_signal("grp")
+    assert ma.timeouts["players/cmd/stop"] >= 40.0
+
+
+def test_solo_of_a_player_outside_the_group_is_member_gone_and_mutes_nobody():
+    ctl, ma = make()
+    with pytest.raises(ControlError) as exc:
+        ctl.solo("grp", "someone-else")
+    assert exc.value.code == "member_gone"
+    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
+
+
+def test_restore_forgets_what_the_solo_muted():
+    ctl, ma = make()
+    snap = ctl.snapshot("grp")
+    ctl.solo("grp", "spk-bridge")
+    ctl.restore(snap)
+    assert [p for p in ("spk-bridge", "uni", "cast") if ma.players[p]["volume_muted"]] == []
+    ma.players["uni"]["volume_muted"] = True  # the user mutes the hall after the session
+    before = len(ma.calls)
+    ctl.solo("grp", None)  # a late clear must not undo the user's mute
+    assert ma.players["uni"]["volume_muted"]
+    assert not [c for c in ma.calls[before:] if c[0] == "players/cmd/volume_mute"]

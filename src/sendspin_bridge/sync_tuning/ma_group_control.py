@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
 DELAY_KEY = "sendspin_static_delay"
 SPLIT = "||protocol||"
+# During an announcement MA holds the group's playback lock for the whole clip and
+# cmd_stop waits up to PLAYER_LOCK_TIMEOUT (30 s) for it, so the stop reply can be slow.
+STOP_TIMEOUT_S = 40.0
 
 
 def _bridge_ids() -> set[str]:
@@ -60,7 +63,7 @@ class AnnouncementSignal:
         self._api.fire("players/cmd/play_announcement", args)
 
     def stop(self, group_id: str) -> None:
-        self._api.call("players/cmd/stop", {"player_id": group_id})
+        self._api.call("players/cmd/stop", {"player_id": group_id}, timeout=STOP_TIMEOUT_S)
 
 
 class MaMuteSolo:
@@ -211,13 +214,25 @@ class MaGroupControl:
 
     def solo(self, group_id: str, member: str | None) -> None:
         members = self._cached_members(group_id)
+        if member is not None and member not in {m.ma_player_id for m in members}:
+            raise ControlError("member_gone", f"{member} is not in group {group_id}")
         try:
             self._solo.solo(group_id, members, member)
         except MaApiError as exc:
             raise _wrap(exc) from exc
 
     def restore(self, snapshot: Snapshot) -> None:
-        """Re-assert the mute and volume the snapshot recorded; delays are never touched."""
+        """Re-assert the mute and volume the snapshot recorded; delays are never touched.
+
+        A solo still in place is cleared first, which also makes the solo strategy forget
+        what it muted, so a later clear cannot undo a mute the user set after the session.
+        """
+        members = self._members_cache.get(snapshot.group_id)
+        if members:
+            try:
+                self._solo.solo(snapshot.group_id, members, None)
+            except MaApiError as exc:
+                raise _wrap(exc) from exc
         states = self._states()
         try:
             for mid, muted in snapshot.muted.items():
@@ -231,7 +246,12 @@ class MaGroupControl:
 
 
 def default_group_control() -> MaGroupControl:
-    """Wire the stage 0 choice; today that is (a): announcement signal + MA-side mute solo."""
+    """Build a fresh control for one tuning session.
+
+    Contract: one instance per session — the instance caches the session's members and
+    its solo strategy remembers what it muted, so it must not be shared between sessions.
+    Wires the stage 0 choice; today that is (a): announcement signal + MA-side mute solo.
+    """
     from sendspin_bridge.sync_tuning.ma_api import ma_api_from_config
 
     api = ma_api_from_config()

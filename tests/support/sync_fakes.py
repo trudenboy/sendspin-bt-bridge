@@ -82,6 +82,7 @@ class FakeMa:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.timeouts: dict[str, float] = {}  # last timeout asked for, per command
         self.forbid_write = False
         self.players: dict[str, dict[str, Any]] = {
             "spk-bridge": {
@@ -156,6 +157,7 @@ class FakeMa:
         from sendspin_bridge.sync_tuning.ma_api import MaApiError
 
         self.calls.append((command, args))
+        self.timeouts[command] = timeout
         if command == "players/all":
             return list(self.players.values())
         if command == "players/get":
