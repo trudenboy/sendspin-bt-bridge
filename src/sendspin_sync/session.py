@@ -58,20 +58,23 @@ def _clamp(ms: int) -> int:
 class SyncSession:
     """One tuning session of one group.
 
-    Thread safety: every public method runs under an internal ``threading.RLock``, so API
-    worker threads, the store's restore loop and timers may call into the same session
-    concurrently; transitions are atomic. The lock is re-entrant because ``on_change`` is
-    invoked from inside transitions and may read the session (``to_dict()``). ``record()``
-    runs the estimator outside the lock and, before storing the result, re-checks the state
-    and the measurement round it started in (``session_state`` if a new round began).
-    ``record``/``skip``/``propose`` read the group's membership before taking the lock, and
-    ``expired()`` takes no lock, so a session busy in Music Assistant I/O never stalls the store's
-    ticker.
+    Thread safety: transitions run under an internal ``threading.RLock``, so API worker
+    threads, the store's restore loop and timers may call into the same session concurrently;
+    transitions are atomic. The lock is re-entrant because ``on_change`` is invoked from inside
+    transitions and may read the session (``to_dict()``).
 
-    Lock invariant: the lock is held across port I/O (``GroupControl`` calls) and across
-    ``on_change``. So never call session methods from the event-loop thread (they may block on
-    network I/O or on another thread holding the lock), and ``on_change`` must not block waiting
-    on another thread: callers snapshot ``to_dict()`` on the calling thread and post it.
+    Done without the lock: ``expired()`` (a plain read of ``last_activity``, so the store's
+    ticker never waits behind a busy session); the membership read of ``refresh_members()``,
+    ``record()``, ``skip()`` and ``propose()`` (``GroupControl.members()`` runs first, the diff
+    is applied under the lock); and the estimator in ``record()``, which re-checks the state and
+    the measurement round it started in before storing the result (``session_state`` if a new
+    round began).
+
+    Lock invariant: apart from that membership read, the lock is held across port I/O
+    (``GroupControl`` calls: signal, solo, delays, restore) and across ``on_change``. So never
+    call session methods from the event-loop thread (they may block on network I/O or on
+    another thread holding the lock), and ``on_change`` must not block waiting on another
+    thread: callers snapshot ``to_dict()`` on the calling thread and post it.
 
     ``error`` is the detail given to ``fail()`` and is never overwritten; ``restore_error``
     is the code of the last failed restore attempt and is cleared when a restore succeeds.

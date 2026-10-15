@@ -1259,3 +1259,50 @@ async def test_a_stuck_sync_shutdown_is_abandoned_on_a_daemon_thread(monkeypatch
         assert threads and threads[0].daemon  # an abandoned attempt cannot hold process exit
     finally:
         stuck.set()
+
+
+@pytest.mark.asyncio
+async def test_the_sync_snapshot_is_loaded_before_the_web_server_serves_requests(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    bootstrap = await orchestrator.initialize_runtime()
+    order: list[str] = []
+
+    async def fake_start_web_server(clients, *, app_factory=None):
+        order.append("web")
+        return SimpleNamespace(should_exit=False)
+
+    async def fake_configure_executor(device_count, *, web_thread_name=""):
+        return 8
+
+    async def fake_initialize_ma(config_data, clients, *, server_host):
+        return SimpleNamespace(ma_monitor_task=None)
+
+    async def fake_noop(*_a, **_k):
+        return "done"
+
+    monkeypatch.setattr(orchestrator, "initialize_devices", lambda *a, **k: SimpleNamespace(clients=[]))
+    monkeypatch.setattr(orchestrator, "start_web_server", fake_start_web_server)
+    monkeypatch.setattr(orchestrator, "configure_executor", fake_configure_executor)
+    monkeypatch.setattr(orchestrator, "install_signal_handlers", lambda *_a, **_k: None)
+    monkeypatch.setattr(orchestrator, "initialize_ma_integration", fake_initialize_ma)
+    monkeypatch.setattr(orchestrator, "load_sync_tuning", lambda: order.append("load"))
+    monkeypatch.setattr(orchestrator, "start_sync_tuning", fake_noop)
+    monkeypatch.setattr(orchestrator, "run_runtime", fake_noop)
+
+    await orchestrator.run_bridge_lifecycle(bootstrap, version="1", client_factory=object, bt_manager_factory=object)
+    assert order == ["load", "web"]
+
+
+def test_load_sync_tuning_registers_the_persisted_restores(monkeypatch):
+    from sendspin_bridge.sync_tuning import session_store
+
+    loaded = []
+    monkeypatch.setattr(session_store, "get_store", lambda: SimpleNamespace(load_persisted=lambda: loaded.append(1)))
+    BridgeOrchestrator().load_sync_tuning()
+    assert loaded == [1]
+
+    def boom():
+        raise RuntimeError("bad")
+
+    monkeypatch.setattr(session_store, "get_store", boom)
+    BridgeOrchestrator().load_sync_tuning()  # logged, never breaks startup

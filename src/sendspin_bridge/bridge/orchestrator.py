@@ -9,7 +9,6 @@ import os
 import signal
 import socket
 import subprocess
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -566,22 +565,37 @@ class BridgeOrchestrator:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, _signal_handler)
 
+    def load_sync_tuning(self) -> None:
+        """Register sync-tuning restores left from before a restart, so a session the API creates
+        before Music Assistant is up cannot overwrite them. File I/O only; runs before the web server."""
+        from sendspin_bridge.sync_tuning import session_store
+
+        try:
+            session_store.get_store().load_persisted()
+        except Exception:
+            logger.exception("Loading group sync-tuning snapshots failed")
+
     async def start_sync_tuning(self) -> None:
         """Restore what a group sync-tuning session left behind before a restart.
 
         Runs on a daemon thread and is not awaited: the store talks to Music Assistant with
         blocking calls that need this loop, and retries on its own while MA is unreachable.
         """
+        from sendspin_bridge.sync_tuning import session_store
+
+        try:
+            store = session_store.get_store()
+        except Exception:
+            logger.exception("Restoring group sync-tuning sessions failed")
+            return
 
         def _restore() -> None:
-            from sendspin_bridge.sync_tuning import session_store
-
             try:
-                session_store.get_store().restore_persisted()
+                store.restore_persisted()
             except Exception:
                 logger.exception("Restoring group sync-tuning sessions failed")
 
-        threading.Thread(target=_restore, name="sync-restore", daemon=True).start()
+        session_store.run_in_background(_restore, "sync-restore")
 
     async def _shutdown_sync_tuning(self) -> None:
         """End live sync-tuning sessions (restore their groups), bounded so shutdown never hangs.
@@ -603,7 +617,7 @@ class BridgeOrchestrator:
                 with contextlib.suppress(RuntimeError):  # the loop may be gone already
                     loop.call_soon_threadsafe(finished.set)
 
-        threading.Thread(target=_run, name="sync-shutdown", daemon=True).start()
+        session_store.run_in_background(_run, "sync-shutdown")
         try:
             await asyncio.wait_for(finished.wait(), timeout=_SYNC_SHUTDOWN_TIMEOUT_S)
         except TimeoutError:
@@ -1089,6 +1103,7 @@ class BridgeOrchestrator:
             startup_phase = "web"
             loop = asyncio.get_running_loop()
             await self.configure_executor(len(clients))
+            self.load_sync_tuning()
             await self.start_web_server(clients, app_factory=app_factory)
             startup_phase = "signals"
             self.install_signal_handlers(

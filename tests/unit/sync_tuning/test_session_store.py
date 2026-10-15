@@ -496,3 +496,29 @@ def test_tests_never_point_the_store_singleton_at_the_real_config_dir():
     assert store._dir() != Path("/config") and store._ticker is not None
     store_mod.reset_store()
     assert store_mod._store is None and not store._ticker.is_alive()
+
+
+def test_a_create_before_the_boot_restore_is_refused_and_keeps_the_old_entry(tmp_path):
+    # the API serves requests before Music Assistant is up and the restore thread has run
+    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+    store, _, _, _, _ = make(tmp_path)
+    store.load_persisted()  # what the orchestrator does before the web server starts
+    with pytest.raises(ControlError) as exc:
+        store.create("g", "semi", "device")
+    assert exc.value.code == "restore_pending"
+    store.create("other", "manual", "device")
+    assert {e["session_id"] for e in _persisted(tmp_path)} == {"old", s_id(store, "other")}
+
+
+def test_a_store_that_was_never_told_to_load_still_keeps_the_entries_on_disk(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+    store, _, _, _, _ = make(tmp_path)
+    with pytest.raises(ControlError) as exc:
+        store.create("g", "semi", "device")
+    assert exc.value.code == "restore_pending"
+    store.create("other", "manual", "device")
+    assert "old" in {e["session_id"] for e in _persisted(tmp_path)}
+
+
+def s_id(store, group_id):
+    return store.active_for(group_id).id

@@ -83,6 +83,8 @@ class SessionStore:
         self._pending_next: dict[str, float] = {}
         self._pending_attempts: dict[str, int] = {}
         self._pending_errors: dict[str, str] = {}
+        self._load_lock = threading.Lock()  # taken before _lock, never while holding it
+        self._loaded = False
         self._stop = threading.Event()
         self._ticker: threading.Thread | None = None
 
@@ -122,12 +124,57 @@ class SessionStore:
 
     def _put_entry(self, session_id: str, entry: dict[str, Any] | None) -> None:
         with self._file_lock:
+            if not self._loaded:  # never drop entries this store has not loaded (sessions only exist after a load)
+                for e in self._read_file() or []:
+                    self._entries.setdefault(str(e["session_id"]), e)
             if entry is None:
                 if self._entries.pop(session_id, None) is None:
                     return
             else:
                 self._entries[session_id] = entry
             self._write_file()
+
+    def _read_file(self) -> list[dict[str, Any]] | None:
+        """The entries on disk; None (after moving the file aside) when it cannot be read."""
+        path = self._path()
+        if not path.exists():
+            return []
+        try:
+            raw = json.loads(path.read_text())
+            entries = [e for e in raw["sessions"] if isinstance(e, dict)]
+            for e in entries:
+                snapshot_from_dict(e["snapshot"])
+                str(e["session_id"]), str(e["group_id"])
+        except (OSError, ValueError, KeyError, TypeError):
+            corrupt = path.with_name(path.name + ".corrupt")
+            logger.warning("Unreadable %s; moved aside to %s", path, corrupt.name, exc_info=True)
+            try:
+                path.replace(corrupt)
+            except OSError:
+                path.unlink(missing_ok=True)
+            return None
+        return entries
+
+    def load_persisted(self) -> None:
+        """Register what the snapshot file holds as pending restores, without touching Music
+        Assistant. Must run before the API can create sessions (the orchestrator calls it before the
+        web server starts); idempotent. Any operation that reads or writes sessions loads first."""
+        if self._loaded:
+            return
+        with self._load_lock:
+            if self._loaded:
+                return
+            self._path().with_suffix(".tmp").unlink(missing_ok=True)  # a write cut short by the last shutdown
+            entries = self._read_file() or []
+            with self._lock:
+                for e in entries:
+                    sid = str(e["session_id"])
+                    if sid not in self._sessions:
+                        self._pending[sid] = e
+            with self._file_lock:
+                for e in entries:
+                    self._entries.setdefault(str(e["session_id"]), e)
+            self._loaded = True
 
     def publish_change(self, session: SyncSession) -> None:
         """``on_change`` of every session: persist its snapshot and publish its state."""
@@ -160,6 +207,7 @@ class SessionStore:
             )
 
     def create(self, group_id: str, mode: Mode, point: Point) -> SyncSession:
+        self.load_persisted()
         with self._lock:
             if self.active_for(group_id) is not None:
                 raise ControlError("session_active", "tuning in progress for this group")
@@ -266,6 +314,7 @@ class SessionStore:
     # -- restore after a restart -------------------------------------------------------
     def pending(self) -> list[dict[str, Any]]:
         """Restores left from before a restart that have not succeeded yet, with the last error."""
+        self.load_persisted()
         with self._lock:
             return [
                 {"session_id": sid, "group_id": str(e["group_id"]), "error": self._pending_errors.get(sid)}
@@ -286,32 +335,7 @@ class SessionStore:
     def restore_persisted(self) -> None:
         """On boot: restore what a session left behind (stop the signal, clear the solo, re-assert
         volume and mute) and delete the file; while Music Assistant is unreachable, retry with backoff."""
-        path = self._path()
-        path.with_suffix(".tmp").unlink(missing_ok=True)  # a write cut short by the last shutdown
-        if not path.exists():
-            return
-        try:
-            raw = json.loads(path.read_text())
-            entries = [e for e in raw["sessions"] if isinstance(e, dict)]
-            for e in entries:
-                snapshot_from_dict(e["snapshot"])
-                str(e["session_id"]), str(e["group_id"])
-        except (OSError, ValueError, KeyError, TypeError):
-            corrupt = path.with_name(path.name + ".corrupt")
-            logger.warning("Unreadable %s; moved aside to %s", path, corrupt.name, exc_info=True)
-            try:
-                path.replace(corrupt)
-            except OSError:
-                path.unlink(missing_ok=True)
-            return
-        with self._lock:
-            for e in entries:
-                sid = str(e["session_id"])
-                if sid not in self._sessions:
-                    self._pending[sid] = e
-        with self._file_lock:
-            for e in entries:
-                self._entries.setdefault(str(e["session_id"]), e)
+        self.load_persisted()
         with self._tick_lock:
             for sid in list(self._pending):
                 self._try_pending(sid)
@@ -458,9 +482,23 @@ def _default_snapshot_dir() -> Path:
     return cfg.CONFIG_DIR
 
 
+_background: list[threading.Thread] = []
+
+
+def run_in_background(fn: Callable[[], None], name: str) -> threading.Thread:
+    """Run blocking sync-tuning work on a daemon thread (never holds process exit)."""
+    thread = threading.Thread(target=fn, name=name, daemon=True)
+    _background[:] = [t for t in _background if t.is_alive()] + [thread]
+    thread.start()
+    return thread
+
+
 def reset_store() -> None:
-    """Forget the singleton and the hub (tests)."""
+    """Wait for background work, then forget the singleton and the hub (tests)."""
     global _store, _hub
+    for thread in list(_background):
+        thread.join(timeout=5.0)
+    _background.clear()
     store, _store, _hub = _store, None, None
     if store is not None:
         store.shutdown(restore=False)
