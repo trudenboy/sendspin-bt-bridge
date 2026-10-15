@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSyncStore } from '@/stores/sync'
-import { SbButton, SbCard, SbSpinner, SbTabs } from '@/kit'
+import { ApiError } from '@/api/client'
+import { confirmDialog } from '@/composables/useConfirm'
+import { SbButton, SbCard, SbDialog, SbSpinner, SbTabs } from '@/kit'
 import { ArrowLeft } from 'lucide-vue-next'
 import GroupMembers from '@/components/sync/GroupMembers.vue'
+import ManualTuning from '@/components/sync/ManualTuning.vue'
 import ProfilesPanel from '@/components/sync/ProfilesPanel.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const sync = useSyncStore()
 
@@ -98,6 +101,151 @@ onBeforeUnmount(() => {
 
 /** Step status, announced to screen readers as it changes. */
 const status = computed(() => t(`sync.state.${sync.session?.state ?? 'idle'}`))
+
+/*
+ * Manual tuning is a session (mode "manual"): started when the Manual tab opens, ended when the
+ * tab or the page is left, after offering to keep the changed delays as a profile. Ending it
+ * restores the signal and the mutes; the delays stay as they are.
+ */
+const ENDED = new Set(['done', 'cancelled', 'failed'])
+const liveSession = computed(() => {
+  const s = sync.session
+  return s && s.group_id === groupId.value && !ENDED.has(s.state) ? s : null
+})
+const manualSession = computed(() => (liveSession.value?.mode === 'manual' ? liveSession.value : null))
+/** A measurement already runs for this group: manual tuning must not take it over. */
+const manualBusy = computed(() => !!liveSession.value && liveSession.value.mode !== 'manual')
+const manualChanged = ref(false)
+const manualError = ref('')
+const manualStarting = ref(false)
+let leaving: Promise<void> | null = null
+/** Shown while the leave runs, so the tuning controls go away at once. */
+const isLeaving = ref(false)
+
+function codeOf(e: unknown) {
+  return e instanceof ApiError ? e.code : 'error'
+}
+
+async function enterManual() {
+  if (leaving || manualStarting.value || manualSession.value || manualBusy.value || !group.value) return
+  manualError.value = ''
+  manualStarting.value = true
+  const id = groupId.value
+  try {
+    await sync.start(id, 'manual')
+    manualChanged.value = false
+  } catch (e) {
+    manualError.value = codeOf(e)
+    // Another tab may hold this group's session: show it rather than a dead end.
+    await sync.open(id).catch(() => {})
+  } finally {
+    manualStarting.value = false
+  }
+  if (activeTab.value !== 'manual' || groupId.value !== id) await leaveManual()
+}
+
+/* "Save as profile?" → a name → save; resolves once the operator saved or skipped. */
+const saveOpen = ref(false)
+const profileName = ref('')
+const nameMissing = ref(false)
+const saveFailure = ref('')
+const saving = ref(false)
+let saveDone: (() => void) | null = null
+
+function askProfileName(): Promise<void> {
+  const date = new Intl.DateTimeFormat(locale.value, { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
+  profileName.value = t('sync.manual.defaultName', { date })
+  nameMissing.value = false
+  saveFailure.value = ''
+  saveOpen.value = true
+  return new Promise((resolve) => {
+    saveDone = resolve
+  })
+}
+
+function finishSave() {
+  saveOpen.value = false
+  const done = saveDone
+  saveDone = null
+  done?.()
+}
+
+async function saveManualProfile() {
+  const name = profileName.value.trim()
+  if (!name) {
+    nameMissing.value = true
+    return
+  }
+  saving.value = true
+  try {
+    await sync.saveProfile(name)
+    finishSave()
+  } catch (e) {
+    saveFailure.value = t('sync.profiles.failed', { code: codeOf(e) })
+  } finally {
+    saving.value = false
+  }
+}
+
+// Closed by Escape or the backdrop: the same as skipping.
+watch(saveOpen, (open) => {
+  if (!open) finishSave()
+})
+
+async function doLeave() {
+  if (!manualSession.value) return
+  if (manualChanged.value) {
+    const keep = await confirmDialog({
+      title: t('sync.manual.saveOnLeave'),
+      message: t('sync.manual.saveOnLeaveHelp'),
+      confirmLabel: t('sync.manual.saveConfirm'),
+      cancelLabel: t('sync.manual.saveDecline'),
+    })
+    if (keep) await askProfileName()
+  }
+  try {
+    await sync.end()
+  } catch {
+    /* the failure is kept in the store's error; the session times out on the bridge */
+  }
+  manualChanged.value = false
+}
+
+/** One leave at a time; coming back to the tab meanwhile starts a fresh session afterwards. */
+function leaveManual(): Promise<void> {
+  if (!leaving) {
+    isLeaving.value = true
+    leaving = doLeave().finally(() => {
+      leaving = null
+      isLeaving.value = false
+      if (activeTab.value === 'manual' && !disposed) void enterManual()
+    })
+  }
+  return leaving
+}
+
+watch(activeTab, (tab, prev) => {
+  if (tab === 'manual') void enterManual()
+  else if (prev === 'manual') void leaveManual()
+})
+// The tab may be chosen before the group (and its session) are read.
+watch(
+  () => group.value?.id,
+  (id) => {
+    if (id && activeTab.value === 'manual') void enterManual()
+  },
+)
+
+async function leaveRoute() {
+  if (manualSession.value || leaving) await leaveManual()
+}
+onBeforeRouteLeave(leaveRoute)
+onBeforeRouteUpdate((to, from) => (to.params.groupId !== from.params.groupId ? leaveRoute() : undefined))
+
+onBeforeUnmount(() => {
+  // Not left through the router (the app went away): end without asking.
+  if (manualSession.value && !leaving) void sync.end().catch(() => {})
+})
 
 async function load(id: string) {
   if (!id) return
@@ -200,6 +348,31 @@ watch(groupId, (id) => void load(id), { immediate: true })
         </template>
         <template #manual>
           <p class="mt-4 text-sm text-text-secondary">{{ t('sync.manualIntro') }}</p>
+          <ManualTuning
+            v-if="activeTab === 'manual' && manualSession && !isLeaving"
+            :key="manualSession.id"
+            @changed="manualChanged = $event"
+          />
+          <p
+            v-else-if="manualBusy"
+            data-manual-busy
+            role="status"
+            class="mt-4 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
+          >
+            {{ t('sync.manual.busy') }}
+          </p>
+          <div v-else-if="manualStarting" class="mt-4 flex items-center gap-2 text-sm text-text-secondary" role="status">
+            <SbSpinner size="sm" />{{ t('sync.manual.starting') }}
+          </div>
+          <div
+            v-else-if="manualError"
+            data-manual-error
+            role="alert"
+            class="mt-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
+          >
+            <span class="min-w-0 flex-1">{{ t('sync.manual.startFailed', { code: manualError }) }}</span>
+            <SbButton variant="outline" size="sm" @click="enterManual">{{ t('common.retry') }}</SbButton>
+          </div>
         </template>
         <template #measure>
           <p class="mt-4 text-sm text-text-secondary">{{ t('sync.measureIntro') }}</p>
@@ -209,5 +382,41 @@ watch(groupId, (id) => void load(id), { immediate: true })
         </template>
       </SbTabs>
     </template>
+
+    <SbDialog v-model="saveOpen" :title="t('sync.manual.saveTitle')">
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-1">
+          <label for="sync-manual-profile-name" class="text-sm font-medium text-text-primary">{{ t('sync.profiles.name') }}</label>
+          <input
+            id="sync-manual-profile-name"
+            v-model="profileName"
+            data-manual-profile-name
+            type="text"
+            required
+            maxlength="100"
+            :aria-invalid="nameMissing || undefined"
+            :aria-describedby="nameMissing ? 'sync-manual-profile-name-error' : undefined"
+            :class="[
+              'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40',
+              nameMissing && 'border-error',
+            ]"
+            @input="nameMissing = false"
+            @keydown.enter.prevent="saveManualProfile"
+          />
+          <p v-if="nameMissing" id="sync-manual-profile-name-error" role="alert" class="text-xs text-error">
+            {{ t('sync.profiles.nameRequired') }}
+          </p>
+        </div>
+        <p v-if="saveFailure" role="alert" class="text-sm text-error">{{ saveFailure }}</p>
+        <div class="flex justify-end gap-3">
+          <SbButton type="button" variant="outline" data-manual-profile-skip @click="finishSave">
+            {{ t('sync.manual.skip') }}
+          </SbButton>
+          <SbButton type="button" data-manual-profile-save :loading="saving" @click="saveManualProfile">
+            {{ t('sync.profiles.save') }}
+          </SbButton>
+        </div>
+      </div>
+    </SbDialog>
   </div>
 </template>

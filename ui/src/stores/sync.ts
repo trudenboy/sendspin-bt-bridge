@@ -89,11 +89,20 @@ export const useSyncStore = defineStore('sync', () => {
     }
   }
 
-  /** Member ``delay_ms`` follows what was just written, ahead of the next read. */
+  /**
+   * Member ``delay_ms`` follows what was just written, ahead of the next read.
+   * Members are replaced, not edited in place: the session's members may be the same objects.
+   */
   function setMemberDelays(delays: Record<string, number>) {
-    for (const m of group.value?.members ?? []) {
-      const ms = delays[m.ma_player_id]
-      if (ms !== undefined) m.delay_ms = ms
+    const g = group.value
+    if (!g) return
+    if (!g.members.some((m) => delays[m.ma_player_id] !== undefined)) return
+    group.value = {
+      ...g,
+      members: g.members.map((m) => {
+        const ms = delays[m.ma_player_id]
+        return ms === undefined ? m : { ...m, delay_ms: ms }
+      }),
     }
   }
 

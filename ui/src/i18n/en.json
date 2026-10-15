@@ -1448,6 +1448,43 @@
       },
       "playerId": "player ID {id}",
       "nameRequired": "Enter a name."
+    },
+    "listen": {
+      "title": "Listen",
+      "play": "Play clicks",
+      "stop": "Stop clicks",
+      "solo": "Solo",
+      "soloMember": "Solo {name}",
+      "everyone": "Everyone",
+      "ab": "A/B",
+      "abA": "A",
+      "abB": "B",
+      "abHelp": "Two speakers take turns every two clicks.",
+      "idle": "Clicks stopped.",
+      "playing": "Clicks playing on every speaker.",
+      "soloed": "Clicks playing on {name} only.",
+      "alternating": "Alternating {a} and {b}.",
+      "failed": "That did not work ({code})."
+    },
+    "manual": {
+      "title": "Delays",
+      "help": "A larger delay makes a speaker sound earlier. Changes are written at once.",
+      "reset": "Reset to session start",
+      "resetDone": "Delays are back to where this session started.",
+      "minus": "−{n} ms",
+      "plus": "+{n} ms",
+      "valueLabel": "Delay of {name} in ms",
+      "departed": "Left the group",
+      "starting": "Starting manual tuning…",
+      "startFailed": "Could not start manual tuning ({code}).",
+      "busy": "Another tuning is in progress for this group. Finish it on the Measure tab first.",
+      "saveOnLeave": "Save these delays as a profile?",
+      "saveOnLeaveHelp": "The delays stay as they are either way.",
+      "saveConfirm": "Save as profile",
+      "saveDecline": "Don't save",
+      "saveTitle": "Save as profile",
+      "skip": "Skip",
+      "defaultName": "Manual {date}"
     }
   }
 }
