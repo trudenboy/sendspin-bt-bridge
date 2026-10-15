@@ -24,6 +24,7 @@ import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import SyncChip from './chips/SyncChip.vue'
 import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
+import ServerChip from './chips/ServerChip.vue'
 import LinkChip from './chips/LinkChip.vue'
 import DevicePlayerPanel from './DevicePlayerPanel.vue'
 import { canDo } from '@/utils/supportedActions'
@@ -197,6 +198,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       </div>
       <div class="mt-1 flex flex-wrap items-center gap-1.5 pl-6 empty:hidden">
         <GroupChip :device="device" />
+        <ServerChip :device="device" />
         <SignalChip :device="device" />
       </div>
     </td>

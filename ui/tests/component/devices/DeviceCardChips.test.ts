@@ -121,6 +121,30 @@ describe('DeviceCard chips', () => {
     })
   })
 
+  describe('server chip', () => {
+    const onServer = (server: Record<string, unknown>) => makeDevice({ playback: { server_connected: true, server } })
+
+    it('names the Music Assistant the player is on', async () => {
+      const { wrapper } = await mountCard(onServer({ name: 'Music Assistant HA', host: '192.168.10.10', own: true }))
+      const chip = wrapper.find('[data-chip="server"]')
+      expect(chip.text()).toContain('Music Assistant HA')
+      expect(chip.find('.tone-warning').exists()).toBe(false)
+    })
+
+    it('warns when the server is not the bridge’s own', async () => {
+      const { wrapper } = await mountCard(onServer({ name: 'Test MA', host: '192.168.10.229', own: false }))
+      const chip = wrapper.find('[data-chip="server"]')
+      expect(chip.find('.tone-warning').exists()).toBe(true)
+      expect(chip.attributes('title')).toContain('192.168.10.229')
+      expect(chip.attributes('title')).toContain('not this bridge')
+    })
+
+    it('is absent without a known server', async () => {
+      const { wrapper } = await mountCard(makeDevice())
+      expect(wrapper.find('[data-chip="server"]').exists()).toBe(false)
+    })
+  })
+
   describe('group chip', () => {
     const grouped = () =>
       makeDevice({

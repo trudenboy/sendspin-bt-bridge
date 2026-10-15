@@ -4,6 +4,7 @@ import {
   groupChip,
   linkChip,
   maGroupUrl,
+  serverChip,
   signalInfo,
   syncBadge,
   transferChip,
@@ -280,5 +281,28 @@ describe('transferChip', () => {
     expect(transferChip(makeDevice({ transfer_readiness: notReady, bluetooth: { management_enabled: false } }))).toBeNull()
     expect(transferChip(makeDevice({ transfer_readiness: notReady, enabled: false }))).toBeNull()
     expect(transferChip(makeDevice({ transfer_readiness: notReady, health: { state: 'offline' } }))).toBeNull()
+  })
+})
+
+describe('serverChip', () => {
+  const on = (server: Record<string, unknown>, connected = true) =>
+    makeDevice({ playback: { server_connected: connected, server } })
+
+  it('names the server the player is on, neutral when it is the bridge’s own or unknown', () => {
+    const own = serverChip(on({ name: 'Music Assistant HA', host: '192.168.10.10', own: true }))!
+    expect(own).toMatchObject({ label: 'Music Assistant HA', host: '192.168.10.10', tone: 'neutral', foreign: false })
+    expect(serverChip(on({ host: '192.168.10.10', own: null }))).toMatchObject({ label: '192.168.10.10', foreign: false })
+  })
+
+  it('is a warning when the server is not the bridge’s own', () => {
+    expect(serverChip(on({ name: 'Test MA', host: '192.168.10.229', own: false }))).toMatchObject({
+      tone: 'warning',
+      foreign: true,
+    })
+  })
+
+  it('is hidden when the player is not connected or the server is unknown', () => {
+    expect(serverChip(on({ name: 'MA', host: 'x', own: true }, false))).toBeNull()
+    expect(serverChip(on({}))).toBeNull()
   })
 })

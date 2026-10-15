@@ -200,6 +200,10 @@
       "backend": {
         "bluetooth": "Bluetooth speaker",
         "output": "Audio output"
+      },
+      "server": {
+        "title": "Connected to Music Assistant {where}",
+        "foreign": "Connected to {where} — not this bridge’s Music Assistant"
       }
     },
     "elapsed": {
@@ -553,6 +557,16 @@
       "releaseDone": "Audio output suspended",
       "resume": "Resume audio output",
       "resumeDone": "Audio output resumed"
+    },
+    "server": {
+      "title": "Music Assistant server",
+      "name": "Name",
+      "host": "Address",
+      "id": "Server ID",
+      "url": "URL",
+      "foreign": "Connected to Music Assistant on {where}, not to this bridge’s Music Assistant. Another server took this player first; reconnect the player so this bridge’s Music Assistant can take it.",
+      "refusedTitle": "Turned away",
+      "refusedCount": "{n} attempts"
     }
   },
   "volume": {

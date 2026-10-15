@@ -70,6 +70,21 @@ const tabs = computed(() => [
   { id: 'signal', label: t('drawer.tabs.signal') },
 ])
 
+/* Which Music Assistant the player is on, in full; the card's chip is the short form. */
+const serverInfo = computed(() => {
+  const s = device.value?.playback.server
+  if (!s || !(s.name || s.host || s.id)) return null
+  const rows = [
+    { key: 'name', value: s.name },
+    { key: 'host', value: s.host },
+    { key: 'id', value: s.id, mono: true },
+    { key: 'url', value: s.url, mono: true },
+  ].filter((r): r is { key: string; value: string; mono?: boolean } => !!r.value)
+  const where = s.name && s.host ? `${s.host} (${s.name})` : (s.name ?? s.host ?? '')
+  return { rows, foreign: s.own === false, where }
+})
+const refusedServers = computed(() => device.value?.playback.refused_servers ?? [])
+
 const signalSegments = computed(() => {
   const d = device.value
   if (!d) return []
@@ -224,6 +239,27 @@ function onAdapterReboot() {
                 <span class="text-text-secondary">{{ t('drawer.status.sampleRate') }}</span>
                 <p class="mt-1 text-text-primary">{{ device.audio.format ?? '—' }}</p>
               </div>
+            </div>
+            <div v-if="serverInfo" data-server-details class="space-y-2 text-sm">
+              <span class="text-text-secondary">{{ t('drawer.server.title') }}</span>
+              <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                <template v-for="row in serverInfo.rows" :key="row.key">
+                  <dt class="text-text-secondary">{{ t(`drawer.server.${row.key}`) }}</dt>
+                  <dd class="min-w-0 break-all text-text-primary" :class="row.mono ? 'font-mono text-xs' : ''">{{ row.value }}</dd>
+                </template>
+              </dl>
+              <p v-if="serverInfo.foreign" data-server-warning class="rounded-lg bg-warning/10 p-3 text-warning">
+                {{ t('drawer.server.foreign', { where: serverInfo.where }) }}
+              </p>
+            </div>
+            <div v-if="refusedServers.length" data-refused-servers class="space-y-1 text-sm">
+              <span class="text-text-secondary">{{ t('drawer.server.refusedTitle') }}</span>
+              <ul class="space-y-0.5">
+                <li v-for="r in refusedServers" :key="r.server_id ?? r.host ?? ''" class="text-text-primary">
+                  {{ r.name ? `${r.host} (${r.name})` : r.host }}
+                  <span class="text-text-secondary">· {{ t('drawer.server.refusedCount', { n: r.count }) }}</span>
+                </li>
+              </ul>
             </div>
             <div v-if="device.last_error" class="rounded-lg bg-error/10 p-3 text-sm text-error">
               {{ device.last_error }}

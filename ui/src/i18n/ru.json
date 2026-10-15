@@ -200,6 +200,10 @@
       "backend": {
         "bluetooth": "Bluetooth-колонка",
         "output": "Аудиовыход"
+      },
+      "server": {
+        "title": "Подключён к Music Assistant {where}",
+        "foreign": "Подключён к {where} — это не Music Assistant этого моста"
       }
     },
     "elapsed": {
@@ -553,6 +557,16 @@
       "releaseDone": "Аудиовыход приостановлен",
       "resume": "Возобновить аудиовыход",
       "resumeDone": "Аудиовыход возобновлён"
+    },
+    "server": {
+      "title": "Сервер Music Assistant",
+      "name": "Имя",
+      "host": "Адрес",
+      "id": "ID сервера",
+      "url": "URL",
+      "foreign": "Подключён к Music Assistant на {where}, а не к Music Assistant этого моста. Этот плеер первым занял другой сервер; переподключите плеер, чтобы его мог занять Music Assistant этого моста.",
+      "refusedTitle": "Отклонены",
+      "refusedCount": "попыток: {n}"
     }
   },
   "volume": {

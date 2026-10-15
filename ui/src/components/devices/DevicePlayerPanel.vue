@@ -13,6 +13,7 @@ import SyncChip from './chips/SyncChip.vue'
 import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
 import LinkChip from './chips/LinkChip.vue'
+import ServerChip from './chips/ServerChip.vue'
 import BlockedHints from './chips/BlockedHints.vue'
 import { SbBadge } from '@/kit'
 import { transferChip } from '@/utils/deviceChips'
@@ -141,6 +142,7 @@ async function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
   <div class="relative z-10 flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
     <LinkChip :device="device" />
     <GroupChip :device="device" />
+    <ServerChip :device="device" />
     <SyncChip :device="device" />
     <SignalChip :device="device" />
     <span v-if="transfer" data-chip="transfer" class="inline-flex" :title="transferTitle">

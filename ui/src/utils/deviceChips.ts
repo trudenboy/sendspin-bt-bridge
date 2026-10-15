@@ -194,6 +194,29 @@ export function disabledLinkChip(
   }
 }
 
+/* -------------------------------------------------------------- server -- */
+
+export interface ServerChip {
+  /** The server's name, else its address. */
+  label: string
+  name: string | null
+  host: string | null
+  id: string | null
+  tone: Tone
+  /** The bridge knows its own Music Assistant and this is another one. */
+  foreign: boolean
+}
+
+/** The Music Assistant a connected player is on; a warning when it is not the bridge's own. */
+export function serverChip(d: Device): ServerChip | null {
+  if (!d.playback.server_connected) return null
+  const { name, host, id, own } = d.playback.server
+  const label = name || host
+  if (!label) return null
+  const foreign = own === false
+  return { label, name: name ?? null, host: host ?? null, id: id ?? null, tone: foreign ? 'warning' : 'neutral', foreign }
+}
+
 /* ------------------------------------------------------ blocked hints -- */
 
 export interface BlockedHint {
