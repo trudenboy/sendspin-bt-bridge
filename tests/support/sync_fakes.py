@@ -66,3 +66,124 @@ class FakeHost:
 
     def release(self, session_id: str) -> None:
         self.released.append(session_id)
+
+
+GROUPS: list[dict[str, Any]] = [
+    {
+        "id": "grp",
+        "name": "Downstairs",
+        "members": [{"id": m, "name": m} for m in ("spk-bridge", "spk-kiosk", "uni", "cast")],
+    }
+]
+
+
+class FakeMa:
+    """An in-memory Music Assistant API: records every call and models the member-resolution facts."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.forbid_write = False
+        self.players: dict[str, dict[str, Any]] = {
+            "spk-bridge": {
+                "player_id": "spk-bridge",
+                "provider": "sendspin",
+                "type": "player",
+                "name": "Kitchen",
+                "volume_level": 40,
+                "volume_muted": False,
+                "playback_state": "playing",
+                "output_protocols": [],
+            },
+            "spk-kiosk": {
+                "player_id": "spk-kiosk",
+                "provider": "sendspin",
+                "type": "player",
+                "name": "Kiosk",
+                "volume_level": 30,
+                "volume_muted": True,
+                "playback_state": "playing",
+                "output_protocols": [],
+            },
+            "uni": {
+                "player_id": "uni",
+                "provider": "universal_player",
+                "type": "player",
+                "name": "Hall",
+                "volume_level": 50,
+                "volume_muted": False,
+                "playback_state": "playing",
+                "output_protocols": [
+                    {"output_protocol_id": "uni-sendspin", "protocol_domain": "sendspin", "is_native": False}
+                ],
+            },
+            "uni-sendspin": {
+                "player_id": "uni-sendspin",
+                "provider": "sendspin",
+                "type": "protocol",
+                "name": "Hall (Sendspin)",
+            },
+            "cast": {
+                "player_id": "cast",
+                "provider": "chromecast",
+                "type": "player",
+                "name": "TV",
+                "volume_level": 20,
+                "volume_muted": False,
+                "playback_state": "playing",
+                "output_protocols": [],
+            },
+            "grp": {
+                "player_id": "grp",
+                "provider": "sync_group",
+                "type": "group",
+                "name": "Downstairs",
+                "playback_state": "playing",
+                "group_members": ["spk-bridge", "spk-kiosk", "uni", "cast"],
+            },
+        }
+        self.entries: dict[str, list[str]] = {
+            "spk-bridge": ["sendspin_static_delay"],
+            "spk-kiosk": [],
+            "uni-sendspin": ["sendspin_static_delay"],
+            "cast": [],
+        }
+        self.values: dict[tuple[str, str], int] = {
+            ("spk-bridge", "sendspin_static_delay"): 120,
+            ("uni-sendspin", "sendspin_static_delay"): 0,
+        }
+
+    def call(self, command: str, args: dict[str, Any], *, timeout: float = 10.0) -> Any:
+        from sendspin_bridge.sync_tuning.ma_api import MaApiError
+
+        self.calls.append((command, args))
+        if command == "players/all":
+            return list(self.players.values())
+        if command == "players/get":
+            return self.players.get(args["player_id"])
+        if command == "config/players/get_entries":
+            return [{"key": k} for k in self.entries.get(args["player_id"], [])]
+        if command == "config/players/get_value":
+            return self.values.get((args["player_id"], args["key"]), args.get("default", 0))
+        if command == "config/players/save":
+            if self.forbid_write:
+                raise MaApiError("ma_forbidden", "scope config.players.write required")
+            for key, value in args["values"].items():
+                if "||protocol||" in key:
+                    pid, _, real = key.partition("||protocol||")
+                else:
+                    pid, real = args["player_id"], key
+                self.values[(pid, real)] = int(value)
+            return {}
+        if command == "players/cmd/volume_mute":
+            self.players[args["player_id"]]["volume_muted"] = args["muted"]
+            return None
+        if command == "players/cmd/volume_set":
+            self.players[args["player_id"]]["volume_level"] = args["volume_level"]
+            return None
+        if command == "players/cmd/stop":
+            self.players[args["player_id"]]["playback_state"] = "idle"
+            return None
+        raise MaApiError("ma_error", f"unknown {command}")
+
+    def fire(self, command: str, args: dict[str, Any]) -> None:
+        self.calls.append((command, args))
