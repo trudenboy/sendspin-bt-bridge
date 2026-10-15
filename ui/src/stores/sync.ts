@@ -251,10 +251,13 @@ export const useSyncStore = defineStore('sync', () => {
     profiles.value = await track(() => api.listProfiles(groupId))
   }
 
-  async function saveProfile(name: string, kind: 'device' | 'position' = 'device') {
+  /** Save the group's current delays; ``notes`` is sent only when there are some. */
+  async function saveProfile(name: string, kind: 'device' | 'position' = 'device', notes?: string) {
     const g = group.value
     if (!g) return null
-    const created = await track(() => api.captureProfile(g.id, { name, kind }))
+    const body: { name: string; kind: 'device' | 'position'; notes?: string } = { name, kind }
+    if (notes) body.notes = notes
+    const created = await track(() => api.captureProfile(g.id, body))
     profiles.value = [...profiles.value, created]
     return created
   }

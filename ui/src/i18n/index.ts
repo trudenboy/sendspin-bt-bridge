@@ -1,6 +1,7 @@
 import { createI18n } from 'vue-i18n'
 import en from './en.json'
 import ru from './ru.json'
+import { russianPlural } from './plural'
 
 function storedLocale() {
   try {
@@ -16,4 +17,5 @@ export const i18n = createI18n({
   locale: storedLocale(),
   fallbackLocale: 'en',
   messages: { en, ru },
+  pluralRules: { ru: russianPlural },
 })

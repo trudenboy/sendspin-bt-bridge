@@ -1395,6 +1395,58 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "groupError": "Could not open this group ({code}). Check that Music Assistant is reachable and the group still exists."
+    "groupError": "Could not open this group ({code}). Check that Music Assistant is reachable and the group still exists.",
+    "origin": {
+      "bridge": "Bridge",
+      "sendspin": "Sendspin",
+      "other": "Cannot be adjusted"
+    },
+    "measuredAgo": "Measured {age}",
+    "noDelay": "No delay reported",
+    "actions": {
+      "title": "Tune",
+      "manual": "Manual tuning",
+      "semi": "Measure and suggest",
+      "auto": "Measure and apply",
+      "manualHelp": "Play a test signal and adjust each speaker by ear.",
+      "semiHelp": "Measure with this device's microphone, then review the proposed delays.",
+      "autoHelp": "Measure, apply and check in one go, with an undo for 30 s."
+    },
+    "measureMode": {
+      "semi": "Mode: measure and suggest",
+      "auto": "Mode: measure and apply"
+    },
+    "profiles": {
+      "title": "Profiles",
+      "apply": "Apply",
+      "saveCurrent": "Save current as…",
+      "rename": "Rename",
+      "delete": "Delete",
+      "empty": "No profiles yet. Save the current delays to come back to them later.",
+      "skipped": "{n} member skipped | {n} members skipped",
+      "notInGroup": "Not in the group: {names}",
+      "name": "Name",
+      "notes": "Notes (optional)",
+      "save": "Save",
+      "cancel": "Cancel",
+      "applyTitle": "Apply “{name}”",
+      "confirmApply": "Apply these delays",
+      "member": "Speaker",
+      "change": "Current → profile",
+      "noChanges": "None of the group's speakers are in this profile.",
+      "unchanged": "unchanged",
+      "applied": "Applied “{name}”.",
+      "saved": "Saved “{name}”.",
+      "renamed": "Renamed to “{name}”.",
+      "deleted": "Deleted “{name}”.",
+      "deleteTitle": "Delete “{name}”?",
+      "deleteMessage": "The delays stay as they are; only the saved profile is removed.",
+      "renameLabel": "New name for “{name}”",
+      "failed": "That did not work ({code}).",
+      "kind": {
+        "device": "At the speakers",
+        "position": "From a listening position"
+      }
+    }
   }
 }

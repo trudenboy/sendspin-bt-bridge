@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
@@ -75,5 +75,77 @@ describe('SyncView', () => {
     vi.mocked(api.getSyncGroup).mockRejectedValue(new ApiError({ status: 404, code: 'not_found' }))
     const w = await mountView()
     expect(w.get('[role="alert"]').text()).toContain('not_found')
+  })
+})
+
+describe('SyncView group tab', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.mocked(api.listRestores).mockResolvedValue([])
+    vi.mocked(api.listProfiles).mockResolvedValue([])
+    vi.mocked(api.getSyncGroup).mockResolvedValue(group as never)
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('shows member origins and the profiles panel', async () => {
+    const w = await mountView()
+    expect(w.findAll('[data-member]')).toHaveLength(2)
+    expect(w.text()).toContain('Cannot be adjusted')
+    expect(w.find('[data-save-current]').exists()).toBe(true)
+    expect(api.listProfiles).toHaveBeenCalledWith('g')
+  })
+
+  it('opens manual tuning and the measurement in the chosen mode', async () => {
+    const w = await mountView()
+    await w.get('[data-action="manual"]').trigger('click')
+    expect(w.get('[role="tab"][aria-selected="true"]').text()).toBe('Manual')
+    await w.get('[role="tab"]').trigger('click')
+    await w.get('[data-action="auto"]').trigger('click')
+    expect(w.get('[role="tab"][aria-selected="true"]').text()).toBe('Measure')
+    expect(w.get('[data-measure-mode]').attributes('data-measure-mode')).toBe('auto')
+    await w.get('[role="tab"]').trigger('click')
+    await w.get('[data-action="semi"]').trigger('click')
+    expect(w.get('[data-measure-mode]').attributes('data-measure-mode')).toBe('semi')
+  })
+
+  it('polls a pending restore until it clears, then reads the group again', async () => {
+    vi.useFakeTimers()
+    vi.mocked(api.listRestores)
+      .mockResolvedValueOnce([{ session_id: 'p1', group_id: 'g', error: null }] as never)
+      .mockResolvedValueOnce([{ session_id: 'p1', group_id: 'g', error: 'ma_unavailable' }] as never)
+      .mockResolvedValue([])
+    const w = await mountView()
+    expect(api.listRestores).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(api.listRestores).toHaveBeenCalledTimes(2)
+    expect(w.text()).toContain('Could not restore the group')
+    const reads = vi.mocked(api.getSyncGroup).mock.calls.length
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(api.listRestores).toHaveBeenCalledTimes(3)
+    expect(w.text()).not.toContain('Could not restore the group')
+    expect(vi.mocked(api.getSyncGroup).mock.calls.length).toBeGreaterThan(reads)
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(api.listRestores).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops polling when the view unmounts', async () => {
+    vi.useFakeTimers()
+    vi.mocked(api.listRestores).mockResolvedValue([{ session_id: 'p1', group_id: 'g', error: null }] as never)
+    const w = await mountView()
+    w.unmount()
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(api.listRestores).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes the restores after a retry', async () => {
+    vi.mocked(api.listRestores).mockResolvedValueOnce([{ session_id: 'p1', group_id: 'g', error: 'ma_unavailable' }] as never).mockResolvedValue([])
+    vi.mocked(api.retryRestore).mockResolvedValue({ session_id: 'p1', group_id: 'g', error: 'ma_unavailable' } as never)
+    const w = await mountView()
+    await w.get('[data-retry]').trigger('click')
+    await flushPromises()
+    expect(api.retryRestore).toHaveBeenCalledWith('g')
+    expect(api.listRestores).toHaveBeenCalledTimes(2)
+    expect(w.text()).not.toContain('Could not restore the group')
   })
 })
