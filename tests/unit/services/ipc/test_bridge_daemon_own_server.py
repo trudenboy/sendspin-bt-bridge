@@ -51,7 +51,7 @@ async def test_a_foreign_server_is_refused_with_another_server(tmp_path: Path, c
     daemon = await _daemon(tmp_path)
     client = daemon._client
     foreign = _connection("srv-foreign", "Test MA")
-    peer_host_var.set("192.168.10.229")
+    peer_host_var.set("192.0.2.229")
 
     with caplog.at_level(logging.WARNING):
         assert client._should_admit_connection(foreign) is False
@@ -60,15 +60,15 @@ async def test_a_foreign_server_is_refused_with_another_server(tmp_path: Path, c
     foreign.send_goodbye.assert_awaited_once_with(GoodbyeReason.ANOTHER_SERVER)
     foreign.disconnect.assert_awaited_once()
     refused = daemon._bridge_status["refused_servers"]
-    assert refused[0]["host"] == "192.168.10.229" and refused[0]["name"] == "Test MA"
-    assert any("Refused Music Assistant at 192.168.10.229 (Test MA)" in r.getMessage() for r in caplog.records)
+    assert refused[0]["host"] == "192.0.2.229" and refused[0]["name"] == "Test MA"
+    assert any("Refused Music Assistant at 192.0.2.229 (Test MA)" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_a_redial_is_not_logged_again(tmp_path: Path, caplog):
     daemon = await _daemon(tmp_path)
     client = daemon._client
-    peer_host_var.set("192.168.10.229")
+    peer_host_var.set("192.0.2.229")
     with caplog.at_level(logging.WARNING):
         for _ in range(3):
             conn = _connection("srv-foreign", "Test MA")
@@ -91,7 +91,7 @@ async def test_a_foreign_dial_leaves_the_own_connection_alone(tmp_path: Path):
     client = daemon._client
     own_conn = _connection("srv-own")
     client._admitted_connection = own_conn
-    peer_host_var.set("192.168.10.229")
+    peer_host_var.set("192.0.2.229")
 
     foreign = _connection("srv-foreign")
     assert client._should_admit_connection(foreign) is False
@@ -119,7 +119,7 @@ async def test_everything_is_accepted_when_the_own_server_is_unknown_or_the_chec
     tmp_path: Path, own: OwnServer | None, only: bool
 ):
     daemon = await _daemon(tmp_path, own=own, only=only)
-    peer_host_var.set("192.168.10.229")
+    peer_host_var.set("192.0.2.229")
     assert daemon._client._should_admit_connection(_connection("srv-foreign")) is True
 
 
@@ -141,11 +141,11 @@ async def test_the_connected_server_is_published_with_its_name_and_ownership(tmp
 async def test_an_admitted_foreign_server_is_flagged_not_own(tmp_path: Path):
     daemon = await _daemon(tmp_path, only=False)
     daemon._client = SimpleNamespace(server_info=SimpleNamespace(server_id="srv-x", name="Other"))
-    daemon._mark_server_connected(SimpleNamespace(_req=SimpleNamespace(remote="192.168.10.229")))
+    daemon._mark_server_connected(SimpleNamespace(_req=SimpleNamespace(remote="192.0.2.229")))
     # The check is off: nothing is claimed about ownership.
     assert daemon._bridge_status["connected_server_own"] is None
     daemon._server_gate.enforce = True
-    daemon._mark_server_connected(SimpleNamespace(_req=SimpleNamespace(remote="192.168.10.229")))
+    daemon._mark_server_connected(SimpleNamespace(_req=SimpleNamespace(remote="192.0.2.229")))
     assert daemon._bridge_status["connected_server_own"] is False
 
 
@@ -158,5 +158,5 @@ async def test_the_peer_host_reaches_the_admission_decision(tmp_path: Path):
         seen.append(peer_host_var.get())
 
     daemon._client = SimpleNamespace(attach_websocket=attach, connected=False)
-    await daemon._handle_server_connection(SimpleNamespace(_req=SimpleNamespace(remote="192.168.10.229")))
-    assert seen == ["192.168.10.229"]
+    await daemon._handle_server_connection(SimpleNamespace(_req=SimpleNamespace(remote="192.0.2.229")))
+    assert seen == ["192.0.2.229"]

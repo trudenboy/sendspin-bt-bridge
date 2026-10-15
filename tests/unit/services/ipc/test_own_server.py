@@ -25,12 +25,12 @@ def test_the_own_server_id_is_accepted_from_any_host():
 
 
 def test_a_foreign_server_is_refused():
-    verdict = decide(OWN, server_id="srv-other", peer_host="192.168.10.229")
+    verdict = decide(OWN, server_id="srv-other", peer_host="192.0.2.229")
     assert not verdict.accept and verdict.own is False
 
 
 def test_an_unknown_own_server_accepts_everyone():
-    verdict = decide(None, server_id="srv-other", peer_host="192.168.10.229")
+    verdict = decide(None, server_id="srv-other", peer_host="192.0.2.229")
     assert verdict.accept and verdict.own is None
     assert decide(OwnServer(), server_id="a", peer_host="b").own is None
 
@@ -85,7 +85,7 @@ def test_resolve_own_server_collects_hosts_from_the_configured_sources():
 
     own = asyncio.run(go())
     assert own is not None
-    assert own.hosts == {"ma.lan", "192.168.10.10"}
+    assert own.hosts == {"ma.lan", "192.168.10.10", "localhost"}
 
 
 def test_resolve_own_server_uses_an_explicit_sendspin_host():
@@ -96,16 +96,24 @@ def test_resolve_own_server_uses_an_explicit_sendspin_host():
     assert own is not None and own.hosts == {"10.1.1.1"}
 
 
-def test_resolve_own_server_knows_nothing_when_only_loopback_is_configured():
+def test_a_loopback_music_assistant_makes_only_this_machine_its_server():
+    # Music Assistant reached over loopback runs on this machine, so a server
+    # dialling from another machine is not it.
     async def resolver(host):
         return []
 
-    assert (
-        asyncio.run(
-            resolve_own_server(sendspin_server="auto", ma_api_urls=["http://localhost:8095"], resolver=resolver)
-        )
-        is None
+    own = asyncio.run(
+        resolve_own_server(sendspin_server="auto", ma_api_urls=["http://localhost:8095"], resolver=resolver)
     )
+    assert own is not None
+    assert decide(own, server_id="srv", peer_host="127.0.0.1").accept
+    assert not decide(own, server_id="srv", peer_host="192.0.2.229").accept
+
+
+def test_resolve_own_server_knows_nothing_when_nothing_is_configured():
+    async def resolver(host):
+        return []
+
     assert asyncio.run(resolve_own_server(sendspin_server="auto", ma_api_urls=[], resolver=resolver)) is None
 
 
@@ -120,3 +128,38 @@ def test_refusals_carry_who_owns_the_bridge():
     log = RefusalLog()
     log.note(server_id="s", host="1.1.1.1", name="Test MA", owner="192.168.10.10")
     assert log.recent()[0]["owner"] == "192.168.10.10"
+
+
+def test_a_server_on_this_machine_is_always_accepted():
+    # The Home Assistant add-on reaches Music Assistant by an internal name or
+    # address, while Music Assistant on the same host dials from a local one.
+    own = OwnServer(hosts=frozenset({"d5369777-music-assistant-dev", "172.30.33.5"}))
+    verdict = decide(own, server_id="srv", peer_host="127.0.0.1")
+    assert verdict.accept and verdict.own is True
+
+
+def test_a_server_dialling_from_a_local_interface_address_is_accepted(monkeypatch):
+    from sendspin_bridge.services.ipc import own_server
+
+    monkeypatch.setattr(own_server, "is_local_address", lambda host: host == "192.168.10.10")
+    own = OwnServer(hosts=frozenset({"172.30.33.5"}))
+    assert decide(own, server_id="srv", peer_host="192.168.10.10").accept
+    assert not decide(own, server_id="srv", peer_host="192.0.2.229").accept
+
+
+def test_an_own_name_that_does_not_resolve_makes_the_bridge_accept_everyone():
+    async def resolver(host):
+        return []
+
+    own = asyncio.run(
+        resolve_own_server(sendspin_server="auto", ma_api_urls=["http://ma-gone.lan:8095"], resolver=resolver)
+    )
+    assert own is None
+
+
+def test_is_local_address_knows_loopback_and_not_a_foreign_address():
+    from sendspin_bridge.services.ipc.own_server import is_local_address
+
+    assert is_local_address("127.0.0.1")
+    assert not is_local_address("192.0.2.77")
+    assert not is_local_address("not-an-ip")

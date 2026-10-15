@@ -47,6 +47,28 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+def is_local_address(host: str | None) -> bool:
+    """Whether ``host`` is an address of this machine.
+
+    Binding succeeds only for an address one of the machine's interfaces
+    holds, which covers loopback, the LAN address and container bridges.
+    """
+    value = normalize_host(host)
+    if _is_loopback(value):
+        return True
+    try:
+        addr = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    family = socket.AF_INET6 if addr.version == 6 else socket.AF_INET
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as sock:
+            sock.bind((str(addr), 0))
+    except OSError:
+        return False
+    return True
+
+
 @dataclass(frozen=True)
 class OwnServer:
     """What the bridge knows about its own Music Assistant."""
@@ -97,6 +119,11 @@ def decide(
         return Verdict(True, True, "server id matches")
     if normalize_host(peer_host) in own.hosts:
         return Verdict(True, True, "host matches")
+    # A Music Assistant on this very machine (the Home Assistant add-on next
+    # to the bridge's) dials from a local address while the bridge may know it
+    # by an internal name; a foreign server is always on another machine.
+    if peer_host and is_local_address(peer_host):
+        return Verdict(True, True, "server on this machine")
     return Verdict(False, False, "not the bridge's Music Assistant")
 
 
@@ -120,8 +147,8 @@ async def resolve_own_server(
 ) -> OwnServer | None:
     """Work out the bridge's Music Assistant from its configuration.
 
-    A loopback address says nothing about which machine Music Assistant is on,
-    so it never makes the bridge strict.
+    A loopback address means Music Assistant runs on this machine.  A name
+    that does not resolve leaves the bridge's server unknown.
     """
     resolve = resolver or _system_resolver
     names: set[str] = set()
@@ -138,15 +165,25 @@ async def resolve_own_server(
             continue
         if host:
             names.add(normalize_host(host))
-    names = {n for n in names if n and not _is_loopback(n)}
+    names = {n for n in names if n}
     if not names:
         return None
     hosts = set(names)
     for name in sorted(names):
+        if _is_loopback(name):
+            # Music Assistant reached over loopback is on this machine; the
+            # local-address rule in decide() admits it and nothing else.
+            continue
         try:
             ipaddress.ip_address(name)
         except ValueError:
-            hosts.update(normalize_host(a) for a in await resolve(name))
+            addresses = await resolve(name)
+            if not addresses:
+                # A name the bridge cannot resolve cannot be matched against
+                # the address a server dials from: refusing on it would turn
+                # away the bridge's own Music Assistant.
+                return None
+            hosts.update(normalize_host(a) for a in addresses)
     return OwnServer(hosts=frozenset(hosts))
 
 
