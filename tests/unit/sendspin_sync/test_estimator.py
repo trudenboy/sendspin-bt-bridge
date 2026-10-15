@@ -1,6 +1,11 @@
+import struct
+import time
+
+import pytest
+
 from sendspin_sync import estimator as est
 from sendspin_sync.models import Recording
-from tests.support.sync_synth import synth
+from tests.support.sync_synth import bursty_noise, sparse_lsb_noise, synth
 
 
 def _phase(m):
@@ -64,3 +69,107 @@ def test_pure_python_cost_is_bounded():
     t = time.perf_counter()
     est.estimate(rec)
     assert time.perf_counter() - t < 2.0
+
+
+@pytest.mark.parametrize("delay_s", [0.025, 0.060])
+def test_room_echo_after_each_chirp_is_not_a_click(delay_s):
+    # a reflection 25/60 ms later at -3.5 dB must not pair up as an extra click (60 ms is also a valid gap)
+    m = est.estimate(synth("a", lag_s=0.1, echo=(delay_s, 0.2)))
+    assert m.clicks == 3
+    assert abs(_phase(m) - 100.0) <= 1.0
+
+
+@pytest.mark.parametrize(
+    "rec",
+    [sparse_lsb_noise("a"), bursty_noise("a"), bursty_noise("a", rate_hz=20.0, seed=9)],
+    ids=["sparse_lsb", "bursty", "bursty_dense"],
+)
+def test_garbage_without_a_click_track_is_not_heard(rec):
+    assert est.estimate(rec).status == "not_heard"
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda: sparse_lsb_noise("a", duration_s=20.0, sample_rate=48000),
+        lambda: bursty_noise("a", duration_s=20.0, sample_rate=48000, rate_hz=20.0),
+    ],
+    ids=["sparse_lsb", "bursty"],
+)
+def test_garbage_at_the_largest_accepted_geometry_is_cheap(make):
+    rec = make()
+    t = time.perf_counter()
+    m = est.estimate(rec)
+    assert time.perf_counter() - t < 2.0
+    assert m.status == "not_heard"
+
+
+def test_silence_reason_is_no_clicks():
+    silent = Recording(member="a", start_time_s=0.0, sample_rate=16000, pcm=bytes(6 * 16000 * 2))
+    m = est.estimate(silent)
+    assert (m.status, m.reason, m.clicks) == ("not_heard", "no_clicks", 0)
+
+
+def test_room_noise_without_clicks_is_no_clicks():
+    m = est.estimate(synth("a", lag_s=0.0, noise=0.02, gain=0.0))
+    assert (m.status, m.reason) == ("not_heard", "no_clicks")
+
+
+def test_clicks_barely_above_the_noise_are_low_snr():
+    m = est.estimate(synth("a", lag_s=0.1, noise=0.05, gain=0.1))
+    assert (m.status, m.reason) == ("not_heard", "low_snr")
+    assert m.clicks >= 2 and m.confidence == 0.0
+
+
+def _mix(a: Recording, b: Recording) -> Recording:
+    sa = struct.unpack(f"<{len(a.pcm) // 2}h", a.pcm)
+    sb = struct.unpack(f"<{len(b.pcm) // 2}h", b.pcm)
+    mixed = [max(-32767, min(32767, p + q)) for p, q in zip(sa, sb, strict=True)]
+    return Recording(
+        member=a.member,
+        start_time_s=a.start_time_s,
+        sample_rate=a.sample_rate,
+        pcm=struct.pack(f"<{len(mixed)}h", *mixed),
+    )
+
+
+def test_clicks_survive_moderate_clatter():
+    # ~10 noise bursts a second: more events than a click track can make, the strongest are still the chirps
+    clicks = synth("a", lag_s=0.2, duration_s=12.0, noise=0.0)
+    clatter = bursty_noise("a", duration_s=12.0, rate_hz=10.0, level=0.03, seed=5)
+    m = est.estimate(_mix(clicks, clatter))
+    assert m.clicks == 6
+    assert abs(_phase(m) - 200.0) <= 1.0
+
+
+def test_a_room_full_of_clatter_is_too_noisy_to_try():
+    m = est.estimate(bursty_noise("a", rate_hz=50.0, level=0.1))
+    assert (m.status, m.reason) == ("not_heard", "low_snr")
+
+
+@pytest.mark.parametrize(
+    ("lag_s", "delay_s", "seed"),
+    [(0.1, 0.002, 1), (0.37, 0.020, 2), (0.1, 0.040, 1), (0.1, 0.060, 1)],
+    ids=["2ms_overlaps_the_chirp", "20ms_shifts_gaps_down", "40ms_aliases_two_gap_steps", "60ms_lands_on_partner"],
+)
+def test_a_reflection_as_loud_as_the_direct_sound_is_still_not_the_click(lag_s, delay_s, seed):
+    # a hard wall next to the phone: the reflection matches the direct chirp, so only arrival order tells them apart
+    m = est.estimate(synth("a", lag_s=lag_s, echo=(delay_s, 0.3), seed=seed))
+    assert m.clicks == 3
+    assert abs(_phase(m) - lag_s * 1000) <= 1.0
+
+
+def test_matched_filter_work_is_bounded_by_the_click_track_not_by_the_noise(monkeypatch):
+    calls = 0
+    real = est.matched_peak
+
+    def counting(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(est, "matched_peak", counting)
+    rec = bursty_noise("a", duration_s=12.0, rate_hz=10.0, level=0.1)  # ~100 events in 12 s
+    est.estimate(rec)
+    # a 12 s click track has 7 periods x (2 chirps + reflections) = 42 plausible events, two searches each
+    assert calls <= 2 * 42
