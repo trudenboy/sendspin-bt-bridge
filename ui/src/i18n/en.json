@@ -1503,6 +1503,7 @@
         "busy": "A recording is already running.",
         "interrupted": "Audio was interrupted (the page was in the background or another app took the audio). Tap to continue; the affected steps are measured again.",
         "timeout": "The recording did not finish in time.",
+        "mic_lost": "The microphone stopped (unplugged, or access was withdrawn). Open it again to continue; the affected steps are measured again.",
         "failed": "Recording failed."
       },
       "resume": "Continue recording",
