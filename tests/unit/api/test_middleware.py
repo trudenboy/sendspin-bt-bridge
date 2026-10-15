@@ -139,6 +139,40 @@ def test_relative_assets_load_on_a_nested_page(spa):
     assert "<!doctype html>" in client.get("/sync/syncgroup_x").text
 
 
+def test_a_very_long_nested_path_is_cheap_and_never_fails(spa):
+    import time
+
+    client = make_client(spa_dir=spa)
+    for path in (
+        "/" + "/".join(["a"] * 2000),
+        "/" + "/".join(["x" * 200] * 40) + "/assets/app-1a2b.js",
+        "/" + "/".join(["y" * 300] * 15),  # a component over NAME_MAX: the lookup must not raise
+    ):
+        started = time.monotonic()
+        resp = client.get(path)
+        assert time.monotonic() - started < 1.0
+        assert resp.status_code == 200
+        assert "<!doctype html>" in resp.text
+
+
+def test_the_nested_lookup_does_not_escape_the_spa(spa, tmp_path):
+    (tmp_path / "secret.txt").write_text("nope")
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "outside.js").write_text("nope")
+    (spa / "assets" / "link.js").symlink_to(tmp_path / "secret.txt")
+    client = make_client(spa_dir=spa)
+    for path in (
+        "/sync/%2e%2e/%2e%2e/secret.txt",
+        "/sync/%2e%2e/secret.txt",
+        "/sync/assets/%2e%2e/%2e%2e/assets/outside.js",
+        "/sync/assets/link.js",
+        "/assets/link.js",
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert "nope" not in resp.text
+
+
 def test_files_outside_the_spa_are_not_served(spa, tmp_path):
     (tmp_path / "secret.txt").write_text("nope")
     resp = make_client(spa_dir=spa).get("/../secret.txt")
