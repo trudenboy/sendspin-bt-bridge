@@ -106,7 +106,7 @@ pulsectl-asyncio==1.3.2
     # via sendspin-bt-bridge
 pycairo==1.29.1
     # via pygobject
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.11 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 pygments==2.20.0
     # via sendspin-bt-bridge
