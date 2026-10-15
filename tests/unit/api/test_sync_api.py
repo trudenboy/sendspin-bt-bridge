@@ -79,15 +79,36 @@ def test_a_group_under_tuning_names_its_session(api_client, sync_env):
     assert api_client.get("/api/v1/sync/groups/g").json()["session_id"] == sid
 
 
-def test_music_assistant_unreachable_is_503(api_client, sync_env, monkeypatch):
-    ctl = sync_env[0]
+def test_music_assistant_not_connected_is_503(api_client, sync_env, monkeypatch):
+    from sendspin_bridge.sync_tuning.ma_api import MaApiError
 
-    def down(group_id):
-        raise ControlError("ma_unavailable", "not connected")
+    def down():
+        raise MaApiError("ma_unavailable", "Music Assistant is not connected")
 
-    monkeypatch.setattr(ctl, "members", down)
+    monkeypatch.setattr("sendspin_bridge.application.sync_tuning._control", down)
     resp = api_client.get("/api/v1/sync/groups")
     assert resp.status_code == 503 and resp.json()["code"] == "ma_unavailable"
+
+
+def test_one_group_failing_does_not_hide_the_others(api_client, sync_env, monkeypatch):
+    ctl = sync_env[0]
+    other = {"id": "h", "name": "Upstairs", "members": [{"id": "x", "name": "X"}]}
+    monkeypatch.setattr("sendspin_bridge.application.sync_tuning.get_ma_groups", lambda: [GROUP, other])
+    real = ctl.members
+
+    def members(group_id):
+        if group_id == "h":
+            raise ControlError("member_gone", "group h is not known")
+        return real(group_id)
+
+    monkeypatch.setattr(ctl, "members", members)
+    resp = api_client.get("/api/v1/sync/groups")
+    assert resp.status_code == 200
+    by_id = {g["id"]: g for g in resp.json()}
+    assert by_id["g"]["error"] is None and len(by_id["g"]["members"]) == 3
+    assert by_id["h"]["error"] == "member_gone" and by_id["h"]["members"] == []
+    one = api_client.get("/api/v1/sync/groups/h")
+    assert one.status_code == 409 and one.json()["code"] == "member_gone"
 
 
 def test_manual_delay_write_refuses_a_non_adjustable_member(api_client, sync_env):
@@ -123,7 +144,7 @@ def test_session_flow_over_http(api_client, sync_env):
     for member, lag in (("a", 0.0), ("b", 0.03)):
         resp = _upload(api_client, sid, member, lag)
         assert resp.status_code == 200 and resp.json()["status"] == "ok"
-    prop = api_client.get(f"/api/v1/sync/sessions/{sid}/proposal")
+    prop = api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
     assert prop.status_code == 200
     assert {r["member"]: r["after_ms"] for r in prop.json()["rows"]} == {"a": 0, "b": 30}
     again = api_client.get(f"/api/v1/sync/sessions/{sid}/proposal")  # reading it twice is fine
@@ -165,7 +186,7 @@ def test_skip_and_semi_apply_with_verification(api_client, sync_env):
     skipped = api_client.post(f"{base}/skip", json={"member": "b"})
     assert skipped.status_code == 200 and skipped.json()["measurements"]["b"]["status"] == "skipped"
     assert _upload(api_client, sid, "b", 0.03).json()["status"] == "ok"
-    api_client.get(f"{base}/proposal")
+    api_client.post(f"{base}/proposal")
     verifying = api_client.post(f"{base}/apply", json={"rows": {"b": 25}, "verify": True})
     assert verifying.status_code == 200 and verifying.json()["state"] == "verifying"
     assert verifying.json()["round"] == 2 and verifying.json()["measurements"] == {}
@@ -174,7 +195,7 @@ def test_skip_and_semi_apply_with_verification(api_client, sync_env):
 
 def test_apply_rows_are_bounded(api_client, sync_env):
     sid = _measured_session(api_client)
-    api_client.get(f"/api/v1/sync/sessions/{sid}/proposal")
+    api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
     resp = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={"rows": {"b": 9000}})
     assert resp.status_code == 422
     assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["state"] == "proposed"
@@ -188,6 +209,8 @@ def test_errors_of_the_session_state_machine(api_client, sync_env):
     assert early.status_code == 409 and early.json()["code"] == "session_state"
     nothing = api_client.get(f"/api/v1/sync/sessions/{sid}/proposal")
     assert nothing.status_code == 409 and nothing.json()["code"] == "no_measurement"
+    computed = api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
+    assert computed.status_code == 409 and computed.json()["code"] == "no_measurement"
     undo = api_client.post(f"/api/v1/sync/sessions/{sid}/undo")
     assert undo.status_code == 409 and undo.json()["code"] == "undo_expired"
     api_client.delete(f"/api/v1/sync/sessions/{sid}")
@@ -200,7 +223,7 @@ def test_auto_apply_keeps_an_undo(api_client, sync_env):
     sid = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "auto"}).json()["id"]
     for member, lag in (("a", 0.0), ("b", 0.03)):
         _upload(api_client, sid, member, lag)
-    api_client.get(f"/api/v1/sync/sessions/{sid}/proposal")
+    api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
     applied = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).json()
     assert applied["state"] == "verifying" and applied["undo_until_s"] == pytest.approx(30.0)
     undone = api_client.post(f"/api/v1/sync/sessions/{sid}/undo")
@@ -217,6 +240,9 @@ def test_garbage_recordings_are_400_not_500(api_client, sync_env):
         ({"member": "a", "start_time_s": 0, "sample_rate": 16000}, bytes(10 * 1024 * 1024)),
         ({"member": "a", "start_time_s": 0, "sample_rate": 16000}, bytes(600)),
         ({"member": "a", "start_time_s": 0, "sample_rate": 16000}, b""),
+        ({"member": "a", "start_time_s": "nan", "sample_rate": 16000}, synth("a", lag_s=0.0).pcm),
+        ({"member": "a", "start_time_s": "inf", "sample_rate": 16000}, synth("a", lag_s=0.0).pcm),
+        ({"member": "a", "start_time_s": "-inf", "sample_rate": 16000}, synth("a", lag_s=0.0).pcm),
     ):
         resp = api_client.post(url, params=params, content=body, headers=OCTET)
         assert resp.status_code == 400 and resp.json()["code"] == "recording_invalid", (params, len(body))
@@ -242,7 +268,7 @@ def test_garbage_recordings_are_400_not_500(api_client, sync_env):
 def test_forbidden_apply_keeps_the_proposal(api_client, sync_env, monkeypatch):
     ctl = sync_env[0]
     sid = _measured_session(api_client)
-    proposal = api_client.get(f"/api/v1/sync/sessions/{sid}/proposal").json()
+    proposal = api_client.post(f"/api/v1/sync/sessions/{sid}/proposal").json()
 
     def boom(member, ms):
         raise ControlError("ma_forbidden", "scope")
@@ -373,3 +399,117 @@ def test_the_upload_body_is_documented_as_binary(api_client):
     op = spec["paths"]["/api/v1/sync/sessions/{session_id}/recordings"]["post"]
     assert op["requestBody"]["content"]["application/octet-stream"]["schema"]["format"] == "binary"
     assert {p["name"] for p in op["parameters"]} >= {"member", "start_time_s", "sample_rate"}
+
+
+# -- review fixes: nothing half-applied, GET is read-only -----------------------------------
+
+
+def test_apply_with_a_non_adjustable_row_writes_nothing(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = _measured_session(api_client)
+    proposal = api_client.post(f"/api/v1/sync/sessions/{sid}/proposal").json()
+    resp = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={"rows": {"b": 25, "cast": 10}})
+    assert resp.status_code == 409 and resp.json()["code"] == "not_adjustable"
+    assert ctl.delays_now == {"a": 0, "b": 0}
+    session = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    assert session["state"] == "proposed" and session["proposal"] == proposal
+    assert {m["ma_player_id"]: m["delay_ms"] for m in session["members"]}["b"] == 0
+
+
+def test_apply_failing_on_the_second_member_puts_the_first_back(api_client, sync_env, monkeypatch):
+    ctl = sync_env[0]
+    sid = _measured_session(api_client)
+    api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
+    real = ctl.set_delay
+
+    def flaky(member, ms):
+        if member.ma_player_id == "b":
+            raise ControlError("ma_unavailable", "gone")
+        real(member, ms)
+
+    monkeypatch.setattr(ctl, "set_delay", flaky)
+    resp = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={"rows": {"a": 10, "b": 20}})
+    assert resp.status_code == 503 and resp.json()["code"] == "ma_unavailable"
+    assert ctl.delays_now == {"a": 0, "b": 0}
+    session = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    assert session["state"] == "proposed" and session["proposal"]["rows"]
+    assert {m["ma_player_id"]: m["delay_ms"] for m in session["members"]} == {"a": 0, "b": 0, "cast": None}
+
+
+def test_get_proposal_never_changes_the_session(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "auto"}).json()["id"]
+    for member, lag in (("a", 0.0), ("b", 0.03)):
+        _upload(api_client, sid, member, lag)
+    before = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    read = api_client.get(f"/api/v1/sync/sessions/{sid}/proposal")
+    assert read.status_code == 409 and read.json()["code"] == "no_measurement"
+    assert api_client.get(f"/api/v1/sync/sessions/{sid}").json() == before  # still measuring
+    api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
+    verifying = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).json()  # auto: verifies
+    assert verifying["state"] == "verifying"
+    for member, lag in (("a", 0.0), ("b", 0.05)):  # residual above the refine threshold
+        _upload(api_client, sid, member, lag)
+    writes = list(ctl.calls)
+    snapshot = api_client.get(f"/api/v1/sync/sessions/{sid}").json()
+    assert api_client.get(f"/api/v1/sync/sessions/{sid}/proposal").status_code == 200
+    assert api_client.get(f"/api/v1/sync/sessions/{sid}").json() == snapshot
+    assert ctl.calls == writes  # no delay written by a GET
+
+
+def test_computing_a_proposal_is_a_write_that_needs_csrf_or_same_site(tmp_config, sync_env, monkeypatch):
+    from sendspin_bridge.config import hash_password
+    from tests.support.api_client import make_client
+
+    anonymous = make_client()  # auth off: cross-site writes are refused by Sec-Fetch-Site / Origin
+    sid = _measured_session(anonymous)
+    cross = anonymous.post(f"/api/v1/sync/sessions/{sid}/proposal", headers={"Sec-Fetch-Site": "cross-site"})
+    assert cross.status_code == 403
+    assert anonymous.get(f"/api/v1/sync/sessions/{sid}").json()["state"] == "measuring"
+
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    cfg = {"AUTH_ENABLED": True, "AUTH_PASSWORD_HASH": hash_password("pw-pw-pw-pw")}
+    tmp_config.write_text(json.dumps(cfg))
+    client = make_client(cfg)
+    csrf = client.post("/api/v1/auth/session", json={"method": "password", "password": "pw-pw-pw-pw"}).json()[
+        "csrf_token"
+    ]
+    refused = client.post(f"/api/v1/sync/sessions/{sid}/proposal")
+    assert refused.status_code == 403 and refused.json()["code"] == "csrf_failed"
+    ok = client.post(f"/api/v1/sync/sessions/{sid}/proposal", headers={"X-CSRF-Token": csrf})
+    assert ok.status_code == 200 and ok.json()["rows"]
+
+
+def test_group_write_failing_midway_reports_what_was_applied(api_client, sync_env, monkeypatch):
+    ctl = sync_env[0]
+    real = ctl.set_delay
+
+    def flaky(member, ms):
+        if member.ma_player_id == "b":
+            raise ControlError("ma_unavailable", "gone")
+        real(member, ms)
+
+    monkeypatch.setattr(ctl, "set_delay", flaky)
+    resp = api_client.put("/api/v1/sync/groups/g/delays", json={"delays": {"a": 10, "b": 20}})
+    assert resp.status_code == 503 and resp.json()["code"] == "ma_unavailable"
+    assert resp.json()["applied"] == {"a": 10}
+    pid = api_client.post(
+        "/api/v1/sync/profiles", json={"group_id": "g", "name": "P", "delays": {"a": 30, "b": 40}}
+    ).json()["id"]
+    applied = api_client.post(f"/api/v1/sync/profiles/{pid}/apply")
+    assert applied.status_code == 503 and applied.json()["applied"] == {"a": 30}
+
+
+@pytest.mark.parametrize("clock", ["nan", "inf", "-inf"])
+def test_a_non_finite_clock_is_refused_at_the_boundary(api_client, sync_env, monkeypatch, clock):
+    from sendspin_sync import estimator
+    from sendspin_sync.models import Measurement
+
+    sid = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "semi"}).json()["id"]
+    monkeypatch.setattr(estimator, "estimate", lambda rec, **kw: Measurement(member=rec.member, status="ok"))
+    params = {"member": "a", "start_time_s": clock, "sample_rate": 16000}
+    resp = api_client.post(
+        f"/api/v1/sync/sessions/{sid}/recordings", params=params, content=bytes(6 * 16000 * 2), headers=OCTET
+    )
+    assert resp.status_code == 400 and resp.json()["code"] == "recording_invalid"
+    assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["measurements"] == {}

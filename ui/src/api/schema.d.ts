@@ -1904,10 +1904,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The proposal (computed once the round's measurements are in) */
+        /** The current proposal (read-only) */
         get: operations["proposal_api_v1_sync_sessions__session_id__proposal_get"];
         put?: never;
-        post?: never;
+        /** Compute the proposal from the round's measurements */
+        post: operations["compute_proposal_api_v1_sync_sessions__session_id__proposal_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4447,6 +4448,11 @@ export interface components {
         };
         /** SyncGroup */
         SyncGroup: {
+            /**
+             * Error
+             * @description Error code when the group's members could not be read (members is then empty).
+             */
+            error: string | null;
             /** Id */
             id: string;
             /** Members */
@@ -9780,6 +9786,48 @@ export interface operations {
         };
     };
     proposal_api_v1_sync_sessions__session_id__proposal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    compute_proposal_api_v1_sync_sessions__session_id__proposal_post: {
         parameters: {
             query?: never;
             header?: never;

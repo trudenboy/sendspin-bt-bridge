@@ -173,3 +173,12 @@ def test_matched_filter_work_is_bounded_by_the_click_track_not_by_the_noise(monk
     est.estimate(rec)
     # a 12 s click track has 7 periods x (2 chirps + reflections) = 42 plausible events, two searches each
     assert calls <= 2 * 42
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_clock_is_an_invalid_recording(bad):
+    rec = synth("a", lag_s=0.0)
+    rec.start_time_s = bad
+    m = est.estimate(rec)
+    assert m.reason == "invalid_recording" and m.phase_ms is None
+    assert est.estimate(synth("a", lag_s=0.0), epoch_s=bad).reason == "invalid_recording"

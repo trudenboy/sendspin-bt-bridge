@@ -11,6 +11,7 @@ become the problem's ``code``.
 from __future__ import annotations
 
 import contextlib
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -64,8 +65,8 @@ _STATUS = {
 MAX_RECORDING_BYTES = 2_000_000
 
 
-def _raise(exc: ControlError | MaApiError) -> NoReturn:
-    raise UseCaseError(_STATUS.get(exc.code, 502), exc.code, exc.detail or exc.code) from exc
+def _raise(exc: ControlError | MaApiError, *, extra: dict[str, Any] | None = None) -> NoReturn:
+    raise UseCaseError(_STATUS.get(exc.code, 502), exc.code, exc.detail or exc.code, extra=extra) from exc
 
 
 def _invalid_recording(detail: str) -> NoReturn:
@@ -119,21 +120,30 @@ def _pending_out(p: Mapping[str, Any] | None) -> PendingRestoreOut | None:
     return PendingRestoreOut(session_id=str(p["session_id"]), group_id=str(p["group_id"]), error=p.get("error"))
 
 
-def _group_out(row: Mapping[str, Any], control: GroupControl | None) -> SyncGroup:
+def _group_out(row: Mapping[str, Any], control: GroupControl, *, tolerant: bool = False) -> SyncGroup:
+    """One group; with ``tolerant`` a group whose members cannot be read carries ``error`` instead
+    of failing the whole list."""
     gid = str(row.get("id"))
     store = get_store()
     active = store.active_for(gid)
+    error: str | None = None
+    members: list[dict[str, Any]] = []
     if active is not None:
         members = active.to_dict()["members"]
     else:
-        assert control is not None
-        members = [to_dict(m) for m in control.members(gid)]
+        try:
+            members = [to_dict(m) for m in control.members(gid)]
+        except (ControlError, MaApiError) as exc:
+            if not tolerant:
+                raise
+            error = exc.code
     return SyncGroup(
         id=gid,
         name=str(row.get("name") or gid),
         members=_members_out(members),
         session_id=active.id if active else None,
         restore_pending=_pending_out(store.pending_for(gid)),
+        error=error,
     )
 
 
@@ -142,7 +152,7 @@ def list_groups() -> list[SyncGroup]:
     if not rows:
         return []
     with _ephemeral_control() as control:
-        return [_group_out(row, control) for row in rows]
+        return [_group_out(row, control, tolerant=True) for row in rows]
 
 
 def get_group(group_id: str) -> SyncGroup:
@@ -175,9 +185,19 @@ def write_delays(group_id: str, delays: Mapping[str, int]) -> SyncGroup:
     row = _group_row(group_id)
     _refuse_while_tuned(group_id)
     with _ephemeral_control() as control:
+        applied: dict[str, int] = {}
         for member, ms in _writable(control.members(group_id), delays):
-            control.set_delay(member, ms)
+            _write_or_report(control, member, ms, applied)
         return _group_out(row, control)
+
+
+def _write_or_report(control: GroupControl, member: Member, ms: int, applied: dict[str, int]) -> None:
+    """Write one delay; a failure names in the problem's ``applied`` what was already written."""
+    try:
+        control.set_delay(member, ms)
+    except (ControlError, MaApiError) as exc:
+        _raise(exc, extra={"applied": dict(applied)})
+    applied[member.ma_player_id] = ms
 
 
 def list_pending_restores() -> list[PendingRestoreOut]:
@@ -275,11 +295,19 @@ def verify(sid: str) -> SyncSessionOut:
 
 
 def proposal(sid: str) -> ProposalOut:
-    """The proposal waiting for the operator; computes it when the round's measurements are in."""
+    """Read-only: the session's current proposal (``no_measurement`` before one was computed)."""
+    current = _session(sid).proposal
+    if current is None:
+        raise UseCaseError(409, "no_measurement", "No proposal yet: compute one with POST")
+    return ProposalOut.model_validate(to_dict(current))
+
+
+def compute_proposal(sid: str) -> ProposalOut:
+    """Plan from the round's measurements. A write: it moves the session on (proposed; in a
+    verification round it ends the round, and automatic mode may apply a refinement)."""
     session = _session(sid)
     try:
-        current = session.proposal if session.state == "proposed" else None
-        result = current if current is not None else session.propose()
+        result = session.propose()
     except (ControlError, MaApiError) as exc:
         _raise(exc)
     return ProposalOut.model_validate(to_dict(result))
@@ -288,6 +316,8 @@ def proposal(sid: str) -> ProposalOut:
 def upload_recording(sid: str, member: str, start_time_s: float, sample_rate: int, body: bytes) -> MeasurementOut:
     if not body or len(body) > MAX_RECORDING_BYTES or len(body) % 2:
         _invalid_recording("A recording is non-empty int16 PCM of at most 2 MB")
+    if not math.isfinite(start_time_s):
+        _invalid_recording("start_time_s must be a finite number")
     if not estimator.MIN_SAMPLE_RATE <= sample_rate <= estimator.MAX_SAMPLE_RATE:
         _invalid_recording(
             f"Sample rate must be {estimator.MIN_SAMPLE_RATE}-{estimator.MAX_SAMPLE_RATE} Hz, got {sample_rate}"
@@ -372,8 +402,7 @@ def apply_profile(pid: str) -> ProfileApplyOut:
             if member is None or not member.adjustable:
                 skipped.append(mid)
                 continue
-            control.set_delay(member, ms)
-            applied[mid] = ms
+            _write_or_report(control, member, ms, applied)
     return ProfileApplyOut(applied=applied, skipped=skipped)
 
 

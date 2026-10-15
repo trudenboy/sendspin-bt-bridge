@@ -197,13 +197,18 @@ def upload_recording(
     return uc.upload_recording(session_id, member, start_time_s, sample_rate, body)
 
 
-@router.get(
-    "/sessions/{session_id}/proposal",
-    response_model=ProposalOut,
-    summary="The proposal (computed once the round's measurements are in)",
-)
+@router.get("/sessions/{session_id}/proposal", response_model=ProposalOut, summary="The current proposal (read-only)")
 def proposal(session_id: str) -> ProposalOut:
     return uc.proposal(session_id)
+
+
+@router.post(
+    "/sessions/{session_id}/proposal",
+    response_model=ProposalOut,
+    summary="Compute the proposal from the round's measurements",
+)
+def compute_proposal(session_id: str) -> ProposalOut:
+    return uc.compute_proposal(session_id)
 
 
 @router.post("/sessions/{session_id}/apply", response_model=SyncSessionOut, summary="Write the proposal (or rows)")

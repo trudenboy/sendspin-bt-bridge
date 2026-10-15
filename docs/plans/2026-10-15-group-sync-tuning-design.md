@@ -359,8 +359,9 @@ bridge are generated to match it.
   `POST .../solo` `{member | null}`; `POST .../ab` `{a, b}`.
 - `POST /api/v1/sync/sessions/{id}/recordings?member=…&start_time_s=…&sample_rate=…`
   (binary body) → measurement.
-- `GET .../proposal`; `POST .../apply` `{rows?}`; `POST .../undo`;
-  `POST .../verify`.
+- `GET .../proposal` (read-only: the current proposal, or `no_measurement`);
+  `POST .../proposal` computes it (a write: auth + CSRF); `POST .../apply`
+  `{rows?, verify?}`; `POST .../undo`; `POST .../verify`.
 - `GET/POST /api/v1/sync/profiles?group_id=…`; `PATCH`/`DELETE
   /api/v1/sync/profiles/{id}`; `POST /api/v1/sync/profiles/{id}/apply`;
   `POST /api/v1/sync/groups/{group_id}/capture` `{name, kind}` → profile from the

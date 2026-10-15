@@ -326,20 +326,27 @@ class SyncSession:
         assert self.proposal is not None
         source = rows if rows is not None else {r.member: r.after_ms for r in self.proposal.rows}
         wanted = {mid: _clamp(ms) for mid, ms in source.items()}
+        targets: list[tuple[Member, int]] = []
+        for mid, ms in wanted.items():  # refuse before the first write, so a refusal writes nothing
+            member = self._member(mid)
+            if not member.adjustable:
+                raise ControlError("not_adjustable", member.name)
+            targets.append((member, ms))
         self._set("applying")
+        done: list[tuple[Member, int]] = []  # (member, value before) written by this call
         try:
-            for mid, ms in wanted.items():
-                member = self._member(mid)
-                if not member.adjustable:
-                    raise ControlError("not_adjustable", member.name)
+            for member, ms in targets:
                 before = self._before(member)
                 if ms != before:
                     self._control.set_delay(member, ms)
-                    self._undo_delays.setdefault(mid, before)
-                    self._written[mid] = ms
+                    done.append((member, before))
         except ControlError:
+            self._roll_back(done, wanted)
             self._set("proposed")
             raise
+        for member, before in done:
+            self._undo_delays.setdefault(member.ma_player_id, before)
+            self._written[member.ma_player_id] = wanted[member.ma_player_id]
         self.members = [dataclasses.replace(m, delay_ms=wanted.get(m.ma_player_id, m.delay_ms)) for m in self.members]
         self.touch()
         if self.mode == "auto" and self.round <= MAX_ROUNDS:
@@ -349,6 +356,19 @@ class SyncSession:
             self.verify()
         else:
             self._begin_restore("done")
+
+    def _roll_back(self, done: list[tuple[Member, int]], wanted: Mapping[str, int]) -> None:
+        """Best effort: put back what a failed apply already wrote. A member whose value cannot be put
+        back keeps the written value in ``members`` (and in the undo/reset bookkeeping), so the session
+        shows what Music Assistant holds."""
+        for member, before in reversed(done):
+            mid = member.ma_player_id
+            try:
+                self._control.set_delay(member, before)
+            except ControlError:
+                self._undo_delays.setdefault(mid, before)
+                self._written[mid] = wanted[mid]
+                self._set_member_delay(mid, wanted[mid])
 
     @_locked
     def verify(self) -> None:

@@ -557,6 +557,19 @@
     },
     "SyncGroup": {
       "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error code when the group's members could not be read (members is then empty).",
+          "title": "Error"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -603,7 +616,8 @@
         "name",
         "members",
         "session_id",
-        "restore_pending"
+        "restore_pending",
+        "error"
       ],
       "title": "SyncGroup",
       "type": "object"

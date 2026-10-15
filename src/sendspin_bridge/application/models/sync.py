@@ -59,6 +59,9 @@ class SyncGroup(ResponseModel):
     restore_pending: PendingRestoreOut | None = Field(
         default=None, description="Set while the group still has to be restored after a restart."
     )
+    error: str | None = Field(
+        default=None, description="Error code when the group's members could not be read (members is then empty)."
+    )
 
 
 class MeasurementOut(ResponseModel):

@@ -5756,6 +5756,18 @@
       },
       "SyncGroup": {
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error code when the group's members could not be read (members is then empty).",
+            "title": "Error"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -5800,7 +5812,8 @@
           "name",
           "members",
           "session_id",
-          "restore_pending"
+          "restore_pending",
+          "error"
         ],
         "title": "SyncGroup",
         "type": "object"
@@ -12705,7 +12718,59 @@
             "description": "Server error"
           }
         },
-        "summary": "The proposal (computed once the round's measurements are in)",
+        "summary": "The current proposal (read-only)",
+        "tags": [
+          "sync"
+        ]
+      },
+      "post": {
+        "operationId": "compute_proposal_api_v1_sync_sessions__session_id__proposal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Compute the proposal from the round's measurements",
         "tags": [
           "sync"
         ]

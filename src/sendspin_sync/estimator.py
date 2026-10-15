@@ -185,6 +185,8 @@ def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
     sr, member = recording.sample_rate, recording.member
     if not MIN_SAMPLE_RATE <= sr <= MAX_SAMPLE_RATE or len(recording.pcm) % 2:
         return _invalid(member)
+    if not (math.isfinite(recording.start_time_s) and math.isfinite(epoch_s)):  # a phase of nan poisons planning
+        return _invalid(member)
     n = len(recording.pcm) // 2
     if not MIN_DURATION_S * sr <= n <= MAX_DURATION_S * sr:
         return _invalid(member)

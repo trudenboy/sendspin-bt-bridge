@@ -506,3 +506,59 @@ def test_membership_refresh_is_best_effort_when_music_assistant_is_down():
     ctl.members = down
     s.record(synth("a", lag_s=0.0))
     assert [m.ma_player_id for m in s.members] == ["a", "b", "cast"] and s.to_dict()["departed"] == []
+
+
+@pytest.mark.parametrize(
+    ("rows", "code"),
+    [({"b": 25, "cast": 10}, "not_adjustable"), ({"b": 25, "zz": 10}, "member_gone")],
+)
+def test_apply_validates_every_row_before_writing_any(rows, code):
+    s, ctl, _ = _measured_and_proposed()
+    proposal = s.proposal
+    with pytest.raises(ControlError) as err:
+        s.apply(rows)
+    assert err.value.code == code
+    assert not [c for c in ctl.calls if c[0] == "set"] and ctl.delays_now == {"a": 0, "b": 0}
+    assert s.state == "proposed" and s.proposal == proposal
+    assert _delay_of(s, "b") == 0
+
+
+def test_a_write_failing_mid_apply_puts_back_what_this_apply_wrote():
+    s, ctl, _ = _measured_and_proposed()
+    real = ctl.set_delay
+
+    def flaky(member, ms):
+        if member.ma_player_id == "b":
+            raise ControlError("ma_unavailable")
+        real(member, ms)
+
+    ctl.set_delay = flaky
+    with pytest.raises(ControlError) as err:
+        s.apply({"a": 10, "b": 20})
+    assert err.value.code == "ma_unavailable"
+    assert ctl.delays_now == {"a": 0, "b": 0}
+    assert [c for c in ctl.calls if c[0] == "set"] == [("set", "a", 10), ("set", "a", 0)]
+    assert s.state == "proposed" and s.proposal is not None
+    assert _delay_of(s, "a") == 0
+    ctl.set_delay = real
+    s.apply()  # a later apply still works and keeps an exact undo baseline
+    assert ctl.delays_now == {"a": 0, "b": 30}
+
+
+def test_when_the_rollback_fails_too_members_show_what_music_assistant_holds():
+    s, ctl, _ = _measured_and_proposed()
+    real = ctl.set_delay
+    writes = []
+
+    def flaky(member, ms):
+        writes.append((member.ma_player_id, ms))
+        if len(writes) >= 2:
+            raise ControlError("ma_unavailable")
+        real(member, ms)
+
+    ctl.set_delay = flaky
+    with pytest.raises(ControlError):
+        s.apply({"a": 10, "b": 20})
+    assert ctl.delays_now["a"] == 10
+    assert _delay_of(s, "a") == 10 and _delay_of(s, "b") == 0
+    assert s.state == "proposed"
