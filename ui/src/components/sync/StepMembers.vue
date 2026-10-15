@@ -86,6 +86,7 @@ const label = (status: SyncMeasurement['status']) =>
 
         <template v-if="isDeparted(m.ma_player_id)">
           <SbBadge tone="neutral" size="sm" class="self-start">{{ t('sync.wizard.departed') }}</SbBadge>
+          <p v-if="errors[m.ma_player_id]" class="text-sm text-text-secondary">{{ errors[m.ma_player_id] }}</p>
         </template>
         <template v-else>
           <p class="text-sm text-text-primary">

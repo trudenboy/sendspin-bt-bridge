@@ -1,18 +1,34 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { endSessionOnPageHide, sessionSolo, uploadRecording } from '@/api/sync'
+import {
+  applyProposal,
+  captureProfile,
+  computeProposal,
+  endSession,
+  endSessionOnPageHide,
+  getSession,
+  sessionReference,
+  sessionSignal,
+  sessionSolo,
+  undoApply,
+  uploadRecording,
+} from '@/api/sync'
 import { ApiError } from '@/api/client'
-import type { SessionPoint, SyncMeasurement } from '@/api/types'
+import type { SessionPoint, SyncMeasurement, SyncProposal, SyncSession } from '@/api/types'
 import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
 import { SOLO_SETTLE_MS, SyncCaptureError, SyncRecorder, type Capture } from '@/sync/capture'
-import { SbButton } from '@/kit'
+import { SbButton, SbSpinner } from '@/kit'
+import { formatMs } from '@/sync/format'
 import StepPrepare from './StepPrepare.vue'
 import StepLevel from './StepLevel.vue'
 import StepMembers, { type MemberPhase } from './StepMembers.vue'
+import StepProposal from './StepProposal.vue'
+import StepDone from './StepDone.vue'
 
 /**
- * The measurement wizard, steps 1–3: preparation, level check, then speaker by speaker.
+ * The measurement wizard: preparation, level check, speaker by speaker, the proposal
+ * (applied by itself in automatic mode, with an undo), an optional check round, and done.
  *
  * The wizard owns the microphone: it is opened from the first "Next" (a user gesture) and
  * closed on cancel, on unmount and when the session ends. Captures share one clock only
@@ -29,12 +45,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** Every member is measured (or skipped): the proposal step takes over. */
   proposal: []
-  /** The operator cancelled; the session is ended. */
+  /** The operator cancelled (the session is ended), or left the done step. */
   done: []
 }>()
 
-type Step = 'prepare' | 'level' | 'members' | 'proposal'
+type Step = 'prepare' | 'level' | 'members' | 'proposal' | 'done'
 const STEPS: Step[] = ['prepare', 'level', 'members']
+const QUICK_LISTEN_MS = 10_000
 
 const { t } = useI18n()
 const sync = useSyncStore()
@@ -64,7 +81,9 @@ const session = computed(() => (sync.session && sync.session.id === sessionId.va
 const allMembers = computed(() => session.value?.members ?? sync.group?.members ?? [])
 const adjustable = computed(() => allMembers.value.filter((m) => m.adjustable))
 const notMeasured = computed(() => allMembers.value.filter((m) => !m.adjustable).map((m) => m.name))
-const departed = computed(() => session.value?.departed ?? [])
+/** Members that left the group: as the bridge says, and as a refused call just told us. */
+const gone = ref<string[]>([])
+const departed = computed(() => [...new Set([...(session.value?.departed ?? []), ...gone.value])])
 
 /** The measuring order, editable; members joining later go to the end. */
 const order = ref<string[]>([])
@@ -140,6 +159,8 @@ function markAllStale() {
 const message = ref('')
 const stepLine = computed(() => {
   if (step.value === 'proposal') return t('sync.wizard.steps.proposal')
+  if (step.value === 'done') return t('sync.wizard.steps.done')
+  if (step.value === 'members' && verifying.value) return t('sync.wizard.verifying')
   return t('sync.wizard.stepOf', {
     n: STEPS.indexOf(step.value) + 1,
     total: STEPS.length,
@@ -340,6 +361,7 @@ async function record(member: string) {
       sync.applyEvent(answer)
     } catch (e) {
       if (disposed || sid !== sessionId.value) return
+      if (errorCode(e) === 'member_gone') return markGone(member, sid)
       errors[member] = t('sync.wizard.failed', { code: errorCode(e) })
       return
     }
@@ -374,6 +396,7 @@ async function record(member: string) {
         errors[member] = t('sync.wizard.failed', { code: errorCode(e) })
         return
       }
+      if (e.code === 'member_gone') return markGone(member, sid)
       r = measurement(member, 'not_heard', e.code)
     }
     if (disposed || sid !== sessionId.value) return
@@ -406,6 +429,7 @@ async function skip(member: string) {
   try {
     await sync.skip(member)
   } catch (e) {
+    if (errorCode(e) === 'member_gone') return markGone(member, sessionId.value)
     errors[member] = t('sync.wizard.failed', { code: errorCode(e) })
     return
   }
@@ -413,17 +437,342 @@ async function skip(member: string) {
   void focusRow(member)
 }
 
+/** The member left the group mid-session: its step is marked and the order goes on without it. */
+function markGone(member: string, sid: string | null) {
+  if (!gone.value.includes(member)) gone.value = [...gone.value, member]
+  delete results[member]
+  stale.value = stale.value.filter((id) => id !== member)
+  errors[member] = t('sync.wizard.memberGone', { name: nameOf(member) })
+  message.value = errors[member]!
+  if (sid) void refresh(sid)
+}
+
+/* -- proposal, apply, undo, check round, done ------------------------------------------ */
+
+const proposal = ref<SyncProposal | null>(null)
+const proposing = ref(false)
+const proposalError = ref('')
+const applying = ref(false)
+const applyError = ref('')
+/** Music Assistant refused the write: the proposal stays, with the values to copy. */
+const forbidden = ref(false)
+/** The members step is a check round after an apply. */
+const verifying = ref(false)
+/** Something was written: a restore from now on ends in the done step, not "ended". */
+const applied = ref(false)
+/** The measuring session as last seen (it outlives ``sessionId`` in the done step). */
+const lastSession = ref<SyncSession | null>(null)
+/** The spread of the first round, before anything was applied. */
+const firstSpread = ref<number | null>(null)
+const undone = ref(false)
+const undoing = ref(false)
+const undoError = ref('')
+const savedName = ref<string | null>(null)
+const saveError = ref('')
+
+const stale$ = (sid: string) => disposed || sid !== sessionId.value
+
+/** Read the session again (control answers and events may lag); null when it is not ours any more. */
+async function refresh(sid: string): Promise<SyncSession | null> {
+  try {
+    const s = await getSession(sid)
+    if (stale$(sid)) return null
+    sync.applyEvent(s)
+    return s.id === sid ? s : null
+  } catch {
+    return session.value
+  }
+}
+
+function lastHistory(s: SyncSession | null) {
+  const h = s?.history ?? []
+  return (h[h.length - 1] ?? null) as { spread_before_ms?: number; spread_after_ms?: number } | null
+}
+
+const proposalSession = computed<SyncSession | null>(() => {
+  const s = session.value ?? lastSession.value
+  if (!s) return null
+  return { ...s, departed: departed.value, error: forbidden.value ? 'ma_forbidden' : s.error }
+})
+
 async function toProposal() {
   if (!complete.value) return
   await goTo('proposal')
-  message.value = t('sync.wizard.measured')
+  message.value = t('sync.wizard.computing')
   emit('proposal')
+  await compute()
+}
+
+/** POST the proposal (a GET may answer an earlier round's): it ends the round on the bridge. */
+async function compute() {
+  const sid = sessionId.value
+  if (!sid || proposing.value) return
+  const checkRound = verifying.value
+  proposing.value = true
+  proposalError.value = ''
+  applyError.value = ''
+  forbidden.value = false
+  let p: SyncProposal
+  try {
+    p = await computeProposal(sid)
+  } catch (e) {
+    if (stale$(sid)) return
+    const code = errorCode(e)
+    // In a check round the bridge may have planned a refinement and failed to write it.
+    const s = checkRound ? await refresh(sid) : null
+    if (s && s.state === 'proposed' && s.proposal) {
+      verifying.value = false
+      proposal.value = s.proposal
+      if (code === 'ma_forbidden') forbidden.value = true
+      else applyError.value = t('sync.wizard.applyFailed', { code })
+      message.value = forbidden.value ? t('sync.proposal.forbidden') : applyError.value
+      return
+    }
+    proposalError.value = t('sync.wizard.proposalFailed', { code })
+    message.value = proposalError.value
+    return
+  } finally {
+    proposing.value = false
+  }
+  if (stale$(sid)) return
+  const s = await refresh(sid)
+  if (stale$(sid)) return
+  proposal.value = p
+  if (!checkRound) {
+    firstSpread.value = lastHistory(s)?.spread_before_ms ?? firstSpread.value
+    message.value = t('sync.state.proposed')
+    if (props.mode === 'auto') await apply(undefined, undefined)
+    return
+  }
+  if (s?.state === 'verifying') {
+    // Automatic mode: the bridge applied a refinement and checks once more.
+    await startCheckRound(t('sync.wizard.refined'))
+    return
+  }
+  await toDone()
+}
+
+/** Write the proposal (``rows``: without members that left). Semi-automatic: ``verify`` asks for a check round. */
+async function apply(rows: Record<string, number> | undefined, verify: boolean | undefined): Promise<boolean> {
+  const sid = sessionId.value
+  if (!sid || applying.value) return false
+  applying.value = true
+  applyError.value = ''
+  message.value = t('sync.wizard.applying')
+  try {
+    const s = await applyProposal(sid, rows, verify)
+    if (stale$(sid)) return false
+    forbidden.value = false
+    applied.value = true
+    sync.applyEvent(s)
+    if (s.id === sid) lastSession.value = s
+    trackUndo(s)
+    if (s.state === 'verifying') await startCheckRound(t('sync.wizard.verifyingHelp'))
+    else if (s.state !== 'proposed') await toDone()
+    return true
+  } catch (e) {
+    if (stale$(sid)) return false
+    const code = errorCode(e)
+    if (code === 'ma_forbidden') {
+      forbidden.value = true
+      message.value = t('sync.proposal.forbidden')
+    } else {
+      if (code === 'member_gone') await refresh(sid)
+      applyError.value = t('sync.wizard.applyFailed', { code })
+      message.value = applyError.value
+    }
+    return false
+  } finally {
+    applying.value = false
+  }
+}
+
+/** Apply, then save the group's delays as a profile, noting the spread before → after. */
+async function applyAndSave(name: string, rows: Record<string, number> | undefined, verify: boolean) {
+  const before = lastHistory(session.value)?.spread_before_ms ?? firstSpread.value
+  const after = proposal.value?.predicted_spread_ms
+  const body: { name: string; kind: SessionPoint; notes?: string } = { name, kind: point.value }
+  if (before != null && after != null) body.notes = `spread ${formatMs(before)} → ${formatMs(after)} ms`
+  if (!(await apply(rows, props.mode === 'auto' ? undefined : verify))) return
+  saveError.value = ''
+  try {
+    const created = await captureProfile(props.groupId, body)
+    savedName.value = created?.name ?? name
+    if (sync.group?.id === props.groupId && created) sync.profiles = [...sync.profiles, created]
+  } catch (e) {
+    saveError.value = t('sync.done.saveFailed', { code: errorCode(e) })
+  }
+}
+
+async function chooseReference(member: string) {
+  const sid = sessionId.value
+  if (!sid) return
+  applyError.value = ''
+  try {
+    const s = await sessionReference(sid, member)
+    if (!stale$(sid)) sync.applyEvent(s)
+  } catch (e) {
+    if (!stale$(sid)) applyError.value = t('sync.wizard.failed', { code: errorCode(e) })
+  }
+}
+
+/** A check round: every member is measured once more with the new delays. */
+async function startCheckRound(note: string) {
+  verifying.value = true
+  resetMeasurements()
+  for (const id of gone.value) errors[id] = t('sync.wizard.memberGone', { name: nameOf(id) })
+  await goTo('members')
+  message.value = note
+}
+
+/** Step 5. The microphone goes now: nothing is recorded any more. */
+async function toDone() {
+  if (step.value === 'done') return
+  verifying.value = false
+  active.value = null
+  closeRecorder()
+  await goTo('done')
+}
+
+const doneState = computed(() => (session.value ?? lastSession.value)?.state ?? null)
+const doneBefore = computed(() => firstSpread.value ?? lastHistory(lastSession.value)?.spread_before_ms ?? null)
+const measuredAfter = computed(() => lastHistory(session.value ?? lastSession.value)?.spread_after_ms ?? null)
+const doneAfter = computed(() => measuredAfter.value ?? proposal.value?.predicted_spread_ms ?? null)
+const doneLine = computed(() => (doneState.value && ENDED.has(doneState.value) ? t('sync.done.restored') : t('sync.done.restoring')))
+
+/* -- undo: the window is the bridge's (``undo_until_s``), counted down here ------------- */
+
+const undoDeadline = ref<number | null>(null)
+const undoLeft = ref(0)
+let undoTimer: ReturnType<typeof setInterval> | null = null
+
+function stopUndoTimer() {
+  if (undoTimer) clearInterval(undoTimer)
+  undoTimer = null
+}
+
+function tickUndo() {
+  if (undoDeadline.value == null) return
+  undoLeft.value = Math.max(0, Math.ceil((undoDeadline.value - Date.now()) / 1000 - 1e-6))
+  if (undoLeft.value <= 0) stopUndoTimer()
+}
+
+function trackUndo(s: SyncSession) {
+  if (s.undo_until_s == null) {
+    if (undoDeadline.value != null) undoLeft.value = 0
+    stopUndoTimer()
+    return
+  }
+  undoDeadline.value = Date.now() + s.undo_until_s * 1000
+  tickUndo()
+  if (undoLeft.value > 0 && !undoTimer) undoTimer = setInterval(tickUndo, 1000)
+}
+
+async function undo() {
+  const id = session.value?.id ?? lastSession.value?.id
+  if (!id || undoing.value || undoLeft.value <= 0) return
+  undoing.value = true
+  undoError.value = ''
+  try {
+    const s = await undoApply(id)
+    if (disposed) return
+    sync.applyEvent(s)
+    if (s.id === id) lastSession.value = s
+    undone.value = true
+    undoLeft.value = 0
+    stopUndoTimer()
+    message.value = t('sync.done.undone')
+    await toDone()
+  } catch (e) {
+    undoError.value = t('sync.wizard.undoFailed', { code: errorCode(e) })
+    message.value = undoError.value
+  } finally {
+    undoing.value = false
+  }
+}
+
+/* -- quick listen: clicks on the whole group for 10 s, in a session of its own ---------- */
+
+const listening = ref(false)
+const listenError = ref('')
+let listenId: string | null = null
+let listenTimer: ReturnType<typeof setTimeout> | null = null
+
+async function stopListen(id: string) {
+  if (listenTimer) clearTimeout(listenTimer)
+  listenTimer = null
+  try {
+    await sessionSignal(id, 'stop')
+  } catch {
+    /* the end below stops the signal too */
+  }
+  try {
+    await endSession(id)
+  } catch {
+    /* the bridge times the session out */
+  }
+  if (listenId === id) listenId = null
+  if (!disposed) listening.value = false
+}
+
+async function quickListen() {
+  if (listening.value) return
+  listening.value = true
+  listenError.value = ''
+  let id: string | null = null
+  try {
+    id = (await sync.start(props.groupId, 'manual')).id
+    listenId = id
+    if (disposed) return void stopListen(id)
+    sync.applyEvent(await sessionSignal(id, 'start'))
+    if (disposed) return void stopListen(id)
+    const started = id
+    listenTimer = setTimeout(() => void stopListen(started), QUICK_LISTEN_MS)
+  } catch (e) {
+    listenError.value = t('sync.done.listenFailed', { code: errorCode(e) })
+    if (id) await stopListen(id)
+    listening.value = false
+  }
+}
+
+function resetFlow() {
+  proposal.value = null
+  proposalError.value = ''
+  applyError.value = ''
+  forbidden.value = false
+  verifying.value = false
+  applied.value = false
+  lastSession.value = null
+  firstSpread.value = null
+  undone.value = false
+  undoError.value = ''
+  savedName.value = null
+  saveError.value = ''
+  gone.value = []
+  undoDeadline.value = null
+  undoLeft.value = 0
+  stopUndoTimer()
 }
 
 function clearAll() {
   resetMeasurements()
+  resetFlow()
   active.value = null
   reopenError.value = ''
+}
+
+/** Leave the done step: back to the start, ready for another measurement. */
+async function again() {
+  sessionId.value = null
+  clearAll()
+  listenError.value = ''
+  await goTo('prepare')
+  emit('done')
+}
+
+async function backToMembers() {
+  proposalError.value = ''
+  await goTo('members')
 }
 
 async function cancel() {
@@ -448,7 +797,22 @@ watch(
   (s) => {
     const id = sessionId.value
     if (!id) return
-    if (s && s.id === id && !ENDED.has(s.state)) return
+    const ours = s && s.id === id ? s : null
+    if (ours) {
+      lastSession.value = ours
+      trackUndo(ours)
+    }
+    if (ours && !ENDED.has(ours.state)) {
+      // After an apply, a restore is the end of the measurement, not an interruption.
+      if (ours.state === 'restoring' && applied.value) void toDone()
+      return
+    }
+    if (step.value === 'done' || ours?.state === 'done' || (ours && applied.value)) {
+      // Finished: the session keeps its outcome (a finished one is never shown as ended or cancelled).
+      sessionId.value = null
+      void toDone()
+      return
+    }
     sessionId.value = null
     closeRecorder()
     clearAll()
@@ -460,6 +824,7 @@ watch(
 
 function onPageHide() {
   if (sessionId.value) endSessionOnPageHide(sessionId.value)
+  if (listenId) endSessionOnPageHide(listenId)
 }
 onMounted(() => window.addEventListener('pagehide', onPageHide))
 
@@ -469,6 +834,11 @@ onBeforeUnmount(() => {
   const id = sessionId.value
   sessionId.value = null
   closeRecorder()
+  stopUndoTimer()
+  if (listenTimer) clearTimeout(listenTimer)
+  listenTimer = null
+  if (listenId) void endSession(listenId).catch(() => {})
+  listenId = null
   if (id && sync.session?.id === id && !ENDED.has(sync.session.state)) void sync.end().catch(() => {})
 })
 
@@ -480,8 +850,27 @@ const signalStarting = computed(() => !session.value?.signal_running)
   <section ref="root" class="mt-4 flex flex-col gap-4">
     <h2 ref="heading" tabindex="-1" class="text-base font-semibold text-text-primary outline-none">{{ stepLine }}</h2>
     <p data-step-status role="status" aria-live="polite" class="sr-only">
-      {{ stepLine }}<template v-if="message">. {{ message }}</template>
+      {{ stepLine }}<template v-if="step === 'done'">. {{ doneLine }}</template><template v-if="message">. {{ message }}</template>
     </p>
+
+    <div
+      v-if="undoDeadline != null && !undone && (step === 'members' || step === 'done')"
+      class="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+    >
+      <span class="min-w-0 flex-1">{{ t('sync.wizard.undoHelp') }}</span>
+      <SbButton
+        type="button"
+        variant="outline"
+        size="sm"
+        data-undo
+        :loading="undoing"
+        :disabled="undoLeft <= 0"
+        @click="undo"
+      >
+        {{ undoLeft > 0 ? t('sync.wizard.undo', { s: undoLeft }) : t('sync.wizard.undoClosed') }}
+      </SbButton>
+      <p v-if="undoError" role="alert" class="w-full text-error">{{ undoError }}</p>
+    </div>
 
     <div
       v-if="ended && step === 'prepare'"
@@ -545,6 +934,47 @@ const signalStarting = computed(() => !session.value?.signal_running)
       @back="backToLevel"
       @cancel="cancel"
     />
-    <p v-else class="text-sm text-text-secondary" data-measured>{{ t('sync.wizard.measured') }}</p>
+    <template v-else-if="step === 'proposal'">
+      <p v-if="proposing" role="status" class="flex items-center gap-2 text-sm text-text-secondary">
+        <SbSpinner size="sm" />{{ t('sync.wizard.computing') }}
+      </p>
+      <div
+        v-else-if="proposalError"
+        data-proposal-error
+        role="alert"
+        class="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
+      >
+        <span class="min-w-0 flex-1">{{ proposalError }}</span>
+        <SbButton type="button" variant="outline" size="sm" data-cancel @click="cancel">{{ t('sync.wizard.cancel') }}</SbButton>
+        <SbButton type="button" variant="outline" size="sm" data-back @click="backToMembers">{{ t('sync.wizard.back') }}</SbButton>
+        <SbButton type="button" size="sm" data-retry-proposal @click="compute">{{ t('sync.wizard.retry') }}</SbButton>
+      </div>
+      <StepProposal
+        v-else-if="proposal && proposalSession"
+        :session="proposalSession"
+        :proposal="proposal"
+        :mode="mode"
+        :busy="applying"
+        :error="applyError"
+        @apply="apply"
+        @apply-and-save="applyAndSave"
+        @reference="chooseReference"
+        @cancel="cancel"
+      />
+    </template>
+    <StepDone
+      v-else-if="step === 'done'"
+      :state="doneState"
+      :before="doneBefore"
+      :after="doneAfter"
+      :predicted="measuredAfter == null"
+      :undone="undone"
+      :saved="savedName"
+      :save-error="saveError"
+      :listening="listening"
+      :listen-error="listenError"
+      @listen="quickListen"
+      @again="again"
+    />
   </section>
 </template>

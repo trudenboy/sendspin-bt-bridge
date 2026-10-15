@@ -45,6 +45,8 @@ export const useSyncStore = defineStore('sync', () => {
   const error = ref<string | null>(null)
 
   const writeFailure = ref<WriteFailure | null>(null)
+  /** Sessions this page started; any other live session of the group belongs to another client. */
+  const owned = ref<Set<string>>(new Set())
 
   const pending = new Map<string, ReturnType<typeof setTimeout>>()
   const latest = new Map<string, number>()
@@ -203,6 +205,7 @@ export const useSyncStore = defineStore('sync', () => {
 
   async function start(groupId: string, mode: SessionMode, point: SessionPoint = 'device') {
     const created = await track(() => api.createSession({ group_id: groupId, mode, point }))
+    owned.value = new Set([...owned.value, created.id])
     session.value = created
     return created
   }
@@ -212,6 +215,30 @@ export const useSyncStore = defineStore('sync', () => {
     if (!current) return
     await track(() => api.endSession(current.id))
     if (session.value?.id === current.id) session.value = null
+  }
+
+  function owns(id: string) {
+    return owned.value.has(id)
+  }
+
+  /**
+   * "Retry" on a session whose restore keeps failing: ask again (a DELETE never changes the outcome of
+   * a restoring or finished session; the bridge keeps retrying anyway), then read it back.
+   */
+  async function retrySessionRestore() {
+    const current = session.value
+    if (!current) return
+    try {
+      await api.endSession(current.id)
+    } catch {
+      /* the read below shows where it stands */
+    }
+    try {
+      applyEvent(await api.getSession(current.id))
+      error.value = null
+    } catch (e) {
+      error.value = errorCode(e)
+    }
   }
 
   /** A control call on the open session; its answer is fed through ``applyEvent``. */
@@ -347,6 +374,8 @@ export const useSyncStore = defineStore('sync', () => {
     loading,
     error,
     writeFailure,
+    owns,
+    retrySessionRestore,
     fetchGroups,
     fetchGroup,
     open,

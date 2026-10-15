@@ -30,6 +30,11 @@ const restore = computed(() => {
   return pending?.error ? pending : null
 })
 const retrying = ref(false)
+/** This group's session is restoring and the last attempt failed (Music Assistant unreachable). */
+const sessionRestore = computed(() => {
+  const s = sync.session
+  return s && s.group_id === groupId.value && s.state === 'restoring' && s.restore_error ? s : null
+})
 const root = ref<HTMLElement | null>(null)
 
 /** Which measurement the Measure tab runs: suggest (review first) or apply (with undo). */
@@ -111,6 +116,17 @@ const status = computed(() => t(`sync.state.${sync.session?.state ?? 'idle'}`))
 const liveSession = computed(() => {
   const s = sync.session
   return s && s.group_id === groupId.value && !ENDED.has(s.state) ? s : null
+})
+/**
+ * Another client tunes this group: its session is live (or could not be read) and this page did not
+ * start it. Manual sessions stay usable from the Manual tab, as before.
+ */
+const readOnly = computed(() => {
+  const g = group.value
+  if (!g) return false
+  if (g.session_id && !sync.session) return true
+  const s = liveSession.value
+  return !!s && s.mode !== 'manual' && !sync.owns(s.id)
 })
 const manualSession = computed(() => (liveSession.value?.mode === 'manual' ? liveSession.value : null))
 /** A measurement already runs for this group: manual tuning must not take it over. */
@@ -274,6 +290,15 @@ async function load(id: string) {
   await Promise.allSettled([sync.open(id), sync.fetchRestores()])
 }
 
+async function retrySession() {
+  retrying.value = true
+  try {
+    await sync.retrySessionRestore()
+  } finally {
+    retrying.value = false
+  }
+}
+
 async function retry() {
   retrying.value = true
   try {
@@ -316,6 +341,28 @@ watch(groupId, (id) => void load(id), { immediate: true })
       <SbButton variant="outline" size="sm" data-retry :loading="retrying" @click="retry">{{ t('common.retry') }}</SbButton>
     </div>
 
+    <div
+      v-if="sessionRestore"
+      role="alert"
+      class="mb-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-text-primary"
+    >
+      <div class="min-w-0 flex-1">
+        <p class="font-medium">{{ t('sync.restoreFailed') }}</p>
+        <p class="text-text-secondary">{{ t('sync.restoreRetrying', { code: sessionRestore.restore_error }) }}</p>
+      </div>
+      <SbButton variant="outline" size="sm" data-retry :loading="retrying" @click="retrySession">{{ t('common.retry') }}</SbButton>
+    </div>
+
+    <div
+      v-if="readOnly"
+      data-read-only
+      role="status"
+      class="mb-4 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+    >
+      <p class="font-medium">{{ t('sync.readOnly') }}</p>
+      <p class="text-text-secondary">{{ t('sync.readOnlyHelp') }}</p>
+    </div>
+
     <div v-if="sync.loading && !group" class="flex justify-center py-8">
       <SbSpinner />
     </div>
@@ -353,6 +400,7 @@ watch(groupId, (id) => void load(id), { immediate: true })
                     :variant="action === 'manual' ? 'outline' : action === 'semi' ? 'primary' : 'secondary'"
                     :data-action="action"
                     :aria-describedby="`sync-action-${action}-help`"
+                    :disabled="readOnly"
                     @click="choose(action)"
                   >
                     {{ t(`sync.actions.${action}`) }}
@@ -411,7 +459,7 @@ watch(groupId, (id) => void load(id), { immediate: true })
             {{ t(`sync.measureMode.${measureMode}`) }}
           </p>
           <!-- Mounted only while the tab is open: leaving it closes the microphone and ends the measurement. -->
-          <MeasureWizard v-if="activeTab === 'measure'" :key="measureMode" :group-id="group.id" :mode="measureMode" />
+          <MeasureWizard v-if="activeTab === 'measure' && !readOnly" :key="measureMode" :group-id="group.id" :mode="measureMode" />
         </template>
       </SbTabs>
     </template>
