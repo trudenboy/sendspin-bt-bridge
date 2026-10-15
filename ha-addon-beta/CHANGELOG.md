@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.4] - 2026-10-15
+
+### Added
+
+- Shuffle and repeat buttons on a playing speaker, and seeking by clicking or
+  using the arrow keys on its progress bar.
+- Each speaker shows which Music Assistant it is connected to, and warns when
+  that is not the bridge's own Music Assistant.
+- A bridge accepts only its own Music Assistant (the one in its settings, or
+  one on the same machine) when another Music Assistant on the network tries
+  to take a speaker. Refusals are listed in the speaker's details. The
+  `SENDSPIN_OWN_SERVER_ONLY` setting turns this off.
+
+### Changed
+
+- Disabled speakers appear as regular cards and rows, dimmed, in the same
+  grid or list, filters and sorting, instead of a separate list.
+- Enabling a speaker starts it at once, without a bridge restart.
+- The grid/list switch is available from the first speaker.
+
+### Fixed
+
+- A list row keeps its volume slider and actions menu in view, and its status
+  on one line.
+- Removing a disabled audio output takes it off the dashboard at once.
+
 ## [3.1.0-beta.3] - 2026-10-14
 
 ### Added

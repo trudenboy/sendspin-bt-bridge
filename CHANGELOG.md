@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.4] - 2026-10-15
+
 ### Added
 
 - Shuffle and repeat buttons on a playing speaker, and seeking by clicking or
