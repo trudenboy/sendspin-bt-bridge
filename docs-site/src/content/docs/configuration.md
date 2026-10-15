@@ -247,6 +247,7 @@ Use device-level overrides when:
 | Key | Type | Description |
 |---|---|---|
 | `SENDSPIN_SERVER` | string | Music Assistant host or `auto` |
+| `SENDSPIN_OWN_SERVER_ONLY` | bool | Accept only the bridge's own Music Assistant (from `SENDSPIN_SERVER` or the Music Assistant address, or one on the same machine) when another Music Assistant on the network tries to take a speaker. Default `true` |
 | `SENDSPIN_PORT` | integer | Sendspin WebSocket port |
 | `WEB_PORT` | integer or `null` | Optional web UI port override |
 | `BASE_LISTEN_PORT` | integer or `null` | Optional base port for auto-assigned device listeners |
