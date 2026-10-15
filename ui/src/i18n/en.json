@@ -1491,6 +1491,22 @@
       "writeFailed": "Could not change {name} ({code}). The delay shown is what Music Assistant holds.",
       "ended": "This tuning session ended (it timed out, or was closed elsewhere). The delays stay as they are.",
       "startAgain": "Start again"
+    },
+    "capture": {
+      "errors": {
+        "unsupported": "This browser cannot record here. The microphone needs HTTPS (or localhost) and a current browser.",
+        "permission": "Microphone access was denied. Allow the microphone for this page in the browser settings and try again.",
+        "no_microphone": "No microphone was found on this device.",
+        "mic_busy": "The microphone is in use by another app or could not be started.",
+        "worklet": "The recording module could not be loaded. Reload the page and try again.",
+        "not_open": "The microphone is not open.",
+        "busy": "A recording is already running.",
+        "interrupted": "Audio was interrupted (the page was in the background or another app took the audio). Tap to continue; the affected steps are measured again.",
+        "timeout": "The recording did not finish in time.",
+        "failed": "Recording failed."
+      },
+      "resume": "Continue recording",
+      "epochBroken": "The audio clock was reset. Measurements taken before the interruption are repeated."
     }
   }
 }

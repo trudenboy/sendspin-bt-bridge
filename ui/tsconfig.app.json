@@ -15,5 +15,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  // The capture worklet runs in AudioWorkletGlobalScope: its globals live in tsconfig.worklet.json.
+  "exclude": ["src/sync/sync-capture.worklet.ts", "src/sync/audioworklet.d.ts"]
 }
