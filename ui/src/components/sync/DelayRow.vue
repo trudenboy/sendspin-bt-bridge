@@ -65,7 +65,7 @@ const inputId = `sync-delay-${props.member.ma_player_id}`
       :format-value="(v: number) => t('sync.delay', { ms: v })"
       @update:model-value="set"
     />
-    <div class="flex gap-1">
+    <div role="group" :aria-label="t('sync.manual.nudges', { name: member.name })" class="flex gap-1">
       <SbButton
         v-for="d in NUDGES"
         :key="d"

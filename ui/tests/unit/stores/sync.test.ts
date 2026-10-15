@@ -10,7 +10,7 @@ vi.mock('@/api/sync', () => ({
 }))
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'
-import { useSyncStore } from '@/stores/sync'
+import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
 
 const group = { id: 'g', name: 'Downstairs', session_id: null, members: [
   { ma_player_id: 'a', name: 'A', origin: 'bridge', adjustable: true, delay_ms: 0 },
@@ -268,5 +268,59 @@ describe('sync store', () => {
     expect(api.getSyncGroup).toHaveBeenCalledTimes(2)
     expect(store.group?.members[0]?.delay_ms).toBe(0)
     expect(store.error).toBe('ma_error')
+  })
+})
+
+describe('sync store live writes', () => {
+  beforeEach(() => { setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('flushes pending writes at once and waits for them', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    let answer: (v: unknown) => void = () => {}
+    vi.mocked(api.writeGroupDelays).mockImplementation(() => new Promise((r) => { answer = r }) as never)
+    store.setDelay('a', 10)
+    expect(store.hasPendingWrite('a')).toBe(true)
+    let done = false
+    const flushed = store.flushDelays().then(() => { done = true })
+    expect(api.writeGroupDelays).toHaveBeenCalledWith('g', { a: 10 })
+    await Promise.resolve(); await Promise.resolve()
+    expect(done).toBe(false)
+    expect(store.hasPendingWrite('a')).toBe(true)
+    answer(group)
+    await flushed
+    expect(done).toBe(true)
+    expect(store.hasPendingWrite('a')).toBe(false)
+    vi.advanceTimersByTime(1000)
+    expect(api.writeGroupDelays).toHaveBeenCalledTimes(1)
+  })
+
+  it('says which member a failed write was for', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    vi.mocked(api.writeGroupDelays).mockRejectedValue(new ApiError({ status: 403, code: 'ma_forbidden' }))
+    store.setDelay('a', 10)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(store.writeFailure).toMatchObject({ member: 'a', code: 'ma_forbidden' })
+  })
+
+  it('puts the previous delay back when the group cannot be read after a failed write', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValueOnce({ ...structuredClone(group), members: [{ ...group.members[0]!, delay_ms: 70 }, group.members[1]!] } as never)
+    await store.fetchGroup('g')
+    vi.mocked(api.getSyncGroup).mockRejectedValue(new ApiError({ status: 502, code: 'ma_unavailable' }))
+    vi.mocked(api.writeGroupDelays).mockRejectedValue(new ApiError({ status: 502, code: 'ma_unavailable' }))
+    store.setDelay('a', 10)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(store.group?.members[0]?.delay_ms).toBe(70)
+  })
+
+  it('shares the ended states and the error-code helper', () => {
+    expect([...ENDED].sort()).toEqual(['cancelled', 'done', 'failed'])
+    expect(errorCode(new ApiError({ status: 403, code: 'ma_forbidden' }))).toBe('ma_forbidden')
+    expect(errorCode(new Error('x'))).toBe('error')
   })
 })

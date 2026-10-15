@@ -5,15 +5,17 @@ import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SyncView from '@/views/SyncView.vue'
 import en from '@/i18n/en.json'
+import { defineComponent, h, nextTick, ref } from 'vue'
 
 vi.mock('@/api/sync', () => ({
   getSyncGroup: vi.fn(), getSession: vi.fn(), listRestores: vi.fn(), retryRestore: vi.fn(), listProfiles: vi.fn(),
   createSession: vi.fn(), endSession: vi.fn(), captureProfile: vi.fn(), sessionDelay: vi.fn(), sessionSignal: vi.fn(),
-  sessionSolo: vi.fn(), sessionAb: vi.fn(), writeGroupDelays: vi.fn(),
+  sessionSolo: vi.fn(), sessionAb: vi.fn(), writeGroupDelays: vi.fn(), endSessionOnPageHide: vi.fn(),
 }))
 import * as api from '@/api/sync'
 vi.mock('@/composables/useConfirm', () => ({ confirmDialog: vi.fn().mockResolvedValue(true) }))
 import { confirmDialog } from '@/composables/useConfirm'
+import { useSyncStore } from '@/stores/sync'
 
 const members = [
   { ma_player_id: 'a', name: 'Kitchen', origin: 'bridge', adjustable: true, delay_ms: 120 },
@@ -39,7 +41,7 @@ async function mountView() {
   return { w, router }
 }
 
-async function openManual(w: Awaited<ReturnType<typeof mountView>>['w']) {
+async function openManual(w: { get: Awaited<ReturnType<typeof mountView>>['w']['get'] }) {
   await w.get('[role="tab"][data-tab-id="manual"]').trigger('click')
   await flushPromises()
 }
@@ -139,6 +141,65 @@ describe('SyncView manual tuning', () => {
     expect(confirmDialog).toHaveBeenCalledTimes(1)
     expect(api.endSession).toHaveBeenCalledWith('s1')
     expect(router.currentRoute.value.name).toBe('groups')
+    w.unmount()
+  })
+
+  it('says when the session ended under the open tab and starts again only on request', async () => {
+    const { w } = await mountView()
+    await openManual(w)
+    const store = useSyncStore()
+    store.applyEvent({ ...store.session!, state: 'cancelled' } as never)
+    await flushPromises()
+    expect(w.find('[data-delay-row]').exists()).toBe(false)
+    const ended = w.get('[data-manual-ended]')
+    expect(api.createSession).toHaveBeenCalledTimes(1)
+    await ended.get('button').trigger('click')
+    await flushPromises()
+    expect(api.createSession).toHaveBeenCalledTimes(2)
+    expect(w.find('[data-manual-ended]').exists()).toBe(false)
+    expect(w.findAll('[data-delay-row]')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('writes the last edit before asking and before ending', async () => {
+    vi.mocked(confirmDialog).mockResolvedValue(false)
+    const { w } = await mountView()
+    await openManual(w)
+    await w.get('[data-delay-row] [aria-label="+10 ms"]').trigger('click')
+    expect(api.sessionDelay).not.toHaveBeenCalled()
+    await w.get('[role="tab"][data-tab-id="group"]').trigger('click')
+    await flushPromises()
+    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'a', 130)
+    const wrote = vi.mocked(api.sessionDelay).mock.invocationCallOrder[0]!
+    expect(wrote).toBeLessThan(vi.mocked(confirmDialog).mock.invocationCallOrder[0]!)
+    expect(wrote).toBeLessThan(vi.mocked(api.endSession).mock.invocationCallOrder[0]!)
+    w.unmount()
+  })
+
+  it('ends the manual session when the page is hidden for good, and stops listening once gone', async () => {
+    // The session outlives the view (its DELETE is still on the way): only the removed listener keeps quiet.
+    vi.mocked(api.endSession).mockReturnValue(new Promise(() => {}))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/groups', name: 'groups', component: { template: '<div />' } },
+        { path: '/sync/:groupId', name: 'sync', component: SyncView },
+      ],
+    })
+    await router.push('/sync/g')
+    // The view goes away while the app and its route stay (unmounting the app would reset the route).
+    const show = ref(true)
+    const host = defineComponent({ setup: () => () => (show.value ? h(SyncView) : null) })
+    const w = mount(host, { global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router] }, attachTo: document.body })
+    await flushPromises()
+    await openManual(w)
+    window.dispatchEvent(new Event('pagehide'))
+    expect(api.endSessionOnPageHide).toHaveBeenCalledWith('s1')
+    show.value = false
+    await nextTick()
+    vi.mocked(api.endSessionOnPageHide).mockClear()
+    window.dispatchEvent(new Event('pagehide'))
+    expect(api.endSessionOnPageHide).not.toHaveBeenCalled()
     w.unmount()
   })
 })

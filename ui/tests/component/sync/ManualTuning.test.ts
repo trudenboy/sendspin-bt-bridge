@@ -8,8 +8,16 @@ import en from '@/i18n/en.json'
 
 vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
 import * as api from '@/api/sync'
+import { ApiError } from '@/api/client'
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 const members = [{ ma_player_id: 'a', name: 'A', origin: 'bridge', adjustable: true, delay_ms: 100 }, { ma_player_id: 'b', name: 'B', origin: 'sendspin', adjustable: true, delay_ms: 0 }, { ma_player_id: 'cast', name: 'TV', origin: 'other', adjustable: false, delay_ms: null }]
+
+/** The click track is running: solo and A/B are only offered then. */
+async function running() {
+  const store = useSyncStore()
+  store.session = { ...store.session!, signal_running: true } as never
+  await flushPromises()
+}
 
 function setup() {
   setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks()
@@ -91,6 +99,7 @@ describe('ManualTuning', () => {
 
   it('stops the A/B alternation when a single member is soloed', async () => {
     const w = setup()
+    await running()
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     await w.find('[data-solo="b"]').trigger('click'); await flushPromises()
     vi.advanceTimersByTime(12000); await flushPromises()
@@ -100,6 +109,8 @@ describe('ManualTuning', () => {
 
   it('leaves no A/B timer behind when it unmounts', async () => {
     const w = setup()
+    await running()
+    expect(w.get('[data-ab]').attributes('disabled')).toBeUndefined()
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     w.unmount()
     vi.advanceTimersByTime(12000); await flushPromises()
@@ -148,5 +159,68 @@ describe('ManualTuning', () => {
     vi.mocked(api.sessionSignal).mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'ma_unavailable' }))
     await w.find('[data-signal]').trigger('click'); await flushPromises()
     expect(w.get('[role="alert"]').text()).toContain('That did not work')
+  })
+
+  it('shows a refused write as a permission problem and puts the real value back', async () => {
+    const w = setup()
+    vi.mocked(api.sessionDelay).mockRejectedValueOnce(new ApiError({ status: 403, code: 'ma_forbidden' }))
+    vi.mocked(api.getSyncGroup).mockResolvedValue({ id: 'g', name: 'G', session_id: 's1', members: structuredClone(members) } as never)
+    const row = () => w.findAll('[data-delay-row]')[0]!
+    await row().find('[aria-label="+10 ms"]').trigger('click')
+    expect((row().find('input[type="number"]').element as HTMLInputElement).value).toBe('110')
+    await vi.advanceTimersByTimeAsync(300); await flushPromises()
+    const alert = w.get('[data-write-error]')
+    expect(alert.attributes('role')).toBe('alert')
+    expect(alert.text()).toContain('permission')
+    expect(alert.text()).toContain('A')
+    expect((row().find('input[type="number"]').element as HTMLInputElement).value).toBe('100')
+    expect(w.get('[data-reset]').attributes('disabled')).toBeDefined()
+  })
+
+  it('shows other failed writes with their code', async () => {
+    const w = setup()
+    vi.mocked(api.sessionDelay).mockRejectedValueOnce(new ApiError({ status: 502, code: 'ma_unavailable' }))
+    vi.mocked(api.getSyncGroup).mockResolvedValue({ id: 'g', name: 'G', session_id: 's1', members: structuredClone(members) } as never)
+    await w.findAll('[data-delay-row]')[0]!.find('[aria-label="+1 ms"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(300); await flushPromises()
+    expect(w.get('[data-write-error]').text()).toContain('ma_unavailable')
+  })
+
+  it('follows delays from sync events unless a local write is pending', async () => {
+    const w = setup()
+    const store = useSyncStore()
+    const value = (i: number) => (w.findAll('[data-delay-row]')[i]!.find('input[type="number"]').element as HTMLInputElement).value
+    store.applyEvent({ ...store.session!, members: [{ ...members[0]!, delay_ms: 150 }, { ...members[1]!, delay_ms: 30 }, members[2]!] } as never)
+    await flushPromises()
+    expect(value(0)).toBe('150')
+    expect(value(1)).toBe('30')
+    await w.findAll('[data-delay-row]')[0]!.find('[aria-label="+1 ms"]').trigger('click')
+    store.applyEvent({ ...store.session!, members: [{ ...members[0]!, delay_ms: 400 }, { ...members[1]!, delay_ms: 40 }, members[2]!] } as never)
+    await flushPromises()
+    expect(value(0)).toBe('151')
+    expect(value(1)).toBe('40')
+  })
+
+  it('offers solo and A/B only while the clicks play', async () => {
+    const w = setup()
+    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
+    expect(w.get('[data-ab]').attributes('disabled')).toBeDefined()
+    await w.find('[data-signal]').trigger('click')
+    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-ab]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('takes the solo controls away again when starting the clicks fails', async () => {
+    const w = setup()
+    vi.mocked(api.sessionSignal).mockRejectedValueOnce(new ApiError({ status: 502, code: 'ma_unavailable' }))
+    await w.find('[data-signal]').trigger('click'); await flushPromises()
+    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('groups each member\'s nudge buttons under the member\'s name', () => {
+    const w = setup()
+    const group = w.findAll('[data-delay-row]')[0]!.get('[role="group"]')
+    expect(group.attributes('aria-label')).toContain('A')
+    expect(group.findAll('button')).toHaveLength(4)
   })
 })

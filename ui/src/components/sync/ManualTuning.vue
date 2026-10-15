@@ -2,8 +2,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RotateCcw } from 'lucide-vue-next'
-import { useSyncStore } from '@/stores/sync'
-import { ApiError } from '@/api/client'
+import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
 import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
 import ListeningBar from './ListeningBar.vue'
@@ -16,7 +15,6 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const sync = useSyncStore()
 
-const ENDED = new Set(['done', 'cancelled', 'failed'])
 /** A/B: each member plays for two clicks (P = 2 s) before the other takes over. */
 const AB_MS = 4000
 
@@ -36,12 +34,35 @@ watch(
   members,
   (list) => {
     for (const m of list) {
-      if (!m.adjustable || m.ma_player_id in initial) continue
-      initial[m.ma_player_id] = m.delay_ms ?? 0
-      values[m.ma_player_id] = m.delay_ms ?? 0
+      if (!m.adjustable) continue
+      const id = m.ma_player_id
+      if (!(id in initial)) {
+        initial[id] = m.delay_ms ?? 0
+        values[id] = m.delay_ms ?? 0
+      } else if (m.delay_ms != null && !sync.hasPendingWrite(id)) {
+        // Another tab, or the bridge: follow it unless this screen has an edit on the way.
+        values[id] = m.delay_ms
+      }
     }
   },
   { immediate: true },
+)
+
+/** A live write Music Assistant refused: say so, and show what it really holds. */
+const writeError = ref('')
+watch(
+  () => sync.writeFailure,
+  (failure) => {
+    if (!failure || !(failure.member in initial)) return
+    const name = nameOf(failure.member)
+    writeError.value =
+      failure.code === 'ma_forbidden'
+        ? t('sync.manual.writeForbidden', { name })
+        : t('sync.manual.writeFailed', { name, code: failure.code })
+    if (sync.hasPendingWrite(failure.member)) return
+    const held = sync.group?.members.find((m) => m.ma_player_id === failure.member)?.delay_ms
+    values[failure.member] = held ?? initial[failure.member]!
+  },
 )
 
 const changedIds = computed(() => Object.keys(initial).filter((id) => values[id] !== initial[id]))
@@ -55,6 +76,7 @@ const note = ref('')
 
 function write(member: string, ms: number) {
   note.value = ''
+  writeError.value = ''
   values[member] = ms
   sync.setDelay(member, ms)
 }
@@ -86,14 +108,30 @@ async function run(call: Promise<unknown>) {
     failure.value = ''
     return true
   } catch (e) {
-    failure.value = t('sync.listen.failed', { code: e instanceof ApiError ? e.code : 'error' })
+    failure.value = t('sync.listen.failed', { code: errorCode(e) })
     return false
   }
 }
 
+/**
+ * The click track's state as this screen asked for it, until the session says otherwise:
+ * solo and A/B are offered only while the clicks play, and must be there right after Play.
+ */
+const signalWanted = ref<boolean | null>(null)
+const signalRunning = computed(() => signalWanted.value ?? !!session.value?.signal_running)
+watch(
+  () => session.value?.signal_running,
+  () => {
+    signalWanted.value = null
+  },
+)
+
 function onSignal(action: 'start' | 'stop') {
   if (action === 'stop') stopAb()
-  void run(sync.signal(action))
+  signalWanted.value = action === 'start'
+  void run(sync.signal(action)).then((ok) => {
+    if (!ok) signalWanted.value = null
+  })
 }
 
 function onSolo(member: string | null) {
@@ -132,8 +170,8 @@ onBeforeUnmount(stopAb)
 const listenStatus = computed(() => {
   const s = session.value
   if (abPair.value) return t('sync.listen.alternating', { a: nameOf(abPair.value[0]), b: nameOf(abPair.value[1]) })
-  if (!s?.signal_running) return t('sync.listen.idle')
-  if (s.soloed) return t('sync.listen.soloed', { name: nameOf(s.soloed) })
+  if (!signalRunning.value) return t('sync.listen.idle')
+  if (s?.soloed) return t('sync.listen.soloed', { name: nameOf(s.soloed) })
   return t('sync.listen.playing')
 })
 </script>
@@ -144,7 +182,7 @@ const listenStatus = computed(() => {
       <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.listen.title') }}</h2>
       <ListeningBar
         :members="present"
-        :signal-running="!!session?.signal_running"
+        :signal-running="signalRunning"
         :soloed="session?.soloed ?? null"
         :alternating="abPair"
         @signal="onSignal"
@@ -154,7 +192,7 @@ const listenStatus = computed(() => {
       <p data-listen-status role="status" aria-live="polite" class="mt-3 text-sm text-text-secondary">
         {{ listenStatus }}<template v-if="note"> {{ note }}</template>
       </p>
-      <p v-if="failure" role="alert" class="mt-2 text-sm text-error">{{ failure }}</p>
+      <p v-if="failure" data-listen-error role="alert" class="mt-2 text-sm text-error">{{ failure }}</p>
     </SbCard>
 
     <SbCard>
@@ -166,6 +204,7 @@ const listenStatus = computed(() => {
         </SbButton>
       </div>
       <p class="mb-2 text-xs text-text-secondary">{{ t('sync.manual.help') }}</p>
+      <p v-if="writeError" data-write-error role="alert" class="mb-2 text-sm text-error">{{ writeError }}</p>
       <ul class="divide-y divide-border">
         <li v-for="m in members" :key="m.ma_player_id">
           <div

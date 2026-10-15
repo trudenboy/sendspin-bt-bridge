@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useSyncStore } from '@/stores/sync'
-import { ApiError } from '@/api/client'
+import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
+import { endSessionOnPageHide } from '@/api/sync'
 import { confirmDialog } from '@/composables/useConfirm'
 import { SbButton, SbCard, SbDialog, SbSpinner, SbTabs } from '@/kit'
 import { ArrowLeft } from 'lucide-vue-next'
@@ -107,7 +107,6 @@ const status = computed(() => t(`sync.state.${sync.session?.state ?? 'idle'}`))
  * tab or the page is left, after offering to keep the changed delays as a profile. Ending it
  * restores the signal and the mutes; the delays stay as they are.
  */
-const ENDED = new Set(['done', 'cancelled', 'failed'])
 const liveSession = computed(() => {
   const s = sync.session
   return s && s.group_id === groupId.value && !ENDED.has(s.state) ? s : null
@@ -118,24 +117,23 @@ const manualBusy = computed(() => !!liveSession.value && liveSession.value.mode 
 const manualChanged = ref(false)
 const manualError = ref('')
 const manualStarting = ref(false)
+/** The session ended under the open tab (timeout, another tab, a failure): say so, start again on request. */
+const manualEnded = ref(false)
 let leaving: Promise<void> | null = null
 /** Shown while the leave runs, so the tuning controls go away at once. */
 const isLeaving = ref(false)
 
-function codeOf(e: unknown) {
-  return e instanceof ApiError ? e.code : 'error'
-}
-
 async function enterManual() {
   if (leaving || manualStarting.value || manualSession.value || manualBusy.value || !group.value) return
   manualError.value = ''
+  manualEnded.value = false
   manualStarting.value = true
   const id = groupId.value
   try {
     await sync.start(id, 'manual')
     manualChanged.value = false
   } catch (e) {
-    manualError.value = codeOf(e)
+    manualError.value = errorCode(e)
     // Another tab may hold this group's session: show it rather than a dead end.
     await sync.open(id).catch(() => {})
   } finally {
@@ -181,7 +179,7 @@ async function saveManualProfile() {
     await sync.saveProfile(name)
     finishSave()
   } catch (e) {
-    saveFailure.value = t('sync.profiles.failed', { code: codeOf(e) })
+    saveFailure.value = t('sync.profiles.failed', { code: errorCode(e) })
   } finally {
     saving.value = false
   }
@@ -194,6 +192,8 @@ watch(saveOpen, (open) => {
 
 async function doLeave() {
   if (!manualSession.value) return
+  // The last edit is written before the profile captures the delays, and never hits an ending session.
+  await sync.flushDelays()
   if (manualChanged.value) {
     const keep = await confirmDialog({
       title: t('sync.manual.saveOnLeave'),
@@ -203,6 +203,7 @@ async function doLeave() {
     })
     if (keep) await askProfileName()
   }
+  await sync.flushDelays()
   try {
     await sync.end()
   } catch {
@@ -224,9 +225,21 @@ function leaveManual(): Promise<void> {
   return leaving
 }
 
+watch(manualSession, (now, prev) => {
+  if (now) manualEnded.value = false
+  if (prev && !now && activeTab.value === 'manual' && !isLeaving.value && prev.group_id === groupId.value) {
+    manualEnded.value = true
+    manualChanged.value = false
+  }
+})
+
 watch(activeTab, (tab, prev) => {
-  if (tab === 'manual') void enterManual()
-  else if (prev === 'manual') void leaveManual()
+  if (tab === 'manual') {
+    if (!manualEnded.value) void enterManual()
+  } else if (prev === 'manual') {
+    manualEnded.value = false
+    void leaveManual()
+  }
 })
 // The tab may be chosen before the group (and its session) are read.
 watch(
@@ -241,6 +254,14 @@ async function leaveRoute() {
 }
 onBeforeRouteLeave(leaveRoute)
 onBeforeRouteUpdate((to, from) => (to.params.groupId !== from.params.groupId ? leaveRoute() : undefined))
+
+/* Closing or reloading the tab: stop the clicks and the mutes now rather than at the timeout. */
+function onPageHide() {
+  const s = manualSession.value
+  if (s) endSessionOnPageHide(s.id)
+}
+onMounted(() => window.addEventListener('pagehide', onPageHide))
+onBeforeUnmount(() => window.removeEventListener('pagehide', onPageHide))
 
 onBeforeUnmount(() => {
   // Not left through the router (the app went away): end without asking.
@@ -353,6 +374,15 @@ watch(groupId, (id) => void load(id), { immediate: true })
             :key="manualSession.id"
             @changed="manualChanged = $event"
           />
+          <div
+            v-else-if="manualEnded"
+            data-manual-ended
+            role="status"
+            class="mt-4 flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
+          >
+            <span class="min-w-0 flex-1">{{ t('sync.manual.ended') }}</span>
+            <SbButton variant="outline" size="sm" data-manual-restart @click="enterManual">{{ t('sync.manual.startAgain') }}</SbButton>
+          </div>
           <p
             v-else-if="manualBusy"
             data-manual-busy

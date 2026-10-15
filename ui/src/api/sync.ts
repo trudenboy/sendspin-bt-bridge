@@ -57,6 +57,26 @@ export async function endSession(id: string): Promise<void> {
   await unwrap(api().DELETE('/api/v1/sync/sessions/{session_id}', sessionPath(id)))
 }
 
+/**
+ * Best effort while the page goes away (``pagehide``): a keepalive DELETE, so the clicks and
+ * the mutes stop promptly instead of at the inactivity timeout. Never throws.
+ */
+export function endSessionOnPageHide(id: string): void {
+  const headers: Record<string, string> = {}
+  const csrf = getCsrfToken()
+  if (csrf) headers['X-CSRF-Token'] = csrf
+  try {
+    void fetch(apiUrl(`/api/v1/sync/sessions/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers,
+      credentials: 'same-origin',
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    /* the page is going away; the bridge's timeout ends the session */
+  }
+}
+
 export function sessionSignal(id: string, action: 'start' | 'stop'): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/signal', { ...sessionPath(id), body: { action } }))
 }

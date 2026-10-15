@@ -1464,7 +1464,8 @@
       "playing": "Clicks playing on every speaker.",
       "soloed": "Clicks playing on {name} only.",
       "alternating": "Alternating {a} and {b}.",
-      "failed": "That did not work ({code})."
+      "failed": "That did not work ({code}).",
+      "needsClicks": "Play the clicks to solo or compare speakers."
     },
     "manual": {
       "title": "Delays",
@@ -1484,7 +1485,12 @@
       "saveDecline": "Don't save",
       "saveTitle": "Save as profile",
       "skip": "Skip",
-      "defaultName": "Manual {date}"
+      "defaultName": "Manual {date}",
+      "nudges": "Adjust {name}",
+      "writeForbidden": "Music Assistant refused to change {name}: this account has no permission to change player settings (ma_forbidden).",
+      "writeFailed": "Could not change {name} ({code}). The delay shown is what Music Assistant holds.",
+      "ended": "This tuning session ended (it timed out, or was closed elsewhere). The delays stay as they are.",
+      "startAgain": "Start again"
     }
   }
 }

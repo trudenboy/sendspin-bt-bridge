@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { setCsrfToken } from '@/api/client'
-import { uploadRecording } from '@/api/sync'
+import { endSessionOnPageHide, uploadRecording } from '@/api/sync'
 
 function stubFetch() {
   const fetchMock = vi.fn().mockResolvedValue(
@@ -34,5 +34,28 @@ describe('uploadRecording', () => {
     await uploadRecording('s1', 'a', 0, 16000, new Int16Array([1]))
     expect(headersOf(fetchMock)).not.toHaveProperty('X-CSRF-Token')
     expect(headersOf(fetchMock)['content-type']).toBe('application/octet-stream')
+  })
+})
+
+describe('endSessionOnPageHide', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    setCsrfToken('')
+  })
+
+  it('ends the session with a keepalive DELETE that carries the CSRF token', () => {
+    const fetchMock = stubFetch()
+    setCsrfToken('tok')
+    endSessionOnPageHide('s 1')
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(url).toMatch(/\/api\/v1\/sync\/sessions\/s%201$/)
+    expect(init.method).toBe('DELETE')
+    expect(init.keepalive).toBe(true)
+    expect(headersOf(fetchMock)['X-CSRF-Token']).toBe('tok')
+  })
+
+  it('never throws, even when fetch does', () => {
+    vi.stubGlobal('fetch', vi.fn(() => { throw new Error('gone') }))
+    expect(() => endSessionOnPageHide('s1')).not.toThrow()
   })
 })

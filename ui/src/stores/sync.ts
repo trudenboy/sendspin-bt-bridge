@@ -11,8 +11,21 @@ import type {
   SyncSession,
 } from '@/api/types'
 
-const ENDED = new Set<string>(['done', 'cancelled', 'failed'])
+/** Session states after which nothing more happens. */
+export const ENDED: ReadonlySet<string> = new Set<string>(['done', 'cancelled', 'failed'])
 const DEBOUNCE_MS = 300
+
+/** The problem ``code`` of an API failure, ``error`` for anything else. */
+export function errorCode(e: unknown): string {
+  return e instanceof ApiError ? e.code : 'error'
+}
+
+/** The last live delay write that failed: which member, why. ``seq`` tells repeats apart. */
+export interface WriteFailure {
+  member: string
+  code: string
+  seq: number
+}
 
 /**
  * Group sync tuning: the group on screen, its tuning session, its profiles and
@@ -31,12 +44,13 @@ export const useSyncStore = defineStore('sync', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  const writeFailure = ref<WriteFailure | null>(null)
+
   const pending = new Map<string, ReturnType<typeof setTimeout>>()
   const latest = new Map<string, number>()
-
-  function errorCode(e: unknown) {
-    return e instanceof ApiError ? e.code : 'error'
-  }
+  /** Writes sent and not answered yet, per member. */
+  const inFlight = new Map<string, Set<Promise<void>>>()
+  let failureSeq = 0
 
   /** Run a call, keeping its failure code in ``error``; rethrows so callers can react. */
   async function track<T>(call: () => Promise<T>): Promise<T> {
@@ -171,18 +185,20 @@ export const useSyncStore = defineStore('sync', () => {
     }
   }
 
-  /** After a failed live write, show what Music Assistant really holds. */
-  async function rollBack(code: string) {
+  /** After a failed live write, show what Music Assistant really holds (or what was there before). */
+  async function rollBack(member: string, before: number | null | undefined, code: string) {
     const g = group.value
     if (g) {
       try {
         const fresh = await api.getSyncGroup(g.id)
         if (group.value?.id === fresh.id) group.value = fresh
       } catch {
-        /* keep the optimistic value; the error below says the write failed */
+        // Unreadable: the optimistic value is surely wrong, the one before it is the best guess.
+        if (group.value?.id === g.id && before != null && !hasPendingWrite(member)) setMemberDelays({ [member]: before })
       }
     }
     error.value = code
+    writeFailure.value = { member, code, seq: ++failureSeq }
   }
 
   async function start(groupId: string, mode: SessionMode, point: SessionPoint = 'device') {
@@ -222,6 +238,47 @@ export const useSyncStore = defineStore('sync', () => {
     return track(() => api.computeProposal(current.id))
   }
 
+  /** A local edit of this member is waiting for its debounce or for Music Assistant's answer. */
+  function hasPendingWrite(member: string) {
+    return pending.has(member) || (inFlight.get(member)?.size ?? 0) > 0
+  }
+
+  /** Send this member's latest edit now (the debounce timer has fired or is flushed). */
+  function sendWrite(member: string): Promise<void> | null {
+    const value = latest.get(member)
+    latest.delete(member)
+    if (value === undefined) return null
+    const s = session.value
+    let call: Promise<unknown>
+    if (s && s.mode === 'manual' && !ENDED.has(s.state)) {
+      call = api.sessionDelay(s.id, member, value).then((answer) => applyEvent(answer))
+    } else if (group.value) {
+      call = api.writeGroupDelays(group.value.id, { [member]: value })
+    } else {
+      return null
+    }
+    const before = group.value?.members.find((m) => m.ma_player_id === member)?.delay_ms
+    setMemberDelays({ [member]: value })
+    const set = inFlight.get(member) ?? new Set<Promise<void>>()
+    inFlight.set(member, set)
+    const done: Promise<void> = call
+      .then(
+        () => {
+          error.value = null
+        },
+        (e) => {
+          set.delete(done)
+          return rollBack(member, before, errorCode(e))
+        },
+      )
+      .finally(() => {
+        set.delete(done)
+        if (set.size === 0 && inFlight.get(member) === set) inFlight.delete(member)
+      })
+    set.add(done)
+    return done
+  }
+
   /** A live delay edit, written 300 ms after the last change of that member. */
   function setDelay(member: string, ms: number) {
     latest.set(member, ms)
@@ -231,27 +288,20 @@ export const useSyncStore = defineStore('sync', () => {
       member,
       setTimeout(() => {
         pending.delete(member)
-        const value = latest.get(member)
-        latest.delete(member)
-        if (value === undefined) return
-        const s = session.value
-        let call: Promise<unknown>
-        if (s && s.mode === 'manual' && !ENDED.has(s.state)) {
-          call = api.sessionDelay(s.id, member, value).then((answer) => applyEvent(answer))
-        } else if (group.value) {
-          call = api.writeGroupDelays(group.value.id, { [member]: value })
-        } else {
-          return
-        }
-        setMemberDelays({ [member]: value })
-        void call.then(
-          () => {
-            error.value = null
-          },
-          (e) => rollBack(errorCode(e)),
-        )
+        void sendWrite(member)
       }, DEBOUNCE_MS),
     )
+  }
+
+  /** Send every waiting edit now and wait until Music Assistant answered them all (failures included). */
+  async function flushDelays(): Promise<void> {
+    for (const [member, t] of [...pending]) {
+      clearTimeout(t)
+      pending.delete(member)
+      sendWrite(member)
+    }
+    const all = [...inFlight.values()].flatMap((set) => [...set])
+    await Promise.allSettled(all)
   }
 
   /* -- profiles -------------------------------------------------------------------- */
@@ -296,6 +346,7 @@ export const useSyncStore = defineStore('sync', () => {
     restores,
     loading,
     error,
+    writeFailure,
     fetchGroups,
     fetchGroup,
     open,
@@ -316,6 +367,8 @@ export const useSyncStore = defineStore('sync', () => {
     undo,
     verify,
     setDelay,
+    flushDelays,
+    hasPendingWrite,
     fetchProfiles,
     saveProfile,
     applyProfile,

@@ -74,6 +74,7 @@ const selectClass =
         :variant="soloed === m.ma_player_id && !alternating ? 'primary' : 'secondary'"
         :aria-pressed="soloed === m.ma_player_id && !alternating"
         :aria-label="t('sync.listen.soloMember', { name: m.name })"
+        :disabled="!signalRunning"
         @click="emit('solo', m.ma_player_id)"
       >
         {{ m.name }}
@@ -101,13 +102,15 @@ const selectClass =
           :variant="alternating ? 'primary' : 'secondary'"
           :aria-pressed="!!alternating"
           :aria-describedby="`${uid}-ab-help`"
-          :disabled="!a || !b || a === b"
+          :disabled="!signalRunning || !a || !b || a === b"
           @click="emit('ab', a, b)"
         >
           {{ t('sync.listen.ab') }}
         </SbButton>
       </div>
-      <p :id="`${uid}-ab-help`" class="text-xs text-text-secondary">{{ t('sync.listen.abHelp') }}</p>
+      <p :id="`${uid}-ab-help`" class="text-xs text-text-secondary">
+        {{ t('sync.listen.abHelp') }}<template v-if="!signalRunning"> {{ t('sync.listen.needsClicks') }}</template>
+      </p>
     </div>
   </div>
 </template>
