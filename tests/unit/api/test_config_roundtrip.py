@@ -104,3 +104,18 @@ def test_a_stored_out_of_range_power_save_delay_does_not_block_saving(client, tm
 
     assert resp.status_code == 200, resp.data
     assert client.get("/api/v1/config").json()["players"][0]["power_save_delay_minutes"] == 60
+
+
+def test_settings_save_keeps_sync_profiles_and_ignores_submitted_ones(client, tmp_path):
+    """Profiles belong to the Sync screen: a settings save neither drops them nor accepts a replacement."""
+    profile = {"id": "p1", "name": "Evening", "group_id": "g", "kind": "device", "delays": {"a": 120}}
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    cfg["SYNC_PROFILES"] = [profile]
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+
+    shown = client.get("/api/v1/config").json()
+    shown["SYNC_PROFILES"] = [{"id": "evil", "name": "x", "group_id": "g", "delays": {}}]
+    shown["BT_CHURN_THRESHOLD"] = 5
+    assert client.put("/api/v1/config", json=shown).status_code == 200
+
+    assert json.loads((tmp_path / "config.json").read_text())["SYNC_PROFILES"] == [profile]

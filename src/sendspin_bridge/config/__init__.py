@@ -195,6 +195,8 @@ DEFAULT_CONFIG = {
     # Each entry: {"id", "token_hash", "label", "created", "last_used"}.
     # Plain tokens are returned once at issuance and never persisted.
     "AUTH_TOKENS": [],
+    # Named per-group delay profiles for the Sync screen (see sync_tuning).
+    "SYNC_PROFILES": [],
 }
 
 logger = logging.getLogger(__name__)

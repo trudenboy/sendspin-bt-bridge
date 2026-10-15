@@ -882,3 +882,22 @@ def test_fresh_install_without_devices_has_no_players(tmp_path, monkeypatch):
     del options["bluetooth_devices"]
     loaded = _translate_then_load(tmp_path, monkeypatch, options)
     assert loaded["players"] == []
+
+
+def test_sync_profiles_survive_addon_restart(tmp_path):
+    profiles = [
+        {
+            "id": "p1",
+            "name": "Evening",
+            "group_id": "g",
+            "kind": "device",
+            "delays": {"a": 120},
+            "created_at": "2026-10-15T10:00:00Z",
+            "notes": "",
+        }
+    ]
+    _write_json(tmp_path / "config.json", {"SYNC_PROFILES": profiles})
+    _write_json(tmp_path / "options.json", _minimal_options())
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    assert _read_json(tmp_path / "config.json")["SYNC_PROFILES"] == profiles

@@ -271,6 +271,7 @@ def main() -> None:
         # auth / update / sync / proxy family.
         web_ui_only_keys = (
             "SENDSPIN_PAIRING",
+            "SYNC_PROFILES",
             "SENDSPIN_OWN_SERVER_ONLY",
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
             "EXPERIMENTAL_PA_MODULE_RELOAD",

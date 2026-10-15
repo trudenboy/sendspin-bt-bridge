@@ -434,6 +434,27 @@
         }
       }
     },
+    "SYNC_PROFILES": {
+      "type": "array",
+      "default": [],
+      "description": "Named per-group delay profiles for Music Assistant sync groups (managed by the Sync screen, not the settings form).",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "group_id", "delays"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "group_id": {"type": "string"},
+          "kind": {"type": "string", "enum": ["device", "position"]},
+          "delays": {
+            "type": "object",
+            "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 5000}
+          },
+          "created_at": {"type": "string"},
+          "notes": {"type": "string"}
+        }
+      }
+    },
     "AUTH_TOKENS": {
       "type": "array",
       "default": [],

@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 # secrets) and internal runtime-state keys are intentionally excluded so
 # they cannot be overwritten by the web form.
 _ALLOWED_POST_CONFIG_KEYS = (
-    CONFIG_ALLOWED_KEYS - SENSITIVE_CONFIG_KEYS - RUNTIME_STATE_CONFIG_KEYS - {"MA_AUTH_PROVIDER"}
+    CONFIG_ALLOWED_KEYS - SENSITIVE_CONFIG_KEYS - RUNTIME_STATE_CONFIG_KEYS - {"MA_AUTH_PROVIDER", "SYNC_PROFILES"}
 ) | {
     # The save pipeline's v5-shaped view of the Bluetooth players (see
     # ``_internal_view``); the payload itself carries ``players``.
@@ -1085,6 +1085,7 @@ def save_config(config: dict) -> dict:
             # per-player state comes across in ``_kept_player_state``.
             for key in (
                 "HA_ADAPTER_AREA_MAP",
+                "SYNC_PROFILES",
                 "AUTH_PASSWORD_HASH",
                 "SECRET_KEY",
                 "MA_AUTH_PROVIDER",
