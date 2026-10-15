@@ -44,6 +44,7 @@ class DeviceEventType(str, Enum):
     SINK_REMATCHED = "sink-rematched"
     SINK_LOST = "sink-lost"
     SINK_RESTORED = "sink-restored"
+    MA_SERVER_REFUSED = "ma-server-refused"
 
 
 _DEFAULT_EVENT_LEVELS: dict[str, str] = {
@@ -51,6 +52,7 @@ _DEFAULT_EVENT_LEVELS: dict[str, str] = {
     DeviceEventType.BLUETOOTH_DISCONNECTED.value: "warning",
     DeviceEventType.BLUETOOTH_RECONNECTED.value: "info",
     DeviceEventType.BLUETOOTH_RECONNECT_FAILED.value: "warning",
+    DeviceEventType.MA_SERVER_REFUSED.value: "warning",
     DeviceEventType.DAEMON_CONNECTED.value: "info",
     DeviceEventType.DAEMON_DISCONNECTED.value: "warning",
     DeviceEventType.PLAYBACK_STARTED.value: "info",

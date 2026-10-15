@@ -1259,6 +1259,19 @@
             "description": "Flask session secret key. Auto-generated on first startup — do not edit.",
             "title": "Secret Key"
           },
+          "SENDSPIN_OWN_SERVER_ONLY": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": true,
+            "description": "Accept only this bridge's own Music Assistant. When another Music Assistant on the network dials a speaker first, the bridge turns it away so the speaker stays available to the right one. Has no effect until the bridge knows its Music Assistant (a server address or the Music Assistant API URL).",
+            "title": "Sendspin Own Server Only"
+          },
           "SENDSPIN_PAIRING": {
             "anyOf": [
               {
@@ -2336,6 +2349,13 @@
             "title": "Playing",
             "type": "boolean"
           },
+          "refused_servers": {
+            "items": {
+              "$ref": "#/components/schemas/RefusedServer"
+            },
+            "title": "Refused Servers",
+            "type": "array"
+          },
           "repeat_mode": {
             "anyOf": [
               {
@@ -2346,6 +2366,9 @@
               }
             ],
             "title": "Repeat Mode"
+          },
+          "server": {
+            "$ref": "#/components/schemas/DeviceServer"
           },
           "server_connected": {
             "default": false,
@@ -2402,6 +2425,8 @@
           "server_connected",
           "server_connected_at",
           "server_url",
+          "server",
+          "refused_servers",
           "track",
           "playback_speed",
           "shuffle",
@@ -2604,6 +2629,76 @@
         "title": "DeviceSendspin",
         "type": "object"
       },
+      "DeviceServer": {
+        "description": "The Music Assistant server the player is connected to.",
+        "properties": {
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "own": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether it is this bridge's own Music Assistant; null when the bridge does not know which that is.",
+            "title": "Own"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "host",
+          "url",
+          "own"
+        ],
+        "title": "DeviceServer",
+        "type": "object"
+      },
       "DeviceTiming": {
         "properties": {
           "available": {
@@ -2800,6 +2895,18 @@
         "additionalProperties": true,
         "description": "A configured speaker the bridge is not running (``enabled: false``).",
         "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bluetooth adapter (hci name or MAC) the speaker is set to.",
+            "title": "Adapter"
+          },
           "backend_type": {
             "default": "bluetooth_a2dp",
             "title": "Backend Type",
@@ -2838,13 +2945,39 @@
               }
             ],
             "title": "Player Name"
+          },
+          "room_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room Name"
+          },
+          "sink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A local audio output's sink name.",
+            "title": "Sink"
           }
         },
         "required": [
           "id",
           "mac",
           "backend_type",
-          "player_name"
+          "player_name",
+          "adapter",
+          "sink",
+          "room_name"
         ],
         "title": "DisabledDevice",
         "type": "object"
@@ -4502,6 +4635,81 @@
         "title": "RecordingIn",
         "type": "object"
       },
+      "RefusedServer": {
+        "description": "A Music Assistant this player turned away because it is not the bridge's own.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "count": {
+            "default": 1,
+            "title": "Count",
+            "type": "integer"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          }
+        },
+        "required": [
+          "host",
+          "name",
+          "server_id",
+          "owner",
+          "at",
+          "count"
+        ],
+        "title": "RefusedServer",
+        "type": "object"
+      },
       "ReloadOut": {
         "properties": {
           "job": {
@@ -5205,12 +5413,14 @@
               "repeat_all",
               "shuffle",
               "unshuffle",
-              "switch"
+              "switch",
+              "seek"
             ],
             "title": "Command",
             "type": "string"
           },
           "value": {
+            "description": "volume: 0-100; mute: bool; seek: absolute position in ms within the current track.",
             "title": "Value"
           }
         },

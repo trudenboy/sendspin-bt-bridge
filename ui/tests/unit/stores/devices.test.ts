@@ -307,3 +307,88 @@ describe('device sorting and backend filter', () => {
     expect(store.filteredDevices).toHaveLength(2)
   })
 })
+
+describe('disabled players among the others', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  const disabled = [
+    { id: 'off-bt', player_name: 'Charlie', mac: 'AA:00:00:00:00:03', adapter: 'hci1', backend_type: 'bluetooth_a2dp', room_name: 'Hall', sink: null, enabled: false },
+    { id: 'off-out', player_name: 'Aardvark', mac: null, adapter: null, backend_type: 'pulse_sink', room_name: null, sink: 'alsa_output.usb', enabled: false },
+    { id: null, player_name: 'Ghost', mac: null, backend_type: 'bluetooth_a2dp' },
+  ]
+
+  function setupWithDisabled() {
+    const bridge = useBridgeStore()
+    const status = makeStatus([A(), B()])
+    status.bridge.disabled_devices = disabled as never
+    bridge.snapshot = status
+    return { bridge, store: useDeviceStore() }
+  }
+
+  const ids = (store: ReturnType<typeof useDeviceStore>) => store.filteredPlayers.map((p) => p.id)
+
+  it('lists disabled players (with an id) as players, last in activity order', () => {
+    const { store } = setupWithDisabled()
+    expect(store.disabledPlayers.map((p) => [p.id, p.name, p.output, p.room])).toEqual([
+      ['off-bt', 'Charlie', false, 'Hall'],
+      ['off-out', 'Aardvark', true, null],
+    ])
+    expect(ids(store)).toEqual(['a', 'b', 'off-out', 'off-bt'])
+    expect(store.filteredPlayers.filter((p) => p.kind === 'disabled').map((p) => p.id)).toEqual(['off-out', 'off-bt'])
+  })
+
+  it('sorts them in among the others by name', () => {
+    const { store } = setupWithDisabled()
+    store.setSort('name')
+    expect(ids(store)).toEqual(['off-out', 'a', 'b', 'off-bt'])
+  })
+
+  it('keeps them last in status order', () => {
+    const { store } = setupWithDisabled()
+    store.setSort('status')
+    expect(ids(store).slice(-2)).toEqual(['off-out', 'off-bt'])
+  })
+
+  it('filters them by status, search, adapter, backend and group like the others', () => {
+    const { store } = setupWithDisabled()
+    store.filter.status = ['disabled']
+    expect(ids(store)).toEqual(['off-out', 'off-bt'])
+    store.filter.status = ['ready']
+    expect(ids(store)).toEqual(['a'])
+    store.filter.status = []
+    store.filter.search = 'char'
+    expect(ids(store)).toEqual(['off-bt'])
+    store.filter.search = ''
+    store.filter.adapter = 'hci1'
+    expect(ids(store)).toEqual(['b', 'off-bt'])
+    store.filter.adapter = ''
+    store.filter.backend = 'output'
+    expect(ids(store)).toEqual(['off-out'])
+    store.filter.backend = ''
+    store.filter.group = 'g1'
+    expect(ids(store)).toEqual(['b'])
+  })
+
+  it('matches a disabled speaker set to its adapter by MAC under that adapter\'s hci', () => {
+    const bridge = useBridgeStore()
+    const status = makeStatus([A(), B()])
+    status.bridge.disabled_devices = [
+      { id: 'off-mac', player_name: 'Delta', mac: 'AA:00:00:00:00:04', adapter: 'c0:fb:f9:62:d7:d6', backend_type: 'bluetooth_a2dp', enabled: false },
+    ] as never
+    bridge.snapshot = status
+    bridge.adapters = [
+      { id: 'hci0', mac: 'C0:FB:F9:62:D6:9D', name: 'Audio' },
+      { id: 'hci1', mac: 'C0:FB:F9:62:D7:D6', name: 'BLE' },
+    ] as never
+    const store = useDeviceStore()
+    store.filter.adapter = 'hci1'
+    expect(ids(store)).toEqual(['b', 'off-mac'])
+    store.filter.adapter = 'hci0'
+    expect(ids(store)).toEqual(['a'])
+  })
+
+  it('leaves filteredDevices to the running players', () => {
+    const { store } = setupWithDisabled()
+    expect(store.filteredDevices.map((d) => d.id)).toEqual(['a', 'b'])
+  })
+})

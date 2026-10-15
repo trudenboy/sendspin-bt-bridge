@@ -5,22 +5,23 @@ import { useRouter } from 'vue-router'
 import { Bluetooth, Speaker } from 'lucide-vue-next'
 import { SbBadge } from '@/kit'
 import { useAudioStore } from '@/stores/audio'
-import { linkChip } from '@/utils/deviceChips'
+import { linkChip, type LinkChip as LinkChipData } from '@/utils/deviceChips'
 import type { Device } from '@/api/types'
 
 /**
  * A Bluetooth speaker's adapter, coloured by its link and opening the
  * adapter in Configuration; a local output's audio output (no link).
  */
-const props = defineProps<{ device: Device }>()
+const props = defineProps<{ device?: Device; chip?: LinkChipData | null }>()
 const { t } = useI18n()
 const router = useRouter()
 const audio = useAudioStore()
 
-const chip = computed(() => linkChip(props.device, audio.sinks))
+/* A ready-made chip (a disabled player has no Device), else the device's own. */
+const chip = computed(() => (props.chip !== undefined ? props.chip : props.device ? linkChip(props.device, audio.sinks) : null))
 
 function openAdapter() {
-  if (chip.value?.kind !== 'adapter') return
+  if (chip.value?.kind !== 'adapter' || !chip.value.hci) return
   void router?.push({ name: 'config', query: { adapter: chip.value.hci }, hash: '#settings-bluetooth' })
 }
 </script>

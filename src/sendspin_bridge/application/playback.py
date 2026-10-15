@@ -10,8 +10,9 @@ tells Music Assistant itself.
 from __future__ import annotations
 
 import logging
+import math
 import threading
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 
 from sendspin_bridge.application.errors import UseCaseError
 from sendspin_bridge.application.runtime import bridge_loop, run_on_loop, submit_on_loop
@@ -20,7 +21,7 @@ from sendspin_bridge.config import load_config, save_device_buffer_setting, save
 from sendspin_bridge.services.audio.pulse import get_sink_mute, set_sink_mute, set_sink_volume
 from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
 from sendspin_bridge.services.ipc.commands import OpenPairingWindow, Pause, Play, SetMute, SetVolume
-from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs
+from sendspin_bridge.services.lifecycle.status_snapshot import build_device_snapshot_pairs, ma_now_playing_for_player
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials, get_ma_group_for_player
 
 logger = logging.getLogger(__name__)
@@ -292,15 +293,51 @@ TransportAction = Literal[
     "shuffle",
     "unshuffle",
     "switch",
+    "seek",
 ]
 
 
+def _positive(value: Any) -> TypeGuard[int | float]:
+    return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
+
+
+def _track_duration_ms(client) -> int | None:
+    """The current track's length, in the order the dashboard's progress bar reads it:
+    Music Assistant's (seconds) first, then the daemon's own ``track_duration_ms``."""
+    now_playing = ma_now_playing_for_player(client.player_id, client.status.get("group_id"))
+    duration = now_playing.get("duration")
+    if _positive(duration):
+        # Up, never down: the bar rounds its end the JS way (half up), so it may ask for x.5 ms more.
+        return math.ceil(duration * 1000)
+    native = client.status.get("track_duration_ms")
+    if _positive(native):
+        return int(native)
+    return None
+
+
+def _seek_position(client, value: Any) -> int:
+    """A seek target in ms, checked against the track (0..duration)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise UseCaseError(400, "invalid_position", "Seek needs a whole number of milliseconds")
+    duration = _track_duration_ms(client)
+    if duration is None:
+        raise UseCaseError(409, "unknown_duration", "The track's length is not known; cannot seek")
+    if not 0 <= value <= duration:
+        raise UseCaseError(400, "out_of_range", f"Seek position must be between 0 and {duration} ms")
+    return value
+
+
 def transport(device_id: str, action: TransportAction, value: Any = None) -> None:
-    """A native Sendspin controller command (lower latency than going through MA)."""
+    """A native Sendspin controller command (lower latency than going through MA).
+
+    ``seek`` takes an absolute position in ms within the current track.
+    """
     client = find_client(device_id)
     supported = client.status.get("supported_commands")
     if supported is not None and action not in supported:
         raise UseCaseError(409, "unsupported_command", f"Command {action!r} not supported by device")
+    if action == "seek":
+        value = _seek_position(client, value)
     if not run_on_loop(
         client.send_transport_command(action, value=value), timeout=5.0, description=f"transport {action}"
     ):

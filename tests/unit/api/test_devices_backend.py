@@ -136,3 +136,53 @@ def test_disabled_device_id_comes_from_its_config_entry(api_client, running, tmp
         assert disabled[0]["id"] == "custom-id"
     finally:
         state.set_disabled_devices([])
+
+
+def test_device_reports_which_music_assistant_it_is_connected_to(api_client, running):
+    running[0].connected_server_url = "192.168.10.229:8927"
+    running[0].status.update(
+        {
+            "server_connected": True,
+            "bluetooth_connected": True,
+            "connected_server_url": "192.168.10.229:8927",
+            "connected_server_name": "Test MA",
+            "connected_server_id": "srv-1",
+            "connected_server_host": "192.168.10.229",
+            "connected_server_own": False,
+            "refused_servers": [
+                {"host": "192.168.10.50", "name": "Old MA", "server_id": "srv-2", "owner": "ma.local", "count": 3}
+            ],
+        }
+    )
+    d = api_client.get("/api/v1/devices").json()[0]
+    assert d["playback"]["server"] == {
+        "name": "Test MA",
+        "id": "srv-1",
+        "host": "192.168.10.229",
+        "url": "192.168.10.229:8927",
+        "own": False,
+    }
+    refused = d["playback"]["refused_servers"][0]
+    assert refused["host"] == "192.168.10.50" and refused["count"] == 3 and refused["owner"] == "ma.local"
+    assert d["health"]["state"] == "degraded"
+    assert "192.168.10.229" in d["health"]["summary"]
+
+
+def test_device_without_server_details_reports_them_empty(api_client, running):
+    d = api_client.get("/api/v1/devices").json()[0]
+    assert d["playback"]["server"]["own"] is None and d["playback"]["refused_servers"] == []
+
+
+def test_connection_diagnostics_name_the_server_and_list_refusals(running):
+    running[0].status.update(
+        {
+            "connected_server_name": "Test MA",
+            "connected_server_own": False,
+            "refused_servers": [{"host": "192.168.10.50", "name": "Old MA", "count": 2}],
+        }
+    )
+    info = diagnostics._collect_sendspin_connection_info({"SENDSPIN_SERVER": "auto"})
+    dev = info["devices"][0]
+    assert dev["connected_server_name"] == "Test MA"
+    assert dev["connected_server_own"] is False
+    assert dev["refused_servers"][0]["host"] == "192.168.10.50"

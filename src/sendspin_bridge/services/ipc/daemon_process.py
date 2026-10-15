@@ -574,6 +574,12 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                     continue
             elif mc == MediaCommand.MUTE and value is not None:
                 kwargs["mute"] = bool(value)
+            elif mc == MediaCommand.SEEK:
+                # An absolute position in ms; the server bounds it by seek_max_ms.
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    logger.warning("Invalid seek position for transport: %r", value)
+                    continue
+                kwargs["position_ms"] = value
             _task = asyncio.ensure_future(daemon._client.send_group_command(mc, **kwargs))
             _background_tasks.add(_task)
             _task.add_done_callback(_background_tasks.discard)
@@ -599,6 +605,7 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
 
 async def _run(params: dict) -> None:
     from sendspin_bridge.services.ipc.bridge_daemon import BridgeDaemon, DaemonArgs
+    from sendspin_bridge.services.ipc.own_server import OwnServer
 
     player_name: str = params["player_name"]
     client_id: str = params["client_id"]
@@ -688,6 +695,11 @@ async def _run(params: dict) -> None:
             "group_name": None,
             "group_id": None,
             "connected_server_url": None,
+            "connected_server_name": None,
+            "connected_server_id": None,
+            "connected_server_host": None,
+            "connected_server_own": None,
+            "refused_servers": [],
             "last_error": None,
             "reanchor_count": 0,
             "reanchor_count_session": 0,
@@ -738,6 +750,8 @@ async def _run(params: dict) -> None:
         bt_manufacturer=bt_manufacturer,
         required_lead_time_ms=required_lead_time_ms,
         min_buffer_ms=min_buffer_ms,
+        own_server=OwnServer.from_params(params.get("own_server")),
+        own_server_only=bool(params.get("own_server_only", True)),
     )
     daemon_ref.append(daemon)
 

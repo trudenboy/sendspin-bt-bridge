@@ -107,6 +107,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'SENDSPIN_PORT', kind: 'number', min: 1, max: 65535 },
       { key: 'BASE_LISTEN_PORT', kind: 'number', min: 1024, max: 65535, nullable: true, placeholder: 'auto', advanced: true },
       { key: 'SENDSPIN_PAIRING', kind: 'toggle' },
+      { key: 'SENDSPIN_OWN_SERVER_ONLY', kind: 'toggle' },
       { key: 'VOLUME_VIA_MA', kind: 'toggle' },
       { key: 'MUTE_VIA_MA', kind: 'toggle' },
       { key: 'MA_WEBSOCKET_MONITOR', kind: 'toggle', advanced: true },

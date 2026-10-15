@@ -48,7 +48,10 @@ class PlaybackIn(BaseModel):
 
 class TransportIn(BaseModel):
     command: playback.TransportAction
-    value: Any = None
+    value: Any = Field(
+        default=None,
+        description="volume: 0-100; mute: bool; seek: absolute position in ms within the current track.",
+    )
 
 
 class EnabledIn(BaseModel):

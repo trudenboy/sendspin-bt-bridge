@@ -108,6 +108,14 @@
     "server_connected": true,
     "server_connected_at": null,
     "server_url": null,
+    "server": {
+      "name": null,
+      "id": null,
+      "host": null,
+      "url": null,
+      "own": null
+    },
+    "refused_servers": [],
     "track": {
       "title": null,
       "artist": null,

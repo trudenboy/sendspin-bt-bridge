@@ -743,6 +743,7 @@ def _stub_media_command(monkeypatch):
         REPEAT_ALL = "repeat_all"
         SHUFFLE = "shuffle"
         UNSHUFFLE = "unshuffle"
+        SEEK = "seek"
 
     monkeypatch.setattr(
         sys.modules["aiosendspin.models.types"],
@@ -840,6 +841,30 @@ async def test_read_commands_transport_mute_passes_bool(monkeypatch):
     dispatched_mc, kwargs = send_group.calls[0]
     assert dispatched_mc == fake_mc.MUTE
     assert kwargs == {"mute": True}
+
+
+@pytest.mark.asyncio
+async def test_read_commands_transport_seek_passes_position_ms(monkeypatch):
+    fake_mc = _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "seek", "value": 61500})
+
+    assert len(send_group.calls) == 1
+    dispatched_mc, kwargs = send_group.calls[0]
+    assert dispatched_mc == fake_mc.SEEK
+    assert kwargs == {"position_ms": 61500}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, -1, "soon"])
+async def test_read_commands_transport_seek_without_a_valid_position_is_skipped(monkeypatch, value):
+    _stub_media_command(monkeypatch)
+    daemon, send_group = _make_transport_daemon()
+
+    await _run_one_command(daemon, {"cmd": "transport", "action": "seek", "value": value})
+
+    assert send_group.calls == []
 
 
 @pytest.mark.asyncio
@@ -967,6 +992,37 @@ async def test_run_passes_pairing_requirement_into_daemon_args(monkeypatch):
         )
 
     assert captured["require_pairing"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_hands_the_own_server_to_the_daemon(monkeypatch):
+    captured = {}
+
+    class _Stop(BaseException):
+        pass
+
+    def _daemon(*_args, **kwargs):
+        captured.update(kwargs)
+        raise _Stop
+
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+
+    monkeypatch.setattr(bridge_daemon_mod, "DaemonArgs", lambda **kw: SimpleNamespace(**kw))
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _daemon)
+
+    with pytest.raises(_Stop):
+        await _run(
+            {
+                "player_name": "TestSpeaker",
+                "client_id": "test",
+                "listen_port": 8927,
+                "own_server": {"hosts": ["192.168.10.10"], "server_ids": [], "name": None},
+                "own_server_only": False,
+            }
+        )
+
+    assert captured["own_server"].hosts == {"192.168.10.10"}
+    assert captured["own_server_only"] is False
 
 
 @pytest.mark.asyncio

@@ -224,6 +224,7 @@ Bridge поддерживает два необязательных top-level ov
 | Ключ | Тип | Описание |
 |---|---|---|
 | `SENDSPIN_SERVER` | string | Хост Music Assistant или `auto` |
+| `SENDSPIN_OWN_SERVER_ONLY` | bool | Принимать только свой Music Assistant (из `SENDSPIN_SERVER` или адреса Music Assistant, либо работающий на той же машине), когда другой Music Assistant в сети пытается забрать колонку. По умолчанию `true` |
 | `SENDSPIN_PORT` | integer | Порт Sendspin WebSocket |
 | `WEB_PORT` | integer или `null` | Override прямого web-порта |
 | `BASE_LISTEN_PORT` | integer или `null` | Необязательный base port для автоматически назначаемых listener'ов устройств |

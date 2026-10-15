@@ -6,9 +6,10 @@
  * dashboard.
  */
 import type { AudioSink, Device, Group } from '@/api/types'
-import { isDeviceConnected, isPulseSink } from './deviceBackend'
+import { isDeviceConnected, isPulseSink, resolveAdapter } from './deviceBackend'
 import { deviceState } from '@/stores/devices'
 import { safeHttpUrl } from './safeUrl'
+import { queueControls } from './queueControls'
 
 export type Tone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
 
@@ -167,6 +168,55 @@ export function linkChip(d: Device, sinks: AudioSink[] = []): LinkChip | null {
   return { ...base, tone: 'error', pulse: false, state: 'disconnected' }
 }
 
+/**
+ * A disabled player's adapter (neutral: no link to colour) or output, from
+ * the bridge's disabled list, which names the adapter by hci or MAC.
+ */
+export function disabledLinkChip(
+  p: { output: boolean; adapter: string | null; sink: string | null },
+  adapters: { id: string; mac: string; name: string }[] = [],
+  sinks: AudioSink[] = [],
+): LinkChip | null {
+  if (p.output) {
+    if (!p.sink) return null
+    return { kind: 'output', label: sinks.find((s) => s.name === p.sink)?.description || p.sink, sink: p.sink }
+  }
+  if (!p.adapter) return null
+  const { adapter, hci } = resolveAdapter(p.adapter, adapters)
+  return {
+    kind: 'adapter',
+    label: adapter?.name || hci || p.adapter,
+    hci,
+    mac: adapter?.mac ?? null,
+    tone: 'neutral',
+    pulse: false,
+    state: 'disabled',
+  }
+}
+
+/* -------------------------------------------------------------- server -- */
+
+export interface ServerChip {
+  /** The server's name, else its address. */
+  label: string
+  name: string | null
+  host: string | null
+  id: string | null
+  tone: Tone
+  /** The bridge knows its own Music Assistant and this is another one. */
+  foreign: boolean
+}
+
+/** The Music Assistant a connected player is on; a warning when it is not the bridge's own. */
+export function serverChip(d: Device): ServerChip | null {
+  if (!d.playback.server_connected) return null
+  const { name, host, id, own } = d.playback.server
+  const label = name || host
+  if (!label) return null
+  const foreign = own === false
+  return { label, name: name ?? null, host: host ?? null, id: id ?? null, tone: foreign ? 'warning' : 'neutral', foreign }
+}
+
 /* ------------------------------------------------------ blocked hints -- */
 
 export interface BlockedHint {
@@ -198,7 +248,7 @@ const SELF_EXPLAINED = new Set(['offline', 'standby', 'released', 'disabled', 'o
  * Up to two controls the speaker cannot use right now, each with the bridge's
  * reason. Nothing when the state badge already says why (handed over,
  * standby, offline, output missing, disabled), and queue controls only while
- * the player streams: an idle player has no queue to control.
+ * the player streams without them: an idle player has no queue to control.
  */
 export function blockedHints(d: Device, limit = 2): BlockedHint[] {
   if (SELF_EXPLAINED.has(deviceState(d))) return []
@@ -210,7 +260,8 @@ export function blockedHints(d: Device, limit = 2): BlockedHint[] {
   const actions = ((d.capabilities as { actions?: Record<string, Capability> }).actions ?? {}) as Record<string, Capability>
   for (const key of HINT_ACTIONS) {
     if (isPulseSink(d) && BLUETOOTH_ONLY.has(key)) continue
-    if (key === 'queue_control' && !streaming) continue
+    // Only while streaming, and only when the card has no shuffle/repeat to show.
+    if (key === 'queue_control' && (!streaming || queueControls(d).any)) continue
     const cap = actions[key]
     if (!cap || cap.supported === false || cap.currently_available !== false || !cap.blocked_reason) continue
     hints.push({

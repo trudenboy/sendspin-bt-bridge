@@ -1,24 +1,35 @@
 import { ref, computed, type Ref } from 'vue'
 import type { Device } from '@/api/types'
 
-export function useDeviceSelection(devices: Ref<Device[]>) {
+/**
+ * Bulk selection over the shown players: running devices, plus disabled
+ * players (by id), which only Enable and Remove apply to.
+ */
+export function useDeviceSelection(devices: Ref<Device[]>, disabledIds: Ref<string[]> = ref([])) {
   const selected = ref<Set<string>>(new Set())
 
-  const selectedCount = computed(() => selected.value.size)
+  const allIds = computed(() => [...devices.value.map((d) => d.id), ...disabledIds.value])
+
+  /** Selected among the listed: a removed (or filtered-out) player stops counting. */
+  const listedSelected = computed(() => allIds.value.filter((id) => selected.value.has(id)))
+
+  const selectedCount = computed(() => listedSelected.value.length)
 
   const allSelected = computed(
-    () => devices.value.length > 0 && selected.value.size === devices.value.length,
+    () => allIds.value.length > 0 && allIds.value.every((id) => selected.value.has(id)),
   )
 
   const someSelected = computed(
-    () => selected.value.size > 0 && !allSelected.value,
+    () => listedSelected.value.length > 0 && !allSelected.value,
   )
 
   const selectedDevices = computed(() =>
     devices.value.filter((d) => selected.value.has(d.id)),
   )
 
-  const selectedNames = computed(() => [...selected.value])
+  const selectedDisabledIds = computed(() => disabledIds.value.filter((id) => selected.value.has(id)))
+
+  const selectedNames = computed(() => listedSelected.value)
 
   function toggle(id: string) {
     const next = new Set(selected.value)
@@ -31,7 +42,7 @@ export function useDeviceSelection(devices: Ref<Device[]>) {
     if (allSelected.value) {
       selected.value = new Set()
     } else {
-      selected.value = new Set(devices.value.map((d) => d.id))
+      selected.value = new Set(allIds.value)
     }
   }
 
@@ -49,6 +60,7 @@ export function useDeviceSelection(devices: Ref<Device[]>) {
     allSelected,
     someSelected,
     selectedDevices,
+    selectedDisabledIds,
     selectedNames,
     toggle,
     toggleAll,

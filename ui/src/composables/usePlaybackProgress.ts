@@ -64,6 +64,7 @@ export function usePlaybackProgress(deviceRef: Ref<Device>) {
   function resolveSource(): ProgressSource | null {
     const device = deviceRef.value
     // Music Assistant's clock first (it knows seeks); the daemon's track position otherwise.
+    // The seek API checks positions against the length in the same order.
     return resolveMaSource(device.music_assistant.now_playing as MaNowPlaying | null) ?? resolveNativeSource(device)
   }
 

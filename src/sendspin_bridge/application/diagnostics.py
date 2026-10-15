@@ -1147,6 +1147,9 @@ def _collect_sendspin_connection_info(config: dict | None = None) -> dict:
                 "player_name": getattr(client, "player_name", "?"),
                 "server_connected": bool(status.get("server_connected")) if status else False,
                 "connected_server_url": (status.get("connected_server_url") if status else None) or None,
+                "connected_server_name": (status.get("connected_server_name") if status else None) or None,
+                "connected_server_own": status.get("connected_server_own") if status else None,
+                "refused_servers": list(status.get("refused_servers") or []) if status else [],
                 "daemon_recurring_lifetime_s": recurring,
                 "recent_spawns": recent,
             }
@@ -1683,6 +1686,16 @@ def _build_full_text_report(
             full.append(f"    server_connected:  {'Yes' if dev.get('server_connected') else 'No'}")
             if dev.get("connected_server_url"):
                 full.append(f"    connected_url:     {dev['connected_server_url']}")
+            if dev.get("connected_server_name"):
+                own = {True: "this bridge's", False: "NOT this bridge's"}.get(
+                    dev.get("connected_server_own"), "unknown"
+                )
+                full.append(f"    connected_server:  {dev['connected_server_name']} ({own} Music Assistant)")
+            for refusal in dev.get("refused_servers") or []:
+                full.append(
+                    f"    refused_server:    {refusal.get('host')} ({refusal.get('name') or '?'})"
+                    f" x{refusal.get('count', 1)}"
+                )
             recurring = dev.get("daemon_recurring_lifetime_s")
             if isinstance(recurring, (int, float)):
                 full.append(

@@ -166,12 +166,38 @@ class DeviceGroupRef(ResponseModel):
     muted: bool | None = None
 
 
+class DeviceServer(ResponseModel):
+    """The Music Assistant server the player is connected to."""
+
+    name: str | None = None
+    id: str | None = None
+    host: str | None = None
+    url: str | None = None
+    own: bool | None = Field(
+        default=None,
+        description="Whether it is this bridge's own Music Assistant; null when the bridge does not know which that is.",
+    )
+
+
+class RefusedServer(ResponseModel):
+    """A Music Assistant this player turned away because it is not the bridge's own."""
+
+    host: str | None = None
+    name: str | None = None
+    server_id: str | None = None
+    owner: str | None = None
+    at: str | None = None
+    count: int = 1
+
+
 class DevicePlayback(ResponseModel):
     playing: bool = False
     connected: bool = False
     server_connected: bool = False
     server_connected_at: str | None = None
     server_url: str | None = None
+    server: DeviceServer = Field(default_factory=DeviceServer)
+    refused_servers: list[RefusedServer] = Field(default_factory=list)
     track: Track
     playback_speed: int | None = None
     shuffle: bool | None = None
@@ -363,6 +389,18 @@ class Device(ResponseModel):
                 server_connected=bool(g("server_connected")),
                 server_connected_at=g("server_connected_at"),
                 server_url=g("connected_server_url") or None,
+                server=DeviceServer(
+                    name=g("connected_server_name"),
+                    id=g("connected_server_id"),
+                    host=g("connected_server_host"),
+                    url=g("connected_server_url") or None,
+                    own=g("connected_server_own"),
+                ),
+                refused_servers=[
+                    RefusedServer(**{k: v for k, v in r.items() if k in RefusedServer.model_fields})
+                    for r in (g("refused_servers") or [])
+                    if isinstance(r, dict)
+                ],
                 track=Track(
                     title=g("current_track"),
                     artist=g("current_artist"),
@@ -421,3 +459,6 @@ class DisabledDevice(ResponseModel):
     mac: str | None = None
     backend_type: str = BLUETOOTH
     player_name: str | None = None
+    adapter: str | None = Field(default=None, description="Bluetooth adapter (hci name or MAC) the speaker is set to.")
+    sink: str | None = Field(default=None, description="A local audio output's sink name.")
+    room_name: str | None = None

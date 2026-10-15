@@ -24,6 +24,7 @@ import SpeakerActionsMenu from './SpeakerActionsMenu.vue'
 import SyncChip from './chips/SyncChip.vue'
 import SignalChip from './chips/SignalChip.vue'
 import GroupChip from './chips/GroupChip.vue'
+import ServerChip from './chips/ServerChip.vue'
 import LinkChip from './chips/LinkChip.vue'
 import DevicePlayerPanel from './DevicePlayerPanel.vue'
 import { canDo } from '@/utils/supportedActions'
@@ -180,7 +181,8 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
         </span>
         <button
           type="button"
-          class="truncate text-sm font-medium text-text-primary hover:text-primary-text"
+          class="max-w-80 truncate text-sm font-medium text-text-primary hover:text-primary-text"
+          :title="device.name ?? undefined"
           @click="emit('openDetail', device.id)"
         >
           {{ speakerName(device.name, device.bluetooth?.mac ?? device.id) }}
@@ -197,12 +199,13 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
       </div>
       <div class="mt-1 flex flex-wrap items-center gap-1.5 pl-6 empty:hidden">
         <GroupChip :device="device" />
+        <ServerChip :device="device" />
         <SignalChip :device="device" />
       </div>
     </td>
 
     <!-- Status -->
-    <td class="px-2 py-2">
+    <td class="whitespace-nowrap px-2 py-2">
       <div class="flex flex-wrap items-center gap-1.5">
         <DeviceStatusBadge :state="state" :device="device" />
         <SyncChip :device="device" />
@@ -217,6 +220,7 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
     <td class="w-48 px-2 py-2">
       <VolumeSlider
         v-if="connected"
+        class="min-w-40"
         :mac="device.bluetooth?.mac ?? device.id"
         :name="device.name"
         :volume="device.audio.volume"
@@ -263,7 +267,9 @@ function onTransport(command: 'play' | 'pause' | 'previous' | 'next') {
 
     <!-- Adapter -->
     <td class="hidden px-2 py-2 text-xs text-text-secondary md:table-cell">
-      <LinkChip :device="device" />
+      <div class="max-w-48">
+        <LinkChip :device="device" />
+      </div>
     </td>
 
     <!-- Actions -->

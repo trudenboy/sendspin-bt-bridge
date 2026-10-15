@@ -42,11 +42,23 @@ const device = computed<Device | undefined>(() => (props.deviceId ? bridge.devic
 const pulse = computed(() => (device.value ? isPulseSink(device.value) : false))
 const released = computed(() => device.value?.bluetooth?.management_enabled === false)
 const adapterId = computed(() => device.value?.bluetooth?.adapter.hci || '')
-const drawerTitle = computed(() => speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''))
+/* A disabled player has no Device: its details are its settings. */
+const disabledPlayer = computed(() =>
+  !device.value && props.deviceId ? deviceStore.disabledPlayers.find((p) => p.id === props.deviceId) : undefined,
+)
+const disabledTarget = computed(() => {
+  const p = disabledPlayer.value
+  return p ? { id: p.id, config_id: p.id, name: p.name, enabled: false, bluetooth: p.mac ? { mac: p.mac } : null } : null
+})
+const drawerTitle = computed(() =>
+  disabledPlayer.value
+    ? speakerName(disabledPlayer.value.name, disabledPlayer.value.mac ?? disabledPlayer.value.id)
+    : speakerName(device.value?.name, device.value?.bluetooth?.mac ?? ''),
+)
 const events = computed(() => device.value?.recent_events ?? [])
 
 // A speaker that disappears (removed) takes its panel with it.
-watch(device, (now, before) => {
+watch(() => device.value ?? disabledPlayer.value, (now, before) => {
   if (before && !now && props.open) emit('update:open', false)
 })
 
@@ -57,6 +69,22 @@ const tabs = computed(() => [
   { id: 'events', label: t('drawer.tabs.events'), badge: events.value.length || undefined },
   { id: 'signal', label: t('drawer.tabs.signal') },
 ])
+
+/* Which Music Assistant the player is on, in full; the card's chip is the short form. */
+const serverInfo = computed(() => {
+  const playback = device.value?.playback
+  const s = playback?.server
+  if (!playback?.server_connected || !s || !(s.name || s.host || s.id)) return null
+  const rows = [
+    { key: 'name', value: s.name },
+    { key: 'host', value: s.host },
+    { key: 'id', value: s.id, mono: true },
+    { key: 'url', value: s.url, mono: true },
+  ].filter((r): r is { key: string; value: string; mono?: boolean } => !!r.value)
+  const where = s.name && s.host ? `${s.host} (${s.name})` : (s.name ?? s.host ?? '')
+  return { rows, foreign: s.own === false, where }
+})
+const refusedServers = computed(() => device.value?.playback.refused_servers ?? [])
 
 const signalSegments = computed(() => {
   const d = device.value
@@ -213,6 +241,27 @@ function onAdapterReboot() {
                 <p class="mt-1 text-text-primary">{{ device.audio.format ?? '—' }}</p>
               </div>
             </div>
+            <div v-if="serverInfo" data-server-details class="space-y-2 text-sm">
+              <span class="text-text-secondary">{{ t('drawer.server.title') }}</span>
+              <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                <template v-for="row in serverInfo.rows" :key="row.key">
+                  <dt class="text-text-secondary">{{ t(`drawer.server.${row.key}`) }}</dt>
+                  <dd class="min-w-0 break-all text-text-primary" :class="row.mono ? 'font-mono text-xs' : ''">{{ row.value }}</dd>
+                </template>
+              </dl>
+              <p v-if="serverInfo.foreign" data-server-warning class="rounded-lg bg-warning/10 p-3 text-warning">
+                {{ t('drawer.server.foreign', { where: serverInfo.where }) }}
+              </p>
+            </div>
+            <div v-if="refusedServers.length" data-refused-servers class="space-y-1 text-sm">
+              <span class="text-text-secondary">{{ t('drawer.server.refusedTitle') }}</span>
+              <ul class="space-y-0.5">
+                <li v-for="r in refusedServers" :key="r.server_id ?? r.host ?? ''" class="text-text-primary">
+                  {{ r.name ? `${r.host} (${r.name})` : r.host }}
+                  <span class="text-text-secondary">· {{ t('drawer.server.refusedCount', { n: r.count }) }}</span>
+                </li>
+              </ul>
+            </div>
             <div v-if="device.last_error" class="rounded-lg bg-error/10 p-3 text-sm text-error">
               {{ device.last_error }}
             </div>
@@ -343,6 +392,9 @@ function onAdapterReboot() {
         </template>
       </SbTabs>
     </template>
+    <div v-else-if="disabledTarget" class="text-sm">
+      <DeviceSettingsPanel :device="disabledTarget" />
+    </div>
 
     <!-- BT Device Info Modal -->
     <BtDeviceInfoModal

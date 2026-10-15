@@ -7,6 +7,10 @@ from typing import Any
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 
 
+def _refusal_key(refusal: dict) -> str:
+    return str(refusal.get("server_id") or refusal.get("host") or "")
+
+
 class StatusEventBuilder:
     """Pure builder for meaningful status-transition events."""
 
@@ -54,6 +58,21 @@ class StatusEventBuilder:
                     DeviceEventType.DAEMON_DISCONNECTED.value,
                     level="warning",
                     message="Sendspin daemon disconnected",
+                )
+
+        if "refused_servers" in updates:
+            known = {_refusal_key(r) for r in previous.get("refused_servers") or []}  # type: ignore[attr-defined]
+            for refusal in current.get("refused_servers") or []:  # type: ignore[attr-defined]
+                if _refusal_key(refusal) in known:
+                    continue
+                who = refusal.get("host") or "unknown host"
+                if refusal.get("name"):
+                    who = f"{who} ({refusal['name']})"
+                _add(
+                    DeviceEventType.MA_SERVER_REFUSED.value,
+                    level="warning",
+                    message=f"Refused Music Assistant at {who}: this bridge belongs to {refusal.get('owner') or 'another server'}",
+                    details={k: refusal.get(k) for k in ("host", "name", "server_id")},
                 )
 
         if "playing" in updates and current.get("playing") != previous.get("playing"):

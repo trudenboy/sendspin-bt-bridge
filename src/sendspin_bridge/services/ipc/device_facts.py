@@ -205,6 +205,20 @@ class DeviceFacts:
         return bool(self._fact("reanchoring", False))
 
     @property
+    def connected_server_own(self) -> bool | None:
+        """Whether the server the player is on is the bridge's own; ``None`` when unknown."""
+        value = self._fact("connected_server_own")
+        return None if value is None else bool(value)
+
+    @property
+    def connected_server_host(self) -> str | None:
+        return self._fact("connected_server_host")
+
+    @property
+    def connected_server_name(self) -> str | None:
+        return self._fact("connected_server_name")
+
+    @property
     def ma_reconnecting(self) -> bool:
         return bool(self._fact("ma_reconnecting", False))
 

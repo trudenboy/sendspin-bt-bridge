@@ -2274,6 +2274,12 @@ export interface components {
              */
             SECRET_KEY?: string | null;
             /**
+             * Sendspin Own Server Only
+             * @description Accept only this bridge's own Music Assistant. When another Music Assistant on the network dials a speaker first, the bridge turns it away so the speaker stays available to the right one. Has no effect until the bridge knows its Music Assistant (a server address or the Music Assistant API URL).
+             * @default true
+             */
+            SENDSPIN_OWN_SERVER_ONLY?: boolean | null;
+            /**
              * Sendspin Pairing
              * @description Require Music Assistant to pair with a PIN before playback. Off by default so speakers play as soon as Music Assistant finds them. Transport encryption still runs; this only gates pairing.
              * @default false
@@ -2692,8 +2698,11 @@ export interface components {
              * @default false
              */
             playing: boolean;
+            /** Refused Servers */
+            refused_servers: components["schemas"]["RefusedServer"][];
             /** Repeat Mode */
             repeat_mode: string | null;
+            server: components["schemas"]["DeviceServer"];
             /**
              * Server Connected
              * @default false
@@ -2770,6 +2779,25 @@ export interface components {
              */
             stopping: boolean;
         };
+        /**
+         * DeviceServer
+         * @description The Music Assistant server the player is connected to.
+         */
+        DeviceServer: {
+            /** Host */
+            host: string | null;
+            /** Id */
+            id: string | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Own
+             * @description Whether it is this bridge's own Music Assistant; null when the bridge does not know which that is.
+             */
+            own: boolean | null;
+            /** Url */
+            url: string | null;
+        };
         /** DeviceTiming */
         DeviceTiming: {
             /**
@@ -2842,6 +2870,11 @@ export interface components {
          */
         DisabledDevice: {
             /**
+             * Adapter
+             * @description Bluetooth adapter (hci name or MAC) the speaker is set to.
+             */
+            adapter: string | null;
+            /**
              * Backend Type
              * @default bluetooth_a2dp
              */
@@ -2855,6 +2888,13 @@ export interface components {
             mac: string | null;
             /** Player Name */
             player_name: string | null;
+            /** Room Name */
+            room_name: string | null;
+            /**
+             * Sink
+             * @description A local audio output's sink name.
+             */
+            sink: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -3535,6 +3575,27 @@ export interface components {
             /** Samples */
             samples: number[];
         };
+        /**
+         * RefusedServer
+         * @description A Music Assistant this player turned away because it is not the bridge's own.
+         */
+        RefusedServer: {
+            /** At */
+            at: string | null;
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Host */
+            host: string | null;
+            /** Name */
+            name: string | null;
+            /** Owner */
+            owner: string | null;
+            /** Server Id */
+            server_id: string | null;
+        };
         /** ReloadOut */
         ReloadOut: {
             job: components["schemas"]["Job"];
@@ -3810,8 +3871,11 @@ export interface components {
              * Command
              * @enum {string}
              */
-            command: "play" | "pause" | "stop" | "next" | "previous" | "volume" | "mute" | "repeat_off" | "repeat_one" | "repeat_all" | "shuffle" | "unshuffle" | "switch";
-            /** Value */
+            command: "play" | "pause" | "stop" | "next" | "previous" | "volume" | "mute" | "repeat_off" | "repeat_one" | "repeat_all" | "shuffle" | "unshuffle" | "switch" | "seek";
+            /**
+             * Value
+             * @description volume: 0-100; mute: bool; seek: absolute position in ms within the current track.
+             */
             value?: unknown;
         };
         /**

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from sendspin_bridge.application.bluetooth import _lease, start_leased_job
@@ -156,7 +157,8 @@ def set_enabled(device_id: str, enabled: bool) -> dict[str, Any]:
     """Enable or disable the speaker in the configuration.
 
     Disabling stops the player at once (Music Assistant drops it); enabling a
-    speaker that is not running takes a bridge restart.
+    player that is not running starts it the way a settings save does, and
+    asks for a restart only when the bridge cannot start it here.
     """
     try:
         client = find_client(device_id)
@@ -168,9 +170,9 @@ def set_enabled(device_id: str, enabled: bool) -> dict[str, Any]:
         configured = find_player_by_id(load_config(), device_id)
         if configured is None:
             raise
-        _persist_device_enabled(str(configured.get("name") or ""), enabled)
+        started = _persist_enabled_and_apply(device_id, str(configured.get("name") or ""), enabled)
         _sync_ha_options_later()
-        return {"enabled": enabled, "restart_required": True}
+        return {"enabled": enabled, "restart_required": not started}
     _persist_device_enabled(str(client.player_name), enabled)
     if not enabled:
         threading.Thread(target=client.set_bt_management_enabled, args=(False,), daemon=True).start()
@@ -178,6 +180,57 @@ def set_enabled(device_id: str, enabled: bool) -> dict[str, Any]:
         _clear_never_paired_state(client)
     _sync_ha_options_later()
     return {"enabled": enabled, "restart_required": not enabled}
+
+
+def _persist_enabled_and_apply(device_id: str, player_name: str, enabled: bool) -> bool:
+    """Persist the flag, then apply the config change online; whether *device_id* was started.
+
+    The before/after snapshots and the diff are taken under ``config_lock`` so
+    a concurrent save cannot slip in between; the orchestrator runs after the
+    lock is released (it reads the config itself).
+    """
+    import sendspin_bridge.config as config_mod
+    from sendspin_bridge.config.store import ConfigStore
+    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot
+    from sendspin_bridge.services.infrastructure.config_diff import ActionKind, diff_configs
+    from sendspin_bridge.services.lifecycle import bridge_runtime_state
+    from sendspin_bridge.services.lifecycle import reconfig_orchestrator as ro
+
+    with config_mod.config_lock:
+        store = ConfigStore(config_mod.CONFIG_FILE)
+        before = store.load()
+        _persist_device_enabled(player_name, enabled)
+        actions = diff_configs(before, store.load())
+    ours = [a.to_summary() for a in actions if a.kind is ActionKind.START_CLIENT and a.player_id == device_id]
+    if not ours:
+        return False
+    summary = ro.ReconfigOrchestrator(
+        bridge_runtime_state.get_main_loop(),
+        get_device_registry_snapshot(),
+        activation_context=bridge_runtime_state.get_activation_context(),
+    ).apply(actions)
+    started = any(entry in summary.started for entry in ours)
+    if started:
+        _drop_from_disabled_list(device_id)
+    return started
+
+
+def _drop_from_disabled_list(device_id: str, also: Callable[[dict], bool] | None = None) -> None:
+    """The disabled list is built at startup; a player started or removed since leaves it now.
+
+    Entries match by player id; ``also`` matches more (a removed speaker by its MAC).
+    """
+    from sendspin_bridge.config import _player_id_from_mac
+    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot, set_disabled_devices
+
+    def _entry_id(entry: dict) -> str:
+        mac = entry.get("mac")
+        return str(entry.get("id") or (_player_id_from_mac(str(mac)) if mac else ""))
+
+    disabled = get_device_registry_snapshot().disabled_devices
+    remaining = [d for d in disabled if _entry_id(d) != device_id and not (also and also(d))]
+    if len(remaining) != len(disabled):
+        set_disabled_devices(remaining)
 
 
 def remove(device_id: str) -> dict[str, Any]:
@@ -209,13 +262,12 @@ def remove(device_id: str) -> dict[str, Any]:
     config.pop("PLAYER_STATE", None)
     config["players"] = [p for p in config.get("players") or [] if p is not target]
     result = config_uc.save_config(config)
-    # The disabled list is built at startup; a removed speaker leaves it now.
-    from sendspin_bridge.services.bluetooth.device_registry import get_device_registry_snapshot, set_disabled_devices
-
-    disabled = get_device_registry_snapshot().disabled_devices
-    remaining = [d for d in disabled if not (target_mac and normalize_mac(d.get("mac")) == target_mac)]
-    if len(remaining) != len(disabled):
-        set_disabled_devices(remaining)
+    # The disabled list is built at startup; a removed player leaves it now —
+    # by its MAC, or by its id (a local output has no MAC).
+    _drop_from_disabled_list(
+        str(target.get("id") or device_id),
+        also=lambda d: bool(target_mac) and normalize_mac(d.get("mac")) == target_mac,
+    )
     return {"removed": True, "reconfig": result.get("reconfig") or {}}
 
 
