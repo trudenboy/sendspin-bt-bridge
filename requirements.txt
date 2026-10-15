@@ -181,7 +181,7 @@ winrt-windows-storage-streams==3.2.1 ; sys_platform == 'win32'
     # via bleak
 yarl==1.24.2
     # via aiohttp
-zeroconf==0.150.0
+zeroconf==0.151.5
     # via
     #   aiosendspin
     #   sendspin-bt-bridge
