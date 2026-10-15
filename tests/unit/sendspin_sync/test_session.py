@@ -399,3 +399,70 @@ def test_propose_counts_as_activity():
     s.propose()
     clock["t"] = 1000.0
     assert not s.expired()
+
+
+# -- review fix round 2 --------------------------------------------------------------------------
+
+
+def test_a_recording_from_before_an_apply_is_not_stored_in_the_next_round(monkeypatch):
+    import threading
+
+    from sendspin_sync import estimator
+
+    s, _ctl, _ = make(mode="auto")
+    s.start()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    real_estimate = estimator.estimate
+    entered, go = threading.Event(), threading.Event()
+
+    def slow_estimate(recording, **kw):
+        entered.set()
+        assert go.wait(2.0)
+        return real_estimate(recording, **kw)
+
+    monkeypatch.setattr(estimator, "estimate", slow_estimate)
+    outcome = {}
+
+    def late_record():
+        try:
+            outcome["m"] = s.record(synth("b", lag_s=0.030))  # round-1 audio
+        except ControlError as exc:
+            outcome["code"] = exc.code
+
+    t = threading.Thread(target=late_record)
+    t.start()
+    assert entered.wait(2.0)
+    s.propose()
+    s.apply()  # auto: round 2 starts with cleared measurements
+    assert s.state == "verifying" and s.round == 2
+    go.set()
+    t.join(2.0)
+    assert outcome == {"code": "session_state"}
+    assert s.measurements == {}
+
+
+def test_start_keeps_tracking_a_signal_that_started_when_on_change_fails():
+    ctl = FakeControl()
+
+    def on_change(sess):
+        if sess.state == "measuring":
+            raise RuntimeError("listener broke")
+
+    s = SyncSession(
+        session_id="s1",
+        group_id="g",
+        mode="semi",
+        point="device",
+        control=ctl,
+        host=FakeHost(),
+        clock=lambda: 0.0,
+        on_change=on_change,
+    )
+    with pytest.raises(RuntimeError):
+        s.start()
+    assert ("start", "http://bridge/api/v1/sync/signal/s1.wav") in ctl.calls
+    # the click track is playing: the session must not pretend it never started
+    assert s.signal_running and s.state != "created" and s.snapshot is not None
+    s.cancel()
+    assert s.restore_tick() is True and ("stop",) in ctl.calls

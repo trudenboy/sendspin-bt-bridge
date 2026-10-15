@@ -62,7 +62,13 @@ class SyncSession:
     worker threads, the store's restore loop and timers may call into the same session
     concurrently; transitions are atomic. The lock is re-entrant because ``on_change`` is
     invoked from inside transitions and may read the session (``to_dict()``). ``record()``
-    runs the estimator outside the lock and re-checks the state before storing the result.
+    runs the estimator outside the lock and, before storing the result, re-checks the state
+    and the measurement round it started in (``session_state`` if a new round began).
+
+    Lock invariant: the lock is held across port I/O (``GroupControl`` calls) and across
+    ``on_change``. So never call session methods from the event-loop thread (they may block on
+    network I/O or on another thread holding the lock), and ``on_change`` must not block waiting
+    on another thread: callers snapshot ``to_dict()`` on the calling thread and post it.
 
     ``error`` is the detail given to ``fail()`` and is never overwritten; ``restore_error``
     is the code of the last failed restore attempt and is cleared when a restore succeeds.
@@ -99,6 +105,7 @@ class SyncSession:
         self._undo_delays: dict[str, int] = {}
         self._written: dict[str, int] = {}
         self._lock = threading.RLock()
+        self._generation = 0  # bumped whenever a new measurement round starts
         self.created_at = clock()
         self.last_activity = clock()
 
@@ -153,16 +160,15 @@ class SyncSession:
             self._set("measuring")
             return
         try:
-            self._begin_signal()
+            self._set("signal_starting")
+            self.start_signal()
         except Exception:
+            if self.signal_running:  # the click track plays: keep tracking it so a restore stops it
+                raise
             # nothing reached the group: back to created so start() can be retried
-            self.members, self.snapshot, self.signal_running = [], None, False
+            self.members, self.snapshot = [], None
             self._set("created")
             raise
-
-    def _begin_signal(self) -> None:
-        self._set("signal_starting")
-        self.start_signal()
         self._set("measuring")
 
     @_locked
@@ -207,9 +213,12 @@ class SyncSession:
         with self._lock:
             self._require("measuring", "verifying")
             self._member(recording.member)
+            generation = self._generation
         m = estimator.estimate(recording)  # slow: outside the lock
         with self._lock:
             self._require("measuring", "verifying")
+            if self._generation != generation:
+                raise ControlError("session_state", "the measurement round changed while estimating")
             self._member(recording.member)
             self.measurements[recording.member] = m
             self.touch()
@@ -289,6 +298,7 @@ class SyncSession:
         self._require("applying", "proposed")
         self.round += 1
         self.measurements = {}
+        self._generation += 1
         if not self.signal_running:
             self.start_signal()
         self._set("verifying")
