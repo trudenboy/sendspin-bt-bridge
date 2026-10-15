@@ -1394,6 +1394,7 @@
       "done": "Done",
       "cancelled": "Cancelled",
       "failed": "Failed"
-    }
+    },
+    "groupError": "Could not open this group ({code}). Check that Music Assistant is reachable and the group still exists."
   }
 }

@@ -122,9 +122,12 @@ export async function uploadRecording(
   pcm: Int16Array,
 ): Promise<SyncMeasurement> {
   const query = new URLSearchParams({ member, start_time_s: String(startTimeS), sample_rate: String(sampleRate) })
+  const headers: Record<string, string> = { 'content-type': 'application/octet-stream' }
+  const csrf = getCsrfToken()
+  if (csrf) headers['X-CSRF-Token'] = csrf
   const res = await fetch(apiUrl(`/api/v1/sync/sessions/${encodeURIComponent(id)}/recordings?${query}`), {
     method: 'POST',
-    headers: { 'content-type': 'application/octet-stream', 'X-CSRF-Token': getCsrfToken() },
+    headers,
     credentials: 'same-origin',
     body: pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer,
   })

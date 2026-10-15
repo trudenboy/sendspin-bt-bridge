@@ -38,6 +38,8 @@ export const useBridgeStore = defineStore('bridge', () => {
     },
     onConnect() {
       sseConnected.value = true
+      // Sync events are not replayed: catch up on what was missed while the stream was down.
+      void useSyncStore().resync()
       if (restartState.value === 'restarting' || restartState.value === 'stopping') {
         restartState.value = 'ready'
         void refreshAdapters()

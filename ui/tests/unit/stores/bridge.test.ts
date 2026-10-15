@@ -52,6 +52,14 @@ describe('useBridgeStore', () => {
     expect(spy).toHaveBeenCalledWith(session)
   })
 
+  it('resyncs group sync state when the event stream comes back', () => {
+    useBridgeStore()
+    const sync = useSyncStore()
+    const spy = vi.spyOn(sync, 'resync').mockResolvedValue(undefined)
+    stream.options!.onConnect!()
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
   it('tracks a restart from stopping to ready', async () => {
     const store = useBridgeStore()
     await store.restart()

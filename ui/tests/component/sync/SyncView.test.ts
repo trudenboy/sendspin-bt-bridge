@@ -10,6 +10,7 @@ vi.mock('@/api/sync', () => ({
   getSyncGroup: vi.fn(), getSession: vi.fn(), listRestores: vi.fn(), retryRestore: vi.fn(), listProfiles: vi.fn(),
 }))
 import * as api from '@/api/sync'
+import { ApiError } from '@/api/client'
 
 const group = {
   id: 'g', name: 'Downstairs', session_id: null, restore_pending: null, error: null,
@@ -68,5 +69,11 @@ describe('SyncView', () => {
     vi.mocked(api.getSyncGroup).mockResolvedValue({ ...group, members: [], error: 'ma_unavailable' } as never)
     const w = await mountView()
     expect(w.get('[role="alert"]').text()).toContain('ma_unavailable')
+  })
+
+  it('says why when the group itself cannot be loaded', async () => {
+    vi.mocked(api.getSyncGroup).mockRejectedValue(new ApiError({ status: 404, code: 'not_found' }))
+    const w = await mountView()
+    expect(w.get('[role="alert"]').text()).toContain('not_found')
   })
 })

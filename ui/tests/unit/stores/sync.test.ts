@@ -207,4 +207,66 @@ describe('sync store', () => {
     expect(api.deleteProfile).toHaveBeenCalledWith('p2')
     expect(store.profiles.map((x) => x.id)).toEqual(['p1'])
   })
+
+  it('adopts a new live session of the group once the held one has ended', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    store.applyEvent({ id: 's1', group_id: 'g', state: 'measuring' } as never)
+    store.applyEvent({ id: 's1', group_id: 'g', state: 'cancelled' } as never)
+    expect(store.session?.state).toBe('cancelled')
+    store.applyEvent({ id: 'x', group_id: 'other', state: 'measuring' } as never)
+    expect(store.session?.id).toBe('s1')
+    store.applyEvent({ id: 's2', group_id: 'g', state: 'measuring' } as never)
+    expect(store.session?.id).toBe('s2')
+    store.applyEvent({ id: 's3', group_id: 'g', state: 'measuring' } as never)
+    expect(store.session?.id).toBe('s2')
+  })
+
+  it('resyncs the held session and group after the event stream was down', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    store.applyEvent({ id: 's1', group_id: 'g', state: 'measuring' } as never)
+    vi.mocked(api.getSession).mockResolvedValue({ id: 's1', group_id: 'g', state: 'proposed' } as never)
+    vi.mocked(api.getSyncGroup).mockResolvedValue({ ...structuredClone(group), session_id: 's1' } as never)
+    await store.resync()
+    expect(api.getSession).toHaveBeenCalledWith('s1')
+    expect(store.session?.state).toBe('proposed')
+  })
+
+  it('drops a held session that expired while the stream was down and picks up the current one', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    store.applyEvent({ id: 's1', group_id: 'g', state: 'measuring' } as never)
+    vi.mocked(api.getSession).mockImplementation(async (id: string) => {
+      if (id === 's1') throw new ApiError({ status: 404, code: 'not_found' })
+      return { id, group_id: 'g', state: 'measuring' } as never
+    })
+    vi.mocked(api.getSyncGroup).mockResolvedValue({ ...structuredClone(group), session_id: 's2' } as never)
+    await store.resync()
+    expect(store.session?.id).toBe('s2')
+  })
+
+  it('does nothing on resync when no group is open', async () => {
+    const store = useSyncStore()
+    await store.resync()
+    expect(api.getSyncGroup).not.toHaveBeenCalled()
+    expect(api.getSession).not.toHaveBeenCalled()
+  })
+
+  it('reads the group back when a live write fails, so the shown delay is the real one', async () => {
+    const store = useSyncStore()
+    // MA holds 0 ms for "a" (the shared fixture is mutated by the tests above).
+    const held = () => ({ ...structuredClone(group), members: [{ ...group.members[0]!, delay_ms: 0 }, group.members[1]!] })
+    vi.mocked(api.getSyncGroup).mockImplementation(async () => held() as never)
+    await store.fetchGroup('g')
+    vi.mocked(api.writeGroupDelays).mockRejectedValue(new ApiError({ status: 502, code: 'ma_error' }))
+    store.setDelay('a', 250)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(api.getSyncGroup).toHaveBeenCalledTimes(2)
+    expect(store.group?.members[0]?.delay_ms).toBe(0)
+    expect(store.error).toBe('ma_error')
+  })
 })

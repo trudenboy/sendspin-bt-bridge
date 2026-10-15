@@ -78,6 +78,14 @@ watch(groupId, (id) => void load(id), { immediate: true })
       <SbSpinner />
     </div>
 
+    <div
+      v-else-if="!group && sync.error"
+      role="alert"
+      class="rounded-(--radius-card) border border-error/50 bg-error/10 px-4 py-3 text-sm text-text-primary"
+    >
+      {{ t('sync.groupError', { code: sync.error }) }}
+    </div>
+
     <template v-else-if="group">
       <div
         v-if="group.error"

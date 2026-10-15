@@ -99,8 +99,9 @@ export const useSyncStore = defineStore('sync', () => {
 
   /* -- restores -------------------------------------------------------------------- */
 
+  /** Not through ``track``: the restore list must not clear or replace the group's error. */
   async function fetchRestores() {
-    restores.value = await track(() => api.listRestores())
+    restores.value = await api.listRestores()
   }
 
   function restoreFor(groupId: string) {
@@ -127,11 +128,52 @@ export const useSyncStore = defineStore('sync', () => {
   /** A ``sync`` event (or a control call's answer): taken when it is this session, or a live one of this group. */
   function applyEvent(next: SyncSession) {
     if (!next || typeof next !== 'object' || !next.id) return
-    if (session.value) {
-      if (next.id === session.value.id) session.value = next
+    const held = session.value
+    if (held) {
+      if (next.id === held.id) session.value = next
+      // A held session that ended gives way to a new live one of its group (another tab, a restart after timeout).
+      else if (ENDED.has(held.state) && next.group_id === held.group_id && !ENDED.has(next.state)) session.value = next
       return
     }
     if (group.value && next.group_id === group.value.id && !ENDED.has(next.state)) session.value = next
+  }
+
+  /** Catch up after the event stream was down: ``sync`` events are not replayed. */
+  async function resync() {
+    const held = session.value
+    if (held) {
+      try {
+        applyEvent(await api.getSession(held.id))
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) {
+          if (session.value?.id === held.id) session.value = null
+        } else {
+          error.value = errorCode(e)
+        }
+      }
+    }
+    const g = group.value
+    if (g) {
+      try {
+        await open(g.id)
+      } catch {
+        /* the failure is kept in ``error`` */
+      }
+    }
+  }
+
+  /** After a failed live write, show what Music Assistant really holds. */
+  async function rollBack(code: string) {
+    const g = group.value
+    if (g) {
+      try {
+        const fresh = await api.getSyncGroup(g.id)
+        if (group.value?.id === fresh.id) group.value = fresh
+      } catch {
+        /* keep the optimistic value; the error below says the write failed */
+      }
+    }
+    error.value = code
   }
 
   async function start(groupId: string, mode: SessionMode, point: SessionPoint = 'device') {
@@ -197,9 +239,7 @@ export const useSyncStore = defineStore('sync', () => {
           () => {
             error.value = null
           },
-          (e) => {
-            error.value = errorCode(e)
-          },
+          (e) => rollBack(errorCode(e)),
         )
       }, DEBOUNCE_MS),
     )
@@ -247,6 +287,7 @@ export const useSyncStore = defineStore('sync', () => {
     fetchGroups,
     fetchGroup,
     open,
+    resync,
     fetchRestores,
     restoreFor,
     retryRestore,
