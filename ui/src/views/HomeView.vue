@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBridgeStore } from '@/stores/bridge'
 import { deviceState, useDeviceStore, SORT_OPTIONS, type BackendFilter } from '@/stores/devices'
-import { isPulseSink } from '@/utils/deviceBackend'
+import { isPulseSink, resolveAdapter } from '@/utils/deviceBackend'
 import { fleetSummary } from '@/utils/fleetSummary'
 import { useAudioStore } from '@/stores/audio'
 import { useBluetoothStore } from '@/stores/bluetooth'
@@ -152,6 +152,11 @@ const uniqueAdapters = computed(() => {
   for (const d of bridge.devices) {
     if (d.bluetooth?.adapter.hci) set.add(d.bluetooth.adapter.hci)
   }
+  // A disabled speaker is filtered by the adapter it is set to, so that adapter must be offered.
+  for (const p of deviceStore.disabledPlayers) {
+    const hci = !p.output && p.adapter ? resolveAdapter(p.adapter, bridge.adapters ?? []).hci : ''
+    if (hci) set.add(hci)
+  }
   return [...set].sort()
 })
 
@@ -261,6 +266,7 @@ function openDetail(id: string) {
           <template #trigger>
             <button
               type="button"
+              data-adapter-filter
               aria-haspopup="true"
               class="inline-flex cursor-pointer items-center gap-1 rounded-(--radius-button) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-secondary"
             >
@@ -274,6 +280,7 @@ function openDetail(id: string) {
           <SbDropdownItem
             v-for="adapter in uniqueAdapters"
             :key="adapter"
+            data-adapter-option
             @click="setAdapterFilter(adapter)"
           >
             {{ adapter }}

@@ -237,3 +237,36 @@ describe('HomeView disabled players', () => {
     expect(w.get('[data-home-summary]').text()).toContain('1 of 1 connected')
   })
 })
+
+describe('HomeView adapter filter', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  const onAdapter = (id: string, name: string, hci: string) => makeDevice({ id, name, bluetooth: { adapter: { hci } } } as never)
+  // The filters appear from six players on.
+  const filler = ['b', 'c', 'd', 'e'].map((id) => onAdapter(id, id.toUpperCase(), 'hci0'))
+  const options = async (w: ReturnType<typeof mountHome>) => {
+    await w.get('button[data-adapter-filter]').trigger('click')
+    await nextTick()
+    return [...document.body.querySelectorAll('[data-adapter-option]')].map((e) => e.textContent?.trim())
+  }
+
+  it('offers an adapter that only disabled speakers use', async () => {
+    useBridgeStore().adapters = [{ id: 'hci1', mac: 'C0:FB:F9:62:D7:D6', name: 'Second', powered: true }] as never
+    const w = mountWithDisabled(
+      [onAdapter('a', 'Alpha', 'hci0'), ...filler],
+      [offDevice('x', 'Xray', { adapter: 'C0:FB:F9:62:D7:D6' }), offDevice('y', 'Yankee', { adapter: 'hci1' })],
+    )
+    expect(await options(w)).toEqual(['hci0', 'hci1'])
+  })
+
+  it('offers no adapter for a disabled local output', async () => {
+    const w = mountWithDisabled(
+      [onAdapter('a', 'Alpha', 'hci0'), onAdapter('z', 'Zulu', 'hci1'), ...filler],
+      [offDevice('o', 'Out', { backend_type: 'pulse_sink', adapter: 'hci9' })],
+    )
+    expect(await options(w)).toEqual(['hci0', 'hci1'])
+  })
+})
