@@ -108,7 +108,7 @@ pycairo==1.29.1
     # via pygobject
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
-pygments==2.20.0
+pygments==2.21.0
     # via sendspin-bt-bridge
 pygobject==3.56.3
     # via sendspin-bt-bridge
