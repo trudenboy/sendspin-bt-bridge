@@ -17,6 +17,7 @@ vi.mock('@/api/bluetooth', () => ({ getAdapters: vi.fn().mockResolvedValue([{ id
 import { getStatus, restartBridge } from '@/api/status'
 import { useBridgeStore } from '@/stores/bridge'
 import { useJobsStore } from '@/stores/jobs'
+import { useSyncStore } from '@/stores/sync'
 
 describe('useBridgeStore', () => {
   beforeEach(() => {
@@ -39,6 +40,16 @@ describe('useBridgeStore', () => {
     expect(store.deviceById('x')).toBeTruthy()
     stream.options!.onEvent!({ type: 'job', data: { id: 'j9', status: 'running' } })
     expect(useJobsStore().byId.j9).toBeTruthy()
+  })
+
+  it('subscribes to sync events and hands them to the sync store', () => {
+    useBridgeStore()
+    expect((stream.options as unknown as { types: string[] }).types).toEqual(expect.arrayContaining(['status', 'job', 'sync']))
+    const sync = useSyncStore()
+    const spy = vi.spyOn(sync, 'applyEvent')
+    const session = { id: 's1', group_id: 'g', state: 'measuring' }
+    stream.options!.onEvent!({ type: 'sync', data: session })
+    expect(spy).toHaveBeenCalledWith(session)
   })
 
   it('tracks a restart from stopping to ready', async () => {

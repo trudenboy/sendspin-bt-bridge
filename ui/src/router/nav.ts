@@ -17,6 +17,10 @@ export const NAV: readonly NavItem[] = [
   { to: '/diagnostics', label: 'nav.diagnostics', short: 'nav.diagnosticsShort', icon: Activity },
 ]
 
+/** Pages that sit under one of the places (a group's sync page belongs to Groups). */
+const UNDER: Readonly<Record<string, readonly string[]>> = { '/groups': ['/sync/'] }
+
 export function isActive(path: string, to: string) {
-  return to === '/' ? path === '/' : path.startsWith(to)
+  if (to === '/') return path === '/'
+  return path.startsWith(to) || (UNDER[to] ?? []).some((prefix) => path.startsWith(prefix))
 }

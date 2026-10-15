@@ -22,6 +22,18 @@ export type StartupProgress = Schemas['StartupProgress']
 export type QueueCommandOut = Schemas['QueueCommandOut']
 export type BugReportOut = Schemas['BugReportOut']
 
+export type SyncGroup = Schemas['SyncGroup']
+export type SyncMember = Schemas['SyncMember']
+export type SyncSession = Schemas['SyncSessionOut']
+export type SyncProfile = Schemas['ProfileOut']
+export type SyncProfileApplied = Schemas['ProfileApplyOut']
+export type SyncMeasurement = Schemas['MeasurementOut']
+export type SyncProposal = Schemas['ProposalOut']
+export type PendingRestore = Schemas['PendingRestoreOut']
+export type SessionMode = SyncSession['mode']
+export type SessionPoint = SyncSession['point']
+export type SessionStateName = SyncSession['state']
+
 export type JobStatus = Job['status']
 export type AuthMethod = Schemas['SignInRequest']['method']
 export type TransportCommand = Schemas['TransportIn']['command']
@@ -48,7 +60,7 @@ export interface ScanResult {
 /** One envelope for every event on /api/v1/events. */
 export interface EventEnvelope<T = unknown> {
   v: number
-  type: 'status' | 'job' | 'log'
+  type: 'status' | 'job' | 'log' | 'sync'
   at: string
   data: T
 }

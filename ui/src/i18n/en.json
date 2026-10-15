@@ -1279,7 +1279,8 @@
     "settings": "Settings",
     "settingsShort": "Settings",
     "diagnostics": "Diagnostics",
-    "diagnosticsShort": "Health"
+    "diagnosticsShort": "Health",
+    "sync": "Group sync"
   },
   "home": {
     "maConnected": "Music Assistant connected",
@@ -1361,5 +1362,38 @@
     "suspendOutput": "Suspend audio output",
     "resumeOutput": "Resume audio output",
     "settings": "Settings"
+  },
+  "sync": {
+    "open": "Sync",
+    "tuneGroup": "Tune the whole group",
+    "tuneGroupHelp": "Line up every speaker of this player's Music Assistant group at once.",
+    "backToGroups": "Back to groups",
+    "tabs": {
+      "group": "Group",
+      "manual": "Manual",
+      "measure": "Measure"
+    },
+    "members": "Members",
+    "delay": "{ms} ms",
+    "notAdjustable": "Not adjustable",
+    "noMembers": "This group has no members.",
+    "loadError": "Could not read the group members ({code}).",
+    "restoreFailed": "Could not restore the group",
+    "restoreFailedHelp": "Tuning was interrupted by a restart, so some speakers may still be muted ({code}). The bridge keeps trying.",
+    "manualIntro": "Play a test signal and adjust each speaker by ear.",
+    "measureIntro": "Measure each speaker with this device's microphone.",
+    "state": {
+      "idle": "No tuning in progress",
+      "created": "Starting",
+      "signal_starting": "Starting the test signal",
+      "measuring": "Measuring",
+      "proposed": "Proposal ready",
+      "applying": "Applying the delays",
+      "verifying": "Checking the result",
+      "restoring": "Restoring the group",
+      "done": "Done",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    }
   }
 }

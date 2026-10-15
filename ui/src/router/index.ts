@@ -29,6 +29,12 @@ const router = createRouter({
       component: () => import('@/views/GroupsView.vue'),
     },
     {
+      path: '/sync/:groupId',
+      name: 'sync',
+      meta: { title: 'nav.sync' },
+      component: () => import('@/views/SyncView.vue'),
+    },
+    {
       path: '/config',
       name: 'config',
       meta: { title: 'nav.settings' },

@@ -6,6 +6,7 @@ import MaGroupList from '@/components/ma/MaGroupList.vue'
 import en from '@/i18n/en.json'
 import type { MaGroup } from '@/api/types'
 import { useBridgeStore } from '@/stores/bridge'
+import { createRouter, createMemoryHistory } from 'vue-router'
 
 let mockGroupsResult: MaGroup[] = []
 const getGroupsSpy = vi.fn(() => Promise.resolve(mockGroupsResult))
@@ -113,5 +114,23 @@ describe('MaGroupList', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('opens group sync tuning from the group card', async () => {
+    mockGroupsResult = [{ id: 'syncgroup_x', name: 'Downstairs', members: [] }]
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/sync/:groupId', name: 'sync', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    const wrapper = mount(MaGroupList, { global: { plugins: [buildI18n(), router] } })
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text() === 'Sync')!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('sync')
+    expect(router.currentRoute.value.params.groupId).toBe('syncgroup_x')
   })
 })
