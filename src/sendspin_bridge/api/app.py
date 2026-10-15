@@ -73,6 +73,7 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
     v1.include_router(ha_integration.router)
     v1.include_router(config_router.router)
     v1.include_router(diagnostics.router)
+    v1.include_router(sync.router)
     v1.include_router(events_router)
     app.include_router(v1)
     app.include_router(compat_ha.router)

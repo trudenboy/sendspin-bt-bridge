@@ -1,0 +1,861 @@
+{
+  "$defs": {
+    "AbIn": {
+      "properties": {
+        "a": {
+          "title": "A",
+          "type": "string"
+        },
+        "b": {
+          "title": "B",
+          "type": "string"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ],
+      "title": "AbIn",
+      "type": "object"
+    },
+    "ApplyIn": {
+      "properties": {
+        "rows": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "maximum": 5000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Delays to write instead of the proposal.",
+          "title": "Rows"
+        },
+        "verify": {
+          "default": false,
+          "description": "Semi-automatic: measure again after applying.",
+          "title": "Verify",
+          "type": "boolean"
+        }
+      },
+      "title": "ApplyIn",
+      "type": "object"
+    },
+    "CaptureIn": {
+      "properties": {
+        "kind": {
+          "default": "device",
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "CaptureIn",
+      "type": "object"
+    },
+    "DelaysIn": {
+      "properties": {
+        "delays": {
+          "additionalProperties": {
+            "maximum": 5000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        }
+      },
+      "required": [
+        "delays"
+      ],
+      "title": "DelaysIn",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "description": "Stable `code` of the problem responses (RFC 9457) the sync endpoints return.",
+      "enum": [
+        "ma_error",
+        "ma_forbidden",
+        "ma_unavailable",
+        "member_gone",
+        "no_measurement",
+        "not_adjustable",
+        "not_found",
+        "recording_invalid",
+        "restore_pending",
+        "session_active",
+        "session_expired",
+        "session_state",
+        "undo_expired"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "MeasurementOut": {
+      "properties": {
+        "clicks": {
+          "default": 0,
+          "title": "Clicks",
+          "type": "integer"
+        },
+        "confidence": {
+          "default": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "member": {
+          "title": "Member",
+          "type": "string"
+        },
+        "phase_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Phase Ms"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "spread_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spread Ms"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "not_heard",
+            "unstable",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "status",
+        "phase_ms",
+        "confidence",
+        "clicks",
+        "spread_ms",
+        "reason"
+      ],
+      "title": "MeasurementOut",
+      "type": "object"
+    },
+    "MemberDelayIn": {
+      "properties": {
+        "ms": {
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms"
+      ],
+      "title": "MemberDelayIn",
+      "type": "object"
+    },
+    "PendingRestoreOut": {
+      "description": "A restore left from before a bridge restart that has not succeeded yet.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Code of the last failed attempt; null before the first.",
+          "title": "Error"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "group_id",
+        "error"
+      ],
+      "title": "PendingRestoreOut",
+      "type": "object"
+    },
+    "ProfileApplyOut": {
+      "properties": {
+        "applied": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Applied",
+          "type": "object"
+        },
+        "skipped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skipped",
+          "type": "array"
+        }
+      },
+      "required": [
+        "applied",
+        "skipped"
+      ],
+      "title": "ProfileApplyOut",
+      "type": "object"
+    },
+    "ProfileCreate": {
+      "properties": {
+        "delays": {
+          "additionalProperties": {
+            "maximum": 5000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "device",
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "name",
+        "delays"
+      ],
+      "title": "ProfileCreate",
+      "type": "object"
+    },
+    "ProfileOut": {
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "delays": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "group_id",
+        "kind",
+        "delays",
+        "created_at",
+        "notes"
+      ],
+      "title": "ProfileOut",
+      "type": "object"
+    },
+    "ProfilePatch": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        }
+      },
+      "title": "ProfilePatch",
+      "type": "object"
+    },
+    "ProposalOut": {
+      "properties": {
+        "predicted_spread_ms": {
+          "title": "Predicted Spread Ms",
+          "type": "number"
+        },
+        "reference": {
+          "title": "Reference",
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/ProposalRowOut"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "unverified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unverified",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reference",
+        "rows",
+        "predicted_spread_ms",
+        "unverified",
+        "warnings"
+      ],
+      "title": "ProposalOut",
+      "type": "object"
+    },
+    "ProposalRowOut": {
+      "properties": {
+        "after_ms": {
+          "title": "After Ms",
+          "type": "integer"
+        },
+        "before_ms": {
+          "title": "Before Ms",
+          "type": "integer"
+        },
+        "clamped": {
+          "title": "Clamped",
+          "type": "boolean"
+        },
+        "delta_ms": {
+          "title": "Delta Ms",
+          "type": "integer"
+        },
+        "member": {
+          "title": "Member",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "before_ms",
+        "after_ms",
+        "delta_ms",
+        "clamped"
+      ],
+      "title": "ProposalRowOut",
+      "type": "object"
+    },
+    "ReferenceIn": {
+      "properties": {
+        "member": {
+          "title": "Member",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member"
+      ],
+      "title": "ReferenceIn",
+      "type": "object"
+    },
+    "SessionCreate": {
+      "properties": {
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "manual",
+            "semi",
+            "auto"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "point": {
+          "default": "device",
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Point",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "mode"
+      ],
+      "title": "SessionCreate",
+      "type": "object"
+    },
+    "SignalIn": {
+      "properties": {
+        "action": {
+          "enum": [
+            "start",
+            "stop"
+          ],
+          "title": "Action",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "SignalIn",
+      "type": "object"
+    },
+    "SkipIn": {
+      "properties": {
+        "member": {
+          "title": "Member",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member"
+      ],
+      "title": "SkipIn",
+      "type": "object"
+    },
+    "SoloIn": {
+      "properties": {
+        "member": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Member"
+        }
+      },
+      "required": [
+        "member"
+      ],
+      "title": "SoloIn",
+      "type": "object"
+    },
+    "SyncGroup": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/SyncMember"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "restore_pending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingRestoreOut"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set while the group still has to be restored after a restart."
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The session tuning this group, if any.",
+          "title": "Session Id"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "members",
+        "session_id",
+        "restore_pending"
+      ],
+      "title": "SyncGroup",
+      "type": "object"
+    },
+    "SyncMember": {
+      "properties": {
+        "adjustable": {
+          "title": "Adjustable",
+          "type": "boolean"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Id"
+        },
+        "delay_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delay Ms"
+        },
+        "last_measured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Measured At"
+        },
+        "ma_player_id": {
+          "title": "Ma Player Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "bridge",
+            "sendspin",
+            "other"
+          ],
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ma_player_id",
+        "name",
+        "origin",
+        "adjustable",
+        "client_id",
+        "delay_ms",
+        "last_measured_at"
+      ],
+      "title": "SyncMember",
+      "type": "object"
+    },
+    "SyncSessionOut": {
+      "description": "The session resource; also the payload of ``sync`` events.",
+      "properties": {
+        "departed": {
+          "description": "Members that left the group mid-session.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Departed",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "history": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "History",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "measurements": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MeasurementOut"
+          },
+          "title": "Measurements",
+          "type": "object"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/SyncMember"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "manual",
+            "semi",
+            "auto"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "point": {
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Point",
+          "type": "string"
+        },
+        "proposal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProposalOut"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reference"
+        },
+        "restore_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Code of the last failed restore attempt.",
+          "title": "Restore Error"
+        },
+        "round": {
+          "title": "Round",
+          "type": "integer"
+        },
+        "signal_running": {
+          "title": "Signal Running",
+          "type": "boolean"
+        },
+        "soloed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Soloed"
+        },
+        "state": {
+          "enum": [
+            "created",
+            "signal_starting",
+            "measuring",
+            "proposed",
+            "applying",
+            "verifying",
+            "restoring",
+            "done",
+            "cancelled",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "undo_until_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds left to undo an automatic apply; null when closed.",
+          "title": "Undo Until S"
+        }
+      },
+      "required": [
+        "id",
+        "group_id",
+        "mode",
+        "point",
+        "state",
+        "members",
+        "departed",
+        "measurements",
+        "proposal",
+        "history",
+        "error",
+        "restore_error",
+        "signal_running",
+        "soloed",
+        "reference",
+        "round",
+        "undo_until_s"
+      ],
+      "title": "SyncSessionOut",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/trudenboy/sendspin-bt-bridge/docs/contracts/sync-contract-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Resources of /api/v1/sync/*; the payload of `sync` events is SyncSessionOut.",
+  "title": "sync-contract v1"
+}

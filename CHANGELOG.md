@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Group sync tuning: align the Sendspin players of a Music Assistant sync
+  group from the bridge — manual sliders with a click track and solo
+  listening, a phone-microphone measurement with a reviewable proposal or
+  one-shot apply with verification and undo, and named delay profiles
+  (`SYNC_PROFILES`). New `/api/v1/sync/*` endpoints and `sync` events.
+
 ## [3.1.0-beta.4] - 2026-10-15
 
 ### Added
