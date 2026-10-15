@@ -155,6 +155,21 @@ def compute_device_health_state(device: Any) -> DeviceHealthState:
             last_event_at=last_event_at,
         )
 
+    if facts.connected_server_own is False and getattr(device, "server_connected", False):
+        _append_reason(reasons, "foreign_server")
+        for reason in event_reasons:
+            _append_reason(reasons, reason)
+        where = facts.connected_server_host or "another server"
+        if facts.connected_server_name:
+            where = f"{where} ({facts.connected_server_name})"
+        return DeviceHealthState(
+            state="degraded",
+            severity="warning",
+            summary=f"Connected to Music Assistant on {where}, not to this bridge's Music Assistant",
+            reasons=reasons,
+            last_event_at=last_event_at,
+        )
+
     if audio_streaming:
         return DeviceHealthState(
             state="streaming",

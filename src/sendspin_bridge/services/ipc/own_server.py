@@ -159,13 +159,20 @@ class RefusalLog:
     _entries: dict[str, dict[str, Any]] = field(default_factory=dict)
     _logged_at: dict[str, float] = field(default_factory=dict)
 
-    def note(self, *, server_id: str | None, host: str | None, name: str | None) -> bool:
+    def note(self, *, server_id: str | None, host: str | None, name: str | None, owner: str | None = None) -> bool:
         """Record a refusal; return whether it should be logged now."""
         key = server_id or normalize_host(host) or "?"
         now = self.clock()
         entry = self._entries.setdefault(key, {"count": 0})
         entry.update(
-            {"server_id": server_id, "host": normalize_host(host) or None, "name": name, "at": _iso_now(), "mono": now}
+            {
+                "server_id": server_id,
+                "host": normalize_host(host) or None,
+                "name": name,
+                "owner": owner,
+                "at": _iso_now(),
+                "mono": now,
+            }
         )
         entry["count"] += 1
         last = self._logged_at.get(key)
@@ -232,7 +239,7 @@ class ServerGate:
         name = getattr(info, "name", None)
         host = peer_host_var.get()
         self._refused.add(id(connection))
-        if self.refusals.note(server_id=server_id, host=host, name=name):
+        if self.refusals.note(server_id=server_id, host=host, name=name, owner=self._own_label()):
             self._logger.warning(
                 "Refused Music Assistant at %s (%s): this bridge belongs to %s",
                 host or "unknown host",

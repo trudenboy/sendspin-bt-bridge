@@ -2698,8 +2698,11 @@ export interface components {
              * @default false
              */
             playing: boolean;
+            /** Refused Servers */
+            refused_servers: components["schemas"]["RefusedServer"][];
             /** Repeat Mode */
             repeat_mode: string | null;
+            server: components["schemas"]["DeviceServer"];
             /**
              * Server Connected
              * @default false
@@ -2775,6 +2778,25 @@ export interface components {
              * @default false
              */
             stopping: boolean;
+        };
+        /**
+         * DeviceServer
+         * @description The Music Assistant server the player is connected to.
+         */
+        DeviceServer: {
+            /** Host */
+            host: string | null;
+            /** Id */
+            id: string | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Own
+             * @description Whether it is this bridge's own Music Assistant; null when the bridge does not know which that is.
+             */
+            own: boolean | null;
+            /** Url */
+            url: string | null;
         };
         /** DeviceTiming */
         DeviceTiming: {
@@ -3552,6 +3574,27 @@ export interface components {
             sample_rate: number;
             /** Samples */
             samples: number[];
+        };
+        /**
+         * RefusedServer
+         * @description A Music Assistant this player turned away because it is not the bridge's own.
+         */
+        RefusedServer: {
+            /** At */
+            at: string | null;
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Host */
+            host: string | null;
+            /** Name */
+            name: string | null;
+            /** Owner */
+            owner: string | null;
+            /** Server Id */
+            server_id: string | null;
         };
         /** ReloadOut */
         ReloadOut: {

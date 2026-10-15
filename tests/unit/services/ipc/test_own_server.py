@@ -114,3 +114,9 @@ def test_own_server_round_trips_through_the_daemon_params():
     assert OwnServer.from_params(own.to_params()) == own
     assert OwnServer.from_params(None) is None
     assert OwnServer.from_params({"hosts": []}) is None
+
+
+def test_refusals_carry_who_owns_the_bridge():
+    log = RefusalLog()
+    log.note(server_id="s", host="1.1.1.1", name="Test MA", owner="192.168.10.10")
+    assert log.recent()[0]["owner"] == "192.168.10.10"

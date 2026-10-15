@@ -2349,6 +2349,13 @@
             "title": "Playing",
             "type": "boolean"
           },
+          "refused_servers": {
+            "items": {
+              "$ref": "#/components/schemas/RefusedServer"
+            },
+            "title": "Refused Servers",
+            "type": "array"
+          },
           "repeat_mode": {
             "anyOf": [
               {
@@ -2359,6 +2366,9 @@
               }
             ],
             "title": "Repeat Mode"
+          },
+          "server": {
+            "$ref": "#/components/schemas/DeviceServer"
           },
           "server_connected": {
             "default": false,
@@ -2415,6 +2425,8 @@
           "server_connected",
           "server_connected_at",
           "server_url",
+          "server",
+          "refused_servers",
           "track",
           "playback_speed",
           "shuffle",
@@ -2615,6 +2627,76 @@
           "daemon_recurring_lifetime_s"
         ],
         "title": "DeviceSendspin",
+        "type": "object"
+      },
+      "DeviceServer": {
+        "description": "The Music Assistant server the player is connected to.",
+        "properties": {
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "own": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether it is this bridge's own Music Assistant; null when the bridge does not know which that is.",
+            "title": "Own"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "host",
+          "url",
+          "own"
+        ],
+        "title": "DeviceServer",
         "type": "object"
       },
       "DeviceTiming": {
@@ -4551,6 +4633,81 @@
           "sample_rate"
         ],
         "title": "RecordingIn",
+        "type": "object"
+      },
+      "RefusedServer": {
+        "description": "A Music Assistant this player turned away because it is not the bridge's own.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "count": {
+            "default": 1,
+            "title": "Count",
+            "type": "integer"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "server_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Id"
+          }
+        },
+        "required": [
+          "host",
+          "name",
+          "server_id",
+          "owner",
+          "at",
+          "count"
+        ],
+        "title": "RefusedServer",
         "type": "object"
       },
       "ReloadOut": {

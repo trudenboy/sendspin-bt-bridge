@@ -173,3 +173,26 @@ def test_build_emits_only_cleared_event_when_error_resolves_alone():
     event_types = [event["event_type"] for event in events]
     assert "runtime-error" not in event_types
     assert "runtime-error-cleared" in event_types
+
+
+def test_a_newly_refused_music_assistant_is_an_event_with_who_and_why():
+    refused = {"host": "192.168.10.229", "name": "Test MA", "server_id": "s1", "owner": "192.168.10.10", "count": 1}
+    events = StatusEventBuilder.build(
+        {"refused_servers": []}, {"refused_servers": [refused]}, {"refused_servers": [refused]}
+    )
+
+    (event,) = events
+    assert event["event_type"] == "ma-server-refused"
+    assert event["level"] == "warning"
+    assert event["message"] == (
+        "Refused Music Assistant at 192.168.10.229 (Test MA): this bridge belongs to 192.168.10.10"
+    )
+
+
+def test_a_redial_of_an_already_refused_server_is_not_a_new_event():
+    first = {"host": "192.168.10.229", "name": "Test MA", "server_id": "s1", "owner": "x", "count": 1}
+    again = {**first, "count": 2}
+    events = StatusEventBuilder.build(
+        {"refused_servers": [first]}, {"refused_servers": [again]}, {"refused_servers": [again]}
+    )
+    assert events == []
