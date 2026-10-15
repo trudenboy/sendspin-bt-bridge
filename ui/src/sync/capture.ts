@@ -121,6 +121,8 @@ export class SyncRecorder {
   private sink: GainNode | null = null
   private pending: Pending | null = null
   private opening: Promise<void> | null = null
+  /** Bumped by `close()`: an open started before it must not take hold of anything. */
+  private generation = 0
   private nextId = 1
   private lastLevel = 0
   private _epoch = 0
@@ -173,14 +175,16 @@ export class SyncRecorder {
   open(): Promise<void> {
     if (this.opening) return this.opening
     if (this.ctx && !this._micLost) return Promise.resolve()
-    this.opening = this.doOpen().finally(() => {
-      this.opening = null
+    const opening: Promise<void> = this.doOpen().finally(() => {
+      if (this.opening === opening) this.opening = null
     })
-    return this.opening
+    this.opening = opening
+    return opening
   }
 
   private async doOpen(): Promise<void> {
     if (this.ctx) this.close()
+    const gen = this.generation
     if (!SyncRecorder.supported()) throw new SyncCaptureError('unsupported')
     let stream: MediaStream
     try {
@@ -189,6 +193,11 @@ export class SyncRecorder {
       })
     } catch (e) {
       throw micError(e)
+    }
+    // Closed while the permission prompt was up: the microphone must not stay live.
+    if (gen !== this.generation) {
+      for (const t of stream.getTracks()) t.stop()
+      throw new SyncCaptureError('not_open', 'closed while opening')
     }
     const ctx = new AudioContext()
     const release = () => {
@@ -200,6 +209,10 @@ export class SyncRecorder {
     } catch (e) {
       release()
       throw new SyncCaptureError('worklet', e instanceof Error ? e.message : String(e))
+    }
+    if (gen !== this.generation) {
+      release()
+      throw new SyncCaptureError('not_open', 'closed while opening')
     }
     let source: MediaStreamAudioSourceNode
     let node: AudioWorkletNode
@@ -282,7 +295,10 @@ export class SyncRecorder {
     return this.lastLevel
   }
 
+  /** Releases the microphone and the context; an open still in progress is cancelled. */
   close(): void {
+    this.generation++
+    this.opening = null
     this.fail(new SyncCaptureError('not_open'))
     if (this.node) this.node.port.onmessage = null
     this.source?.disconnect()

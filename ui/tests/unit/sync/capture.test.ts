@@ -426,6 +426,75 @@ describe('SyncRecorder', () => {
     expect(await p).toMatchObject({ code: 'timeout' })
   })
 
+  it('cancels an open still waiting for the permission prompt when closed, and stops that microphone', async () => {
+    let grant!: (s: unknown) => void
+    ;(navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise((r) => (grant = r)),
+    )
+    const made = vi.fn()
+    const OrigCtx = globalThis.AudioContext
+    vi.stubGlobal(
+      'AudioContext',
+      class extends OrigCtx {
+        constructor() {
+          super()
+          made()
+        }
+      },
+    )
+    const r = new SyncRecorder()
+    const opening = r.open().catch((e: unknown) => e)
+    r.close()
+    let stops = 0
+    grant({ getTracks: () => [{ stop: () => stops++, onended: null }] })
+    expect(await opening).toMatchObject({ code: 'not_open' })
+    expect(stops).toBe(1)
+    expect(made).not.toHaveBeenCalled()
+    expect(r.needsResume).toBe(false)
+    await expect(r.record(1)).rejects.toMatchObject({ code: 'not_open' })
+  })
+
+  it('cancels an open closed while the worklet loads, releasing the microphone and the context', async () => {
+    let loaded!: () => void
+    let made: FakeContext | null = null
+    const OrigCtx = globalThis.AudioContext
+    vi.stubGlobal(
+      'AudioContext',
+      class extends OrigCtx {
+        constructor() {
+          super()
+          made = this as unknown as FakeContext
+          this.audioWorklet.addModule = vi.fn(() => new Promise<void>((r) => (loaded = r)))
+        }
+      },
+    )
+    const r = new SyncRecorder()
+    const opening = r.open().catch((e: unknown) => e)
+    await vi.waitFor(() => expect(made).not.toBeNull())
+    r.close()
+    loaded()
+    expect(await opening).toMatchObject({ code: 'not_open' })
+    expect(trackStops).toBe(1)
+    expect(made!.closed).toBe(true)
+    expect(r.needsResume).toBe(false)
+  })
+
+  it('opens afresh after a cancelled open', async () => {
+    let grant!: (s: unknown) => void
+    const gum = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>
+    gum.mockImplementationOnce(() => new Promise((r) => (grant = r)))
+    const r = new SyncRecorder()
+    const first = r.open().catch((e: unknown) => e)
+    r.close()
+    const second = r.open()
+    grant({ getTracks: () => [] })
+    expect(await first).toMatchObject({ code: 'not_open' })
+    await second
+    expect(gum).toHaveBeenCalledTimes(2)
+    expect(r.needsResume).toBe(false)
+    expect(ctxOf(r)).not.toBeNull()
+  })
+
   it('releases the microphone and the context on close', async () => {
     const r = new SyncRecorder()
     await r.open()
