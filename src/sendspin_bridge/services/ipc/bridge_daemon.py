@@ -487,11 +487,12 @@ class BridgeDaemon:
         is told off by ``_reject_connection``.  Both are the seams its own
         multi-server arbitration is built on, so the bridge overrides exactly
         those two.  A refused server gets ``client/goodbye`` with reason
-        ``shutdown``: the sending server stops its retry loop (the library's
-        default ``concurrent_attempt`` makes it retry), yet still dials again
-        when the player's mDNS advert changes.  ``another_server`` would make
-        it ignore the advert until the record disappears, which locks out the
-        bridge's own server after a refusal caused by a wrong setting.  If a
+        ``restart``: the server keeps retrying with its exponential backoff
+        (capped at five minutes), so a refused server costs one short session
+        every few minutes, and the bridge's own server comes back by itself
+        once a wrong setting is fixed.  Every other goodbye ends the server's
+        retry loop, after which it dials again only on an mDNS change, which
+        a restarted bridge does not reliably produce (seen live).  If a
         future aiosendspin drops either method the check degrades to accepting
         every server, with a warning, rather than breaking connections.
         """
@@ -510,7 +511,7 @@ class BridgeDaemon:
 
             async def _reject_connection(self, connection):
                 if gate.take_refused(connection):
-                    await self._dismiss_connection(connection, GoodbyeReason.SHUTDOWN)
+                    await self._dismiss_connection(connection, GoodbyeReason.RESTART)
                     await connection.disconnect()
                     return
                 await super()._reject_connection(connection)

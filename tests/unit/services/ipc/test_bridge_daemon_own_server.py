@@ -47,7 +47,7 @@ def _connection(server_id: str, name: str = "MA", activities: list | None = None
 
 
 @pytest.mark.asyncio
-async def test_a_foreign_server_is_refused_with_shutdown(tmp_path: Path, caplog):
+async def test_a_foreign_server_is_refused_with_restart(tmp_path: Path, caplog):
     daemon = await _daemon(tmp_path)
     client = daemon._client
     foreign = _connection("srv-foreign", "Test MA")
@@ -57,10 +57,11 @@ async def test_a_foreign_server_is_refused_with_shutdown(tmp_path: Path, caplog)
         assert client._should_admit_connection(foreign) is False
         await client._reject_connection(foreign)
 
-    # ``shutdown`` ends that server's retry loop but, unlike ``another_server``,
-    # does not make it ignore this player's mDNS adverts for good: the server
-    # that owns the bridge after a configuration fix still finds it.
-    foreign.send_goodbye.assert_awaited_once_with(GoodbyeReason.SHUTDOWN)
+    # ``restart`` keeps the server's own retry loop (with its backoff) alive:
+    # any other goodbye ends it, and the server then waits for an mDNS change
+    # that a restarted bridge does not reliably produce, so the bridge's own
+    # server would stay away after a refusal caused by a wrong setting.
+    foreign.send_goodbye.assert_awaited_once_with(GoodbyeReason.RESTART)
     foreign.disconnect.assert_awaited_once()
     refused = daemon._bridge_status["refused_servers"]
     assert refused[0]["host"] == "192.0.2.229" and refused[0]["name"] == "Test MA"
