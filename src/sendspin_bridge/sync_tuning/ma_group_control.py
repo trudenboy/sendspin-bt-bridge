@@ -244,6 +244,12 @@ class MaGroupControl:
         except MaApiError as exc:
             raise _wrap(exc) from exc
 
+    def close(self) -> None:
+        """Release the Music Assistant connection this control owns (the session store calls it)."""
+        close = getattr(self._api, "close", None)
+        if callable(close):
+            close()
+
 
 def default_group_control() -> MaGroupControl:
     """Build a fresh control for one tuning session.

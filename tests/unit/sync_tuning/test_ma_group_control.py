@@ -182,3 +182,17 @@ def test_restore_forgets_what_the_solo_muted():
     ctl.solo("grp", None)  # a late clear must not undo the user's mute
     assert ma.players["uni"]["volume_muted"]
     assert not [c for c in ma.calls[before:] if c[0] == "players/cmd/volume_mute"]
+
+
+def test_close_closes_the_music_assistant_connection():
+    class Closable(FakeMa):
+        closed = 0
+
+        def close(self):
+            self.closed += 1
+
+    ma = Closable()
+    ctl, _ = make(ma)
+    ctl.close()
+    assert ma.closed == 1
+    make()[0].close()  # an api without close() is fine

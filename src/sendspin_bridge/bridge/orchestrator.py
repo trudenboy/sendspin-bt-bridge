@@ -58,6 +58,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _PA_FALLBACK_SINK = "sendspin_fallback"
+_SYNC_SHUTDOWN_TIMEOUT_S = 15.0  # a stop_signal reply alone may take up to 40 s; do not hold shutdown for it
 
 
 def _resolve_config_dir() -> Path:
@@ -476,6 +477,7 @@ class BridgeOrchestrator:
     ) -> None:
         """Mute active sinks, stop the sink monitor, and stop all clients."""
         logger.info("Received shutdown signal — muting sinks before exit...")
+        await self._shutdown_sync_tuning()
         mute_sink_fn = mute_sink
         if mute_sink_fn is None:
             from sendspin_bridge.services.audio.pulse import aset_sink_mute as imported_mute_sink
@@ -560,6 +562,35 @@ class BridgeOrchestrator:
 
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, _signal_handler)
+
+    async def start_sync_tuning(self) -> None:
+        """Restore what a group sync-tuning session left behind before a restart.
+
+        Runs in the executor and is not awaited: the store talks to Music Assistant with
+        blocking calls that need this loop, and retries on its own while MA is unreachable.
+        """
+
+        def _restore() -> None:
+            from sendspin_bridge.sync_tuning import session_store
+
+            try:
+                session_store.get_store().restore_persisted()
+            except Exception:
+                logger.exception("Restoring group sync-tuning sessions failed")
+
+        asyncio.get_running_loop().run_in_executor(None, _restore)
+
+    async def _shutdown_sync_tuning(self) -> None:
+        """End live sync-tuning sessions (restore their groups), bounded so shutdown never hangs."""
+        from sendspin_bridge.sync_tuning import session_store
+
+        try:
+            await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(None, session_store.shutdown_store),
+                timeout=_SYNC_SHUTDOWN_TIMEOUT_S,
+            )
+        except Exception:
+            logger.warning("Ending group sync-tuning sessions at shutdown failed", exc_info=True)
 
     async def initialize_ma_integration(
         self,
@@ -1053,6 +1084,7 @@ class BridgeOrchestrator:
             ma_bootstrap = await self.initialize_ma_integration(
                 bootstrap.config, clients, server_host=bootstrap.server_host
             )
+            await self.start_sync_tuning()
             # Non-blocking cross-bridge duplicate device check
             await self._run_duplicate_device_check(bootstrap.config, loop)
         except Exception as exc:

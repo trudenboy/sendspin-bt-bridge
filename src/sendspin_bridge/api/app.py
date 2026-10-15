@@ -99,8 +99,12 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI):
     """The event hub lives as long as the server, on the server's loop."""
+    from sendspin_bridge.sync_tuning import session_store
+
     app.state.event_hub.start()
+    session_store.attach_event_hub(app.state.event_hub)
     try:
         yield
     finally:
+        session_store.attach_event_hub(None)
         await app.state.event_hub.stop()

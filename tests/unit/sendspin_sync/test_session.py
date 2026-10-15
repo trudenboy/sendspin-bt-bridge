@@ -466,3 +466,43 @@ def test_start_keeps_tracking_a_signal_that_started_when_on_change_fails():
     assert s.signal_running and s.state != "created" and s.snapshot is not None
     s.cancel()
     assert s.restore_tick() is True and ("stop",) in ctl.calls
+
+
+def test_a_member_that_leaves_the_group_is_dropped_and_planning_continues_without_it():
+    s, ctl, _ = make()
+    s.start()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    ctl.member_list = [m for m in ctl.member_list if m.ma_player_id != "b"]  # "b" leaves the group
+    p = s.propose()
+    assert [r.member for r in p.rows] == ["a"] and "b" not in s.measurements
+    assert s.to_dict()["departed"] == ["b"] and "b" not in [m["ma_player_id"] for m in s.to_dict()["members"]]
+
+
+def test_a_departed_member_is_refused_when_its_recording_arrives():
+    s, ctl, _ = make()
+    s.start()
+    ctl.member_list = [m for m in ctl.member_list if m.ma_player_id != "b"]
+    with pytest.raises(ControlError) as exc:
+        s.record(synth("b", lag_s=0.0))
+    assert exc.value.code == "member_gone" and s.to_dict()["departed"] == ["b"]
+
+
+def test_undo_still_reaches_a_member_that_left_after_the_apply():
+    s, ctl, _ = _auto_applied()
+    ctl.member_list = [m for m in ctl.member_list if m.ma_player_id != "b"]
+    s.record(synth("a", lag_s=0.0))  # the next step notices "b" left
+    s.undo()
+    assert ctl.delays_now["b"] == 0
+
+
+def test_membership_refresh_is_best_effort_when_music_assistant_is_down():
+    s, ctl, _ = make()
+    s.start()
+
+    def down(group_id):
+        raise ControlError("ma_unavailable")
+
+    ctl.members = down
+    s.record(synth("a", lag_s=0.0))
+    assert [m.ma_player_id for m in s.members] == ["a", "b", "cast"] and s.to_dict()["departed"] == []

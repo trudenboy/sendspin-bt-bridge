@@ -1127,3 +1127,83 @@ def test_initialize_devices_warns_on_port_collisions_and_persists_enabled(caplog
     assert "listen_port 8928 already used by another client" in caplog.text
     assert "BT adapter 'default' not available for One" in caplog.text
     assert "BT adapter 'default' not available for Two" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sync_sessions_left_by_a_restart_are_restored_off_the_event_loop(monkeypatch):
+    import threading
+
+    from sendspin_bridge.sync_tuning import session_store
+
+    seen: list[object] = []
+    fake = SimpleNamespace(restore_persisted=lambda: seen.append(threading.current_thread()))
+    monkeypatch.setattr(session_store, "get_store", lambda: fake)
+
+    await BridgeOrchestrator().start_sync_tuning()
+    for _ in range(200):
+        if seen:
+            break
+        await asyncio.sleep(0.01)
+    assert seen and seen[0] is not threading.main_thread()
+
+
+@pytest.mark.asyncio
+async def test_a_failing_sync_restore_does_not_break_startup(monkeypatch):
+    from sendspin_bridge.sync_tuning import session_store
+
+    def boom():
+        raise RuntimeError("bad")
+
+    monkeypatch.setattr(session_store, "get_store", boom)
+    await BridgeOrchestrator().start_sync_tuning()  # logged, not raised
+
+
+@pytest.mark.asyncio
+async def test_run_bridge_lifecycle_starts_sync_tuning_after_music_assistant(monkeypatch):
+    orchestrator = BridgeOrchestrator()
+    bootstrap = await orchestrator.initialize_runtime()
+    order: list[str] = []
+
+    async def fake_initialize_ma(config_data, clients, *, server_host):
+        order.append("ma")
+        return SimpleNamespace(ma_monitor_task=None)
+
+    async def fake_start_sync_tuning():
+        order.append("sync")
+
+    async def fake_run_runtime(clients, **_kwargs):
+        order.append("runtime")
+        return "done"
+
+    async def fake_start_web_server(clients, *, app_factory=None):
+        return SimpleNamespace(should_exit=False)
+
+    async def fake_configure_executor(device_count, *, web_thread_name=""):
+        return 8
+
+    monkeypatch.setattr(orchestrator, "initialize_devices", lambda *a, **k: SimpleNamespace(clients=[]))
+    monkeypatch.setattr(orchestrator, "start_web_server", fake_start_web_server)
+    monkeypatch.setattr(orchestrator, "configure_executor", fake_configure_executor)
+    monkeypatch.setattr(orchestrator, "install_signal_handlers", lambda *_a, **_k: None)
+    monkeypatch.setattr(orchestrator, "initialize_ma_integration", fake_initialize_ma)
+    monkeypatch.setattr(orchestrator, "start_sync_tuning", fake_start_sync_tuning)
+    monkeypatch.setattr(orchestrator, "run_runtime", fake_run_runtime)
+
+    await orchestrator.run_bridge_lifecycle(bootstrap, version="1", client_factory=object, bt_manager_factory=object)
+    assert order == ["ma", "sync", "runtime"]
+
+
+@pytest.mark.asyncio
+async def test_graceful_shutdown_restores_sync_sessions_off_the_event_loop(monkeypatch):
+    import threading
+
+    from sendspin_bridge.sync_tuning import session_store
+
+    seen: list[object] = []
+    monkeypatch.setattr(session_store, "shutdown_store", lambda: seen.append(threading.current_thread()))
+
+    async def no_mute(_sink, _flag):
+        return False
+
+    await BridgeOrchestrator(lifecycle_state=RecordingLifecycleState()).graceful_shutdown(clients=[], mute_sink=no_mute)
+    assert seen and seen[0] is not threading.main_thread()

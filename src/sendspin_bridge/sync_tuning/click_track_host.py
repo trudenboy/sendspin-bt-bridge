@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import secrets
 import threading
 from functools import lru_cache
@@ -13,6 +14,8 @@ from sendspin_sync.click_track import render_wav
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -46,12 +49,33 @@ class ClickTrackTokens:
         with self._lock:
             self._by_session.pop(session_id, None)
 
+    def any_live(self) -> bool:
+        with self._lock:
+            return bool(self._by_session)
+
 
 tokens = ClickTrackTokens()
 
 
+_announced_base_url: str | None = None
+
+
 def default_base_url() -> str:
-    return f"http://{get_local_ip() or '127.0.0.1'}:{resolve_web_port()}"
+    """The bridge as Music Assistant reaches it; logged once per value, with a warning on the loopback fallback."""
+    global _announced_base_url
+    ip = get_local_ip()
+    url = f"http://{ip or '127.0.0.1'}:{resolve_web_port()}"
+    if url != _announced_base_url:
+        _announced_base_url = url
+        if ip:
+            logger.info("Sync click track is served to Music Assistant from %s", url)
+        else:
+            logger.warning(
+                "No LAN address found: the sync click track URL falls back to %s, "
+                "which Music Assistant on another host cannot reach",
+                url,
+            )
+    return url
 
 
 class FastApiClickTrackHost:
@@ -68,3 +92,5 @@ class FastApiClickTrackHost:
 
     def release(self, session_id: str) -> None:
         self._tokens.release(session_id)
+        if not self._tokens.any_live():
+            track_wav.cache_clear()  # ~35 MB: keep it only while a session plays it

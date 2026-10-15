@@ -90,6 +90,8 @@ class SyncSession:
         self._control, self._host, self._clock, self._on_change = control, host, clock, on_change
         self.state: State = "created"
         self.members: list[Member] = []
+        self.departed: list[str] = []  # members that left the group mid-session
+        self._gone: dict[str, Member] = {}
         self.snapshot: Snapshot | None = None
         self.measurements: dict[str, Measurement] = {}
         self.proposal: Proposal | None = None
@@ -141,6 +143,10 @@ class SyncSession:
     def _require_active(self) -> None:
         """Side operations that touch the group are only allowed while the session runs."""
         self._require(*_ACTIVE)
+
+    def _known(self, mid: str) -> Member:
+        """A current or departed member: putting back a delay must still reach a member that left."""
+        return self._gone[mid] if mid in self._gone else self._member(mid)
 
     def _before(self, member: Member) -> int:
         if member.delay_ms is not None:
@@ -209,9 +215,31 @@ class SyncSession:
         self.touch()
 
     # -- measuring -----------------------------------------------------------------
+    @_locked
+    def refresh_members(self) -> None:
+        """Drop members that left the group (with their measurements) so planning goes on without
+        them; they are listed in ``departed`` and refused with ``member_gone``. Best effort: when the
+        membership cannot be read, the session keeps the members it has."""
+        try:
+            current = {m.ma_player_id for m in self._control.members(self.group_id)}
+        except ControlError:
+            return
+        gone = [m for m in self.members if m.ma_player_id not in current]
+        if not gone:
+            return
+        for m in gone:
+            self._gone[m.ma_player_id] = m
+            self.departed.append(m.ma_player_id)
+            self.measurements.pop(m.ma_player_id, None)
+            if self.reference == m.ma_player_id:
+                self.reference = None
+        self.members = [m for m in self.members if m.ma_player_id in current]
+        self._changed()
+
     def record(self, recording: Recording) -> Measurement:
         with self._lock:
             self._require("measuring", "verifying")
+            self.refresh_members()
             self._member(recording.member)
             generation = self._generation
         m = estimator.estimate(recording)  # slow: outside the lock
@@ -228,6 +256,7 @@ class SyncSession:
     @_locked
     def skip(self, member: str) -> None:
         self._require("measuring", "verifying")
+        self.refresh_members()
         self._member(member)
         self.measurements[member] = Measurement(member=member, status="skipped", reason="skipped")
         self.touch()
@@ -236,6 +265,7 @@ class SyncSession:
     @_locked
     def propose(self) -> Proposal:
         self._require("measuring", "verifying")
+        self.refresh_members()
         self.touch()
         spread = planner.spread_ms(self.measurements.values())
         if self.state == "verifying":
@@ -311,7 +341,7 @@ class SyncSession:
         if self.undo_until is None or self._clock() > self.undo_until:
             raise ControlError("undo_expired")
         for mid, ms in list(self._undo_delays.items()):
-            self._control.set_delay(self._member(mid), ms)
+            self._control.set_delay(self._known(mid), ms)
             self._set_member_delay(mid, ms)
             self._written.pop(mid, None)
             del self._undo_delays[mid]
@@ -342,7 +372,7 @@ class SyncSession:
         assert self.snapshot is not None
         for mid in list(self._written):
             value = self.snapshot.delays.get(mid, 0)
-            self._control.set_delay(self._member(mid), value)
+            self._control.set_delay(self._known(mid), value)
             self._set_member_delay(mid, value)
             del self._written[mid]
         self.touch()
@@ -402,6 +432,7 @@ class SyncSession:
             "point": self.point,
             "state": self.state,
             "members": [to_dict(m) for m in self.members],
+            "departed": list(self.departed),
             "measurements": {k: to_dict(v) for k, v in self.measurements.items()},
             "proposal": to_dict(self.proposal) if self.proposal else None,
             "history": list(self.history),

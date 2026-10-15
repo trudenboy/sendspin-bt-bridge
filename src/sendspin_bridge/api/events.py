@@ -5,7 +5,8 @@ Each event is an envelope ``{"v": 1, "type", "at", "data"}``:
 * ``status`` — the full ``BridgeStatus`` (bridge, devices, groups), built once
   per change for all listeners and sent to new listeners on connect;
 * ``job`` — a ``Job`` whenever one starts, progresses or ends;
-* ``log`` — one log line (only to listeners that ask for ``types=log``).
+* ``log`` — one log line (only to listeners that ask for ``types=log``);
+* ``sync`` — a group sync-tuning session whenever its state changes.
 """
 
 from __future__ import annotations
@@ -29,8 +30,8 @@ from sendspin_bridge.api.errors import ApiError
 logger = logging.getLogger(__name__)
 
 EVENT_VERSION = 1
-DEFAULT_TYPES = frozenset({"status", "job"})
-ALL_TYPES = frozenset({"status", "job", "log"})
+DEFAULT_TYPES = frozenset({"status", "job", "sync"})
+ALL_TYPES = frozenset({"status", "job", "log", "sync"})
 _QUEUE_SIZE = 64
 _HEARTBEAT_S = 15.0
 _MAX_LIFETIME_S = 1800.0
