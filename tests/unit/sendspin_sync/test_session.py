@@ -180,3 +180,222 @@ def test_write_delay_clamps_to_the_allowed_range():
     assert ctl.delays_now["b"] == 5000
     s.write_delay("a", -20)
     assert ctl.delays_now["a"] == 0
+
+
+# -- review fix round 1 --------------------------------------------------------------------------
+
+
+def _delay_of(s, mid):
+    return next(m.delay_ms for m in s.members if m.ma_player_id == mid)
+
+
+def _auto_applied(clock=None):
+    s, ctl, events = make(mode="auto", clock=clock)
+    s.start()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    s.apply()
+    return s, ctl, events
+
+
+def test_undo_during_verification_restores_members_and_ends_without_refining():
+    s, ctl, _ = _auto_applied()
+    assert s.state == "verifying" and _delay_of(s, "b") == 30
+    s.undo()
+    assert ctl.delays_now["b"] == 0 and _delay_of(s, "b") == 0
+    assert s.state == "restoring"
+    with pytest.raises(ControlError) as exc:  # no refinement on top of an undone apply
+        s.record(synth("b", lag_s=0.030))
+    assert exc.value.code == "restore_pending"
+    assert s.restore_tick() is True and s.state == "done"
+    assert [c for c in ctl.calls if c[0] == "set"] == [("set", "b", 30), ("set", "b", 0)]
+
+
+SIDE_METHODS = [
+    ("start_signal", ()),
+    ("stop_signal", ()),
+    ("solo", ("a",)),
+    ("ab", ("a", "b")),
+    ("set_reference", ("a",)),
+    ("write_delay", ("b", 10)),
+    ("reset", ()),
+]
+
+
+@pytest.mark.parametrize(("name", "args"), SIDE_METHODS)
+def test_side_operations_answer_restore_pending_while_restoring(name, args):
+    s, _ctl, _ = make(mode="manual")
+    s.start()
+    s.cancel()
+    with pytest.raises(ControlError) as exc:
+        getattr(s, name)(*args)
+    assert exc.value.code == "restore_pending"
+
+
+@pytest.mark.parametrize(("name", "args"), SIDE_METHODS)
+def test_side_operations_are_refused_once_the_session_ended(name, args):
+    s, ctl, _ = make()
+    s.start()
+    s.cancel()
+    assert s.restore_tick() is True and s.state == "cancelled"
+    calls = list(ctl.calls)
+    with pytest.raises(ControlError) as exc:
+        getattr(s, name)(*args)
+    assert exc.value.code == "session_state"
+    assert ctl.calls == calls and not s.signal_running and s.soloed is None
+
+
+def test_fail_detail_survives_restore_retries():
+    s, ctl, _ = make()
+    s.start()
+    s.fail("boom")
+    ctl.fail_restore = 1
+    assert s.restore_tick() is False
+    assert s.error == "boom" and s.restore_error == "ma_unavailable"
+    assert s.to_dict()["restore_error"] == "ma_unavailable"
+    assert s.restore_tick() is True
+    assert s.state == "failed" and s.error == "boom" and s.restore_error is None
+    assert s.to_dict()["error"] == "boom" and s.to_dict()["restore_error"] is None
+
+
+def test_successful_retry_clears_the_transient_restore_error():
+    s, ctl, _ = make()
+    s.start()
+    s.cancel()
+    ctl.fail_restore = 1
+    assert s.restore_tick() is False and s.restore_error == "ma_unavailable"
+    assert s.restore_tick() is True
+    assert s.state == "cancelled" and s.error is None and s.restore_error is None
+
+
+def test_concurrent_apply_and_cancel_leave_a_consistent_outcome():
+    import threading
+    import time
+
+    s, ctl, _ = make()
+    s.start()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    entered = threading.Event()
+    real_set = ctl.set_delay
+
+    def slow_set(member, ms):
+        entered.set()
+        time.sleep(0.05)  # a cancel arriving now must wait for the apply to finish
+        real_set(member, ms)
+
+    ctl.set_delay = slow_set
+    applier = threading.Thread(target=s.apply)
+    applier.start()
+    assert entered.wait(2.0)
+    canceller = threading.Thread(target=s.cancel)
+    canceller.start()
+    canceller.join(2.0)  # with the lock this waits for the apply; without it, it lands mid-apply
+    ticker = threading.Thread(target=s.restore_tick)
+    ticker.start()
+    ticker.join(2.0)
+    applier.join(2.0)
+    # apply finished first, cancel was a no-op on the restoring session, the tick restored: one outcome
+    assert s.state == "done" and ctl.delays_now["b"] == 30 and ctl.calls[-1] == ("restore",)
+
+
+def test_auto_refines_once_when_the_residual_is_above_5_ms_then_restores():
+    clock = {"t": 100.0}
+    s, ctl, _ = _auto_applied(clock=lambda: clock["t"])
+    assert s.round == 2 and s.undo_until == 130.0
+    clock["t"] = 110.0
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.012))  # 12 ms residual
+    s.propose()
+    assert s.state == "verifying" and s.round == 3
+    assert s.undo_until == 140.0  # undo window restarts with the refinement
+    assert s.history[0]["spread_after_ms"] == pytest.approx(12.0, abs=1.0)
+    assert s.history[-1]["round"] == 2 and s.history[-1]["spread_before_ms"] == pytest.approx(12.0, abs=1.0)
+    assert ctl.delays_now["b"] == pytest.approx(42, abs=1)
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.012))  # still off: no third apply
+    s.propose()
+    assert s.state == "restoring"
+    assert s.history[-1]["spread_after_ms"] == pytest.approx(12.0, abs=1.0)
+    assert len([c for c in ctl.calls if c[0] == "set"]) == 2
+
+
+def test_start_failure_in_the_signal_rolls_back_to_created():
+    s, ctl, _ = make()
+    real = ctl.start_signal
+
+    def boom(group_id, url):
+        raise ControlError("ma_unavailable")
+
+    ctl.start_signal = boom
+    with pytest.raises(ControlError):
+        s.start()
+    assert s.state == "created" and not s.signal_running
+    ctl.start_signal = real
+    s.start()
+    assert s.state == "measuring" and s.signal_running
+
+
+def test_refine_with_an_unplannable_reference_answers_no_measurement():
+    s, _ctl, _ = _auto_applied()
+    s.set_reference("cast")  # not adjustable, so never measured "ok" for the planner
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.012))
+    with pytest.raises(ControlError) as exc:
+        s.propose()
+    assert exc.value.code == "no_measurement"
+    assert s.state == "verifying"
+
+
+def test_undo_falls_back_to_the_snapshot_delay_when_the_member_has_none():
+    from sendspin_sync.models import Member
+
+    s, ctl, _ = make(mode="auto")
+    ctl.member_list[1] = Member("b", "B", True, "sendspin", delay_ms=None)
+    ctl.delays_now["b"] = 100
+    s.start()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    s.apply(rows={"b": 130})
+    s.undo()
+    assert ctl.delays_now["b"] == 100 and _delay_of(s, "b") == 100
+
+
+def test_apply_clamps_operator_rows():
+    s, ctl, _ = _measured_and_proposed()
+    s.apply(rows={"b": 9000})
+    assert ctl.delays_now["b"] == 5000 and _delay_of(s, "b") == 5000
+
+
+def test_manual_writes_and_reset_keep_members_current():
+    s, _ctl, _ = make(mode="manual")
+    s.start()
+    s.write_delay("b", 250)
+    assert _delay_of(s, "b") == 250
+    assert next(m for m in s.to_dict()["members"] if m["ma_player_id"] == "b")["delay_ms"] == 250
+    s.reset()
+    assert _delay_of(s, "b") == 0
+
+
+def test_fail_after_the_session_ended_is_a_no_op():
+    s, _ctl, _ = make()
+    s.start()
+    s.cancel()
+    assert s.restore_tick() is True
+    s.fail("late")
+    assert s.state == "cancelled" and s.error is None
+
+
+def test_propose_counts_as_activity():
+    clock = {"t": 0.0}
+    s, _ctl, _ = make(clock=lambda: clock["t"])
+    s.start()
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    clock["t"] = 500.0
+    s.propose()
+    clock["t"] = 1000.0
+    assert not s.expired()
