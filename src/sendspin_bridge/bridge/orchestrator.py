@@ -9,6 +9,7 @@ import os
 import signal
 import socket
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -58,7 +59,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _PA_FALLBACK_SINK = "sendspin_fallback"
-_SYNC_SHUTDOWN_TIMEOUT_S = 15.0  # a stop_signal reply alone may take up to 40 s; do not hold shutdown for it
+# Supervisor/Docker allow ~10 s to stop; the snapshot file restores the group on the next boot anyway.
+_SYNC_SHUTDOWN_TIMEOUT_S = 3.0
 
 
 def _resolve_config_dir() -> Path:
@@ -477,7 +479,6 @@ class BridgeOrchestrator:
     ) -> None:
         """Mute active sinks, stop the sink monitor, and stop all clients."""
         logger.info("Received shutdown signal — muting sinks before exit...")
-        await self._shutdown_sync_tuning()
         mute_sink_fn = mute_sink
         if mute_sink_fn is None:
             from sendspin_bridge.services.audio.pulse import aset_sink_mute as imported_mute_sink
@@ -519,6 +520,8 @@ class BridgeOrchestrator:
         for client in shutdown_clients:
             client.running = False
             await client.stop_sendspin()
+
+        await self._shutdown_sync_tuning()
 
         if sink_monitor is not None:
             await sink_monitor.stop()
@@ -566,7 +569,7 @@ class BridgeOrchestrator:
     async def start_sync_tuning(self) -> None:
         """Restore what a group sync-tuning session left behind before a restart.
 
-        Runs in the executor and is not awaited: the store talks to Music Assistant with
+        Runs on a daemon thread and is not awaited: the store talks to Music Assistant with
         blocking calls that need this loop, and retries on its own while MA is unreachable.
         """
 
@@ -578,19 +581,33 @@ class BridgeOrchestrator:
             except Exception:
                 logger.exception("Restoring group sync-tuning sessions failed")
 
-        asyncio.get_running_loop().run_in_executor(None, _restore)
+        threading.Thread(target=_restore, name="sync-restore", daemon=True).start()
 
     async def _shutdown_sync_tuning(self) -> None:
-        """End live sync-tuning sessions (restore their groups), bounded so shutdown never hangs."""
+        """End live sync-tuning sessions (restore their groups), bounded so shutdown never hangs.
+
+        Runs on a daemon thread, not the executor: the executor's threads are joined at
+        interpreter exit, so an abandoned attempt there would still hold the process.
+        """
         from sendspin_bridge.sync_tuning import session_store
 
+        loop = asyncio.get_running_loop()
+        finished = asyncio.Event()
+
+        def _run() -> None:
+            try:
+                session_store.shutdown_store()
+            except Exception:
+                logger.warning("Ending group sync-tuning sessions at shutdown failed", exc_info=True)
+            finally:
+                with contextlib.suppress(RuntimeError):  # the loop may be gone already
+                    loop.call_soon_threadsafe(finished.set)
+
+        threading.Thread(target=_run, name="sync-shutdown", daemon=True).start()
         try:
-            await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(None, session_store.shutdown_store),
-                timeout=_SYNC_SHUTDOWN_TIMEOUT_S,
-            )
-        except Exception:
-            logger.warning("Ending group sync-tuning sessions at shutdown failed", exc_info=True)
+            await asyncio.wait_for(finished.wait(), timeout=_SYNC_SHUTDOWN_TIMEOUT_S)
+        except TimeoutError:
+            logger.warning("Group sync-tuning sessions did not end in time; the next start restores them")
 
     async def initialize_ma_integration(
         self,

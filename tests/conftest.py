@@ -144,6 +144,18 @@ def tmp_config(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_sync_session_store(tmp_path_factory, monkeypatch):
+    """No test shares the sync-tuning store singleton or lets it near the real ``/config``."""
+    from sendspin_bridge.sync_tuning import session_store
+
+    snapshot_dir = tmp_path_factory.mktemp("sync-store")
+    monkeypatch.setattr(session_store, "_default_snapshot_dir", lambda: snapshot_dir)
+    session_store.reset_store()
+    yield
+    session_store.reset_store()
+
+
+@pytest.fixture(autouse=True)
 def _reset_shared_module_state():
     """Reset known process-wide module-level state between tests.
 

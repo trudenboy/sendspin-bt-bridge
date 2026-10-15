@@ -1207,3 +1207,55 @@ async def test_graceful_shutdown_restores_sync_sessions_off_the_event_loop(monke
 
     await BridgeOrchestrator(lifecycle_state=RecordingLifecycleState()).graceful_shutdown(clients=[], mute_sink=no_mute)
     assert seen and seen[0] is not threading.main_thread()
+
+
+@pytest.mark.asyncio
+async def test_sync_sessions_end_after_the_sinks_are_muted_and_clients_stopped(monkeypatch):
+    from sendspin_bridge.sync_tuning import session_store
+
+    order: list[str] = []
+    monkeypatch.setattr(session_store, "shutdown_store", lambda: order.append("sync"))
+
+    async def stop_sendspin():
+        order.append("client")
+
+    client = SimpleNamespace(player_name="K", bluetooth_sink_name=None, stop_sendspin=stop_sendspin, running=True)
+
+    async def no_mute(_sink, _flag):
+        return False
+
+    await BridgeOrchestrator(lifecycle_state=RecordingLifecycleState()).graceful_shutdown(
+        clients=[client], mute_sink=no_mute
+    )
+    assert order == ["client", "sync"]
+
+
+@pytest.mark.asyncio
+async def test_a_stuck_sync_shutdown_is_abandoned_on_a_daemon_thread(monkeypatch):
+    import threading
+    import time
+
+    import sendspin_bridge.bridge.orchestrator as orch
+    from sendspin_bridge.sync_tuning import session_store
+
+    assert orch._SYNC_SHUTDOWN_TIMEOUT_S == 3.0
+    monkeypatch.setattr(orch, "_SYNC_SHUTDOWN_TIMEOUT_S", 0.2)
+    stuck = threading.Event()
+    threads: list[threading.Thread] = []
+
+    def hang():
+        threads.append(threading.current_thread())
+        stuck.wait(5.0)
+
+    monkeypatch.setattr(session_store, "shutdown_store", hang)
+
+    async def no_mute(_sink, _flag):
+        return False
+
+    started = time.monotonic()
+    await BridgeOrchestrator(lifecycle_state=RecordingLifecycleState()).graceful_shutdown(clients=[], mute_sink=no_mute)
+    try:
+        assert time.monotonic() - started < 2.0
+        assert threads and threads[0].daemon  # an abandoned attempt cannot hold process exit
+    finally:
+        stuck.set()

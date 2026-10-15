@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -81,6 +82,7 @@ class SessionStore:
         self._pending: dict[str, dict[str, Any]] = {}  # entries from before a restart, not restored yet
         self._pending_next: dict[str, float] = {}
         self._pending_attempts: dict[str, int] = {}
+        self._pending_errors: dict[str, str] = {}
         self._stop = threading.Event()
         self._ticker: threading.Thread | None = None
 
@@ -96,10 +98,27 @@ class SessionStore:
                 path.unlink(missing_ok=True)
                 return
             tmp = path.with_suffix(".tmp")
-            tmp.write_text(json.dumps({"sessions": list(self._entries.values())}))
+            with tmp.open("w", encoding="utf-8") as fh:
+                fh.write(json.dumps({"sessions": list(self._entries.values())}))
+                fh.flush()
+                os.fsync(fh.fileno())
             tmp.replace(path)
+            self._fsync_dir(path.parent)
         except OSError:
             logger.warning("Could not write %s", path, exc_info=True)
+
+    @staticmethod
+    def _fsync_dir(directory: Path) -> None:
+        try:
+            fd = os.open(directory, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(fd)
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
 
     def _put_entry(self, session_id: str, entry: dict[str, Any] | None) -> None:
         with self._file_lock:
@@ -144,6 +163,8 @@ class SessionStore:
         with self._lock:
             if self.active_for(group_id) is not None:
                 raise ControlError("session_active", "tuning in progress for this group")
+            if self.pending_for(group_id) is not None:
+                raise ControlError("restore_pending", "the group is still being restored from an earlier session")
             try:
                 control = self._factory()
             except MaApiError as exc:
@@ -243,10 +264,30 @@ class SessionStore:
             _close(control)
 
     # -- restore after a restart -------------------------------------------------------
+    def pending(self) -> list[dict[str, Any]]:
+        """Restores left from before a restart that have not succeeded yet, with the last error."""
+        with self._lock:
+            return [
+                {"session_id": sid, "group_id": str(e["group_id"]), "error": self._pending_errors.get(sid)}
+                for sid, e in self._pending.items()
+            ]
+
+    def pending_for(self, group_id: str) -> dict[str, Any] | None:
+        return next((p for p in self.pending() if p["group_id"] == group_id), None)
+
+    def retry_pending(self, group_id: str) -> bool:
+        """Drop the backoff of the group's pending restore so the next tick tries it at once."""
+        with self._lock:
+            sids = [sid for sid, e in self._pending.items() if str(e["group_id"]) == group_id]
+            for sid in sids:
+                self._pending_next[sid] = 0.0
+            return bool(sids)
+
     def restore_persisted(self) -> None:
         """On boot: restore what a session left behind (stop the signal, clear the solo, re-assert
         volume and mute) and delete the file; while Music Assistant is unreachable, retry with backoff."""
         path = self._path()
+        path.with_suffix(".tmp").unlink(missing_ok=True)  # a write cut short by the last shutdown
         if not path.exists():
             return
         try:
@@ -256,8 +297,12 @@ class SessionStore:
                 snapshot_from_dict(e["snapshot"])
                 str(e["session_id"]), str(e["group_id"])
         except (OSError, ValueError, KeyError, TypeError):
-            logger.warning("Unreadable %s; removing it", path, exc_info=True)
-            path.unlink(missing_ok=True)
+            corrupt = path.with_name(path.name + ".corrupt")
+            logger.warning("Unreadable %s; moved aside to %s", path, corrupt.name, exc_info=True)
+            try:
+                path.replace(corrupt)
+            except OSError:
+                path.unlink(missing_ok=True)
             return
         with self._lock:
             for e in entries:
@@ -273,7 +318,8 @@ class SessionStore:
 
     def _try_pending(self, sid: str) -> None:
         with self._lock:
-            entry = self._pending.get(sid)
+            found = self._pending.get(sid)
+            entry = dict(found) if found is not None else None
         if entry is None:
             return
         group = str(entry["group_id"])
@@ -296,6 +342,9 @@ class SessionStore:
                 n = self._pending_attempts.get(sid, 0)
                 self._pending_attempts[sid] = n + 1
                 self._pending_next[sid] = self._clock() + _backoff(n)
+                self._pending_errors[sid] = str(getattr(exc, "code", None) or type(exc).__name__)
+                if sid in self._pending:
+                    self._pending[sid] = entry
             self._put_entry(sid, entry)  # keep what already succeeded
             log = logger.warning if n == 0 else logger.debug
             log("Restoring the group after a restart failed (%s); retrying", exc)
@@ -307,6 +356,7 @@ class SessionStore:
             self._pending.pop(sid, None)
             self._pending_next.pop(sid, None)
             self._pending_attempts.pop(sid, None)
+            self._pending_errors.pop(sid, None)
         self._put_entry(sid, None)
         logger.info("Sync session %s: group %s restored after a restart", sid, group)
 
@@ -326,9 +376,10 @@ class SessionStore:
             except Exception:
                 logger.exception("Sync session tick failed")
 
-    def shutdown(self) -> None:
+    def shutdown(self, *, restore: bool = True) -> None:
         """Cancel live sessions and try one restore each; a session that cannot be restored keeps
-        its entry in the snapshot file, so the next boot restores it."""
+        its entry in the snapshot file, so the next boot restores it. With ``restore=False``
+        (Music Assistant not connected) no network call is made at all."""
         self._stop.set()
         ticker = self._ticker
         if ticker is not None and ticker is not threading.current_thread():
@@ -337,7 +388,7 @@ class SessionStore:
             with self._lock:
                 sessions = list(self._sessions.values())
                 controls = dict(self._controls)
-            for s in sessions:
+            for s in sessions if restore else ():
                 try:
                     s.cancel()
                     if s.state == "restoring":
@@ -378,7 +429,6 @@ def get_store() -> SessionStore:
     global _store
     with _store_lock:
         if _store is None:
-            from sendspin_bridge import config as cfg
             from sendspin_bridge.sync_tuning.click_track_host import FastApiClickTrackHost
             from sendspin_bridge.sync_tuning.ma_group_control import default_group_control
 
@@ -386,14 +436,31 @@ def get_store() -> SessionStore:
                 control_factory=default_group_control,
                 host=FastApiClickTrackHost(),
                 publish=_publish_to_hub,
-                snapshot_dir=lambda: cfg.CONFIG_DIR,
+                snapshot_dir=lambda: _default_snapshot_dir(),
             )
             _store.start_ticker()
         return _store
 
 
 def shutdown_store() -> None:
-    """Shut the store down if one was built (blocking: run it off the event loop)."""
+    """Shut the store down if one was built (blocking: run it off the event loop). Without a
+    Music Assistant connection it skips the restore; the snapshot file restores on the next boot."""
+    from sendspin_bridge.services.music_assistant import ma_runtime_state
+
     store = _store
     if store is not None:
-        store.shutdown()
+        store.shutdown(restore=ma_runtime_state.is_ma_connected())
+
+
+def _default_snapshot_dir() -> Path:
+    from sendspin_bridge import config as cfg
+
+    return cfg.CONFIG_DIR
+
+
+def reset_store() -> None:
+    """Forget the singleton and the hub (tests)."""
+    global _store, _hub
+    store, _store, _hub = _store, None, None
+    if store is not None:
+        store.shutdown(restore=False)

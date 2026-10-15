@@ -64,6 +64,9 @@ class SyncSession:
     invoked from inside transitions and may read the session (``to_dict()``). ``record()``
     runs the estimator outside the lock and, before storing the result, re-checks the state
     and the measurement round it started in (``session_state`` if a new round began).
+    ``record``/``skip``/``propose`` read the group's membership before taking the lock, and
+    ``expired()`` takes no lock, so a session busy in Music Assistant I/O never stalls the store's
+    ticker.
 
     Lock invariant: the lock is held across port I/O (``GroupControl`` calls) and across
     ``on_change``. So never call session methods from the event-loop thread (they may block on
@@ -124,8 +127,8 @@ class SyncSession:
     def touch(self) -> None:
         self.last_activity = self._clock()
 
-    @_locked
     def expired(self) -> bool:
+        # lock-free on purpose: the store's ticker must not wait behind a session busy in MA I/O
         return self._clock() - self.last_activity > INACTIVITY_S
 
     def _member(self, mid: str) -> Member:
@@ -215,14 +218,26 @@ class SyncSession:
         self.touch()
 
     # -- measuring -----------------------------------------------------------------
-    @_locked
+    def _membership(self) -> set[str] | None:
+        """Read the group's membership without the lock (it is Music Assistant I/O); None when unknown
+        or when the session is not measuring."""
+        if self.state not in ("measuring", "verifying"):
+            return None
+        try:
+            return {m.ma_player_id for m in self._control.members(self.group_id)}
+        except ControlError:
+            return None
+
     def refresh_members(self) -> None:
         """Drop members that left the group (with their measurements) so planning goes on without
         them; they are listed in ``departed`` and refused with ``member_gone``. Best effort: when the
         membership cannot be read, the session keeps the members it has."""
-        try:
-            current = {m.ma_player_id for m in self._control.members(self.group_id)}
-        except ControlError:
+        current = self._membership()
+        with self._lock:
+            self._apply_membership(current)
+
+    def _apply_membership(self, current: set[str] | None) -> None:
+        if current is None:
             return
         gone = [m for m in self.members if m.ma_player_id not in current]
         if not gone:
@@ -237,9 +252,10 @@ class SyncSession:
         self._changed()
 
     def record(self, recording: Recording) -> Measurement:
+        current = self._membership()
         with self._lock:
             self._require("measuring", "verifying")
-            self.refresh_members()
+            self._apply_membership(current)
             self._member(recording.member)
             generation = self._generation
         m = estimator.estimate(recording)  # slow: outside the lock
@@ -253,19 +269,27 @@ class SyncSession:
             self._changed()
         return m
 
-    @_locked
     def skip(self, member: str) -> None:
+        current = self._membership()
+        self._skip(current, member)
+
+    @_locked
+    def _skip(self, current: set[str] | None, member: str) -> None:
         self._require("measuring", "verifying")
-        self.refresh_members()
+        self._apply_membership(current)
         self._member(member)
         self.measurements[member] = Measurement(member=member, status="skipped", reason="skipped")
         self.touch()
         self._changed()
 
-    @_locked
     def propose(self) -> Proposal:
+        current = self._membership()
+        return self._propose(current)
+
+    @_locked
+    def _propose(self, current: set[str] | None) -> Proposal:
         self._require("measuring", "verifying")
-        self.refresh_members()
+        self._apply_membership(current)
         self.touch()
         spread = planner.spread_ms(self.measurements.values())
         if self.state == "verifying":
