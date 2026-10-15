@@ -9,6 +9,7 @@ import { SbButton, SbCard, SbDialog, SbSpinner, SbTabs } from '@/kit'
 import { ArrowLeft } from 'lucide-vue-next'
 import GroupMembers from '@/components/sync/GroupMembers.vue'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
+import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import ProfilesPanel from '@/components/sync/ProfilesPanel.vue'
 
 const { t, locale } = useI18n()
@@ -409,6 +410,8 @@ watch(groupId, (id) => void load(id), { immediate: true })
           <p class="mt-1 text-sm text-text-primary" :data-measure-mode="measureMode">
             {{ t(`sync.measureMode.${measureMode}`) }}
           </p>
+          <!-- Mounted only while the tab is open: leaving it closes the microphone and ends the measurement. -->
+          <MeasureWizard v-if="activeTab === 'measure'" :key="measureMode" :group-id="group.id" :mode="measureMode" />
         </template>
       </SbTabs>
     </template>

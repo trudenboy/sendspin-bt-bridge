@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n'
 import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SyncView from '@/views/SyncView.vue'
+import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import en from '@/i18n/en.json'
 
 vi.mock('@/api/sync', () => ({
@@ -109,6 +110,19 @@ describe('SyncView group tab', () => {
     await w.get('[role="tab"]').trigger('click')
     await w.get('[data-action="semi"]').trigger('click')
     expect(w.get('[data-measure-mode]').attributes('data-measure-mode')).toBe('semi')
+  })
+
+  it('mounts the measurement wizard in the chosen mode only while the Measure tab is open', async () => {
+    const w = await mountView()
+    expect(w.findComponent(MeasureWizard).exists()).toBe(false)
+    await w.get('[data-action="auto"]').trigger('click')
+    expect(w.findComponent(MeasureWizard).props('mode')).toBe('auto')
+    expect(w.findComponent(MeasureWizard).props('groupId')).toBe('g')
+    expect(w.text()).toContain('Playback will be interrupted')
+    await w.get('[role="tab"]').trigger('click')
+    expect(w.findComponent(MeasureWizard).exists()).toBe(false)
+    await w.get('[data-action="semi"]').trigger('click')
+    expect(w.findComponent(MeasureWizard).props('mode')).toBe('semi')
   })
 
   it('polls a pending restore until it clears, then reads the group again', async () => {

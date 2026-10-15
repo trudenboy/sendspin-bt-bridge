@@ -1508,6 +1508,73 @@
       },
       "resume": "Continue recording",
       "epochBroken": "The audio clock was reset. Measurements taken before the interruption are repeated."
+    },
+    "wizard": {
+      "stepOf": "Step {n} of {total}: {name}",
+      "steps": {
+        "prepare": "Preparation",
+        "level": "Level check",
+        "members": "Speaker by speaker",
+        "proposal": "Proposal"
+      },
+      "interrupted": "Playback will be interrupted and restored afterwards.",
+      "interruptedHelp": "While measuring, the group plays a click track and the speakers are muted one by one. What was playing stops; the mutes and the test signal are put back when the measurement ends.",
+      "point": {
+        "legend": "Where will you measure?",
+        "device": "At each speaker",
+        "deviceHelp": "Hold the phone near each speaker in turn. 6 s per speaker; lines up the devices themselves.",
+        "position": "From the listening position",
+        "positionHelp": "Stay where you usually listen. 12 s per speaker; includes the sound's travel to you."
+      },
+      "micPermission": "The browser will ask for the microphone. Recordings stay in memory and are only sent to this bridge.",
+      "holdStill": "Tip: keep the room quiet and hold the phone still while it records.",
+      "micDenied": "Could not use the microphone.",
+      "startFailed": "Could not start the measurement ({code}).",
+      "level": {
+        "title": "Level check",
+        "help": "Clicks now play on every speaker. The meter should jump with each click.",
+        "meter": "Microphone level",
+        "tooQuiet": "Too quiet: turn the group up or move closer.",
+        "tooLoud": "Too loud: turn the group down a little or move away.",
+        "fine": "The level is fine.",
+        "value": "{pct} %"
+      },
+      "members": {
+        "help": "Measure each speaker on its own. You can change the order and repeat any step.",
+        "moveUp": "Move {name} up",
+        "moveDown": "Move {name} down",
+        "notMeasured": "Not measured (cannot be adjusted): {names}"
+      },
+      "holdNear": "Hold the phone 30–50 cm from {name}",
+      "stayPut": "Stay where you are",
+      "record": "Record",
+      "recordMember": "Record {name}",
+      "repeat": "Repeat",
+      "repeatMember": "Repeat {name}",
+      "skip": "Skip",
+      "skipMember": "Skip {name}",
+      "soloing": "Playing {name} alone…",
+      "recording": "Recording {name}…",
+      "heard": "Heard",
+      "notHeard": "Not heard",
+      "unstable": "Unstable",
+      "skipped": "Skipped",
+      "departed": "Left the group",
+      "confidence": "{pct} %",
+      "redo": "Record again",
+      "result": "{name}: {result}",
+      "restartRound": "The microphone clock was interrupted, so start the measurement again for the speakers marked “Record again”.",
+      "tapToContinue": "Tap to continue",
+      "micLost": "The microphone stopped (unplugged, or access was withdrawn).",
+      "reopen": "Open the microphone again",
+      "failed": "That did not work ({code}).",
+      "ended": "The measurement session ended (it timed out, or was closed elsewhere). Playback has been restored.",
+      "startAgain": "Start again",
+      "next": "Next",
+      "back": "Back",
+      "cancel": "Cancel",
+      "toProposal": "Continue to the proposal",
+      "measured": "Every speaker is measured. The proposal comes next."
     }
   }
 }
