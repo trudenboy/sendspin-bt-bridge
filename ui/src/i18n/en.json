@@ -786,6 +786,10 @@
         "label": "Require pairing",
         "help": "Music Assistant must enter a PIN before it can play to these speakers."
       },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "Only this bridge's Music Assistant",
+        "help": "Turn away any other Music Assistant that tries to take a speaker. Applies once the bridge knows its own Music Assistant (a server address or the Music Assistant API URL)."
+      },
       "VOLUME_VIA_MA": {
         "label": "Volume through Music Assistant",
         "help": "Volume changes go through Music Assistant so its sliders stay in step."

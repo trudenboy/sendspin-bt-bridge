@@ -786,6 +786,10 @@
         "label": "Требовать сопряжение",
         "help": "Music Assistant должен ввести PIN, прежде чем играть на эти колонки."
       },
+      "SENDSPIN_OWN_SERVER_ONLY": {
+        "label": "Только Music Assistant этого моста",
+        "help": "Отклонять любой другой Music Assistant, который пытается занять колонку. Действует, когда мост знает свой Music Assistant (адрес сервера или URL API Music Assistant)."
+      },
       "VOLUME_VIA_MA": {
         "label": "Громкость через Music Assistant",
         "help": "Громкость меняется через Music Assistant, и его ползунки остаются синхронными."

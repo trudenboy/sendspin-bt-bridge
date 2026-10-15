@@ -2274,6 +2274,12 @@ export interface components {
              */
             SECRET_KEY?: string | null;
             /**
+             * Sendspin Own Server Only
+             * @description Accept only this bridge's own Music Assistant. When another Music Assistant on the network dials a speaker first, the bridge turns it away so the speaker stays available to the right one. Has no effect until the bridge knows its Music Assistant (a server address or the Music Assistant API URL).
+             * @default true
+             */
+            SENDSPIN_OWN_SERVER_ONLY?: boolean | null;
+            /**
              * Sendspin Pairing
              * @description Require Music Assistant to pair with a PIN before playback. Off by default so speakers play as soon as Music Assistant finds them. Transport encryption still runs; this only gates pairing.
              * @default false

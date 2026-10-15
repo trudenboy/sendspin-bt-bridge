@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,6 +30,7 @@ from aiosendspin.models.types import PlayerCommand, UndefinedField
 from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
 from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory
 from sendspin_bridge.services.audio.player.player import PcmFormat, StreamPlayer
+from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
 
 UTC = timezone.utc
 
@@ -85,8 +87,16 @@ class BridgeDaemon:
         bt_manufacturer: str = "",
         required_lead_time_ms: float = 250.0,
         min_buffer_ms: float = 250.0,
+        own_server: OwnServer | None = None,
+        own_server_only: bool = True,
     ) -> None:
         self._args = args
+        self._gate = ServerGate(
+            own_server,
+            enforce=own_server_only,
+            on_refused=self._publish_refusals,
+            logger=logger,
+        )
         self._client: Any = None
         self._listener: Any = None
         self._connection_lock: asyncio.Lock | None = None
@@ -435,7 +445,7 @@ class BridgeDaemon:
             },
         )
 
-        client = _AioSendspinClient(**client_kwargs)  # type: ignore[arg-type]
+        client = self._own_server_client_class(_AioSendspinClient)(**client_kwargs)  # type: ignore[arg-type]
 
         client.add_group_update_listener(self._on_group_update)
         client.add_metadata_listener(self._on_metadata_update)
@@ -456,6 +466,53 @@ class BridgeDaemon:
             client.add_stream_clear_listener(self._on_stream_clear)
 
         return client
+
+    @property
+    def _server_gate(self) -> ServerGate:
+        """The admission gate; a daemon built without one accepts every server."""
+        gate = self.__dict__.get("_gate")
+        if gate is None:
+            gate = self.__dict__["_gate"] = ServerGate(None, on_refused=self._publish_refusals, logger=logger)
+        return gate
+
+    def _publish_refusals(self, recent: list[dict]) -> None:
+        self._bridge_status["refused_servers"] = recent
+        self._notify()
+
+    def _own_server_client_class(self, base: type) -> type:
+        """The aiosendspin client, with admission limited to the bridge's own server.
+
+        aiosendspin 10 has no public admission hook: whether an incoming server
+        takes the player is decided by ``_should_admit_connection``, and a loser
+        is told off by ``_reject_connection``.  Both are the seams its own
+        multi-server arbitration is built on, so the bridge overrides exactly
+        those two.  A refused server gets ``client/goodbye`` with reason
+        ``another_server``, which the sending server treats as "do not redial"
+        (the library's default ``concurrent_attempt`` makes it retry).  If a
+        future aiosendspin drops either method the check degrades to accepting
+        every server, with a warning, rather than breaking connections.
+        """
+        gate = self._server_gate
+        if not (hasattr(base, "_should_admit_connection") and hasattr(base, "_reject_connection")):
+            logger.warning("aiosendspin has no admission seam: connecting to any Music Assistant server")
+            return base
+
+        from aiosendspin.models.types import GoodbyeReason
+
+        class _OwnServerClient(base):  # type: ignore[misc, valid-type]
+            def _should_admit_connection(self, incoming):
+                if not gate.admits(incoming):
+                    return False
+                return super()._should_admit_connection(incoming)
+
+            async def _reject_connection(self, connection):
+                if gate.take_refused(connection):
+                    await self._dismiss_connection(connection, GoodbyeReason.ANOTHER_SERVER)
+                    await connection.disconnect()
+                    return
+                await super()._reject_connection(connection)
+
+        return _OwnServerClient
 
     # ── Connection lifecycle ─────────────────────────────────────────────────
 
@@ -484,7 +541,26 @@ class BridgeDaemon:
             logger.debug("Could not extract peer address: %s", _exc)
         if url:
             self._bridge_status["connected_server_url"] = url
+        self._publish_connected_server(ws, url)
         self._notify()
+
+    def _publish_connected_server(self, ws, url: str | None) -> None:
+        """Say which server the player is connected to, and whether it is the bridge's own."""
+        info = getattr(self._client, "server_info", None)
+        server_id = getattr(info, "server_id", None)
+        host: str | None = None
+        if url:
+            with contextlib.suppress(ValueError):
+                host = urlsplit(url).hostname
+        else:
+            host = getattr(getattr(ws, "_req", None), "remote", None)
+        verdict = self._server_gate.verdict_for(server_id, host)
+        if verdict.own and server_id:
+            self._server_gate.trusted_ids.add(server_id)
+        self._bridge_status["connected_server_name"] = getattr(info, "name", None) or None
+        self._bridge_status["connected_server_id"] = server_id
+        self._bridge_status["connected_server_host"] = normalize_host(host) or None
+        self._bridge_status["connected_server_own"] = verdict.own
 
     async def _handle_disconnect(self) -> None:
         self._on_server_disconnect()
@@ -574,6 +650,7 @@ class BridgeDaemon:
                     return
                 await asyncio.sleep(0.05)
 
+        peer_host_var.set(getattr(getattr(ws, "_req", None), "remote", None))
         publisher = asyncio.create_task(_publish_when_connected())
         try:
             await client.attach_websocket(ws)

@@ -995,6 +995,37 @@ async def test_run_passes_pairing_requirement_into_daemon_args(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_hands_the_own_server_to_the_daemon(monkeypatch):
+    captured = {}
+
+    class _Stop(BaseException):
+        pass
+
+    def _daemon(*_args, **kwargs):
+        captured.update(kwargs)
+        raise _Stop
+
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+
+    monkeypatch.setattr(bridge_daemon_mod, "DaemonArgs", lambda **kw: SimpleNamespace(**kw))
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _daemon)
+
+    with pytest.raises(_Stop):
+        await _run(
+            {
+                "player_name": "TestSpeaker",
+                "client_id": "test",
+                "listen_port": 8927,
+                "own_server": {"hosts": ["192.168.10.10"], "server_ids": [], "name": None},
+                "own_server_only": False,
+            }
+        )
+
+    assert captured["own_server"].hosts == {"192.168.10.10"}
+    assert captured["own_server_only"] is False
+
+
+@pytest.mark.asyncio
 async def test_run_cancels_listener_daemon_when_stop_command_arrives(monkeypatch):
     """IPC stop must cancel the daemon's otherwise-infinite listener task."""
     import sendspin_bridge.services.ipc.daemon_process as daemon_process_mod

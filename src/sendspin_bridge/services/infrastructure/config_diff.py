@@ -72,6 +72,7 @@ _GLOBAL_RESTART_FIELDS: frozenset[str] = frozenset(
         "SENDSPIN_SERVER",
         "SENDSPIN_PORT",
         "SENDSPIN_PAIRING",
+        "SENDSPIN_OWN_SERVER_ONLY",
         "BRIDGE_NAME",
         "PULSE_LATENCY_MSEC",
         "PREFER_SBC_CODEC",

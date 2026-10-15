@@ -145,6 +145,18 @@ def test_sendspin_pairing_defaults_false_and_survives_addon_restart(tmp_path):
     assert cfg["SENDSPIN_PAIRING"] is True
 
 
+def test_own_server_only_defaults_on_and_a_web_ui_choice_survives_addon_restart(tmp_path):
+    _write_json(tmp_path / "options.json", _minimal_options())
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    assert _read_json(tmp_path / "config.json")["SENDSPIN_OWN_SERVER_ONLY"] is True
+
+    _write_json(tmp_path / "config.json", {"SENDSPIN_OWN_SERVER_ONLY": False})
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    assert _read_json(tmp_path / "config.json")["SENDSPIN_OWN_SERVER_ONLY"] is False
+
+
 def test_pulse_sink_reset_on_start_survives_addon_restart(tmp_path):
     _write_json(tmp_path / "config.json", {"PULSE_SINK_RESET_ON_START": True})
     _write_json(tmp_path / "options.json", _minimal_options())

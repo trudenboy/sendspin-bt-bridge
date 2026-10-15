@@ -177,6 +177,7 @@ def main() -> None:
         "SENDSPIN_SERVER": str(opts.get("sendspin_server") or "auto"),
         "SENDSPIN_PORT": _int_opt(opts, "sendspin_port", 9000),
         "SENDSPIN_PAIRING": False,
+        "SENDSPIN_OWN_SERVER_ONLY": True,
         "WEB_PORT": None,
         "BASE_LISTEN_PORT": _optional_int_opt(opts, "base_listen_port"),
         "BRIDGE_NAME": str(opts.get("bridge_name") or ""),
@@ -270,6 +271,7 @@ def main() -> None:
         # auth / update / sync / proxy family.
         web_ui_only_keys = (
             "SENDSPIN_PAIRING",
+            "SENDSPIN_OWN_SERVER_ONLY",
             "EXPERIMENTAL_A2DP_SINK_RECOVERY_DANCE",
             "EXPERIMENTAL_PA_MODULE_RELOAD",
             "EXPERIMENTAL_ADAPTER_AUTO_RECOVERY",

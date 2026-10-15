@@ -82,6 +82,7 @@ from sendspin_bridge.services.ipc.daemon_handle import spawn_kwargs
 from sendspin_bridge.services.ipc.ipc_protocol import (
     with_protocol_version,
 )
+from sendspin_bridge.services.ipc.own_server import OwnServer, resolve_own_server
 from sendspin_bridge.services.ipc.subprocess_command import SubprocessCommandService
 from sendspin_bridge.services.ipc.subprocess_ipc import SubprocessIpcService
 from sendspin_bridge.services.ipc.subprocess_stderr import SubprocessStderrService
@@ -217,6 +218,11 @@ _IPC_ALLOWED_KEYS = frozenset(
         "server_connected",
         "server_connected_at",
         "connected_server_url",
+        "connected_server_name",
+        "connected_server_id",
+        "connected_server_host",
+        "connected_server_own",
+        "refused_servers",
         "group_id",
         "group_name",
         "audio_format",
@@ -452,6 +458,11 @@ class DeviceStatus:
     group_name: str | None = None
     group_id: str | None = None
     connected_server_url: str | None = None
+    connected_server_name: str | None = None
+    connected_server_id: str | None = None
+    connected_server_host: str | None = None
+    connected_server_own: bool | None = None
+    refused_servers: list = field(default_factory=list)
     track_progress_ms: int | None = None
     track_duration_ms: int | None = None
     playback_speed: int | None = None
@@ -1731,6 +1742,22 @@ class SendspinClient:
                 self._start_sendspin_processed = self._start_sendspin_requests
                 await self._start_sendspin_inner()
 
+    async def _resolve_own_server(self) -> OwnServer | None:
+        """The Music Assistant this bridge belongs to, as far as its configuration says."""
+        config = load_config()
+        if not config.get("SENDSPIN_OWN_SERVER_ONLY", True):
+            return None
+        from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
+
+        try:
+            return await resolve_own_server(
+                sendspin_server=self.server_host,
+                ma_api_urls=[config.get("MA_API_URL"), get_ma_api_credentials()[0]],
+            )
+        except Exception as exc:
+            logger.debug("[%s] Could not work out the bridge's Music Assistant: %s", self.player_name, exc)
+            return None
+
     async def _start_sendspin_inner(self) -> None:
         """Spawn daemon_process.py subprocess with PULSE_SINK in its environment."""
         is_pulse_sink = getattr(self, "backend_type", BLUETOOTH) == PULSE_SINK
@@ -1930,6 +1957,7 @@ class SendspinClient:
                     logger.info("[%s] Audio output gone before the start — player not started", self.player_name)
                     self._update_status({"sink_missing": True})
                     return
+                own_server = await self._resolve_own_server()
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -1953,6 +1981,8 @@ class SendspinClient:
                             "bt_product_name": bt_product_name,
                             "bt_manufacturer": bt_manufacturer,
                             "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
+                            "own_server": own_server.to_params() if own_server else None,
+                            "own_server_only": bool(load_config().get("SENDSPIN_OWN_SERVER_ONLY", True)),
                         }
                     )
                 )

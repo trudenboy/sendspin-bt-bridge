@@ -102,6 +102,7 @@ DEFAULT_CONFIG = {
     # are preserved and the port-probe auto-shifts to 8927 at runtime.
     "SENDSPIN_PORT": 8927,
     "SENDSPIN_PAIRING": False,
+    "SENDSPIN_OWN_SERVER_ONLY": True,
     "WEB_PORT": None,
     "BASE_LISTEN_PORT": None,
     "BRIDGE_NAME": "",
