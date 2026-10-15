@@ -25,6 +25,7 @@ from sendspin_bridge.api.routers import (
     diagnostics,
     ha_integration,
     music_assistant,
+    sync,
 )
 from sendspin_bridge.api.routers import config as config_router
 from sendspin_bridge.api.spa import mount_spa
@@ -62,6 +63,7 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
 
     v1 = APIRouter(prefix=API_PREFIX)
     v1.include_router(bridge.public)
+    v1.include_router(sync.public)
     v1.include_router(auth.router)
     v1.include_router(audio.router)
     v1.include_router(bridge.router)
