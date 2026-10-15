@@ -127,6 +127,18 @@ def test_hashed_assets_are_cached_forever(spa):
     assert resp.headers["Cache-Control"] == "public, max-age=31536000, immutable"
 
 
+def test_relative_assets_load_on_a_nested_page(spa):
+    """The build uses relative asset URLs (``./assets/...``) for HA ingress, so a reload of a
+    nested page such as ``/sync/<group>`` asks for ``/sync/assets/...``: that is the asset."""
+    client = make_client(spa_dir=spa)
+    resp = client.get("/sync/assets/app-1a2b.js")
+    assert resp.status_code == 200
+    assert resp.text.startswith("console.log(1);")
+    assert resp.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+    assert client.get("/sync/favicon.svg").text == "<svg/>"
+    assert "<!doctype html>" in client.get("/sync/syncgroup_x").text
+
+
 def test_files_outside_the_spa_are_not_served(spa, tmp_path):
     (tmp_path / "secret.txt").write_text("nope")
     resp = make_client(spa_dir=spa).get("/../secret.txt")

@@ -37,11 +37,17 @@ def mount_spa(app: FastAPI, spa_dir: Path | None = None) -> None:
         if root is None:
             return HTMLResponse(_MISSING_PAGE)
         if path:
-            candidate = (root / path).resolve()
-            if candidate.is_file() and root.resolve() in candidate.parents:
-                headers = {}
-                if candidate.parent.name == "assets":
-                    # Vite puts a content hash in every asset file name.
-                    headers["Cache-Control"] = "public, max-age=31536000, immutable"
-                return FileResponse(candidate, headers=headers)
+            # Asset URLs are relative (``./assets/...``, for HA ingress), so a reload of a
+            # nested page (``/sync/<group>``) asks for ``sync/assets/...``: try the path, then
+            # the same path without its leading page segments.
+            parts = path.split("/")
+            resolved_root = root.resolve()
+            for start in range(len(parts)):
+                candidate = (root / "/".join(parts[start:])).resolve()
+                if candidate.is_file() and resolved_root in candidate.parents:
+                    headers = {}
+                    if candidate.parent.name == "assets":
+                        # Vite puts a content hash in every asset file name.
+                        headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                    return FileResponse(candidate, headers=headers)
         return FileResponse(root / "index.html")
