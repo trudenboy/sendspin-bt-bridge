@@ -41,7 +41,7 @@ click==8.5.0
     # via flask
 cpace==0.1.0
     # via aiosendspin
-cryptography==50.0.0
+cryptography==50.0.2
     # via
     #   aiosendspin
     #   cpace
