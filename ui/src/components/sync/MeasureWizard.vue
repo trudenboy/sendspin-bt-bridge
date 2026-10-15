@@ -48,9 +48,13 @@ const sessionId = ref<string | null>(null)
 const ended = ref(false)
 
 let recorder: SyncRecorder | null = null
-let unsubscribe: (() => void) | null = null
+let unsubscribers: (() => void)[] = []
 let disposed = false
 let settleTimer: ReturnType<typeof setTimeout> | null = null
+/** Ends the settle wait early (on close), so the waiting step settles and exits. */
+let settleDone: (() => void) | null = null
+let progressTimer: ReturnType<typeof setInterval> | null = null
+const PROGRESS_TICK_MS = 100
 
 const supported = props.recorderFactory ? true : SyncRecorder.supported()
 
@@ -84,6 +88,24 @@ const epochOf: Record<string, number | undefined> = {}
 const stale = ref<string[]>([])
 const errors = reactive<Record<string, string>>({})
 const active = ref<{ member: string; phase: MemberPhase } | null>(null)
+/** Share of the running recording done, 0..1. */
+const progress = ref(0)
+
+function stopProgress() {
+  if (progressTimer) clearInterval(progressTimer)
+  progressTimer = null
+}
+
+function startProgress(durationS: number) {
+  stopProgress()
+  progress.value = 0
+  let ticks = 0
+  const total = (durationS * 1000) / PROGRESS_TICK_MS
+  progressTimer = setInterval(() => {
+    ticks++
+    progress.value = Math.min(1, ticks / total)
+  }, PROGRESS_TICK_MS)
+}
 
 const complete = computed(
   () =>
@@ -125,6 +147,7 @@ const stepLine = computed(() => {
   })
 })
 const heading = ref<HTMLElement | null>(null)
+const root = ref<HTMLElement | null>(null)
 
 async function goTo(next: Step) {
   step.value = next
@@ -146,12 +169,17 @@ function resultText(id: string, r: SyncMeasurement) {
 const interrupted = ref(false)
 const micLost = ref(false)
 const reopenError = ref('')
+const resumeError = ref('')
 
 function closeRecorder() {
-  unsubscribe?.()
-  unsubscribe = null
+  for (const off of unsubscribers) off()
+  unsubscribers = []
   if (settleTimer) clearTimeout(settleTimer)
   settleTimer = null
+  const done = settleDone
+  settleDone = null
+  done?.()
+  stopProgress()
   recorder?.close()
   recorder = null
   interrupted.value = false
@@ -180,10 +208,15 @@ function captureText(e: unknown) {
 async function resumeTap() {
   const rec = recorder
   if (!rec) return
+  resumeError.value = ''
   try {
-    await rec.resume()
+    await rec.resume?.()
   } catch (e) {
+    if (rec !== recorder) return
     if (e instanceof SyncCaptureError && e.code === 'not_open') return lostMic()
+    resumeError.value = captureText(e)
+    message.value = resumeError.value
+    return
   }
   if (rec !== recorder) return
   if (!rec.epochInvalidated && !rec.needsResume) {
@@ -242,7 +275,9 @@ async function begin() {
       return
     }
     sessionId.value = id
-    unsubscribe = rec.onEpochInvalidated?.(() => interrupt()) ?? null
+    unsubscribers = [rec.onEpochInvalidated?.(() => interrupt()), rec.onMicLost?.(() => lostMic())].filter(
+      (off): off is () => void => typeof off === 'function',
+    )
     resetMeasurements()
     await goTo('level')
     // iOS may leave a fresh context suspended until a tap: offer it right away.
@@ -274,10 +309,14 @@ function move(member: string, by: -1 | 1) {
 function setResult(member: string, r: SyncMeasurement, epoch: number | undefined) {
   results[member] = r
   epochOf[member] = epoch
-  const others = Object.keys(results).filter(
-    (id) => id !== member && results[id]!.status !== 'skipped' && epochOf[id] !== epoch,
-  )
-  // Never one round from two clocks: whatever was captured in another epoch is redone.
+  // Never one round from two clocks: a capture in a newer epoch makes the older captures redo.
+  // A skip carries no capture, so it compares nothing.
+  const others =
+    epoch === undefined
+      ? []
+      : Object.keys(results).filter(
+          (id) => id !== member && epochOf[id] !== undefined && epochOf[id] !== epoch,
+        )
   stale.value = [...new Set([...stale.value.filter((id) => id !== member), ...others])]
   message.value = resultText(member, r)
 }
@@ -295,22 +334,30 @@ async function record(member: string) {
     try {
       // Straight to the API (one hop less than the store): the settle time counts from the bridge's
       // answer, i.e. once the mutes are applied. The answer still goes through ``applyEvent``.
-      sync.applyEvent(await sessionSolo(sid, member))
+      const answer = await sessionSolo(sid, member)
+      // A late answer must not revive a session that ended (or was left) meanwhile.
+      if (disposed || rec !== recorder || sid !== sessionId.value) return
+      sync.applyEvent(answer)
     } catch (e) {
+      if (disposed || sid !== sessionId.value) return
       errors[member] = t('sync.wizard.failed', { code: errorCode(e) })
       return
     }
     await new Promise<void>((resolve) => {
+      settleDone = resolve
       settleTimer = setTimeout(() => {
         settleTimer = null
+        settleDone = null
         resolve()
       }, SOLO_SETTLE_MS)
     })
     if (disposed || rec !== recorder || sid !== sessionId.value) return
     active.value = { member, phase: 'recording' }
+    const durationS = point.value === 'device' ? 6 : 12
     let cap: Capture
     try {
-      cap = await rec.record(point.value === 'device' ? 6 : 12)
+      startProgress(durationS)
+      cap = await rec.record(durationS)
     } catch (e) {
       if (rec !== recorder) return
       if (e instanceof SyncCaptureError && e.code === 'interrupted') interrupt()
@@ -332,8 +379,25 @@ async function record(member: string) {
     if (disposed || sid !== sessionId.value) return
     setResult(member, r, cap.epoch)
   } finally {
+    stopProgress()
     active.value = null
+    if (!disposed) void focusRow(member)
   }
+}
+
+/**
+ * The row's button was disabled while the step ran (which drops focus in browsers):
+ * give keyboard focus back to the row's action, unless the operator moved elsewhere.
+ */
+async function focusRow(member: string) {
+  const before = document.activeElement
+  const inside = !before || before === document.body || !!root.value?.contains(before)
+  if (!inside) return
+  await nextTick()
+  const el = root.value?.querySelector<HTMLElement>(
+    `[data-repeat="${CSS.escape(member)}"], [data-record="${CSS.escape(member)}"]`,
+  )
+  el?.focus()
 }
 
 async function skip(member: string) {
@@ -346,6 +410,7 @@ async function skip(member: string) {
     return
   }
   setResult(member, measurement(member, 'skipped'), undefined)
+  void focusRow(member)
 }
 
 async function toProposal() {
@@ -412,7 +477,7 @@ const signalStarting = computed(() => !session.value?.signal_running)
 </script>
 
 <template>
-  <section class="mt-4 flex flex-col gap-4">
+  <section ref="root" class="mt-4 flex flex-col gap-4">
     <h2 ref="heading" tabindex="-1" class="text-base font-semibold text-text-primary outline-none">{{ stepLine }}</h2>
     <p data-step-status role="status" aria-live="polite" class="sr-only">
       {{ stepLine }}<template v-if="message">. {{ message }}</template>
@@ -442,6 +507,7 @@ const signalStarting = computed(() => !session.value?.signal_running)
     >
       <span class="min-w-0 flex-1">{{ t('sync.wizard.restartRound') }}</span>
       <SbButton type="button" size="sm" data-resume @click="resumeTap">{{ t('sync.wizard.tapToContinue') }}</SbButton>
+      <p v-if="resumeError" role="alert" class="w-full text-error">{{ resumeError }}</p>
     </div>
 
     <StepPrepare
@@ -468,6 +534,7 @@ const signalStarting = computed(() => !session.value?.signal_running)
       :stale="stale"
       :departed="departed"
       :active="active"
+      :progress="progress"
       :errors="errors"
       :not-measured="notMeasured"
       :complete="complete"

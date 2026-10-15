@@ -46,6 +46,10 @@ describe('MeasureWizard', () => {
     expect(w.find('[data-result="b"]').text()).toContain('Not heard')
     expect(w.find('[data-repeat="b"]').exists()).toBe(true)
     await w.find('[data-skip="b"]').trigger('click'); expect(api.sessionSkip).toHaveBeenCalledWith('s1', 'b')
+    await flushPromises()
+    expect(w.find('[data-result="b"]').text()).toContain('Skipped')
+    expect(w.find('[data-result="a"]').text()).not.toContain('Record again')
+    expect(w.find('[data-to-proposal]').attributes('disabled')).toBeUndefined()
   })
 
   it('restarts the round when the audio context stopped', async () => {
@@ -70,13 +74,20 @@ class EpochRecorder extends FakeRecorder {
   resumed = 0
   listeners = new Set<(e: number) => void>()
   nextError: SyncCaptureError | null = null
+  micListeners = new Set<() => void>()
+  hold: { resolve: () => void } | null = null
+  holdNext = false
+  resumeError: unknown = null
   onEpochInvalidated(cb: (e: number) => void) { this.listeners.add(cb); return () => this.listeners.delete(cb) }
+  onMicLost(cb: () => void) { this.micListeners.add(cb); return () => this.micListeners.delete(cb) }
+  loseMic() { this.needsReopen = true; for (const cb of this.micListeners) cb() }
   async record(d: number) {
     if (this.nextError) { const e = this.nextError; this.nextError = null; throw e }
+    if (this.holdNext) { this.holdNext = false; await new Promise<void>((resolve) => (this.hold = { resolve })) }
     const cap = await super.record(d)
     return { ...cap, epoch: this.epoch }
   }
-  async resume() { this.resumed++; this.needsResume = false; if (this.epochInvalidated) { this.epochInvalidated = false; this.epoch++ } }
+  async resume() { this.resumed++; if (this.resumeError) throw this.resumeError; this.needsResume = false; if (this.epochInvalidated) { this.epochInvalidated = false; this.epoch++ } }
   async open() { await super.open(); if (this.needsReopen) { this.needsReopen = false; this.epoch++ } }
   close() { this.closed++ }
   invalidate() { this.epochInvalidated = true; this.needsResume = true; for (const cb of this.listeners) cb(this.epoch) }
@@ -229,6 +240,91 @@ describe('MeasureWizard rulings', () => {
     expect(w.get('[data-member-step="a"]').text()).toContain('Record again')
     expect(w.get('[data-member-step="b"]').text()).not.toContain('Record again')
     expect(w.get('[data-to-proposal]').attributes('disabled')).toBeDefined()
+  })
+
+  it('keeps earlier measurements valid when a member is skipped', async () => {
+    const w = mountWizard()
+    await toMembers(w)
+    await recordMember(w, 'a')
+    await w.get('[data-skip="b"]').trigger('click'); await flushPromises()
+    expect(w.get('[data-member-step="a"]').text()).not.toContain('Record again')
+    expect(w.get('[data-to-proposal]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows the recording progress over its duration and removes it when done', async () => {
+    rec.holdNext = true
+    const w = mountWizard()
+    await toMembers(w)
+    await recordMember(w, 'a')
+    const bar = () => w.find('[data-member-step="a"] [role="progressbar"]')
+    expect(bar().attributes('aria-valuenow')).toBe('0')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(bar().attributes('aria-valuenow')).toBe('50')
+    expect(bar().attributes('aria-valuemax')).toBe('100')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(bar().attributes('aria-valuenow')).toBe('100')
+    rec.hold!.resolve(); await flushPromises()
+    expect(bar().exists()).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('stops the progress timer and settles the step when closed mid-recording', async () => {
+    rec.holdNext = true
+    const w = mountWizard()
+    await toMembers(w)
+    await recordMember(w, 'a')
+    w.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('settles a pending step when the microphone closes during the settle wait', async () => {
+    const w = mountWizard()
+    await toMembers(w)
+    await w.get('[data-record="a"]').trigger('click'); await flushPromises()
+    w.unmount(); await flushPromises()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(rec.recorded).toEqual([])
+  })
+
+  it('does not revive an ended session with a late solo answer', async () => {
+    let answer!: (s: unknown) => void
+    vi.mocked(api.sessionSolo).mockImplementationOnce(() => new Promise((r) => (answer = r)) as never)
+    const w = mountWizard()
+    await toMembers(w)
+    await w.get('[data-record="a"]').trigger('click'); await flushPromises()
+    const store = useSyncStore()
+    store.applyEvent(session({ state: 'cancelled' })); await flushPromises()
+    answer(session({ state: 'measuring' })); await flushPromises()
+    expect(store.session?.state).toBe('cancelled')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(rec.recorded).toEqual([])
+  })
+
+  it('keeps keyboard focus on the row button after a recording', async () => {
+    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode: 'semi', recorderFactory: () => rec as never }, attachTo: document.body })
+    await toMembers(w)
+    ;(w.get('[data-record="a"]').element as HTMLElement).focus()
+    await recordMember(w, 'a')
+    expect(document.activeElement).toBe(w.get('[data-repeat="a"]').element)
+    w.unmount()
+  })
+
+  it('says why resuming failed', async () => {
+    const w = mountWizard()
+    await toMembers(w)
+    rec.invalidate(); await flushPromises()
+    rec.resumeError = new SyncCaptureError('failed')
+    await w.get('[data-resume]').trigger('click'); await flushPromises()
+    expect(w.get('[role="alert"]').text()).toContain('Recording failed.')
+    expect(w.get('[data-step-status]').text()).toContain('Recording failed.')
+  })
+
+  it('notices a lost microphone on the level step', async () => {
+    const w = mountWizard()
+    await w.get('[data-next]').trigger('click'); await flushPromises()
+    rec.loseMic(); await flushPromises()
+    expect(w.find('[data-reopen]').exists()).toBe(true)
+    expect(w.get('[data-next]').attributes('disabled')).toBeDefined()
   })
 
   it('treats a recording interrupted mid-way like a broken clock', async () => {

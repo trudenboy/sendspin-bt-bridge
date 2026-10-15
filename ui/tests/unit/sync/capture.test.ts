@@ -353,6 +353,19 @@ describe('SyncRecorder', () => {
     expect(r.epoch).toBe(1)
   })
 
+  it('tells mic-lost listeners when the microphone goes away, until they unsubscribe', async () => {
+    const r = new SyncRecorder()
+    await r.open()
+    const seen: number[] = []
+    const off = r.onMicLost(() => seen.push(1))
+    track.onended!()
+    expect(seen).toEqual([1])
+    off()
+    await r.open()
+    track.onended!()
+    expect(seen).toEqual([1])
+  })
+
   it('shares one open between concurrent callers', async () => {
     const r = new SyncRecorder()
     await Promise.all([r.open(), r.open()])

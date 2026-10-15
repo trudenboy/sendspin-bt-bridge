@@ -130,6 +130,7 @@ export class SyncRecorder {
   private _invalidated = false
   private _micLost = false
   private listeners = new Set<(epoch: number) => void>()
+  private micLostListeners = new Set<() => void>()
 
   static supported(): boolean {
     return (
@@ -169,6 +170,12 @@ export class SyncRecorder {
   onEpochInvalidated(cb: (epoch: number) => void): () => void {
     this.listeners.add(cb)
     return () => this.listeners.delete(cb)
+  }
+
+  /** Called when the microphone track ends (`needsReopen` turns true). Returns an unsubscribe. */
+  onMicLost(cb: () => void): () => void {
+    this.micLostListeners.add(cb)
+    return () => this.micLostListeners.delete(cb)
   }
 
   /** Must be called from a user gesture (iOS will not start audio otherwise). */
@@ -231,7 +238,7 @@ export class SyncRecorder {
       throw new SyncCaptureError('failed', e instanceof Error ? e.message : String(e))
     }
     node.port.onmessage = (e: MessageEvent) => this.onMessage(e.data as WorkletMessage)
-    for (const t of stream.getTracks()) t.onended = () => this.onMicLost(ctx)
+    for (const t of stream.getTracks()) t.onended = () => this.handleMicLost(ctx)
     ctx.addEventListener('statechange', () => this.onStateChange(ctx))
     Object.assign(this, { ctx, stream, source, node, sink })
     if (this.everOpened) this._epoch++
@@ -320,10 +327,11 @@ export class SyncRecorder {
     for (const cb of this.listeners) cb(this._epoch)
   }
 
-  private onMicLost(ctx: AudioContext): void {
+  private handleMicLost(ctx: AudioContext): void {
     if (ctx !== this.ctx) return
     this._micLost = true
     this.fail(new SyncCaptureError('mic_lost'))
+    for (const cb of this.micLostListeners) cb()
   }
 
   /** Give up the running recording, and stop the worklet so it sends nothing more for it. */

@@ -16,6 +16,8 @@ const props = defineProps<{
   departed: string[]
   /** The member being soloed or recorded, and what is happening to it. */
   active: { member: string; phase: MemberPhase } | null
+  /** Share of the running recording done, 0..1. */
+  progress: number
   /** Per-member failure that is not a measurement result (already translated). */
   errors: Record<string, string>
   /** Members that cannot be measured (not adjustable), by name. */
@@ -91,12 +93,22 @@ const label = (status: SyncMeasurement['status']) =>
           </p>
 
           <div class="flex flex-wrap items-center gap-2">
-            <p
-              v-if="active?.member === m.ma_player_id"
-              class="flex items-center gap-2 text-sm text-text-secondary"
-            >
-              <SbSpinner size="sm" />{{ t(`sync.wizard.${active.phase}`, { name: m.name }) }}
-            </p>
+            <div v-if="active?.member === m.ma_player_id" class="flex min-w-0 flex-1 flex-col gap-1">
+              <p class="flex items-center gap-2 text-sm text-text-secondary">
+                <SbSpinner size="sm" />{{ t(`sync.wizard.${active.phase}`, { name: m.name }) }}
+              </p>
+              <div
+                v-if="active.phase === 'recording'"
+                role="progressbar"
+                :aria-label="t('sync.wizard.recording', { name: m.name })"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-valuenow="Math.round(progress * 100)"
+                class="h-2 overflow-hidden rounded-full bg-surface-secondary"
+              >
+                <div class="h-full rounded-full bg-primary transition-[width] duration-100" :style="{ width: `${Math.round(progress * 100)}%` }" />
+              </div>
+            </div>
             <template v-else-if="results[m.ma_player_id]">
               <span :data-result="m.ma_player_id" class="flex flex-wrap items-center gap-2">
                 <SbBadge :tone="tone(results[m.ma_player_id]!.status)" size="sm">

@@ -1569,7 +1569,6 @@
       "reopen": "Open the microphone again",
       "failed": "That did not work ({code}).",
       "ended": "The measurement session ended (it timed out, or was closed elsewhere). Playback has been restored.",
-      "startAgain": "Start again",
       "next": "Next",
       "back": "Back",
       "cancel": "Cancel",
