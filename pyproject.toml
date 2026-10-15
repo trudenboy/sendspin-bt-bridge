@@ -56,7 +56,7 @@ path = "VERSION"
 pattern = "^(?P<version>.+)$"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sendspin_bridge"]
+packages = ["src/sendspin_bridge", "src/sendspin_sync"]
 # Hatchling auto-includes non-.py files inside the package tree
 # (config/schema.json, and the built SPA under spa/ when present).
 
@@ -115,7 +115,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["sendspin_bridge"]
+known-first-party = ["sendspin_bridge", "sendspin_sync"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI declares dependencies and parameters as argument defaults.
