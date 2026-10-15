@@ -41,11 +41,9 @@ function age(iso: string): string {
       <SbBadge :tone="m.adjustable ? 'neutral' : 'warning'" size="sm">
         {{ t(`sync.origin.${m.adjustable ? m.origin : 'other'}`) }}
       </SbBadge>
-      <span
-        class="w-16 text-right text-sm tabular-nums text-text-secondary"
-        :aria-label="m.adjustable && m.delay_ms != null ? undefined : t('sync.noDelay')"
-      >
-        {{ m.adjustable && m.delay_ms != null ? t('sync.delay', { ms: m.delay_ms }) : '—' }}
+      <span class="w-16 text-right text-sm tabular-nums text-text-secondary">
+        <template v-if="m.adjustable && m.delay_ms != null">{{ t('sync.delay', { ms: m.delay_ms }) }}</template>
+        <template v-else><span aria-hidden="true">—</span><span class="sr-only">{{ t('sync.noDelay') }}</span></template>
       </span>
       <span v-if="m.last_measured_at" class="w-full text-xs text-text-secondary sm:w-auto">
         {{ t('sync.measuredAgo', { age: age(m.last_measured_at) }) }}

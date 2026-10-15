@@ -25,6 +25,7 @@ describe('GroupMembers', () => {
     const row = w.get('[data-member]')
     expect(row.text()).toContain('Sendspin')
     expect(row.text()).toContain('—')
+    expect(row.get('.sr-only').text()).toBe('No delay reported')
     expect(row.text()).toContain('5 minutes ago')
   })
 

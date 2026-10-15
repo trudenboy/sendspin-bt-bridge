@@ -1375,7 +1375,6 @@
     },
     "members": "Members",
     "delay": "{ms} ms",
-    "notAdjustable": "Not adjustable",
     "noMembers": "This group has no members.",
     "loadError": "Could not read the group members ({code}).",
     "restoreFailed": "Could not restore the group",
@@ -1446,7 +1445,9 @@
       "kind": {
         "device": "At the speakers",
         "position": "From a listening position"
-      }
+      },
+      "playerId": "player ID {id}",
+      "nameRequired": "Enter a name."
     }
   }
 }

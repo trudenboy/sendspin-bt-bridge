@@ -86,7 +86,10 @@ describe('ProfilesPanel', () => {
     name.value = '   '; name.dispatchEvent(new Event('input'))
     await (document.body.querySelector('[data-profile-save]') as HTMLElement).click(); await flushPromises()
     expect(api.captureProfile).not.toHaveBeenCalled()
-    expect(document.body.querySelector('[data-profile-name]')).not.toBeNull()
+    const input = document.body.querySelector('[data-profile-name]') as HTMLInputElement
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(document.body.querySelector('[data-profile-name-error]')!.textContent).toContain(en.sync.profiles.nameRequired)
+    expect(document.activeElement).toBe(input)
     w.unmount()
   })
 
@@ -103,6 +106,7 @@ describe('ProfilesPanel', () => {
     expect(api.patchProfile).toHaveBeenCalledWith('p1', { name: 'Late' })
     expect(w.text()).toContain('Late')
     expect(w.find('[data-rename-input="p1"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(w.get('[data-rename="p1"]').element)
     w.unmount()
   })
 
@@ -115,6 +119,7 @@ describe('ProfilesPanel', () => {
     await w.get('[data-rename-input="p1"]').trigger('keydown', { key: 'Escape' }); await flushPromises()
     expect(api.patchProfile).not.toHaveBeenCalled()
     expect(w.text()).toContain('Evening')
+    expect(document.activeElement).toBe(w.get('[data-rename="p1"]').element)
     w.unmount()
   })
 
@@ -130,6 +135,35 @@ describe('ProfilesPanel', () => {
     expect(confirmDialog).toHaveBeenCalledTimes(2)
     expect(api.deleteProfile).toHaveBeenCalledWith('p1')
     expect(w.find('[data-profile="p1"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('moves focus to the next profile after a delete, and to the heading after the last one', async () => {
+    const store = useSyncStore(); store.group = { id: 'g', name: 'G', session_id: null, members } as never
+    const p = (id: string, name: string) => ({ id, name, group_id: 'g', kind: 'device', delays: {}, created_at: '', notes: '' })
+    vi.mocked(api.listProfiles).mockResolvedValue([p('p1', 'Evening'), p('p2', 'Morning')] as never)
+    vi.mocked(api.deleteProfile).mockResolvedValue(undefined)
+    const w = mount(ProfilesPanel, { global: { plugins: [i18n] }, props: { groupId: 'g' }, attachTo: document.body }); await flushPromises()
+    await w.get('[data-delete="p1"]').trigger('click'); await flushPromises()
+    expect(document.activeElement).toBe(w.get('[data-apply="p2"]').element)
+    await w.get('[data-delete="p2"]').trigger('click'); await flushPromises()
+    expect(document.activeElement).toBe(w.get('#sync-profiles-title').element)
+    w.unmount()
+  })
+
+  it('labels players that are not in the group by their player ID', async () => {
+    const store = useSyncStore(); store.group = { id: 'g', name: 'G', session_id: null, members } as never
+    vi.mocked(api.listProfiles).mockResolvedValue([{ id: 'p1', name: 'Evening', group_id: 'g', kind: 'device', delays: { a: 120, gone: 30 }, created_at: '', notes: '' }] as never)
+    vi.mocked(api.applyProfile).mockResolvedValue({ applied: { a: 120 }, skipped: ['b', 'gone'] })
+    const w = mount(ProfilesPanel, { global: { plugins: [i18n] }, props: { groupId: 'g' }, attachTo: document.body }); await flushPromises()
+    await w.get('[data-apply="p1"]').trigger('click'); await flushPromises()
+    expect(document.body.querySelector('[data-not-in-group]')!.textContent).toContain('player ID gone')
+    await (document.body.querySelector('[data-confirm]') as HTMLElement).click(); await flushPromises()
+    const skipped = w.get('[data-skipped]').text()
+    expect(skipped).toContain('2 members skipped')
+    expect(skipped).toContain('B')
+    expect(skipped).toContain('player ID gone')
+    expect(skipped).not.toContain('player ID b')
     w.unmount()
   })
 

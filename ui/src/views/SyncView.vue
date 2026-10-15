@@ -44,9 +44,14 @@ async function choose(action: 'manual' | 'semi' | 'auto') {
   root.value?.querySelector<HTMLElement>(`[role="tab"][data-tab-id="${activeTab.value}"]`)?.focus()
 }
 
-/* A pending restore publishes no ``sync`` events: poll until it clears, then read the group again. */
+/*
+ * A pending restore publishes no ``sync`` events: poll until it clears, then read the group again.
+ * One chain at a time (``pollTimer`` or ``polling`` while a read is in flight); nothing after unmount.
+ */
 const POLL_MS = 5000
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+let polling = false
+let disposed = false
 const restorePending = computed(() => !!sync.restoreFor(groupId.value))
 
 function stopPolling() {
@@ -55,32 +60,41 @@ function stopPolling() {
 }
 
 function schedulePoll() {
+  if (disposed || polling) return
   stopPolling()
   pollTimer = setTimeout(async () => {
     pollTimer = null
+    polling = true
     try {
       await sync.fetchRestores()
     } catch {
       /* try again on the next tick */
+    } finally {
+      polling = false
     }
-    if (restorePending.value) schedulePoll()
+    if (!disposed && restorePending.value) schedulePoll()
   }, POLL_MS)
 }
 
 watch(
   () => [groupId.value, restorePending.value] as const,
-  ([id, pending], [prevId, was]) => {
+  ([id, pending], prev) => {
     if (pending) {
+      // Also when the page opens on a restore that was already pending (the store outlives the view).
       if (!pollTimer) schedulePoll()
       return
     }
     stopPolling()
     // The restore of the group on screen just finished: its mutes and members may have changed.
-    if (was && id && id === prevId) void sync.open(id).catch(() => {})
+    if (prev && prev[1] && id && id === prev[0]) void sync.open(id).catch(() => {})
   },
+  { immediate: true },
 )
 
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  disposed = true
+  stopPolling()
+})
 
 /** Step status, announced to screen readers as it changes. */
 const status = computed(() => t(`sync.state.${sync.session?.state ?? 'idle'}`))

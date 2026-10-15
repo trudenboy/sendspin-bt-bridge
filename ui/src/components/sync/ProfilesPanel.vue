@@ -39,8 +39,21 @@ function fail(e: unknown) {
   failure.value = t('sync.profiles.failed', { code: codeOf(e) })
 }
 
+/** A member's name, or its player ID when it is no longer in the group. */
 function memberName(id: string) {
-  return members.value.find((m) => m.ma_player_id === id)?.name ?? id
+  return members.value.find((m) => m.ma_player_id === id)?.name ?? t('sync.profiles.playerId', { id })
+}
+
+/** One look for the native inputs (``SbInput`` puts extra attributes on its wrapper, not the input). */
+const inputClass =
+  'rounded-(--radius-input) border border-border-strong bg-surface-card px-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40'
+
+const root = ref<HTMLElement | null>(null)
+
+/** Focus an element of the panel once the list has re-rendered. */
+async function focusIn(selector: string) {
+  await nextTick()
+  root.value?.querySelector<HTMLElement>(selector)?.focus()
 }
 
 watch(
@@ -83,16 +96,29 @@ async function apply() {
 const saveOpen = ref(false)
 const newName = ref('')
 const newNotes = ref('')
+const nameMissing = ref(false)
 
 function askSave() {
   newName.value = ''
   newNotes.value = ''
+  nameMissing.value = false
   saveOpen.value = true
 }
 
+watch(newName, (v) => {
+  if (v.trim()) nameMissing.value = false
+})
+
 async function save() {
   const name = newName.value.trim()
-  if (!name || busy.value) return
+  if (busy.value) return
+  if (!name) {
+    // Not a disabled button: the name may arrive in the same tick as the click.
+    nameMissing.value = true
+    await nextTick()
+    document.getElementById('sync-profile-name')?.focus()
+    return
+  }
   busy.value = true
   try {
     await sync.saveProfile(name, 'device', newNotes.value.trim())
@@ -122,7 +148,9 @@ async function startRename(profile: SyncProfile) {
 }
 
 function cancelRename() {
+  const id = renaming.value
   renaming.value = null
+  if (id) void focusIn(`[data-rename="${id}"]`)
 }
 
 async function commitRename(profile: SyncProfile) {
@@ -138,6 +166,7 @@ async function commitRename(profile: SyncProfile) {
     fail(e)
   } finally {
     renaming.value = null
+    void focusIn(`[data-rename="${profile.id}"]`)
   }
 }
 
@@ -152,9 +181,14 @@ async function remove(profile: SyncProfile) {
     danger: true,
   })
   if (!ok) return
+  const list = profiles.value
+  const at = list.findIndex((p) => p.id === profile.id)
+  const next = list[at + 1] ?? list[at - 1]
   try {
     await sync.removeProfile(profile.id)
     report(t('sync.profiles.deleted', { name: profile.name }))
+    // Keep the keyboard in the list: the next profile, else the previous one, else the heading.
+    void focusIn(next ? `[data-apply="${next.id}"]` : '#sync-profiles-title')
   } catch (e) {
     fail(e)
   }
@@ -162,9 +196,9 @@ async function remove(profile: SyncProfile) {
 </script>
 
 <template>
-  <section aria-labelledby="sync-profiles-title">
+  <section ref="root" aria-labelledby="sync-profiles-title">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-      <h2 id="sync-profiles-title" class="text-sm font-medium text-text-secondary">{{ t('sync.profiles.title') }}</h2>
+      <h2 id="sync-profiles-title" tabindex="-1" class="text-sm font-medium text-text-secondary outline-none">{{ t('sync.profiles.title') }}</h2>
       <SbButton type="button" variant="outline" size="sm" data-save-current @click="askSave">
         {{ t('sync.profiles.saveCurrent') }}
       </SbButton>
@@ -181,7 +215,7 @@ async function remove(profile: SyncProfile) {
             v-model="renameValue"
             :data-rename-input="p.id"
             type="text"
-            class="min-w-0 flex-1 rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-1.5 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40"
+            :class="[inputClass, 'min-w-0 flex-1 py-1.5']"
             @keydown.enter.prevent="commitRename(p)"
             @keydown.escape.prevent.stop="cancelRename"
           />
@@ -244,9 +278,14 @@ async function remove(profile: SyncProfile) {
             type="text"
             required
             maxlength="100"
-            class="rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40"
+            :aria-invalid="nameMissing || undefined"
+            :aria-describedby="nameMissing ? 'sync-profile-name-error' : undefined"
+            :class="[inputClass, 'py-2', nameMissing && 'border-error']"
             @keydown.enter.prevent="save"
           />
+          <p v-if="nameMissing" id="sync-profile-name-error" data-profile-name-error role="alert" class="text-xs text-error">
+            {{ t('sync.profiles.nameRequired') }}
+          </p>
         </div>
         <div class="flex flex-col gap-1">
           <label for="sync-profile-notes" class="text-sm font-medium text-text-primary">{{ t('sync.profiles.notes') }}</label>
@@ -255,7 +294,7 @@ async function remove(profile: SyncProfile) {
             v-model="newNotes"
             data-profile-notes
             type="text"
-            class="rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40"
+            :class="[inputClass, 'py-2']"
             @keydown.enter.prevent="save"
           />
         </div>

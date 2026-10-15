@@ -59,7 +59,7 @@ const notInGroup = computed(() => {
         </tbody>
       </table>
       <p v-if="notInGroup.length" data-not-in-group class="mt-3 text-sm text-text-secondary">
-        {{ t('sync.profiles.notInGroup', { names: notInGroup.join(', ') }) }}
+        {{ t('sync.profiles.notInGroup', { names: notInGroup.map((id) => t('sync.profiles.playerId', { id })).join(', ') }) }}
       </p>
       <div class="mt-4 flex justify-end gap-3">
         <SbButton variant="outline" data-cancel @click="open = false">{{ t('sync.profiles.cancel') }}</SbButton>
