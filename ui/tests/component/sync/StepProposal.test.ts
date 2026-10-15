@@ -59,12 +59,19 @@ describe('StepProposal details', () => {
     expect(chart.attributes('aria-label')).toContain('4900')
   })
 
-  it('lets the operator choose the reference speaker (default: the planner’s)', async () => {
+  it('renders the warnings from the rows, not from the bridge text (no duplicates)', () => {
     const w = mountStep()
-    const select = w.get<HTMLSelectElement>('[data-reference]')
-    expect(select.element.value).toBe('a')
-    await select.setValue('b')
-    expect(w.emitted('reference')).toEqual([['b']])
+    expect(w.findAll('[data-warnings] li')).toHaveLength(2)
+    expect(w.get('[data-warnings]').text()).not.toContain('Some delays were clamped to 5000 ms; predicted residual')
+  })
+
+  it('shows a bridge warning as it is when the rows explain nothing', () => {
+    const w = mountStep({}, { rows: [{ member: 'a', before_ms: 0, after_ms: 0, delta_ms: 0, clamped: false }], warnings: ['Something new.'] })
+    expect(w.findAll('[data-warnings] li').map((l) => l.text())).toEqual(['Something new.'])
+  })
+
+  it('offers no reference choice', () => {
+    expect(mountStep().find('[data-reference]').exists()).toBe(false)
   })
 
   it('applies without a member that left the group and marks its row', async () => {

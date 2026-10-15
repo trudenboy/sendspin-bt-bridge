@@ -47,6 +47,12 @@ export const useSyncStore = defineStore('sync', () => {
   const writeFailure = ref<WriteFailure | null>(null)
   /** Sessions this page started; any other live session of the group belongs to another client. */
   const owned = ref<Set<string>>(new Set())
+  /** Sessions that are never the page's session (a quick listen): their events are dropped. */
+  const ignored = new Set<string>()
+  /** While > 0, no other session is adopted (a quick listen is being created, its id not known yet). */
+  let holds = 0
+  /** The session that was held when a hold began: an event adopted meanwhile is undone on ignore. */
+  let heldBefore: SyncSession | null = null
 
   const pending = new Map<string, ReturnType<typeof setTimeout>>()
   const latest = new Map<string, number>()
@@ -150,10 +156,19 @@ export const useSyncStore = defineStore('sync', () => {
 
   /* -- session --------------------------------------------------------------------- */
 
+  /** The group's ``session_id`` is only read with the group: forget it once that session is gone. */
+  function forgetSessionId(id: string) {
+    const g = group.value
+    if (g && g.session_id === id) group.value = { ...g, session_id: null }
+  }
+
   /** A ``sync`` event (or a control call's answer): taken when it is this session, or a live one of this group. */
   function applyEvent(next: SyncSession) {
     if (!next || typeof next !== 'object' || !next.id) return
+    if (ignored.has(next.id)) return
+    if (ENDED.has(next.state)) forgetSessionId(next.id)
     const held = session.value
+    if (holds > 0 && held?.id !== next.id) return
     if (held) {
       if (next.id === held.id) session.value = next
       // A held session that ended gives way to a new live one of its group (another tab, a restart after timeout).
@@ -171,6 +186,7 @@ export const useSyncStore = defineStore('sync', () => {
         applyEvent(await api.getSession(held.id))
       } catch (e) {
         if (e instanceof ApiError && e.status === 404) {
+          forgetSessionId(held.id)
           if (session.value?.id === held.id) session.value = null
         } else {
           error.value = errorCode(e)
@@ -214,7 +230,35 @@ export const useSyncStore = defineStore('sync', () => {
     const current = session.value
     if (!current) return
     await track(() => api.endSession(current.id))
+    forgetSessionId(current.id)
     if (session.value?.id === current.id) session.value = null
+  }
+
+  /** Hold the page's session while a side session (quick listen) is created; returns the release. */
+  function holdSession(): () => void {
+    if (holds === 0) heldBefore = session.value
+    holds++
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      holds--
+    }
+  }
+
+  /** Never take this session as the page's session (and undo it if it was taken). */
+  function ignoreSession(id: string) {
+    ignored.add(id)
+    if (session.value?.id === id) session.value = heldBefore && heldBefore.id !== id ? heldBefore : null
+  }
+
+  /** End another client's session (the operator confirmed): nobody stays locked out. */
+  async function endForeign(id: string) {
+    await track(() => api.endSession(id))
+    forgetSessionId(id)
+    if (session.value?.id === id) session.value = null
+    const g = group.value
+    if (g) await fetchGroup(g.id).catch(() => {})
   }
 
   function owns(id: string) {
@@ -375,6 +419,9 @@ export const useSyncStore = defineStore('sync', () => {
     error,
     writeFailure,
     owns,
+    holdSession,
+    ignoreSession,
+    endForeign,
     retrySessionRestore,
     fetchGroups,
     fetchGroup,

@@ -290,6 +290,38 @@ async function load(id: string) {
   await Promise.allSettled([sync.open(id), sync.fetchRestores()])
 }
 
+/** The id of the other client's session: the store's when it could be read, else the group's. */
+const foreignId = computed(() => {
+  const s = liveSession.value
+  if (s && !sync.owns(s.id)) return s.id
+  return group.value?.session_id ?? null
+})
+const endingForeign = ref(false)
+const endForeignError = ref('')
+
+/** End another client's session after confirming, so nobody stays locked out (e.g. a phone killed the page). */
+async function endForeign() {
+  const id = foreignId.value
+  if (!id || endingForeign.value) return
+  const ok = await confirmDialog({
+    title: t('sync.endForeignTitle'),
+    message: t('sync.endForeignMessage'),
+    confirmLabel: t('sync.endForeign'),
+    cancelLabel: t('sync.profiles.cancel'),
+    danger: true,
+  })
+  if (!ok) return
+  endingForeign.value = true
+  endForeignError.value = ''
+  try {
+    await sync.endForeign(id)
+  } catch (e) {
+    endForeignError.value = t('sync.profiles.failed', { code: errorCode(e) })
+  } finally {
+    endingForeign.value = false
+  }
+}
+
 async function retrySession() {
   retrying.value = true
   try {
@@ -350,7 +382,7 @@ watch(groupId, (id) => void load(id), { immediate: true })
         <p class="font-medium">{{ t('sync.restoreFailed') }}</p>
         <p class="text-text-secondary">{{ t('sync.restoreRetrying', { code: sessionRestore.restore_error }) }}</p>
       </div>
-      <SbButton variant="outline" size="sm" data-retry :loading="retrying" @click="retrySession">{{ t('common.retry') }}</SbButton>
+      <SbButton variant="outline" size="sm" data-retry-session :loading="retrying" @click="retrySession">{{ t('common.retry') }}</SbButton>
     </div>
 
     <div
@@ -359,8 +391,16 @@ watch(groupId, (id) => void load(id), { immediate: true })
       role="status"
       class="mb-4 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
     >
-      <p class="font-medium">{{ t('sync.readOnly') }}</p>
-      <p class="text-text-secondary">{{ t('sync.readOnlyHelp') }}</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="font-medium">{{ t('sync.readOnly') }}</p>
+          <p class="text-text-secondary">{{ t('sync.readOnlyHelp') }}</p>
+        </div>
+        <SbButton variant="outline" size="sm" data-end-foreign :loading="endingForeign" @click="endForeign">
+          {{ t('sync.endForeign') }}
+        </SbButton>
+      </div>
+      <p v-if="endForeignError" role="alert" class="mt-1 text-error">{{ endForeignError }}</p>
     </div>
 
     <div v-if="sync.loading && !group" class="flex justify-center py-8">
@@ -412,7 +452,7 @@ watch(groupId, (id) => void load(id), { immediate: true })
               </ul>
             </SbCard>
             <SbCard>
-              <ProfilesPanel :group-id="group.id" />
+              <ProfilesPanel :group-id="group.id" :read-only="readOnly" />
             </SbCard>
           </div>
         </template>

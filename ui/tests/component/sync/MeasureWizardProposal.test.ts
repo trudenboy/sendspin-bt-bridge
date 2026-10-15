@@ -25,8 +25,8 @@ const proposal = {
 }
 
 class Recorder {
-  epoch = 0; closed = 0; recorded: number[] = []
-  async open() {} level() { return 0.2 } close() { this.closed++ }
+  epoch = 0; closed = 0; opened = 0; recorded: number[] = []
+  async open() { this.opened++ } level() { return 0.2 } close() { this.closed++ }
   async record(d: number) { this.recorded.push(d); return { pcm: new Int16Array(10), sampleRate: 16000, startTimeS: 20, epoch: this.epoch } }
 }
 
@@ -70,17 +70,18 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     expect(api.computeProposal).toHaveBeenCalledWith('s1')
     expect(api.getProposal).not.toHaveBeenCalled()
     expect(w.get('[data-row="b"]').text()).toContain('+12')
-    expect(rec.closed).toBe(0)                                   // still open: a check round may follow
+    expect(rec.closed).toBe(1)                                   // closed on the proposal step
     vi.mocked(api.applyProposal).mockResolvedValue(session({ state: 'restoring', history: [{ round: 1, spread_before_ms: 12 }] }))
     await w.get('[data-apply]').trigger('click'); await flushPromises()
     expect(api.applyProposal).toHaveBeenCalledWith('s1', undefined, false)
-    expect(rec.closed).toBe(1)                                   // the microphone never stays live
+    expect(rec.closed).toBe(1)                                   // and it stays closed
     expect(w.get('[data-done]').text()).toContain('Restoring the group')
     useSyncStore().applyEvent(session({ state: 'done', history: [{ round: 1, spread_before_ms: 12 }] }))
     await flushPromises()
     expect(w.get('[data-done]').text()).toContain('Group restored')
     expect(w.text()).not.toContain('The measurement session ended')
     expect(w.get('[data-step-status]').text()).toContain('Group restored')
+    expect(w.get('h2').text()).toContain('Step 5 of 5')
   })
 
   it('runs an optional check round in semi-automatic mode and shows the spread after it', async () => {
@@ -90,7 +91,8 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     await w.get('[data-check-again]').setValue(true)
     await w.get('[data-apply]').trigger('click'); await flushPromises()
     expect(api.applyProposal).toHaveBeenCalledWith('s1', undefined, true)
-    expect(w.get('h2').text()).toContain('Checking the result')
+    expect(rec.opened).toBe(2)                                   // reopened for the check round
+    expect(w.get('h2').text()).toContain('Check round')
     expect(w.find('[data-result="a"]').exists()).toBe(false)     // a fresh round
     await recordMember(w, 'a'); await recordMember(w, 'b')
     vi.mocked(api.getSession).mockResolvedValue(session({ state: 'restoring', round: 2, history: [{ round: 1, spread_before_ms: 12, spread_after_ms: 2 }] }))
@@ -107,7 +109,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     const w = mountWizard('auto')
     await toProposal(w)
     expect(api.applyProposal).toHaveBeenCalledWith('s1', undefined, undefined)
-    expect(w.get('h2').text()).toContain('Checking the result')
+    expect(w.get('h2').text()).toContain('Check round')
     expect(w.get('[data-undo]').text()).toContain('12 s')
     await vi.advanceTimersByTimeAsync(1000)
     expect(w.get('[data-undo]').text()).toContain('11 s')
@@ -115,7 +117,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     await w.get('[data-undo]').trigger('click'); await flushPromises()
     expect(api.undoApply).toHaveBeenCalledWith('s1')
     expect(w.get('[data-done]').text()).toContain('back to where they were')
-    expect(rec.closed).toBe(1)
+    expect(rec.closed).toBe(2)                                   // proposal step, then done
   })
 
   it('disables Undo once the window is over', async () => {
@@ -138,7 +140,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     vi.mocked(api.getSession).mockResolvedValue(session({ mode: 'auto', state: 'verifying', round: 3, undo_until_s: 30 }))
     await w.get('[data-to-proposal]').trigger('click'); await flushPromises()
     expect(api.applyProposal).toHaveBeenCalledTimes(1)          // the bridge applied round 2
-    expect(w.get('h2').text()).toContain('Checking the result')
+    expect(w.get('h2').text()).toContain('Check round')
     expect(w.find('[data-result="a"]').exists()).toBe(false)
     expect(w.get('[data-step-status]').text()).toContain('refinement')
   })
@@ -150,7 +152,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     await toProposal(w)
     expect(w.text()).toContain('administrator')
     expect(w.get('[data-copy-text]').text()).toContain('Kitchen: 0 ms\nHall: 112 ms')
-    expect(rec.closed).toBe(0)
+    expect(rec.closed).toBe(1)
   })
 
   it('applies and saves a profile with the spread in its notes', async () => {
@@ -165,12 +167,62 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     expect(w.get('[data-done]').text()).toContain('Evening')
   })
 
-  it('sets the reference through the session', async () => {
-    vi.mocked(api.sessionReference).mockResolvedValue(session({ state: 'proposed', reference: 'b' }))
+  it('offers no reference choice (the normalised proposal does not depend on it)', async () => {
     const w = mountWizard()
     await toProposal(w)
-    await w.get('[data-reference]').setValue('b'); await flushPromises()
-    expect(api.sessionReference).toHaveBeenCalledWith('s1', 'b')
+    expect(w.find('[data-reference]').exists()).toBe(false)
+    expect(api.sessionReference).not.toHaveBeenCalled()
+  })
+
+  it('saves the profile even when the done event arrived before the apply answer', async () => {
+    vi.mocked(api.captureProfile).mockResolvedValue({ id: 'p1', name: 'Evening' } as never)
+    const w = mountWizard()
+    await toProposal(w)
+    vi.mocked(api.applyProposal).mockImplementation(async () => {
+      useSyncStore().applyEvent(session({ state: 'done' }))
+      await flushPromises()
+      return session({ state: 'done' })
+    })
+    w.getComponent({ name: 'StepProposal' }).vm.$emit('applyAndSave', 'Evening', undefined, false)
+    await flushPromises()
+    expect(api.captureProfile).toHaveBeenCalledWith('g', { name: 'Evening', kind: 'device', notes: 'spread 12 → 1 ms' })
+    expect(w.get('[data-done]').text()).toContain('Evening')
+  })
+
+  it('offers Undo on the proposal when the bridge could not write its refinement within the undo window', async () => {
+    vi.mocked(api.getSession).mockResolvedValue(session({ mode: 'auto', state: 'proposed', proposal }))
+    vi.mocked(api.applyProposal).mockResolvedValue(session({ mode: 'auto', state: 'verifying', round: 2, undo_until_s: 30 }))
+    const w = mountWizard('auto')
+    await toProposal(w)
+    await recordMember(w, 'a'); await recordMember(w, 'b')
+    vi.mocked(api.computeProposal).mockRejectedValueOnce(new ApiError({ status: 403, code: 'ma_forbidden' }))
+    vi.mocked(api.getSession).mockResolvedValue(session({ mode: 'auto', state: 'proposed', round: 2, proposal, undo_until_s: 20 }))
+    await w.get('[data-to-proposal]').trigger('click'); await flushPromises()
+    expect(w.text()).toContain('administrator')
+    expect(w.get('[data-undo]').attributes('disabled')).toBeUndefined()
+    vi.mocked(api.undoApply).mockResolvedValue(session({ mode: 'auto', state: 'proposed', round: 2, undo_until_s: null }))
+    vi.mocked(api.endSession).mockResolvedValue(undefined)
+    await w.get('[data-undo]').trigger('click'); await flushPromises()
+    expect(api.undoApply).toHaveBeenCalledWith('s1')
+    expect(api.endSession).toHaveBeenCalledWith('s1')           // proposed stays live after an undo: end it
+    expect(w.find('[data-done]').exists()).toBe(true)
+  })
+
+  it('an undo during a check-round recording drops that recording', async () => {
+    vi.mocked(api.getSession).mockResolvedValue(session({ mode: 'auto', state: 'proposed', proposal }))
+    vi.mocked(api.applyProposal).mockResolvedValue(session({ mode: 'auto', state: 'verifying', round: 2, undo_until_s: 30 }))
+    const w = mountWizard('auto')
+    await toProposal(w)
+    let release!: () => void
+    vi.mocked(api.sessionSolo).mockImplementation(async () => session({ mode: 'auto', state: 'verifying', round: 2, undo_until_s: 29 }))
+    vi.mocked(api.uploadRecording).mockImplementationOnce(async (_s, member) => { await new Promise<void>((r) => (release = r)); return ok(member) })
+    await recordMember(w, 'a')
+    vi.mocked(api.undoApply).mockResolvedValue(session({ mode: 'auto', state: 'restoring', round: 2, undo_until_s: null }))
+    await w.get('[data-undo]').trigger('click'); await flushPromises()
+    release(); await flushPromises()
+    expect(w.find('[data-done]').exists()).toBe(true)
+    expect(w.get('[data-step-status]').text()).not.toContain('Kitchen')
+    expect(w.get('[data-step-status]').text()).toContain('back to where they were')
   })
 
   it('marks a member that left the group mid-session and goes on without it', async () => {
@@ -206,7 +258,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     await flushPromises()
     expect(w.find('[data-done]').exists()).toBe(true)
     expect(w.text()).not.toContain('The measurement session ended')
-    expect(rec.closed).toBe(1)
+    expect(rec.closed).toBe(2)
   })
 
   it('goes to the done step when the group starts restoring during the check round', async () => {
@@ -219,7 +271,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     await flushPromises()
     expect(w.get('[data-done]').text()).toContain('Restoring the group')
     expect(w.get('[data-listen]').attributes('disabled')).toBeDefined()
-    expect(rec.closed).toBe(1)
+    expect(rec.closed).toBe(2)
   })
 
   it('plays a quick listen on the whole group for 10 s once the group is restored', async () => {
@@ -230,15 +282,21 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     vi.mocked(api.createSession).mockResolvedValue(session({ id: 'q1', mode: 'manual', signal_running: false }))
     vi.mocked(api.sessionSignal).mockResolvedValue(session({ id: 'q1', mode: 'manual' }))
     await w.get('[data-listen]').trigger('click'); await flushPromises()
-    expect(api.createSession).toHaveBeenLastCalledWith({ group_id: 'g', mode: 'manual', point: 'device' })
+    expect(api.createSession).toHaveBeenLastCalledWith({ group_id: 'g', mode: 'manual' })
     expect(api.sessionSignal).toHaveBeenCalledWith('q1', 'start')
+    // The quick listen never becomes the page's session, even when its events arrive.
+    useSyncStore().applyEvent(session({ id: 'q1', mode: 'manual', state: 'measuring' }))
+    expect(useSyncStore().session?.id).toBe('s1')
+    expect(useSyncStore().session?.state).toBe('done')
     expect(w.get('[data-listen]').attributes('disabled')).toBeDefined()
     await vi.advanceTimersByTimeAsync(10_000); await flushPromises()
     expect(api.sessionSignal).toHaveBeenCalledWith('q1', 'stop')
     expect(api.endSession).toHaveBeenCalledWith('q1')
+    useSyncStore().applyEvent(session({ id: 'q1', mode: 'manual', state: 'cancelled' }))
+    expect(useSyncStore().session?.state).toBe('done')
   })
 
-  it('cancel on the proposal ends the session and closes the microphone', async () => {
+  it('cancel on the proposal ends the session (the microphone is already closed)', async () => {
     const w = mountWizard()
     await toProposal(w)
     await w.get('[data-cancel]').trigger('click'); await flushPromises()

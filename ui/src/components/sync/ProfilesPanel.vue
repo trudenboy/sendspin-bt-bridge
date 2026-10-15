@@ -9,7 +9,11 @@ import { SbBadge, SbButton, SbDialog } from '@/kit'
 import ProfileDiffDialog from './ProfileDiffDialog.vue'
 import type { SyncProfile } from '@/api/types'
 
-const props = defineProps<{ groupId: string }>()
+const props = defineProps<{
+  groupId: string
+  /** Another client tunes the group: writing delays is refused until it ends. */
+  readOnly?: boolean
+}>()
 
 const { t } = useI18n()
 const sync = useSyncStore()
@@ -228,7 +232,7 @@ async function remove(profile: SyncProfile) {
             <span v-if="p.notes" class="block truncate text-xs text-text-secondary">{{ p.notes }}</span>
           </span>
           <SbBadge size="sm" tone="neutral">{{ t(`sync.profiles.kind.${p.kind}`) }}</SbBadge>
-          <SbButton type="button" size="sm" :data-apply="p.id" @click="askApply(p)">{{ t('sync.profiles.apply') }}</SbButton>
+          <SbButton type="button" size="sm" :data-apply="p.id" :disabled="readOnly" @click="askApply(p)">{{ t('sync.profiles.apply') }}</SbButton>
           <SbButton
             type="button"
             size="sm"

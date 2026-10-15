@@ -5,10 +5,10 @@ import {
   applyProposal,
   captureProfile,
   computeProposal,
+  createSession,
   endSession,
   endSessionOnPageHide,
   getSession,
-  sessionReference,
   sessionSignal,
   sessionSolo,
   undoApply,
@@ -50,7 +50,7 @@ const emit = defineEmits<{
 }>()
 
 type Step = 'prepare' | 'level' | 'members' | 'proposal' | 'done'
-const STEPS: Step[] = ['prepare', 'level', 'members']
+const STEPS: Step[] = ['prepare', 'level', 'members', 'proposal', 'done']
 const QUICK_LISTEN_MS = 10_000
 
 const { t } = useI18n()
@@ -158,14 +158,8 @@ function markAllStale() {
 
 const message = ref('')
 const stepLine = computed(() => {
-  if (step.value === 'proposal') return t('sync.wizard.steps.proposal')
-  if (step.value === 'done') return t('sync.wizard.steps.done')
-  if (step.value === 'members' && verifying.value) return t('sync.wizard.verifying')
-  return t('sync.wizard.stepOf', {
-    n: STEPS.indexOf(step.value) + 1,
-    total: STEPS.length,
-    name: t(`sync.wizard.steps.${step.value}`),
-  })
+  const name = step.value === 'members' && verifying.value ? t('sync.wizard.verifying') : t(`sync.wizard.steps.${step.value}`)
+  return t('sync.wizard.stepOf', { n: STEPS.indexOf(step.value) + 1, total: STEPS.length, name })
 })
 const heading = ref<HTMLElement | null>(null)
 const root = ref<HTMLElement | null>(null)
@@ -266,6 +260,31 @@ async function reopenTap() {
 
 /* -- steps ---------------------------------------------------------------------------- */
 
+function attach(rec: SyncRecorder) {
+  unsubscribers = [rec.onEpochInvalidated?.(() => interrupt()), rec.onMicLost?.(() => lostMic())].filter(
+    (off): off is () => void => typeof off === 'function',
+  )
+}
+
+/**
+ * The microphone again, for a check round (or back from a failed proposal): opened right away (the
+ * Apply click was the gesture); when the browser wants a tap, the reopen / "Tap to continue" banner asks.
+ */
+async function reopenRecorder() {
+  if (recorder) return
+  const rec = props.recorderFactory?.() ?? new SyncRecorder()
+  recorder = rec
+  attach(rec)
+  try {
+    await rec.open()
+  } catch {
+    if (rec === recorder) lostMic()
+    return
+  }
+  if (rec !== recorder) return
+  if (rec.epochInvalidated || rec.needsResume) interrupt()
+}
+
 /** Step 1 → 2: microphone first (still inside the tap), then the session, which starts the clicks. */
 async function begin() {
   if (starting.value) return
@@ -296,9 +315,8 @@ async function begin() {
       return
     }
     sessionId.value = id
-    unsubscribers = [rec.onEpochInvalidated?.(() => interrupt()), rec.onMicLost?.(() => lostMic())].filter(
-      (off): off is () => void => typeof off === 'function',
-    )
+    trackedId.value = id
+    attach(rec)
     resetMeasurements()
     await goTo('level')
     // iOS may leave a fresh context suspended until a tap: offer it right away.
@@ -470,6 +488,11 @@ const undoError = ref('')
 const savedName = ref<string | null>(null)
 const saveError = ref('')
 
+/** The measuring session, for following its state to the end (``sessionId`` is cleared earlier). */
+const trackedId = ref<string | null>(null)
+/** Bumped when the flow starts over (cancel, measure again, the session ended under it). */
+let flow = 0
+
 const stale$ = (sid: string) => disposed || sid !== sessionId.value
 
 /** Read the session again (control answers and events may lag); null when it is not ours any more. */
@@ -497,6 +520,8 @@ const proposalSession = computed<SyncSession | null>(() => {
 
 async function toProposal() {
   if (!complete.value) return
+  // Nothing is recorded on the proposal: the microphone goes (a check round opens it again).
+  closeRecorder()
   await goTo('proposal')
   message.value = t('sync.wizard.computing')
   emit('proposal')
@@ -556,12 +581,15 @@ async function compute() {
 async function apply(rows: Record<string, number> | undefined, verify: boolean | undefined): Promise<boolean> {
   const sid = sessionId.value
   if (!sid || applying.value) return false
+  const gen = flow
+  // The bridge may report the end (done) before its answer: that is not a reason to drop the answer.
+  const gone$ = () => disposed || gen !== flow
   applying.value = true
   applyError.value = ''
   message.value = t('sync.wizard.applying')
   try {
     const s = await applyProposal(sid, rows, verify)
-    if (stale$(sid)) return false
+    if (gone$()) return false
     forbidden.value = false
     applied.value = true
     sync.applyEvent(s)
@@ -571,7 +599,7 @@ async function apply(rows: Record<string, number> | undefined, verify: boolean |
     else if (s.state !== 'proposed') await toDone()
     return true
   } catch (e) {
-    if (stale$(sid)) return false
+    if (gone$()) return false
     const code = errorCode(e)
     if (code === 'ma_forbidden') {
       forbidden.value = true
@@ -593,7 +621,9 @@ async function applyAndSave(name: string, rows: Record<string, number> | undefin
   const after = proposal.value?.predicted_spread_ms
   const body: { name: string; kind: SessionPoint; notes?: string } = { name, kind: point.value }
   if (before != null && after != null) body.notes = `spread ${formatMs(before)} → ${formatMs(after)} ms`
+  const gen = flow
   if (!(await apply(rows, props.mode === 'auto' ? undefined : verify))) return
+  if (disposed || gen !== flow) return
   saveError.value = ''
   try {
     const created = await captureProfile(props.groupId, body)
@@ -604,18 +634,6 @@ async function applyAndSave(name: string, rows: Record<string, number> | undefin
   }
 }
 
-async function chooseReference(member: string) {
-  const sid = sessionId.value
-  if (!sid) return
-  applyError.value = ''
-  try {
-    const s = await sessionReference(sid, member)
-    if (!stale$(sid)) sync.applyEvent(s)
-  } catch (e) {
-    if (!stale$(sid)) applyError.value = t('sync.wizard.failed', { code: errorCode(e) })
-  }
-}
-
 /** A check round: every member is measured once more with the new delays. */
 async function startCheckRound(note: string) {
   verifying.value = true
@@ -623,6 +641,7 @@ async function startCheckRound(note: string) {
   for (const id of gone.value) errors[id] = t('sync.wizard.memberGone', { name: nameOf(id) })
   await goTo('members')
   message.value = note
+  await reopenRecorder()
 }
 
 /** Step 5. The microphone goes now: nothing is recorded any more. */
@@ -676,18 +695,41 @@ async function undo() {
   try {
     const s = await undoApply(id)
     if (disposed) return
+    // A recording or upload under way belongs to the undone round: drop it.
+    sessionId.value = null
     sync.applyEvent(s)
     if (s.id === id) lastSession.value = s
     undone.value = true
     undoLeft.value = 0
     stopUndoTimer()
-    message.value = t('sync.done.undone')
     await toDone()
+    message.value = t('sync.done.undone')
+    // Undone on the proposal (a refused refinement): the session is still live; end it so the group restores.
+    if (!ENDED.has(s.state) && s.state !== 'restoring') {
+      try {
+        await endSession(id)
+      } catch {
+        /* the bridge times the session out */
+      }
+      void refreshTracked(id)
+    }
   } catch (e) {
     undoError.value = t('sync.wizard.undoFailed', { code: errorCode(e) })
     message.value = undoError.value
   } finally {
     undoing.value = false
+  }
+}
+
+async function refreshTracked(id: string) {
+  try {
+    const s = await getSession(id)
+    if (!disposed && trackedId.value === id) {
+      lastSession.value = s
+      sync.applyEvent(s)
+    }
+  } catch {
+    /* events follow anyway */
   }
 }
 
@@ -720,15 +762,20 @@ async function quickListen() {
   listening.value = true
   listenError.value = ''
   let id: string | null = null
+  // Never the page's session: the header keeps the measurement's outcome, the Manual tab cannot take it.
+  const release = sync.holdSession()
   try {
-    id = (await sync.start(props.groupId, 'manual')).id
+    id = (await createSession({ group_id: props.groupId, mode: 'manual' })).id
+    sync.ignoreSession(id)
+    release()
     listenId = id
     if (disposed) return void stopListen(id)
-    sync.applyEvent(await sessionSignal(id, 'start'))
+    await sessionSignal(id, 'start')
     if (disposed) return void stopListen(id)
     const started = id
     listenTimer = setTimeout(() => void stopListen(started), QUICK_LISTEN_MS)
   } catch (e) {
+    release()
     listenError.value = t('sync.done.listenFailed', { code: errorCode(e) })
     if (id) await stopListen(id)
     listening.value = false
@@ -736,6 +783,8 @@ async function quickListen() {
 }
 
 function resetFlow() {
+  flow++
+  trackedId.value = null
   proposal.value = null
   proposalError.value = ''
   applyError.value = ''
@@ -773,6 +822,7 @@ async function again() {
 async function backToMembers() {
   proposalError.value = ''
   await goTo('members')
+  await reopenRecorder()
 }
 
 async function cancel() {
@@ -795,13 +845,13 @@ async function cancel() {
 watch(
   () => sync.session,
   (s) => {
+    if (s && trackedId.value && s.id === trackedId.value) {
+      lastSession.value = s
+      trackUndo(s)
+    }
     const id = sessionId.value
     if (!id) return
     const ours = s && s.id === id ? s : null
-    if (ours) {
-      lastSession.value = ours
-      trackUndo(ours)
-    }
     if (ours && !ENDED.has(ours.state)) {
       // After an apply, a restore is the end of the measurement, not an interruption.
       if (ours.state === 'restoring' && applied.value) void toDone()
@@ -854,7 +904,7 @@ const signalStarting = computed(() => !session.value?.signal_running)
     </p>
 
     <div
-      v-if="undoDeadline != null && !undone && (step === 'members' || step === 'done')"
+      v-if="undoDeadline != null && !undone && step !== 'prepare' && step !== 'level'"
       class="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
     >
       <span class="min-w-0 flex-1">{{ t('sync.wizard.undoHelp') }}</span>
@@ -958,7 +1008,6 @@ const signalStarting = computed(() => !session.value?.signal_running)
         :error="applyError"
         @apply="apply"
         @apply-and-save="applyAndSave"
-        @reference="chooseReference"
         @cancel="cancel"
       />
     </template>

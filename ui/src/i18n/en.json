@@ -1575,7 +1575,7 @@
       "cancel": "Cancel",
       "toProposal": "Continue to the proposal",
       "measured": "Every speaker is measured. The proposal comes next.",
-      "verifying": "Checking the result",
+      "verifying": "Check round",
       "verifyingHelp": "The delays are applied. Measure each speaker once more to check the result.",
       "refined": "A refinement was applied. Measure each speaker once more.",
       "memberGone": "{name} left the group; the measurement goes on without it.",
@@ -1602,8 +1602,6 @@
       "ms": "{ms} ms",
       "clamped": "Clamped to the 0–5000 ms range",
       "departed": "Left the group",
-      "reference": "Reference speaker",
-      "referenceHelp": "The other speakers are lined up to this one.",
       "chart": "Spread between the speakers",
       "chartLabel": "Spread before: {before} ms; after: {after} ms",
       "spreadBefore": "Before",
@@ -1646,6 +1644,9 @@
       "listenFailed": "Could not play the clicks ({code}).",
       "again": "Measure again",
       "spreadPredicted": "Spread: {before} ms → {after} ms (predicted)"
-    }
+    },
+    "endForeign": "End that session",
+    "endForeignTitle": "End the tuning on the other device?",
+    "endForeignMessage": "Its test signal stops and the group is restored. Delays already written stay as they are."
   }
 }

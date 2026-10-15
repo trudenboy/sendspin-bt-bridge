@@ -9,7 +9,7 @@ import SpreadChart from './SpreadChart.vue'
 
 /**
  * Step 4: the proposal. Before → after (Δ) per speaker, the spread before and after, the
- * reference, warnings, and the actions. When Music Assistant refused the write
+ * warnings, and the actions. When Music Assistant refused the write
  * (``session.error === 'ma_forbidden'``) the values are offered to copy instead.
  */
 const props = defineProps<{
@@ -25,7 +25,6 @@ const emit = defineEmits<{
   /** ``rows`` only when some proposed members left the group (they are left out); ``verify``: check again. */
   apply: [rows: Record<string, number> | undefined, verify: boolean]
   applyAndSave: [name: string, rows: Record<string, number> | undefined, verify: boolean]
-  reference: [member: string]
   cancel: []
 }>()
 
@@ -52,24 +51,20 @@ const history = computed(() => {
 const spreadBefore = computed(() => history.value?.spread_before_ms ?? null)
 const measuredAfter = computed(() => history.value?.spread_after_ms ?? null)
 
-/** Warnings in the operator's language, derived from the rows (the bridge's own text is English). */
+/**
+ * Warnings in the operator's language, from the structured fields (clamped rows, the predicted
+ * residual, delays above 2000 ms). The bridge's own (English) text is shown as it is, once, only
+ * when the fields explain nothing.
+ */
 const warnings = computed(() => {
   const out: string[] = []
   if (rows.value.some((r) => r.clamped)) out.push(t('sync.proposal.clampedWarning', { ms: props.proposal.predicted_spread_ms }))
   if (rows.value.some((r) => r.after_ms > LARGE_MS)) out.push(t('sync.proposal.largeWarning'))
-  const known = /^(A delay above|Some delays were clamped)/
-  for (const w of props.proposal.warnings ?? []) if (!known.test(w)) out.push(w)
+  if (!out.length) out.push(...new Set(props.proposal.warnings ?? []))
   return out
 })
 
 const unverified = computed(() => (props.proposal.unverified ?? []).map(nameOf))
-
-/* -- reference ----------------------------------------------------------------------- */
-const reference = computed(() => props.session.reference ?? props.proposal.reference)
-function onReference(e: Event) {
-  const id = (e.target as HTMLSelectElement).value
-  if (id && id !== reference.value) emit('reference', id)
-}
 
 /* -- Music Assistant refused: the values to set by hand ----------------------------------- */
 const forbidden = computed(() => props.session.error === 'ma_forbidden')
@@ -115,22 +110,6 @@ function confirmSave() {
 <template>
   <div class="flex flex-col gap-4">
     <p class="text-sm text-text-secondary">{{ t('sync.proposal.help') }}</p>
-
-    <div class="flex flex-col gap-1">
-      <label for="sync-proposal-reference" class="text-sm font-medium text-text-primary">{{ t('sync.proposal.reference') }}</label>
-      <select
-        id="sync-proposal-reference"
-        data-reference
-        :value="reference"
-        :disabled="busy"
-        aria-describedby="sync-proposal-reference-help"
-        class="max-w-xs rounded-(--radius-input) border border-border-strong bg-surface-card px-3 py-2 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/40"
-        @change="onReference"
-      >
-        <option v-for="r in live" :key="r.member" :value="r.member">{{ nameOf(r.member) }}</option>
-      </select>
-      <p id="sync-proposal-reference-help" class="text-xs text-text-secondary">{{ t('sync.proposal.referenceHelp') }}</p>
-    </div>
 
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
