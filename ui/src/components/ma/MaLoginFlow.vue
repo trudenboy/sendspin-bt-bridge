@@ -5,7 +5,7 @@ import { useMaStore } from '@/stores/ma'
 import { useNotificationStore } from '@/stores/notifications'
 import { apiUrl, ApiError } from '@/api/client'
 import { SbInput, SbButton, SbCard } from '@/kit'
-import { Search, LogIn, Home } from 'lucide-vue-next'
+import { Search, LogIn, Home, KeyRound } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const ma = useMaStore()
@@ -16,6 +16,10 @@ const username = ref('')
 const password = ref('')
 const error = ref('')
 const loggingIn = ref(false)
+const showToken = ref(false)
+const token = ref('')
+const tokenError = ref('')
+const connectingToken = ref(false)
 
 async function discover() {
   error.value = ''
@@ -39,6 +43,24 @@ async function doLogin() {
     error.value = e instanceof ApiError ? e.message : t('ma.login.failed')
   } finally {
     loggingIn.value = false
+  }
+}
+
+/** A long-lived token made in Music Assistant → Settings → Profile; checked by the bridge, never kept here. */
+async function doTokenLogin() {
+  const pasted = token.value.trim()
+  if (!pasted) return
+  tokenError.value = ''
+  connectingToken.value = true
+  try {
+    const result = await ma.loginWithToken(serverUrl.value.trim(), pasted)
+    token.value = ''
+    notifications.success(t('ma.login.connected', { url: result.url }))
+    await ma.fetchConnection()
+  } catch (e) {
+    tokenError.value = e instanceof ApiError ? e.message : t('ma.login.tokenFailed')
+  } finally {
+    connectingToken.value = false
   }
 }
 
@@ -105,6 +127,30 @@ onUnmounted(() => window.removeEventListener('message', onPopupMessage))
           </SbButton>
         </div>
       </form>
+
+      <div class="space-y-2 border-t border-border pt-4">
+        <SbButton v-if="!showToken" variant="ghost" size="sm" @click="showToken = true">
+          <template #icon-left>
+            <KeyRound class="h-4 w-4" aria-hidden="true" />
+          </template>
+          {{ t('ma.login.useToken') }}
+        </SbButton>
+        <form v-else data-testid="ma-token-form" class="space-y-2" @submit.prevent="doTokenLogin">
+          <SbInput
+            v-model="token"
+            :label="t('ma.login.maToken')"
+            :hint="t('ma.login.maTokenHint')"
+            type="password"
+          />
+          <p v-if="tokenError" class="text-sm text-error" role="alert">{{ tokenError }}</p>
+          <SbButton variant="primary" type="submit" :loading="connectingToken" :disabled="!token.trim()">
+            <template #icon-left>
+              <KeyRound class="h-4 w-4" aria-hidden="true" />
+            </template>
+            {{ t('ma.login.tokenSubmit') }}
+          </SbButton>
+        </form>
+      </div>
     </div>
   </SbCard>
 </template>

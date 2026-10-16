@@ -1619,6 +1619,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/music-assistant/session/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect with a Music Assistant token
+         * @description Checks the token against the server, then saves it. 400 `ma_token_invalid` when Music Assistant refuses it, 503 `ma_unreachable` when it does not answer.
+         */
+        post: operations["sign_in_token_api_v1_music_assistant_session_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/playback": {
         parameters: {
             query?: never;
@@ -3843,6 +3863,20 @@ export interface components {
             label: string;
             /** Last Used */
             last_used?: string | null;
+        };
+        /** TokenSignIn */
+        TokenSignIn: {
+            /**
+             * Token
+             * @description A long-lived token made in Music Assistant → Settings → Profile.
+             */
+            token: string;
+            /**
+             * Url
+             * @description Empty: find the server (saved URL, Sendspin peer, mDNS).
+             * @default
+             */
+            url?: string;
         };
         /** Track */
         Track: {
@@ -8210,6 +8244,50 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["HaSilentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    sign_in_token_api_v1_music_assistant_session_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenSignIn"];
             };
         };
         responses: {

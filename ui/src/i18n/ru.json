@@ -375,7 +375,12 @@
       "username": "Имя пользователя",
       "password": "Пароль",
       "withHa": "Войти через Home Assistant",
-      "connected": "Подключено к {url}"
+      "connected": "Подключено к {url}",
+      "useToken": "Использовать токен",
+      "maToken": "Токен Music Assistant",
+      "maTokenHint": "Создайте долгосрочный токен в Music Assistant → Настройки → Профиль и вставьте его сюда.",
+      "tokenSubmit": "Подключить по токену",
+      "tokenFailed": "Music Assistant не принял токен."
     },
     "groups": {
       "members": "участников",

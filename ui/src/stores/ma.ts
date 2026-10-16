@@ -8,6 +8,7 @@ import {
   queueCommand,
   refreshGroups,
   signInWithPassword,
+  signInWithToken,
   silentAuth as apiSilentAuth,
 } from '@/api/ma'
 import { useJobsStore } from './jobs'
@@ -90,6 +91,12 @@ export const useMaStore = defineStore('ma', () => {
     return result
   }
 
+  async function loginWithToken(url: string, token: string) {
+    const result = await signInWithToken(url, token)
+    connected.value = true
+    return result
+  }
+
   async function silentAuth(haToken: string, maUrl: string) {
     const result = await apiSilentAuth(haToken, maUrl)
     connected.value = true
@@ -112,6 +119,7 @@ export const useMaStore = defineStore('ma', () => {
     nowPlayingByGroup,
     fetchGroupNowPlaying,
     login,
+    loginWithToken,
     silentAuth,
   }
 })

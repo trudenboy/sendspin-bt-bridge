@@ -39,6 +39,11 @@ class PasswordSignIn(BaseModel):
     password: str
 
 
+class TokenSignIn(BaseModel):
+    url: str = Field(default="", description="Empty: find the server (saved URL, Sendspin peer, mDNS).")
+    token: str = Field(description="A long-lived token made in Music Assistant → Settings → Profile.")
+
+
 class HaSignIn(BaseModel):
     ma_url: str
     step: Literal["init", "mfa"] = "init"
@@ -91,6 +96,17 @@ def connection() -> dict[str, Any]:
 @router.post("/session", response_model=Connection, summary="Sign in with Music Assistant credentials")
 def sign_in(body: PasswordSignIn) -> Connection:
     return Connection(**ma_auth.sign_in_with_password(body.url, body.username, body.password))
+
+
+@router.post(
+    "/session/token",
+    response_model=Connection,
+    summary="Connect with a Music Assistant token",
+    description="Checks the token against the server, then saves it. "
+    "400 `ma_token_invalid` when Music Assistant refuses it, 503 `ma_unreachable` when it does not answer.",
+)
+def sign_in_token(body: TokenSignIn) -> Connection:
+    return Connection(**ma_auth.sign_in_with_token(body.url, body.token))
 
 
 @router.post(
