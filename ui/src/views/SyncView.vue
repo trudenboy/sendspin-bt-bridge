@@ -11,6 +11,7 @@ import GroupMembers from '@/components/sync/GroupMembers.vue'
 import ManualTuning from '@/components/sync/ManualTuning.vue'
 import MeasureWizard from '@/components/sync/MeasureWizard.vue'
 import ProfilesPanel from '@/components/sync/ProfilesPanel.vue'
+import ReadinessWarnings from '@/components/sync/ReadinessWarnings.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -36,6 +37,13 @@ const sessionRestore = computed(() => {
   return s && s.group_id === groupId.value && s.state === 'restoring' && s.restore_error ? s : null
 })
 const root = ref<HTMLElement | null>(null)
+
+/** Speakers to skip when measuring, chosen before the music is stopped (Group tab or step 1). */
+const preSkip = ref<string[]>([])
+function togglePreSkip(member: string, skip: boolean) {
+  preSkip.value = skip ? [...new Set([...preSkip.value, member])] : preSkip.value.filter((id) => id !== member)
+}
+watch(groupId, () => (preSkip.value = []))
 
 /** The two ways to tune: by ear (Manual tab) or measured with a microphone, then by ear (Measure tab). */
 const actions = ['manual', 'semi'] as const
@@ -509,6 +517,13 @@ watch(groupId, (id) => void load(id), { immediate: true })
               <h2 class="mb-2 text-sm font-medium text-text-secondary">{{ t('sync.members') }}</h2>
               <GroupMembers :members="group.members" />
             </SbCard>
+            <ReadinessWarnings
+              v-if="!readOnly"
+              :members="group.members"
+              :skipped="preSkip"
+              @skip="togglePreSkip"
+              @manual="choose('manual')"
+            />
             <SbCard>
               <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.actions.title') }}</h2>
               <ul class="grid gap-3 sm:grid-cols-2">
@@ -587,6 +602,8 @@ watch(groupId, (id) => void load(id), { immediate: true })
           <MeasureWizard
             v-if="activeTab === 'measure' && (!readOnly || wizardSession)"
             :group-id="group.id"
+            :pre-skip="preSkip"
+            @skip="togglePreSkip"
             @session="wizardSession = $event"
             @stage="wizardStage = $event"
             @manual="choose('manual')"

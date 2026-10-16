@@ -8,6 +8,16 @@ import { speakerName } from '@/sync/names'
 defineProps<{ members: SyncMember[] }>()
 
 const { t, locale } = useI18n()
+
+/** What would get in the way of measuring this member (shown before anything is touched). */
+function badges(m: SyncMember): string[] {
+  const out: string[] = []
+  if (m.available === false) out.push('unavailable')
+  if (m.can_mute === false) out.push('unmutable')
+  if (m.muted === true) out.push('muted')
+  if (m.volume === 0) out.push('silent')
+  return out
+}
 const now = useNow()
 
 const STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -42,6 +52,7 @@ function age(iso: string): string {
     >
       <span :title="m.name" class="min-w-0 flex-1 truncate text-text-primary">{{ speakerName(m.name, m.ma_player_id) }}</span>
       <SbBadge v-if="!m.adjustable" tone="warning" size="sm">{{ t('sync.origin.other') }}</SbBadge>
+      <SbBadge v-for="b in badges(m)" :key="b" :data-badge="b" tone="warning" size="sm">{{ t(`sync.badge.${b}`) }}</SbBadge>
       <span class="w-16 text-right text-sm tabular-nums text-text-secondary">
         <template v-if="m.adjustable && m.delay_ms != null">{{ t('sync.delay', { ms: m.delay_ms }) }}</template>
         <template v-else><span aria-hidden="true">—</span><span class="sr-only">{{ t('sync.noDelay') }}</span></template>

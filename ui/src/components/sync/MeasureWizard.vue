@@ -45,6 +45,8 @@ import StepDone from './StepDone.vue'
  */
 const props = defineProps<{
   groupId: string
+  /** Speakers the operator chose to skip before starting (e.g. unavailable ones): skipped once it runs. */
+  preSkip?: string[]
   /** For tests: the recorder to use instead of the browser's microphone. */
   recorderFactory?: () => SyncRecorder
 }>()
@@ -57,6 +59,8 @@ const emit = defineEmits<{
   stage: [stage: Stage | null]
   /** The operator would rather tune by ear (no microphone, or a speaker that cannot be measured). */
   manual: []
+  /** The operator toggled skipping a speaker on step 1. */
+  skip: [member: string, skip: boolean]
 }>()
 
 type Step = 'prepare' | 'stop' | 'clicker' | 'volume' | 'members' | 'tune' | 'done'
@@ -360,6 +364,16 @@ async function begin() {
     setActiveFlag()
     attach(rec)
     resetMeasurements()
+    // The speakers the operator chose to skip on step 1 (unavailable, silent, muted).
+    for (const member of props.preSkip ?? []) {
+      if (!adjustable.value.some((m) => m.ma_player_id === member)) continue
+      try {
+        await sync.skip(member)
+        setResult(member, measurement(member, 'skipped'), undefined)
+      } catch {
+        /* still offered on the members step */
+      }
+    }
     await goTo('stop')
     if (session.value && session.value.group_state !== 'playing') {
       // Nothing to stop: one tap fewer.
@@ -1048,7 +1062,10 @@ const volumes = computed(() => session.value?.volumes ?? {})
       :busy="starting"
       :error="startError"
       :supported="supported"
-      :count="adjustable.length"
+      :count="adjustable.length - (preSkip?.length ?? 0)"
+      :members="allMembers"
+      :skipped="preSkip"
+      @skip="(id, on) => emit('skip', id, on)"
       @next="begin"
       @manual="emit('manual')"
     />

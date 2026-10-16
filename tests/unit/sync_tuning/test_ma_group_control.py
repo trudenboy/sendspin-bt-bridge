@@ -353,3 +353,25 @@ def test_an_unreachable_music_assistant_still_fails_the_group():
     with pytest.raises(ControlError) as exc:
         ctl.members("grp")
     assert exc.value.code == "ma_unavailable"
+
+
+def test_members_report_what_could_stop_a_measurement_before_it_starts():
+    """UX round: mute support, availability, volume and mute state per member, read with the group."""
+    ma = FakeMa()
+    ma.players["cast"]["available"] = False
+    ma.players["uni"]["volume_level"] = 0
+    ma.players["spk-bridge"]["volume_muted"] = True
+    ctl, _ = make(ma)
+    by = {m.ma_player_id: m for m in ctl.members("grp")}
+    assert (by["spk-kiosk"].can_mute, by["spk-bridge"].can_mute) == (False, True)
+    assert (by["cast"].available, by["spk-bridge"].available) == (False, True)
+    assert (by["uni"].volume, by["spk-kiosk"].volume) == (0, 30)
+    assert (by["spk-bridge"].muted, by["uni"].muted, by["spk-kiosk"].muted) == (True, False, None)
+
+
+def test_a_member_music_assistant_does_not_list_is_unavailable_with_nothing_known():
+    ma = FakeMa()
+    del ma.players["cast"]
+    ctl, _ = make(ma)
+    cast = next(m for m in ctl.members("grp") if m.ma_player_id == "cast")
+    assert (cast.available, cast.can_mute, cast.volume, cast.muted) == (False, None, None, None)

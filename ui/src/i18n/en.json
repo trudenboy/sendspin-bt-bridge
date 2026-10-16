@@ -1708,6 +1708,21 @@
     "mute": {
       "unsupported": "{name} cannot be muted, so the other speakers cannot be measured one at a time while it is in the group. Skip them, or tune by ear in Manual tuning.",
       "unsupportedManual": "{name} cannot be muted, so the other speakers cannot be heard alone. Everyone and {name} alone still work."
+    },
+    "ready": {
+      "title": "Before you measure",
+      "unmutable": "{name} cannot be muted. While it is in the group, the other speakers cannot be measured one at a time. You can still measure {name} itself, or tune by ear in Manual tuning.",
+      "unavailable": "{name} is unavailable in Music Assistant (switched off or disconnected), so it cannot be measured.",
+      "silent": "{name} is at 0 %: it will not be heard. Turn it up on the volume step, or skip it.",
+      "muted": "{name} is muted in Music Assistant. The bridge leaves it muted, so it will not be heard: unmute it, or skip it.",
+      "skip": "Skip {name} when measuring",
+      "skipped": "{name} will be skipped (tap to measure it)"
+    },
+    "badge": {
+      "unmutable": "Cannot be muted",
+      "unavailable": "Unavailable",
+      "silent": "Volume 0 %",
+      "muted": "Muted"
     }
   }
 }

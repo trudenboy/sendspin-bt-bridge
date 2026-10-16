@@ -200,4 +200,12 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     expect(api.sessionSignal).not.toHaveBeenCalledWith('q1', 'stop')
     expect(api.endSession).toHaveBeenCalledWith('q1')
   })
+
+  it('skips the speakers chosen on step 1 as soon as the measurement starts', async () => {
+    const w = mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', preSkip: ['c'], recorderFactory: () => rec as never } })
+    await w.get('[data-next]').trigger('click'); await flushPromises()
+    expect(api.sessionSkip).toHaveBeenCalledWith('s1', 'c')
+    for (let i = 0; i < 3; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
+    expect(w.get('[data-result="c"]').text()).toContain('Skipped')
+  })
 })

@@ -5834,6 +5834,30 @@
             "title": "Adjustable",
             "type": "boolean"
           },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Music Assistant lists the player as available.",
+            "title": "Available"
+          },
+          "can_mute": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The player can be muted (hearing one speaker alone mutes all the others).",
+            "title": "Can Mute"
+          },
           "client_id": {
             "anyOf": [
               {
@@ -5871,6 +5895,18 @@
             "title": "Ma Player Id",
             "type": "string"
           },
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The player is muted right now.",
+            "title": "Muted"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -5883,6 +5919,18 @@
             ],
             "title": "Origin",
             "type": "string"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The player's volume (0-100) when the group was read.",
+            "title": "Volume"
           }
         },
         "required": [
@@ -5892,7 +5940,11 @@
           "adjustable",
           "client_id",
           "delay_ms",
-          "last_measured_at"
+          "last_measured_at",
+          "can_mute",
+          "available",
+          "volume",
+          "muted"
         ],
         "title": "SyncMember",
         "type": "object"

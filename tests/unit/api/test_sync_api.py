@@ -76,6 +76,22 @@ def test_groups_list_members_with_origin_and_adjustability(api_client, sync_env)
     assert {m["ma_player_id"]: m["origin"] for m in g["members"]} == {"a": "bridge", "b": "sendspin", "cast": "other"}
 
 
+def test_a_group_reports_mute_support_availability_and_volume_per_member(api_client, sync_env):
+    from dataclasses import replace
+
+    ctl = sync_env[0]
+    a, b, cast = ctl.member_list
+    ctl.member_list = [
+        replace(a, can_mute=True, available=True, volume=40, muted=False),
+        replace(b, can_mute=False, available=True, volume=0, muted=None),
+        replace(cast, can_mute=True, available=False, volume=None, muted=False),
+    ]
+    members = {m["ma_player_id"]: m for m in api_client.get("/api/v1/sync/groups/g").json()["members"]}
+    assert (members["a"]["can_mute"], members["a"]["available"], members["a"]["volume"]) == (True, True, 40)
+    assert (members["b"]["can_mute"], members["b"]["volume"], members["b"]["muted"]) == (False, 0, None)
+    assert members["cast"]["available"] is False
+
+
 def test_one_group_and_an_unknown_group(api_client, sync_env):
     assert api_client.get("/api/v1/sync/groups/g").json()["id"] == "g"
     missing = api_client.get("/api/v1/sync/groups/nope")

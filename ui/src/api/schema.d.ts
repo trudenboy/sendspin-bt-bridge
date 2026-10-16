@@ -4477,6 +4477,16 @@ export interface components {
         SyncMember: {
             /** Adjustable */
             adjustable: boolean;
+            /**
+             * Available
+             * @description Music Assistant lists the player as available.
+             */
+            available: boolean | null;
+            /**
+             * Can Mute
+             * @description The player can be muted (hearing one speaker alone mutes all the others).
+             */
+            can_mute: boolean | null;
             /** Client Id */
             client_id: string | null;
             /** Delay Ms */
@@ -4485,6 +4495,11 @@ export interface components {
             last_measured_at: string | null;
             /** Ma Player Id */
             ma_player_id: string;
+            /**
+             * Muted
+             * @description The player is muted right now.
+             */
+            muted: boolean | null;
             /** Name */
             name: string;
             /**
@@ -4492,6 +4507,11 @@ export interface components {
              * @enum {string}
              */
             origin: "bridge" | "sendspin" | "other";
+            /**
+             * Volume
+             * @description The player's volume (0-100) when the group was read.
+             */
+            volume: number | null;
         };
         /**
          * SyncSessionOut

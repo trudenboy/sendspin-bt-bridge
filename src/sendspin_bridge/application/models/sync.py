@@ -44,6 +44,12 @@ class SyncMember(ResponseModel):
     client_id: str | None = None
     delay_ms: int | None = None
     last_measured_at: str | None = None
+    can_mute: bool | None = Field(
+        default=None, description="The player can be muted (hearing one speaker alone mutes all the others)."
+    )
+    available: bool | None = Field(default=None, description="Music Assistant lists the player as available.")
+    volume: int | None = Field(default=None, description="The player's volume (0-100) when the group was read.")
+    muted: bool | None = Field(default=None, description="The player is muted right now.")
 
 
 class PendingRestoreOut(ResponseModel):

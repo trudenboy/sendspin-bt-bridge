@@ -24,6 +24,11 @@ class Member:
     client_id: str | None = None
     delay_ms: int | None = None
     last_measured_at: str | None = None
+    # What could stop a measurement, read with the group (None: unknown).
+    can_mute: bool | None = None  # its player can be muted (solo needs every other member muted)
+    available: bool | None = None  # Music Assistant lists it as available
+    volume: int | None = None  # its volume, 0..100
+    muted: bool | None = None  # muted right now (by someone; the session leaves it alone)
 
 
 @dataclass

@@ -3,20 +3,25 @@ import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Mic, TriangleAlert } from 'lucide-vue-next'
 import { SbButton } from '@/kit'
-import type { SessionPoint } from '@/api/types'
+import type { SessionPoint, SyncMember } from '@/api/types'
+import ReadinessWarnings from './ReadinessWarnings.vue'
 
 const props = defineProps<{
   /** Starting: the microphone prompt or the session start is on its way. */
   busy: boolean
   /** Speakers that will be measured (for the time estimate). */
   count?: number
+  /** The group's members as last read (what would stop a measurement is said before it starts). */
+  members?: SyncMember[]
+  /** Speakers the operator chose to skip. */
+  skipped?: string[]
   /** Why the last start failed, already translated. */
   error: string
   /** Capture works in this browser at all. */
   supported: boolean
 }>()
 const point = defineModel<SessionPoint>('point', { required: true })
-const emit = defineEmits<{ next: []; manual: [] }>()
+const emit = defineEmits<{ next: []; manual: []; skip: [member: string, skip: boolean] }>()
 
 const { t } = useI18n()
 const uid = useId()
@@ -38,6 +43,13 @@ const minutes = computed(() => 2 + Math.max(1, props.count ?? 1))
         <p data-queue-note class="mt-1 text-text-secondary">{{ t('sync.wizard.notice.queue') }}</p>
       </div>
     </div>
+
+    <ReadinessWarnings
+      :members="members ?? []"
+      :skipped="skipped"
+      @skip="(id, on) => emit('skip', id, on)"
+      @manual="emit('manual')"
+    />
 
     <fieldset class="flex flex-col gap-2">
       <legend class="mb-2 text-sm font-medium text-text-primary">{{ t('sync.wizard.point.legend') }}</legend>

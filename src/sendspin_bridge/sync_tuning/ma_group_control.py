@@ -118,6 +118,8 @@ class MaGroupControl:
                     # its Sendspin player left Music Assistant (a closed kiosk page): listed, not adjustable
                     logger.warning("Sync: %s has no reachable Sendspin player in Music Assistant: %s", name, exc)
                     adjustable, delay = False, None
+            listed = mid in states
+            raw_muted = st.get("volume_muted")
             out.append(
                 Member(
                     ma_player_id=mid,
@@ -126,6 +128,10 @@ class MaGroupControl:
                     origin=origin,
                     client_id=client_id,
                     delay_ms=delay,
+                    can_mute=_can_mute(st) if listed else None,
+                    available=bool(st.get("available", True)) if listed else False,
+                    volume=_volume(st),
+                    muted=raw_muted if isinstance(raw_muted, bool) else None,
                 )
             )
         self._members_cache[group_id] = out
