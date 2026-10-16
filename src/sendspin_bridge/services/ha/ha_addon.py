@@ -551,10 +551,13 @@ def _started_ma_candidates() -> tuple[list[dict[str, Any]], list[dict[str, Any]]
         if info is not None and _is_started(info):
             official.append({**info, "slug": slug})
     rows = list_supervisor_addons()
+    opted_in = _opted_in_slug()
     others: list[dict[str, Any]] = []
     for row in rows:
         slug = str(row["slug"])
-        if slug in KNOWN_MA_ADDON_SLUGS or not is_ma_addon(row) or str(row.get("state") or "").lower() != "started":
+        # The admin's MA_ADDON_SLUG is a candidate whatever it is called.
+        looks_like_ma = is_ma_addon(row) or (opted_in and slug == opted_in)
+        if slug in KNOWN_MA_ADDON_SLUGS or not looks_like_ma or str(row.get("state") or "").lower() != "started":
             continue
         info = get_supervisor_addon_info(slug)
         if info is not None and _is_started(info):
@@ -670,64 +673,83 @@ def _address_matches(info: dict[str, Any], ma_url: str, host_ips: Callable[[], s
     return port in published and bool(resolved & host_ips())
 
 
+class _HostIps:
+    """The HA host's addresses (``/network/info`` plus loopback), fetched once per lookup."""
+
+    def __init__(self) -> None:
+        self._ips: set[str] | None = None
+
+    def __call__(self) -> set[str]:
+        if self._ips is None:
+            # The bridge add-on runs on the host network too, so loopback is the host.
+            self._ips = host_addresses() | {"127.0.0.1", "::1"}
+        return self._ips
+
+
+def _acceptance(info: dict[str, Any], ma_url: str, host_ips: Callable[[], set[str]], opted_in: str) -> str:
+    """The rule under which *info* may receive a user's ingress session or identity ("" = none).
+
+    Every path that hands out an add-on (fresh choice or remembered one) goes
+    through this:
+
+    - official repository (``d5369777_*``, a slug no other repository can get):
+      trusted, and with an MA URL also required to be at that address;
+    - any other add-on: a Supervisor fact must vouch for it (``_trust_rule``)
+      and the MA URL must be one of its addresses (``_address_matches``).
+    """
+    slug = str(info.get("slug") or "")
+    if slug in KNOWN_MA_ADDON_SLUGS:
+        if not ma_url:
+            return "official repository"
+        return f"official repository, at {ma_url}" if _address_matches(info, ma_url, host_ips) else ""
+    rule = _trust_rule(info, opted_in)
+    if not rule or not ma_url or not _address_matches(info, ma_url, host_ips):
+        return ""
+    return f"{rule}, at {ma_url}"
+
+
 def _choose(official: list[dict], others: list[dict], ma_url: str) -> MaAddonLookup:
     """Pick the add-on that is the MA behind *ma_url*, or refuse.
 
-    The official repository's add-ons are trusted outright.  Any other add-on
-    is used only when all of this holds, so it can't be handed a user's
-    ingress session or identity by naming itself "Music Assistant" or by
-    echoing the real server's public ``/info``:
-
-    - a Supervisor fact vouches for it (``repository: local``, or the admin's
-      ``MA_ADDON_SLUG``);
-    - *ma_url* is one of its addresses (``_address_matches``);
-    - it is the only such add-on;
-    - its ``server_id`` does not contradict *ma_url*'s (checked, never sufficient).
+    An add-on is a candidate only under ``_acceptance``, so it can't be handed
+    a user's ingress session or identity by naming itself "Music Assistant" or
+    by echoing the real server's public ``/info``.  Official add-ons win over
+    others; among others exactly one must qualify (several → refused).  A
+    ``server_id`` that contradicts *ma_url*'s refuses a candidate; a matching
+    one never accepts alone.
     """
+    opted_in = _opted_in_slug()
+    host_ips = _HostIps()
     target = ma_server_id(ma_url) if ma_url else None
 
-    for candidate in official:
-        if not target or _addon_server_id(candidate) in (None, target):
-            return MaAddonLookup(candidate, rule="official repository")
+    def consistent(candidate: dict) -> bool:
+        return not target or _addon_server_id(candidate) in (None, target)
 
-    if not others:
-        return MaAddonLookup(
-            None,
-            f"The Music Assistant add-on is not the server at {ma_url} "
-            f"({describe_addons(official, with_state=False)}); set the Music Assistant URL to the add-on you use",
-        )
+    for candidate in official:
+        if (rule := _acceptance(candidate, ma_url, host_ips, opted_in)) and consistent(candidate):
+            return MaAddonLookup(candidate, rule=rule)
+
     if not ma_url:
         return MaAddonLookup(
             None,
             "Can't confirm which add-on is Music Assistant without its address: "
-            f"{describe_addons(others, with_state=False)}; set the Music Assistant URL",
+            f"{describe_addons(official + others, with_state=False)}; set the Music Assistant URL",
         )
-
-    opted_in = _opted_in_slug()
-    trusted = [(c, rule) for c in others if (rule := _trust_rule(c, opted_in))]
-    untrusted = [c for c in others if not _trust_rule(c, opted_in)]
-    cached_ips: list[set[str]] = []
-
-    def host_ips() -> set[str]:
-        if not cached_ips:
-            cached_ips.append(host_addresses())
-        return cached_ips[0]
-
-    matching = [(c, rule) for c, rule in trusted if _address_matches(c, ma_url, host_ips)]
-    if target:
-        matching = [(c, rule) for c, rule in matching if _addon_server_id(c) in (None, target)]
+    matching = [(c, rule) for c in others if (rule := _acceptance(c, ma_url, host_ips, opted_in)) and consistent(c)]
     if len(matching) == 1:
         candidate, rule = matching[0]
-        return MaAddonLookup(candidate, rule=f"{rule}, at {ma_url}")
+        return MaAddonLookup(candidate, rule=rule)
     if len(matching) > 1:
         return MaAddonLookup(
             None,
             f"Several Music Assistant add-ons are at {ma_url}: "
             f"{describe_addons([c for c, _r in matching], with_state=False)}; refusing to pick one",
         )
+    trusted = [c for c in official + others if c["slug"] in KNOWN_MA_ADDON_SLUGS or _trust_rule(c, opted_in)]
+    untrusted = [c for c in others if c not in trusted]
     parts = []
     if trusted:
-        parts.append(f"not at {ma_url}: {describe_addons([c for c, _r in trusted], with_state=False)}")
+        parts.append(f"not at {ma_url}: {describe_addons(trusted, with_state=False)}")
     if untrusted:
         parts.append(
             "not from a local repository and not named in MA_ADDON_SLUG: "
@@ -747,9 +769,12 @@ def resolve_ma_addon(ma_url: str = "") -> MaAddonLookup:
     key = _url_key(ma_url)
 
     if slug := _ma_addon_slug_cache.get(key):
+        # Re-checked every time: the add-on, MA_ADDON_SLUG or the host may have changed.
         cached = get_supervisor_addon_info(slug)
         if cached is not None and _is_started(cached):
-            return MaAddonLookup({**cached, "slug": slug})
+            info = {**cached, "slug": slug}
+            if _acceptance(info, ma_url, _HostIps(), _opted_in_slug()):
+                return MaAddonLookup(info)
         _ma_addon_slug_cache.pop(key, None)
 
     failed = _ma_addon_not_found.get(key)

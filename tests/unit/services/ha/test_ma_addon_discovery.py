@@ -238,7 +238,7 @@ def test_found_slug_is_remembered_until_it_stops(monkeypatch):
 
     info = ha_addon.find_ma_addon_info(MA_URL)
     assert info is not None and info["slug"] == LOCAL
-    assert fake.calls == [f"/addons/{LOCAL}/info"]
+    assert "/supervisor/info" not in fake.calls  # no new listing, only a re-check
 
     fake.addons[LOCAL]["state"] = "stopped"
     assert ha_addon.find_ma_addon_info(MA_URL) is None
@@ -298,3 +298,48 @@ def test_host_addresses_come_from_the_supervisor(monkeypatch):
 )
 def test_what_counts_as_a_music_assistant_candidate(slug, name, expected):
     assert ha_addon.is_ma_addon({"slug": slug, "name": name}) is expected
+
+
+def test_remembered_add_on_is_dropped_when_the_opt_in_is_withdrawn(monkeypatch, tmp_path):
+    _opt_in(tmp_path, "abcd1234_music_assistant")
+    _install(monkeypatch, [_host_ma("abcd1234_music_assistant", "Music Assistant")])
+    assert ha_addon.find_ma_addon_info(MA_URL) is not None
+
+    (tmp_path / "config.json").write_text(json.dumps({}))
+
+    assert ha_addon.find_ma_addon_info(MA_URL) is None
+
+
+def test_remembered_add_on_is_dropped_when_it_leaves_the_address(monkeypatch):
+    fake = _install(monkeypatch, [_host_ma()])
+    assert ha_addon.find_ma_addon_info(MA_URL) is not None
+
+    fake.addons[LOCAL]["host_network"] = False
+
+    assert ha_addon.find_ma_addon_info(MA_URL) is None
+
+
+def test_opted_in_add_on_counts_whatever_it_is_called(monkeypatch, tmp_path):
+    _opt_in(tmp_path, "abcd1234_mass_server")
+    _install(monkeypatch, [_host_ma("abcd1234_mass_server", "My media server")])
+
+    info = ha_addon.find_ma_addon_info(MA_URL)
+
+    assert info is not None and info["slug"] == "abcd1234_mass_server"
+
+
+@pytest.mark.parametrize("ma_url", ["http://localhost:8095", "http://127.0.0.1:8095"])
+def test_loopback_is_the_host_for_a_host_network_add_on(monkeypatch, ma_url):
+    monkeypatch.setattr(ha_addon, "_resolve_host", lambda host: {"127.0.0.1"} if host == "localhost" else {host})
+    _install(monkeypatch, [_host_ma()])
+
+    info = ha_addon.find_ma_addon_info(ma_url)
+
+    assert info is not None and info["slug"] == LOCAL
+
+
+def test_official_add_on_must_be_at_the_ma_url_too(monkeypatch):
+    # Official add-on runs bridged without publishing 8095: the host's 8095 is someone else.
+    _install(monkeypatch, [_addon("d5369777_music_assistant", "Music Assistant")])
+
+    assert ha_addon.find_ma_addon_info(MA_URL) is None
