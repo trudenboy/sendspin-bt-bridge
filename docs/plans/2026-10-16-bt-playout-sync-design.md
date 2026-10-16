@@ -703,3 +703,132 @@ Taken by the user on 2026-10-16; the design above and the plan implement them.
 ## Review notes
 
 (Filled in by the review and by Task 1.1's decision note.)
+
+## Task 1.1 decision note (2026-10-16, local, provisional)
+
+Local part only: a dev machine with PulseAudio-on-PipeWire 1.0.5 (`pipewire-pulse`), GStreamer
+1.24.2, a wired analog sink and a `module-null-sink`; no Bluetooth speaker. The probe is the
+plan's script with the device, `buffer-time` and stream volume as arguments, 140 s per run,
+sampled every 100 ms, first 2 s dropped. Items marked PENDING-STAND need the HAOS stand or the
+phone; the commands are at the end of this note.
+
+- **Audio clock on bluez5 (PA 17):** PENDING-STAND (E1).
+- **Audio clock on pipewire-pulse:** available: yes. `provide_clock()` returns
+  `GstPulseSinkClock` (`GstAudioClock`) within 0.0–0.13 s of `PLAYING` in all 10 runs; `A`
+  never went backwards. Single-stream runs, rate of `A` vs RAW: analog −0.1 / +10.9 / −15.8 ppm
+  (`buffer-time` 200 / 600 / 800 ms), null sink −46.5 ppm (600 ms). With six streams at once
+  the fits gave −83…+164 ppm, because of step changes in `A − t` (below). Every run is inside
+  the ±500 ppm bound. Bracket (the time to read `A`): p99 39–79 µs, max 2.7 ms (rare
+  scheduler hiccups). **Noise σ of `A − t` after the linear fit: 7.1–7.5 ms**, at every
+  `buffer-time` and on both sinks. This is not white noise. It is a sawtooth: inside each
+  ~1.5 s interval `A` runs 0.1–0.6 % off RAW (the smoother extrapolating), then a 6.7 ms
+  (median) step corrects it at the next timing update. Means reduce σ only slowly: 1 s mean
+  6.6–7.1 ms, 5 s mean 3.5–4.2 ms, 10 s mean 1.3–2.4 ms. The expected 0.1–1 ms was not met.
+  Under the plan's rule the Hampel floor would be 2σ ≈ 15 ms.
+- **`F` (fill with `k = 0`):** it sits at `buffer-time` − 40…50 ms (200 → 135–157 ms,
+  600 → 433–478 ms, 800 → 638–676 ms), with ±30–40 ms of ripple from the same sawtooth plus the
+  10 ms appsrc blocks.
+- **k₀ rule:** PENDING-STAND (E2: phone on the wired output, `buffer-time` 200 and 800 ms).
+- **Underrun (E3, local part):** `buffer-time` 200 ms, the probe process `SIGSTOP`ped for 800 ms.
+  A advances during starvation: **yes**. It advanced 850 ms over 851 ms of RAW, and `A − t` stayed
+  continuous within the usual sawtooth. The fill rule detects it: **yes**, on the first sample
+  after `SIGCONT` (`F` = −627 ms on analog, −672 ms on null). After recovery `F` settles at a
+  new constant: pre-gap 158 / 113 ms, post-gap −512 / −554 ms, so `k` shifted by 670 / 667 ms.
+  `−F_min` read 627 / 672 ms, an error of 43 / −5 ms. The analog error is about one appsrc
+  target (40 ms): the first sample after `SIGCONT` still saw the pre-gap `written`. So `k`
+  should be re-anchored from the post-recovery steady `F` (or `F` once data flows again), not from
+  the raw `F_min`. Post-gap lateness heard = deficit ± … ms: PENDING-STAND (phone).
+- **Delay Report:** HAOS PA: PENDING-STAND (E4). PipeWire: PENDING-STAND (Docker VM 105 with a
+  delay-reporting speaker).
+- **group/update while a sync group is powered / off:** PENDING-STAND (E5). The local bridge log
+  has only solo players: `Group update: id='64ae3ccc-…'` and `id='77efd219-…'`, each with
+  `name` = the player's own name and `state=STOPPED`. So an ungrouped player does receive a
+  per-player group id. That id is not its player id in `config.json`. The powered sync group case
+  needs MA dev with a sync group.
+- **MONO vs RAW:** local −9.7 ppm over 60 s (NTP slewing). HAOS: PENDING-STAND (E6).
+  Legacy offset vs `PULSE_LATENCY_MSEC` (400→800): PENDING-STAND (H4).
+- **Changes to the plan (provisional, from the local result):**
+  - E1 passes on pipewire-pulse for existence, monotonicity, rate and bracket, so Stage 1 keeps
+    the `GstAudioClock` sensor and does not pause.
+  - E1 fails the noise expectation, so **Tasks 1.6 and 1.7 change**. The Hampel floor of
+    0.5 ms is not usable on pipewire-pulse. Per-sample `A − t` must not drive the loop. The
+    observer estimates phase from a robust linear fit of `A` vs RAW over a ≥ 10 s window
+    (σ ≈ 1.3–2.4 ms here), or from the lower envelope of the sawtooth. The steps (~6.7 ms
+    every ~1.5 s) are classified as smoother corrections, not `pa_steps`: the `pa_steps`
+    threshold of 2 ms would fire every 1.5 s, so it rises to > 15 ms or uses the windowed
+    residual.
+  - The S9 ±0.5 ms acceptance on a wired output is at risk on PipeWire. It is re-assessed
+    after the stand result for PA 17, whose bluez5 smoother may behave differently. If PA 17
+    shows the same sawtooth, the 20 ms jump threshold stays, but the trim loop's deadband
+    becomes ≥ 2 ms and the design's sub-ms claims move to "within ~2 ms".
+  - The underrun rule stays. `k` takes the deficit from the post-recovery steady `F` (median of
+    the first 1–2 s after data flows) instead of `−F_min`, which under-reads by up to one appsrc
+    level.
+  - E4 and E5 still drive Tasks 4.2 and 2.6 as written. Until the stand answers, Task 2.6
+    implements the parent MA-group-cache alternative, since the local logs show that solo
+    players also get a non-empty group id, so "has a group id" cannot mean "grouped".
+
+### Stand commands (PENDING-STAND)
+
+On HAOS: install the "Advanced SSH & Web Terminal" add-on (community store), turn
+**Protection mode off**, and open its web terminal. Then enter the bridge add-on container
+(beta channel, v3):
+
+```sh
+C=$(docker ps --format '{{.Names}}' | grep sendspin_bt_bridge | head -1); echo "$C"
+docker exec -it "$C" bash
+export PULSE_SERVER=${PULSE_SERVER:-unix:/run/audio/pulse.sock}
+pactl info | grep -E 'Server (Name|Version)'; pactl list sinks short
+```
+
+**E1 on bluez5 (PA 17), with a connected speaker, music stopped in MA.** Save the probe from
+the plan as `/tmp/probe.py` (paste it with `cat > /tmp/probe.py`; replace the `pulsesink`
+line's `buffer-time=600000` with `device=<bluez_sink…a2dp_sink> buffer-time=600000
+volume=0.05`). Then:
+
+```sh
+cd /tmp && timeout 150 python3 /tmp/probe.py > /tmp/e1_bt_600.log 2>&1; tail -3 /tmp/e1_bt_600.log
+python3 - <<'PY'
+rows=[list(map(int,l.split())) for l in open('/tmp/e1_bt_600.log') if l[:1].isdigit()]
+rows=[r for r in rows if r[2]>=0]; t0=rows[0][0]; rows=[r for r in rows if r[0]-t0>2e6]
+t=[(r[0]-t0)/1e6 for r in rows]; A=[r[2]/1e9 for r in rows]; n=len(t)
+mt=sum(t)/n; mA=sum(A)/n; b=sum((x-mt)*(y-mA) for x,y in zip(t,A))/sum((x-mt)**2 for x in t)
+res=[y-(mA+b*(x-mt)) for x,y in zip(t,A)]; s=(sum(r*r for r in res)/n)**.5
+br=sorted(r[1] for r in rows); print(f"n={n} rate={(b-1)*1e6:+.1f}ppm sigma={s*1e3:.2f}ms p99bracket={br[int(.99*n)]}us")
+PY
+```
+
+Paste back: the `rate / sigma / p99bracket` line and `/tmp/e1_bt_600.log` (or its first 50 and
+last 50 lines).
+
+**E4 Delay Report** (in the same container):
+
+```sh
+python3 - <<'PY'
+import dbus; b=dbus.SystemBus()
+om=dbus.Interface(b.get_object('org.bluez','/'),'org.freedesktop.DBus.ObjectManager')
+for p,ifs in om.GetManagedObjects().items():
+    t=ifs.get('org.bluez.MediaTransport1')
+    if t: print(p, {k:str(v) for k,v in t.items() if k in ('Codec','State','Delay','Volume')})
+PY
+```
+
+Paste back the printed lines, one per connected speaker. If `Delay` is missing, the speaker
+does not report delay on this stack.
+
+**E6 MONO vs RAW on HAOS** (in the container):
+`python3 -c "import time;R,M=time.CLOCK_MONOTONIC_RAW,time.CLOCK_MONOTONIC;r,m=time.clock_gettime_ns(R),time.clock_gettime_ns(M);time.sleep(60);print(((time.clock_gettime_ns(M)-m)/(time.clock_gettime_ns(R)-r)-1)*1e6,'ppm')"`.
+Paste back the number. H4 (legacy offset vs `PULSE_LATENCY_MSEC` 400 vs 800): in the add-on
+options set `pulse_latency_msec` to 400, restart, and play a group with ENEBY20 and the kiosk.
+Note `backend_output_latency_ms` from the device's diagnostics and record the ENEBY-vs-kiosk
+offset with the phone (the group sync tuning page). Repeat at 800, then set it back.
+
+**E5 group id**: in MA dev, make a sync group of one bridge player and the kiosk. Power the
+group on, play anything, then power it off. Then in the HAOS terminal run
+`ha addons logs <slug> | grep "Group update: id="` (the slug is the container name without the
+`addon_` prefix) and paste back the lines with their timestamps and which state they came from.
+
+**E2 / E3 lateness (phone):** on the dev machine, the wired output plays the click track through
+the probe (`buffer-time` 200, then 800) while the phone records near the speaker. For E3, use the
+underrun runner (the probe is `SIGSTOP`ped 800 ms at t = 30 s). Hand both recordings and the
+probe logs to the agent. It computes `t_heard − t(x_port = x)` and the post-gap lateness.
