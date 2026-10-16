@@ -472,3 +472,74 @@ async def test_an_outbound_connection_is_reported_as_connected(tmp_path: Path):
         loop_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await loop_task
+
+
+# ---------------------------------------------------------------------------
+# Output delay change resynchronises the player
+# ---------------------------------------------------------------------------
+#
+# A delay change moves every later play time, but audio already handed to the
+# player keeps the old timing (and GStreamer absorbs steps under 40 ms as
+# jitter). Every change, whatever its source, must resync the player once by
+# the matching shift: a larger delay means earlier play times.
+
+
+async def _daemon_with_real_client(tmp_path: Path, delay_ms: float = 300.0) -> BridgeDaemon:
+    daemon = _daemon(tmp_path)
+    await daemon._load_identity_and_pairing_store()
+    daemon._client = daemon._create_client(delay_ms)
+    return daemon
+
+
+@pytest.mark.asyncio
+async def test_music_assistant_delay_change_resyncs_the_player_once(tmp_path: Path, caplog):
+    from aiosendspin.models.player import PlayerCommandPayload
+    from aiosendspin.models.types import PlayerCommand
+
+    daemon = await _daemon_with_real_client(tmp_path)
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    # aiosendspin applies the command to the client, then calls the listener.
+    daemon._client.set_output_delay_ms(310.0)
+    daemon._handle_server_command(
+        SimpleNamespace(player=PlayerCommandPayload(command=PlayerCommand.SET_OUTPUT_DELAY, output_delay_ms=310))
+    )
+
+    daemon._player.resync.assert_called_once_with(-10_000)
+    assert "Output delay changed 300→310 ms; player resynchronised" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_an_unchanged_delay_does_not_resync(tmp_path: Path):
+    from aiosendspin.models.player import PlayerCommandPayload
+    from aiosendspin.models.types import PlayerCommand
+
+    daemon = await _daemon_with_real_client(tmp_path)
+
+    daemon._client.set_output_delay_ms(300.0)
+    daemon._handle_server_command(
+        SimpleNamespace(player=PlayerCommandPayload(command=PlayerCommand.SET_OUTPUT_DELAY, output_delay_ms=300))
+    )
+
+    daemon._player.resync.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_smaller_delay_moves_audio_later(tmp_path: Path):
+    daemon = await _daemon_with_real_client(tmp_path)
+
+    daemon._client.set_output_delay_ms(200.0)
+
+    daemon._player.resync.assert_called_once_with(100_000)
+
+
+@pytest.mark.asyncio
+async def test_delay_change_shifts_audio_held_by_the_decoder(tmp_path: Path):
+    """A compressed packet whose PCM is not out of the decoder yet keeps its
+    play time in the daemon; it must move with the rest of the queue."""
+    daemon = await _daemon_with_real_client(tmp_path)
+    daemon._pending_play_time_us = 5_000_000
+
+    daemon._client.set_output_delay_ms(350.0)
+
+    assert daemon._pending_play_time_us == 5_000_000 - 50_000

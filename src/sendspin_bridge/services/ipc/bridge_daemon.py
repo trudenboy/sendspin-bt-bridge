@@ -111,6 +111,8 @@ class BridgeDaemon:
         self._muted = args.initial_muted
         self._volume_controller: Any = None
         self._static_delay_ms = max(0.0, min(5000.0, args.static_delay_ms))
+        # The output delay the queued audio was timed with (see _on_output_delay_change).
+        self._player_delay_ms: float | None = None
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
@@ -452,6 +454,9 @@ class BridgeDaemon:
         client.add_controller_state_listener(self._on_controller_state)
         client.add_disconnect_listener(self._on_server_disconnect)
         client.add_server_command_listener(self._handle_server_command)
+        if hasattr(client, "add_output_delay_listener"):
+            self._player_delay_ms = float(getattr(client, "output_delay_ms", static_delay_ms))
+            client.add_output_delay_listener(self._on_output_delay_change)
 
         # Register visualizer listener if available
         if hasattr(client, "add_visualizer_listener"):
@@ -785,10 +790,10 @@ class BridgeDaemon:
         elif cmd.command == PlayerCommand.SET_OUTPUT_DELAY and cmd.output_delay_ms is not None:
             # aiosendspin's SendspinClient._handle_server_command auto-applied
             # the new delay via self.set_output_delay_ms(value) before this
-            # listener fires. The sendspin AudioPlayer reads the post-clamp
-            # value per chunk so audio shifts naturally — we only mirror the
-            # value into bridge_status so the parent persists it and the
-            # web UI repaints.
+            # listener fires, and its output-delay listener has already
+            # resynced the player (_on_output_delay_change). Here we only
+            # mirror the value into bridge_status so the parent persists it
+            # and the web UI repaints.
             client = getattr(self, "_client", None)
             applied = (
                 int(client.output_delay_ms)
@@ -805,6 +810,32 @@ class BridgeDaemon:
             # already does for parent-driven set_static_delay_ms commands.
             self._static_delay_ms = float(applied)
             self._notify()
+
+    def _on_output_delay_change(self, delay_ms: float) -> None:
+        """Re-time the audio already queued when the output delay changes.
+
+        aiosendspin calls this for every change, whether Music Assistant sent
+        set_output_delay or the bridge set it (set_static_delay_ms). Only later
+        chunks get the new play time from ``compute_play_time``; the queued ones
+        keep the old one, and GStreamer would absorb a step under 40 ms as
+        jitter. A larger delay plays earlier (play time = client time - delay).
+        """
+        old_ms = self._player_delay_ms
+        self._player_delay_ms = delay_ms
+        if old_ms is None or old_ms == delay_ms:
+            return
+        shift_us = round((old_ms - delay_ms) * 1000)
+        if self._pending_play_time_us is not None:
+            self._pending_play_time_us += shift_us
+        if self._next_play_time_us is not None:
+            self._next_play_time_us += shift_us
+        if self._player is not None:
+            try:
+                self._player.resync(shift_us)
+            except Exception:
+                logger.exception("Player resync after an output delay change failed")
+                return
+        logger.info("Output delay changed %g→%g ms; player resynchronised", old_ms, delay_ms)
 
     # ── MA group updates ─────────────────────────────────────────────────────
 

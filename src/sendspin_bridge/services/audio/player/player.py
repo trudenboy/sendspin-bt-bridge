@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +46,10 @@ class StreamPlayer:
         self._stream_closed = False
         # Stream volume/mute once set; re-applied to every new sink element.
         self._volume: tuple[float, bool] | None = None
+        # Audio handed to GStreamer that may not have played yet, as
+        # (play_time_us, end_us, payload): ``resync`` re-times it after a delay change.
+        self._queued: deque[tuple[int, int, bytes]] = deque(maxlen=_MAX_QUEUED_CHUNKS)
+        self._resyncs = 0
 
     def start(self, audio_format: PcmFormat) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
@@ -82,7 +87,8 @@ class StreamPlayer:
             raise RuntimeError("player is not started")
         clock = self._pipeline.get_clock()
         gst_now_ns = int(clock.get_time()) if clock is not None else 0
-        pts_ns = gst_pts_ns(play_time_us, self._raw_now_us(), gst_now_ns)
+        raw_now_us = self._raw_now_us()
+        pts_ns = gst_pts_ns(play_time_us, raw_now_us, gst_now_ns)
         frame = self._format.frame_bytes()
         n_frames = len(payload) // frame if frame else 0
         duration_ns = int(n_frames * 1_000_000_000 / self._format.sample_rate) if n_frames else 0
@@ -97,7 +103,41 @@ class StreamPlayer:
             raise RuntimeError(f"appsrc rejected buffer: {result}")
         self._last_pts_ns = pts_ns
         self._last_duration_ns = duration_ns
+        self._forget_played(raw_now_us)
+        self._queued.append((play_time_us, play_time_us + duration_ns // 1000, payload))
         self._poll_bus()
+
+    def resync(self, shift_us: int) -> None:
+        """Move all audio not yet played by ``shift_us`` on the play timeline, now.
+
+        A changed output delay shifts every later play time, but buffers already
+        in appsrc and the sink's ring buffer keep their old timestamps, and
+        audiobasesink absorbs a step under its alignment threshold (40 ms) as
+        jitter and a larger one only after discont-wait, as a jump. So the
+        output is rebuilt, which drops everything queued downstream (flush
+        events deadlocked some A2DP sinks, #464; teardown is the path every
+        stream start takes), and the kept audio is handed back with the shifted
+        play times. Audio whose new time has already passed is dropped: the
+        cost is a short silence, never misaligned audio.
+        """
+        if self._pipeline is None or self._format is None:
+            return
+        audio_format = self._format
+        now_us = self._raw_now_us()
+        keep = [(start_us + shift_us, payload) for start_us, _end_us, payload in self._queued]
+        keep = [(start_us, payload) for start_us, payload in keep if start_us >= now_us]
+        self.stop()
+        self.start(audio_format)
+        for play_time_us, payload in keep:
+            self.submit(play_time_us, payload)
+        self._resyncs += 1
+
+    def _forget_played(self, raw_now_us: int) -> None:
+        while self._queued and self._queued[0][1] <= raw_now_us:
+            self._queued.popleft()
+
+    def _forget_queued(self) -> None:
+        self._queued.clear()
 
     def clear(self) -> None:
         from sendspin_bridge.services.audio.player.gst_support import Gst
@@ -106,6 +146,7 @@ class StreamPlayer:
             return
         self._pipeline.send_event(Gst.Event.new_flush_start())
         self._pipeline.send_event(Gst.Event.new_flush_stop(True))
+        self._forget_queued()
         self._last_pts_ns = None
         self._last_duration_ns = None
         self._sync_error_ns = None
@@ -146,6 +187,7 @@ class StreamPlayer:
         self._last_pts_ns = None
         self._last_duration_ns = None
         self._stream_closed = False
+        self._forget_queued()
 
     def is_drained(self) -> bool:
         if self._appsrc is None:
@@ -174,12 +216,15 @@ class StreamPlayer:
             "playback_sync_error_ms": _ns_to_ms(self._sync_error_ns),
             "discontinuity_count": self._discontinuities,
             "rendered_buffers": self._rendered,
+            "resync_count": self._resyncs,
         }
 
     def _set_caps(self, audio_format: PcmFormat) -> None:
         from sendspin_bridge.services.audio.player.pipeline import pcm_caps
 
         assert self._appsrc is not None
+        # Queued audio of another format can't be handed back after a resync.
+        self._forget_queued()
         self._appsrc.set_property(
             "caps",
             pcm_caps(
@@ -250,6 +295,11 @@ class StreamPlayer:
             return None
         _live, min_latency, _max_latency = query.parse_latency()
         return int(min_latency)
+
+
+# Bounds the resync record if the clock stalls: far beyond any send-ahead
+# (over 5 min of 20 ms chunks); played chunks are dropped by time anyway.
+_MAX_QUEUED_CHUNKS = 16_384
 
 
 def _raw_now_us() -> int:

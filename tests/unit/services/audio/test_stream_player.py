@@ -263,3 +263,111 @@ def test_a_player_never_given_a_volume_leaves_the_sink_alone(monkeypatch):
     player.start(PCM_S16_STEREO_48K)
 
     assert sink.props == {}
+
+
+# ── Output-delay resync ──────────────────────────────────────────────────────
+#
+# A changed output delay moves every later play time by the same amount, but
+# the audio already handed to GStreamer carries the old timestamps, and
+# audiobasesink treats a step under its alignment threshold (40 ms) as jitter.
+# ``resync`` must drop what is queued downstream and hand the not-yet-played
+# audio back with the shifted timestamps, so any step (even 10 ms) lands
+# exactly.
+
+
+def _test_clock():
+    try:
+        import gi
+
+        gi.require_version("GstCheck", "1.0")
+        from gi.repository import GstCheck
+    except (ValueError, ImportError):
+        pytest.skip("GstCheck.TestClock is not introspectable")
+    clock = GstCheck.TestClock.new()
+    clock.set_time(0)
+    return clock
+
+
+_CHUNK_US = 10_000
+_CHUNK_FRAMES = 480  # 10 ms at 48 kHz
+
+
+@requires_gst
+@pytest.mark.parametrize("shift_us", [-10_000, -100_000, 100_000, 7_000])
+def test_resync_moves_queued_audio_by_exactly_the_shift(shift_us):
+    handed: list[int] = []
+    player = StreamPlayer(sink_factory=_recording_fakesink(handed), raw_now_us=lambda: 0, clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    play_times = [1_000_000 + i * _CHUNK_US for i in range(5)]
+    for play_time in play_times:
+        player.submit(play_time, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 5)
+    assert handed == [t * 1000 for t in play_times]
+    handed.clear()
+
+    player.resync(shift_us)
+
+    _wait_until(lambda: len(handed) == 5)
+    assert handed == [(t + shift_us) * 1000 for t in play_times]
+    assert player.metrics()["resync_count"] == 1
+    # Audio arriving after the change continues the shifted timeline seamlessly.
+    player.submit(play_times[-1] + _CHUNK_US + shift_us, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 6)
+    assert handed[-1] == (play_times[-1] + _CHUNK_US + shift_us) * 1000
+    assert player.metrics()["discontinuity_count"] == 0
+    player.stop()
+
+
+@requires_gst
+def test_resync_drops_audio_that_is_already_played_or_now_due_in_the_past():
+    handed: list[int] = []
+    now = {"us": 0}
+    player = StreamPlayer(sink_factory=_recording_fakesink(handed), raw_now_us=lambda: now["us"], clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    for i in range(5):
+        player.submit(i * _CHUNK_US, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 5)
+    handed.clear()
+    now["us"] = 15_000
+
+    # Delay +10 ms: chunks move 10 ms earlier, to -10, 0, 10, 20 and 30 ms.
+    player.resync(-10_000)
+
+    _wait_until(lambda: len(handed) == 2)
+    assert handed == [(20_000 - 15_000) * 1000, (30_000 - 15_000) * 1000]
+    player.stop()
+
+
+@requires_gst
+def test_resync_rebuilds_the_output_so_nothing_queued_keeps_the_old_timing():
+    """Nothing queued downstream with the old timestamps may survive."""
+    player = StreamPlayer(sink_factory=_fakesink, raw_now_us=lambda: 0, clock=_test_clock())
+    player.start(PCM_S16_STEREO_48K)
+    old_sink = player._sink
+    player.submit(1_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+
+    player.resync(-10_000)
+
+    assert player._sink is not old_sink
+    assert player._format == PCM_S16_STEREO_48K
+    player.stop()
+
+
+@requires_gst
+def test_resync_after_clear_or_before_start_pushes_nothing():
+    handed: list[int] = []
+    player = StreamPlayer(sink_factory=_recording_fakesink(handed), raw_now_us=lambda: 0, clock=_test_clock())
+    player.resync(-10_000)  # not started: no-op, no error
+    player.start(PCM_S16_STEREO_48K)
+    player.submit(1_000_000, _silence(PCM_S16_STEREO_48K, frames=_CHUNK_FRAMES))
+    _wait_until(lambda: len(handed) == 1)
+    player.clear()
+    handed.clear()
+
+    player.resync(-10_000)
+
+    import time
+
+    time.sleep(0.05)
+    assert handed == []
+    player.stop()
