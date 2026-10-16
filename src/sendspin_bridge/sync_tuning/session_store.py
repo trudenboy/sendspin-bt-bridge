@@ -1,4 +1,8 @@
-"""Sessions by id, one per group; restore with backoff; the snapshot survives a restart.
+"""Sessions by id, one per group; restore with backoff; what a session did to the group survives a restart.
+
+A session's entry in the snapshot file names the members it muted and the click track it started,
+written whenever that changes: after a restart the members are unmuted and the group is stopped
+if it still plays that click track.
 
 Threading: session methods block on Music Assistant I/O, so nothing here runs on the
 event loop. API worker threads call ``create``/``end``/``get``; a daemon thread calls
@@ -20,15 +24,13 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
-from sendspin_sync.models import snapshot_from_dict, to_dict
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import RESTORE_RECHECK_S, SyncSession
+from sendspin_sync.session import SyncSession
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from sendspin_sync.models import Snapshot
     from sendspin_sync.ports import ClickTrackHost, GroupControl
     from sendspin_sync.session import Mode, Point
 
@@ -63,10 +65,8 @@ class SessionStore:
         publish: Callable[[dict[str, Any]], None],
         snapshot_dir: Callable[[], Path],
         clock: Callable[[], float] = time.monotonic,
-        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self._factory = control_factory
-        self._wall = wall_clock  # the persisted clip end must survive a restart
         self._host = host
         self._publish = publish
         self._dir = snapshot_dir
@@ -79,8 +79,6 @@ class SessionStore:
         self._closed: set[str] = set()
         self._next_restore: dict[str, float] = {}
         self._attempts: dict[str, int] = {}
-        # session id -> (when, group, snapshot): one more volume check after a restore that followed a clip
-        self._rechecks: dict[str, tuple[float, str, Snapshot]] = {}
         self._finished_at: dict[str, float] = {}
         self._hold_until: dict[str, float] = {}  # end of the undo window a finished session had
         self._entries: dict[str, dict[str, Any]] = {}  # what sync_snapshot.json holds, by session id
@@ -137,6 +135,8 @@ class SessionStore:
                 if self._entries.pop(session_id, None) is None:
                     return
             else:
+                if self._entries.get(session_id) == entry:
+                    return  # unchanged: no write
                 self._entries[session_id] = entry
             self._write_file()
 
@@ -149,8 +149,8 @@ class SessionStore:
             raw = json.loads(path.read_text())
             entries = [e for e in raw["sessions"] if isinstance(e, dict)]
             for e in entries:
-                snapshot_from_dict(e["snapshot"])
                 str(e["session_id"]), str(e["group_id"])
+                [str(m) for m in e.get("muted") or []]
         except (OSError, ValueError, KeyError, TypeError):
             corrupt = path.with_name(path.name + ".corrupt")
             logger.warning("Unreadable %s; moved aside to %s", path, corrupt.name, exc_info=True)
@@ -188,24 +188,19 @@ class SessionStore:
             self._loaded = True
 
     def publish_change(self, session: SyncSession) -> None:
-        """``on_change`` of every session: persist its snapshot and publish its state."""
+        """``on_change`` of every session: persist what it did to the group and publish its state."""
         data = session.to_dict()
-        snapshot = session.snapshot
-        if data["state"] in _ENDED or snapshot is None:
-            self._put_entry(session.id, None)
+        clicker = session.clicker_url
+        if data["state"] in _ENDED or (not data["muted"] and clicker is None):
+            self._put_entry(session.id, None)  # nothing to put back
         else:
-            returns_in = data["music_returns_in_s"]
             self._put_entry(
                 session.id,
                 {
                     "session_id": session.id,
                     "group_id": session.group_id,
-                    "signal_running": data["signal_running"],
-                    "soloed": data["soloed"],
-                    # when the clip ends (wall clock): a restore after a restart waits for it
-                    "signal_ends_at": None if returns_in is None else self._wall() + returns_in,
-                    "silenced": bool(session.silenced),
-                    "snapshot": to_dict(snapshot),
+                    "muted": data["muted"],
+                    "clicker_url": clicker,
                 },
             )
         try:
@@ -237,12 +232,6 @@ class SessionStore:
         with self._lock:
             active = self.active_for(group_id)
             if active is not None:
-                returns_in = active.music_returns_in_s() if active.state == "restoring" else None
-                if returns_in is not None:
-                    raise ControlError(
-                        "signal_playing",
-                        f"the last test clip is still playing; music returns in {round(returns_in)} s",
-                    )
                 raise ControlError("session_active", "tuning in progress for this group")
             if self.pending_for(group_id) is not None:
                 raise ControlError("restore_pending", "the group is still being restored from an earlier session")
@@ -263,11 +252,8 @@ class SessionStore:
             self._sessions[session.id] = session  # reserves the group while start() talks to MA
             self._controls[session.id] = control
         try:
-            session.start()
+            session.start()  # reads the group, writes nothing to it
         except BaseException:
-            if session.clip_playing:  # the click track was fired (even still settling): restore it like any other
-                session.cancel()
-                raise
             with self._lock:
                 self._sessions.pop(session.id, None)
                 self._controls.pop(session.id, None)
@@ -303,28 +289,6 @@ class SessionStore:
                 due = [sid for sid in self._pending if now >= self._pending_next.get(sid, 0.0)]
             for sid in due:
                 self._try_pending(sid)
-            self._run_rechecks(now)
-
-    def _run_rechecks(self, now: float) -> None:
-        """Check the volumes once more a few seconds after a session restored them at a clip's end:
-        Music Assistant's own end-of-announcement restore (or a kiosk re-reporting its level) may land
-        after ours. Best effort, once, over a fresh control; skipped when a new session runs on the group."""
-        with self._lock:
-            due = [(sid, r) for sid, r in self._rechecks.items() if now >= r[0]]
-            for sid, _r in due:
-                del self._rechecks[sid]
-        for sid, (_at, group, snapshot) in due:
-            if self.active_for(group) is not None:
-                continue
-            control: GroupControl | None = None
-            try:
-                control = self._factory()
-                control.restore(snapshot)
-            except Exception as exc:
-                logger.warning("Checking the volumes of group %s again after session %s failed: %s", group, sid, exc)
-            finally:
-                if control is not None:
-                    _close(control)
 
     def _tick_session(self, s: SyncSession, now: float) -> None:
         if s.state not in _ENDED and s.state != "restoring" and s.expired():
@@ -332,22 +296,17 @@ class SessionStore:
             s.cancel()
         if s.state not in _ENDED and s.state != "restoring":
             try:
-                s.tick()  # a clip that ended; a check round waiting for it
+                s.tick()  # the group's playback, read every few seconds
             except Exception:
                 logger.warning("Sync session %s tick failed", s.id, exc_info=True)
         if s.state == "restoring" and now >= self._next_restore.get(s.id, 0.0):
-            waiting = False
             try:
                 ok = s.restore_tick()
-                # the clip still plays out with every member silent: not a failed attempt
-                waiting = not ok and s.restore_error is None and s.clip_playing
             except Exception:
                 logger.warning("Restoring sync session %s failed", s.id, exc_info=True)
                 ok = False
             with self._lock:
-                if ok and s.signal_clip > 0 and s.snapshot is not None:
-                    self._rechecks[s.id] = (now + RESTORE_RECHECK_S, s.group_id, s.snapshot)
-                if ok or waiting:
+                if ok:
                     self._next_restore.pop(s.id, None)
                     self._attempts.pop(s.id, None)
                 else:
@@ -398,9 +357,8 @@ class SessionStore:
             return bool(sids)
 
     def restore_persisted(self) -> None:
-        """On boot: restore what a session left behind and delete the file: while its clip still plays,
-        keep the members silent and wait for its end, then put the volumes back; while Music Assistant
-        is unreachable, retry with backoff."""
+        """On boot: unmute what a session left muted and stop its click track if the group still
+        plays it, then delete the entry; while Music Assistant is unreachable, retry with backoff."""
         self.load_persisted()
         with self._tick_lock:
             for sid in list(self._pending):
@@ -413,33 +371,24 @@ class SessionStore:
         if entry is None:
             return
         group = str(entry["group_id"])
-        ends_at = entry.get("signal_ends_at")
-        wait_s = float(ends_at) - self._wall() if isinstance(ends_at, (int, float)) else 0.0
         control: GroupControl | None = None
         try:
-            if wait_s > 0 and entry.get("silenced"):
-                with self._lock:  # silent already: just wait for the clip to end
-                    self._pending_next[sid] = self._clock() + wait_s
-                return
             control = self._factory()
-            if wait_s > 0:
-                # The clip still plays (it cannot be stopped): keep every member silent until it ends,
-                # when Music Assistant restores music and volumes; then check the volumes.
+            muted = [str(m) for m in entry.get("muted") or []]
+            for mid in list(muted):
+                control.mute(mid, False)
+                muted.remove(mid)
+                entry["muted"] = list(muted)  # keep what already succeeded
+            url = entry.get("clicker_url")
+            if isinstance(url, str) and url:
                 try:
-                    control.stop_signal(group)
+                    playing = control.playback(group).plays(url)
                 except ControlError as exc:
-                    if exc.code != "member_gone":  # the group is gone: nothing to silence
+                    if exc.code != "member_gone":  # the group is gone: nothing plays on it
                         raise
-                entry["silenced"] = True
-                with self._lock:
-                    if sid in self._pending:
-                        self._pending[sid] = entry
-                    self._pending_next[sid] = self._clock() + wait_s
-                    self._pending_errors.pop(sid, None)
-                self._put_entry(sid, entry)
-                return
-            # the volume restore covers a solo; a signal from before the clip end was known is over
-            control.restore(snapshot_from_dict(entry["snapshot"]))
+                    playing = False
+                if playing:
+                    control.stop_group(group)
         except Exception as exc:
             with self._lock:
                 n = self._pending_attempts.get(sid, 0)
@@ -494,11 +443,7 @@ class SessionStore:
             for s in sessions if restore else ():
                 try:
                     s.cancel()
-                    if s.state == "restoring" and s.clip_playing:
-                        # never leave the members (and their protocol players, which MA does not restore) at
-                        # 0 if the bridge does not come back: their levels, the clicks play out, MA restores
-                        s.hand_back()
-                    elif s.state == "restoring":
+                    if s.state == "restoring":
                         s.restore_tick()
                 except Exception:
                     logger.warning("Restoring sync session %s at shutdown failed", s.id, exc_info=True)

@@ -58,10 +58,9 @@ _STATUS = {
     "undo_expired": 409,
     "session_state": 409,
     "no_measurement": 409,
-    "signal_playing": 409,
-    "signal_waiting": 409,
-    "signal_starting": 409,
-    "signal_stopped": 409,
+    "group_playing": 409,
+    "clicker_stopped": 409,
+    "sync_mute_unsupported": 409,
     "not_found": 404,
 }
 
@@ -70,6 +69,10 @@ MAX_RECORDING_BYTES = 2_000_000
 
 
 def _raise(exc: ControlError | MaApiError, *, extra: dict[str, Any] | None = None) -> NoReturn:
+    """The problem for *exc*; a ``ControlError`` about one member names it in ``member``."""
+    member = getattr(exc, "member", None)
+    if member is not None:
+        extra = {**(extra or {}), "member": member}
     raise UseCaseError(_STATUS.get(exc.code, 502), exc.code, exc.detail or exc.code, extra=extra) from exc
 
 
@@ -267,7 +270,14 @@ def end_session(sid: str) -> None:
 
 
 def signal(sid: str, action: str) -> SyncSessionOut:
-    return _act(sid, lambda s: s.start_signal() if action == "start" else s.stop_signal())
+    """``start``: play the clicker on the group (refused while it plays anything else); ``stop``: stop
+    the group's playback (the music before the clicker, or the clicker)."""
+    return _act(sid, lambda s: s.start_clicker() if action == "start" else s.stop_group())
+
+
+def session_volume(sid: str, member: str, level: int) -> SyncSessionOut:
+    """Set one member's volume (the clicks must be clearly audible where the operator measures)."""
+    return _act(sid, lambda s: s.set_volume(member, level))
 
 
 def solo(sid: str, member: str | None) -> SyncSessionOut:

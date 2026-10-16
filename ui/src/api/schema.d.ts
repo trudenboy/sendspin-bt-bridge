@@ -1958,7 +1958,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start or stop the click track */
+        /**
+         * Start the clicker on the group, or stop the group's playback
+         * @description start: queue the click track on the group (409 group_playing while it plays anything else; again while it plays starts it over). stop: stop whatever the group plays.
+         */
         post: operations["session_signal_api_v1_sync_sessions__session_id__signal_post"];
         delete?: never;
         options?: never;
@@ -1992,7 +1995,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Hear one member (null: all) */
+        /**
+         * Hear one member (null: all)
+         * @description Mutes every other member; 409 clicker_stopped while the clicker does not play, 409 sync_mute_unsupported (with member) when a member's player cannot be muted.
+         */
         post: operations["solo_api_v1_sync_sessions__session_id__solo_post"];
         delete?: never;
         options?: never;
@@ -2028,6 +2034,23 @@ export interface paths {
         put?: never;
         /** Measure again */
         post: operations["verify_api_v1_sync_sessions__session_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/volumes/{member}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set one member's volume */
+        put: operations["session_volume_api_v1_sync_sessions__session_id__volumes__member__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3696,6 +3719,11 @@ export interface components {
             /** Ms */
             ms: number;
         };
+        /** MemberVolumeIn */
+        MemberVolumeIn: {
+            /** Level */
+            level: number;
+        };
         /** MetronomeIn */
         MetronomeIn: {
             /**
@@ -4493,6 +4521,16 @@ export interface components {
          */
         SyncSessionOut: {
             /**
+             * Clicker Playing
+             * @description The group plays this session's click track (as last read).
+             */
+            clicker_playing: boolean;
+            /**
+             * Clicker Starts
+             * @description Clicker starts in this session; recordings from two playbacks are never mixed.
+             */
+            clicker_starts: number;
+            /**
              * Departed
              * @description Members that left the group mid-session.
              */
@@ -4501,6 +4539,11 @@ export interface components {
             error: string | null;
             /** Group Id */
             group_id: string;
+            /**
+             * Group State
+             * @description The group's playback state as last read (playing, idle, paused); null when unknown.
+             */
+            group_state: string | null;
             /** History */
             history: {
                 [key: string]: unknown;
@@ -4519,10 +4562,10 @@ export interface components {
              */
             mode: "manual" | "semi" | "auto";
             /**
-             * Music Returns In S
-             * @description Seconds until the current clip ends and Music Assistant restores music and volumes; null when no clip plays.
+             * Muted
+             * @description Members this session muted; they are unmuted when it ends.
              */
-            music_returns_in_s: number | null;
+            muted: string[];
             /**
              * Point
              * @enum {string}
@@ -4538,33 +4581,25 @@ export interface components {
             restore_error: string | null;
             /** Round */
             round: number;
-            /**
-             * Signal Clip
-             * @description Clips started in this session; recordings from two clips are never mixed.
-             */
-            signal_clip: number;
-            /**
-             * Signal Running
-             * @description The clicks are audible: a clip plays, has settled and is not silenced.
-             */
-            signal_running: boolean;
-            /**
-             * Signal Waiting
-             * @description A new round waits for the current clip to end before its own clip starts (it cannot be stopped).
-             */
-            signal_waiting: boolean;
             /** Soloed */
             soloed: string | null;
             /**
              * State
              * @enum {string}
              */
-            state: "created" | "signal_starting" | "measuring" | "proposed" | "applying" | "verifying" | "restoring" | "done" | "cancelled" | "failed";
+            state: "created" | "measuring" | "proposed" | "applying" | "verifying" | "restoring" | "done" | "cancelled" | "failed";
             /**
              * Undo Until S
              * @description Seconds left to undo an automatic apply; null when closed.
              */
             undo_until_s: number | null;
+            /**
+             * Volumes
+             * @description Each member's volume as last read or set.
+             */
+            volumes: {
+                [key: string]: number | null;
+            };
         };
         /** TokenList */
         TokenList: {
@@ -10177,6 +10212,53 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    session_volume_api_v1_sync_sessions__session_id__volumes__member__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                member: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberVolumeIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sendspin_sync.models import Member, Snapshot
+from sendspin_sync.models import GroupPlayback, Member, Snapshot
 from sendspin_sync.ports import ControlError
 
 if TYPE_CHECKING:
@@ -12,11 +12,17 @@ if TYPE_CHECKING:
 
 
 class FakeControl:
+    """A group that plays music until the session stops it; the clicker plays until it ends (``clicker_ends``)."""
+
     def __init__(self) -> None:
         self.calls: list[tuple[Any, ...]] = []
         self.delays_now: dict[str, int] = {"a": 0, "b": 0}
-        self.fail_restore = 0
-        self.announcing = False  # what Music Assistant reports about an announcement under way
+        self.fail_unmute = 0  # this many unmute calls fail with ma_unavailable
+        self.group_state: str | None = "playing"
+        self.media_uri: str | None = "library://track/1"
+        self.volumes: dict[str, int | None] = {"a": 40, "b": 40, "cast": 20}
+        self.muted_now: dict[str, bool] = {"a": False, "b": False, "cast": False}
+        self.no_mute: set[str] = set()  # members whose player cannot be muted
         self.member_list = [
             Member("a", "A", True, "bridge", delay_ms=0),
             Member("b", "B", True, "sendspin", delay_ms=0),
@@ -30,35 +36,39 @@ class FakeControl:
         return {m.ma_player_id: self.delays_now.get(m.ma_player_id) for m in members}
 
     def snapshot(self, group_id: str) -> Snapshot:
-        return Snapshot(
-            group_id=group_id,
-            delays=dict(self.delays_now),
-            volumes={"a": 40, "b": 40},
-            muted={"a": False, "b": False},
-            playing=True,
-        )
+        return Snapshot(group_id=group_id, delays=dict(self.delays_now), muted=dict(self.muted_now))
 
-    def start_signal(self, group_id: str, url: str) -> None:
-        self.calls.append(("start", url))
+    def playback(self, group_id: str) -> GroupPlayback:
+        return GroupPlayback(state=self.group_state, media_uri=self.media_uri, volumes=dict(self.volumes))
 
-    def stop_signal(self, group_id: str) -> None:
-        self.calls.append(("stop",))
+    def stop_group(self, group_id: str) -> None:
+        self.calls.append(("stop_group",))
+        self.group_state, self.media_uri = "idle", None
 
-    def solo(self, group_id: str, member: str | None) -> None:
-        self.calls.append(("solo", member))
+    def start_clicker(self, group_id: str, url: str) -> None:
+        self.calls.append(("clicker", url))
+        self.group_state, self.media_uri = "playing", url
+
+    def clicker_ends(self) -> None:
+        """The click track played to its end (or someone stopped it in Music Assistant)."""
+        self.group_state, self.media_uri = "idle", None
+
+    def mute(self, member: str, muted: bool) -> None:
+        if muted and member in self.no_mute:
+            raise ControlError("sync_mute_unsupported", f"{member} cannot be muted", member=member)
+        if not muted and self.fail_unmute:
+            self.fail_unmute -= 1
+            raise ControlError("ma_unavailable")
+        self.calls.append(("mute", member, muted))
+        self.muted_now[member] = muted
+
+    def set_volume(self, member: str, level: int) -> None:
+        self.calls.append(("volume", member, level))
+        self.volumes[member] = level
 
     def set_delay(self, member: Member, ms: int) -> None:
         self.delays_now[member.ma_player_id] = ms
         self.calls.append(("set", member.ma_player_id, ms))
-
-    def announcement_active(self, group_id: str) -> bool:
-        return self.announcing
-
-    def restore(self, snapshot: Snapshot) -> None:
-        if self.fail_restore:
-            self.fail_restore -= 1
-            raise ControlError("ma_unavailable")
-        self.calls.append(("restore",))
 
 
 class FakeHost:
@@ -88,9 +98,6 @@ class FakeMa:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.timeouts: dict[str, float] = {}  # last timeout asked for, per command
         self.forbid_write = False
-        # MA dev, idle: a volume set on a player reaches its Sendspin protocol player; E5 (2026-10-16):
-        # during an announcement it does not always, so a test can switch the propagation off
-        self.member_volume_reaches_protocol = True
         self.players: dict[str, dict[str, Any]] = {
             "spk-bridge": {
                 "player_id": "spk-bridge",
@@ -99,16 +106,19 @@ class FakeMa:
                 "name": "Kitchen",
                 "volume_level": 40,
                 "volume_muted": False,
+                "supported_features": ["volume_set", "volume_mute"],
                 "playback_state": "playing",
                 "output_protocols": [],
             },
             "spk-kiosk": {
+                # a web kiosk: no mute (stage 0, MA dev 2026-10-16)
                 "player_id": "spk-kiosk",
                 "provider": "sendspin",
                 "type": "player",
                 "name": "Kiosk",
                 "volume_level": 30,
-                "volume_muted": True,
+                "volume_muted": None,
+                "supported_features": ["volume_set"],
                 "playback_state": "playing",
                 "output_protocols": [],
             },
@@ -119,6 +129,7 @@ class FakeMa:
                 "name": "Hall",
                 "volume_level": 50,
                 "volume_muted": False,
+                "supported_features": ["volume_set", "volume_mute"],
                 "playback_state": "playing",
                 "output_protocols": [
                     {"output_protocol_id": "uni-sendspin", "protocol_domain": "sendspin", "is_native": False}
@@ -138,6 +149,7 @@ class FakeMa:
                 "name": "TV",
                 "volume_level": 20,
                 "volume_muted": False,
+                "supported_features": ["volume_set", "volume_mute"],
                 "playback_state": "playing",
                 "output_protocols": [],
             },
@@ -147,6 +159,7 @@ class FakeMa:
                 "type": "group",
                 "name": "Downstairs",
                 "playback_state": "playing",
+                "current_media": {"uri": "library://track/7", "media_type": "track"},
                 "group_members": ["spk-bridge", "spk-kiosk", "uni", "cast"],
             },
         }
@@ -185,27 +198,26 @@ class FakeMa:
                 self.values[(pid, real)] = int(value)
             return {}
         if command == "players/cmd/volume_mute":
-            self.players[args["player_id"]]["volume_muted"] = args["muted"]
+            player = self.players[args["player_id"]]
+            if "volume_mute" not in (player.get("supported_features") or []):
+                raise MaApiError("ma_error", f"Player {player['name']} does not support feature volume_mute")
+            player["volume_muted"] = args["muted"]
             return None
         if command == "players/cmd/volume_set":
-            player = self.players[args["player_id"]]
-            player["volume_level"] = args["volume_level"]
-            # as seen on MA dev: a volume set on a player reaches its Sendspin protocol player too
-            # (MA's end-of-announcement restore then puts back only the player's own volume)
-            for proto in (player.get("output_protocols") or []) if self.member_volume_reaches_protocol else []:
-                if proto.get("protocol_domain") == "sendspin" and proto["output_protocol_id"] in self.players:
-                    self.players[proto["output_protocol_id"]]["volume_level"] = args["volume_level"]
+            self.players[args["player_id"]]["volume_level"] = args["volume_level"]
             return None
         if command == "players/cmd/stop":
-            self.players[args["player_id"]]["playback_state"] = "idle"
+            player = self.players[args["player_id"]]
+            player["playback_state"] = "idle"
+            player.pop("current_media", None)
+            return None
+        if command == "player_queues/play_media":
+            # a URL plays as a sound_effect item on the group (stage 0, MA dev 2026-10-16)
+            group = self.players[args["queue_id"]]
+            group["playback_state"] = "playing"
+            group["current_media"] = {"uri": args["media"], "media_type": "sound_effect"}
             return None
         raise MaApiError("ma_error", f"unknown {command}")
 
     def fire(self, command: str, args: dict[str, Any]) -> None:
         self.calls.append((command, args))
-
-    def announcement_restore(self, volumes: dict[str, int]) -> None:
-        """MA's restore at the clip's end, as observed: the players' own volumes only, never their
-        Sendspin protocol players'."""
-        for pid, vol in volumes.items():
-            self.players[pid]["volume_level"] = vol

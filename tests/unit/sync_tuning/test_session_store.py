@@ -7,7 +7,6 @@ from sendspin_bridge.sync_tuning import session_store as store_mod
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_bridge.sync_tuning.session_store import SNAPSHOT_FILE, SessionStore
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import SIGNAL_CLIP_S, SIGNAL_SETTLE_S, SIGNAL_TAIL_S
 from tests.support.sync_fakes import FakeControl, FakeHost
 from tests.support.sync_synth import synth
 
@@ -38,13 +37,20 @@ def make(tmp_path, *, controls=None):
         publish=events.append,
         snapshot_dir=lambda: tmp_path,
         clock=lambda: t["now"],
-        wall_clock=lambda: WALL0 + t["now"],
     )
     return store, made, events, t, host
 
 
-WALL0 = 1_700_000_000.0  # the wall clock when the store's monotonic clock reads 0
-CLIP_END = SIGNAL_CLIP_S + SIGNAL_TAIL_S
+URL = "http://bridge/api/v1/sync/signal/old.wav"
+
+
+def soloed(store, group_id="g", mode="semi"):
+    """A session whose clicker plays with member "a" soloed: "b" and "cast" are muted by it."""
+    s = store.create(group_id, mode, "device")
+    s.stop_group()
+    s.start_clicker()
+    s.solo("a")
+    return s
 
 
 def _file(tmp_path):
@@ -55,23 +61,17 @@ def _persisted(tmp_path):
     return json.loads(_file(tmp_path).read_text())["sessions"]
 
 
-def _old_snapshot(**kw):
-    entry = {
-        "session_id": "old",
-        "group_id": "g",
-        "signal_running": True,
-        "soloed": "a",
-        "snapshot": {
-            "group_id": "g",
-            "delays": {"a": 0},
-            "volumes": {"a": 40},
-            "muted": {"a": False, "b": False},
-            "playing": True,
-            "restore_token": {},
-        },
-    }
+def _old_entry(**kw):
+    """What a session left in the file before a restart: it muted "b" and started its clicker."""
+    entry = {"session_id": "old", "group_id": "g", "muted": ["b"], "clicker_url": URL}
     entry.update(kw)
     return {"sessions": [entry]}
+
+
+def _playing_old_clicker(ctl):
+    ctl.group_state, ctl.media_uri = "playing", URL
+    ctl.muted_now["b"] = True
+    return ctl
 
 
 def test_one_session_per_group_and_events_are_published(tmp_path):
@@ -83,25 +83,47 @@ def test_one_session_per_group_and_events_are_published(tmp_path):
         store.create("g", "manual", "device")
     assert exc.value.code == "session_active"
     assert len(made) == 1  # a refused create builds no control
+    assert not _file(tmp_path).exists()  # nothing done to the group yet: nothing to put back
+
+
+def test_the_entry_names_what_the_session_muted_and_its_clicker(tmp_path):
+    store, _made, _, _, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    s.stop_group()
+    s.start_clicker()
     [entry] = _persisted(tmp_path)
-    assert (entry["session_id"], entry["group_id"]) == (s.id, "g") and entry["signal_ends_at"] is not None
-    assert entry["snapshot"]["volumes"] == {"a": 40, "b": 40}
+    assert entry == {"session_id": s.id, "group_id": "g", "muted": [], "clicker_url": s.clicker_url}
+    s.solo("a")
+    assert _persisted(tmp_path)[0]["muted"] == ["b", "cast"]
+    s.solo(None)
+    assert _persisted(tmp_path)[0]["muted"] == []
+
+
+def test_an_unchanged_entry_is_not_written_again(tmp_path, monkeypatch):
+    store, _made, _, _, _ = make(tmp_path)
+    s = soloed(store)
+    writes = []
+    real = store._write_file
+    monkeypatch.setattr(store, "_write_file", lambda: (writes.append(1), real()))
+    s.set_reference("a")
+    s.set_volume("a", 30)  # published, but the entry stays the same
+    assert writes == []
 
 
 def test_each_session_gets_its_own_control(tmp_path):
     store, made, _, _, _ = make(tmp_path)
-    a = store.create("g1", "manual", "device")
-    b = store.create("g2", "manual", "device")
+    a = soloed(store, "g1", "manual")
+    b = soloed(store, "g2", "manual")
     assert len(made) == 2 and a._control is made[0] and b._control is made[1]
     assert {e["group_id"] for e in _persisted(tmp_path)} == {"g1", "g2"}
 
 
 def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
     store, made, _, t, host = make(tmp_path)
-    s = store.create("g", "semi", "device")
+    s = soloed(store)
     ctl = made[0]
-    ctl.fail_restore = 2
-    b = CLIP_END  # the clip has played out: the restore itself is due
+    ctl.fail_unmute = 2
+    b = 10.0
     t["now"] = b
     store.end(s.id)
     assert s.state == "restoring" and _file(tmp_path).exists()
@@ -109,7 +131,7 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
     assert s.state == "restoring" and s.restore_error == "ma_unavailable"  # attempt 1 failed, next after 1 s
     t["now"] = b + 0.5
     store.tick()
-    assert ("restore",) not in ctl.calls
+    assert ("stop_group",) not in ctl.calls[-1:]
     t["now"] = b + 1.1
     store.tick()  # attempt 2 fails, next after 2 s
     t["now"] = b + 2.9
@@ -118,6 +140,7 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
     t["now"] = b + 3.2
     store.tick()
     assert s.state == "cancelled" and not _file(tmp_path).exists()
+    assert ctl.muted_now == {"a": False, "b": False, "cast": False} and ctl.calls[-1] == ("stop_group",)
     assert host.released == [s.id] and ctl.closed == 1
     t["now"] = b + 60.0
     store.tick()
@@ -131,32 +154,32 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
 
 
 def test_a_session_that_restores_by_itself_is_driven_by_the_store(tmp_path):
-    store, _made, _, t, host = make(tmp_path)
-    s = store.create("g", "semi", "device")
+    store, made, _, _t, host = make(tmp_path)
+    s = soloed(store)
     s.record(synth("a", lag_s=0.0))
+    s.solo("b")
     s.record(synth("b", lag_s=0.030))
     s.propose()
     s.apply()  # semi without verify: restores and ends
     assert s.state == "restoring"
     store.tick()
-    assert s.state == "restoring"  # members silent until the clip ends
-    t["now"] = CLIP_END
-    store.tick()
     assert s.state == "done" and host.released == [s.id] and not _file(tmp_path).exists()
+    assert made[0].calls[-1] == ("stop_group",) and not any(made[0].muted_now.values())
 
 
 def test_any_exception_from_a_restore_is_a_failed_attempt(tmp_path):
     store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "manual", "device")
+    s = soloed(store, mode="manual")
     calls = {"n": 0}
+    real = made[0].mute
 
-    def flaky(snapshot):
+    def flaky(member, muted):
         calls["n"] += 1
         if calls["n"] == 1:
             raise RuntimeError("socket exploded")
-        made[0].calls.append(("restore",))
+        real(member, muted)
 
-    made[0].restore = flaky
+    made[0].mute = flaky
     store.end(s.id)
     store.tick()  # must not raise
     assert s.state == "restoring" and _file(tmp_path).exists()
@@ -167,42 +190,40 @@ def test_any_exception_from_a_restore_is_a_failed_attempt(tmp_path):
 
 def test_inactivity_ends_the_session(tmp_path):
     store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "manual", "device")
+    s = soloed(store, mode="manual")
     t["now"] = 901.0
     store.tick()
     store.tick()
-    assert s.state == "cancelled" and ("restore",) in made[0].calls
+    assert s.state == "cancelled" and made[0].calls[-1] == ("stop_group",)
 
 
-def test_an_auto_session_keeps_its_undo_while_the_check_rounds_clip_plays_out(tmp_path):
-    # The check round's clip outlasts the 30 s undo window, so the session is still restoring
-    # (members silent until the clip ends) while the undo is possible; the control stays open
-    # until the session finished, then the finished session is evicted after a while.
+def test_an_auto_session_keeps_its_undo_and_its_control_until_the_window_closed(tmp_path):
+    # the session finishes within the 30 s undo window: the control stays open until the window closed,
+    # then the finished session is evicted after a while
     store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "auto", "device")
+    s = soloed(store, mode="auto")
     s.record(synth("a", lag_s=0.0))
+    s.solo("b")
     s.record(synth("b", lag_s=0.030))
     s.propose()
-    b = CLIP_END
-    t["now"] = b  # the first clip played out: the check round starts its own at once
-    store.tick()
-    s.apply()  # undo until b + 30
-    s.record(synth("a", lag_s=0.0))
+    s.apply()  # undo until 30
     s.record(synth("b", lag_s=0.0))
+    s.solo("a")
+    s.record(synth("a", lag_s=0.0))
     s.propose()
     store.tick()
-    assert s.state == "restoring" and made[0].closed == 0
-    t["now"] = b + 25.0
+    assert s.state == "done" and made[0].closed == 0
+    t["now"] = 25.0
     store.tick()
     s.undo()
     assert made[0].delays_now["b"] == 0
-    t["now"] = b + CLIP_END  # the check round's clip ends: restored and finished
+    t["now"] = 31.0
     store.tick()
-    assert s.state == "done" and made[0].closed == 1
-    t["now"] = b + CLIP_END + 59.0
+    assert made[0].closed == 1
+    t["now"] = 30.0 + 59.0
     store.tick()
     assert store.get(s.id) is s
-    t["now"] = b + CLIP_END + 61.0
+    t["now"] = 30.0 + 61.0
     store.tick()
     with pytest.raises(ControlError):
         store.get(s.id)
@@ -211,14 +232,14 @@ def test_an_auto_session_keeps_its_undo_while_the_check_rounds_clip_plays_out(tm
 def test_a_failed_start_frees_the_group_releases_the_token_and_removes_the_snapshot(tmp_path):
     store, made, _, _, host = make(tmp_path, controls=[])
 
-    def refuse(group_id, url):
+    def refuse(group_id):
         raise ControlError("ma_forbidden", "no")
 
     original = store._factory
 
     def factory():
         ctl = original()
-        ctl.start_signal = refuse
+        ctl.playback = refuse
         return ctl
 
     store._factory = factory
@@ -245,27 +266,43 @@ def test_music_assistant_not_connected_is_a_control_error(tmp_path):
 
 def test_ending_one_group_keeps_the_other_persisted(tmp_path):
     store, _, _, _, _ = make(tmp_path)
-    a = store.create("g1", "manual", "device")
-    store.create("g2", "manual", "device")
+    a = soloed(store, "g1", "manual")
+    soloed(store, "g2", "manual")
     store.end(a.id)
     store.tick()
     assert [e["group_id"] for e in _persisted(tmp_path)] == ["g2"]
 
 
-def test_restore_persisted_without_a_known_clip_end_puts_the_volumes_back_at_once(tmp_path):
-    # an entry from before the clip end was persisted: the volume restore covers the solo, and
-    # there is no stop to send (an announcement cannot be stopped)
-    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+def test_restore_persisted_unmutes_and_stops_the_clicker_still_playing(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, made, _, _, _ = make(tmp_path)
+    original = store._factory
+    store._factory = lambda: _playing_old_clicker(original())
     store.restore_persisted()
-    assert made[0].calls == [("restore",)] and not _file(tmp_path).exists()
+    assert made[0].calls == [("mute", "b", False), ("stop_group",)] and not _file(tmp_path).exists()
     assert made[0].closed == 1
     with pytest.raises(ControlError):
         store.get("old")
 
 
+def test_restore_persisted_never_stops_music_that_replaced_the_clicker(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
+    store, made, _, _, _ = make(tmp_path)  # the group plays the operator's music
+    store.restore_persisted()
+    assert made[0].calls == [("mute", "b", False)] and not _file(tmp_path).exists()
+
+
+def test_an_older_entry_without_mutes_or_clicker_is_dropped_without_a_call(tmp_path):
+    # option A's entries (volumes in a snapshot) carry nothing this version puts back
+    old = {"session_id": "old", "group_id": "g", "snapshot": {"group_id": "g", "delays": {}, "volumes": {"a": 0}}}
+    _file(tmp_path).write_text(json.dumps({"sessions": [old]}))
+    store, made, _, _, _ = make(tmp_path)
+    store.restore_persisted()
+    assert [c.calls for c in made] in ([], [[]]) and not _file(tmp_path).exists()
+
+
 def test_restore_persisted_keeps_the_file_when_ma_is_down(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_running=False, soloed=None)))
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, made, _, t, _ = make(tmp_path)
     attempts = {"n": 0}
     original = store._factory
@@ -274,7 +311,7 @@ def test_restore_persisted_keeps_the_file_when_ma_is_down(tmp_path):
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise MaApiError("ma_unavailable", "Music Assistant is not connected")
-        return original()
+        return _playing_old_clicker(original())
 
     store._factory = factory
     store.restore_persisted()
@@ -284,26 +321,45 @@ def test_restore_persisted_keeps_the_file_when_ma_is_down(tmp_path):
     assert attempts["n"] == 1
     t["now"] = 2.0
     store.tick()
-    assert not _file(tmp_path).exists() and made[0].calls == [("restore",)]
+    assert not _file(tmp_path).exists() and made[0].calls == [("mute", "b", False), ("stop_group",)]
 
 
-def test_a_persisted_group_that_is_gone_still_gets_its_volumes_restored(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+def test_a_persisted_unmute_that_succeeded_is_not_repeated_after_a_later_failure(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry(muted=["b", "cast"])))
+    store, made, _, t, _ = make(tmp_path)
+    original = store._factory
+
+    def factory():
+        ctl = _playing_old_clicker(original())
+        if len(made) == 1:
+            ctl.playback = lambda group_id: (_ for _ in ()).throw(ControlError("ma_unavailable"))
+        return ctl
+
+    store._factory = factory
+    store.restore_persisted()
+    assert _persisted(tmp_path)[0]["muted"] == []  # both unmuted; the clicker check failed
+    t["now"] = 2.0
+    store.tick()
+    assert made[1].calls == [("stop_group",)] and not _file(tmp_path).exists()
+
+
+def test_a_persisted_group_that_is_gone_still_gets_its_members_unmuted(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, made, _, _, _ = make(tmp_path)
     original = store._factory
 
     def factory():
         ctl = original()
 
-        def gone(group_id, member):
+        def gone(group_id):
             raise ControlError("member_gone", "group g is not known")
 
-        ctl.solo = gone
+        ctl.playback = gone
         return ctl
 
     store._factory = factory
     store.restore_persisted()
-    assert made[0].calls == [("restore",)] and not _file(tmp_path).exists()
+    assert made[0].calls == [("mute", "b", False)] and not _file(tmp_path).exists()
 
 
 def test_an_unreadable_snapshot_file_is_removed(tmp_path):
@@ -314,7 +370,7 @@ def test_an_unreadable_snapshot_file_is_removed(tmp_path):
 
 
 def test_a_new_session_does_not_drop_a_snapshot_still_waiting_from_before_the_restart(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_snapshot(group_id="old-g")))
+    _file(tmp_path).write_text(json.dumps(_old_entry(group_id="old-g")))
     store, _made, _, _, _ = make(tmp_path)
     original = store._factory
     attempts = {"n": 0}
@@ -333,42 +389,16 @@ def test_a_new_session_does_not_drop_a_snapshot_still_waiting_from_before_the_re
 
 def test_shutdown_restores_live_sessions_and_releases_everything(tmp_path):
     store, made, _, _, host = make(tmp_path)
-    s = store.create("g", "manual", "device")  # no clip playing
+    s = soloed(store, mode="manual")
     store.shutdown()
-    assert s.state == "cancelled" and ("restore",) in made[0].calls
+    assert s.state == "cancelled" and made[0].calls[-1] == ("stop_group",) and not any(made[0].muted_now.values())
     assert host.released == [s.id] and made[0].closed == 1 and not _file(tmp_path).exists()
-
-
-def test_shutdown_while_the_clip_plays_hands_every_member_back_its_level_and_leaves_the_restore_to_the_next_boot(
-    tmp_path,
-):
-    # M-1: silencing at shutdown would leave the Sendspin protocol players at 0 (Music Assistant never restores
-    # them) until a next boot that may never come; at their levels the clicks play out and MA brings the music back
-    store, made, _, _, host = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    store.shutdown()
-    assert s.state == "restoring" and made[0].calls[-1] == ("solo", None) and ("stop",) not in made[0].calls
-    assert ("restore",) not in made[0].calls
-    [entry] = _persisted(tmp_path)
-    assert entry["silenced"] is False and entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END)
-    assert host.released == [s.id] and made[0].closed == 1
-
-
-def test_shutdown_during_a_silenced_clip_hands_the_levels_back_too(tmp_path):
-    store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "manual", "device")
-    s.start_signal()
-    t["now"] = 10.0
-    s.stop_signal()
-    store.shutdown()
-    assert made[0].calls[-1] == ("solo", None) and not s.silenced
-    assert _persisted(tmp_path)[0]["silenced"] is False
 
 
 def test_shutdown_keeps_the_snapshot_when_the_restore_fails(tmp_path):
     store, made, _, _, host = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    made[0].fail_restore = 99
+    s = soloed(store)
+    made[0].fail_unmute = 99
     store.shutdown()
     assert s.state == "restoring" and _file(tmp_path).exists()  # the next boot restores it
     assert host.released == [s.id] and made[0].closed == 1
@@ -429,7 +459,7 @@ def test_the_api_attaches_its_event_hub_while_it_runs():
 
 def _pending_store(tmp_path, *, group_id="g"):
     """A store whose persisted restore of *group_id* failed once (MA down) and waits for its backoff."""
-    _file(tmp_path).write_text(json.dumps(_old_snapshot(group_id=group_id)))
+    _file(tmp_path).write_text(json.dumps(_old_entry(group_id=group_id)))
     store, made, _events, t, _host = make(tmp_path)
     original = store._factory
     attempts = {"n": 0}
@@ -462,13 +492,13 @@ def test_pending_restores_are_listed_with_their_last_error_and_can_be_retried_no
     assert made == []
     assert store.retry_pending("g") is True and store.retry_pending("other") is False
     store.tick()  # tried at once
-    assert store.pending_for("g") is None and made[0].calls[-1] == ("restore",)
+    assert store.pending_for("g") is None and made[0].calls[-1] == ("mute", "b", False)
     assert store.create("g", "manual", "device").state == "measuring"
 
 
 def test_shutdown_without_music_assistant_makes_no_calls_and_keeps_the_snapshot(tmp_path):
     store, made, _, _, host = make(tmp_path)
-    s = store.create("g", "semi", "device")
+    s = soloed(store)
     before = list(made[0].calls)
     store.shutdown(restore=False)
     assert made[0].calls == before and _file(tmp_path).exists()  # the next boot restores it
@@ -520,7 +550,7 @@ def test_the_snapshot_file_is_fsynced_before_it_replaces_the_old_one(tmp_path, m
     real_fsync = store_mod.os.fsync
     monkeypatch.setattr(store_mod.os, "fsync", lambda fd: (synced.append(fd), real_fsync(fd)))
     store, _, _, _, _ = make(tmp_path)
-    store.create("g", "manual", "device")
+    soloed(store, mode="manual")
     assert synced and not (tmp_path / "sync_snapshot.tmp").exists()
 
 
@@ -545,18 +575,18 @@ def test_tests_never_point_the_store_singleton_at_the_real_config_dir():
 
 def test_a_create_before_the_boot_restore_is_refused_and_keeps_the_old_entry(tmp_path):
     # the API serves requests before Music Assistant is up and the restore thread has run
-    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, _, _, _, _ = make(tmp_path)
     store.load_persisted()  # what the orchestrator does before the web server starts
     with pytest.raises(ControlError) as exc:
         store.create("g", "semi", "device")
     assert exc.value.code == "restore_pending"
-    store.create("other", "manual", "device")
+    soloed(store, "other", "manual")
     assert {e["session_id"] for e in _persisted(tmp_path)} == {"old", s_id(store, "other")}
 
 
 def test_a_store_that_was_never_told_to_load_still_keeps_the_entries_on_disk(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, _, _, _, _ = make(tmp_path)
     with pytest.raises(ControlError) as exc:
         store.create("g", "semi", "device")
@@ -573,7 +603,7 @@ def test_a_leftover_tmp_that_cannot_be_removed_does_not_break_every_create(tmp_p
     stuck = tmp_path / "sync_snapshot.tmp"
     stuck.mkdir()  # unlink() on a directory raises an OSError
     (stuck / "x").write_text("x")
-    _file(tmp_path).write_text(json.dumps(_old_snapshot()))
+    _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, *_ = make(tmp_path)
     store.load_persisted()
     assert [p["group_id"] for p in store.pending()] == ["g"]  # the snapshot file was still read
@@ -582,194 +612,25 @@ def test_a_leftover_tmp_that_cannot_be_removed_does_not_break_every_create(tmp_p
     assert "sync_snapshot.tmp" in caplog.text
 
 
-# -- stage 0, option A: the clip cannot be stopped, the restore waits for its end -------------------
+# -- option C: the store reads the group while a session runs ------------------------------------------
 
 
-def test_a_restore_waits_for_the_clip_to_end_without_an_error_or_backoff(tmp_path):
-    store, made, _, t, host = make(tmp_path)
-    s = store.create("g", "semi", "device")
+def test_the_store_tick_publishes_a_clicker_that_played_to_its_end(tmp_path):
+    from sendspin_sync.session import PLAYBACK_POLL_S
+
+    store, made, events, t, _ = make(tmp_path)
+    s = soloed(store)
+    made[0].clicker_ends()
+    t["now"] = PLAYBACK_POLL_S
+    store.tick()
+    assert s.clicker_playing is False and events[-1]["clicker_playing"] is False
     store.end(s.id)
     store.tick()
-    ctl = made[0]
-    assert s.state == "restoring" and s.restore_error is None and ctl.calls[-1] == ("stop",)  # silenced
-    assert s.to_dict()["music_returns_in_s"] == pytest.approx(CLIP_END)
-    t["now"] = CLIP_END - 1
-    store.tick()
-    assert s.state == "restoring" and ("restore",) not in ctl.calls and host.released == []
-    t["now"] = CLIP_END
-    store.tick()  # waiting is not a failed attempt: no backoff delays the restore after the clip
-    assert s.state == "cancelled" and ctl.calls[-1] == ("restore",) and ctl.calls.count(("stop",)) == 1
+    assert s.state == "cancelled" and ("stop_group",) not in made[0].calls[-1:]  # nothing of ours plays
 
 
-def test_a_new_session_while_the_last_clip_plays_out_is_refused_with_signal_playing(tmp_path):
-    store, _made, _, t, _ = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    store.end(s.id)
-    store.tick()
-    with pytest.raises(ControlError) as exc:
-        store.create("g", "manual", "device")
-    assert exc.value.code == "signal_playing"
-    t["now"] = CLIP_END
-    store.tick()
-    assert store.create("g", "manual", "device").state == "measuring"
-
-
-def test_the_persisted_entry_says_when_the_clip_ends_and_whether_it_is_silenced(tmp_path):
-    store, _made, _, t, _ = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    [entry] = _persisted(tmp_path)
-    assert entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END) and entry["silenced"] is False
-    t["now"] = 10.0
-    store.end(s.id)
-    store.tick()
-    [entry] = _persisted(tmp_path)
-    assert entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END) and entry["silenced"] is True
-
-
-def test_after_a_restart_the_restore_silences_waits_for_the_clip_end_then_restores(tmp_path):
-    ends = WALL0 + 100.0
-    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_ends_at=ends, silenced=False)))
-    store, made, _, t, _ = make(tmp_path)
-    store.restore_persisted()
-    assert made[0].calls == [("stop",)] and _file(tmp_path).exists()  # never restored while the clip plays
-    assert store.pending_for("g") == {"session_id": "old", "group_id": "g", "error": None}
-    assert _persisted(tmp_path)[0]["silenced"] is True
-    t["now"] = 99.0
-    store.tick()
-    assert len(made) == 1
-    t["now"] = 100.0
-    store.tick()
-    assert made[1].calls == [("restore",)] and not _file(tmp_path).exists()
-
-
-def test_after_a_restart_a_silenced_clip_is_not_silenced_again(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_ends_at=WALL0 + 50.0, silenced=True)))
-    store, made, _, t, _ = make(tmp_path)
-    store.restore_persisted()
-    assert made == []  # nothing to do before the clip ends: no Music Assistant call at all
-    t["now"] = 50.0
-    store.tick()
-    assert made[0].calls == [("restore",)]
-
-
-def test_after_a_restart_a_clip_on_a_group_that_is_gone_is_still_waited_out(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_snapshot(signal_ends_at=WALL0 + 50.0, silenced=False)))
-    store, made, _, t, _ = make(tmp_path)
-    original = store._factory
-
-    def factory():
-        ctl = original()
-
-        def gone(group_id):
-            raise ControlError("member_gone", "group g is not known")
-
-        ctl.stop_signal = gone
-        return ctl
-
-    store._factory = factory
-    store.restore_persisted()
-    assert store.pending_for("g")["error"] is None and _file(tmp_path).exists()
-    t["now"] = 50.0
-    store.tick()
-    assert made[1].calls == [("restore",)] and not _file(tmp_path).exists()
-
-
-def test_the_store_tick_starts_a_check_round_once_the_previous_clip_ended(tmp_path):
-    store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    t["now"] = SIGNAL_SETTLE_S
-    s.record(synth("a", lag_s=0.0))
-    s.record(synth("b", lag_s=0.030))
-    s.propose()
-    s.apply(verify=True)
-    assert s.signal_waiting
-    t["now"] = CLIP_END
-    store.tick()
-    assert not s.signal_waiting and [c for c in made[0].calls if c[0] == "start"][1:]
-
-
-# -- I-3: the volumes are checked once more shortly after the restore at a clip's end --------------------
-
-
-def test_the_volumes_are_checked_once_more_after_a_restore_that_followed_a_clip(tmp_path):
-    from sendspin_sync.session import RESTORE_RECHECK_S
-
-    store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    store.end(s.id)
-    store.tick()
-    t["now"] = CLIP_END
-    store.tick()
-    assert s.state == "cancelled" and made[0].calls[-1] == ("restore",)
-    t["now"] = CLIP_END + RESTORE_RECHECK_S - 0.5
-    store.tick()
-    assert len(made) == 1
-    t["now"] = CLIP_END + RESTORE_RECHECK_S
-    store.tick()
-    assert len(made) == 2 and made[1].calls == [("restore",)] and made[1].closed == 1
-    t["now"] = CLIP_END + 3 * RESTORE_RECHECK_S
-    store.tick()
-    assert len(made) == 2  # once
-
-
-def test_no_recheck_after_a_session_that_never_played_a_clip(tmp_path):
-    from sendspin_sync.session import RESTORE_RECHECK_S
-
-    store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "manual", "device")
-    store.end(s.id)
-    store.tick()
-    assert s.state == "cancelled"
-    t["now"] = 2 * RESTORE_RECHECK_S
-    store.tick()
-    assert len(made) == 1
-
-
-def test_the_recheck_never_overrides_a_new_session_on_the_group(tmp_path):
-    from sendspin_sync.session import RESTORE_RECHECK_S
-
-    store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    store.end(s.id)
-    store.tick()
-    t["now"] = CLIP_END
-    store.tick()
-    store.create("g", "manual", "device")  # made[1]
-    t["now"] = CLIP_END + RESTORE_RECHECK_S
-    store.tick()
-    assert len(made) == 2 and ("restore",) not in made[1].calls
-
-
-def test_a_failed_recheck_is_dropped_quietly(tmp_path):
-    from sendspin_sync.session import RESTORE_RECHECK_S
-
-    store, made, _, t, _ = make(tmp_path)
-    s = store.create("g", "semi", "device")
-    store.end(s.id)
-    store.tick()
-    t["now"] = CLIP_END
-    store.tick()
-    real = store._factory
-
-    def failing():
-        ctl = real()
-        ctl.fail_restore = 1
-        return ctl
-
-    store._factory = failing
-    t["now"] = CLIP_END + RESTORE_RECHECK_S
-    store.tick()  # must not raise
-    assert made[1].closed == 1
-    t["now"] = CLIP_END + 3 * RESTORE_RECHECK_S
-    store.tick()
-    assert len(made) == 2
-
-
-# -- M-2: a start that fails after the announcement was fired --------------------------------------------
-
-
-def test_a_start_failing_after_the_clip_was_fired_keeps_the_session_to_restore_it(tmp_path):
-    store, made, _, t, host = make(tmp_path)
+def test_a_start_whose_publish_fails_wrote_nothing_and_frees_the_group(tmp_path):
+    store, made, _, _, host = make(tmp_path)
     real = store.publish_change
 
     def flaky(session):
@@ -779,9 +640,5 @@ def test_a_start_failing_after_the_clip_was_fired_keeps_the_session_to_restore_i
 
     store.publish_change = flaky
     with pytest.raises(OSError):
-        store.create("g", "semi", "device")  # within the settle time: the clicks are not audible yet
-    s = store.active_for("g") or next(iter(store._sessions.values()))
-    assert s.state == "restoring" and host.released == []  # the token stays: MA still fetches the clip
-    t["now"] = CLIP_END
-    store.tick()
-    assert s.state == "cancelled" and made[0].calls[-1] == ("restore",)
+        store.create("g", "semi", "device")
+    assert store.active_for("g") is None and made[0].calls == [] and host.released != []

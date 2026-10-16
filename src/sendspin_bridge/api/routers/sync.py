@@ -22,6 +22,7 @@ from sendspin_bridge.application.models.sync import (
     DelaysIn,
     MeasurementOut,
     MemberDelayIn,
+    MemberVolumeIn,
     PendingRestoreOut,
     ProfileApplyOut,
     ProfileCreate,
@@ -129,12 +130,37 @@ def end_session(session_id: str) -> Response:
     return Response(status_code=204)
 
 
-@router.post("/sessions/{session_id}/signal", response_model=SyncSessionOut, summary="Start or stop the click track")
+@router.post(
+    "/sessions/{session_id}/signal",
+    response_model=SyncSessionOut,
+    summary="Start the clicker on the group, or stop the group's playback",
+    description=(
+        "start: queue the click track on the group (409 group_playing while it plays anything else; "
+        "again while it plays starts it over). stop: stop whatever the group plays."
+    ),
+)
 def session_signal(session_id: str, body: SignalIn) -> SyncSessionOut:
     return uc.signal(session_id, body.action)
 
 
-@router.post("/sessions/{session_id}/solo", response_model=SyncSessionOut, summary="Hear one member (null: all)")
+@router.put(
+    "/sessions/{session_id}/volumes/{member}",
+    response_model=SyncSessionOut,
+    summary="Set one member's volume",
+)
+def session_volume(session_id: str, member: str, body: MemberVolumeIn) -> SyncSessionOut:
+    return uc.session_volume(session_id, member, body.level)
+
+
+@router.post(
+    "/sessions/{session_id}/solo",
+    response_model=SyncSessionOut,
+    summary="Hear one member (null: all)",
+    description=(
+        "Mutes every other member; 409 clicker_stopped while the clicker does not play, 409 "
+        "sync_mute_unsupported (with member) when a member's player cannot be muted."
+    ),
+)
 def solo(session_id: str, body: SoloIn) -> SyncSessionOut:
     return uc.solo(session_id, body.member)
 

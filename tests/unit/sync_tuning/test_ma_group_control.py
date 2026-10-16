@@ -1,7 +1,7 @@
 import pytest
 
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
-from sendspin_bridge.sync_tuning.ma_group_control import AnnouncementSignal, MaGroupControl
+from sendspin_bridge.sync_tuning.ma_group_control import MaGroupControl
 from sendspin_sync.ports import ControlError
 from tests.support.sync_fakes import GROUPS, FakeMa
 
@@ -10,7 +10,6 @@ def make(ma=None):
     ma = ma or FakeMa()
     ctl = MaGroupControl(
         ma,
-        signal=AnnouncementSignal(ma),
         groups=lambda: GROUPS,
         bridge_player_ids=lambda: {"spk-bridge"},
     )
@@ -81,17 +80,6 @@ def test_forbidden_write_becomes_ma_forbidden():
     assert exc.value.code == "ma_forbidden"
 
 
-def test_restore_resets_a_changed_volume():
-    ctl, ma = make()
-    snap = ctl.snapshot("grp")
-    ma.players["uni"]["volume_level"] = 80
-    ctl.restore(snap)
-    assert ("players/cmd/volume_set", {"player_id": "uni", "volume_level": 50}) in ma.calls
-    assert [c for c in ma.calls if c[0] == "players/cmd/volume_set"] == [
-        ("players/cmd/volume_set", {"player_id": "uni", "volume_level": 50})
-    ]
-
-
 def test_ma_errors_surface_as_control_errors():
     class Down(FakeMa):
         def call(self, command, args, *, timeout=10.0):
@@ -101,7 +89,14 @@ def test_ma_errors_surface_as_control_errors():
             raise MaApiError("ma_unavailable", "gone")
 
     ctl, _ = make(Down())
-    for action in (lambda: ctl.members("grp"), lambda: ctl.start_signal("grp", "u"), lambda: ctl.stop_signal("grp")):
+    actions = (
+        lambda: ctl.members("grp"),
+        lambda: ctl.playback("grp"),
+        lambda: ctl.start_clicker("grp", "u"),
+        lambda: ctl.stop_group("grp"),
+        lambda: ctl.set_volume("uni", 10),
+    )
+    for action in actions:
         with pytest.raises(ControlError) as exc:
             action()
         assert exc.value.code == "ma_unavailable"
@@ -114,14 +109,6 @@ def test_default_group_control_needs_credentials(monkeypatch):
     with pytest.raises(MaApiError) as exc:
         ma_group_control.default_group_control()
     assert exc.value.code == "ma_unavailable"
-
-
-def test_solo_of_a_player_outside_the_group_is_member_gone_and_silences_nobody():
-    ctl, ma = make()
-    with pytest.raises(ControlError) as exc:
-        ctl.solo("grp", "someone-else")
-    assert exc.value.code == "member_gone"
-    assert not [c for c in ma.calls if c[0] in ("players/cmd/volume_mute", "players/cmd/volume_set")]
 
 
 def test_close_closes_the_music_assistant_connection():
@@ -156,262 +143,142 @@ def test_the_session_less_control_shares_one_connection_and_never_closes_it(monk
     assert shared.closed == 0  # the connection outlives the request
 
 
-# -- stage 0, option A: solo and stop by volume; the announcement is never stopped ------------------
+# -- option C: the clicker is queued on the group; solo mutes; no volume fallback ---------------------
+
+URL = "http://10.0.0.5:8080/api/v1/sync/signal/" + "ab" * 32 + ".wav"
 
 
-def volume_sets(ma, since=0):
-    return {c[1]["player_id"]: c[1]["volume_level"] for c in ma.calls[since:] if c[0] == "players/cmd/volume_set"}
-
-
-def test_snapshot_records_each_members_volume_and_mute():
+def test_snapshot_records_each_members_mute():
     ctl, _ = make()
     snap = ctl.snapshot("grp")
-    assert snap.volumes == {"spk-bridge": 40, "spk-kiosk": 30, "uni": 50, "cast": 20}
-    assert snap.muted == {"spk-bridge": False, "spk-kiosk": True, "uni": False, "cast": False} and snap.playing
     assert snap.delays == {"spk-bridge": 120, "spk-kiosk": 0, "uni": 0, "cast": 0}
+    # a kiosk reports no mute state at all (null): not muted
+    assert snap.muted == {"spk-bridge": False, "spk-kiosk": False, "uni": False, "cast": False}
 
 
-def test_solo_sets_every_other_member_to_volume_zero_and_the_soloed_one_to_its_level():
-    ctl, ma = make()
-    ctl.snapshot("grp")
-    ma.players["spk-bridge"]["volume_level"] = 0  # silenced by an earlier stop
-    ctl.solo("grp", "spk-bridge")
-    assert {p: ma.players[p]["volume_level"] for p in ("spk-bridge", "spk-kiosk", "uni", "cast")} == {
-        "spk-bridge": 40,
-        "spk-kiosk": 0,
-        "uni": 0,
-        "cast": 0,
-    }
-    ctl.solo("grp", "uni")
-    assert (ma.players["spk-bridge"]["volume_level"], ma.players["uni"]["volume_level"]) == (0, 50)
-    # web kiosks refuse volume_mute (UnsupportedFeaturedException): solo never uses it
-    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
-
-
-def test_clearing_the_solo_puts_every_member_back_to_its_session_level():
-    ctl, ma = make()
-    ctl.snapshot("grp")
-    ctl.solo("grp", "uni")
-    before = len(ma.calls)
-    ctl.solo("grp", None)
-    assert volume_sets(ma, before) == {"spk-bridge": 40, "spk-kiosk": 30, "cast": 20}  # uni is already there
-    assert ma.players["spk-kiosk"]["volume_muted"]  # a mute the user set is left alone
-
-
-def test_a_control_without_a_snapshot_reads_the_levels_before_it_solos():
-    ctl, ma = make()
-    ctl.solo("grp", "cast")
-    assert (ma.players["cast"]["volume_level"], ma.players["uni"]["volume_level"]) == (20, 0)
-    ctl.solo("grp", None)
-    assert ma.players["uni"]["volume_level"] == 50  # the level from before the solo, not 0
-
-
-def test_a_member_without_a_volume_is_left_alone():
-    ma = FakeMa()
-    ma.players["cast"]["volume_level"] = None
-    ctl, _ = make(ma)
-    ctl.snapshot("grp")
-    ctl.solo("grp", "uni")
-    ctl.stop_signal("grp")
-    assert "cast" not in volume_sets(ma)
-
-
-def test_the_announcement_is_fired_not_awaited_and_stop_silences_without_stopping_it():
-    # players/cmd/stop does not end an announcement: it blocks until the clip ends
-    ctl, ma = make()
-    ctl.start_signal("grp", "http://192.168.1.2:8080/api/v1/sync/signal/abc.wav")
-    assert ma.calls[-1] == (
-        "players/cmd/play_announcement",
-        {"player_id": "grp", "url": "http://192.168.1.2:8080/api/v1/sync/signal/abc.wav", "pre_announce": False},
-    )
-    ctl.stop_signal("grp")
-    assert volume_sets(ma) == {"spk-bridge": 0, "spk-kiosk": 0, "uni": 0, "cast": 0}
-    assert "players/cmd/stop" not in [c[0] for c in ma.calls]
-    assert ma.players["grp"]["playback_state"] == "playing"
-
-
-def test_restore_puts_back_the_snapshot_volumes_and_never_touches_mute():
-    ctl, ma = make()
-    snap = ctl.snapshot("grp")
-    ctl.solo("grp", "spk-bridge")
-    ma.players["uni"]["volume_muted"] = True  # the user muted the hall meanwhile
-    before = len(ma.calls)
-    ctl.restore(snap)
-    assert volume_sets(ma, before) == {"spk-kiosk": 30, "uni": 50, "cast": 20}
-    assert ma.players["uni"]["volume_muted"]
-    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
-
-
-def test_a_fresh_control_restores_from_the_persisted_snapshot_alone():
-    ctl, ma = make()
-    snap = ctl.snapshot("grp")
-    for p in ("spk-bridge", "uni"):
-        ma.players[p]["volume_level"] = 0  # left at 0 when the bridge restarted
-    fresh, _ = make(ma)
-    fresh.restore(snap)
-    assert (ma.players["spk-bridge"]["volume_level"], ma.players["uni"]["volume_level"]) == (40, 50)
-
-
-# -- stage 0 E5: a member's Sendspin protocol player keeps its own volume --------------------------
-
-
-def test_the_snapshot_records_the_sendspin_protocol_players_volume_too():
+def test_playback_reads_the_group_state_its_media_and_the_member_volumes():
     ctl, _ = make()
-    snap = ctl.snapshot("grp")
-    assert snap.protocol_volumes == {"uni-sendspin": 50}  # only members with a separate protocol player
+    pb = ctl.playback("grp")
+    assert pb.state == "playing" and pb.media_uri == "library://track/7"
+    assert pb.volumes == {"spk-bridge": 40, "spk-kiosk": 30, "uni": 50, "cast": 20}
+    assert not pb.plays(URL)
 
 
-def test_after_the_clip_the_restore_fixes_a_protocol_player_ma_left_at_zero():
+def test_playback_of_an_unknown_group_is_member_gone():
     ctl, ma = make()
-    snap = ctl.snapshot("grp")
-    ctl.solo("grp", "spk-bridge")  # uni (and through it uni-sendspin) to 0
-    assert ma.players["uni-sendspin"]["volume_level"] == 0
-    ma.announcement_restore({"uni": 50})  # MA restores the player, not its protocol player
-    before = len(ma.calls)
-    ctl.restore(snap)
-    assert volume_sets(ma, before) == {"spk-kiosk": 30, "cast": 20, "uni-sendspin": 50}  # the soloed one is at 40
-    assert ma.players["uni-sendspin"]["volume_level"] == 50
-
-
-def test_the_restore_puts_back_a_player_ma_left_louder_than_before():
-    # ENEBY Portable: 46 before the session, 100 after MA's restore
-    ma = FakeMa()
-    ma.players["uni"]["volume_level"] = 46
-    ma.players["uni-sendspin"]["volume_level"] = 46
-    ctl, _ = make(ma)
-    snap = ctl.snapshot("grp")
-    # only the protocol player is off: setting the member (already at 46) cannot fix it, only the protocol step
-    ma.players["uni-sendspin"]["volume_level"] = 100
-    ctl.restore(snap)
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (46, 46)
-
-
-def test_solo_reads_both_levels_back_and_corrects_a_protocol_player_left_at_zero():
-    ctl, ma = make()
-    ctl.snapshot("grp")
-    ma.players["uni-sendspin"]["volume_level"] = 0  # left at 0 by an earlier announcement
-    ctl.solo("grp", "uni")
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (50, 50)
-    ctl.solo("grp", "spk-bridge")
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (0, 0)
-
-
-def test_a_fresh_control_restores_the_protocol_player_from_the_persisted_snapshot():
-    from sendspin_sync.models import snapshot_from_dict, to_dict
-
-    ctl, ma = make()
-    snap = snapshot_from_dict(to_dict(ctl.snapshot("grp")))
-    assert snap.protocol_volumes == {"uni-sendspin": 50}
-    ma.players["uni-sendspin"]["volume_level"] = 0
-    fresh, _ = make(ma)
-    fresh.restore(snap)
-    assert ma.players["uni-sendspin"]["volume_level"] == 50
-
-
-# -- E5 (2026-10-16): during an announcement a member's volume does not always reach its protocol player --
-
-
-def _e5():
-    ma = FakeMa()
-    ma.member_volume_reaches_protocol = False
-    ctl, _ = make(ma)
-    ctl.snapshot("grp")
-    return ctl, ma
-
-
-def test_solo_sets_both_the_member_and_its_protocol_player():
-    ctl, ma = _e5()
-    ctl.solo("grp", "spk-bridge")
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (0, 0)
-    ctl.solo("grp", "uni")
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (50, 50)
-    ctl.solo("grp", None)
-    assert ma.players["spk-bridge"]["volume_level"] == 40 and ma.players["uni-sendspin"]["volume_level"] == 50
-
-
-def test_stop_silences_the_protocol_player_too():
-    ctl, ma = _e5()
-    ctl.stop_signal("grp")
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (0, 0)
-
-
-def test_restore_sets_both_levels_after_the_clip():
-    ctl, ma = _e5()
-    snap = ctl.snapshot("grp")
-    ctl.stop_signal("grp")
-    ma.announcement_restore({"uni": 50})
-    ctl.restore(snap)
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (50, 50)
-
-
-# -- I-3: is Music Assistant still announcing? ------------------------------------------------------
-
-
-def test_no_announcement_is_reported_while_music_plays_normally():
-    ctl, _ = make()
-    assert ctl.announcement_active("grp") is False
-
-
-@pytest.mark.parametrize("pid", ["grp", "uni", "uni-sendspin"])
-def test_the_announcement_flag_on_the_group_or_a_member_counts(pid):
-    # MA dev keeps announcement_in_progress in the player's extra_data, which is not on the API today;
-    # read it wherever a later version exposes it
-    ctl, ma = make()
-    ma.players[pid]["announcement_in_progress"] = True
-    assert ctl.announcement_active("grp") is True
-    ma.players[pid]["announcement_in_progress"] = False
-    ma.players[pid]["extra_attributes"] = {"announcement_in_progress": True}
-    assert ctl.announcement_active("grp") is True
-
-
-def test_announcement_media_on_the_group_counts():
-    ctl, ma = make()
-    ma.players["grp"]["current_media"] = {"uri": "http://ma/announcement/grp.mp3", "media_type": "announcement"}
-    assert ctl.announcement_active("grp") is True
-    ma.players["grp"]["current_media"] = {"uri": "library://track/1", "media_type": "track"}
-    assert ctl.announcement_active("grp") is False
-
-
-def test_announcement_active_surfaces_music_assistant_errors():
-    class Down(FakeMa):
-        def call(self, command, args, *, timeout=10.0):
-            raise MaApiError("ma_unavailable", "gone")
-
-    ctl, _ = make(Down())
+    del ma.players["grp"]
     with pytest.raises(ControlError) as exc:
-        ctl.announcement_active("grp")
-    assert exc.value.code == "ma_unavailable"
+        ctl.playback("grp")
+    assert exc.value.code == "member_gone"
 
 
-# -- I-1, end to end: a clip that ends while a session runs -----------------------------------------
+def test_stop_group_stops_the_group_player():
+    ctl, ma = make()
+    ctl.stop_group("grp")
+    assert ("players/cmd/stop", {"player_id": "grp"}) in ma.calls
+    assert ctl.playback("grp").state == "idle"
 
 
-def test_a_clip_ending_mid_session_brings_the_protocol_player_back_for_the_music_and_the_next_clip():
-    from sendspin_sync.session import SIGNAL_CLIP_S, SIGNAL_SETTLE_S, SIGNAL_TAIL_S, SyncSession
+def test_the_clicker_replaces_the_groups_queue_with_the_click_track():
+    ctl, ma = make()
+    ctl.stop_group("grp")
+    ctl.start_clicker("grp", URL)
+    assert ("player_queues/play_media", {"queue_id": "grp", "media": URL, "option": "replace"}) in ma.calls
+    assert ma.timeouts["player_queues/play_media"] >= 20.0  # MA answers once the item is loaded
+    assert ctl.playback("grp").plays(URL)
+
+
+def test_mute_and_unmute_a_member_through_music_assistant():
+    ctl, ma = make()
+    ctl.mute("uni", True)
+    assert ma.players["uni"]["volume_muted"] is True
+    ctl.mute("uni", False)
+    assert ma.players["uni"]["volume_muted"] is False
+    assert [c for c in ma.calls if c[0] == "players/cmd/volume_mute"] == [
+        ("players/cmd/volume_mute", {"player_id": "uni", "muted": True}),
+        ("players/cmd/volume_mute", {"player_id": "uni", "muted": False}),
+    ]
+
+
+def test_a_player_without_mute_is_named_and_never_sent_a_mute_or_a_volume():
+    ctl, ma = make()
+    with pytest.raises(ControlError) as exc:
+        ctl.mute("spk-kiosk", True)
+    assert exc.value.code == "sync_mute_unsupported" and exc.value.member == "spk-kiosk"
+    assert "Kiosk" in exc.value.detail
+    assert not [c for c in ma.calls if c[0] in ("players/cmd/volume_mute", "players/cmd/volume_set")]
+    ctl.mute("spk-kiosk", False)  # nothing to unmute: never muted
+    assert not [c for c in ma.calls if c[0] == "players/cmd/volume_mute"]
+
+
+def test_a_mute_music_assistant_refuses_is_named_too():
+    ctl, ma = make()
+    ma.players["uni"].pop("supported_features")  # no feature list: the mute is tried, then refused
+
+    real = ma.call
+
+    def refuse(command, args, *, timeout=10.0):
+        if command == "players/cmd/volume_mute":
+            raise MaApiError("ma_error", "Player Hall does not support feature volume_mute")
+        return real(command, args, timeout=timeout)
+
+    ma.call = refuse
+    with pytest.raises(ControlError) as exc:
+        ctl.mute("uni", True)
+    assert exc.value.code == "sync_mute_unsupported" and exc.value.member == "uni"
+
+
+def test_an_unreachable_music_assistant_is_not_mistaken_for_a_missing_mute():
+    ctl, ma = make()
+    real = ma.call
+
+    def down(command, args, *, timeout=10.0):
+        if command == "players/cmd/volume_mute":
+            raise MaApiError("ma_unavailable", "gone")
+        return real(command, args, timeout=timeout)
+
+    ma.call = down
+    with pytest.raises(ControlError) as exc:
+        ctl.mute("uni", True)
+    assert exc.value.code == "ma_unavailable" and exc.value.member == "uni"
+
+
+def test_unmuting_a_player_that_left_music_assistant_is_a_no_op():
+    ctl, ma = make()
+    del ma.players["uni"]
+    ctl.mute("uni", False)
+    with pytest.raises(ControlError) as exc:
+        ctl.mute("uni", True)
+    assert exc.value.code == "member_gone"
+
+
+def test_set_volume_sets_the_members_volume():
+    ctl, ma = make()
+    ctl.set_volume("spk-kiosk", 55)
+    assert ("players/cmd/volume_set", {"player_id": "spk-kiosk", "volume_level": 55}) in ma.calls
+
+
+def test_a_whole_session_over_music_assistant_leaves_the_group_stopped_and_unmuted():
+    from sendspin_sync.session import SyncSession
     from tests.support.sync_fakes import FakeHost
 
+    class Host(FakeHost):
+        def url_for(self, session_id):
+            return URL
+
     ma = FakeMa()
-    ma.member_volume_reaches_protocol = False  # E5: during the announcement
     ctl, _ = make(ma)
-    t = {"now": 0.0}
-    s = SyncSession(
-        session_id="s1",
-        group_id="grp",
-        mode="manual",
-        point="device",
-        control=ctl,
-        host=FakeHost(),
-        clock=lambda: t["now"],
-    )
+    s = SyncSession(session_id="s1", group_id="grp", mode="manual", point="device", control=ctl, host=Host())
     s.start()
-    s.start_signal()
-    t["now"] = SIGNAL_SETTLE_S
-    s.solo("spk-bridge")
-    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (0, 0)
-    t["now"] = SIGNAL_CLIP_S + SIGNAL_TAIL_S
-    ma.announcement_restore({"uni": 50, "spk-kiosk": 30, "cast": 20})  # members only, as observed
-    s.tick()
-    assert ma.players["uni-sendspin"]["volume_level"] == 50 and s.soloed is None
-    s.start_signal()  # "all members" in the next clip: the kiosk is audible
-    t["now"] += SIGNAL_SETTLE_S
-    assert s.signal_running and ma.players["uni-sendspin"]["volume_level"] == 50
+    s.stop_group()
+    s.start_clicker()
+    with pytest.raises(ControlError) as exc:  # the kiosk cannot be muted: the bridge speaker cannot solo
+        s.solo("spk-bridge")
+    assert exc.value.code == "sync_mute_unsupported" and exc.value.member == "spk-kiosk"
+    assert not any(p.get("volume_muted") for p in ma.players.values())
+    s.solo("spk-kiosk")  # the kiosk alone: everyone else muted
+    assert [ma.players[p]["volume_muted"] for p in ("spk-bridge", "uni", "cast")] == [True, True, True]
+    s.cancel()
+    assert s.restore_tick() is True
+    assert [ma.players[p]["volume_muted"] for p in ("spk-bridge", "uni", "cast")] == [False, False, False]
+    assert ma.players["grp"]["playback_state"] == "idle"

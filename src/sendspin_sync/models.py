@@ -78,15 +78,29 @@ class Profile:
 
 @dataclass
 class Snapshot:
+    """What the session reads when it starts: the delays (for reset and undo) and which members were
+    muted already (the session never touches those)."""
+
     group_id: str
     delays: dict[str, int]
-    volumes: dict[str, int | None]
-    muted: dict[str, bool]
-    playing: bool
-    restore_token: dict[str, Any] = field(default_factory=dict)
-    # volume of each member's separate Sendspin protocol player, by its player id: Music Assistant's
-    # end-of-announcement restore does not reach it (stage 0, E5)
-    protocol_volumes: dict[str, int | None] = field(default_factory=dict)
+    muted: dict[str, bool] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class GroupPlayback:
+    """What the group plays right now, as Music Assistant reports it."""
+
+    state: str | None  # the group's playback_state ("playing", "idle", "paused"; None when unknown)
+    media_uri: str | None  # uri of the group's current media
+    volumes: dict[str, int | None] = field(default_factory=dict)  # member id -> volume
+
+    def plays(self, url: str | None) -> bool:
+        """The group plays the click track served at *url* (matched on its unguessable token too, in
+        case Music Assistant reports the item under its own uri)."""
+        if not url or self.state != "playing" or not self.media_uri:
+            return False
+        token = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".wav")
+        return url in self.media_uri or (len(token) >= 16 and token in self.media_uri)
 
 
 def to_dict(obj: Any) -> dict[str, Any]:
@@ -111,11 +125,5 @@ def snapshot_from_dict(d: Mapping[str, Any]) -> Snapshot:
     return Snapshot(
         group_id=str(d["group_id"]),
         delays={str(k): int(v) for k, v in dict(d.get("delays") or {}).items()},
-        volumes={str(k): (None if v is None else int(v)) for k, v in dict(d.get("volumes") or {}).items()},
         muted={str(k): bool(v) for k, v in dict(d.get("muted") or {}).items()},
-        playing=bool(d.get("playing")),
-        restore_token=dict(d.get("restore_token") or {}),
-        protocol_volumes={
-            str(k): (None if v is None else int(v)) for k, v in dict(d.get("protocol_volumes") or {}).items()
-        },
     )

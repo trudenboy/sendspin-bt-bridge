@@ -7,19 +7,26 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from sendspin_sync.models import Member, Profile, Snapshot
+    from sendspin_sync.models import GroupPlayback, Member, Profile, Snapshot
 
 
 class GroupControl(Protocol):
     def members(self, group_id: str) -> list[Member]: ...
     def delays(self, members: Sequence[Member]) -> dict[str, int | None]: ...
     def snapshot(self, group_id: str) -> Snapshot: ...
-    def start_signal(self, group_id: str, url: str) -> None: ...
-    def stop_signal(self, group_id: str) -> None: ...
-    def solo(self, group_id: str, member: str | None) -> None: ...
+    def playback(self, group_id: str) -> GroupPlayback: ...
+    def stop_group(self, group_id: str) -> None: ...
+    def start_clicker(self, group_id: str, url: str) -> None:
+        """Play the click track at *url* on the group, replacing what its queue holds."""
+        ...
+
+    def mute(self, member: str, muted: bool) -> None:
+        """Mute or unmute one member's player; a player that cannot be muted raises
+        ``sync_mute_unsupported`` naming it (unmuting such a player is a no-op)."""
+        ...
+
+    def set_volume(self, member: str, level: int) -> None: ...
     def set_delay(self, member: Member, ms: int) -> None: ...
-    def restore(self, snapshot: Snapshot) -> None: ...
-    def announcement_active(self, group_id: str) -> bool: ...
 
 
 class ProfileRepository(Protocol):
@@ -35,9 +42,11 @@ class ClickTrackHost(Protocol):
 
 
 class ControlError(Exception):
-    """Raised by the session and the adapters; ``code`` is stable and maps to an API error."""
+    """Raised by the session and the adapters; ``code`` is stable and maps to an API error.
+    ``member`` names the member the error is about, when there is one."""
 
-    def __init__(self, code: str, detail: str = "") -> None:
+    def __init__(self, code: str, detail: str = "", *, member: str | None = None) -> None:
         super().__init__(f"{code}: {detail}" if detail else code)
         self.code = code
         self.detail = detail
+        self.member = member
