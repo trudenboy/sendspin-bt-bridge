@@ -112,6 +112,13 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unexpected(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        logger.exception("Unhandled error on %s %s", request.method, _redact(request.url.path))
         problem = Problem(title="Internal error", status=500, code="internal_error")
         return problem_response(problem)
+
+
+def _redact(path: str) -> str:
+    """A path for the log: the phone capture token (a credential) never reaches the log ring."""
+    import re
+
+    return re.sub(r"(/sync/capture/)[^/]+", r"\1<token>", path)

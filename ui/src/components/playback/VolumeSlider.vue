@@ -27,8 +27,10 @@ const props = withDefaults(
     volume: number
     muted: boolean
     disabled?: boolean
+    /** Offer the mute button (off where something else owns the mutes, e.g. group sync tuning). */
+    mutable?: boolean
   }>(),
-  { disabled: false, name: null },
+  { disabled: false, name: null, mutable: true },
 )
 
 const emit = defineEmits<{
@@ -103,6 +105,7 @@ function toggleMute() {
 <template>
   <div class="flex items-center gap-2">
     <button
+      v-if="mutable"
       type="button"
       class="-ml-2 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
       :class="{ 'text-warning': muted }"

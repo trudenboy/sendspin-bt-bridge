@@ -167,3 +167,11 @@ def test_dependency_prs_build_and_smoke_test_the_docker_image():
     assert "scripts/check_sendspin_compat.py" in workflow
     assert '--expect-aiosendspin "${{ steps.versions.outputs.aiosendspin }}"' in workflow
     assert "scripts/check_container_runtime.py" in workflow
+
+
+def test_wheel_ships_the_sync_core():
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[2] / "pyproject.toml").read_text())
+    assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
+        "src/sendspin_bridge",
+        "src/sendspin_sync",
+    ]

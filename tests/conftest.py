@@ -143,6 +143,27 @@ def tmp_config(tmp_path):
     _cfg.CONFIG_DIR = original_dir
 
 
+@pytest.fixture(scope="session")
+def _sync_click_track_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("sync-click-track")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_sync_session_store(tmp_path_factory, monkeypatch, _sync_click_track_dir):
+    """No test shares the sync-tuning store singleton or lets it near the real ``/config``,
+    and the click track file is written to a temp dir (once per worker), never ``/var/tmp``."""
+    from sendspin_bridge.sync_tuning import click_track_host, session_store
+
+    snapshot_dir = tmp_path_factory.mktemp("sync-store")
+    monkeypatch.setattr(session_store, "_default_snapshot_dir", lambda: snapshot_dir)
+    monkeypatch.setattr(
+        click_track_host, "track", click_track_host.ClickTrackFile(directory=lambda: _sync_click_track_dir)
+    )
+    session_store.reset_store()
+    yield
+    session_store.reset_store()
+
+
 @pytest.fixture(autouse=True)
 def _reset_shared_module_state():
     """Reset known process-wide module-level state between tests.

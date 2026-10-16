@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   token instead" and paste a long-lived token created in Music Assistant →
   Settings → Profile. The bridge checks the token with Music Assistant before
   saving it.
+- Group sync tuning: align the Sendspin players of a Music Assistant sync
+  group from the bridge — manual tuning by ear with a click track, solo and
+  compare-two listening, or a measurement with a microphone after which the
+  measured delays are applied and fine-tuned by ear on the same screen; named
+  delay profiles (`SYNC_PROFILES`). The group is stopped for a session, the
+  click track ("Sendspin sync clicks") replaces the group's queue, solo mutes
+  the other members, and the volumes changed for the clicks go back at the
+  end. Speakers that cannot be muted, are
+  unavailable, silent or muted are flagged before anything is touched. New
+  `/api/v1/sync/*` endpoints and `sync` events.
+- Measure with a phone: a link and QR code open a capture page on the
+  bridge; press Start on the phone and the bridge plays each speaker alone in
+  turn while the phone records once. Over HTTPS (a separate port with a
+  self-signed certificate, `SYNC_CAPTURE_HTTPS_PORT`) the phone records in the
+  browser and stops by itself; over plain HTTP it uses the phone's recorder
+  with a countdown. The link only lets the phone follow the measurement,
+  start its sequence and send its recording, expires after 30 minutes and
+  stops working when the measurement ends.
 
 ### Fixed
 

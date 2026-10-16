@@ -1676,6 +1676,515 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/capture/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capture state for the phone page (capture token, no sign-in) */
+        get: operations["capture_state_api_v1_sync_capture__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/capture/{token}/recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload the phone's recording of the sequence (capture token, no sign-in) */
+        post: operations["capture_upload_api_v1_sync_capture__token__recording_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/capture/{token}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The phone starts the sequence (capture token, no sign-in)
+         * @description The capture token's only write besides the upload: every adjustable member not skipped plays alone in turn. Needs a measuring session whose clicks play (409 clicker_stopped otherwise).
+         */
+        post: operations["capture_start_api_v1_sync_capture__token__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Assistant sync groups with their members */
+        get: operations["list_groups_api_v1_sync_groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One sync group */
+        get: operations["get_group_api_v1_sync_groups__group_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/groups/{group_id}/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save the group's current delays as a profile */
+        post: operations["capture_profile_api_v1_sync_groups__group_id__capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/groups/{group_id}/delays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Write members' delays (no session) */
+        put: operations["write_delays_api_v1_sync_groups__group_id__delays_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/groups/{group_id}/restore/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry the group's pending restore now */
+        post: operations["retry_restore_api_v1_sync_groups__group_id__restore_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A group's delay profiles */
+        get: operations["list_profiles_api_v1_sync_profiles_get"];
+        put?: never;
+        /** Save a delay profile */
+        post: operations["create_profile_api_v1_sync_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a profile */
+        delete: operations["delete_profile_api_v1_sync_profiles__profile_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename a profile or change its notes */
+        patch: operations["patch_profile_api_v1_sync_profiles__profile_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/sync/profiles/{profile_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write a profile's delays */
+        post: operations["apply_profile_api_v1_sync_profiles__profile_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/restores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Restores left from before a restart */
+        get: operations["list_restores_api_v1_sync_restores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start tuning a group */
+        post: operations["create_session_api_v1_sync_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One tuning session */
+        get: operations["get_session_api_v1_sync_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        /** End a session (the group is restored) */
+        delete: operations["end_session_api_v1_sync_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/ab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A-B listening: solo A */
+        post: operations["ab_api_v1_sync_sessions__session_id__ab_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write the proposal (or rows); the session goes on as the manual editor */
+        post: operations["apply_api_v1_sync_sessions__session_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/capture-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A link (and QR) to the phone capture page of this measurement
+         * @description The link carries a short-lived, unguessable token for this session only; it allows reading the capture state and uploading a recording, nothing else. A new link revokes the previous one; the token is revoked when the session ends.
+         */
+        post: operations["capture_link_api_v1_sync_sessions__session_id__capture_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/delays/{member}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Write one member's delay live (manual tuning) */
+        put: operations["session_delay_api_v1_sync_sessions__session_id__delays__member__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish: keep the delays, restore the group, end the session as done */
+        post: operations["finish_api_v1_sync_sessions__session_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The current proposal (read-only) */
+        get: operations["proposal_api_v1_sync_sessions__session_id__proposal_get"];
+        put?: never;
+        /** Compute the proposal from the measurements so far */
+        post: operations["compute_proposal_api_v1_sync_sessions__session_id__proposal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload one member's recording */
+        post: operations["upload_recording_api_v1_sync_sessions__session_id__recordings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pick the reference member */
+        post: operations["set_reference_api_v1_sync_sessions__session_id__reference_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put back every delay this session wrote */
+        post: operations["reset_api_v1_sync_sessions__session_id__reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/sequence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Play the sequence for the phone: every member alone in turn */
+        post: operations["start_sequence_api_v1_sync_sessions__session_id__sequence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/signal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the clicker, stop the group, or stop only the clicker
+         * @description start: queue the click track on the group (409 group_playing while it plays anything else; again while it plays starts it over). stop: stop whatever the group plays. stop_clicker: stop the group only while it plays this session's click track.
+         */
+        post: operations["session_signal_api_v1_sync_sessions__session_id__signal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Skip measuring a member */
+        post: operations["skip_api_v1_sync_sessions__session_id__skip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/solo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hear one member (null: all)
+         * @description Mutes every other member; 409 clicker_stopped while the clicker does not play, 409 sync_mute_unsupported (with member) when a member's player cannot be muted.
+         */
+        post: operations["solo_api_v1_sync_sessions__session_id__solo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/volumes/{member}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set one member's volume */
+        put: operations["session_volume_api_v1_sync_sessions__session_id__volumes__member__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/signal/{token}.wav": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Click track for a running session (public) */
+        get: operations["signal_api_v1_sync_signal__token__wav_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/updates": {
         parameters: {
             query?: never;
@@ -1746,6 +2255,13 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** AbIn */
+        AbIn: {
+            /** A */
+            a: string;
+            /** B */
+            b: string;
+        };
         /** AdapterArea */
         AdapterArea: {
             /**
@@ -1807,6 +2323,16 @@ export interface components {
             mac: string | null;
             /** Name */
             name: string | null;
+        };
+        /** ApplyIn */
+        ApplyIn: {
+            /**
+             * Rows
+             * @description Delays to write instead of the proposal.
+             */
+            rows?: {
+                [key: string]: number;
+            } | null;
         };
         /** AreasIn */
         AreasIn: {
@@ -2404,6 +2930,99 @@ export interface components {
             /** Issue Url */
             issue_url: string;
         };
+        /** CaptureIn */
+        CaptureIn: {
+            /**
+             * Kind
+             * @default device
+             * @enum {string}
+             */
+            kind?: "device" | "position";
+            /** Name */
+            name: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes?: string;
+        };
+        /** CaptureLinkIn */
+        CaptureLinkIn: {
+            /**
+             * Lang
+             * @description The page's language (the UI's).
+             */
+            lang?: ("en" | "ru") | null;
+        };
+        /** CaptureLinkOut */
+        CaptureLinkOut: {
+            /** Expires In S */
+            expires_in_s: number;
+            /**
+             * Http Url
+             * @description The same page over plain HTTP (the phone's own recorder).
+             */
+            http_url: string;
+            /**
+             * Secure
+             * @description url is the HTTPS one.
+             */
+            secure: boolean;
+            /** Token */
+            token: string;
+            /**
+             * Url
+             * @description The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP.
+             */
+            url: string;
+        };
+        /** CaptureMemberOut */
+        CaptureMemberOut: {
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @description This member's last measurement, if any.
+             */
+            status: ("ok" | "not_heard" | "unstable" | "skipped") | null;
+        };
+        /** CaptureResultOut */
+        CaptureResultOut: {
+            /** Results */
+            results: components["schemas"]["MeasurementOut"][];
+        };
+        /** CaptureStartIn */
+        CaptureStartIn: {
+            /**
+             * Mode
+             * @description live: the page records with the browser's microphone; recorder: the phone's own recorder, started by hand (a longer lead-in).
+             * @enum {string}
+             */
+            mode: "live" | "recorder";
+        };
+        /**
+         * CaptureStateOut
+         * @description What the phone page shows: no delays, no session id, nothing to change.
+         */
+        CaptureStateOut: {
+            /** Clicks Playing */
+            clicks_playing: boolean;
+            /** Group */
+            group: string;
+            /**
+             * Measuring
+             * @description The session still takes recordings (not tuning by ear yet).
+             */
+            measuring: boolean;
+            /** Members */
+            members: components["schemas"]["CaptureMemberOut"][];
+            /**
+             * Point
+             * @enum {string}
+             */
+            point: "device" | "position";
+            sequence: components["schemas"]["SequenceOut"] | null;
+        };
         /** CheckIn */
         CheckIn: {
             /** Device Names */
@@ -2423,6 +3042,13 @@ export interface components {
              * @default
              */
             username?: string;
+        };
+        /** DelaysIn */
+        DelaysIn: {
+            /** Delays */
+            delays: {
+                [key: string]: number;
+            };
         };
         /** Device */
         Device: {
@@ -3241,6 +3867,45 @@ export interface components {
              */
             enabled: boolean;
         };
+        /** MeasurementOut */
+        MeasurementOut: {
+            /**
+             * Clicks
+             * @default 0
+             */
+            clicks: number;
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /** Member */
+            member: string;
+            /** Phase Ms */
+            phase_ms: number | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Spread Ms */
+            spread_ms: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "not_heard" | "unstable" | "skipped";
+        };
+        /** MemberDelayIn */
+        MemberDelayIn: {
+            /** Ms */
+            ms: number;
+        };
+        /** MemberVolumeIn */
+        MemberVolumeIn: {
+            /** Level */
+            level: number;
+        };
         /** MetronomeIn */
         MetronomeIn: {
             /**
@@ -3403,6 +4068,21 @@ export interface components {
             /** Username */
             username: string;
         };
+        /**
+         * PendingRestoreOut
+         * @description A restore left from before a bridge restart that has not succeeded yet.
+         */
+        PendingRestoreOut: {
+            /**
+             * Error
+             * @description Code of the last failed attempt; null before the first.
+             */
+            error: string | null;
+            /** Group Id */
+            group_id: string;
+            /** Session Id */
+            session_id: string;
+        };
         /** PlaybackIn */
         PlaybackIn: {
             /**
@@ -3529,6 +4209,95 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ProfileApplyOut */
+        ProfileApplyOut: {
+            /** Applied */
+            applied: {
+                [key: string]: number;
+            };
+            /** Skipped */
+            skipped: string[];
+        };
+        /** ProfileCreate */
+        ProfileCreate: {
+            /** Delays */
+            delays: {
+                [key: string]: number;
+            };
+            /** Group Id */
+            group_id: string;
+            /**
+             * Kind
+             * @default device
+             * @enum {string}
+             */
+            kind?: "device" | "position";
+            /** Name */
+            name: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes?: string;
+        };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Created At */
+            created_at: string;
+            /** Delays */
+            delays: {
+                [key: string]: number;
+            };
+            /** Group Id */
+            group_id: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "device" | "position";
+            /** Name */
+            name: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+        };
+        /** ProfilePatch */
+        ProfilePatch: {
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** ProposalOut */
+        ProposalOut: {
+            /** Predicted Spread Ms */
+            predicted_spread_ms: number;
+            /** Reference */
+            reference: string;
+            /** Rows */
+            rows: components["schemas"]["ProposalRowOut"][];
+            /** Unverified */
+            unverified: string[];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** ProposalRowOut */
+        ProposalRowOut: {
+            /** After Ms */
+            after_ms: number;
+            /** Before Ms */
+            before_ms: number;
+            /** Clamped */
+            clamped: boolean;
+            /** Delta Ms */
+            delta_ms: number;
+            /** Member */
+            member: string;
+        };
         /** ProxyAvailability */
         ProxyAvailability: {
             /** Available */
@@ -3594,6 +4363,11 @@ export interface components {
             sample_rate: number;
             /** Samples */
             samples: number[];
+        };
+        /** ReferenceIn */
+        ReferenceIn: {
+            /** Member */
+            member: string;
         };
         /**
          * RefusedServer
@@ -3721,6 +4495,68 @@ export interface components {
             /** Sendspin Server */
             SENDSPIN_SERVER?: string | null;
         };
+        /** SequenceIn */
+        SequenceIn: {
+            /**
+             * Members
+             * @description The members to play alone, in order.
+             */
+            members: string[];
+        };
+        /**
+         * SequenceOut
+         * @description The phone capture's sequence: every member alone in turn while the phone records once.
+         */
+        SequenceOut: {
+            /** Error */
+            error: string | null;
+            /** Error Member */
+            error_member: string | null;
+            /** Gap S */
+            gap_s: number;
+            /**
+             * Index
+             * @description The member playing alone (0-based) in solo; -1 before the first.
+             */
+            index: number;
+            /** Lead S */
+            lead_s: number;
+            /**
+             * Member
+             * @description The member playing alone right now (solo only).
+             */
+            member: string | null;
+            /** Members */
+            members: string[];
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "starting" | "lead" | "solo" | "gap" | "done" | "failed";
+            /** Solo S */
+            solo_s: number;
+            /**
+             * Uploaded
+             * @description A recording of this sequence was measured.
+             */
+            uploaded: boolean;
+        };
+        /** SessionCreate */
+        SessionCreate: {
+            /** Group Id */
+            group_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "manual" | "semi";
+            /**
+             * Point
+             * @default device
+             * @enum {string}
+             */
+            point?: "device" | "position";
+        };
         /** SessionOut */
         SessionOut: {
             /** Expires In Seconds */
@@ -3802,6 +4638,15 @@ export interface components {
             /** User */
             user?: string | null;
         };
+        /** SignalIn */
+        SignalIn: {
+            /**
+             * Action
+             * @description start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker.
+             * @enum {string}
+             */
+            action: "start" | "stop" | "stop_clicker";
+        };
         /** SinkMatch */
         SinkMatch: {
             /** Alsa Long Card Name */
@@ -3814,6 +4659,16 @@ export interface components {
             serial?: string | null;
             /** Vendor Id */
             vendor_id?: string | null;
+        };
+        /** SkipIn */
+        SkipIn: {
+            /** Member */
+            member: string;
+        };
+        /** SoloIn */
+        SoloIn: {
+            /** Member */
+            member: string | null;
         };
         /** StartupProgress */
         StartupProgress: {
@@ -3847,6 +4702,160 @@ export interface components {
             total_steps: number;
         } & {
             [key: string]: unknown;
+        };
+        /** SyncGroup */
+        SyncGroup: {
+            /**
+             * Error
+             * @description Error code when the group's members could not be read (members is then empty).
+             */
+            error: string | null;
+            /** Id */
+            id: string;
+            /** Members */
+            members: components["schemas"]["SyncMember"][];
+            /** Name */
+            name: string;
+            /** @description Set while the group still has to be restored after a restart. */
+            restore_pending: components["schemas"]["PendingRestoreOut"] | null;
+            /**
+             * Session Id
+             * @description The session tuning this group, if any.
+             */
+            session_id: string | null;
+        };
+        /** SyncMember */
+        SyncMember: {
+            /** Adjustable */
+            adjustable: boolean;
+            /**
+             * Available
+             * @description Music Assistant lists the player as available.
+             */
+            available: boolean | null;
+            /**
+             * Can Mute
+             * @description The player can be muted (hearing one speaker alone mutes all the others).
+             */
+            can_mute: boolean | null;
+            /** Client Id */
+            client_id: string | null;
+            /** Delay Ms */
+            delay_ms: number | null;
+            /** Last Measured At */
+            last_measured_at: string | null;
+            /** Ma Player Id */
+            ma_player_id: string;
+            /**
+             * Muted
+             * @description The player is muted right now.
+             */
+            muted: boolean | null;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "bridge" | "sendspin" | "other";
+            /**
+             * Volume
+             * @description The player's volume (0-100) when the group was read.
+             */
+            volume: number | null;
+        };
+        /**
+         * SyncSessionOut
+         * @description The session resource; also the payload of ``sync`` events.
+         */
+        SyncSessionOut: {
+            /**
+             * Clicker Left S
+             * @description Seconds of the click track left while it plays (from its last start); null otherwise.
+             */
+            clicker_left_s: number | null;
+            /**
+             * Clicker Playing
+             * @description The group plays this session's click track (as last read).
+             */
+            clicker_playing: boolean;
+            /**
+             * Clicker Starts
+             * @description Clicker starts in this session; recordings from two playbacks are never mixed.
+             */
+            clicker_starts: number;
+            /**
+             * Departed
+             * @description Members that left the group mid-session.
+             */
+            departed: string[];
+            /** Error */
+            error: string | null;
+            /** Group Id */
+            group_id: string;
+            /**
+             * Group State
+             * @description The group's playback state as last read (playing, idle, paused); null when unknown.
+             */
+            group_state: string | null;
+            /** History */
+            history: {
+                [key: string]: unknown;
+            }[];
+            /** Id */
+            id: string;
+            /** Measurements */
+            measurements: {
+                [key: string]: components["schemas"]["MeasurementOut"];
+            };
+            /** Members */
+            members: components["schemas"]["SyncMember"][];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "manual" | "semi";
+            /**
+             * Muted
+             * @description Members this session muted; they are unmuted when it ends.
+             */
+            muted: string[];
+            /**
+             * Point
+             * @enum {string}
+             */
+            point: "device" | "position";
+            proposal: components["schemas"]["ProposalOut"] | null;
+            /** Reference */
+            reference: string | null;
+            /**
+             * Restore Error
+             * @description Code of the last failed restore attempt.
+             */
+            restore_error: string | null;
+            /** @description The phone capture's sequence, once one was started. */
+            sequence: components["schemas"]["SequenceOut"] | null;
+            /** Soloed */
+            soloed: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "created" | "measuring" | "proposed" | "applying" | "tuning" | "restoring" | "done" | "cancelled" | "failed";
+            /**
+             * Volumes
+             * @description Each member's volume as last read or set.
+             */
+            volumes: {
+                [key: string]: number | null;
+            };
+            /**
+             * Volumes Before
+             * @description Members whose volume this session changed, with the volume from before; put back at the end.
+             */
+            volumes_before: {
+                [key: string]: number;
+            };
         };
         /** TokenList */
         TokenList: {
@@ -8404,6 +9413,1424 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Problem"];
                     "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    capture_state_api_v1_sync_capture__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureStateOut"];
+                };
+            };
+            /** @description Unknown, expired or revoked token */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_upload_api_v1_sync_capture__token__recording_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        /** @description The phone's recording of the sequence: any audio file FFmpeg reads (m4a/AAC, wav, webm, …). */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_start_api_v1_sync_capture__token__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureStartIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_groups_api_v1_sync_groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncGroup"][];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_group_api_v1_sync_groups__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncGroup"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    capture_profile_api_v1_sync_groups__group_id__capture_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    write_delays_api_v1_sync_groups__group_id__delays_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DelaysIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncGroup"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    retry_restore_api_v1_sync_groups__group_id__restore_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingRestoreOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    list_profiles_api_v1_sync_profiles_get: {
+        parameters: {
+            query: {
+                group_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"][];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    create_profile_api_v1_sync_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    delete_profile_api_v1_sync_profiles__profile_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    patch_profile_api_v1_sync_profiles__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    apply_profile_api_v1_sync_profiles__profile_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileApplyOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    list_restores_api_v1_sync_restores_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingRestoreOut"][];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    create_session_api_v1_sync_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    get_session_api_v1_sync_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    end_session_api_v1_sync_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    ab_api_v1_sync_sessions__session_id__ab_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AbIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    apply_api_v1_sync_sessions__session_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    capture_link_api_v1_sync_sessions__session_id__capture_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureLinkOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    session_delay_api_v1_sync_sessions__session_id__delays__member__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                member: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberDelayIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    finish_api_v1_sync_sessions__session_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    proposal_api_v1_sync_sessions__session_id__proposal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    compute_proposal_api_v1_sync_sessions__session_id__proposal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    upload_recording_api_v1_sync_sessions__session_id__recordings_post: {
+        parameters: {
+            query: {
+                /** @description Music Assistant player id of the member that played. */
+                member: string;
+                /** @description Capture clock at the first sample, in seconds. */
+                start_time_s: number;
+                /** @description Samples per second. */
+                sample_rate: number;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Mono int16 little-endian PCM, at most 2 MB. */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeasurementOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    set_reference_api_v1_sync_sessions__session_id__reference_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    reset_api_v1_sync_sessions__session_id__reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    start_sequence_api_v1_sync_sessions__session_id__sequence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    session_signal_api_v1_sync_sessions__session_id__signal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    skip_api_v1_sync_sessions__session_id__skip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    solo_api_v1_sync_sessions__session_id__solo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoloIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    session_volume_api_v1_sync_sessions__session_id__volumes__member__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                member: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberVolumeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    signal_api_v1_sync_signal__token__wav_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

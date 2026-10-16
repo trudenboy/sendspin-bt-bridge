@@ -7,6 +7,7 @@ import en from '@/i18n/en.json'
 import { setLatency } from '@/api/devices'
 import { setMetronome } from '@/api/calibration'
 import { makeDevice } from '../../fixtures/device'
+import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('@/api/devices', () => ({ setLatency: vi.fn().mockResolvedValue({ field: 'static_delay_ms', value: 0 }) }))
 vi.mock('@/api/calibration', () => ({
@@ -63,5 +64,28 @@ describe('DeviceTimingPanel', () => {
     const w = mountPanel()
     await w.findAll('button').find((b) => b.text() === 'Start')!.trigger('click')
     expect(setMetronome).toHaveBeenCalledWith(expect.any(String), 'start')
+  })
+
+  it('links to tuning the whole Music Assistant group the player is in', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/sync/:groupId', name: 'sync', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    const w = mount(DeviceTimingPanel, {
+      props: { device: makeDevice({ music_assistant: { syncgroup_id: 'syncgroup_abc' } }) },
+      global: { plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router] },
+    })
+    const link = w.findAll('a').find((a) => a.attributes('href') === '/sync/syncgroup_abc')
+    expect(link).toBeTruthy()
+    expect(w.text()).toContain('Tune the whole group')
+  })
+
+  it('offers no group tuning when the player is in no group', () => {
+    const w = mountPanel()
+    expect(w.text()).not.toContain('Tune the whole group')
   })
 })

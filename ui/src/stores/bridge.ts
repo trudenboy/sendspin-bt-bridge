@@ -4,7 +4,8 @@ import { useEventStream } from '@/composables/useEventStream'
 import { getStatus, restartBridge } from '@/api/status'
 import { getAdapters } from '@/api/bluetooth'
 import { useJobsStore } from './jobs'
-import type { Adapter, BridgeStatus, Device, Group, Job } from '@/api/types'
+import { useSyncStore } from './sync'
+import type { Adapter, BridgeStatus, Device, Group, Job, SyncSession } from '@/api/types'
 
 export type RestartState = 'idle' | 'stopping' | 'restarting' | 'ready' | 'error'
 
@@ -29,13 +30,16 @@ export const useBridgeStore = defineStore('bridge', () => {
   }
 
   const stream = useEventStream({
-    types: ['status', 'job'],
+    types: ['status', 'job', 'sync'],
     onEvent(event) {
       if (event.type === 'status') apply(event.data as BridgeStatus)
       else if (event.type === 'job') useJobsStore().update(event.data as Job)
+      else if (event.type === 'sync') useSyncStore().applyEvent(event.data as SyncSession)
     },
     onConnect() {
       sseConnected.value = true
+      // Sync events are not replayed: catch up on what was missed while the stream was down.
+      void useSyncStore().resync()
       if (restartState.value === 'restarting' || restartState.value === 'stopping') {
         restartState.value = 'ready'
         void refreshAdapters()

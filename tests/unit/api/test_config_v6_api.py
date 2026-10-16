@@ -454,3 +454,57 @@ def test_inventory_is_read_outside_config_lock_and_only_for_pulse_sinks(client, 
     payload["players"] = [p for p in payload["players"] if p["backend"]["type"] != "pulse_sink"]
     assert client.put("/api/v1/config", json=payload).status_code == 200
     assert calls == []
+
+
+_PROFILE = {
+    "id": "p1",
+    "name": "Evening",
+    "group_id": "g",
+    "kind": "device",
+    "delays": {"a": 120},
+    "created_at": "2026-10-15T20:00:00+00:00",
+    "notes": "",
+}
+
+
+def _store_profiles(tmp_path, profiles):
+    disk = _disk(tmp_path)
+    disk["SYNC_PROFILES"] = profiles
+    (tmp_path / "config.json").write_text(json.dumps(disk))
+
+
+def _import(client, payload):
+    return client.post(
+        "/api/v1/config/import", files={"file": ("c.json", json.dumps(payload).encode(), "application/json")}
+    )
+
+
+def test_export_carries_the_sync_profiles(client, tmp_path):
+    _store_profiles(tmp_path, [_PROFILE])
+    exported = json.loads(client.get("/api/v1/config/export").content)
+    assert exported["SYNC_PROFILES"] == [_PROFILE]
+
+
+def test_import_without_sync_profiles_keeps_the_stored_ones(client, tmp_path):
+    _store_profiles(tmp_path, [_PROFILE])
+    v5 = {"CONFIG_SCHEMA_VERSION": 5, "BLUETOOTH_DEVICES": [{"mac": B, "player_name": "Only B"}]}
+    assert _import(client, v5).status_code == 200
+    disk = _disk(tmp_path)
+    assert [p["name"] for p in disk["players"]] == ["Only B"]
+    assert disk["SYNC_PROFILES"] == [_PROFILE]
+    exported = json.loads(client.get("/api/v1/config/export").content)
+    exported.pop("SYNC_PROFILES")
+    assert _import(client, exported).status_code == 200
+    assert _disk(tmp_path)["SYNC_PROFILES"] == [_PROFILE]
+
+
+def test_import_with_sync_profiles_replaces_the_stored_ones(client, tmp_path):
+    _store_profiles(tmp_path, [_PROFILE])
+    other = {**_PROFILE, "id": "p2", "name": "Morning"}
+    exported = json.loads(client.get("/api/v1/config/export").content)
+    exported["SYNC_PROFILES"] = [other]
+    assert _import(client, exported).status_code == 200
+    assert _disk(tmp_path)["SYNC_PROFILES"] == [other]
+    exported["SYNC_PROFILES"] = []
+    assert _import(client, exported).status_code == 200
+    assert _disk(tmp_path)["SYNC_PROFILES"] == []

@@ -63,6 +63,24 @@
         "title": "AUTHTOKEN",
         "type": "object"
       },
+      "AbIn": {
+        "properties": {
+          "a": {
+            "title": "A",
+            "type": "string"
+          },
+          "b": {
+            "title": "B",
+            "type": "string"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ],
+        "title": "AbIn",
+        "type": "object"
+      },
       "AdapterArea": {
         "additionalProperties": true,
         "properties": {
@@ -235,6 +253,29 @@
           "name"
         ],
         "title": "AdapterRef",
+        "type": "object"
+      },
+      "ApplyIn": {
+        "properties": {
+          "rows": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maximum": 5000.0,
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Delays to write instead of the proposal.",
+            "title": "Rows"
+          }
+        },
+        "title": "ApplyIn",
         "type": "object"
       },
       "AreasIn": {
@@ -1513,6 +1554,213 @@
         "title": "BugReportOut",
         "type": "object"
       },
+      "CaptureIn": {
+        "properties": {
+          "kind": {
+            "default": "device",
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CaptureIn",
+        "type": "object"
+      },
+      "CaptureLinkIn": {
+        "properties": {
+          "lang": {
+            "anyOf": [
+              {
+                "enum": [
+                  "en",
+                  "ru"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The page's language (the UI's).",
+            "title": "Lang"
+          }
+        },
+        "title": "CaptureLinkIn",
+        "type": "object"
+      },
+      "CaptureLinkOut": {
+        "properties": {
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "number"
+          },
+          "http_url": {
+            "description": "The same page over plain HTTP (the phone's own recorder).",
+            "title": "Http Url",
+            "type": "string"
+          },
+          "secure": {
+            "description": "url is the HTTPS one.",
+            "title": "Secure",
+            "type": "boolean"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "description": "The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "http_url",
+          "secure",
+          "token",
+          "expires_in_s"
+        ],
+        "title": "CaptureLinkOut",
+        "type": "object"
+      },
+      "CaptureMemberOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ok",
+                  "not_heard",
+                  "unstable",
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "This member's last measurement, if any.",
+            "title": "Status"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "CaptureMemberOut",
+        "type": "object"
+      },
+      "CaptureResultOut": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementOut"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "CaptureResultOut",
+        "type": "object"
+      },
+      "CaptureStartIn": {
+        "properties": {
+          "mode": {
+            "description": "live: the page records with the browser's microphone; recorder: the phone's own recorder, started by hand (a longer lead-in).",
+            "enum": [
+              "live",
+              "recorder"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "CaptureStartIn",
+        "type": "object"
+      },
+      "CaptureStateOut": {
+        "description": "What the phone page shows: no delays, no session id, nothing to change.",
+        "properties": {
+          "clicks_playing": {
+            "title": "Clicks Playing",
+            "type": "boolean"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "measuring": {
+            "description": "The session still takes recordings (not tuning by ear yet).",
+            "title": "Measuring",
+            "type": "boolean"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/CaptureMemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "point": {
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Point",
+            "type": "string"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SequenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "group",
+          "point",
+          "measuring",
+          "clicks_playing",
+          "members",
+          "sequence"
+        ],
+        "title": "CaptureStateOut",
+        "type": "object"
+      },
       "CheckIn": {
         "properties": {
           "device_names": {
@@ -1554,6 +1802,24 @@
           "url"
         ],
         "title": "Connection",
+        "type": "object"
+      },
+      "DelaysIn": {
+        "properties": {
+          "delays": {
+            "additionalProperties": {
+              "maximum": 5000.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "title": "Delays",
+            "type": "object"
+          }
+        },
+        "required": [
+          "delays"
+        ],
+        "title": "DelaysIn",
         "type": "object"
       },
       "Device": {
@@ -3733,6 +3999,102 @@
         "title": "ManagementIn",
         "type": "object"
       },
+      "MeasurementOut": {
+        "properties": {
+          "clicks": {
+            "default": 0,
+            "title": "Clicks",
+            "type": "integer"
+          },
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "member": {
+            "title": "Member",
+            "type": "string"
+          },
+          "phase_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase Ms"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "spread_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Ms"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_heard",
+              "unstable",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member",
+          "status",
+          "phase_ms",
+          "confidence",
+          "clicks",
+          "spread_ms",
+          "reason"
+        ],
+        "title": "MeasurementOut",
+        "type": "object"
+      },
+      "MemberDelayIn": {
+        "properties": {
+          "ms": {
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ms"
+        ],
+        "title": "MemberDelayIn",
+        "type": "object"
+      },
+      "MemberVolumeIn": {
+        "properties": {
+          "level": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Level",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "title": "MemberVolumeIn",
+        "type": "object"
+      },
       "MetronomeIn": {
         "properties": {
           "action": {
@@ -4062,6 +4424,38 @@
           "password"
         ],
         "title": "PasswordSignIn",
+        "type": "object"
+      },
+      "PendingRestoreOut": {
+        "description": "A restore left from before a bridge restart that has not succeeded yet.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Code of the last failed attempt; null before the first.",
+            "title": "Error"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "group_id",
+          "error"
+        ],
+        "title": "PendingRestoreOut",
         "type": "object"
       },
       "PlaybackIn": {
@@ -4443,6 +4837,232 @@
         "title": "Problem",
         "type": "object"
       },
+      "ProfileApplyOut": {
+        "properties": {
+          "applied": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Applied",
+            "type": "object"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "skipped"
+        ],
+        "title": "ProfileApplyOut",
+        "type": "object"
+      },
+      "ProfileCreate": {
+        "properties": {
+          "delays": {
+            "additionalProperties": {
+              "maximum": 5000.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "title": "Delays",
+            "type": "object"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "device",
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "name",
+          "delays"
+        ],
+        "title": "ProfileCreate",
+        "type": "object"
+      },
+      "ProfileOut": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "delays": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Delays",
+            "type": "object"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "group_id",
+          "kind",
+          "delays",
+          "created_at",
+          "notes"
+        ],
+        "title": "ProfileOut",
+        "type": "object"
+      },
+      "ProfilePatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "title": "ProfilePatch",
+        "type": "object"
+      },
+      "ProposalOut": {
+        "properties": {
+          "predicted_spread_ms": {
+            "title": "Predicted Spread Ms",
+            "type": "number"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unverified",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reference",
+          "rows",
+          "predicted_spread_ms",
+          "unverified",
+          "warnings"
+        ],
+        "title": "ProposalOut",
+        "type": "object"
+      },
+      "ProposalRowOut": {
+        "properties": {
+          "after_ms": {
+            "title": "After Ms",
+            "type": "integer"
+          },
+          "before_ms": {
+            "title": "Before Ms",
+            "type": "integer"
+          },
+          "clamped": {
+            "title": "Clamped",
+            "type": "boolean"
+          },
+          "delta_ms": {
+            "title": "Delta Ms",
+            "type": "integer"
+          },
+          "member": {
+            "title": "Member",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member",
+          "before_ms",
+          "after_ms",
+          "delta_ms",
+          "clamped"
+        ],
+        "title": "ProposalRowOut",
+        "type": "object"
+      },
       "ProxyAvailability": {
         "properties": {
           "available": {
@@ -4633,6 +5253,19 @@
           "sample_rate"
         ],
         "title": "RecordingIn",
+        "type": "object"
+      },
+      "ReferenceIn": {
+        "properties": {
+          "member": {
+            "title": "Member",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member"
+        ],
+        "title": "ReferenceIn",
         "type": "object"
       },
       "RefusedServer": {
@@ -4915,6 +5548,150 @@
         "title": "SendspinTestIn",
         "type": "object"
       },
+      "SequenceIn": {
+        "properties": {
+          "members": {
+            "description": "The members to play alone, in order.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "SequenceIn",
+        "type": "object"
+      },
+      "SequenceOut": {
+        "description": "The phone capture's sequence: every member alone in turn while the phone records once.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "error_member": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Member"
+          },
+          "gap_s": {
+            "title": "Gap S",
+            "type": "number"
+          },
+          "index": {
+            "description": "The member playing alone (0-based) in solo; -1 before the first.",
+            "title": "Index",
+            "type": "integer"
+          },
+          "lead_s": {
+            "title": "Lead S",
+            "type": "number"
+          },
+          "member": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The member playing alone right now (solo only).",
+            "title": "Member"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "starting",
+              "lead",
+              "solo",
+              "gap",
+              "done",
+              "failed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "solo_s": {
+            "title": "Solo S",
+            "type": "number"
+          },
+          "uploaded": {
+            "description": "A recording of this sequence was measured.",
+            "title": "Uploaded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "members",
+          "phase",
+          "index",
+          "member",
+          "error",
+          "error_member",
+          "solo_s",
+          "gap_s",
+          "lead_s",
+          "uploaded"
+        ],
+        "title": "SequenceOut",
+        "type": "object"
+      },
+      "SessionCreate": {
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "manual",
+              "semi"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "point": {
+            "default": "device",
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Point",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "mode"
+        ],
+        "title": "SessionCreate",
+        "type": "object"
+      },
       "SessionOut": {
         "properties": {
           "expires_in_seconds": {
@@ -5114,6 +5891,25 @@
         "title": "SignInResult",
         "type": "object"
       },
+      "SignalIn": {
+        "properties": {
+          "action": {
+            "description": "start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker.",
+            "enum": [
+              "start",
+              "stop",
+              "stop_clicker"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "SignalIn",
+        "type": "object"
+      },
       "SinkMatch": {
         "additionalProperties": false,
         "properties": {
@@ -5176,6 +5972,39 @@
         "title": "SinkMatch",
         "type": "object"
       },
+      "SkipIn": {
+        "properties": {
+          "member": {
+            "title": "Member",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member"
+        ],
+        "title": "SkipIn",
+        "type": "object"
+      },
+      "SoloIn": {
+        "properties": {
+          "member": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member"
+          }
+        },
+        "required": [
+          "member"
+        ],
+        "title": "SoloIn",
+        "type": "object"
+      },
       "StartupProgress": {
         "additionalProperties": true,
         "properties": {
@@ -5223,6 +6052,422 @@
           "details"
         ],
         "title": "StartupProgress",
+        "type": "object"
+      },
+      "SyncGroup": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error code when the group's members could not be read (members is then empty).",
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SyncMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "restore_pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingRestoreOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set while the group still has to be restored after a restart."
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session tuning this group, if any.",
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "members",
+          "session_id",
+          "restore_pending",
+          "error"
+        ],
+        "title": "SyncGroup",
+        "type": "object"
+      },
+      "SyncMember": {
+        "properties": {
+          "adjustable": {
+            "title": "Adjustable",
+            "type": "boolean"
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Music Assistant lists the player as available.",
+            "title": "Available"
+          },
+          "can_mute": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The player can be muted (hearing one speaker alone mutes all the others).",
+            "title": "Can Mute"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "delay_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Ms"
+          },
+          "last_measured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Measured At"
+          },
+          "ma_player_id": {
+            "title": "Ma Player Id",
+            "type": "string"
+          },
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The player is muted right now.",
+            "title": "Muted"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "bridge",
+              "sendspin",
+              "other"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The player's volume (0-100) when the group was read.",
+            "title": "Volume"
+          }
+        },
+        "required": [
+          "ma_player_id",
+          "name",
+          "origin",
+          "adjustable",
+          "client_id",
+          "delay_ms",
+          "last_measured_at",
+          "can_mute",
+          "available",
+          "volume",
+          "muted"
+        ],
+        "title": "SyncMember",
+        "type": "object"
+      },
+      "SyncSessionOut": {
+        "description": "The session resource; also the payload of ``sync`` events.",
+        "properties": {
+          "clicker_left_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Seconds of the click track left while it plays (from its last start); null otherwise.",
+            "title": "Clicker Left S"
+          },
+          "clicker_playing": {
+            "description": "The group plays this session's click track (as last read).",
+            "title": "Clicker Playing",
+            "type": "boolean"
+          },
+          "clicker_starts": {
+            "description": "Clicker starts in this session; recordings from two playbacks are never mixed.",
+            "title": "Clicker Starts",
+            "type": "integer"
+          },
+          "departed": {
+            "description": "Members that left the group mid-session.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Departed",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "group_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The group's playback state as last read (playing, idle, paused); null when unknown.",
+            "title": "Group State"
+          },
+          "history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "measurements": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MeasurementOut"
+            },
+            "title": "Measurements",
+            "type": "object"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SyncMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "manual",
+              "semi"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "muted": {
+            "description": "Members this session muted; they are unmuted when it ends.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Muted",
+            "type": "array"
+          },
+          "point": {
+            "enum": [
+              "device",
+              "position"
+            ],
+            "title": "Point",
+            "type": "string"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "restore_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Code of the last failed restore attempt.",
+            "title": "Restore Error"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SequenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The phone capture's sequence, once one was started."
+          },
+          "soloed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soloed"
+          },
+          "state": {
+            "enum": [
+              "created",
+              "measuring",
+              "proposed",
+              "applying",
+              "tuning",
+              "restoring",
+              "done",
+              "cancelled",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "volumes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": "Each member's volume as last read or set.",
+            "title": "Volumes",
+            "type": "object"
+          },
+          "volumes_before": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Members whose volume this session changed, with the volume from before; put back at the end.",
+            "title": "Volumes Before",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "group_id",
+          "mode",
+          "point",
+          "state",
+          "members",
+          "departed",
+          "measurements",
+          "proposal",
+          "history",
+          "error",
+          "restore_error",
+          "group_state",
+          "clicker_playing",
+          "clicker_starts",
+          "volumes",
+          "volumes_before",
+          "clicker_left_s",
+          "muted",
+          "soloed",
+          "reference",
+          "sequence"
+        ],
+        "title": "SyncSessionOut",
         "type": "object"
       },
       "TokenList": {
@@ -10952,6 +12197,1921 @@
         "summary": "Everything the dashboard shows",
         "tags": [
           "bridge"
+        ]
+      }
+    },
+    "/api/v1/sync/capture/{token}": {
+      "get": {
+        "operationId": "capture_state_api_v1_sync_capture__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown, expired or revoked token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture state for the phone page (capture token, no sign-in)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/capture/{token}/recording": {
+      "post": {
+        "operationId": "capture_upload_api_v1_sync_capture__token__recording_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "The phone's recording of the sequence: any audio file FFmpeg reads (m4a/AAC, wav, webm, …).",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload the phone's recording of the sequence (capture token, no sign-in)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/capture/{token}/start": {
+      "post": {
+        "description": "The capture token's only write besides the upload: every adjustable member not skipped plays alone in turn. Needs a measuring session whose clicks play (409 clicker_stopped otherwise).",
+        "operationId": "capture_start_api_v1_sync_capture__token__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The phone starts the sequence (capture token, no sign-in)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/groups": {
+      "get": {
+        "operationId": "list_groups_api_v1_sync_groups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SyncGroup"
+                  },
+                  "title": "Response List Groups Api V1 Sync Groups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Music Assistant sync groups with their members",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/groups/{group_id}": {
+      "get": {
+        "operationId": "get_group_api_v1_sync_groups__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncGroup"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One sync group",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/groups/{group_id}/capture": {
+      "post": {
+        "operationId": "capture_profile_api_v1_sync_groups__group_id__capture_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Save the group's current delays as a profile",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/groups/{group_id}/delays": {
+      "put": {
+        "operationId": "write_delays_api_v1_sync_groups__group_id__delays_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelaysIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncGroup"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Write members' delays (no session)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/groups/{group_id}/restore/retry": {
+      "post": {
+        "operationId": "retry_restore_api_v1_sync_groups__group_id__restore_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingRestoreOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Retry the group's pending restore now",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/profiles": {
+      "get": {
+        "operationId": "list_profiles_api_v1_sync_profiles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileOut"
+                  },
+                  "title": "Response List Profiles Api V1 Sync Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "A group's delay profiles",
+        "tags": [
+          "sync"
+        ]
+      },
+      "post": {
+        "operationId": "create_profile_api_v1_sync_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Save a delay profile",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/profiles/{profile_id}": {
+      "delete": {
+        "operationId": "delete_profile_api_v1_sync_profiles__profile_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Delete a profile",
+        "tags": [
+          "sync"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_profile_api_v1_sync_profiles__profile_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Rename a profile or change its notes",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/profiles/{profile_id}/apply": {
+      "post": {
+        "operationId": "apply_profile_api_v1_sync_profiles__profile_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileApplyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Write a profile's delays",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/restores": {
+      "get": {
+        "operationId": "list_restores_api_v1_sync_restores_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PendingRestoreOut"
+                  },
+                  "title": "Response List Restores Api V1 Sync Restores Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Restores left from before a restart",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions": {
+      "post": {
+        "operationId": "create_session_api_v1_sync_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Start tuning a group",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}": {
+      "delete": {
+        "operationId": "end_session_api_v1_sync_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "End a session (the group is restored)",
+        "tags": [
+          "sync"
+        ]
+      },
+      "get": {
+        "operationId": "get_session_api_v1_sync_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "One tuning session",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/ab": {
+      "post": {
+        "operationId": "ab_api_v1_sync_sessions__session_id__ab_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "A-B listening: solo A",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/apply": {
+      "post": {
+        "operationId": "apply_api_v1_sync_sessions__session_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Write the proposal (or rows); the session goes on as the manual editor",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/capture-link": {
+      "post": {
+        "description": "The link carries a short-lived, unguessable token for this session only; it allows reading the capture state and uploading a recording, nothing else. A new link revokes the previous one; the token is revoked when the session ends.",
+        "operationId": "capture_link_api_v1_sync_sessions__session_id__capture_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "A link (and QR) to the phone capture page of this measurement",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/delays/{member}": {
+      "put": {
+        "operationId": "session_delay_api_v1_sync_sessions__session_id__delays__member__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member",
+            "required": true,
+            "schema": {
+              "title": "Member",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberDelayIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Write one member's delay live (manual tuning)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/finish": {
+      "post": {
+        "operationId": "finish_api_v1_sync_sessions__session_id__finish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Finish: keep the delays, restore the group, end the session as done",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/proposal": {
+      "get": {
+        "operationId": "proposal_api_v1_sync_sessions__session_id__proposal_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "The current proposal (read-only)",
+        "tags": [
+          "sync"
+        ]
+      },
+      "post": {
+        "operationId": "compute_proposal_api_v1_sync_sessions__session_id__proposal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Compute the proposal from the measurements so far",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/recordings": {
+      "post": {
+        "operationId": "upload_recording_api_v1_sync_sessions__session_id__recordings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Music Assistant player id of the member that played.",
+            "in": "query",
+            "name": "member",
+            "required": true,
+            "schema": {
+              "description": "Music Assistant player id of the member that played.",
+              "title": "Member",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Capture clock at the first sample, in seconds.",
+            "in": "query",
+            "name": "start_time_s",
+            "required": true,
+            "schema": {
+              "description": "Capture clock at the first sample, in seconds.",
+              "title": "Start Time S",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Samples per second.",
+            "in": "query",
+            "name": "sample_rate",
+            "required": true,
+            "schema": {
+              "description": "Samples per second.",
+              "title": "Sample Rate",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Mono int16 little-endian PCM, at most 2 MB.",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeasurementOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Upload one member's recording",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/reference": {
+      "post": {
+        "operationId": "set_reference_api_v1_sync_sessions__session_id__reference_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferenceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Pick the reference member",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/reset": {
+      "post": {
+        "operationId": "reset_api_v1_sync_sessions__session_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Put back every delay this session wrote",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/sequence": {
+      "post": {
+        "operationId": "start_sequence_api_v1_sync_sessions__session_id__sequence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Play the sequence for the phone: every member alone in turn",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/signal": {
+      "post": {
+        "description": "start: queue the click track on the group (409 group_playing while it plays anything else; again while it plays starts it over). stop: stop whatever the group plays. stop_clicker: stop the group only while it plays this session's click track.",
+        "operationId": "session_signal_api_v1_sync_sessions__session_id__signal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Start the clicker, stop the group, or stop only the clicker",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/skip": {
+      "post": {
+        "operationId": "skip_api_v1_sync_sessions__session_id__skip_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Skip measuring a member",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/solo": {
+      "post": {
+        "description": "Mutes every other member; 409 clicker_stopped while the clicker does not play, 409 sync_mute_unsupported (with member) when a member's player cannot be muted.",
+        "operationId": "solo_api_v1_sync_sessions__session_id__solo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoloIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Hear one member (null: all)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/volumes/{member}": {
+      "put": {
+        "operationId": "session_volume_api_v1_sync_sessions__session_id__volumes__member__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member",
+            "required": true,
+            "schema": {
+              "title": "Member",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberVolumeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Set one member's volume",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/signal/{token}.wav": {
+      "get": {
+        "operationId": "signal_api_v1_sync_signal__token__wav_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Click track for a running session (public)",
+        "tags": [
+          "sync"
         ]
       }
     },

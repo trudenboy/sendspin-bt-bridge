@@ -4,4 +4,4 @@
  * prefix, so a route missing here makes the app treat its own page as the
  * base path. A unit test checks the router against this list.
  */
-export const APP_SEGMENTS = ['groups', 'config', 'settings', 'diagnostics', 'login', 'devices', 'ma', 'dashboard'] as const
+export const APP_SEGMENTS = ['groups', 'config', 'settings', 'diagnostics', 'login', 'devices', 'ma', 'dashboard', 'sync'] as const

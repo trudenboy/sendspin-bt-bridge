@@ -1,0 +1,16 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.worklet.tsbuildinfo",
+    // AudioWorkletGlobalScope is not a DOM scope: ES + WebWorker (MessagePort, MessageEvent),
+    // with the worklet globals declared in src/sync/audioworklet.d.ts.
+    "lib": ["ES2023", "WebWorker"],
+    "types": [],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/sync/sync-capture.worklet.ts", "src/sync/audioworklet.d.ts"]
+}

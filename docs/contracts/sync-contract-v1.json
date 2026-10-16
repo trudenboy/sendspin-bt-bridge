@@ -1,0 +1,1296 @@
+{
+  "$defs": {
+    "AbIn": {
+      "properties": {
+        "a": {
+          "title": "A",
+          "type": "string"
+        },
+        "b": {
+          "title": "B",
+          "type": "string"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ],
+      "title": "AbIn",
+      "type": "object"
+    },
+    "ApplyIn": {
+      "properties": {
+        "rows": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "maximum": 5000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Delays to write instead of the proposal.",
+          "title": "Rows"
+        }
+      },
+      "title": "ApplyIn",
+      "type": "object"
+    },
+    "CaptureIn": {
+      "properties": {
+        "kind": {
+          "default": "device",
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "CaptureIn",
+      "type": "object"
+    },
+    "CaptureLinkIn": {
+      "properties": {
+        "lang": {
+          "anyOf": [
+            {
+              "enum": [
+                "en",
+                "ru"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The page's language (the UI's).",
+          "title": "Lang"
+        }
+      },
+      "title": "CaptureLinkIn",
+      "type": "object"
+    },
+    "CaptureLinkOut": {
+      "properties": {
+        "expires_in_s": {
+          "title": "Expires In S",
+          "type": "number"
+        },
+        "http_url": {
+          "description": "The same page over plain HTTP (the phone's own recorder).",
+          "title": "Http Url",
+          "type": "string"
+        },
+        "secure": {
+          "description": "url is the HTTPS one.",
+          "title": "Secure",
+          "type": "boolean"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        },
+        "url": {
+          "description": "The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP.",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "http_url",
+        "secure",
+        "token",
+        "expires_in_s"
+      ],
+      "title": "CaptureLinkOut",
+      "type": "object"
+    },
+    "CaptureMemberOut": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "ok",
+                "not_heard",
+                "unstable",
+                "skipped"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "This member's last measurement, if any.",
+          "title": "Status"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "CaptureMemberOut",
+      "type": "object"
+    },
+    "CaptureResultOut": {
+      "properties": {
+        "results": {
+          "items": {
+            "$ref": "#/$defs/MeasurementOut"
+          },
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "results"
+      ],
+      "title": "CaptureResultOut",
+      "type": "object"
+    },
+    "CaptureStartIn": {
+      "properties": {
+        "mode": {
+          "description": "live: the page records with the browser's microphone; recorder: the phone's own recorder, started by hand (a longer lead-in).",
+          "enum": [
+            "live",
+            "recorder"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "CaptureStartIn",
+      "type": "object"
+    },
+    "CaptureStateOut": {
+      "description": "What the phone page shows: no delays, no session id, nothing to change.",
+      "properties": {
+        "clicks_playing": {
+          "title": "Clicks Playing",
+          "type": "boolean"
+        },
+        "group": {
+          "title": "Group",
+          "type": "string"
+        },
+        "measuring": {
+          "description": "The session still takes recordings (not tuning by ear yet).",
+          "title": "Measuring",
+          "type": "boolean"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/CaptureMemberOut"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "point": {
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Point",
+          "type": "string"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SequenceOut"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "group",
+        "point",
+        "measuring",
+        "clicks_playing",
+        "members",
+        "sequence"
+      ],
+      "title": "CaptureStateOut",
+      "type": "object"
+    },
+    "DelaysIn": {
+      "properties": {
+        "delays": {
+          "additionalProperties": {
+            "maximum": 5000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        }
+      },
+      "required": [
+        "delays"
+      ],
+      "title": "DelaysIn",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "description": "Stable `code` of the problem responses (RFC 9457) the sync endpoints return.",
+      "enum": [
+        "clicker_stopped",
+        "group_playing",
+        "ma_error",
+        "ma_forbidden",
+        "ma_unavailable",
+        "member_gone",
+        "no_measurement",
+        "no_sequence",
+        "not_adjustable",
+        "not_found",
+        "recording_invalid",
+        "restore_pending",
+        "sequence_running",
+        "session_active",
+        "session_expired",
+        "session_state",
+        "sync_mute_unsupported",
+        "upload_running"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "MeasurementOut": {
+      "properties": {
+        "clicks": {
+          "default": 0,
+          "title": "Clicks",
+          "type": "integer"
+        },
+        "confidence": {
+          "default": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "member": {
+          "title": "Member",
+          "type": "string"
+        },
+        "phase_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Phase Ms"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "spread_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spread Ms"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "not_heard",
+            "unstable",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "status",
+        "phase_ms",
+        "confidence",
+        "clicks",
+        "spread_ms",
+        "reason"
+      ],
+      "title": "MeasurementOut",
+      "type": "object"
+    },
+    "MemberDelayIn": {
+      "properties": {
+        "ms": {
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms"
+      ],
+      "title": "MemberDelayIn",
+      "type": "object"
+    },
+    "MemberVolumeIn": {
+      "properties": {
+        "level": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Level",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "level"
+      ],
+      "title": "MemberVolumeIn",
+      "type": "object"
+    },
+    "PendingRestoreOut": {
+      "description": "A restore left from before a bridge restart that has not succeeded yet.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Code of the last failed attempt; null before the first.",
+          "title": "Error"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "group_id",
+        "error"
+      ],
+      "title": "PendingRestoreOut",
+      "type": "object"
+    },
+    "ProfileApplyOut": {
+      "properties": {
+        "applied": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Applied",
+          "type": "object"
+        },
+        "skipped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skipped",
+          "type": "array"
+        }
+      },
+      "required": [
+        "applied",
+        "skipped"
+      ],
+      "title": "ProfileApplyOut",
+      "type": "object"
+    },
+    "ProfileCreate": {
+      "properties": {
+        "delays": {
+          "additionalProperties": {
+            "maximum": 5000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "device",
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "name",
+        "delays"
+      ],
+      "title": "ProfileCreate",
+      "type": "object"
+    },
+    "ProfileOut": {
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "delays": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Delays",
+          "type": "object"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "group_id",
+        "kind",
+        "delays",
+        "created_at",
+        "notes"
+      ],
+      "title": "ProfileOut",
+      "type": "object"
+    },
+    "ProfilePatch": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        }
+      },
+      "title": "ProfilePatch",
+      "type": "object"
+    },
+    "ProposalOut": {
+      "properties": {
+        "predicted_spread_ms": {
+          "title": "Predicted Spread Ms",
+          "type": "number"
+        },
+        "reference": {
+          "title": "Reference",
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/ProposalRowOut"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "unverified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unverified",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reference",
+        "rows",
+        "predicted_spread_ms",
+        "unverified",
+        "warnings"
+      ],
+      "title": "ProposalOut",
+      "type": "object"
+    },
+    "ProposalRowOut": {
+      "properties": {
+        "after_ms": {
+          "title": "After Ms",
+          "type": "integer"
+        },
+        "before_ms": {
+          "title": "Before Ms",
+          "type": "integer"
+        },
+        "clamped": {
+          "title": "Clamped",
+          "type": "boolean"
+        },
+        "delta_ms": {
+          "title": "Delta Ms",
+          "type": "integer"
+        },
+        "member": {
+          "title": "Member",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "before_ms",
+        "after_ms",
+        "delta_ms",
+        "clamped"
+      ],
+      "title": "ProposalRowOut",
+      "type": "object"
+    },
+    "ReferenceIn": {
+      "properties": {
+        "member": {
+          "title": "Member",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member"
+      ],
+      "title": "ReferenceIn",
+      "type": "object"
+    },
+    "SequenceIn": {
+      "properties": {
+        "members": {
+          "description": "The members to play alone, in order.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Members",
+          "type": "array"
+        }
+      },
+      "required": [
+        "members"
+      ],
+      "title": "SequenceIn",
+      "type": "object"
+    },
+    "SequenceOut": {
+      "description": "The phone capture's sequence: every member alone in turn while the phone records once.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "error_member": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error Member"
+        },
+        "gap_s": {
+          "title": "Gap S",
+          "type": "number"
+        },
+        "index": {
+          "description": "The member playing alone (0-based) in solo; -1 before the first.",
+          "title": "Index",
+          "type": "integer"
+        },
+        "lead_s": {
+          "title": "Lead S",
+          "type": "number"
+        },
+        "member": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The member playing alone right now (solo only).",
+          "title": "Member"
+        },
+        "members": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "phase": {
+          "enum": [
+            "starting",
+            "lead",
+            "solo",
+            "gap",
+            "done",
+            "failed"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "solo_s": {
+          "title": "Solo S",
+          "type": "number"
+        },
+        "uploaded": {
+          "description": "A recording of this sequence was measured.",
+          "title": "Uploaded",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "members",
+        "phase",
+        "index",
+        "member",
+        "error",
+        "error_member",
+        "solo_s",
+        "gap_s",
+        "lead_s",
+        "uploaded"
+      ],
+      "title": "SequenceOut",
+      "type": "object"
+    },
+    "SessionCreate": {
+      "properties": {
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "manual",
+            "semi"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "point": {
+          "default": "device",
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Point",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "mode"
+      ],
+      "title": "SessionCreate",
+      "type": "object"
+    },
+    "SignalIn": {
+      "properties": {
+        "action": {
+          "description": "start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker.",
+          "enum": [
+            "start",
+            "stop",
+            "stop_clicker"
+          ],
+          "title": "Action",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "SignalIn",
+      "type": "object"
+    },
+    "SkipIn": {
+      "properties": {
+        "member": {
+          "title": "Member",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member"
+      ],
+      "title": "SkipIn",
+      "type": "object"
+    },
+    "SoloIn": {
+      "properties": {
+        "member": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Member"
+        }
+      },
+      "required": [
+        "member"
+      ],
+      "title": "SoloIn",
+      "type": "object"
+    },
+    "SyncGroup": {
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error code when the group's members could not be read (members is then empty).",
+          "title": "Error"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/SyncMember"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "restore_pending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingRestoreOut"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set while the group still has to be restored after a restart."
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The session tuning this group, if any.",
+          "title": "Session Id"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "members",
+        "session_id",
+        "restore_pending",
+        "error"
+      ],
+      "title": "SyncGroup",
+      "type": "object"
+    },
+    "SyncMember": {
+      "properties": {
+        "adjustable": {
+          "title": "Adjustable",
+          "type": "boolean"
+        },
+        "available": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Music Assistant lists the player as available.",
+          "title": "Available"
+        },
+        "can_mute": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The player can be muted (hearing one speaker alone mutes all the others).",
+          "title": "Can Mute"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Id"
+        },
+        "delay_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delay Ms"
+        },
+        "last_measured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Measured At"
+        },
+        "ma_player_id": {
+          "title": "Ma Player Id",
+          "type": "string"
+        },
+        "muted": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The player is muted right now.",
+          "title": "Muted"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "bridge",
+            "sendspin",
+            "other"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The player's volume (0-100) when the group was read.",
+          "title": "Volume"
+        }
+      },
+      "required": [
+        "ma_player_id",
+        "name",
+        "origin",
+        "adjustable",
+        "client_id",
+        "delay_ms",
+        "last_measured_at",
+        "can_mute",
+        "available",
+        "volume",
+        "muted"
+      ],
+      "title": "SyncMember",
+      "type": "object"
+    },
+    "SyncSessionOut": {
+      "description": "The session resource; also the payload of ``sync`` events.",
+      "properties": {
+        "clicker_left_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds of the click track left while it plays (from its last start); null otherwise.",
+          "title": "Clicker Left S"
+        },
+        "clicker_playing": {
+          "description": "The group plays this session's click track (as last read).",
+          "title": "Clicker Playing",
+          "type": "boolean"
+        },
+        "clicker_starts": {
+          "description": "Clicker starts in this session; recordings from two playbacks are never mixed.",
+          "title": "Clicker Starts",
+          "type": "integer"
+        },
+        "departed": {
+          "description": "Members that left the group mid-session.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Departed",
+          "type": "array"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "group_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The group's playback state as last read (playing, idle, paused); null when unknown.",
+          "title": "Group State"
+        },
+        "history": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "History",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "measurements": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MeasurementOut"
+          },
+          "title": "Measurements",
+          "type": "object"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/SyncMember"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "manual",
+            "semi"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "muted": {
+          "description": "Members this session muted; they are unmuted when it ends.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Muted",
+          "type": "array"
+        },
+        "point": {
+          "enum": [
+            "device",
+            "position"
+          ],
+          "title": "Point",
+          "type": "string"
+        },
+        "proposal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProposalOut"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reference"
+        },
+        "restore_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Code of the last failed restore attempt.",
+          "title": "Restore Error"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SequenceOut"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The phone capture's sequence, once one was started."
+        },
+        "soloed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Soloed"
+        },
+        "state": {
+          "enum": [
+            "created",
+            "measuring",
+            "proposed",
+            "applying",
+            "tuning",
+            "restoring",
+            "done",
+            "cancelled",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "volumes": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": "Each member's volume as last read or set.",
+          "title": "Volumes",
+          "type": "object"
+        },
+        "volumes_before": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Members whose volume this session changed, with the volume from before; put back at the end.",
+          "title": "Volumes Before",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "group_id",
+        "mode",
+        "point",
+        "state",
+        "members",
+        "departed",
+        "measurements",
+        "proposal",
+        "history",
+        "error",
+        "restore_error",
+        "group_state",
+        "clicker_playing",
+        "clicker_starts",
+        "volumes",
+        "volumes_before",
+        "clicker_left_s",
+        "muted",
+        "soloed",
+        "reference",
+        "sequence"
+      ],
+      "title": "SyncSessionOut",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/trudenboy/sendspin-bt-bridge/docs/contracts/sync-contract-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Resources of /api/v1/sync/*; the payload of `sync` events is SyncSessionOut.",
+  "title": "sync-contract v1"
+}

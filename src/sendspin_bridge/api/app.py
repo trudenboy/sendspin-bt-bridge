@@ -25,6 +25,7 @@ from sendspin_bridge.api.routers import (
     diagnostics,
     ha_integration,
     music_assistant,
+    sync,
 )
 from sendspin_bridge.api.routers import config as config_router
 from sendspin_bridge.api.spa import mount_spa
@@ -62,6 +63,8 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
 
     v1 = APIRouter(prefix=API_PREFIX)
     v1.include_router(bridge.public)
+    v1.include_router(sync.public)
+    v1.include_router(sync.capture)
     v1.include_router(auth.router)
     v1.include_router(audio.router)
     v1.include_router(bridge.router)
@@ -71,10 +74,12 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
     v1.include_router(ha_integration.router)
     v1.include_router(config_router.router)
     v1.include_router(diagnostics.router)
+    v1.include_router(sync.router)
     v1.include_router(events_router)
     app.include_router(v1)
     app.include_router(compat_ha.router)
     app.include_router(compat_ha.protected)
+    app.include_router(sync.page)
     if serve_spa:
         mount_spa(app, spa_dir)
 
@@ -97,8 +102,12 @@ def create_app(*, config: dict | None = None, spa_dir: Path | None = None, serve
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI):
     """The event hub lives as long as the server, on the server's loop."""
+    from sendspin_bridge.sync_tuning import session_store
+
     app.state.event_hub.start()
+    session_store.attach_event_hub(app.state.event_hub)
     try:
         yield
     finally:
+        session_store.attach_event_hub(None)
         await app.state.event_hub.stop()

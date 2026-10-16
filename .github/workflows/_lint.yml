@@ -62,7 +62,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Mypy
-        run: uv run mypy --config-file pyproject.toml src/sendspin_bridge/
+        run: uv run mypy --config-file pyproject.toml src/sendspin_bridge/ src/sendspin_sync/
 
       - name: Lint CHANGELOG.md (Keep a Changelog discipline)
         # Rule set: CONTRIBUTING.md § Changelog Discipline (R1–R10).

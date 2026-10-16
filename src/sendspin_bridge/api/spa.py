@@ -27,6 +27,44 @@ def find_spa_dir() -> Path | None:
     return None
 
 
+_MAX_SEGMENTS = 16
+
+
+def _file_in(root: Path, resolved_root: Path, relative: str) -> Path | None:
+    try:
+        candidate = (root / relative).resolve()
+        if candidate.is_file() and resolved_root in candidate.parents:
+            return candidate
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _find_file(root: Path, path: str) -> Path | None:
+    """The SPA file a request names, or ``None`` (then the page itself is served).
+
+    Asset URLs are relative (``./assets/...``, for HA ingress), so a reload of a nested page
+    (``/sync/<group>``) asks for ``sync/assets/...``. Besides the path itself, at most two
+    more lookups: from its first ``assets`` segment, and its last segment alone (favicon).
+    Deeply nested paths are never app files: no lookup at all. The handler runs on the
+    bridge loop, unauthenticated, so the work stays constant.
+    """
+    parts = path.split("/")
+    if len(parts) > _MAX_SEGMENTS:
+        return None
+    resolved_root = root.resolve()
+    tries = [path]
+    if "assets" in parts[1:]:
+        tries.append("/".join(parts[parts.index("assets", 1) :]))
+    if len(parts) > 1:
+        tries.append(parts[-1])
+    for relative in tries:
+        found = _file_in(root, resolved_root, relative)
+        if found is not None:
+            return found
+    return None
+
+
 def mount_spa(app: FastAPI, spa_dir: Path | None = None) -> None:
     root = spa_dir if spa_dir is not None else find_spa_dir()
 
@@ -37,8 +75,8 @@ def mount_spa(app: FastAPI, spa_dir: Path | None = None) -> None:
         if root is None:
             return HTMLResponse(_MISSING_PAGE)
         if path:
-            candidate = (root / path).resolve()
-            if candidate.is_file() and root.resolve() in candidate.parents:
+            candidate = _find_file(root, path)
+            if candidate is not None:
                 headers = {}
                 if candidate.parent.name == "assets":
                     # Vite puts a content hash in every asset file name.

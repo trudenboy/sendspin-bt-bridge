@@ -58,6 +58,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _PA_FALLBACK_SINK = "sendspin_fallback"
+# Supervisor/Docker allow ~10 s to stop; the snapshot file restores the group on the next boot anyway.
+_SYNC_SHUTDOWN_TIMEOUT_S = 3.0
 
 
 def _resolve_config_dir() -> Path:
@@ -462,6 +464,13 @@ class BridgeOrchestrator:
         self.lifecycle_state.publish_clients(clients)
         server = await serve_api(factory(), port)
         self._api_server = server
+        if app_factory is None:  # the real bridge (not a test app): the phone capture page over HTTPS too
+            try:
+                from sendspin_bridge.sync_tuning.capture_https import serve_capture_https
+
+                await serve_capture_https()
+            except Exception:
+                logger.warning("Sync capture HTTPS server could not start", exc_info=True)
         return server
 
     async def graceful_shutdown(
@@ -518,11 +527,17 @@ class BridgeOrchestrator:
             client.running = False
             await client.stop_sendspin()
 
+        await self._shutdown_sync_tuning()
+
         if sink_monitor is not None:
             await sink_monitor.stop()
         if hci_monitor is not None:
             await hci_monitor.stop()
 
+        with contextlib.suppress(Exception):
+            from sendspin_bridge.sync_tuning.capture_https import stop_capture_https
+
+            await stop_capture_https()
         api_server = getattr(self, "_api_server", None)
         if api_server is not None:
             api_server.should_exit = True
@@ -560,6 +575,69 @@ class BridgeOrchestrator:
 
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, _signal_handler)
+
+    def load_sync_tuning(self) -> None:
+        """Register sync-tuning restores left from before a restart, so a session the API creates
+        before Music Assistant is up cannot overwrite them. File I/O only; runs before the web server."""
+        from sendspin_bridge.sync_tuning import session_store
+
+        try:
+            session_store.get_store().load_persisted()
+        except Exception:
+            logger.exception("Loading group sync-tuning snapshots failed")
+
+    async def start_sync_tuning(self) -> None:
+        """Restore what a group sync-tuning session left behind before a restart.
+
+        Runs on a daemon thread and is not awaited: the store talks to Music Assistant with
+        blocking calls that need this loop, and retries on its own while MA is unreachable.
+        """
+        from sendspin_bridge.sync_tuning import session_store
+
+        try:
+            store = session_store.get_store()
+        except Exception:
+            logger.exception("Restoring group sync-tuning sessions failed")
+            return
+
+        def _restore() -> None:
+            try:
+                store.restore_persisted()
+            except Exception:
+                logger.exception("Restoring group sync-tuning sessions failed")
+
+        session_store.run_in_background(_restore, "sync-restore")
+
+    async def _shutdown_sync_tuning(self) -> None:
+        """End live sync-tuning sessions (restore their groups), bounded so shutdown never hangs.
+
+        Runs on a daemon thread, not the executor: the executor's threads are joined at
+        interpreter exit, so an abandoned attempt there would still hold the process.
+        Then closes the shared Music Assistant connection the session-less sync requests use.
+        """
+        from sendspin_bridge.sync_tuning import ma_api, session_store
+
+        loop = asyncio.get_running_loop()
+        finished = asyncio.Event()
+
+        def _run() -> None:
+            try:
+                session_store.shutdown_store()
+            except Exception:
+                logger.warning("Ending group sync-tuning sessions at shutdown failed", exc_info=True)
+            finally:
+                with contextlib.suppress(RuntimeError):  # the loop may be gone already
+                    loop.call_soon_threadsafe(finished.set)
+
+        session_store.run_in_background(_run, "sync-shutdown")
+        try:
+            await asyncio.wait_for(finished.wait(), timeout=_SYNC_SHUTDOWN_TIMEOUT_S)
+        except TimeoutError:
+            logger.warning("Group sync-tuning sessions did not end in time; the next start restores them")
+        try:
+            await asyncio.wait_for(ma_api.aclose_shared_ma_api(), timeout=_SYNC_SHUTDOWN_TIMEOUT_S)
+        except Exception:
+            logger.debug("Closing the shared Music Assistant connection failed", exc_info=True)
 
     async def initialize_ma_integration(
         self,
@@ -1041,6 +1119,7 @@ class BridgeOrchestrator:
             startup_phase = "web"
             loop = asyncio.get_running_loop()
             await self.configure_executor(len(clients))
+            self.load_sync_tuning()
             await self.start_web_server(clients, app_factory=app_factory)
             startup_phase = "signals"
             self.install_signal_handlers(
@@ -1053,6 +1132,7 @@ class BridgeOrchestrator:
             ma_bootstrap = await self.initialize_ma_integration(
                 bootstrap.config, clients, server_host=bootstrap.server_host
             )
+            await self.start_sync_tuning()
             # Non-blocking cross-bridge duplicate device check
             await self._run_duplicate_device_check(bootstrap.config, loop)
         except Exception as exc:

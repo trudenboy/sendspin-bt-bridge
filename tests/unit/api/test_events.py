@@ -177,3 +177,8 @@ def test_websocket_without_credentials_is_refused_when_auth_is_on():
     ):
         pass
     assert exc.value.code == 4401
+
+
+def test_sync_is_a_known_default_event_type():
+    assert "sync" in events.ALL_TYPES and "sync" in events.DEFAULT_TYPES
+    assert events._parse_types("sync") == frozenset({"sync"})

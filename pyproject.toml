@@ -56,7 +56,7 @@ path = "VERSION"
 pattern = "^(?P<version>.+)$"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sendspin_bridge"]
+packages = ["src/sendspin_bridge", "src/sendspin_sync"]
 # Hatchling auto-includes non-.py files inside the package tree
 # (config/schema.json, and the built SPA under spa/ when present).
 
@@ -115,7 +115,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["sendspin_bridge"]
+known-first-party = ["sendspin_bridge", "sendspin_sync"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI declares dependencies and parameters as argument defaults.
@@ -123,6 +123,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body", "f
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/translate_landing.py" = ["RUF001"]  # Cyrillic strings are intentional
+"src/sendspin_bridge/sync_tuning/capture_page.py" = ["RUF001"]  # the phone page's Russian texts
 # FastAPI resolves annotations at runtime (dependencies, bodies, responses),
 # so type-only imports would break the routers.
 "src/sendspin_bridge/api/**" = ["TC001", "TC002", "TC003"]

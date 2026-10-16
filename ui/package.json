@@ -23,6 +23,7 @@
     "lucide-vue-next": "^1.0.0",
     "openapi-fetch": "0.17.0",
     "pinia": "^3.0.4",
+    "qrcode-generator": "2.0.4",
     "tailwindcss": "^4.2.2",
     "vue": "^3.5.30",
     "vue-i18n": "^11.3.0",

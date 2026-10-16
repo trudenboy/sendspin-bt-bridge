@@ -3,6 +3,7 @@ import { openExternal } from '@/utils/safeUrl'
 import { speakerName } from '@/utils/speakerName'
 import { onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useMaStore } from '@/stores/ma'
 import { useBridgeStore } from '@/stores/bridge'
 import { SbCard, SbBadge, SbButton, SbEmptyState } from '@/kit'
@@ -12,6 +13,11 @@ import MaNowPlaying from './MaNowPlaying.vue'
 const { t } = useI18n()
 const ma = useMaStore()
 const bridge = useBridgeStore()
+const router = useRouter()
+
+function openSync(groupId: string) {
+  void router.push({ name: 'sync', params: { groupId } })
+}
 
 /** Bridge players are named "Speaker @ bridge"; the group already says where it is. */
 const memberName = (name: string | null | undefined, id: string) => speakerName(name, id)
@@ -55,6 +61,9 @@ onUnmounted(() => pending && clearTimeout(pending))
         <div class="flex items-center gap-3 px-4 pt-3">
           <Users class="size-5 shrink-0 text-text-secondary" aria-hidden="true" />
           <h2 class="min-w-0 flex-1 truncate font-medium text-text-primary">{{ group.name }}</h2>
+          <SbButton variant="outline" size="sm" :aria-label="`${t('sync.open')}: ${group.name}`" @click="openSync(group.id)">
+            {{ t('sync.open') }}
+          </SbButton>
           <button
             v-if="bridge.bridge?.ma_web_url"
             type="button"

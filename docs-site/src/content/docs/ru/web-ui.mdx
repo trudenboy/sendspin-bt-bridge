@@ -139,6 +139,10 @@ import { Aside } from '@astrojs/starlight/components';
 
 **Release** здесь намеренно временный: bridge перестаёт активно перехватывать колонку, чтобы ею мог воспользоваться телефон или ПК. **Disable** исключает устройство из bridge startup, а **Unpair** меняет Bluetooth trust state на уровне хоста.
 
+## Синхронизация группы
+
+Экран **Sync** (`/sync/<id группы>`) выравнивает колонки sync-группы Music Assistant на слух или по микрофону телефона и сохраняет результаты в профили. Он открывается кнопкой **Sync** у группы на вкладке Music Assistant или ссылкой **Tune the whole group** в разделе таймингов устройства. Для измерения микрофону нужен HTTPS или `localhost`. Подробнее: [Синхронизация группы](/sendspin-bt-bridge/ru/group-sync-tuning/).
+
 ## Аппаратные кнопки колонки (MPRIS)
 
 Bridge регистрирует per-device MPRIS-плеер на системной D-Bus и отдаёт его BlueZ через `Media1.RegisterPlayer`. Получается двусторонняя связь между физическими кнопками колонки и Music Assistant:
