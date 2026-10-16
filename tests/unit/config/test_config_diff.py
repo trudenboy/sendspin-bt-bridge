@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from sendspin_bridge.services.infrastructure.config_diff import ActionKind, diff_configs
 from tests.support.config_v6 import v6_players
 
@@ -478,3 +480,16 @@ def test_action_summary_is_json_friendly():
         "label": act.label,
         "fields": ["static_delay_ms"],
     }
+
+
+@pytest.mark.parametrize(
+    ("key", "old_value", "new_value"), [("COMPENSATE_OUTPUT_LATENCY", True, False), ("PLAYOUT_DIAG", False, True)]
+)
+def test_playout_settings_warm_restart_all_daemons(key, old_value, new_value):
+    old = _config([_device("AA:BB:CC:DD:EE:FF")], **{key: old_value})
+    new = _config([_device("AA:BB:CC:DD:EE:FF")], **{key: new_value})
+
+    (act,) = diff_configs(old, new)
+
+    assert act.kind is ActionKind.GLOBAL_RESTART
+    assert act.fields == [key]

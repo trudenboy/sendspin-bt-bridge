@@ -196,3 +196,59 @@ def test_env_flags(monkeypatch, value, default, expected):
         monkeypatch.setenv("SENDSPIN_TEST_FLAG", value)
 
     assert _env_flag("SENDSPIN_TEST_FLAG", default=default) is expected
+
+
+async def _daemon_args_for(monkeypatch, params: dict):
+    from types import SimpleNamespace
+
+    import sendspin_bridge.services.ipc.bridge_daemon as bridge_daemon_mod
+    from sendspin_bridge.services.ipc.daemon_process import _run
+
+    captured: dict = {}
+
+    class _Stop(BaseException):
+        pass
+
+    def _daemon(*_args, **kwargs):
+        captured.update(kwargs)
+        raise _Stop
+
+    monkeypatch.setattr(bridge_daemon_mod, "DaemonArgs", lambda **kw: SimpleNamespace(**kw))
+    monkeypatch.setattr(bridge_daemon_mod, "BridgeDaemon", _daemon)
+    with pytest.raises(_Stop):
+        await _run({"player_name": "ENEBY Portable", "client_id": "eneby", "listen_port": 8933, **params})
+    return captured["args"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("compensate", "diag"), [(True, False), (False, True)])
+async def test_the_configured_playout_settings_reach_the_daemon(monkeypatch, compensate, diag):
+    monkeypatch.delenv("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", raising=False)
+    monkeypatch.delenv("SENDSPIN_PLAYOUT_DIAG", raising=False)
+
+    args = await _daemon_args_for(monkeypatch, {"compensate_output_latency": compensate, "playout_diag": diag})
+
+    assert args.compensate_output_latency is compensate
+    assert args.playout_diag is diag
+
+
+@pytest.mark.asyncio
+async def test_env_vars_override_the_configured_playout_settings(monkeypatch):
+    monkeypatch.setenv("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", "0")
+    monkeypatch.setenv("SENDSPIN_PLAYOUT_DIAG", "1")
+
+    args = await _daemon_args_for(monkeypatch, {"compensate_output_latency": True, "playout_diag": False})
+
+    assert args.compensate_output_latency is False
+    assert args.playout_diag is True
+
+
+@pytest.mark.asyncio
+async def test_a_parent_that_sends_no_playout_settings_gets_the_defaults(monkeypatch):
+    monkeypatch.delenv("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", raising=False)
+    monkeypatch.delenv("SENDSPIN_PLAYOUT_DIAG", raising=False)
+
+    args = await _daemon_args_for(monkeypatch, {})
+
+    assert args.compensate_output_latency is True
+    assert args.playout_diag is False

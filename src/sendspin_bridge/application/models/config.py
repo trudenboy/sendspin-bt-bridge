@@ -348,6 +348,14 @@ class BridgeConfig(BaseModel):
     """
     Disable PulseAudio module-rescue-streams correction on BT reconnect.
     """
+    COMPENSATE_OUTPUT_LATENCY: bool | None = True
+    """
+    Take the PulseAudio buffer's latency out of the playback schedule, so audio leaves the audio server at its scheduled time whatever PULSE_LATENCY_MSEC is. Off restores the timing before 3.1.0-beta.7, where speakers played behind by that latency. The SENDSPIN_COMPENSATE_OUTPUT_LATENCY environment variable overrides it.
+    """
+    PLAYOUT_DIAG: bool | None = False
+    """
+    Playback clock diagnostics: let the audio sink provide its own clock so the log's Clock diag line also reports the sink's audio clock rate. Playback timing is unchanged. The SENDSPIN_PLAYOUT_DIAG environment variable overrides it.
+    """
     PULSE_SINK_RESET_ON_START: bool | None = False
     """
     Suspend and resume each local audio output once before its player first starts, to wake an output that came up stuck.

@@ -1970,6 +1970,7 @@ class SendspinClient:
                     return
                 own_server = await self._resolve_own_server()
                 self._seen_server_delay_seq = 0
+                spawn_config = load_config()
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -1992,9 +1993,11 @@ class SendspinClient:
                             "config_schema_version": CONFIG_SCHEMA_VERSION,
                             "bt_product_name": bt_product_name,
                             "bt_manufacturer": bt_manufacturer,
-                            "require_pairing": bool(load_config().get("SENDSPIN_PAIRING", False)),
+                            "require_pairing": bool(spawn_config.get("SENDSPIN_PAIRING", False)),
                             "own_server": own_server.to_params() if own_server else None,
-                            "own_server_only": bool(load_config().get("SENDSPIN_OWN_SERVER_ONLY", True)),
+                            "own_server_only": bool(spawn_config.get("SENDSPIN_OWN_SERVER_ONLY", True)),
+                            "compensate_output_latency": bool(spawn_config.get("COMPENSATE_OUTPUT_LATENCY", True)),
+                            "playout_diag": bool(spawn_config.get("PLAYOUT_DIAG", False)),
                         }
                     )
                 )

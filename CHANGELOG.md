@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transport once (`BT transport …`: codec, the speaker's reported Delay or
   "absent", Volume); while playing, a `Clock diag:` line gives the system
   clock rate against the Sendspin clock (every 10 s at debug level, once a
-  minute at info). `SENDSPIN_PLAYOUT_DIAG=1` adds the rate of the sink's own
-  audio clock.
+  minute at info). Settings → Audio → **Playback clock diagnostics**
+  (`PLAYOUT_DIAG`, advanced) adds the rate of the sink's own audio clock.
 
 ### Fixed
 
@@ -29,8 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whatever `PULSE_LATENCY_MSEC` is, and declares a lead time to Music
   Assistant that covers the buffer. Delays tuned before this release absorbed
   the old offset and need tuning again (lower by the `sink min` value the
-  new start line shows). `SENDSPIN_COMPENSATE_OUTPUT_LATENCY=0` restores the
-  old timing.
+  new start line shows). Settings → Audio → **Compensate the audio buffer
+  latency** (`COMPENSATE_OUTPUT_LATENCY`, advanced, on by default) turned off
+  restores the old timing. In Docker the `SENDSPIN_COMPENSATE_OUTPUT_LATENCY`
+  and `SENDSPIN_PLAYOUT_DIAG` environment variables override both settings.
 
 ## [3.1.0-beta.6] - 2026-10-16
 

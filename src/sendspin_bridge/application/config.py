@@ -939,6 +939,8 @@ def save_config(config: dict) -> dict:
     for bool_key in (
         "PREFER_SBC_CODEC",
         "DISABLE_PA_RESCUE_STREAMS",
+        "COMPENSATE_OUTPUT_LATENCY",
+        "PLAYOUT_DIAG",
         "PULSE_SINK_RESET_ON_START",
         "AUTH_ENABLED",
         "BRUTE_FORCE_PROTECTION",

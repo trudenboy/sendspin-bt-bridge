@@ -929,6 +929,19 @@
             "description": "Periodically check for new versions.",
             "title": "Check Updates"
           },
+          "COMPENSATE_OUTPUT_LATENCY": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": true,
+            "description": "Take the PulseAudio buffer's latency out of the playback schedule, so audio leaves the audio server at its scheduled time whatever PULSE_LATENCY_MSEC is. Off restores the timing before 3.1.0-beta.7, where speakers played behind by that latency. The SENDSPIN_COMPENSATE_OUTPUT_LATENCY environment variable overrides it.",
+            "title": "Compensate Output Latency"
+          },
           "CONFIG_SCHEMA_VERSION": {
             "anyOf": [
               {
@@ -1231,6 +1244,19 @@
             "default": true,
             "description": "Route mute commands through Music Assistant API.",
             "title": "Mute Via Ma"
+          },
+          "PLAYOUT_DIAG": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Playback clock diagnostics: let the audio sink provide its own clock so the log's Clock diag line also reports the sink's audio clock rate. Playback timing is unchanged. The SENDSPIN_PLAYOUT_DIAG environment variable overrides it.",
+            "title": "Playout Diag"
           },
           "PREFER_SBC_CODEC": {
             "anyOf": [

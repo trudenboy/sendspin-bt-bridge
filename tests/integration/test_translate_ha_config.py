@@ -901,3 +901,19 @@ def test_sync_profiles_survive_addon_restart(tmp_path):
     with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
         main()
     assert _read_json(tmp_path / "config.json")["SYNC_PROFILES"] == profiles
+
+
+def test_playout_settings_have_defaults_and_a_web_ui_choice_survives_addon_restart(tmp_path):
+    _write_json(tmp_path / "options.json", _minimal_options())
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["COMPENSATE_OUTPUT_LATENCY"] is True
+    assert cfg["PLAYOUT_DIAG"] is False
+
+    _write_json(tmp_path / "config.json", {"COMPENSATE_OUTPUT_LATENCY": False, "PLAYOUT_DIAG": True})
+    with patch("scripts.translate_ha_config._detect_adapters", return_value=[]):
+        main()
+    cfg = _read_json(tmp_path / "config.json")
+    assert cfg["COMPENSATE_OUTPUT_LATENCY"] is False
+    assert cfg["PLAYOUT_DIAG"] is True

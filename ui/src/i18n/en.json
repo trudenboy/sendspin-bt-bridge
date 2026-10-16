@@ -849,6 +849,14 @@
         "label": "Stop PulseAudio moving streams",
         "help": "Unload module-rescue-streams so a reconnecting speaker never borrows another's audio."
       },
+      "COMPENSATE_OUTPUT_LATENCY": {
+        "label": "Compensate the audio buffer latency",
+        "help": "Play on schedule whatever the PulseAudio latency is. Off restores the older timing, behind by that latency."
+      },
+      "PLAYOUT_DIAG": {
+        "label": "Playback clock diagnostics",
+        "help": "Also log the speaker sink's own clock rate in the minute-by-minute Clock diag line. Playback is unchanged."
+      },
       "PULSE_SINK_RESET_ON_START": {
         "label": "Wake audio outputs on start",
         "help": "Suspend and resume each local audio output once before its player first starts. Helps an output that comes up silent."

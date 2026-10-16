@@ -682,8 +682,11 @@ async def _run(params: dict) -> None:
         pairing_store_path=str(pairing_path),
         require_pairing=bool(params.get("require_pairing", False)),
         volume_controller="sendspin" if params.get("volume_controller") == "sendspin" else "pa",
-        compensate_output_latency=_env_flag("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", default=True),
-        playout_diag=_env_flag("SENDSPIN_PLAYOUT_DIAG", default=False),
+        # The config keys (web UI) arrive as params; the env vars override them.
+        compensate_output_latency=_env_flag(
+            "SENDSPIN_COMPENSATE_OUTPUT_LATENCY", default=bool(params.get("compensate_output_latency", True))
+        ),
+        playout_diag=_env_flag("SENDSPIN_PLAYOUT_DIAG", default=bool(params.get("playout_diag", False))),
     )
 
     status = StatusStore(

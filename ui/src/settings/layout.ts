@@ -126,6 +126,8 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'SMOOTH_RESTART', kind: 'toggle', advanced: true },
       { key: 'DISABLE_PA_RESCUE_STREAMS', kind: 'toggle', advanced: true },
       { key: 'PULSE_SINK_RESET_ON_START', kind: 'toggle', advanced: true },
+      { key: 'COMPENSATE_OUTPUT_LATENCY', kind: 'toggle', advanced: true },
+      { key: 'PLAYOUT_DIAG', kind: 'toggle', advanced: true },
     ],
     after: ['latencyAssistant'],
   },
