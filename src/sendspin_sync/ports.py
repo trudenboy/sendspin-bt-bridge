@@ -42,6 +42,11 @@ class ProfileRepository(Protocol):
 
 
 class ClickTrackHost(Protocol):
+    def prepare(self, track: Track = "measure") -> None:
+        """Block until *track* can be served (its file written); called outside the session's lock.
+        Raises ``ControlError`` (``disk_full``, ``track_unavailable``) when it cannot be written."""
+        ...
+
     def url_for(self, session_id: str, track: Track = "measure") -> str:
         """The URL Music Assistant fetches *track* from for this session (every track under the
         session's one token)."""

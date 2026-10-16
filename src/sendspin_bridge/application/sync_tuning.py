@@ -73,6 +73,8 @@ _STATUS = {
     "no_sequence": 409,
     "sequence_running": 409,
     "upload_running": 409,
+    "disk_full": 507,
+    "track_unavailable": 503,
     "not_found": 404,
 }
 
@@ -333,8 +335,17 @@ def session_delay(sid: str, member: str, ms: int) -> SyncSessionOut:
 
 
 def apply(sid: str, rows: Mapping[str, int] | None) -> SyncSessionOut:
-    """Write the proposal (or ``rows``); the session goes on as the manual editor ("tuning")."""
-    return _act(sid, lambda s: s.apply(rows))
+    """Write the proposal (or ``rows``); the session goes on as the manual editor ("tuning"), whose
+    playing clicks give way to its listening sound at once (best effort: the delays are written)."""
+
+    def act(s: SyncSession) -> None:
+        s.apply(rows)
+        try:
+            s.follow_sound()
+        except ControlError as exc:
+            logger.warning("Sync session %s: switching to the listening sound after the apply failed: %s", sid, exc)
+
+    return _act(sid, act)
 
 
 def reset(sid: str) -> SyncSessionOut:

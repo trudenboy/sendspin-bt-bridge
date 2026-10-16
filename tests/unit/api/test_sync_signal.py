@@ -72,3 +72,19 @@ def test_listening_sounds_are_served_under_the_session_token(monkeypatch, tmp_pa
     assert client.get("/api/v1/sync/signal/" + "0" * 64 + "/clicks.wav").status_code == 404
     tokens.release("s1")
     assert client.get(f"/api/v1/sync/signal/{token}/clicks.wav").status_code == 404
+
+
+def test_a_sound_file_that_cannot_be_written_is_a_problem_not_a_crash(monkeypatch):
+    from sendspin_sync.ports import ControlError
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+
+    class Full:
+        def ensure(self):
+            raise ControlError("disk_full", "No space left for the sound file")
+
+    monkeypatch.setattr(host, "tracks", {"clicks": Full()})
+    token = tokens.issue("s1")
+    resp = make_client().get(f"/api/v1/sync/signal/{token}/clicks.wav")
+    assert resp.status_code == 507 and resp.json()["code"] == "disk_full"

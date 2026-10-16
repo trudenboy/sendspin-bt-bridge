@@ -88,8 +88,8 @@ export function sessionSignal(id: string, action: 'start' | 'stop' | 'stop_click
 }
 
 /**
- * Manual tuning's listening sound. While the clicker plays it starts over with the new sound (mutes and the
- * solo stay); 409 ``session_state`` in semi-automatic tuning, which always plays the measurement track.
+ * The manual editor's listening sound (state ``tuning``). While the clicker plays it starts over with the new
+ * sound (mutes and the solo stay); 409 ``session_state`` while measuring, which plays the measurement track.
  */
 export function sessionSound(id: string, sound: SyncSound): Promise<SyncSession> {
   return unwrap(api().PUT('/api/v1/sync/sessions/{session_id}/sound', { ...sessionPath(id), body: { sound } }))

@@ -47,6 +47,7 @@ from sendspin_bridge.application.models.sync import (
 )
 from sendspin_bridge.sync_tuning import capture_page
 from sendspin_bridge.sync_tuning import click_track_host as host
+from sendspin_sync.ports import ControlError
 
 if TYPE_CHECKING:
     from sendspin_sync.ports import Track
@@ -63,8 +64,12 @@ def _serve(token: str, kind: str) -> Response:
         raise ApiError(404, "not_found", "No such signal")
     # Streamed from the file written when the clicker started (no render, nothing held in memory);
     # "identity" keeps the gzip middleware from compressing 35 MB on the event loop.
+    try:
+        path = host.current_track(cast("Track", kind)).ensure()  # the callers checked *kind*
+    except ControlError as exc:
+        raise ApiError(507 if exc.code == "disk_full" else 503, exc.code, exc.detail) from exc
     return FileResponse(
-        host.current_track(cast("Track", kind)).ensure(),  # the callers checked *kind*
+        path,
         media_type="audio/wav",
         headers={"Cache-Control": "no-store", "Content-Encoding": "identity"},
     )
@@ -261,11 +266,13 @@ def session_signal(session_id: str, body: SignalIn) -> SyncSessionOut:
 @router.put(
     "/sessions/{session_id}/sound",
     response_model=SyncSessionOut,
-    summary="Pick manual tuning's listening sound",
+    summary="Pick the manual editor's listening sound",
     description=(
-        "clicks, accent or noise. While the clicker plays it starts over with the new sound (the queue is "
-        "replaced); mutes and the solo stay. 409 session_state in semi-automatic tuning, whose clicker always "
-        "plays the measurement's click track."
+        "clicks, accent or noise, in the manual editor (state tuning: manual tuning, or semi-automatic tuning "
+        "once applied). While the clicker plays it starts over with the new sound (the queue is replaced); "
+        "mutes and the solo stay. 409 session_state while measuring (measuring, proposed), whose clicker "
+        "always plays the measurement's click track. 507 disk_full / 503 track_unavailable when the sound's "
+        "file cannot be written."
     ),
 )
 def session_sound(session_id: str, body: SoundIn) -> SyncSessionOut:
@@ -377,6 +384,7 @@ def compute_proposal(session_id: str) -> ProposalOut:
     "/sessions/{session_id}/apply",
     response_model=SyncSessionOut,
     summary="Write the proposal (or rows); the session goes on as the manual editor",
+    description="Clicks that play give way to the editor's listening sound (clicks, unless one was picked).",
 )
 def apply(session_id: str, body: ApplyIn) -> SyncSessionOut:
     return uc.apply(session_id, body.rows)

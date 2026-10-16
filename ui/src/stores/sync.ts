@@ -334,7 +334,7 @@ export const useSyncStore = defineStore('sync', () => {
 
   /** ``start``: the clicker; ``stop``: whatever the group plays; ``stop_clicker``: only our clicker. */
   const signal = (action: 'start' | 'stop' | 'stop_clicker') => control((id) => api.sessionSignal(id, action))
-  /** Manual tuning's listening sound (clicks, accent, noise); a playing clicker starts over with it. */
+  /** The manual editor's listening sound (clicks, accent, noise); a playing clicker starts over with it. */
   const sound = (s: SyncSound) => control((id) => api.sessionSound(id, s))
   const volume = (member: string, level: number) => control((id) => api.sessionVolume(id, member, level))
   const solo = (member: string | null) => control((id) => api.sessionSolo(id, member))

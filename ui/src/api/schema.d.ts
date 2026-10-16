@@ -1946,7 +1946,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Write the proposal (or rows); the session goes on as the manual editor */
+        /**
+         * Write the proposal (or rows); the session goes on as the manual editor
+         * @description Clicks that play give way to the editor's listening sound (clicks, unless one was picked).
+         */
         post: operations["apply_api_v1_sync_sessions__session_id__apply_post"];
         delete?: never;
         options?: never;
@@ -2160,8 +2163,8 @@ export interface paths {
         };
         get?: never;
         /**
-         * Pick manual tuning's listening sound
-         * @description clicks, accent or noise. While the clicker plays it starts over with the new sound (the queue is replaced); mutes and the solo stay. 409 session_state in semi-automatic tuning, whose clicker always plays the measurement's click track.
+         * Pick the manual editor's listening sound
+         * @description clicks, accent or noise, in the manual editor (state tuning: manual tuning, or semi-automatic tuning once applied). While the clicker plays it starts over with the new sound (the queue is replaced); mutes and the solo stay. 409 session_state while measuring (measuring, proposed), whose clicker always plays the measurement's click track. 507 disk_full / 503 track_unavailable when the sound's file cannot be written.
          */
         put: operations["session_sound_api_v1_sync_sessions__session_id__sound_put"];
         post?: never;
@@ -4888,7 +4891,7 @@ export interface components {
             soloed: string | null;
             /**
              * Sound
-             * @description Manual tuning's listening sound (clicks, accent: every 4th click accented, noise: pink noise); null in semi-automatic tuning, whose clicker always plays the measurement's click track.
+             * @description The manual editor's listening sound (clicks, accent: every 4th click accented, noise: pink noise) in state tuning (manual tuning, or semi-automatic once applied); null while measuring, when the clicker always plays the measurement's click track.
              */
             sound: ("clicks" | "accent" | "noise") | null;
             /**

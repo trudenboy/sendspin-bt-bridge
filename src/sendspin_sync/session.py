@@ -132,9 +132,9 @@ class SyncSession:
         self.clicker_playing = False  # the group plays this session's click track (as last read)
         self.clicker_starts = 0  # clicker starts so far; measurements never mix two playbacks
         self.clicker_url: str | None = None
-        # what the clicker plays in manual tuning (a listening sound the operator picks); the measurement
-        # (semi-automatic, and the phone's sequence) always plays the click track its estimator reads
-        self.sound: Sound | None = "clicks" if mode == "manual" else None
+        # what the clicker plays in the manual editor (state "tuning"; a listening sound the operator
+        # picks); while measuring it plays the click track the estimator reads (see ``_track``)
+        self.sound: Sound = "clicks"
         self.volumes: dict[str, int | None] = {}
         # each member's volume before this session first changed it; put back at the end
         self.volumes_before: dict[str, int] = {}
@@ -244,17 +244,27 @@ class SyncSession:
         self.touch()
         self._changed()
 
-    @_locked
+    def _track(self) -> Track:
+        """What the clicker plays: the listening sound in the manual editor (state "tuning": manual
+        tuning, or semi-automatic tuning once its proposal is applied), otherwise the measurement's click
+        track, which the estimator (microphone or the phone's sequence) reads. Lock-free read."""
+        return self.sound if self.state == "tuning" else "measure"
+
     def start_clicker(self) -> None:
-        """Play the click track on the group; refused (``group_playing``) while the group plays
-        anything else. Starting it again while it plays (or after it ended) starts it over."""
+        """Play the click track (or the editor's listening sound) on the group; refused
+        (``group_playing``) while the group plays anything else. Starting it again while it plays (or
+        after it ended) starts it over. The track's file is written first, outside the lock."""
+        self._host.prepare(self._track())
+        with self._lock:
+            self._start_clicker()
+
+    def _start_clicker(self) -> None:
         self._require_active()
         self._observe(self._control.playback(self.group_id))
         if self.group_state == "playing" and not self.clicker_playing:
             self._changed()
             raise ControlError("group_playing", "stop the group's playback first")
-        track: Track = self.sound if self.sound is not None else "measure"
-        url = self._host.url_for(self.id, track)
+        url = self._host.url_for(self.id, self._track())
         if url != self.clicker_url:
             self.clicker_url = url
             self._changed()  # persisted before play_media: a start that times out may still play
@@ -269,24 +279,40 @@ class SyncSession:
         self.touch()
         self._changed()
 
-    @_locked
-    def set_sound(self, sound: Sound) -> None:
-        """Pick manual tuning's listening sound. While our clicker plays it starts over with the new
-        sound (the queue is replaced, as on every start); mutes and the solo stay as they are. Refused
-        (``session_state``) in semi-automatic tuning: the measurement plays its own click track."""
-        self._require_active()
-        if self.mode != "manual":
-            raise ControlError("session_state", "the measurement always plays its click track")
-        if sound == self.sound:
-            self.touch()
-            return
-        self.sound = sound
-        self._changed()
+    def _restart_for_sound(self) -> None:
+        """Under the lock: while our clicker plays another track than the editor's sound, start it over
+        with the sound (the queue is replaced, as on every start); mutes and the solo stay."""
         if self._observe(self._control.playback(self.group_id)):
             self._changed()
-        if self.clicker_playing:
-            self.start_clicker()
-        self.touch()
+        if self.clicker_playing and self.clicker_url != self._host.url_for(self.id, self._track()):
+            self._start_clicker()
+
+    def set_sound(self, sound: Sound) -> None:
+        """Pick the manual editor's listening sound (state "tuning" only: while measuring, the clicker
+        plays the measurement's click track; ``session_state`` otherwise). While our clicker plays it
+        starts over with the new sound; mutes and the solo stay as they are. The sound's file is
+        written before the lock is taken (the first time takes a while)."""
+        with self._lock:
+            self._require("tuning")
+        self._host.prepare(sound)
+        with self._lock:
+            self._require("tuning")
+            if sound != self.sound:
+                self.sound = sound
+                self._changed()
+            self._restart_for_sound()
+            self.touch()
+
+    def follow_sound(self) -> None:
+        """Right after a semi-automatic apply: the clicks that play give way to the editor's listening
+        sound at once (a stopped clicker stays stopped). A no-op outside the editor."""
+        track = self._track()
+        if track == "measure":
+            return
+        self._host.prepare(track)
+        with self._lock:
+            if self.state == "tuning":
+                self._restart_for_sound()
 
     @_locked
     def stop_clicker(self) -> None:
@@ -856,7 +882,7 @@ class SyncSession:
             "volumes": dict(self.volumes),
             "volumes_before": dict(sorted(self.volumes_before.items())),
             "clicker_left_s": self._clicker_left(),
-            "sound": self.sound,
+            "sound": self.sound if self.state == "tuning" else None,
             "muted": sorted(self.muted),
             "soloed": self.soloed,
             "reference": self.reference,

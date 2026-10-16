@@ -203,8 +203,9 @@ function onSignal(action: 'start' | 'stop') {
 }
 
 /**
- * Manual tuning's listening sound (semi-automatic tuning plays the measurement track: no choice there).
- * The pick shows at once; a playing clicker starts over with it, keeping the mutes and the solo.
+ * The editor's listening sound (state "tuning": manual tuning, or semi-automatic once applied; while
+ * measuring the clicker plays the measurement track). A playing clicker starts over with it, keeping the
+ * mutes and the solo.
  */
 const soundWanted = ref<SyncSound | null>(null)
 const sound = computed<SyncSound>(() => soundWanted.value ?? session.value?.sound ?? 'clicks')
@@ -315,7 +316,7 @@ const listenStatus = computed(() => {
 
     <SbCard v-else>
       <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.listen.title') }}</h2>
-      <SoundPicker v-if="session?.mode === 'manual'" class="mb-3" :model-value="sound" @update:model-value="onSound" />
+      <SoundPicker v-if="session?.state === 'tuning'" class="mb-3" :model-value="sound" @update:model-value="onSound" />
       <ListeningBar
         :members="present"
         :signal-running="signalRunning"

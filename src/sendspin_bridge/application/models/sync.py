@@ -39,6 +39,9 @@ ErrorCode = Literal[
     "no_sequence",
     "sequence_running",
     "upload_running",
+    # a click track or listening sound file that cannot be written
+    "disk_full",
+    "track_unavailable",
 ]
 
 
@@ -161,8 +164,9 @@ class SyncSessionOut(ResponseModel):
     )
     sound: Sound | None = Field(
         description=(
-            "Manual tuning's listening sound (clicks, accent: every 4th click accented, noise: pink noise); "
-            "null in semi-automatic tuning, whose clicker always plays the measurement's click track."
+            "The manual editor's listening sound (clicks, accent: every 4th click accented, noise: pink noise) "
+            "in state tuning (manual tuning, or semi-automatic once applied); null while measuring, when the "
+            "clicker always plays the measurement's click track."
         )
     )
     muted: list[str] = Field(description="Members this session muted; they are unmuted when it ends.")

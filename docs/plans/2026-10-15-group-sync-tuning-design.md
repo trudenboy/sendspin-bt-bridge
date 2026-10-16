@@ -299,13 +299,17 @@ separate spec covers it after the bridge version ships.
   within one playback: a clicker started again in the middle of a round starts the
   round again (every member is measured once more).
 
-### Listening sounds of manual tuning (2026-10-16)
+### Listening sounds of the manual editor (2026-10-16)
 
 The click track above is made for the phone's estimator and is poor for tuning by ear: the built-in
 pair gap sounds like a flam (a misalignment that is not there), one click every 2 s is sparse, and a
-thin 2–6 kHz tick is hard to place. It stays as it is for the semi-automatic measurement (and the
-phone's sequence, which is part of it). Manual tuning plays one of three listening sounds instead,
-picked on the Manual tab (*Sound: Clicks · Clicks with accent · Noise*, default Clicks):
+thin 2–6 kHz tick is hard to place. It stays as it is while measuring (states `measuring` and
+`proposed`: microphone recordings and the phone's sequence). The manual editor (state `tuning`:
+manual tuning, and semi-automatic tuning once its proposal is applied) plays one of three listening
+sounds instead, picked above the listening controls (*Sound: Clicks · Clicks with accent · Noise*,
+default Clicks). At the apply, clicks that play give way to the listening sound at once (a stopped
+clicker stays stopped); the track is a function of the state, so a member measured again after the
+proposal is always recorded against the chirps:
 
 | Sound | API `sound` | Track | Use |
 |---|---|---|---|
@@ -324,14 +328,21 @@ picked on the Manual tab (*Sound: Clicks · Clicks with accent · Noise*, defaul
 - Every track: 48 kHz, 16-bit stereo, identical channels, 180 s (like the click track), deterministic,
   titled for Music Assistant like the click track: *Sendspin sync clicks (listening)*, *… (accent)*,
   *… (noise)*.
-- Hosting: each sound is its own file on disk, written when first played; it is served under the
+- Hosting: each sound is its own file on disk (`/var/tmp/sendspin-sync`, about 35 MB each), written
+  when first played, before the session's lock is taken (noise takes ~0.8 s on a desktop, several
+  seconds on a Raspberry Pi 3/4; clicks ~0.2 s). The file name carries a digest of the generator's
+  source (`listen-clicks-<digest>-180s-48000.wav`, `click-<digest>-…`), so a changed generator writes
+  a new file and the old one is removed; `.part` files older than 10 minutes (a write that died) are
+  removed before a write. A file that cannot be written is `507 disk_full` (no space) or
+  `503 track_unavailable`. It is served under the
   session's one token as `GET /api/v1/sync/signal/{token}/{sound}.wav` (the click track keeps
   `…/{token}.wav`). A switch never invalidates a URL Music Assistant may still stream, and "our clicker
   plays" matches the token, so any of the session's tracks counts (and is stopped at the end).
-- `PUT /api/v1/sync/sessions/{id}/sound {sound}` picks it (manual mode only; `409 session_state` in
-  semi-automatic tuning). While the clicker plays, it starts over with the new sound (the queue is
-  replaced, as on every start); mutes and the solo stay. The session reports `sound` (`null` in
-  semi-automatic tuning).
+- `PUT /api/v1/sync/sessions/{id}/sound {sound}` picks it (state `tuning` only; `409 session_state`
+  while measuring). While the clicker plays, it starts over with the new sound (the queue is
+  replaced, as on every start); mutes and the solo stay. The session reports `sound` (`null` while
+  measuring). The page applies a pick once it settles (400 ms without another), so moving through
+  the options with the arrow keys restarts the clicks once.
 
 **Perception, and which sound when.** Two speakers playing the same sound with an offset of
 ≤ 1 ms fuse into one, centred source; 1–5 ms shifts the image towards the earlier speaker

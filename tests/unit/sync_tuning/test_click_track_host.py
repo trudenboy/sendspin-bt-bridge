@@ -167,4 +167,73 @@ def test_each_listening_sound_is_its_own_file(tmp_path):
     for kind, track in files.items():
         assert track.path().read_bytes() == lt.render_wav(kind, duration_s=2)
     assert measure.path().read_bytes() == ct.render_wav(duration_s=2)
-    assert measure.path().name == "click-2s-48000.wav"  # the measurement file keeps its name
+    assert measure.path().name.startswith("click-") and files["noise"].path().name.startswith("listen-noise-")
+
+
+def test_a_changed_generator_writes_a_new_file_and_removes_the_old_one(tmp_path, monkeypatch):
+    """The file name carries a digest of the generator: an upgrade that changes the sound never serves the
+    old file kept in /var/tmp."""
+    from sendspin_bridge.sync_tuning import click_track_host as cth
+
+    old = ClickTrackFile("clicks", directory=lambda: tmp_path, duration_s=2)
+    old_path = old.ensure()
+    keep = ClickTrackFile("noise", directory=lambda: tmp_path, duration_s=2).ensure()
+    measure = ClickTrackFile(directory=lambda: tmp_path, duration_s=2).ensure()
+    monkeypatch.setattr(cth, "generator_version", lambda kind: "feedc0de00" if kind == "clicks" else cth._digest(kind))
+    new = ClickTrackFile("clicks", directory=lambda: tmp_path, duration_s=2)
+    assert new.path() != old_path and "feedc0de00" in new.path().name
+    new.ensure()
+    assert new.path().exists() and not old_path.exists()
+    assert keep.exists() and measure.exists()  # other sounds are left alone
+
+
+def test_the_version_follows_the_generator_source():
+    from sendspin_bridge.sync_tuning import click_track_host as cth
+
+    assert cth.generator_version("measure") != cth.generator_version("clicks")
+    assert cth.generator_version("clicks") == cth.generator_version("noise")  # one module makes all three
+    assert len(cth.generator_version("measure")) == 10
+
+
+def test_stale_partial_files_are_removed_before_a_write(tmp_path):
+    import os
+    import time
+
+    stale = tmp_path / ".click-abc.part"
+    stale.write_bytes(b"x" * 10)
+    old = time.time() - 3600
+    os.utime(stale, (old, old))
+    fresh = tmp_path / ".listen-noise-def.part"  # maybe another worker writing right now
+    fresh.write_bytes(b"x")
+    ClickTrackFile("clicks", directory=lambda: tmp_path, duration_s=1).ensure()
+    assert not stale.exists() and fresh.exists()
+
+
+def test_a_full_disk_is_a_coded_error(tmp_path):
+    import errno
+
+    import pytest
+
+    from sendspin_sync.ports import ControlError
+
+    def full(out, **kw):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    def broken(out, **kw):
+        raise OSError(errno.EACCES, "Permission denied")
+
+    with pytest.raises(ControlError) as exc:
+        ClickTrackFile(directory=lambda: tmp_path, duration_s=1, writer=full).ensure()
+    assert exc.value.code == "disk_full"
+    with pytest.raises(ControlError) as exc:
+        ClickTrackFile(directory=lambda: tmp_path, duration_s=1, writer=broken).ensure()
+    assert exc.value.code == "track_unavailable"
+    assert list(tmp_path.iterdir()) == []  # no partial file left behind
+
+
+def test_prepare_writes_the_file_without_issuing_a_token():
+    tokens = ClickTrackTokens()
+    calls = []
+    host = FastApiClickTrackHost(tokens=tokens, base_url=lambda: "http://h:1", track=RecordingTrack(calls))
+    host.prepare("noise")
+    assert calls == ["ensure"] and tokens.current("s1") is None

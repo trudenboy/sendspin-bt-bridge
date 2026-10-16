@@ -272,6 +272,7 @@
       "description": "Stable `code` of the problem responses (RFC 9457) the sync endpoints return.",
       "enum": [
         "clicker_stopped",
+        "disk_full",
         "group_playing",
         "ma_error",
         "ma_forbidden",
@@ -288,6 +289,7 @@
         "session_expired",
         "session_state",
         "sync_mute_unsupported",
+        "track_unavailable",
         "upload_running"
       ],
       "title": "ErrorCode",
@@ -1255,7 +1257,7 @@
               "type": "null"
             }
           ],
-          "description": "Manual tuning's listening sound (clicks, accent: every 4th click accented, noise: pink noise); null in semi-automatic tuning, whose clicker always plays the measurement's click track.",
+          "description": "The manual editor's listening sound (clicks, accent: every 4th click accented, noise: pink noise) in state tuning (manual tuning, or semi-automatic once applied); null while measuring, when the clicker always plays the measurement's click track.",
           "title": "Sound"
         },
         "state": {

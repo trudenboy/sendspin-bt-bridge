@@ -48,3 +48,10 @@ def test_any_of_the_sessions_tracks_counts_as_its_clicker():
     other = "http://10.0.0.5:8080/api/v1/sync/signal/" + "cd" * 32 + "/clicks.wav"
     assert not GroupPlayback("playing", other).plays(clicks)
     assert not GroupPlayback("playing", "library://track/clicks.wav").plays(clicks)
+
+
+def test_the_token_is_read_from_our_own_path_even_behind_a_prefix_with_signal_in_it():
+    token = "ef" * 32
+    url = f"http://proxy/signal/x/api/v1/sync/signal/{token}/clicks.wav"
+    assert GroupPlayback("playing", "builtin://track/" + token).plays(url)
+    assert not GroupPlayback("playing", "builtin://track/x").plays(url)

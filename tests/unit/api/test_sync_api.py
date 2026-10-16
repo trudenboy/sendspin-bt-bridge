@@ -679,3 +679,29 @@ def test_the_measurement_refuses_a_listening_sound(api_client, sync_env):
     resp = api_client.put(f"/api/v1/sync/sessions/{sid}/sound", json={"sound": "accent"})
     assert resp.status_code == 409 and resp.json()["code"] == "session_state"
     assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["sound"] is None
+
+
+def test_after_a_semi_automatic_apply_the_editor_has_the_listening_sounds(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = _measured_session(api_client)
+    base = f"/api/v1/sync/sessions/{sid}"
+    assert api_client.post(f"{base}/proposal").status_code == 200
+    proposed = api_client.put(f"{base}/sound", json={"sound": "clicks"})
+    assert proposed.status_code == 409 and proposed.json()["code"] == "session_state"
+    applied = api_client.post(f"{base}/apply", json={}).json()
+    assert applied["state"] == "tuning" and applied["sound"] == "clicks"
+    assert ctl.calls[-1] == ("clicker", f"http://bridge/api/v1/sync/signal/{sid}/clicks.wav")
+    assert api_client.put(f"{base}/sound", json={"sound": "accent"}).json()["sound"] == "accent"
+    assert ctl.calls[-1] == ("clicker", f"http://bridge/api/v1/sync/signal/{sid}/accent.wav")
+
+
+def test_a_sound_file_that_cannot_be_written_is_a_clear_problem(api_client, sync_env):
+    store = sync_env[1]
+    sid = _ready(api_client, mode="manual")
+
+    def full(track="measure"):
+        raise ControlError("disk_full", "No space left for the sound file")
+
+    store._host.prepare = full
+    resp = api_client.put(f"/api/v1/sync/sessions/{sid}/sound", json={"sound": "noise"})
+    assert resp.status_code == 507 and resp.json()["code"] == "disk_full"

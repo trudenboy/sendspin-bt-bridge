@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -13,6 +14,12 @@ if TYPE_CHECKING:
 Origin = Literal["bridge", "sendspin", "other"]
 MeasurementStatus = Literal["ok", "not_heard", "unstable", "skipped"]
 ProfileKind = Literal["device", "position"]
+
+
+#: The end of a URL the click track host hands out: ``…/sync/signal/{token}.wav`` (the measurement) or
+#: ``…/sync/signal/{token}/{sound}.wav`` (a listening sound); anchored at the end, so a base URL whose
+#: own path holds "/signal/" never decides the token.
+_SIGNAL_PATH = re.compile(r"/sync/signal/([^/]+?)(?:/[a-z]+)?\.wav$")
 
 
 @dataclass(frozen=True)
@@ -106,9 +113,8 @@ class GroupPlayback:
         token (``…/signal/{token}.wav``, ``…/signal/{token}/{sound}.wav``), so any of them counts."""
         if not url or self.state != "playing" or not self.media_uri:
             return False
-        path = url.rstrip("/")
-        token = path.split("/signal/", 1)[1].split("/", 1)[0] if "/signal/" in path else path.rsplit("/", 1)[-1]
-        token = token.removesuffix(".wav")
+        found = _SIGNAL_PATH.search(url)
+        token = found.group(1) if found else ""
         return url in self.media_uri or (len(token) >= 16 and token in self.media_uri)
 
 

@@ -348,25 +348,51 @@ describe('ManualTuning: the listening sound', () => {
     expect(w.get('[data-sound-hint]').text()).toBe(en.sync.sound.hint.clicks)
     vi.mocked(api.sessionSound).mockResolvedValueOnce({ ...useSyncStore().session!, sound: 'noise' } as never)
     await w.get('[data-sound-option="noise"]').trigger('click')
-    expect(api.sessionSound).toHaveBeenCalledWith('s1', 'noise')
     expect(w.get('[data-sound-option="noise"]').attributes('aria-checked')).toBe('true')
-    await flushPromises()
     expect(w.get('[data-sound-hint]').text()).toBe(en.sync.sound.hint.noise)
+    expect(api.sessionSound).not.toHaveBeenCalled()  // applied once the choice settles
+    vi.advanceTimersByTime(400); await flushPromises()
+    expect(api.sessionSound).toHaveBeenCalledWith('s1', 'noise')
     expect(useSyncStore().session?.sound).toBe('noise')
+    expect(w.get('[data-sound-option="noise"]').attributes('aria-checked')).toBe('true')
+  })
+
+  it('arrow keys move the choice, and only the one it settles on restarts the clicks', async () => {
+    const w = setup({ over: { sound: 'clicks' } })
+    await flushPromises()
+    await w.get('[data-sound-option="clicks"]').trigger('keydown', { key: 'ArrowRight' })
+    vi.advanceTimersByTime(200)
+    await w.get('[data-sound-option="accent"]').trigger('keydown', { key: 'ArrowRight' })
+    expect(w.get('[data-sound-option="noise"]').attributes('aria-checked')).toBe('true')
+    vi.advanceTimersByTime(400); await flushPromises()
+    expect(api.sessionSound).toHaveBeenCalledTimes(1)
+    expect(api.sessionSound).toHaveBeenCalledWith('s1', 'noise')
+  })
+
+  it('going back to the playing sound before it settles sends nothing', async () => {
+    const w = setup({ over: { sound: 'clicks' } })
+    await flushPromises()
+    await w.get('[data-sound-option="noise"]').trigger('click')
+    await w.get('[data-sound-option="clicks"]').trigger('click')
+    vi.advanceTimersByTime(400); await flushPromises()
+    expect(api.sessionSound).not.toHaveBeenCalled()
   })
 
   it('a sound the bridge refused goes back to the one it plays, and says so', async () => {
     const w = setup({ over: { sound: 'clicks' } })
     await flushPromises()
     vi.mocked(api.sessionSound).mockRejectedValueOnce(new ApiError({ status: 409, code: 'session_state' }))
-    await w.get('[data-sound-option="accent"]').trigger('click'); await flushPromises()
+    await w.get('[data-sound-option="accent"]').trigger('click'); vi.advanceTimersByTime(400); await flushPromises()
     expect(w.get('[data-sound-option="clicks"]').attributes('aria-checked')).toBe('true')
     expect(w.get('[data-listen-error]').text()).toContain('session_state')
   })
 
-  it('the semi-automatic tuning has no sound to pick: it plays the measurement track', async () => {
-    const w = setup({ over: { mode: 'semi', sound: null } })
+  it('the editor after a semi-automatic apply has the sounds too; the measurement has none', async () => {
+    const tuned = setup({ over: { mode: 'semi', state: 'tuning', sound: 'clicks' } })
     await flushPromises()
-    expect(w.find('[data-sound]').exists()).toBe(false)
+    expect(tuned.find('[data-sound]').exists()).toBe(true)
+    const measuring = setup({ over: { mode: 'semi', state: 'proposed', sound: null } })
+    await flushPromises()
+    expect(measuring.find('[data-sound]').exists()).toBe(false)
   })
 })
