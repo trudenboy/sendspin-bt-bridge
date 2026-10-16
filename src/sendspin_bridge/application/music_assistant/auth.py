@@ -556,6 +556,11 @@ def _exchange_ha_auth_code(ha_url: str, code: str, client_id: str) -> dict[str, 
         return None
 
 
+# Home Assistant checks the password (and may be reached through a reverse proxy)
+# before it answers a login step; 10 s was observed to be too short.
+_HA_LOGIN_STEP_TIMEOUT_S = 30
+
+
 def _ha_login_flow_start(
     ha_url: str,
     client_id: str,
@@ -604,7 +609,7 @@ def _ha_login_flow_step(ha_url: str, flow_id: str, payload: dict, client_id: str
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with safe_urlopen(req, timeout=10) as resp:
+        with safe_urlopen(req, timeout=_HA_LOGIN_STEP_TIMEOUT_S) as resp:
             return json.loads(resp.read())
     except HTTPError as exc:
         try:
