@@ -166,20 +166,25 @@ function startProgress(durationS: number) {
   }, PROGRESS_TICK_MS)
 }
 
-const complete = computed(
-  () =>
+const complete = computed(() => {
+  const here = ordered.value.filter((m) => !departed.value.includes(m.ma_player_id))
+  if (capture.value === 'phone') {
+    // one recording measures every speaker; one heard is enough, those not heard keep their delay
+    const ms = session.value?.measurements ?? {}
+    const st = (id: string) => ms[id]?.status
+    return (
+      here.some((m) => st(m.ma_player_id) === 'ok') &&
+      (session.value?.sequence?.phase === 'done' || here.every((m) => ['ok', 'skipped'].includes(st(m.ma_player_id) ?? '')))
+    )
+  }
+  return (
     ordered.value.length > 0 &&
-    ordered.value.every((m) => {
-      const id = m.ma_player_id
-      if (departed.value.includes(id)) return true
-      if (capture.value === 'phone') {
-        const s = session.value?.measurements?.[id]?.status
-        return s === 'ok' || s === 'skipped'
-      }
-      const r = results[id]
-      return !!r && (r.status === 'ok' || r.status === 'skipped') && !stale.value.includes(id)
-    }),
-)
+    here.every((m) => {
+      const r = results[m.ma_player_id]
+      return !!r && (r.status === 'ok' || r.status === 'skipped') && !stale.value.includes(m.ma_player_id)
+    })
+  )
+})
 const phoneMembers = computed(() => ordered.value.filter((m) => !departed.value.includes(m.ma_player_id)))
 
 function measurement(member: string, status: SyncMeasurement['status'], reason = ''): SyncMeasurement {

@@ -1756,7 +1756,8 @@
       "waitingUpload": "The sequence has finished: waiting for the phone’s recording…",
       "failed": "The sequence stopped ({code}).",
       "certificate": "Your phone will warn about the certificate once — accept it to record directly in the browser.",
-      "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):"
+      "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):",
+      "keepsDelay": "Not measured, these keep their current delay: {names}"
     }
   }
 }

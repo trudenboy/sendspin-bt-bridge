@@ -119,7 +119,17 @@ const progress = computed(() => {
 const left = computed(
   () => props.members.filter((m) => !skipped.value.includes(m.ma_player_id) && status(m.ma_player_id) !== 'ok').length,
 )
-const complete = computed(() => props.members.length > 0 && left.value === 0)
+/** Speakers the sequence played but did not measure: they keep their current delay. */
+const keeps = computed(() =>
+  props.members.filter((m) => {
+    const st = status(m.ma_player_id)
+    return !skipped.value.includes(m.ma_player_id) && st !== null && st !== 'ok'
+  }),
+)
+/** One speaker heard is enough to go on: the others keep their delay (see ``keeps``). */
+const complete = computed(
+  () => props.members.some((m) => status(m.ma_player_id) === 'ok') && (left.value === 0 || sequence.value?.phase === 'done'),
+)
 const tone = (s: string | null) => (s === 'ok' ? 'success' : s === 'skipped' || !s ? 'neutral' : 'warning')
 const label = (s: string | null) =>
   s ? t(`sync.wizard.${s === 'ok' ? 'heard' : s === 'not_heard' ? 'notHeard' : s}`) : t('sync.phone.notYet')
@@ -229,6 +239,9 @@ const label = (s: string | null) =>
       <SbButton type="button" variant="outline" data-back :disabled="running" @click="emit('back')">{{ t('sync.wizard.back') }}</SbButton>
       <SbButton type="button" data-to-tune :disabled="!complete || running" @click="emit('next')">{{ t('sync.wizard.toTune') }}</SbButton>
     </div>
+    <p v-if="complete && keeps.length" data-keeps-delay class="text-right text-xs text-text-secondary">
+      {{ t('sync.phone.keepsDelay', { names: keeps.map(nameOf).join(', ') }) }}
+    </p>
     <p v-if="!complete" class="text-right text-xs text-text-secondary">{{ t('sync.wizard.members.left', { n: left }, left) }}</p>
   </div>
 </template>

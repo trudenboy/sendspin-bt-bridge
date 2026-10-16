@@ -61,6 +61,25 @@ describe('measuring with a phone', () => {
     expect(w.get('[data-to-tune]').attributes('disabled')).toBeUndefined()
   })
 
+  it('lets the measured speakers be applied when one was not heard, and says it keeps its delay', async () => {
+    const done = session({
+      measurements: { a: { member: 'a', status: 'ok' }, b: { member: 'b', status: 'not_heard' } },
+      sequence: { members: ['a', 'b'], phase: 'done', index: 1, member: null, error: null, error_member: null, solo_s: 7, gap_s: 5, lead_s: 3, uploaded: true } })
+    const w = mount(PhoneCapture, { global: { plugins: [i18n] }, props: { session: done, members: members as never } })
+    await flushPromises()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-keeps-delay]').text()).toContain('Hall')
+  })
+
+  it('keeps the next step closed until at least one speaker was heard', async () => {
+    const none = session({
+      measurements: { a: { member: 'a', status: 'not_heard' }, b: { member: 'b', status: 'unstable' } },
+      sequence: { members: ['a', 'b'], phase: 'done', index: 1, member: null, error: null, error_member: null, solo_s: 7, gap_s: 5, lead_s: 3, uploaded: true } })
+    const w = mount(PhoneCapture, { global: { plugins: [i18n] }, props: { session: none, members: members as never } })
+    await flushPromises()
+    expect(w.get('[data-to-tune]').attributes('disabled')).toBeDefined()
+  })
+
   it('needs the clicks to play the sequence and says so', async () => {
     const w = mount(PhoneCapture, { global: { plugins: [i18n] }, props: { session: session({ clicker_playing: false }), members: members as never } })
     await flushPromises()
