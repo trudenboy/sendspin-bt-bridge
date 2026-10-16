@@ -27,9 +27,9 @@ from sendspin_bridge.security.redaction import redact
 from sendspin_bridge.services.ha.ha_addon import (
     KNOWN_MA_ADDON_SLUGS,
     describe_addons,
-    find_ma_addon_info,
     get_ma_addon_internal_ingress_url,
     is_ma_addon,
+    resolve_ma_addon,
 )
 from sendspin_bridge.services.infrastructure.url_safety import (
     SafeHTTPConnection,
@@ -852,9 +852,50 @@ def _create_ha_ingress_session_via_ws(ha_token: str, ha_url: str | None = None) 
         return None
 
 
-def _find_ma_ingress_url():
-    """Discover the MA addon's internal Ingress base URL."""
-    return get_ma_addon_internal_ingress_url()
+def _ma_api_call(ma_url: str, token: str, command: str, args: dict | None = None) -> object:
+    """One Music Assistant API command over HTTP as *token*'s user; raises on failure."""
+    body = json.dumps({"command": command, "args": args or {}, "message_id": "1"}).encode()
+    req = _ur.Request(
+        f"{ma_url.rstrip('/')}/api",
+        data=body,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        method="POST",
+    )
+    with safe_urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode() or "null")
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(str(data.get("error")))
+    if isinstance(data, dict) and "result" in data:
+        return data["result"]
+    return data
+
+
+def _retire_older_bridge_tokens(ma_url: str, new_token: str) -> None:
+    """Revoke this bridge's earlier tokens in Music Assistant, keeping the newest.
+
+    Every automatic sign-in mints a long-lived token named after this bridge
+    (``_ma_token_name``); without this, each reconnect would leave one more
+    behind.  Only tokens of the same user with exactly this bridge's name are
+    touched, and failures are ignored (an older MA may lack the commands).
+    """
+    name = _ma_token_name()
+    try:
+        tokens = _ma_api_call(ma_url, new_token, "auth/tokens")
+        if not isinstance(tokens, list):
+            return
+        ours = [t for t in tokens if isinstance(t, dict) and t.get("name") == name and t.get("token_id")]
+        ours.sort(key=lambda t: str(t.get("created_at") or ""), reverse=True)
+        for old in ours[1:]:
+            _ma_api_call(ma_url, new_token, "auth/token/revoke", {"token_id": old["token_id"]})
+        if len(ours) > 1:
+            logger.info("Revoked %d older Music Assistant token(s) of this bridge", len(ours) - 1)
+    except Exception as exc:
+        logger.debug("Could not retire older bridge tokens in Music Assistant: %s", exc)
+
+
+def _find_ma_ingress_url(ma_url: str = "") -> str:
+    """The trusted MA add-on's internal Ingress base URL for *ma_url* ("" when none)."""
+    return get_ma_addon_internal_ingress_url(ma_url)
 
 
 def _latin1_safe(value: str) -> str:
@@ -871,7 +912,7 @@ def _latin1_safe(value: str) -> str:
         return _up.quote(value, safe="")
 
 
-def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = ""):
+def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = "", ma_url: str = ""):
     """Create a long-lived MA token via MA's Ingress JSONRPC endpoint.
 
     MA's Ingress server auto-authenticates requests that carry
@@ -881,7 +922,9 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     Returns the MA token string on success, or None on failure.
     """
 
-    base_url = _find_ma_ingress_url()
+    base_url = _find_ma_ingress_url(ma_url)
+    if not base_url:
+        return None
     url = f"{base_url}/api"
     headers = {
         "Content-Type": "application/json",
@@ -929,7 +972,18 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
         return None
 
 
-def _ingress_url_from_addon_info(ha_url: str, data: dict) -> str:
+def _ingress_url_from_addon_info(ha_url: str, data: dict, *, official: bool) -> str:
+    """The add-on's ingress base URL under *ha_url*.
+
+    Only an add-on from the official repository may fall back to its ``webui`` or
+    an absolute URL; any other must offer a real ingress path, so the ingress
+    session cookie never leaves Home Assistant.
+    """
+    if not official:
+        path = str(data.get("ingress_url") or data.get("ingress_entry") or "").rstrip("/")
+        if not data.get("ingress") or not path.startswith("/api/hassio_ingress/"):
+            return ""
+        return f"{ha_url.rstrip('/')}{path}"
     ingress_path = str(data.get("ingress_url") or data.get("ingress_entry") or data.get("webui") or "").rstrip("/")
     if not ingress_path:
         return ""
@@ -962,59 +1016,57 @@ def _addon_info_via_ha(ha_url: str, ha_token: str, slug: str) -> dict | None:
     return data
 
 
-def _resolve_ma_ingress_url_via_ha(ha_url: str, ha_token: str) -> tuple[str, str]:
-    """``(ingress base URL, "")`` of the running MA add-on, or ``("", why not)``.
+def _resolve_ma_ingress_url_via_ha(ha_url: str, ha_token: str, ma_url: str = "") -> tuple[str, str]:
+    """``(ingress base URL, "")`` of the Music Assistant add-on, or ``("", why not)``.
 
-    Slugs tried, in order: the one the bridge's own Supervisor lookup found (an
-    add-on bridge can always do that, whatever the HA user may see), the
-    official repository's slugs, then every Music Assistant add-on Home
-    Assistant lists (admin users only) — a local or custom repository gives
-    the add-on a slug like ``local_music_assistant_dev_local``.
+    In the add-on, the bridge's own Supervisor lookup names the add-on: an
+    official one, or another one only once it proved to be the server at
+    *ma_url* (see ``resolve_ma_addon``).  Outside Home Assistant only the
+    official repository's slugs are used; another Music Assistant add-on is
+    reported, not used, as the bridge can't confirm what it is.
     """
-    slugs: list[str] = []
-    own = find_ma_addon_info()
-    if own and own.get("slug"):
-        slugs.append(str(own["slug"]))
-    slugs.extend(slug for slug in KNOWN_MA_ADDON_SLUGS if slug not in slugs)
+    if os.environ.get("SUPERVISOR_TOKEN", "").strip():
+        lookup = resolve_ma_addon(ma_url)
+        if lookup.info is None:
+            return "", lookup.reason
+        slug = str(lookup.info["slug"])
+        official = slug in KNOWN_MA_ADDON_SLUGS
+        data = _addon_info_via_ha(ha_url, ha_token, slug) or lookup.info
+        if data.get("state") == "started" and (url := _ingress_url_from_addon_info(ha_url, data, official=official)):
+            return url, ""
+        why = f"Music Assistant add-on {slug} has no Home Assistant ingress"
+        logger.warning("%s", why)
+        return "", why
 
     seen: list[dict] = []
-    for slug in slugs:
-        data = _addon_info_via_ha(ha_url, ha_token, slug)
-        if data is None:
+    for slug in KNOWN_MA_ADDON_SLUGS:
+        addon = _addon_info_via_ha(ha_url, ha_token, slug)
+        if addon is None:
             continue
-        seen.append({"slug": slug, "name": data.get("name"), "state": data.get("state")})
-        if data.get("state") == "started" and (url := _ingress_url_from_addon_info(ha_url, data)):
-            if slug not in KNOWN_MA_ADDON_SLUGS:
-                logger.info("Using Music Assistant add-on '%s' through Home Assistant ingress", slug)
+        seen.append({"slug": slug, "name": addon.get("name"), "state": addon.get("state")})
+        if addon.get("state") == "started" and (url := _ingress_url_from_addon_info(ha_url, addon, official=True)):
             return url, ""
 
     listed = _list_ha_addons_via_ws(ha_token, ha_url=ha_url)
-    for row in listed:
-        slug = str(row["slug"])
-        if slug in slugs or not is_ma_addon(row) or row.get("state") != "started":
-            continue
-        data = _addon_info_via_ha(ha_url, ha_token, slug)
-        if data and data.get("state") == "started" and (url := _ingress_url_from_addon_info(ha_url, data)):
-            logger.info("Using Music Assistant add-on '%s' through Home Assistant ingress", slug)
-            return url, ""
-
-    if listed:
-        found = describe_addons([row for row in listed if is_ma_addon(row)] or listed)
-        why = f"No running Music Assistant add-on found in Home Assistant (add-ons found: {found})"
+    others = [row for row in listed if is_ma_addon(row) and str(row["slug"]) not in KNOWN_MA_ADDON_SLUGS]
+    if others:
+        why = (
+            f"Music Assistant add-on {describe_addons(others, with_state=False)} is not from the official "
+            "repository, and a bridge outside Home Assistant can't confirm it is the server it uses"
+        )
     elif seen:
         why = f"No running Music Assistant add-on found in Home Assistant (found: {describe_addons(seen)})"
+    elif listed:
+        why = f"No Music Assistant add-on found in Home Assistant ({len(listed)} add-ons installed)"
     else:
-        why = (
-            "Music Assistant add-on not found through Home Assistant: it is not one of "
-            f"{', '.join(KNOWN_MA_ADDON_SLUGS)} and Home Assistant did not list the installed add-ons"
-        )
+        why = "Music Assistant add-on not found through Home Assistant"
     logger.warning("%s", why)
     return "", why
 
 
-def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str) -> str:
+def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str, ma_url: str = "") -> str:
     """Resolve the MA add-on ingress URL via Home Assistant's hassio proxy."""
-    return _resolve_ma_ingress_url_via_ha(ha_url, ha_token)[0]
+    return _resolve_ma_ingress_url_via_ha(ha_url, ha_token, ma_url)[0]
 
 
 # Why the last ``_create_ma_token_via_ha_proxy`` call in this context made no
@@ -1026,13 +1078,13 @@ _ha_proxy_failure: contextvars.ContextVar[str] = contextvars.ContextVar("_ha_pro
 _HA_CORE_URL = "http://homeassistant:8123"
 
 
-def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
+def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str, ma_url: str = "") -> str | None:
     """Create a long-lived MA token through the HA ingress proxy.
 
     On failure returns None and leaves the reason in ``_ha_proxy_failure``.
     """
     _ha_proxy_failure.set("Music Assistant did not create a token through Home Assistant ingress")
-    base_url, why = _resolve_ma_ingress_url_via_ha(ha_url, ha_token)
+    base_url, why = _resolve_ma_ingress_url_via_ha(ha_url, ha_token, ma_url)
     if not base_url:
         logger.warning("MA ingress URL unavailable via Home Assistant proxy")
         _ha_proxy_failure.set(why)
@@ -1090,15 +1142,14 @@ def _complete_ma_login_via_ha_token(
     if not ha_user:
         return None, "Could not verify Home Assistant user"
 
-    # Lets the bridge's own lookup pick the add-on behind ma_url when several run.
-    find_ma_addon_info(ma_url)
-    ma_token = _create_ma_token_via_ha_proxy(ha_url, ha_token)
+    ma_token = _create_ma_token_via_ha_proxy(ha_url, ha_token, ma_url)
     if not ma_token:
         reason = _ha_proxy_failure.get() or "Could not create Music Assistant token via Home Assistant ingress"
         return None, f"{reason}. Paste a Music Assistant token instead (Music Assistant → Settings → Profile)."
 
     if not _validate_ma_token(ma_url, ma_token):
         return None, "Music Assistant token created but validation failed"
+    _retire_older_bridge_tokens(ma_url, ma_token)
 
     result = dict(ha_user)
     result["ma_token"] = ma_token
@@ -1484,19 +1535,19 @@ def ha_silent_auth(ha_token: str, ma_url: str) -> dict:
     ha_user = _get_ha_user_via_ws(ha_token)
     if not ha_user:
         raise UseCaseError(401, "ha_token_invalid", "Could not verify HA user — token may be expired")
-    ma_token = _create_ma_token_via_ingress(ha_user["id"], ha_user["name"], ha_user.get("name", ""))
+    ma_token = _create_ma_token_via_ingress(ha_user["id"], ha_user["name"], ha_user.get("name", ""), ma_url=ma_url)
     if not ma_token:
         # Music Assistant (server #6772) trusts the ingress user headers only
         # from the Supervisor, so the direct call above is refused there. Home
         # Assistant's ingress proxy makes the same request as this user, from
         # the Supervisor.
-        find_ma_addon_info(ma_url)
-        ma_token = _create_ma_token_via_ha_proxy(_HA_CORE_URL, ha_token)
+        ma_token = _create_ma_token_via_ha_proxy(_HA_CORE_URL, ha_token, ma_url)
     if not ma_token:
         reason = _ha_proxy_failure.get() or "Could not create MA token via Ingress — is Music Assistant running?"
         raise UseCaseError(502, "ma_ingress_failed", reason)
     if not _validate_ma_token(ma_url, ma_token):
         raise UseCaseError(500, "ma_token_invalid", "MA token created but validation failed")
+    _retire_older_bridge_tokens(ma_url, ma_token)
     _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""), auth_provider="ha")
     return _connected(ma_url, ha_user.get("name", ""), "Connected to Music Assistant via Home Assistant.")
 

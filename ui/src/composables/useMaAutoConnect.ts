@@ -5,6 +5,8 @@ import { useIngress } from '@/composables/useIngress'
 
 /** Tries no more often than this, so an unreachable Music Assistant isn't hammered. */
 const MIN_ATTEMPT_INTERVAL_MS = 30_000
+/** Each sign-in that worked but was lost again doubles the wait, up to this. */
+const MAX_ATTEMPT_INTERVAL_MS = 15 * 60_000
 
 /**
  * Signs the bridge in to Music Assistant by itself in the Home Assistant add-on.
@@ -24,6 +26,7 @@ export function useMaAutoConnect() {
   const ma = useMaStore()
   const bridge = useBridgeStore()
   let lastAttempt = 0
+  let interval = MIN_ATTEMPT_INTERVAL_MS
 
   function isIngressMode(): boolean {
     const { basePath } = useIngress()
@@ -46,7 +49,7 @@ export function useMaAutoConnect() {
     if (ma.autoConnecting || bridge.maConnected) return
     if (!isIngressMode()) return
     const now = Date.now()
-    if (lastAttempt && now - lastAttempt < MIN_ATTEMPT_INTERVAL_MS) return
+    if (lastAttempt && now - lastAttempt < interval) return
 
     const haToken = extractHaToken()
     if (!haToken) return
@@ -56,13 +59,21 @@ export function useMaAutoConnect() {
     ma.autoConnectFailed = false
     try {
       await ma.fetchConnection()
+      // The configured server, else only the Music Assistant add-on the
+      // Supervisor reports — never a server merely seen on the network, as the
+      // new token is checked against this address.
       let maUrl = String(ma.connection?.configured_url ?? '')
-      if (!maUrl) maUrl = (await ma.discover())[0]?.url ?? ''
+      if (!maUrl) {
+        const addon = (await ma.discover()).find((s) => s.discovery_source === 'ha_addon_hostname')
+        maUrl = addon?.url ?? ''
+      }
       if (!maUrl) {
         ma.autoConnectFailed = true
         return
       }
       await ma.silentAuth(haToken, maUrl)
+      // A sign-in that has to be repeated soon backs off (each one mints a token).
+      interval = Math.min(interval * 2, MAX_ATTEMPT_INTERVAL_MS)
       await ma.fetchGroups()
     } catch {
       ma.autoConnectFailed = true
@@ -75,7 +86,7 @@ export function useMaAutoConnect() {
   watch(
     () => [bridge.snapshot !== null, bridge.maConnected] as const,
     ([loaded, connected], previous) => {
-      if (!loaded || connected) return
+      if (!loaded || connected || !isIngressMode()) return
       const wasConnected = previous?.[1] === true
       // The bridge lost Music Assistant: what this page signed in with is gone too.
       if (wasConnected) ma.connected = false

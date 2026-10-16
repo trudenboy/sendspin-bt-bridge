@@ -82,3 +82,71 @@ describe('useMaAutoConnect in the Home Assistant add-on', () => {
     expect(ma.autoConnecting).toBe(false)
   })
 })
+
+describe('useMaAutoConnect retries', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.appendChild(haElement)
+  })
+  afterEach(() => {
+    haElement.remove()
+    vi.useRealTimers()
+  })
+
+  it('does not sign in again within 30 s of the last attempt, then backs off', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-16T10:00:00Z'))
+    const bridge = useBridgeStore()
+    bridge.snapshot = status(false)
+    useMaAutoConnect()
+    await settle()
+    expect(api.silentAuth).toHaveBeenCalledTimes(1)
+
+    // Lost again 10 s later: too soon.
+    bridge.snapshot = status(true)
+    await settle()
+    vi.setSystemTime(new Date('2026-10-16T10:00:10Z'))
+    bridge.snapshot = status(false)
+    await settle()
+    expect(api.silentAuth).toHaveBeenCalledTimes(1)
+
+    // 45 s after: still inside the doubled (60 s) wait after a sign-in that worked.
+    bridge.snapshot = status(true)
+    await settle()
+    vi.setSystemTime(new Date('2026-10-16T10:00:45Z'))
+    bridge.snapshot = status(false)
+    await settle()
+    expect(api.silentAuth).toHaveBeenCalledTimes(1)
+
+    bridge.snapshot = status(true)
+    await settle()
+    vi.setSystemTime(new Date('2026-10-16T10:01:05Z'))
+    bridge.snapshot = status(false)
+    await settle()
+    expect(api.silentAuth).toHaveBeenCalledTimes(2)
+  })
+
+  it('does nothing when Home Assistant gives no token', async () => {
+    haElement.remove()
+    useBridgeStore().snapshot = status(false)
+    useMaAutoConnect()
+    await settle()
+
+    expect(api.silentAuth).not.toHaveBeenCalled()
+  })
+
+  it('uses only the add-on the Supervisor reports when no server is configured', async () => {
+    vi.mocked(api.getConnection).mockResolvedValueOnce({ connected: false, configured_url: '' })
+    vi.mocked(api.discoverMA).mockResolvedValueOnce({
+      id: 'j', kind: 'k', status: 'succeeded', created_at: '', updated_at: '', progress: {},
+      result: { servers: [{ url: 'http://homeassistant.local:8095', discovery_source: 'ha_supervisor_dns' }] },
+    } as never)
+    useBridgeStore().snapshot = status(false)
+    useMaAutoConnect()
+    await settle()
+
+    expect(api.silentAuth).not.toHaveBeenCalled()
+    expect(useMaStore().autoConnectFailed).toBe(true)
+  })
+})
