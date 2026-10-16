@@ -261,6 +261,8 @@ Use device-level overrides when:
 | `BT_CHURN_WINDOW` | number | Time window in seconds for churn detection (default `300`) |
 | `PREFER_SBC_CODEC` | boolean | Lower-CPU codec preference |
 | `DISABLE_PA_RESCUE_STREAMS` | boolean | Unload PulseAudio `module-rescue-streams` at startup to prevent sink drift on reconnect |
+| `COMPENSATE_OUTPUT_LATENCY` | boolean | Take the audio buffer's latency (`PULSE_LATENCY_MSEC`) out of the playback schedule, so audio leaves the audio server on time. Default `true`; `false` restores the timing before 3.1.0-beta.7 (speakers behind by that latency). Overridden by `SENDSPIN_COMPENSATE_OUTPUT_LATENCY` |
+| `PLAYOUT_DIAG` | boolean | Add the sink's own audio clock rate to the `Clock diag:` log line. Playback is unchanged. Default `false`. Overridden by `SENDSPIN_PLAYOUT_DIAG` |
 | `DUPLICATE_DEVICE_CHECK` | boolean | Cross-bridge duplicate device detection |
 | `AUTH_ENABLED` | boolean | Enable local web auth outside HA addon mode; HA addon mode always enforces auth |
 | `SESSION_TIMEOUT_HOURS` | integer | Browser session lifetime |
@@ -399,6 +401,8 @@ Set automatically by `entrypoint.sh` during container startup. Rarely need manua
 |---|---|---|
 | `PULSE_SERVER` | *(auto-detected)* | PulseAudio / PipeWire socket path (e.g. `unix:/run/audio/pulse.sock`) |
 | `PULSE_LATENCY_MSEC` | from config (`600`) | PulseAudio latency hint in milliseconds; set from `PULSE_LATENCY_MSEC` config key |
+| `SENDSPIN_COMPENSATE_OUTPUT_LATENCY` | from config (`1`) | `0` turns the output latency compensation off, whatever `COMPENSATE_OUTPUT_LATENCY` says |
+| `SENDSPIN_PLAYOUT_DIAG` | from config (`0`) | `1` turns the playback clock diagnostics on, whatever `PLAYOUT_DIAG` says |
 | `AUDIO_UID` | `1000` | User ID for PulseAudio socket access |
 | `AUDIO_GID` | *(from socket)* | Group ID for PulseAudio socket access |
 | `DBUS_SYSTEM_BUS_ADDRESS` | *(auto-detected)* | D-Bus system bus socket path |

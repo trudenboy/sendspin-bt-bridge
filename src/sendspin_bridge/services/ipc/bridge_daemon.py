@@ -39,8 +39,9 @@ logger = logging.getLogger(__name__)
 # client/state (never the hello) and names the delay command set_output_delay.
 # Delay changes closer together than this are applied as one resync.
 _DELAY_RESYNC_QUIET_S = 0.15
-# A compensated chunk must reach the sink while PulseAudio can still take it:
-# the declared lead covers the pipeline latency plus this much.
+# A compensated chunk must reach PulseAudio before the sink renders it, i.e.
+# the sink's lookahead (PA "sink latency") ahead of its play time; the declared
+# lead covers a measured lookahead plus this much.
 _LEAD_MARGIN_MS = 50.0
 # The stream start timing line waits until the output has settled.
 _START_TIMING_DELAY_S = 2.0
@@ -143,6 +144,9 @@ class BridgeDaemon:
         self._min_buffer_ms = min_buffer_ms
         self._clock_diag_task: asyncio.Task[None] | None = None
         self._start_timing_task: asyncio.Task[None] | None = None
+        # Largest PulseAudio sink lookahead measured at a stream start (ms).
+        self._sink_lookahead_ms: float | None = None
+        self._warned_min_latency = False
 
     def _notify(self) -> None:
         """Notify subscriber that status has changed (no-op if no callback)."""
@@ -380,16 +384,25 @@ class BridgeDaemon:
             output_latency_ns=buffer_time_us * 1000 if self._args.compensate_output_latency else 0,
         )
 
-    def declared_timing_ms(self, value_ms: float) -> float:
-        """The lead / minimum buffer to declare to the server for a configured value.
+    def declared_lead_time_ms(self, value_ms: float) -> float:
+        """The startup lead to declare to the server for a configured value.
 
-        With the output latency compensated, a chunk sounds at its play time
-        but still has to pass through the PulseAudio buffer first, so it must
-        arrive at least that long (plus a margin) before it is due.
+        A compensated chunk only has to reach PulseAudio before the sink
+        renders it: the sink's own lookahead ahead of its play time. Measured
+        on PulseAudio 17 and pipewire-pulse null sinks at buffer 200/600/800 ms,
+        a steady 60 ms lead played every chunk on time, so the configured lead
+        stands until a stream start measures a sink lookahead that, with a
+        margin, needs more. The minimum buffer is never changed.
         """
-        if not self._args.compensate_output_latency:
+        lookahead = getattr(self, "_sink_lookahead_ms", None)
+        if lookahead is None or not self._args.compensate_output_latency:
             return float(value_ms)
-        return max(float(value_ms), float(self._args.pulse_latency_msec) + _LEAD_MARGIN_MS)
+        return max(float(value_ms), lookahead + _LEAD_MARGIN_MS)
+
+    def _note_sink_lookahead(self, sink_ms: float) -> None:
+        """Keep the largest sink lookahead seen this session (the lead only grows)."""
+        if self._sink_lookahead_ms is None or sink_ms > self._sink_lookahead_ms:
+            self._sink_lookahead_ms = float(sink_ms)
 
     def retarget_sink(self, sink_name: str | None) -> None:
         if self._player is None:
@@ -429,6 +442,13 @@ class BridgeDaemon:
         self._report_player_state()
 
     # ── Client creation ──────────────────────────────────────────────────────
+
+    def _declared_lead_for_client(self) -> float:
+        lead = self.declared_lead_time_ms(getattr(self, "_required_lead_time_ms", 250.0))
+        status = getattr(self, "_bridge_status", None)
+        if status is not None:
+            status["declared_lead_time_ms"] = round(lead)
+        return lead
 
     def _create_client(self, static_delay_ms: float = 0.0):
         """Create client with bridge-specific DeviceInfo and register all listeners."""
@@ -480,8 +500,8 @@ class BridgeDaemon:
                     buffer_capacity=32_000_000,
                 ),
                 "output_delay_ms": static_delay_ms,
-                "required_lead_time_ms": self.declared_timing_ms(getattr(self, "_required_lead_time_ms", 250.0)),
-                "min_buffer_ms": self.declared_timing_ms(getattr(self, "_min_buffer_ms", 250.0)),
+                "required_lead_time_ms": self._declared_lead_for_client(),
+                "min_buffer_ms": getattr(self, "_min_buffer_ms", 250.0),
                 "initial_volume": getattr(self, "_volume", 100),
                 "initial_muted": getattr(self, "_muted", False),
                 # Declared in client/state: volume, mute and set_output_delay
@@ -1098,8 +1118,11 @@ class BridgeDaemon:
         self._reset_decoder(codec_name, sample_rate, bit_depth, channels, header)
         self._handle_format_change(codec_name, sample_rate, bit_depth, channels)
         if self._player is not None:
+            generation = self._player.stream_generation
             self._player.start(PcmFormat(sample_rate=sample_rate, channels=channels, bit_depth=bit_depth))
-            self._schedule_start_timing_line()
+            # A start that keeps the running output has no new start to describe.
+            if self._player.stream_generation != generation:
+                self._schedule_start_timing_line()
         self._on_stream_event("start")
 
     def _reset_decoder(
@@ -1256,6 +1279,37 @@ class BridgeDaemon:
                 output_delay_ms=self._player_delay_ms,
             ),
         )
+        self._check_min_latency(report)
+        if pa_latency is not None and self._args.compensate_output_latency:
+            self._raise_lead_for_lookahead(float(pa_latency["sink_ms"]))
+
+    def _check_min_latency(self, report: dict[str, Any]) -> None:
+        compensated = report.get("compensated_latency_ms")
+        min_latency = report.get("min_latency_ms")
+        if self._warned_min_latency or not compensated or min_latency is None or min_latency <= compensated:
+            return
+        self._warned_min_latency = True
+        logger.warning(
+            "The sink reports a min latency of %.1f ms, more than the %.1f ms compensated "
+            "(PULSE_LATENCY_MSEC); audio may play up to %.1f ms late. Raise PULSE_LATENCY_MSEC.",
+            min_latency,
+            compensated,
+            min_latency - compensated,
+        )
+
+    def _raise_lead_for_lookahead(self, sink_ms: float) -> None:
+        self._note_sink_lookahead(sink_ms)
+        client = self._client
+        if client is None or not hasattr(client, "set_required_lead_time_ms"):
+            return
+        lead = self.declared_lead_time_ms(self._required_lead_time_ms)
+        if lead == float(getattr(client, "required_lead_time_ms", lead)):
+            return
+        client.set_required_lead_time_ms(lead)
+        self._bridge_status["declared_lead_time_ms"] = round(lead)
+        self._notify()
+        self._report_player_state()
+        logger.info("Declared lead time raised to %.0f ms to cover the sink's %.1f ms lookahead", lead, sink_ms)
 
     async def _clock_diag_loop(self) -> None:
         """While playing: clock rates, DEBUG every 10 s and INFO once a minute."""

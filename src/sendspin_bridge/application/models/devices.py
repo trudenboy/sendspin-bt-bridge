@@ -136,6 +136,8 @@ class DeviceTiming(ResponseModel):
     clock_uncertainty_ms: float | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250
+    declared_lead_time_ms: int | None = None
+    """The startup lead actually declared to Music Assistant (at least the configured one)."""
     reanchoring: bool = False
     reanchor_count: int = 0
     reanchor_count_session: int = 0
@@ -366,6 +368,7 @@ class Device(ResponseModel):
                 clock_uncertainty_ms=g("clock_uncertainty_ms"),
                 required_lead_time_ms=int(g("required_lead_time_ms") or 250),
                 min_buffer_ms=int(g("min_buffer_ms") or 250),
+                declared_lead_time_ms=g("declared_lead_time_ms"),
                 reanchoring=bool(g("reanchoring")),
                 reanchor_count=int(g("reanchor_count") or 0),
                 reanchor_count_session=int(g("reanchor_count_session") or 0),

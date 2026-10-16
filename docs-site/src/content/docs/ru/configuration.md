@@ -238,6 +238,8 @@ Bridge поддерживает два необязательных top-level ov
 | `BT_CHURN_WINDOW` | number | Окно времени в секундах для обнаружения churn (по умолчанию `300`) |
 | `PREFER_SBC_CODEC` | boolean | Предпочтение кодека с меньшей нагрузкой |
 | `DISABLE_PA_RESCUE_STREAMS` | boolean | Выгрузить PulseAudio `module-rescue-streams` при старте, чтобы предотвратить смещение sink при переподключении |
+| `COMPENSATE_OUTPUT_LATENCY` | boolean | Вычитать задержку аудиобуфера (`PULSE_LATENCY_MSEC`) из расписания воспроизведения, чтобы звук выходил из аудиосервера вовремя. По умолчанию `true`; `false` возвращает поведение до 3.1.0-beta.7 (колонки отстают на эту задержку). Переопределяется `SENDSPIN_COMPENSATE_OUTPUT_LATENCY` |
+| `PLAYOUT_DIAG` | boolean | Добавить в строку журнала `Clock diag:` скорость собственных часов аудиовыхода. Воспроизведение не меняется. По умолчанию `false`. Переопределяется `SENDSPIN_PLAYOUT_DIAG` |
 | `DUPLICATE_DEVICE_CHECK` | boolean | Обнаружение дублирующихся устройств между bridge-экземплярами |
 | `AUTH_ENABLED` | boolean | Включить локальную auth-защиту вне HA addon mode; в HA addon mode auth всегда принудительно включена |
 | `SESSION_TIMEOUT_HOURS` | integer | Срок жизни browser-сессии |
@@ -376,6 +378,8 @@ Bridge читает переменные окружения при запуск�
 |---|---|---|
 | `PULSE_SERVER` | *(автоопределение)* | Путь к сокету PulseAudio / PipeWire (например, `unix:/run/audio/pulse.sock`) |
 | `PULSE_LATENCY_MSEC` | из конфига (`600`) | Подсказка задержки PulseAudio в миллисекундах; берётся из ключа конфига `PULSE_LATENCY_MSEC` |
+| `SENDSPIN_COMPENSATE_OUTPUT_LATENCY` | из конфига (`1`) | `0` выключает компенсацию задержки выхода независимо от `COMPENSATE_OUTPUT_LATENCY` |
+| `SENDSPIN_PLAYOUT_DIAG` | из конфига (`0`) | `1` включает диагностику часов воспроизведения независимо от `PLAYOUT_DIAG` |
 | `AUDIO_UID` | `1000` | User ID для доступа к сокету PulseAudio |
 | `AUDIO_GID` | *(из сокета)* | Group ID для доступа к сокету PulseAudio |
 | `DBUS_SYSTEM_BUS_ADDRESS` | *(автоопределение)* | Путь к системному сокету D-Bus |

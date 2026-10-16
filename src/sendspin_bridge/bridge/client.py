@@ -64,6 +64,7 @@ from sendspin_bridge.services.audio.latency_calibration import (
 )
 from sendspin_bridge.services.audio.latency_recommendation import LatencyRecommendation, build_latency_recommendation
 from sendspin_bridge.services.audio.playback_health import PlaybackHealthMonitor
+from sendspin_bridge.services.audio.player.settings import output_latency_compensated
 from sendspin_bridge.services.bluetooth.transport_telemetry import transport_connect_line
 from sendspin_bridge.services.diagnostics.internal_events import DeviceEventType
 from sendspin_bridge.services.diagnostics.sendspin_port_probe import probe_sendspin_port
@@ -273,6 +274,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "timing_sampled_at",
         "required_lead_time_ms",
         "min_buffer_ms",
+        "declared_lead_time_ms",
         "pairing_pin",
         "pairing_window_open",
         "pairing_state",
@@ -421,6 +423,9 @@ class DeviceStatus:
     timing_sampled_at: str | None = None
     required_lead_time_ms: int = 250
     min_buffer_ms: int = 250
+    # The startup lead the daemon actually declares to the server (it covers
+    # a measured sink lookahead when the output latency is compensated).
+    declared_lead_time_ms: int | None = None
     static_delay_ms: float = 0.0
     static_delay_source: str = "default"
     static_delay_calibrated_at: str | None = None
@@ -2632,8 +2637,11 @@ class SendspinClient:
                 )
                 revision = f"{snapshot.path}:{snapshot.delay_tenths_ms}:{snapshot.codec_id}"
                 backend_latency = self.status.get("backend_output_latency_ms")
+                # A compensated pipeline latency is taken out of the schedule,
+                # so it can no longer count twice with the speaker's Delay.
                 double_count_risk = bool(
-                    snapshot.delay_ms is not None
+                    not output_latency_compensated(load_config())
+                    and snapshot.delay_ms is not None
                     and isinstance(backend_latency, (int, float))
                     and backend_latency >= snapshot.delay_ms * 0.75
                 )

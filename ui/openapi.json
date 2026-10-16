@@ -3065,6 +3065,17 @@
             ],
             "title": "Clock Uncertainty Ms"
           },
+          "declared_lead_time_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Lead Time Ms"
+          },
           "last_reanchor_at": {
             "anyOf": [
               {
@@ -3183,6 +3194,7 @@
           "clock_uncertainty_ms",
           "required_lead_time_ms",
           "min_buffer_ms",
+          "declared_lead_time_ms",
           "reanchoring",
           "reanchor_count",
           "reanchor_count_session",

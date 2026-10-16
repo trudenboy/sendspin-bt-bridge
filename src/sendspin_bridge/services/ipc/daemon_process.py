@@ -541,8 +541,13 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
                 logger.warning("%s not supported by current sendspin client", cmd.cmd)
                 continue
             try:
-                declared = getattr(daemon, "declared_timing_ms", None)
-                setter(declared(value_ms) if callable(declared) else value_ms)
+                declared = getattr(daemon, "declared_lead_time_ms", None)
+                if attr == "required_lead_time_ms" and callable(declared):
+                    sent = float(declared(value_ms))
+                    daemon._bridge_status["declared_lead_time_ms"] = round(sent)
+                else:
+                    sent = value_ms
+                setter(sent)
                 setattr(daemon, f"_{attr}", value_ms)
                 daemon._bridge_status[attr] = round(value_ms)
                 daemon._notify()
@@ -605,10 +610,9 @@ async def _read_commands(daemon_ref: list, stop_event: asyncio.Event, *, bt_sink
 
 
 def _env_flag(name: str, *, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None or not value.strip():
-        return default
-    return value.strip().lower() not in ("0", "false", "no", "off")
+    from sendspin_bridge.services.audio.player.settings import env_flag
+
+    return env_flag(name, default=default)
 
 
 async def _run(params: dict) -> None:

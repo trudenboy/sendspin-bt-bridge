@@ -45,3 +45,20 @@ async def test_configured_values_reach_the_daemon(monkeypatch):
 
     assert params["compensate_output_latency"] is False
     assert params["playout_diag"] is True
+
+
+def test_the_lead_actually_declared_reaches_the_device_api():
+    from sendspin_bridge.application.models.devices import DeviceTiming
+    from sendspin_bridge.bridge.client import _IPC_ALLOWED_KEYS, DeviceStatus
+
+    assert "declared_lead_time_ms" in _IPC_ALLOWED_KEYS
+    assert DeviceStatus().declared_lead_time_ms is None
+    assert "declared_lead_time_ms" in DeviceTiming.model_fields
+
+
+def test_device_timing_carries_the_declared_lead_from_the_status():
+    from sendspin_bridge.application.models.devices import Device
+
+    device = Device.from_status({"player_name": "ENEBY Portable", "declared_lead_time_ms": 450})
+
+    assert device.timing.declared_lead_time_ms == 450

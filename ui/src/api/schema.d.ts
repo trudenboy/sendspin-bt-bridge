@@ -3530,6 +3530,8 @@ export interface components {
             clock_synchronized: boolean;
             /** Clock Uncertainty Ms */
             clock_uncertainty_ms: number | null;
+            /** Declared Lead Time Ms */
+            declared_lead_time_ms: number | null;
             /** Last Reanchor At */
             last_reanchor_at: number | null;
             /** Last Sync Error Ms */

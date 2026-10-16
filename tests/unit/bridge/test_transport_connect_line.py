@@ -55,3 +55,48 @@ async def test_one_line_per_transport_and_again_after_a_reconnect(monkeypatch, c
     lines = [r.getMessage() for r in caplog.records if "BT transport" in r.getMessage()]
     assert len(lines) == 2
     assert lines[0].startswith("[ENEBY Portable] BT transport " + PATH)
+
+
+async def _risk_after_one_poll(monkeypatch, config: dict, env: str | None) -> bool:
+    client = SendspinClient("ENEBY Portable", "localhost", 9000)
+    client.status["backend_output_latency_ms"] = 110.0
+    updates: dict = {}
+
+    async def _transport_snapshot():
+        client.running = False
+        return BluetoothTransportSnapshot(
+            path=PATH, state="active", codec_id=0, codec_name="sbc", delay_supported=True, delay_ms=120.0
+        )
+
+    client.bt_manager = SimpleNamespace(
+        device=SimpleNamespace(transport_snapshot=_transport_snapshot), prefer_sbc=False
+    )
+    client.running = True
+    monkeypatch.setattr(client, "_update_status", updates.update)
+    monkeypatch.setattr("sendspin_bridge.bridge.client.load_config", lambda: dict(config))
+    if env is None:
+        monkeypatch.delenv("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", raising=False)
+    else:
+        monkeypatch.setenv("SENDSPIN_COMPENSATE_OUTPUT_LATENCY", env)
+
+    async def _no_recommendation(*_a, **_k):
+        return False
+
+    async def _no_sleep(_s):
+        return None
+
+    monkeypatch.setattr(client, "_apply_initial_latency_recommendation", _no_recommendation)
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    await client._transport_telemetry_loop()
+    return updates["latency_double_count_risk"]
+
+
+@pytest.mark.asyncio
+async def test_a_compensated_backend_latency_is_no_double_count_risk(monkeypatch):
+    assert await _risk_after_one_poll(monkeypatch, {}, None) is False
+
+
+@pytest.mark.asyncio
+async def test_the_risk_stays_when_compensation_is_off(monkeypatch):
+    assert await _risk_after_one_poll(monkeypatch, {"COMPENSATE_OUTPUT_LATENCY": False}, None) is True
+    assert await _risk_after_one_poll(monkeypatch, {}, "0") is True

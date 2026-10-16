@@ -23,16 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Speakers played behind the schedule by the PulseAudio buffer's latency,
   an amount that depended on `PULSE_LATENCY_MSEC` and the audio server
-  (about 110 ms at 200 ms, 410 ms at 800 ms on PulseAudio 17; PipeWire
-  reports other values). The bridge now fixes that latency and takes it out
-  of the schedule, so audio leaves the audio server at its scheduled time
-  whatever `PULSE_LATENCY_MSEC` is, and declares a lead time to Music
-  Assistant that covers the buffer. Delays tuned before this release absorbed
-  the old offset and need tuning again (lower by the `sink min` value the
-  new start line shows). Settings → Audio → **Compensate the audio buffer
-  latency** (`COMPENSATE_OUTPUT_LATENCY`, advanced, on by default) turned off
-  restores the old timing. In Docker the `SENDSPIN_COMPENSATE_OUTPUT_LATENCY`
-  and `SENDSPIN_PLAYOUT_DIAG` environment variables override both settings.
+  (on PulseAudio 17 about 110 ms at 200 ms, 310 ms at the default 600 ms and
+  410 ms at 800 ms; PipeWire reports other values). The bridge now fixes that
+  latency and takes it out of the schedule, so audio leaves the audio server
+  at its scheduled time whatever `PULSE_LATENCY_MSEC` is. Groups do not start
+  later: the lead time and buffer declared to Music Assistant stay as
+  configured, and the lead is raised only if a sink is measured to need more.
+  Delays tuned before this release absorbed the old offset and need tuning
+  again (lower by the `sink min` value the new start line shows). Settings →
+  Audio → **Compensate the audio buffer latency** (`COMPENSATE_OUTPUT_LATENCY`,
+  advanced, on by default) turned off restores the old timing. In Docker the
+  `SENDSPIN_COMPENSATE_OUTPUT_LATENCY` and `SENDSPIN_PLAYOUT_DIAG` environment
+  variables override both settings.
 
 ## [3.1.0-beta.6] - 2026-10-16
 

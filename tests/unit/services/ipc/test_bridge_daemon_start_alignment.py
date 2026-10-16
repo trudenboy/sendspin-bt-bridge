@@ -89,35 +89,80 @@ def test_a_retargeted_player_keeps_the_compensation(tmp_path, monkeypatch):
     assert players[0]["output_latency_ns"] == 300_000_000
 
 
-@pytest.mark.parametrize(
-    ("pulse_ms", "configured", "expected"),
-    [(200, 250.0, 250.0), (600, 250.0, 650.0), (800, 250.0, 850.0), (200, 1000.0, 1000.0)],
-)
-def test_declared_lead_covers_the_compensated_latency(tmp_path, pulse_ms, configured, expected):
+# A compensated chunk only has to reach PulseAudio before the sink renders it,
+# i.e. the sink's own lookahead (PA "sink latency") ahead of its play time.
+# Measured on PulseAudio 17 and pipewire-pulse null sinks at buffer 200/600/800:
+# a steady 60 ms lead played every chunk on time. So the declared lead stays as
+# configured and is raised only when a measured sink lookahead + margin exceeds it.
+
+
+@pytest.mark.parametrize("pulse_ms", [200, 600, 800])
+def test_the_declared_lead_is_as_configured_until_a_sink_lookahead_is_measured(tmp_path, pulse_ms):
     daemon = _daemon(tmp_path, pulse_latency_msec=pulse_ms)
 
-    assert daemon.declared_timing_ms(configured) == expected
+    assert daemon.declared_lead_time_ms(250.0) == 250.0
+
+
+@pytest.mark.parametrize(("lookahead_ms", "expected"), [(25.3, 250.0), (230.0, 280.0), (400.0, 450.0)])
+def test_the_declared_lead_covers_a_measured_sink_lookahead(tmp_path, lookahead_ms, expected):
+    daemon = _daemon(tmp_path)
+    daemon._note_sink_lookahead(lookahead_ms)
+
+    assert daemon.declared_lead_time_ms(250.0) == expected
+
+
+def test_a_larger_configured_lead_wins(tmp_path):
+    daemon = _daemon(tmp_path)
+    daemon._note_sink_lookahead(400.0)
+
+    assert daemon.declared_lead_time_ms(1000.0) == 1000.0
 
 
 def test_without_compensation_the_lead_is_as_configured(tmp_path):
-    daemon = _daemon(tmp_path, pulse_latency_msec=800, compensate_output_latency=False)
+    daemon = _daemon(tmp_path, compensate_output_latency=False)
+    daemon._note_sink_lookahead(400.0)
 
-    assert daemon.declared_timing_ms(250.0) == 250.0
+    assert daemon.declared_lead_time_ms(250.0) == 250.0
 
 
 @pytest.mark.asyncio
-async def test_the_client_declares_the_covering_lead_to_the_server(tmp_path):
+async def test_the_client_declares_the_configured_lead_and_buffer(tmp_path):
     daemon = _daemon(tmp_path, pulse_latency_msec=600)
     await daemon._load_identity_and_pairing_store()
 
     client = daemon._create_client(0.0)
 
-    assert client.required_lead_time_ms == 650.0
-    assert client.min_buffer_ms == 650.0
+    assert client.required_lead_time_ms == 250.0
+    assert client.min_buffer_ms == 250.0
+    assert daemon._bridge_status["declared_lead_time_ms"] == 250
 
 
 @pytest.mark.asyncio
-async def test_a_lead_set_at_runtime_still_covers_the_latency(monkeypatch):
+async def test_a_measured_lookahead_raises_the_lead_sent_to_the_server(tmp_path, monkeypatch, caplog):
+    import sendspin_bridge.services.audio.pulse as pulse
+
+    async def _latency(_pid):
+        return {"buffer_ms": 64.0, "sink_ms": 400.0}
+
+    monkeypatch.setattr(pulse, "apid_sink_input_latency", _latency)
+    daemon = _daemon(tmp_path)
+    await daemon._load_identity_and_pairing_store()
+    daemon._client = daemon._create_client(0.0)
+    daemon._report_player_state = MagicMock()  # type: ignore[method-assign]
+    daemon._player = MagicMock()
+    daemon._player.start_report.return_value = {"compensated_latency_ms": 200.0, "min_latency_ms": 110.0}
+    daemon._player.stream_generation = 1
+
+    await daemon._log_stream_start_timing(1)
+
+    assert daemon._client.required_lead_time_ms == 450.0
+    assert daemon._client.min_buffer_ms == 250.0
+    assert daemon._bridge_status["declared_lead_time_ms"] == 450
+    daemon._report_player_state.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_a_lead_set_at_runtime_still_covers_the_lookahead_and_the_buffer_is_left_alone(monkeypatch):
     from sendspin_bridge.services.ipc.daemon_process import _read_commands
     from sendspin_bridge.services.ipc.ipc_protocol import IPC_PROTOCOL_VERSION
 
@@ -126,20 +171,67 @@ async def test_a_lead_set_at_runtime_still_covers_the_latency(monkeypatch):
     daemon = MagicMock()
     daemon._client = client
     daemon._bridge_status = {}
-    daemon.declared_timing_ms = lambda value: max(value, 650.0)
-    line = json.dumps({"cmd": "set_required_lead_time_ms", "value": 100, "protocol_version": IPC_PROTOCOL_VERSION})
+    daemon.declared_lead_time_ms = lambda value: max(value, 450.0)
+    lines = [
+        json.dumps({"cmd": "set_required_lead_time_ms", "value": 100, "protocol_version": IPC_PROTOCOL_VERSION}),
+        json.dumps({"cmd": "set_min_buffer_ms", "value": 100, "protocol_version": IPC_PROTOCOL_VERSION}),
+    ]
 
     async def _fake_connect_read_pipe(protocol_factory, _pipe):
         protocol = protocol_factory()
         protocol.connection_made(MagicMock())
-        protocol.data_received((line + "\n").encode())
+        protocol.data_received(("\n".join(lines) + "\n").encode())
         protocol.eof_received()
 
     monkeypatch.setattr(asyncio.get_running_loop(), "connect_read_pipe", _fake_connect_read_pipe)
     await asyncio.wait_for(_read_commands([daemon], asyncio.Event()), timeout=2.0)
 
-    client.set_required_lead_time_ms.assert_called_once_with(650.0)
+    client.set_required_lead_time_ms.assert_called_once_with(450.0)
+    client.set_min_buffer_ms.assert_called_once_with(100.0)
     assert daemon._bridge_status["required_lead_time_ms"] == 100
+    assert daemon._bridge_status["declared_lead_time_ms"] == 450
+
+
+@pytest.mark.asyncio
+async def test_a_sink_needing_more_than_the_compensated_latency_is_warned_about_once(tmp_path, monkeypatch, caplog):
+    import sendspin_bridge.services.audio.pulse as pulse
+
+    async def _none(_pid):
+        return None
+
+    monkeypatch.setattr(pulse, "apid_sink_input_latency", _none)
+    daemon = _daemon(tmp_path)
+    daemon._player = MagicMock()
+    daemon._player.start_report.return_value = {"compensated_latency_ms": 200.0, "min_latency_ms": 260.0}
+    daemon._player.stream_generation = 1
+    caplog.set_level(logging.INFO, logger="sendspin_bridge.services.ipc.bridge_daemon")
+
+    await daemon._log_stream_start_timing(1)
+    await daemon._log_stream_start_timing(1)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "min latency" in r.getMessage()]
+    assert len(warnings) == 1
+
+
+def test_a_start_that_reuses_the_output_logs_no_new_timing_line(tmp_path):
+    daemon = _daemon(tmp_path)
+    player = MagicMock()
+    player.stream_generation = 5  # start() keeps the running pipeline
+    daemon._player = player
+    daemon._schedule_start_timing_line = MagicMock()  # type: ignore[method-assign]
+    daemon._reset_decoder = MagicMock()  # type: ignore[method-assign]
+    message = MagicMock()
+    message.payload.player.codec = "pcm"
+    message.payload.player.sample_rate = 48000
+    message.payload.player.bit_depth = 16
+    message.payload.player.channels = 2
+
+    daemon._on_stream_start(message)
+    daemon._schedule_start_timing_line.assert_not_called()
+
+    player.start.side_effect = lambda _fmt: setattr(player, "stream_generation", 6)
+    daemon._on_stream_start(message)
+    daemon._schedule_start_timing_line.assert_called_once()
 
 
 @pytest.mark.asyncio

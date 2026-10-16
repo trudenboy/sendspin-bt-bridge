@@ -186,3 +186,31 @@ def test_audio_clock_is_unavailable_from_a_sink_that_provides_none():
     player.start(PCM)
     assert player.audio_clock_ns() is None
     player.stop()
+
+
+@requires_gst
+def test_resync_drops_audio_too_close_to_be_played_by_a_rebuilt_output():
+    """A rebuilt output needs a moment before it plays: audio due within the
+    guard would only be clipped by the sink, so it is dropped like played audio."""
+    handed: list[int] = []
+    now = {"us": 0}
+    clock = _test_clock()
+    player = StreamPlayer(
+        sink_factory=_recording_fakesink(handed),
+        raw_now_us=lambda: now["us"],
+        clock=clock,
+        output_latency_ns=LATENCY_NS,
+    )
+    player.start(PCM)
+    for start_us in (1_000_000, 1_010_000, 1_100_000):
+        player.submit(start_us, _silence(frames=480))
+    _wait_until(lambda: len(handed) >= 3)
+    handed.clear()
+    now["us"] = 990_000  # the first two are due within 50 ms
+    clock.set_time(990_000_000)  # the pipeline clock moves with it
+
+    player.resync(0)
+    _wait_until(lambda: len(handed) >= 1)
+    player.stop()
+
+    assert handed == [1_100_000_000 - LATENCY_NS]

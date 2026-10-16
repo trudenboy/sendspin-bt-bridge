@@ -156,7 +156,10 @@ class StreamPlayer:
         audio_format = self._format
         now_us = self._raw_now_us()
         keep = [(start_us + shift_us, payload) for start_us, _end_us, payload in self._queued]
-        keep = [(start_us, payload) for start_us, payload in keep if start_us >= now_us]
+        # A compensated output plays at the play time itself, so audio due
+        # before the rebuilt output can take it would only be clipped.
+        guard_us = _RESYNC_GUARD_US if self._output_latency_ns else 0
+        keep = [(start_us, payload) for start_us, payload in keep if start_us >= now_us + guard_us]
         self.stop()
         self.start(audio_format)
         for play_time_us, payload in keep:
@@ -381,6 +384,11 @@ class StreamPlayer:
         _live, min_latency, _max_latency = query.parse_latency()
         return int(min_latency)
 
+
+# How soon after a resync a rebuilt, compensated output can play: its PulseAudio
+# stream reconnects and the sink renders a little ahead (7 ms measured on a
+# null sink, 25 ms + one block on bluez5).
+_RESYNC_GUARD_US = 50_000
 
 # Bounds the resync record if the clock stalls: far beyond any send-ahead
 # (over 5 min of 20 ms chunks); played chunks are dropped by time anyway.
