@@ -192,7 +192,7 @@ class SkipIn(BaseModel):
 
 
 class SequenceIn(BaseModel):
-    members: list[str] = Field(min_length=1, max_length=32, description="The members to play alone, in order.")
+    members: list[str] = Field(min_length=1, max_length=16, description="The members to play alone, in order.")
 
 
 class CaptureLinkIn(BaseModel):

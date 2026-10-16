@@ -14,6 +14,7 @@ timed them); the silent gaps between members make that robust.
 
 from __future__ import annotations
 
+import bisect
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -32,6 +33,11 @@ TAIL_S = 0.3  # left out at its end
 _FRAME_S = 0.01
 _EVENT_RATIO = 30.0  # a click frame stands this far (≈15 dB) above the recording's median
 _STEP_S = 0.02  # alignment search step
+# Hard limits, whatever the upload holds (security review): the members of one sequence, the click
+# events kept from a recording (the strongest), and the events alignment ever looks at.
+MAX_MEMBERS = 16
+_EVENTS_PER_PERIOD = 6  # a pair of chirps and their reflections every PERIOD_S
+_MAX_EVENTS = 4000
 
 
 def solo_seconds(point: str) -> float:
@@ -54,23 +60,34 @@ class Slot:
     end_s: float
 
 
+def max_events(duration_s: float) -> int:
+    """The most click events a recording of *duration_s* can plausibly hold (more is noise)."""
+    from sendspin_sync.click_track import PERIOD_S
+
+    return min(_MAX_EVENTS, _EVENTS_PER_PERIOD * (math.ceil(max(0.0, duration_s) / PERIOD_S) + 1))
+
+
 def click_times(pcm: bytes, sample_rate: int) -> list[float]:
-    """Seconds into the recording where a click-band burst stands well above the room's floor."""
+    """Seconds into the recording where a click-band burst stands well above the room's floor; at
+    most ``max_events`` of them (the strongest), so a crafted or noisy upload cannot blow up the work."""
     x = pcm_to_floats(pcm)
     env = band_envelope(x, sample_rate, frame_ms=_FRAME_S * 1000)
     if not env:
         return []
     floor = max(sorted(env)[len(env) // 2], 1e-12)
-    out: list[float] = []
+    found: list[tuple[float, float]] = []  # (time, energy)
     for i, e in enumerate(env):
         if (
             e > floor * _EVENT_RATIO
             and e >= (env[i - 1] if i else 0.0)
             and e >= (env[i + 1] if i + 1 < len(env) else 0.0)
         ):
-            if not out or i * _FRAME_S - out[-1] > 0.03:  # one per chirp pair is plenty
-                out.append(i * _FRAME_S)
-    return out
+            if not found or i * _FRAME_S - found[-1][0] > 0.03:  # one per chirp pair is plenty
+                found.append((i * _FRAME_S, e))
+    limit = max_events(len(x) / sample_rate)
+    if len(found) > limit:
+        found = sorted(sorted(found, key=lambda te: te[1], reverse=True)[:limit])
+    return [t for t, _e in found]
 
 
 def align(events: Sequence[float], slots: Sequence[Slot], duration_s: float) -> float | None:
@@ -79,21 +96,21 @@ def align(events: Sequence[float], slots: Sequence[Slot], duration_s: float) -> 
     offsets. None when no click was found."""
     if not events or not slots:
         return None
+    slots = list(slots)[:MAX_MEMBERS]
+    times = sorted(events)[:_MAX_EVENTS]
     end = slots[-1].end_s
     best_score: float = -math.inf
     best: list[float] = []
-    steps = int(max(0.0, duration_s) / _STEP_S) + 1
+    steps = int(min(max(0.0, duration_s), 3600.0) / _STEP_S) + 1
     for k in range(-int(end / _STEP_S), steps):
         offset = k * _STEP_S
-        inside = outside = 0
-        for t in events:
-            rel = t - offset
-            if rel < -LEAD_S or rel > end + WALK_S:
-                continue  # before the sequence or after it: says nothing
-            if any(s.start_s <= rel <= s.end_s for s in slots):
-                inside += 1
-            else:
-                outside += 1
+        # counted with binary searches: O(members * log events) per offset
+        lo = bisect.bisect_left(times, offset - LEAD_S)
+        hi = bisect.bisect_right(times, offset + end + WALK_S)
+        inside = sum(
+            bisect.bisect_right(times, offset + s.end_s) - bisect.bisect_left(times, offset + s.start_s) for s in slots
+        )
+        outside = (hi - lo) - inside
         score = inside - 2 * outside
         if score > best_score:
             best_score, best = score, [offset]

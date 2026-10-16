@@ -5530,7 +5530,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 32,
+            "maxItems": 16,
             "minItems": 1,
             "title": "Members",
             "type": "array"

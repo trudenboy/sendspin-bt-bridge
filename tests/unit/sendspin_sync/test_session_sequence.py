@@ -164,3 +164,26 @@ def test_a_recording_without_clicks_measures_nobody():
 
 def test_sequence_timing_follows_the_measuring_point():
     assert seq.solo_seconds("position") > seq.solo_seconds("device")
+
+
+def test_a_recording_longer_than_the_sequence_allows_or_at_an_odd_rate_is_refused_before_any_work():
+    s, _ctl, clock, _ = ready()
+    s.start_sequence(["a", "b"])
+    run(s, clock)
+    too_long = bytes(2 * 16000 * int(seq.max_duration_s(2, "device") + 5))
+    for pcm, rate in ((too_long, 16000), (bytes(32000), 1_000_000), (bytes(32000), 100)):
+        with pytest.raises(ControlError) as exc:
+            s.record_sequence(pcm, rate)
+        assert exc.value.code == "recording_invalid"
+
+
+def test_a_sequence_of_too_many_members_is_refused():
+    s, ctl, _clock, _ = ready()
+    from sendspin_sync.models import Member
+
+    ctl.member_list = [Member(f"m{i}", f"M{i}", True, "sendspin", delay_ms=0) for i in range(seq.MAX_MEMBERS + 1)]
+    s.refresh_members()
+    s.members = list(ctl.member_list)
+    with pytest.raises(ControlError) as exc:
+        s.start_sequence([m.ma_player_id for m in ctl.member_list])
+    assert exc.value.code == "recording_invalid"

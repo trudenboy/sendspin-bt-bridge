@@ -400,6 +400,8 @@ class SyncSession:
             raise ControlError("sequence_running", "a sequence is playing")
         if not members:
             raise ControlError("member_gone", "no member to measure")
+        if len(set(members)) > seq.MAX_MEMBERS:
+            raise ControlError("recording_invalid", f"at most {seq.MAX_MEMBERS} members in one sequence")
         for mid in members:
             m = self._member(mid)
             if not m.adjustable:
@@ -497,11 +499,17 @@ class SyncSession:
         """Measure every member of the finished sequence from one recording of it (int16 mono PCM):
         the clicks are lined up against the sequence's timing and each member's stretch is estimated
         on the recording's one clock. Refused (``session_state``) when the clicks started over since."""
+        if not estimator.MIN_SAMPLE_RATE <= sample_rate <= estimator.MAX_SAMPLE_RATE or len(pcm) % 2:
+            raise ControlError("recording_invalid", f"a sample rate of {sample_rate} Hz is not supported")
         current_members = self._membership()
         with self._lock:
             self._require(*_MEASURING)
             self._apply_membership(current_members)
             current = self.sequence
+            if current is not None:
+                longest = seq.max_duration_s(len(current["members"]), self.point)
+                if len(pcm) / 2 / sample_rate > longest:
+                    raise ControlError("recording_invalid", f"the recording is longer than {longest:g} s")
             if current is None:
                 raise ControlError("no_sequence", "play the sequence first")
             if current["phase"] != "done":

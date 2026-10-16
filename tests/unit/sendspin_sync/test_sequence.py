@@ -43,3 +43,40 @@ def test_a_window_outside_the_file_is_empty_not_a_crash():
 
 def test_the_longest_recording_allowed_grows_with_the_members():
     assert seq.max_duration_s(4, "position") > seq.max_duration_s(2, "device") > 60
+
+
+# -- hard limits against crafted recordings (security review, UX round) ----------------------------
+
+
+def test_align_is_bounded_for_any_number_of_events():
+    import time
+
+    slots = [seq.Slot(member=f"m{i}", start_s=3 + i * 12, end_s=3 + i * 12 + 7) for i in range(seq.MAX_MEMBERS)]
+    events = [i * 0.001 for i in range(200_000)]  # far more "clicks" than any sequence can make
+    t0 = time.perf_counter()
+    seq.align(events, slots, 600.0)
+    assert time.perf_counter() - t0 < 3.0
+
+
+def test_click_detection_keeps_a_plausible_number_of_events_in_a_burst_storm():
+    import random
+    import struct
+    import time
+
+    rate, seconds = 16000, 60
+    rnd = random.Random(1)
+    x = [0] * (rate * seconds)
+    for start in range(0, len(x), int(0.035 * rate)):  # a band burst every 35 ms
+        for i in range(start, min(len(x), start + 40)):
+            x[i] = rnd.choice((-20000, 20000))
+    pcm = struct.pack(f"<{len(x)}h", *x)
+    t0 = time.perf_counter()
+    events = seq.click_times(pcm, rate)
+    assert len(events) <= seq.max_events(seconds)
+    seq.align(events, [seq.Slot("a", 3, 10)], seconds)
+    assert time.perf_counter() - t0 < 10.0
+
+
+def test_a_sequence_has_a_hard_member_limit():
+    assert seq.MAX_MEMBERS <= 16
+    assert seq.max_duration_s(seq.MAX_MEMBERS, "position") < 400
