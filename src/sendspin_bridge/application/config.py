@@ -773,6 +773,9 @@ def import_config(raw: bytes) -> dict:
     # A v5 file (BLUETOOTH_DEVICES) or a v6 one (an export); validation
     # brings both to v6. The per-player state is the bridge's, never the file's.
     is_v6_upload = isinstance(uploaded.get("players"), list)
+    # A file without the key (a backup from before profiles, or a hand-edited one) keeps the stored
+    # profiles; a file that has it replaces them.
+    keeps_sync_profiles = "SYNC_PROFILES" not in uploaded
     uploaded.pop("PLAYER_STATE", None)
     validation = validate_uploaded_config(uploaded, default_base_listen_port=resolve_base_listen_port())
     warnings = [{"field": issue.field, "message": issue.message} for issue in validation.warnings]
@@ -799,7 +802,9 @@ def import_config(raw: bytes) -> dict:
             stored = store.read_stored() or {}
             players = _players_from_internal(_internal_view(uploaded), uploaded_players, stored, sinks_now)
             new_config = {**uploaded, "players": players, "PLAYER_STATE": _kept_player_state(stored, players)}
-            store.replace(new_config, preserve=(), owned=_PRESERVED_KEYS)
+            if keeps_sync_profiles:
+                new_config.pop("SYNC_PROFILES", None)
+            store.replace(new_config, preserve=("SYNC_PROFILES",) if keeps_sync_profiles else (), owned=_PRESERVED_KEYS)
     except ValueError as exc:
         logger.error("Refusing to save uploaded config: %s is unreadable (%s)", CONFIG_FILE, exc)
         raise _error(
