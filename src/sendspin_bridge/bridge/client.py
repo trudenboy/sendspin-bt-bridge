@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import json
 import logging
 import math
@@ -54,6 +55,7 @@ from sendspin_bridge.config import (
     load_player_volume,
     save_device_static_delay,
     save_device_volume,
+    save_player_static_delay,
     save_player_volume,
 )
 from sendspin_bridge.config.players import BLUETOOTH, PULSE_SINK
@@ -257,6 +259,7 @@ _IPC_ALLOWED_KEYS = frozenset(
         "track_duration_ms",
         "ma_reconnecting",
         "static_delay_ms",
+        "static_delay_server_seq",
         "timing_metrics_available",
         "backend_output_latency_ms",
         "buffered_audio_ms",
@@ -422,6 +425,7 @@ class DeviceStatus:
     static_delay_calibrated_at: str | None = None
     static_delay_codec: str | None = None
     suggested_static_delay_ms: int | None = None
+    static_delay_server_seq: int = 0
     latency_suggestion_source: str = "unavailable"
     latency_suggestion_confidence: str = "none"
     latency_suggestion_explanation: str = ""
@@ -654,6 +658,10 @@ class SendspinClient:
         self.listen_port = listen_port  # port sendspin daemon listens on
         self.listen_host = listen_host  # explicit IP for WebSocket URL display (None = auto-detect)
         self.static_delay_ms = static_delay_ms  # per-device delay override (None = use env var)
+        # The daemon numbers each delay Music Assistant sets on it
+        # (``static_delay_server_seq``, from 1 per daemon process); the last
+        # number this client has taken over.
+        self._seen_server_delay_seq = 0
         self.preferred_format = preferred_format  # preferred audio format string (e.g. "flac:44100:16:2")
         self._effective_bridge = effective_bridge  # bridge instance label for MA device info
         self.idle_mode = idle_mode  # default | power_save | auto_disconnect | keep_alive
@@ -1958,6 +1966,7 @@ class SendspinClient:
                     self._update_status({"sink_missing": True})
                     return
                 own_server = await self._resolve_own_server()
+                self._seen_server_delay_seq = 0
                 params = json.dumps(
                     with_protocol_version(
                         {
@@ -2039,6 +2048,39 @@ class SendspinClient:
     _STDOUT_IDLE_TIMEOUT_SECS: float = 120.0
     _PERSIST_DEBOUNCE_SECS: float = 1.0
 
+    def _take_server_static_delay(self, updates: dict, mac: str | None) -> None:
+        """Keep a delay Music Assistant set on the daemon, and only that.
+
+        MA's ``set_output_delay`` is applied inside the daemon, which mirrors
+        it into its status with ``static_delay_server_seq`` counted up; a delay
+        the bridge sets itself never moves that counter.  On a new count the
+        delay becomes the parent's (a warm restart re-spawns with it) and is
+        saved to the player's config (a full restart starts with it), labelled
+        ``music_assistant``.  Nothing is sent back to the daemon or to MA.
+        """
+        seq = updates.get("static_delay_server_seq")
+        delay = updates.get("static_delay_ms")
+        if not isinstance(seq, int) or isinstance(seq, bool) or seq <= self._seen_server_delay_seq:
+            return
+        if not isinstance(delay, (int, float)) or isinstance(delay, bool):
+            return
+        self._seen_server_delay_seq = seq
+        self.static_delay_ms = float(delay)
+        set_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self._update_status(
+            {
+                "static_delay_source": "music_assistant",
+                "static_delay_calibrated_at": set_at,
+                "static_delay_codec": None,
+            }
+        )
+        logger.info("[%s] Music Assistant set the delay to %.0f ms", self.player_name, delay)
+        if self.config_id:
+            save = functools.partial(save_player_static_delay, source="music_assistant", set_at=set_at)
+            self._schedule_persist("static_delay", save, self.config_id, round(delay))
+        elif mac:
+            self._schedule_persist("static_delay", save_device_static_delay, mac, round(delay))
+
     def _schedule_persist(self, key: str, fn, mac: str, value: int) -> None:
         """Debounce a daemon-driven config write and run it off the loop.
 
@@ -2065,6 +2107,20 @@ class SendspinClient:
             fn(mac, value)
         except Exception:  # pragma: no cover - best-effort persistence
             logger.exception("[%s] failed to persist %s=%s", self.player_name, key, value)
+
+    async def _flush_persist_timers(self) -> None:
+        """Run the debounced writes still waiting, off the loop (called on stop).
+
+        A stop or warm restart inside the debounce window would otherwise lose
+        a delay Music Assistant just set: the respawn uses it, the config not.
+        """
+        with self._persist_timers_lock:
+            pending = [timer for timer in self._persist_timers.values() if not timer.finished.is_set()]
+            for timer in pending:
+                timer.cancel()
+            self._persist_timers.clear()
+        for timer in pending:
+            await asyncio.to_thread(timer.function, *timer.args)
 
     def _cancel_persist_timers(self) -> None:
         """Cancel any pending debounced writes (called on stop/teardown)."""
@@ -2176,17 +2232,7 @@ class SendspinClient:
             self._schedule_persist("volume", save_device_volume, _mac, new_volume)
         elif isinstance(new_volume, int) and self.backend_type == PULSE_SINK and self.config_id:
             self._schedule_persist("volume", save_player_volume, self.config_id, new_volume)
-        # MA-driven static_delay_ms changes flow through the daemon's
-        # status mirror (BridgeDaemon._handle_server_command). Persist
-        # to the player's ``static_delay_ms`` so the value
-        # survives restart and the bridge UI repaints from config.
-        new_delay = updates.get("static_delay_ms")
-        if isinstance(new_delay, int) and _mac:
-            self._schedule_persist("static_delay", save_device_static_delay, _mac, new_delay)
-            # Keep the parent-side cache in sync so a subsequent
-            # warm_restart doesn't re-spawn the subprocess with a
-            # stale ctor value.
-            self.static_delay_ms = float(new_delay)
+        self._take_server_static_delay(updates, _mac)
         # Sync unmute to MA after reconnect (#132) and after
         # initial spawn (the daemon mutes the PA sink during
         # startup to hide format-probe noise; MA polls
@@ -2772,7 +2818,7 @@ class SendspinClient:
     async def stop_sendspin(self) -> None:
         """Stop the daemon subprocess gracefully."""
         await self.stop_calibration_metronome()
-        self._cancel_persist_timers()
+        await self._flush_persist_timers()
         # Flag the upcoming death as expected so the death-handler does NOT
         # populate ``last_error`` or emit the "exited unexpectedly" log.  Only
         # set when there's actually a daemon to stop — otherwise a no-op call

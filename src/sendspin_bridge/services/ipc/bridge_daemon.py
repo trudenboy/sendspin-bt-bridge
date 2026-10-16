@@ -17,8 +17,6 @@ from urllib.parse import urlsplit
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from sendspin_bridge.services.ipc.status_store import StatusStore
-
 from aiosendspin.models.core import (
     DeviceInfo,
     GroupUpdateServerPayload,
@@ -31,6 +29,7 @@ from sendspin_bridge.config import VERSION as _BRIDGE_VERSION
 from sendspin_bridge.services.audio.player.pipeline import default_pulsesink_factory
 from sendspin_bridge.services.audio.player.player import PcmFormat, StreamPlayer
 from sendspin_bridge.services.ipc.own_server import OwnServer, ServerGate, normalize_host, peer_host_var
+from sendspin_bridge.services.ipc.status_store import StatusStore
 
 UTC = timezone.utc
 
@@ -111,6 +110,7 @@ class BridgeDaemon:
         self._muted = args.initial_muted
         self._volume_controller: Any = None
         self._static_delay_ms = max(0.0, min(5000.0, args.static_delay_ms))
+        self._server_delay_seq = 0
         self._bridge_status = status
         self._bluetooth_sink_name = bluetooth_sink_name
         self._on_status_change = on_status_change
@@ -145,6 +145,9 @@ class BridgeDaemon:
             loop.add_signal_handler(signal.SIGTERM, signal_handler)
 
         self._static_delay_ms = max(0.0, min(5000.0, self._args.static_delay_ms))
+        # Report the delay the client starts with, so the parent shows it before
+        # Music Assistant ever sends one.
+        self._bridge_status["static_delay_ms"] = round(self._static_delay_ms)
         await self._load_identity_and_pairing_store()
         if self._identity is not None:
             # MA keys the player by this id, not by the bridge's player id.
@@ -795,7 +798,15 @@ class BridgeDaemon:
                 if client is not None and hasattr(client, "output_delay_ms")
                 else max(0, min(5000, int(cmd.output_delay_ms)))
             )
-            self._bridge_status["static_delay_ms"] = applied
+            # Numbering the server's delays tells the parent this one came from
+            # Music Assistant (to keep and save); a delay the bridge sets goes
+            # through set_static_delay_ms and never moves the count.
+            self._server_delay_seq = getattr(self, "_server_delay_seq", 0) + 1
+            delay_updates = {"static_delay_ms": applied, "static_delay_server_seq": self._server_delay_seq}
+            if isinstance(self._bridge_status, StatusStore):
+                self._bridge_status.patch(delay_updates)
+            else:
+                self._bridge_status.update(delay_updates)
             # IMPORTANT: also update the daemon-level cache. _handle_server_connection
             # rebuilds the aiosendspin client via _create_client(self._static_delay_ms)
             # on every server reconnect; without this the next reconnect would

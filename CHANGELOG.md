@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the password or two-factor code with "Failed to exchange HA code for MA
   token". Older Music Assistant keeps signing in as before.
 
+- A delay changed for a player in Music Assistant is now kept by the bridge:
+  the player shows it, saves it to its settings, and starts with it after a
+  restart, so Music Assistant and the bridge agree. This works for audio
+  outputs as well as Bluetooth speakers.
+
 ## [3.1.0-beta.4] - 2026-10-15
 
 ### Added
