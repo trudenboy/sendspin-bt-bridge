@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import hmac
 import logging
+import os
 import secrets
+import tempfile
 import threading
-from functools import lru_cache
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sendspin_bridge.config.network import get_local_ip, resolve_web_port
-from sendspin_sync.click_track import render_wav
+from sendspin_sync import click_track as ct
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -18,9 +20,77 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=1)
-def track_wav() -> bytes:
-    return render_wav()
+def _cache_dir() -> Path:
+    """A disk-backed temp dir: ``/var/tmp`` where it exists (``/tmp`` is often RAM), else the system one."""
+    var_tmp = Path("/var/tmp")
+    base = var_tmp if var_tmp.is_dir() and os.access(var_tmp, os.W_OK) else Path(tempfile.gettempdir())
+    return base / "sendspin-sync"
+
+
+class ClickTrack(Protocol):
+    def ensure(self) -> Any:
+        """Block until the track can be served."""
+        ...
+
+
+class ClickTrackFile:
+    """The click track as a WAV file, written once and kept on disk (about 35 MB).
+
+    ``ensure()`` writes it when it is missing or incomplete (to a temporary name, then
+    renamed, so a reader never sees half a file); concurrent callers wait for one write.
+    Serving it from a file keeps it out of the bridge's memory, and Music Assistant's
+    first fetch never waits for a render.
+    """
+
+    def __init__(
+        self,
+        *,
+        directory: Callable[[], Path] = _cache_dir,
+        duration_s: float = ct.DURATION_S,
+        sample_rate: int = ct.SAMPLE_RATE,
+        writer: Callable[..., None] = ct.write_wav,
+    ) -> None:
+        self._dir = directory
+        self._duration_s = duration_s
+        self._sample_rate = sample_rate
+        self._writer = writer
+        self._lock = threading.Lock()
+
+    def path(self) -> Path:
+        return self._dir() / f"click-{self._duration_s:g}s-{self._sample_rate}.wav"
+
+    def _complete(self, path: Path) -> bool:
+        try:
+            return path.stat().st_size == ct.wav_size(duration_s=self._duration_s, sample_rate=self._sample_rate)
+        except OSError:
+            return False
+
+    def ensure(self) -> Path:
+        path = self.path()
+        if self._complete(path):
+            return path
+        with self._lock:
+            if self._complete(path):
+                return path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".click-", suffix=".part")
+            tmp = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    self._writer(fh, duration_s=self._duration_s, sample_rate=self._sample_rate)
+                tmp.replace(path)
+            except BaseException:
+                tmp.unlink(missing_ok=True)
+                raise
+            logger.info("Sync click track written to %s", path)
+            return path
+
+
+track = ClickTrackFile()
+
+
+def _current_track() -> ClickTrack:
+    return track  # looked up per call, so the module attribute can be swapped (tests)
 
 
 class ClickTrackTokens:
@@ -48,10 +118,6 @@ class ClickTrackTokens:
     def release(self, session_id: str) -> None:
         with self._lock:
             self._by_session.pop(session_id, None)
-
-    def any_live(self) -> bool:
-        with self._lock:
-            return bool(self._by_session)
 
 
 tokens = ClickTrackTokens()
@@ -83,14 +149,17 @@ class FastApiClickTrackHost:
         self,
         tokens: ClickTrackTokens = tokens,
         base_url: Callable[[], str] = default_base_url,
+        track: ClickTrack | None = None,
     ) -> None:
         self._tokens = tokens
         self._base_url = base_url
+        self._track = track
 
     def url_for(self, session_id: str) -> str:
+        """The URL Music Assistant fetches; returns only once the file is on disk, so the
+        signal is never started before its first byte can be served."""
+        (self._track or _current_track()).ensure()
         return f"{self._base_url().rstrip('/')}/api/v1/sync/signal/{self._tokens.issue(session_id)}.wav"
 
     def release(self, session_id: str) -> None:
-        self._tokens.release(session_id)
-        if not self._tokens.any_live():
-            track_wav.cache_clear()  # ~35 MB: keep it only while a session plays it
+        self._tokens.release(session_id)  # the file stays on disk for the next session

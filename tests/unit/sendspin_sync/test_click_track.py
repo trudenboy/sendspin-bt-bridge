@@ -40,3 +40,16 @@ def test_channels_are_identical_and_wav_header_is_right():
 
 def test_render_is_deterministic():
     assert ct.render_pcm(duration_s=3) == ct.render_pcm(duration_s=3)
+
+
+def test_write_wav_streams_exactly_the_rendered_track():
+    for duration, rate in ((7, 48000), (3, 44100)):
+        out = io.BytesIO()
+        ct.write_wav(out, duration_s=duration, sample_rate=rate)
+        assert out.getvalue() == ct.render_wav(duration_s=duration, sample_rate=rate)
+
+
+def test_write_wav_size_is_known_up_front():
+    out = io.BytesIO()
+    ct.write_wav(out, duration_s=4)
+    assert len(out.getvalue()) == ct.wav_size(duration_s=4)

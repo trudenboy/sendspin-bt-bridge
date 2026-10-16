@@ -6,6 +6,7 @@ import io
 import math
 import struct
 import wave
+from typing import IO
 
 SAMPLE_RATE = 48000
 DURATION_S = 180
@@ -61,6 +62,51 @@ def render_pcm(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE
         s = int(max(-32767, min(32767, round(v * PEAK * 32767))))
         struct.pack_into("<hh", frames, i * 4, s, s)
     return bytes(frames)
+
+
+def _sample(v: float) -> int:
+    return int(max(-32767, min(32767, round(v * PEAK * 32767))))
+
+
+def wav_size(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE) -> int:
+    """Bytes of the WAV file: a 44-byte header and 16-bit stereo frames."""
+    return 44 + round(duration_s * sample_rate) * 4
+
+
+def write_wav(
+    out: IO[bytes], *, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE, block_s: float = 1.0
+) -> None:
+    """Write the same bytes as :func:`render_wav` block by block, touching only the chirps.
+
+    Memory stays at one block, and the silence costs nothing to compute, so the full track
+    takes a fraction of a second instead of seconds of per-sample Python.
+    """
+    total = round(duration_s * sample_rate)
+    template = [_sample(v) for v in chirp(sample_rate)]
+    starts = sorted(
+        start
+        for t, k in click_times(duration_s)
+        for start in (round(t * sample_rate), round((t + gap_ms(k) / 1000) * sample_rate))
+    )
+    block = max(1, round(block_s * sample_rate))
+    with wave.open(out, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        w.setnframes(total)
+        first = 0  # first chirp that may still reach into the current block
+        for lo in range(0, total, block):
+            hi = min(total, lo + block)
+            frames = bytearray((hi - lo) * 4)
+            while first < len(starts) and starts[first] + len(template) <= lo:
+                first += 1
+            for start in starts[first:]:
+                if start >= hi:
+                    break
+                for i in range(max(0, lo - start), min(len(template), hi - start)):
+                    s = template[i]
+                    struct.pack_into("<hh", frames, (start + i - lo) * 4, s, s)
+            w.writeframes(frames)
 
 
 def render_wav(*, duration_s: float = DURATION_S, sample_rate: int = SAMPLE_RATE) -> bytes:

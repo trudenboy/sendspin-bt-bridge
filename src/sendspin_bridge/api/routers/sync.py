@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi.responses import FileResponse
 
 from sendspin_bridge.api.auth import require_principal
 from sendspin_bridge.api.errors import PROBLEM_RESPONSES, ApiError
@@ -44,7 +45,13 @@ public = APIRouter(tags=["sync"])
 def signal(token: str) -> Response:
     if len(token) != 64 or host.tokens.session_for(token) is None:
         raise ApiError(404, "not_found", "No such signal")
-    return Response(host.track_wav(), media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    # Streamed from the file written when the session started (no render, nothing held in memory);
+    # "identity" keeps the gzip middleware from compressing 35 MB on the event loop.
+    return FileResponse(
+        host.track.ensure(),
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store", "Content-Encoding": "identity"},
+    )
 
 
 router = APIRouter(

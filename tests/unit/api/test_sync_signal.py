@@ -36,3 +36,18 @@ def test_signal_is_reachable_through_ingress_and_not_swallowed_by_the_spa(monkey
         f"/api/v1/sync/signal/{token}.wav", headers={"X-Ingress-Path": "/api/hassio_ingress/abc"}
     )
     assert ingress.status_code == 200 and ingress.content[:4] == b"RIFF"
+
+
+def test_signal_streams_the_prepared_file_without_compressing_it(monkeypatch, tmp_path):
+    from sendspin_sync import click_track as ct
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+    track = host.ClickTrackFile(directory=lambda: tmp_path, duration_s=3)
+    monkeypatch.setattr(host, "track", track)
+    token = tokens.issue("s1")
+    resp = make_client().get(f"/api/v1/sync/signal/{token}.wav", headers={"Accept-Encoding": "gzip"})
+    assert resp.status_code == 200 and resp.headers.get("content-encoding") in (None, "identity")
+    assert int(resp.headers["content-length"]) == ct.wav_size(duration_s=3)
+    assert resp.content == track.path().read_bytes() == ct.render_wav(duration_s=3)
+    assert resp.headers["Cache-Control"] == "no-store"

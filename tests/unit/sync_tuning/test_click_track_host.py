@@ -1,4 +1,7 @@
-from sendspin_bridge.sync_tuning.click_track_host import ClickTrackTokens, FastApiClickTrackHost, track_wav
+import threading
+
+from sendspin_bridge.sync_tuning.click_track_host import ClickTrackFile, ClickTrackTokens, FastApiClickTrackHost
+from sendspin_sync import click_track as ct
 
 
 def test_tokens_are_random_session_scoped_and_released():
@@ -11,29 +14,70 @@ def test_tokens_are_random_session_scoped_and_released():
     assert t.session_for("nope") is None
 
 
+class RecordingTrack:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def ensure(self):
+        self.calls.append("ensure")
+
+
 def test_url_uses_the_lan_address_and_web_port():
     t = ClickTrackTokens()
-    host = FastApiClickTrackHost(tokens=t, base_url=lambda: "http://192.168.1.2:8080")
+    host = FastApiClickTrackHost(tokens=t, base_url=lambda: "http://192.168.1.2:8080", track=RecordingTrack([]))
     url = host.url_for("s1")
     assert url.startswith("http://192.168.1.2:8080/api/v1/sync/signal/") and url.endswith(".wav") and "tts" not in url
     host.release("s1")
     assert t.session_for(url.rsplit("/", 1)[1][:-4]) is None
 
 
-def test_track_is_rendered_once():
-    assert track_wav() is track_wav() and track_wav()[:4] == b"RIFF"
+def test_the_url_is_handed_out_only_once_the_file_is_ready():
+    calls = []
 
+    def base_url():
+        calls.append("url")
+        return "http://h:1"
 
-def test_the_cached_track_is_dropped_once_no_token_is_live():
-    t = ClickTrackTokens()
-    host = FastApiClickTrackHost(tokens=t, base_url=lambda: "http://h:1")
+    host = FastApiClickTrackHost(tokens=ClickTrackTokens(), base_url=base_url, track=RecordingTrack(calls))
     host.url_for("s1")
-    host.url_for("s2")
-    track_wav()
+    assert calls == ["ensure", "url"]  # Music Assistant gets the URL after the file exists
+
+
+def test_the_track_is_written_once_to_a_file_and_kept(tmp_path):
+    renders = []
+
+    def writer(out, **kw):
+        renders.append(kw)
+        ct.write_wav(out, **kw)
+
+    track = ClickTrackFile(directory=lambda: tmp_path, duration_s=3, writer=writer)
+    barrier = threading.Barrier(4)
+
+    def go():
+        barrier.wait()
+        track.ensure()
+
+    threads = [threading.Thread(target=go) for _ in range(4)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert len(renders) == 1  # concurrent first fetches render once
+    assert track.path().read_bytes() == ct.render_wav(duration_s=3)
+    assert [p.name for p in tmp_path.iterdir()] == [track.path().name]  # no temp file left behind
+    host = FastApiClickTrackHost(tokens=ClickTrackTokens(), base_url=lambda: "http://h:1", track=track)
+    host.url_for("s1")
     host.release("s1")
-    assert track_wav.cache_info().currsize == 1  # s2 still plays it
-    host.release("s2")
-    assert track_wav.cache_info().currsize == 0
+    assert track.path().exists() and len(renders) == 1  # kept on disk: the next session renders nothing
+    track.ensure()
+    assert len(renders) == 1
+
+
+def test_a_truncated_file_is_written_again(tmp_path):
+    track = ClickTrackFile(directory=lambda: tmp_path, duration_s=2)
+    tmp_path.joinpath(track.path().name).write_bytes(b"RIFF")
+    assert track.ensure() == track.path()
+    assert track.path().read_bytes() == ct.render_wav(duration_s=2)
 
 
 def test_base_url_is_logged_once_and_the_loopback_fallback_warns(monkeypatch, caplog):
