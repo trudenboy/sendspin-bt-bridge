@@ -134,3 +134,37 @@ def test_a_session_keeps_one_url_so_a_clicker_started_again_never_cuts_off_the_o
     assert host.url_for("s1") == first and tokens.session_for(first.rsplit("/", 1)[-1][:-4]) == "s1"
     host.release("s1")
     assert host.url_for("s1") != first
+
+
+# -- the listening sounds of manual tuning ------------------------------------------------------
+
+
+def test_each_listening_sound_has_its_url_under_the_session_token():
+    from sendspin_sync import listening_tracks as lt
+
+    tokens = ClickTrackTokens()
+    calls = []
+    host = FastApiClickTrackHost(tokens=tokens, base_url=lambda: "http://10.0.0.5:8080", track=RecordingTrack(calls))
+    measure = host.url_for("s1")
+    token = measure.rsplit("/", 1)[-1][:-4]
+    assert measure == f"http://10.0.0.5:8080/api/v1/sync/signal/{token}.wav"  # unchanged for the measurement
+    for kind in lt.KINDS:
+        assert host.url_for("s1", kind) == f"http://10.0.0.5:8080/api/v1/sync/signal/{token}/{kind}.wav"
+    assert calls == ["ensure"] * 4  # each one only once its file is ready
+    other = host.url_for("s2", "noise")
+    assert token not in other and tokens.session_for(other.split("/")[-2]) == "s2"
+    host.release("s1")
+    assert tokens.session_for(token) is None
+
+
+def test_each_listening_sound_is_its_own_file(tmp_path):
+    from sendspin_sync import listening_tracks as lt
+
+    files = {kind: ClickTrackFile(kind, directory=lambda: tmp_path, duration_s=2) for kind in lt.KINDS}
+    measure = ClickTrackFile(directory=lambda: tmp_path, duration_s=2)
+    paths = {track.ensure() for track in (*files.values(), measure)}
+    assert len(paths) == 4
+    for kind, track in files.items():
+        assert track.path().read_bytes() == lt.render_wav(kind, duration_s=2)
+    assert measure.path().read_bytes() == ct.render_wav(duration_s=2)
+    assert measure.path().name == "click-2s-48000.wav"  # the measurement file keeps its name

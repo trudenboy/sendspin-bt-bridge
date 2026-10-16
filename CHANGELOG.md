@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Group sync tuning: manual tuning has a choice of sound to listen to —
+  **Clicks** (one woodblock-like click a second, the new default), **Clicks
+  with accent** (every 4th click louder and higher, to catch speakers hundreds
+  of milliseconds off) and **Noise** (pink noise, for the last few
+  milliseconds between two speakers heard from midway). Switching while it
+  plays starts the new sound and keeps the muted and soloed speakers. The
+  measurement keeps its own click track. New `PUT
+  /api/v1/sync/sessions/{id}/sound` endpoint and `sound` in the session.
+
 ## [3.1.0-beta.5] - 2026-10-16
 
 ### Added

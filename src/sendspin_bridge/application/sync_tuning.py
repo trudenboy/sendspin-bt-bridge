@@ -51,6 +51,7 @@ from sendspin_sync.ports import ControlError
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
+    from sendspin_bridge.application.models.sync import Sound
     from sendspin_sync.models import Member
     from sendspin_sync.ports import GroupControl
     from sendspin_sync.session import SyncSession
@@ -298,6 +299,11 @@ def signal(sid: str, action: str) -> SyncSessionOut:
     it plays this session's click track."""
     actions = {"start": lambda s: s.start_clicker(), "stop": lambda s: s.stop_group()}
     return _act(sid, actions.get(action, lambda s: s.stop_clicker()))
+
+
+def session_sound(sid: str, sound: Sound) -> SyncSessionOut:
+    """Manual tuning's listening sound; while the clicker plays it starts over with the new sound."""
+    return _act(sid, lambda s: s.set_sound(sound))
 
 
 def session_volume(sid: str, member: str, level: int) -> SyncSessionOut:

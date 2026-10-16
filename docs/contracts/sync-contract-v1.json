@@ -861,6 +861,25 @@
       "title": "SoloIn",
       "type": "object"
     },
+    "SoundIn": {
+      "properties": {
+        "sound": {
+          "description": "clicks: one a second; accent: every 4th click accented; noise: pink noise (fine alignment).",
+          "enum": [
+            "clicks",
+            "accent",
+            "noise"
+          ],
+          "title": "Sound",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sound"
+      ],
+      "title": "SoundIn",
+      "type": "object"
+    },
     "SyncGroup": {
       "properties": {
         "error": {
@@ -1222,6 +1241,23 @@
           ],
           "title": "Soloed"
         },
+        "sound": {
+          "anyOf": [
+            {
+              "enum": [
+                "clicks",
+                "accent",
+                "noise"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Manual tuning's listening sound (clicks, accent: every 4th click accented, noise: pink noise); null in semi-automatic tuning, whose clicker always plays the measurement's click track.",
+          "title": "Sound"
+        },
         "state": {
           "enum": [
             "created",
@@ -1280,6 +1316,7 @@
         "volumes",
         "volumes_before",
         "clicker_left_s",
+        "sound",
         "muted",
         "soloed",
         "reference",

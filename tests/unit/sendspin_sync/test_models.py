@@ -35,3 +35,16 @@ def test_the_group_plays_the_clicker_only_while_playing_our_url():
     assert not GroupPlayback("playing", "library://track/1").plays(URL)
     assert not GroupPlayback("playing", None).plays(URL)
     assert not GroupPlayback("playing", URL).plays(None)
+
+
+def test_any_of_the_sessions_tracks_counts_as_its_clicker():
+    """Every sound of one session is served under its one token: a switch of sound (or a start that timed
+    out) still leaves whatever of ours plays recognised, and stopped at the end."""
+    base = "http://10.0.0.5:8080/api/v1/sync/signal/" + "ab" * 32
+    clicks, noise = base + "/clicks.wav", base + "/noise.wav"
+    assert GroupPlayback("playing", f"builtin://sound_effect/{noise}").plays(clicks)
+    assert GroupPlayback("playing", f"builtin://sound_effect/{URL}").plays(noise)
+    assert GroupPlayback("playing", "builtin://track/" + "ab" * 32).plays(noise)
+    other = "http://10.0.0.5:8080/api/v1/sync/signal/" + "cd" * 32 + "/clicks.wav"
+    assert not GroupPlayback("playing", other).plays(clicks)
+    assert not GroupPlayback("playing", "library://track/clicks.wav").plays(clicks)

@@ -299,6 +299,50 @@ separate spec covers it after the bridge version ships.
   within one playback: a clicker started again in the middle of a round starts the
   round again (every member is measured once more).
 
+### Listening sounds of manual tuning (2026-10-16)
+
+The click track above is made for the phone's estimator and is poor for tuning by ear: the built-in
+pair gap sounds like a flam (a misalignment that is not there), one click every 2 s is sparse, and a
+thin 2–6 kHz tick is hard to place. It stays as it is for the semi-automatic measurement (and the
+phone's sequence, which is part of it). Manual tuning plays one of three listening sounds instead,
+picked on the Manual tab (*Sound: Clicks · Clicks with accent · Noise*, default Clicks):
+
+| Sound | API `sound` | Track | Use |
+|---|---|---|---|
+| Clicks | `clicks` | one click a second, no pairs, peak −12 dBFS | coarse to fine alignment of any number of speakers |
+| Clicks with accent | `accent` | the same, every 4th click +6 dB and pitched up ×1.5 (a fifth) | a speaker hundreds of ms off: the accent tells a 1 s slip from a small offset |
+| Noise | `noise` | pink noise, −18 dBFS RMS, 2 s raised-cosine fade in | the last few ms between two speakers, standing midway |
+
+- **The click**: 40 ms; a woodblock/rim-like body of three damped resonances (0.95 kHz τ 7 ms,
+  1.65 kHz τ 5 ms, 2.5 kHz τ 3.5 ms; amplitudes 1, 0.6, 0.4) plus an attack of a 0.5 ms-decaying
+  noise burst band-passed at 3 kHz (Q 0.9), the last 10 ms tapered. Its peak comes within 3 ms of the
+  onset (easy to place), ≥ 85 % of its energy lies in 0.5–5 kHz (small Bluetooth speakers reproduce
+  it; < 3 % below 300 Hz or above 8 kHz). The first click is at 1 s, then exactly one per second.
+- **The noise**: seeded white noise through Paul Kellet's pink filter and a one-pole 100 Hz
+  high-pass, a 10 s loop made seamless by running the filter twice over it, repeated; peak about
+  −6 dBFS; 0.5 s fade out at the end. Every member plays the same (correlated) noise.
+- Every track: 48 kHz, 16-bit stereo, identical channels, 180 s (like the click track), deterministic,
+  titled for Music Assistant like the click track: *Sendspin sync clicks (listening)*, *… (accent)*,
+  *… (noise)*.
+- Hosting: each sound is its own file on disk, written when first played; it is served under the
+  session's one token as `GET /api/v1/sync/signal/{token}/{sound}.wav` (the click track keeps
+  `…/{token}.wav`). A switch never invalidates a URL Music Assistant may still stream, and "our clicker
+  plays" matches the token, so any of the session's tracks counts (and is stopped at the end).
+- `PUT /api/v1/sync/sessions/{id}/sound {sound}` picks it (manual mode only; `409 session_state` in
+  semi-automatic tuning). While the clicker plays, it starts over with the new sound (the queue is
+  replaced, as on every start); mutes and the solo stay. The session reports `sound` (`null` in
+  semi-automatic tuning).
+
+**Perception, and which sound when.** Two speakers playing the same sound with an offset of
+≤ 1 ms fuse into one, centred source; 1–5 ms shifts the image towards the earlier speaker
+(precedence effect); 5–30 ms smears the sound (a thick or "phasey" click, a comb-filtered hiss);
+beyond 30–40 ms it is heard as a double, an echo. Sound travels about 0.34 m/ms, so every metre of
+difference between the listener's distances to two speakers is ~3 ms: tune at the listening position,
+and the result holds only there. Use **Clicks with accent** first when speakers are far apart (an echo
+of hundreds of ms, or not sure which click belongs with which), **Clicks** to bring every speaker to one
+hit, and **Noise** last, for two speakers at a time (solo or A/B the others away), standing midway:
+nudge 1 ms at a time until the noise sits in the middle as one solid source.
+
 ## Capture (browser)
 
 - One `AudioContext` for the whole session; capture through an AudioWorklet. Every

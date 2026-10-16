@@ -33,6 +33,8 @@ export type PendingRestore = Schemas['PendingRestoreOut']
 export type SessionMode = SyncSession['mode']
 export type SessionPoint = SyncSession['point']
 export type SessionStateName = SyncSession['state']
+/** Manual tuning's listening sound. */
+export type SyncSound = NonNullable<SyncSession['sound']>
 
 export type JobStatus = Job['status']
 export type AuthMethod = Schemas['SignInRequest']['method']

@@ -6,7 +6,7 @@ import ManualTuning from '@/components/sync/ManualTuning.vue'
 import { useSyncStore } from '@/stores/sync'
 import en from '@/i18n/en.json'
 
-vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
+vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), sessionSound: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
@@ -333,5 +333,40 @@ describe('ManualTuning: UX round', () => {
     // "Put back" goes to the delays from before the measurement, not to the measured ones
     await w.get('[data-reset]').trigger('click'); vi.advanceTimersByTime(300); await flushPromises()
     expect(api.sessionDelay).toHaveBeenLastCalledWith('s1', 'a', 100)
+  })
+})
+
+describe('ManualTuning: the listening sound', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('offers clicks, clicks with accent and noise, with a hint for the one picked', async () => {
+    const w = setup({ over: { sound: 'clicks' } })
+    await flushPromises()
+    const options = w.findAll('[data-sound] [role="radio"]')
+    expect(options.map((o) => o.text())).toEqual(['Clicks', 'Clicks with accent', 'Noise'])
+    expect(w.get('[data-sound-option="clicks"]').attributes('aria-checked')).toBe('true')
+    expect(w.get('[data-sound-hint]').text()).toBe(en.sync.sound.hint.clicks)
+    vi.mocked(api.sessionSound).mockResolvedValueOnce({ ...useSyncStore().session!, sound: 'noise' } as never)
+    await w.get('[data-sound-option="noise"]').trigger('click')
+    expect(api.sessionSound).toHaveBeenCalledWith('s1', 'noise')
+    expect(w.get('[data-sound-option="noise"]').attributes('aria-checked')).toBe('true')
+    await flushPromises()
+    expect(w.get('[data-sound-hint]').text()).toBe(en.sync.sound.hint.noise)
+    expect(useSyncStore().session?.sound).toBe('noise')
+  })
+
+  it('a sound the bridge refused goes back to the one it plays, and says so', async () => {
+    const w = setup({ over: { sound: 'clicks' } })
+    await flushPromises()
+    vi.mocked(api.sessionSound).mockRejectedValueOnce(new ApiError({ status: 409, code: 'session_state' }))
+    await w.get('[data-sound-option="accent"]').trigger('click'); await flushPromises()
+    expect(w.get('[data-sound-option="clicks"]').attributes('aria-checked')).toBe('true')
+    expect(w.get('[data-listen-error]').text()).toContain('session_state')
+  })
+
+  it('the semi-automatic tuning has no sound to pick: it plays the measurement track', async () => {
+    const w = setup({ over: { mode: 'semi', sound: null } })
+    await flushPromises()
+    expect(w.find('[data-sound]').exists()).toBe(false)
   })
 })

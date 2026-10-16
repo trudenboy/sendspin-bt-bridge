@@ -8,7 +8,7 @@ FastAPI must run them in its threadpool, never on the event loop.
 from __future__ import annotations
 
 import secrets
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
@@ -41,11 +41,15 @@ from sendspin_bridge.application.models.sync import (
     SignalIn,
     SkipIn,
     SoloIn,
+    SoundIn,
     SyncGroup,
     SyncSessionOut,
 )
 from sendspin_bridge.sync_tuning import capture_page
 from sendspin_bridge.sync_tuning import click_track_host as host
+
+if TYPE_CHECKING:
+    from sendspin_sync.ports import Track
 
 public = APIRouter(tags=["sync"])
 #: The phone capture page, outside /api/v1 (registered before the SPA's catch-all).
@@ -54,17 +58,33 @@ page = APIRouter(include_in_schema=False)
 capture = APIRouter(tags=["sync"])
 
 
-@public.get("/sync/signal/{token}.wav", response_class=Response, summary="Click track for a running session (public)")
-def signal(token: str) -> Response:
+def _serve(token: str, kind: str) -> Response:
     if len(token) != 64 or host.tokens.session_for(token) is None:
         raise ApiError(404, "not_found", "No such signal")
-    # Streamed from the file written when the session started (no render, nothing held in memory);
+    # Streamed from the file written when the clicker started (no render, nothing held in memory);
     # "identity" keeps the gzip middleware from compressing 35 MB on the event loop.
     return FileResponse(
-        host.track.ensure(),
+        host.current_track(cast("Track", kind)).ensure(),  # the callers checked *kind*
         media_type="audio/wav",
         headers={"Cache-Control": "no-store", "Content-Encoding": "identity"},
     )
+
+
+@public.get("/sync/signal/{token}.wav", response_class=Response, summary="Click track for a running session (public)")
+def signal(token: str) -> Response:
+    return _serve(token, "measure")
+
+
+@public.get(
+    "/sync/signal/{token}/{sound}.wav",
+    response_class=Response,
+    summary="A listening sound of manual tuning for a running session (public)",
+    description="sound: clicks, accent or noise; the same token as the session's click track.",
+)
+def listening_signal(token: str, sound: str) -> Response:
+    if sound not in host.tracks:
+        raise ApiError(404, "not_found", "No such signal")
+    return _serve(token, sound)
 
 
 async def _capture_body(request: Request, token: str) -> bytes:
@@ -236,6 +256,20 @@ def end_session(session_id: str) -> Response:
 )
 def session_signal(session_id: str, body: SignalIn) -> SyncSessionOut:
     return uc.signal(session_id, body.action)
+
+
+@router.put(
+    "/sessions/{session_id}/sound",
+    response_model=SyncSessionOut,
+    summary="Pick manual tuning's listening sound",
+    description=(
+        "clicks, accent or noise. While the clicker plays it starts over with the new sound (the queue is "
+        "replaced); mutes and the solo stay. 409 session_state in semi-automatic tuning, whose clicker always "
+        "plays the measurement's click track."
+    ),
+)
+def session_sound(session_id: str, body: SoundIn) -> SyncSessionOut:
+    return uc.session_sound(session_id, body.sound)
 
 
 @router.put(

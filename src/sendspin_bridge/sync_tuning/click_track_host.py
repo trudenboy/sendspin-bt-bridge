@@ -1,7 +1,9 @@
-"""Hosts the click track for Music Assistant under per-session, unguessable URLs."""
+"""Hosts the click track (and manual tuning's listening sounds) for Music Assistant under per-session,
+unguessable URLs."""
 
 from __future__ import annotations
 
+import functools
 import hmac
 import logging
 import os
@@ -16,9 +18,12 @@ from urllib.parse import urlsplit
 from sendspin_bridge.config.network import get_local_ip, resolve_web_port
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
 from sendspin_sync import click_track as ct
+from sendspin_sync import listening_tracks as lt
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from sendspin_sync.ports import Track
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +42,8 @@ class ClickTrack(Protocol):
 
 
 class ClickTrackFile:
-    """The click track as a WAV file, written once and kept on disk (about 35 MB).
+    """The click track (or, with *kind*, a listening sound) as a WAV file, written once and kept on
+    disk (about 35 MB each).
 
     ``ensure()`` writes it when it is missing or incomplete (to a temporary name, then
     renamed, so a reader never sees half a file); concurrent callers wait for one write.
@@ -47,12 +53,16 @@ class ClickTrackFile:
 
     def __init__(
         self,
+        kind: Track = "measure",
         *,
         directory: Callable[[], Path] = _cache_dir,
         duration_s: float = ct.DURATION_S,
         sample_rate: int = ct.SAMPLE_RATE,
-        writer: Callable[..., None] = ct.write_wav,
+        writer: Callable[..., None] | None = None,
     ) -> None:
+        self._kind = kind
+        if writer is None:
+            writer = ct.write_wav if kind == "measure" else functools.partial(lt.write_wav, kind=kind)
         self._dir = directory
         self._duration_s = duration_s
         self._sample_rate = sample_rate
@@ -60,11 +70,17 @@ class ClickTrackFile:
         self._lock = threading.Lock()
 
     def path(self) -> Path:
-        return self._dir() / f"click-{self._duration_s:g}s-{self._sample_rate}.wav"
+        prefix = "click" if self._kind == "measure" else f"listen-{self._kind}"
+        return self._dir() / f"{prefix}-{self._duration_s:g}s-{self._sample_rate}.wav"
+
+    def _size(self) -> int:
+        if self._kind == "measure":
+            return ct.wav_size(duration_s=self._duration_s, sample_rate=self._sample_rate)
+        return lt.wav_size(self._kind, duration_s=self._duration_s, sample_rate=self._sample_rate)
 
     def _complete(self, path: Path) -> bool:
         try:
-            return path.stat().st_size == ct.wav_size(duration_s=self._duration_s, sample_rate=self._sample_rate)
+            return path.stat().st_size == self._size()
         except OSError:
             return False
 
@@ -85,15 +101,18 @@ class ClickTrackFile:
             except BaseException:
                 tmp.unlink(missing_ok=True)
                 raise
-            logger.info("Sync click track written to %s", path)
+            logger.info("Sync %s track written to %s", self._kind, path)
             return path
 
 
 track = ClickTrackFile()
+#: Manual tuning's listening sounds, each its own file (written when a session first plays it).
+tracks: dict[str, ClickTrackFile] = {kind: ClickTrackFile(kind) for kind in lt.KINDS}
 
 
-def _current_track() -> ClickTrack:
-    return track  # looked up per call, so the module attribute can be swapped (tests)
+def current_track(kind: Track = "measure") -> ClickTrack:
+    # looked up per call, so the module attributes can be swapped (tests)
+    return track if kind == "measure" else tracks[kind]
 
 
 class ClickTrackTokens:
@@ -179,14 +198,16 @@ class FastApiClickTrackHost:
         self._base_url = base_url
         self._track = track
 
-    def url_for(self, session_id: str) -> str:
-        """The URL Music Assistant fetches (the same for the whole session); returns only once the
-        file is on disk, so the clicker is never started before its first byte can be served."""
-        (self._track or _current_track()).ensure()
-        # one URL per session: a clicker started again (or a start that timed out) never invalidates the
-        # URL Music Assistant may still be streaming
+    def url_for(self, session_id: str, track: Track = "measure") -> str:
+        """The URL Music Assistant fetches *track* from (the same for the whole session); returns only
+        once the file is on disk, so the clicker is never started before its first byte can be served.
+        The measurement's click track is ``{token}.wav``, a listening sound ``{token}/{kind}.wav``."""
+        (self._track or current_track(track)).ensure()
+        # one token per session: a clicker started again (or a start that timed out, or another sound)
+        # never invalidates the URL Music Assistant may still be streaming
         token = self._tokens.current(session_id) or self._tokens.issue(session_id)
-        return f"{self._base_url().rstrip('/')}/api/v1/sync/signal/{token}.wav"
+        name = token if track == "measure" else f"{token}/{track}"
+        return f"{self._base_url().rstrip('/')}/api/v1/sync/signal/{name}.wav"
 
     def release(self, session_id: str) -> None:
         self._tokens.release(session_id)  # the file stays on disk for the next session

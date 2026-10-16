@@ -281,7 +281,7 @@ def test_a_whole_session_over_music_assistant_leaves_the_group_stopped_and_unmut
     from tests.support.sync_fakes import FakeHost
 
     class Host(FakeHost):
-        def url_for(self, session_id):
+        def url_for(self, session_id, track="measure"):
             return URL
 
     ma = FakeMa()

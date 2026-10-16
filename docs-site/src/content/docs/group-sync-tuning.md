@@ -50,9 +50,22 @@ Listening controls:
 
 - **Play clicks** starts the 3-minute click track on the whole group again from the start; *Clicks: 2:41 left* counts it down. **Stop clicks** stops only the click track (music someone started meanwhile plays on).
 - **Only this speaker**: pick a speaker to hear it alone (the others are muted), or **Everyone**.
-- **Compare two**: two speakers take turns every two clicks.
+- **Compare two**: two speakers take turns every four seconds.
+- **Sound**: what the clicks play — **Clicks**, **Clicks with accent** or **Noise** (see *Which sound to listen to*). Switching while it plays starts the new sound from the start; the speakers you muted or soloed stay that way.
 
 Each member has a delay field, a slider and −10/−1/+1/+10 ms buttons. Changes are written to Music Assistant at once. **Put back the delays from the start** returns every changed speaker to where this tuning started.
+
+#### Which sound to listen to
+
+| Sound | What it is | When to use it |
+|---|---|---|
+| **Clicks** (default) | One short woodblock-like click a second | Bring every speaker to one hit |
+| **Clicks with accent** | The same, every 4th click louder and higher | A speaker is far off (an echo of hundreds of ms), or you are not sure which click belongs with which |
+| **Noise** | Steady pink noise (a soft hiss) | The last few milliseconds between two speakers |
+
+How an offset sounds: up to about 1 ms the speakers sound as one, in the middle; 1–5 ms pulls the sound towards the earlier speaker; 5–30 ms smears it (a thick click, a hollow, "phasey" hiss); beyond 30–40 ms you hear two separate clicks, an echo. Sound covers about a third of a metre per millisecond, so every metre of difference between your distances to two speakers is ~3 ms: tune where you listen.
+
+A good order: **Clicks with accent** while the speakers are far apart, **Clicks** until every speaker's click is one, then **Noise** for each pair of speakers (hear only the two, with **Only this speaker** or **Compare two**): stand midway and nudge 1 ms at a time until the hiss sits in the middle as one solid sound. The measurement (*Measure with a microphone* or the phone) always plays its own click track.
 
 Leaving the tab finishes the tuning: the delays stay; the clicks stop, every speaker the bridge muted is unmuted and the volumes go back to what they were. If anything changed, the screen first offers to save the delays as a profile.
 

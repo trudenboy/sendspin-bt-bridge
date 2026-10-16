@@ -151,13 +151,21 @@ def _sync_click_track_dir(tmp_path_factory):
 @pytest.fixture(autouse=True)
 def _isolated_sync_session_store(tmp_path_factory, monkeypatch, _sync_click_track_dir):
     """No test shares the sync-tuning store singleton or lets it near the real ``/config``,
-    and the click track file is written to a temp dir (once per worker), never ``/var/tmp``."""
+    and the click track files are written to a temp dir (once per worker), never ``/var/tmp``."""
     from sendspin_bridge.sync_tuning import click_track_host, session_store
 
     snapshot_dir = tmp_path_factory.mktemp("sync-store")
     monkeypatch.setattr(session_store, "_default_snapshot_dir", lambda: snapshot_dir)
     monkeypatch.setattr(
         click_track_host, "track", click_track_host.ClickTrackFile(directory=lambda: _sync_click_track_dir)
+    )
+    monkeypatch.setattr(
+        click_track_host,
+        "tracks",
+        {
+            kind: click_track_host.ClickTrackFile(kind, directory=lambda: _sync_click_track_dir)
+            for kind in click_track_host.tracks
+        },
     )
     session_store.reset_store()
     yield

@@ -2151,6 +2151,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/sessions/{session_id}/sound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Pick manual tuning's listening sound
+         * @description clicks, accent or noise. While the clicker plays it starts over with the new sound (the queue is replaced); mutes and the solo stay. 409 session_state in semi-automatic tuning, whose clicker always plays the measurement's click track.
+         */
+        put: operations["session_sound_api_v1_sync_sessions__session_id__sound_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/sessions/{session_id}/volumes/{member}": {
         parameters: {
             query?: never;
@@ -2177,6 +2197,26 @@ export interface paths {
         };
         /** Click track for a running session (public) */
         get: operations["signal_api_v1_sync_signal__token__wav_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/signal/{token}/{sound}.wav": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A listening sound of manual tuning for a running session (public)
+         * @description sound: clicks, accent or noise; the same token as the session's click track.
+         */
+        get: operations["listening_signal_api_v1_sync_signal__token___sound__wav_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4670,6 +4710,15 @@ export interface components {
             /** Member */
             member: string | null;
         };
+        /** SoundIn */
+        SoundIn: {
+            /**
+             * Sound
+             * @description clicks: one a second; accent: every 4th click accented; noise: pink noise (fine alignment).
+             * @enum {string}
+             */
+            sound: "clicks" | "accent" | "noise";
+        };
         /** StartupProgress */
         StartupProgress: {
             /**
@@ -4837,6 +4886,11 @@ export interface components {
             sequence: components["schemas"]["SequenceOut"] | null;
             /** Soloed */
             soloed: string | null;
+            /**
+             * Sound
+             * @description Manual tuning's listening sound (clicks, accent: every 4th click accented, noise: pink noise); null in semi-automatic tuning, whose clicker always plays the measurement's click track.
+             */
+            sound: ("clicks" | "accent" | "noise") | null;
             /**
              * State
              * @enum {string}
@@ -10759,6 +10813,52 @@ export interface operations {
             };
         };
     };
+    session_sound_api_v1_sync_sessions__session_id__sound_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoundIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
     session_volume_api_v1_sync_sessions__session_id__volumes__member__put: {
         parameters: {
             query?: never;
@@ -10812,6 +10912,36 @@ export interface operations {
             header?: never;
             path: {
                 token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listening_signal_api_v1_sync_signal__token___sound__wav_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                sound: string;
             };
             cookie?: never;
         };

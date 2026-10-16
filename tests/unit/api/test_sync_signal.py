@@ -51,3 +51,24 @@ def test_signal_streams_the_prepared_file_without_compressing_it(monkeypatch, tm
     assert int(resp.headers["content-length"]) == ct.wav_size(duration_s=3)
     assert resp.content == track.path().read_bytes() == ct.render_wav(duration_s=3)
     assert resp.headers["Cache-Control"] == "no-store"
+
+
+def test_listening_sounds_are_served_under_the_session_token(monkeypatch, tmp_path):
+    from sendspin_sync import listening_tracks as lt
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+    monkeypatch.setattr(
+        host, "tracks", {kind: host.ClickTrackFile(kind, directory=lambda: tmp_path, duration_s=2) for kind in lt.KINDS}
+    )
+    token = tokens.issue("s1")
+    client = make_client({"AUTH_ENABLED": True})  # Music Assistant fetches without credentials
+    for kind in lt.KINDS:
+        resp = client.get(f"/api/v1/sync/signal/{token}/{kind}.wav")
+        assert resp.status_code == 200 and resp.headers["content-type"] == "audio/wav", kind
+        assert resp.content == lt.render_wav(kind, duration_s=2) and resp.headers["Cache-Control"] == "no-store"
+    assert client.get(f"/api/v1/sync/signal/{token}/measure.wav").status_code == 404
+    assert client.get(f"/api/v1/sync/signal/{token}/other.wav").status_code == 404
+    assert client.get("/api/v1/sync/signal/" + "0" * 64 + "/clicks.wav").status_code == 404
+    tokens.release("s1")
+    assert client.get(f"/api/v1/sync/signal/{token}/clicks.wav").status_code == 404

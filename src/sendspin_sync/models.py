@@ -102,10 +102,13 @@ class GroupPlayback:
 
     def plays(self, url: str | None) -> bool:
         """The group plays the click track served at *url* (matched on its unguessable token too, in
-        case Music Assistant reports the item under its own uri)."""
+        case Music Assistant reports the item under its own uri). Every track of a session shares the
+        token (``…/signal/{token}.wav``, ``…/signal/{token}/{sound}.wav``), so any of them counts."""
         if not url or self.state != "playing" or not self.media_uri:
             return False
-        token = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".wav")
+        path = url.rstrip("/")
+        token = path.split("/signal/", 1)[1].split("/", 1)[0] if "/signal/" in path else path.rsplit("/", 1)[-1]
+        token = token.removesuffix(".wav")
         return url in self.media_uri or (len(token) >= 16 and token in self.media_uri)
 
 

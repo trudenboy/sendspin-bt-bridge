@@ -18,8 +18,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from typing import Concatenate
 
+    from sendspin_sync.listening_tracks import Kind as Sound
     from sendspin_sync.models import GroupPlayback, Proposal, Recording, Snapshot
-    from sendspin_sync.ports import ClickTrackHost, GroupControl
+    from sendspin_sync.ports import ClickTrackHost, GroupControl, Track
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,9 @@ class SyncSession:
         self.clicker_playing = False  # the group plays this session's click track (as last read)
         self.clicker_starts = 0  # clicker starts so far; measurements never mix two playbacks
         self.clicker_url: str | None = None
+        # what the clicker plays in manual tuning (a listening sound the operator picks); the measurement
+        # (semi-automatic, and the phone's sequence) always plays the click track its estimator reads
+        self.sound: Sound | None = "clicks" if mode == "manual" else None
         self.volumes: dict[str, int | None] = {}
         # each member's volume before this session first changed it; put back at the end
         self.volumes_before: dict[str, int] = {}
@@ -249,7 +253,8 @@ class SyncSession:
         if self.group_state == "playing" and not self.clicker_playing:
             self._changed()
             raise ControlError("group_playing", "stop the group's playback first")
-        url = self._host.url_for(self.id)
+        track: Track = self.sound if self.sound is not None else "measure"
+        url = self._host.url_for(self.id, track)
         if url != self.clicker_url:
             self.clicker_url = url
             self._changed()  # persisted before play_media: a start that times out may still play
@@ -263,6 +268,25 @@ class SyncSession:
             self._generation += 1
         self.touch()
         self._changed()
+
+    @_locked
+    def set_sound(self, sound: Sound) -> None:
+        """Pick manual tuning's listening sound. While our clicker plays it starts over with the new
+        sound (the queue is replaced, as on every start); mutes and the solo stay as they are. Refused
+        (``session_state``) in semi-automatic tuning: the measurement plays its own click track."""
+        self._require_active()
+        if self.mode != "manual":
+            raise ControlError("session_state", "the measurement always plays its click track")
+        if sound == self.sound:
+            self.touch()
+            return
+        self.sound = sound
+        self._changed()
+        if self._observe(self._control.playback(self.group_id)):
+            self._changed()
+        if self.clicker_playing:
+            self.start_clicker()
+        self.touch()
 
     @_locked
     def stop_clicker(self) -> None:
@@ -832,6 +856,7 @@ class SyncSession:
             "volumes": dict(self.volumes),
             "volumes_before": dict(sorted(self.volumes_before.items())),
             "clicker_left_s": self._clicker_left(),
+            "sound": self.sound,
             "muted": sorted(self.muted),
             "soloed": self.soloed,
             "reference": self.reference,

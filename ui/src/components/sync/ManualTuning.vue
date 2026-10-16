@@ -6,6 +6,8 @@ import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
 import ListeningBar from './ListeningBar.vue'
+import SoundPicker from './SoundPicker.vue'
+import type { SyncSound } from '@/api/types'
 import { speakerName } from '@/sync/names'
 import { useCountdown } from '@/sync/countdown'
 import { formatClock } from '@/sync/format'
@@ -200,6 +202,26 @@ function onSignal(action: 'start' | 'stop') {
   })
 }
 
+/**
+ * Manual tuning's listening sound (semi-automatic tuning plays the measurement track: no choice there).
+ * The pick shows at once; a playing clicker starts over with it, keeping the mutes and the solo.
+ */
+const soundWanted = ref<SyncSound | null>(null)
+const sound = computed<SyncSound>(() => soundWanted.value ?? session.value?.sound ?? 'clicks')
+watch(
+  () => session.value?.sound,
+  () => {
+    soundWanted.value = null
+  },
+)
+
+function onSound(next: SyncSound) {
+  soundWanted.value = next
+  void run(sync.sound(next)).then((ok) => {
+    if (!ok) soundWanted.value = null
+  })
+}
+
 function onSolo(member: string | null) {
   stopAb()
   void run(sync.solo(member))
@@ -293,6 +315,7 @@ const listenStatus = computed(() => {
 
     <SbCard v-else>
       <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.listen.title') }}</h2>
+      <SoundPicker v-if="session?.mode === 'manual'" class="mb-3" :model-value="sound" @update:model-value="onSound" />
       <ListeningBar
         :members="present"
         :signal-running="signalRunning"
