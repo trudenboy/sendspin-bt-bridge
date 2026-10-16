@@ -119,6 +119,42 @@ describe('SyncView: sessions of other clients and restores', () => {
     expect(w.get('h1 + p').text()).toBe('Done')
   })
 
+  it('is never read-only when its own start is answered after the session event (B1)', async () => {
+    vi.mocked(api.getSyncGroup).mockResolvedValue(group as never)
+    let answer!: (s: unknown) => void
+    vi.mocked(api.createSession).mockReturnValue(new Promise((r) => { answer = r }) as never)
+    const w = await mountView()
+    const store = useSyncStore()
+    const started = store.start('g', 'semi')
+    store.applyEvent(session())
+    await flushPromises()
+    expect(w.find('[data-read-only]').exists()).toBe(false)
+    answer(session())
+    await started
+    await flushPromises()
+    expect(w.find('[data-read-only]').exists()).toBe(false)
+    expect(api.endSession).not.toHaveBeenCalled()
+  })
+
+  it('never unmounts a measurement that holds a session, even when the page turns read-only', async () => {
+    vi.mocked(api.getSyncGroup).mockResolvedValue(group as never)
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: '/groups', name: 'groups', component: { template: '<div />' } },
+      { path: '/sync/:groupId', name: 'sync', component: SyncView } ] })
+    await router.push('/sync/g')
+    const Wizard = { name: 'MeasureWizard', emits: ['session'], template: '<div data-wizard-stub />' }
+    const w = mount(SyncView, { global: {
+      plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } }), router],
+      stubs: { MeasureWizard: Wizard } } })
+    await flushPromises()
+    await w.get('[role="tab"][data-tab-id="measure"]').trigger('click')
+    await flushPromises()
+    w.findComponent(Wizard).vm.$emit('session', 's9')
+    useSyncStore().applyEvent(session())   // not marked as this page's
+    await flushPromises()
+    expect(w.find('[data-wizard-stub]').exists()).toBe(true)
+  })
+
   it('is not read-only for a session this page started', async () => {
     vi.mocked(api.getSyncGroup).mockResolvedValue(group as never)
     vi.mocked(api.createSession).mockResolvedValue(session())

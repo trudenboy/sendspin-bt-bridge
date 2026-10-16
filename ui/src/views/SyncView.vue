@@ -123,11 +123,13 @@ const liveSession = computed(() => {
  */
 const readOnly = computed(() => {
   const g = group.value
-  if (!g) return false
+  if (!g || sync.starting) return false
   if (g.session_id && !sync.session) return true
   const s = liveSession.value
   return !!s && s.mode !== 'manual' && !sync.owns(s.id)
 })
+/** The session the measuring wizard holds: the wizard is never unmounted under it (B1). */
+const wizardSession = ref<string | null>(null)
 const manualSession = computed(() => (liveSession.value?.mode === 'manual' ? liveSession.value : null))
 /** A measurement already runs for this group: manual tuning must not take it over. */
 const manualBusy = computed(() => !!liveSession.value && liveSession.value.mode !== 'manual')
@@ -499,7 +501,13 @@ watch(groupId, (id) => void load(id), { immediate: true })
             {{ t(`sync.measureMode.${measureMode}`) }}
           </p>
           <!-- Mounted only while the tab is open: leaving it closes the microphone and ends the measurement. -->
-          <MeasureWizard v-if="activeTab === 'measure' && !readOnly" :key="measureMode" :group-id="group.id" :mode="measureMode" />
+          <MeasureWizard
+            v-if="activeTab === 'measure' && (!readOnly || wizardSession)"
+            :key="measureMode"
+            :group-id="group.id"
+            :mode="measureMode"
+            @session="wizardSession = $event"
+          />
         </template>
       </SbTabs>
     </template>

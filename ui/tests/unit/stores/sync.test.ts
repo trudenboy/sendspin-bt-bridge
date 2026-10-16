@@ -318,6 +318,36 @@ describe('sync store live writes', () => {
     expect(store.group?.members[0]?.delay_ms).toBe(70)
   })
 
+  it('owns a session whose event arrives before the answer to its own start (B1)', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    let answer!: (s: unknown) => void
+    vi.mocked(api.createSession).mockReturnValue(new Promise((r) => { answer = r }) as never)
+    const started = store.start('g', 'semi', 'device')
+    expect(store.starting).toBe(true)
+    // The bridge's own event for the new session comes first.
+    store.applyEvent({ id: 's1', group_id: 'g', mode: 'semi', state: 'measuring' } as never)
+    expect(store.session?.id).toBe('s1')
+    expect(store.owns('s1')).toBe(true)
+    answer({ id: 's1', group_id: 'g', mode: 'semi', state: 'measuring' })
+    await started
+    expect(store.starting).toBe(false)
+    expect(store.owns('s1')).toBe(true)
+  })
+
+  it('does not own a session of another group adopted while a start is in flight', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    vi.mocked(api.createSession).mockRejectedValue(new ApiError({ status: 409, code: 'session_active' }))
+    const started = store.start('g', 'semi', 'device').catch(() => {})
+    store.applyEvent({ id: 'x', group_id: 'other', state: 'measuring' } as never)
+    await started
+    expect(store.owns('x')).toBe(false)
+    expect(store.starting).toBe(false)
+  })
+
   it('shares the ended states and the error-code helper', () => {
     expect([...ENDED].sort()).toEqual(['cancelled', 'done', 'failed'])
     expect(errorCode(new ApiError({ status: 403, code: 'ma_forbidden' }))).toBe('ma_forbidden')

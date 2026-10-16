@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'
 import type {
@@ -53,6 +53,13 @@ export const useSyncStore = defineStore('sync', () => {
   const writeFailure = ref<WriteFailure | null>(null)
   /** Sessions this page started; any other live session of the group belongs to another client. */
   const owned = ref<Set<string>>(new Set())
+  /**
+   * The group this page is starting a session for, while the POST is under way. The bridge's own
+   * ``sync`` event for the new session may arrive before the answer: a live session of that group
+   * adopted meanwhile is this page's (one session per group, so it cannot be anyone else's).
+   */
+  const startingGroup = ref<string | null>(null)
+  const starting = computed(() => startingGroup.value !== null)
   /** Sessions that are never the page's session (a quick listen): their events are dropped. */
   const ignored = new Set<string>()
   /** While > 0, no other session is adopted (a quick listen is being created, its id not known yet). */
@@ -178,10 +185,15 @@ export const useSyncStore = defineStore('sync', () => {
     if (held) {
       if (next.id === held.id) session.value = next
       // A held session that ended gives way to a new live one of its group (another tab, a restart after timeout).
-      else if (ENDED.has(held.state) && next.group_id === held.group_id && !ENDED.has(next.state)) session.value = next
+      else if (ENDED.has(held.state) && next.group_id === held.group_id && !ENDED.has(next.state)) adopt(next)
       return
     }
-    if (group.value && next.group_id === group.value.id && !ENDED.has(next.state)) session.value = next
+    if (group.value && next.group_id === group.value.id && !ENDED.has(next.state)) adopt(next)
+  }
+
+  function adopt(next: SyncSession) {
+    if (startingGroup.value === next.group_id) owned.value = new Set([...owned.value, next.id])
+    session.value = next
   }
 
   /** Catch up after the event stream was down: ``sync`` events are not replayed. */
@@ -226,10 +238,15 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   async function start(groupId: string, mode: SessionMode, point: SessionPoint = 'device') {
-    const created = await track(() => api.createSession({ group_id: groupId, mode, point }))
-    owned.value = new Set([...owned.value, created.id])
-    session.value = created
-    return created
+    startingGroup.value = groupId
+    try {
+      const created = await track(() => api.createSession({ group_id: groupId, mode, point }))
+      owned.value = new Set([...owned.value, created.id])
+      session.value = created
+      return created
+    } finally {
+      if (startingGroup.value === groupId) startingGroup.value = null
+    }
   }
 
   async function end() {
@@ -427,6 +444,7 @@ export const useSyncStore = defineStore('sync', () => {
     error,
     writeFailure,
     owns,
+    starting,
     holdSession,
     ignoreSession,
     endForeign,

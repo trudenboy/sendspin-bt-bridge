@@ -50,6 +50,8 @@ const emit = defineEmits<{
   proposal: []
   /** The operator cancelled (the session is ended), or left the done step. */
   done: []
+  /** The session this wizard holds (null when it holds none): the page must not unmount it meanwhile. */
+  session: [id: string | null]
 }>()
 
 type Step = 'prepare' | 'stop' | 'clicker' | 'volume' | 'members' | 'proposal' | 'done'
@@ -68,6 +70,7 @@ const startError = ref('')
 /** The session this wizard started; null before the start and after it ended. */
 const sessionId = ref<string | null>(null)
 const ended = ref(false)
+watch(sessionId, (id) => emit('session', id))
 
 let recorder: SyncRecorder | null = null
 let unsubscribers: (() => void)[] = []
