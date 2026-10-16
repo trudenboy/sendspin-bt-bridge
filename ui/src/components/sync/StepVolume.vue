@@ -31,6 +31,7 @@ const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
 <template>
   <div class="flex flex-col gap-4">
     <p class="text-sm text-text-primary">{{ t('sync.prep.volume.help') }}</p>
+    <p data-volumes-back class="text-sm text-text-secondary">{{ t('sync.prep.volume.back') }}</p>
     <ul class="flex flex-col gap-2">
       <li v-for="m in members" :key="m.ma_player_id" :data-volume-row="m.ma_player_id" class="flex flex-col gap-1">
         <span class="flex flex-wrap items-center gap-2">

@@ -1498,7 +1498,7 @@
       "measured": "Measured: {ms} ms ({change})",
       "resetMeasured": "Reset to measured",
       "resetMeasuredMember": "Reset {name} to the measured delay",
-      "endedNotice": "Manual tuning ended: the delays stay, the clicks stopped and every speaker is unmuted.",
+      "endedNotice": "Manual tuning ended: the delays stay; the clicks stopped, every speaker is unmuted and the volumes are back.",
       "prepOf": "Before you listen ({n}/{total}) · {name}"
     },
     "capture": {
@@ -1535,7 +1535,7 @@
       },
       "notice": {
         "title": "Nothing else plays while you measure.",
-        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted and the clicks stop."
+        "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop."
       },
       "point": {
         "legend": "Where will you measure?",
@@ -1618,12 +1618,12 @@
     },
     "cancel": {
       "title": "Stop measuring?",
-      "message": "Recordings so far will be lost. Speakers the bridge muted are unmuted and the clicks stop.",
+      "message": "Recordings so far will be lost. Speakers the bridge muted are unmuted, volumes go back and the clicks stop.",
       "tuneTitle": "Stop and put the delays back?",
-      "tuneMessage": "The delays go back to what they were before you measured. Speakers the bridge muted are unmuted and the clicks stop.",
+      "tuneMessage": "The delays go back to what they were before you measured. Speakers the bridge muted are unmuted, volumes go back and the clicks stop.",
       "confirm": "Stop",
       "keep": "Keep going",
-      "done": "Measurement cancelled. Speakers unmuted, clicks stopped."
+      "done": "Measurement cancelled. Speakers unmuted, volumes put back, clicks stopped."
     },
     "reloaded": {
       "manual": "Manual tuning ended when the page was reloaded. The delays stay as they were.",
@@ -1652,9 +1652,9 @@
     },
     "done": {
       "restoring": "Restoring the group…",
-      "restoringHelp": "Unmuting the speakers and stopping the clicks. The delays stay as you left them.",
+      "restoringHelp": "Putting the volumes back, unmuting the speakers and stopping the clicks. The delays stay as you left them.",
       "restored": "Group restored",
-      "restoredHelp": "Every speaker is unmuted and the clicks stopped. The new delays stay; start your music again in Music Assistant.",
+      "restoredHelp": "Every speaker is unmuted, the volumes are back and the clicks stopped. The new delays stay; start your music again in Music Assistant.",
       "spread": "Largest gap between speakers: {before} ms → about {after} ms",
       "saved": "Saved as profile “{name}”.",
       "saveFailed": "The delays are kept, but the profile could not be saved ({code}).",
@@ -1692,12 +1692,14 @@
         "playing": "Clicks are playing.",
         "stopped": "Clicks are not playing.",
         "groupPlaying": "The group plays something else: stop it first.",
-        "whyDisabled": "Start the clicks to go on."
+        "whyDisabled": "Start the clicks to go on.",
+        "left": "Clicks: {time} left"
       },
       "volume": {
         "help": "Set a level where the clicks are clearly audible where you measure.",
         "noVolume": "No volume control",
-        "silent": "Silent: turn it up to measure it"
+        "silent": "Silent: turn it up to measure it",
+        "back": "Volumes go back to what they were when you finish."
       },
       "skip": "Skip"
     },

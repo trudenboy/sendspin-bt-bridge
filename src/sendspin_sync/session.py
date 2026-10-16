@@ -9,7 +9,7 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Literal
 
-from sendspin_sync import estimator, planner
+from sendspin_sync import click_track, estimator, planner
 from sendspin_sync.models import Measurement, Member, to_dict
 from sendspin_sync.ports import ControlError
 
@@ -130,6 +130,9 @@ class SyncSession:
         self.clicker_starts = 0  # clicker starts so far; measurements never mix two playbacks
         self.clicker_url: str | None = None
         self.volumes: dict[str, int | None] = {}
+        # each member's volume before this session first changed it; put back at the end
+        self.volumes_before: dict[str, int] = {}
+        self._clicker_started: float | None = None  # clock at the last clicker start
         self._live_muted: dict[str, bool] = {}  # mutes as last read from Music Assistant
         self._restore_since: float | None = None
         self._polled_at: float | None = None
@@ -247,6 +250,7 @@ class SyncSession:
         self._control.start_clicker(self.group_id, url)
         self.clicker_playing, self.group_state = True, "playing"
         self.clicker_starts += 1
+        self._clicker_started = self._clock()
         if self.state in _MEASURING and self.measurements:
             # phases from two playbacks cannot be compared: the round starts again
             self.measurements = {}
@@ -268,9 +272,15 @@ class SyncSession:
 
     @_locked
     def set_volume(self, member: str, level: int) -> None:
+        """Set one member's volume. The first change of a member remembers (and persists, before the
+        command is sent) the volume it had, so the end puts it back."""
         self._require_active()
         self._member(member)
         level = max(0, min(100, int(level)))
+        before = self.volumes.get(member)
+        if member not in self.volumes_before and before is not None:
+            self.volumes_before[member] = before
+            self._changed()
         self._control.set_volume(member, level)
         self.volumes = {**self.volumes, member: level}
         self.touch()
@@ -282,6 +292,30 @@ class SyncSession:
             return False
         return bool((self.snapshot and self.snapshot.muted.get(mid)) or self._live_muted.get(mid))
 
+    def _owed(self, exc: ControlError, *, give_up_absent: bool) -> bool:
+        """Whether a failed restore step stays owed (raise) or is given up: only a player Music Assistant
+        does not list, once the restore ran for RESTORE_GIVE_UP_S."""
+        since = self._restore_since
+        if not (give_up_absent and exc.code == "member_gone" and since is not None):
+            return True
+        return self._clock() - since < RESTORE_GIVE_UP_S
+
+    def _put_volumes_back(self) -> None:
+        """Every volume this session changed goes back to what it was (sent while our clicks may still
+        play: some players keep a volume set while they play). A failure stays owed, as for unmutes."""
+        for mid, level in sorted(self.volumes_before.items()):
+            try:
+                self._control.set_volume(mid, level)
+            except ControlError as exc:
+                if self._owed(exc, give_up_absent=True):
+                    raise
+                logger.warning(
+                    "Sync session %s gives up the volume of %s: Music Assistant does not list it", self.id, mid
+                )
+            del self.volumes_before[mid]
+            self.volumes = {**self.volumes, mid: level}
+            self._changed()
+
     def _unmute(self, mids: list[str], *, give_up_absent: bool = False) -> None:
         """Unmute each member (the adapter sends it only to a player that is muted now). With
         *give_up_absent*, a player Music Assistant no longer lists is dropped once the restore ran for
@@ -290,10 +324,7 @@ class SyncSession:
             try:
                 self._control.mute(mid, False)
             except ControlError as exc:
-                since = self._restore_since
-                if not (give_up_absent and exc.code == "member_gone" and since is not None):
-                    raise
-                if self._clock() - since < RESTORE_GIVE_UP_S:
+                if self._owed(exc, give_up_absent=give_up_absent):
                     raise
                 logger.warning("Sync session %s gives up unmuting %s: Music Assistant does not list it", self.id, mid)
             self.muted.discard(mid)
@@ -567,11 +598,13 @@ class SyncSession:
 
     @_locked
     def restore_tick(self) -> bool:
-        """One restore attempt; True once the group is restored: every member this session muted is
-        unmuted, then the group is stopped if this session's clicker is what it plays (music someone
-        started meanwhile plays on). A failure keeps what is left for the next attempt."""
+        """One restore attempt; True once the group is restored: the volumes this session changed are
+        put back (while our clicks still play), every member it muted is unmuted, then the group is
+        stopped if this session's clicker is what it plays (music someone started meanwhile plays on).
+        A failure keeps what is left for the next attempt."""
         self._require("restoring")
         try:
+            self._put_volumes_back()
             self._unmute(sorted(self.muted), give_up_absent=True)
             self.soloed = None
             if self.clicker_url is not None:
@@ -593,6 +626,12 @@ class SyncSession:
         self._set(self._final)
         return True
 
+    def _clicker_left(self) -> float | None:
+        """Seconds of the click track left, while it plays (counted from its last start)."""
+        if not self.clicker_playing or self._clicker_started is None:
+            return None
+        return max(0.0, round(click_track.DURATION_S - (self._clock() - self._clicker_started), 1))
+
     @_locked
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -612,6 +651,8 @@ class SyncSession:
             "clicker_playing": self.clicker_playing,
             "clicker_starts": self.clicker_starts,
             "volumes": dict(self.volumes),
+            "volumes_before": dict(sorted(self.volumes_before.items())),
+            "clicker_left_s": self._clicker_left(),
             "muted": sorted(self.muted),
             "soloed": self.soloed,
             "reference": self.reference,

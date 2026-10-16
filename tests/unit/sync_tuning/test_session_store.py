@@ -95,7 +95,7 @@ def test_the_entry_names_what_the_session_muted_and_its_clicker(tmp_path):
     s.stop_group()
     s.start_clicker()
     [entry] = _persisted(tmp_path)
-    assert entry == {"session_id": s.id, "group_id": "g", "muted": [], "clicker_url": s.clicker_url}
+    assert entry == {"session_id": s.id, "group_id": "g", "muted": [], "clicker_url": s.clicker_url, "volumes": {}}
     s.solo("a")
     assert _persisted(tmp_path)[0]["muted"] == ["b", "cast"]
     s.solo(None)
@@ -105,11 +105,12 @@ def test_the_entry_names_what_the_session_muted_and_its_clicker(tmp_path):
 def test_an_unchanged_entry_is_not_written_again(tmp_path, monkeypatch):
     store, _made, _, _, _ = make(tmp_path)
     s = soloed(store)
+    s.set_volume("a", 30)  # the first change of "a" names its volume from before: a new entry
     writes = []
     real = store._write_file
     monkeypatch.setattr(store, "_write_file", lambda: (writes.append(1), real()))
     s.set_reference("a")
-    s.set_volume("a", 30)  # published, but the entry stays the same
+    s.set_volume("a", 35)  # published, but the entry (the volume from before) stays the same
     assert writes == []
 
 
@@ -654,3 +655,43 @@ def test_an_owed_unmute_of_a_player_not_listed_yet_is_retried_then_given_up(tmp_
     store2.retry_pending("g")
     store2.tick()
     assert not _file(tmp_path).exists() and store2.pending_for("g") is None  # given up: restore ends
+
+
+# -- UX round: volumes from before the session survive a restart ---------------------------------
+
+
+def test_the_entry_names_the_volumes_to_put_back(tmp_path):
+    store, _made, _, _, _ = make(tmp_path)
+    s = store.create("g", "manual", "device")
+    s.set_volume("a", 75)  # nothing muted, no clicker: the volume alone is worth an entry
+    [entry] = _persisted(tmp_path)
+    assert entry["volumes"] == {"a": 40} and entry["muted"] == [] and entry["clicker_url"] is None
+
+
+def test_restore_persisted_puts_the_volumes_back_then_unmutes_then_stops_the_clicker(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry(volumes={"a": 35})))
+    store, made, _, _, _ = make(tmp_path, left_muted=("b",))
+    original = store._factory
+    store._factory = lambda: _playing_old_clicker(original())
+    store.restore_persisted()
+    assert made[0].calls == [("volume", "a", 35), ("mute", "b", False), ("stop_group",)]
+    assert not _file(tmp_path).exists()
+
+
+def test_a_persisted_volume_that_was_put_back_is_not_sent_again_after_a_later_failure(tmp_path):
+    _file(tmp_path).write_text(json.dumps(_old_entry(volumes={"a": 35, "b": 20})))
+    store, made, _, t, _ = make(tmp_path, left_muted=("b",))
+    original = store._factory
+
+    def factory():
+        ctl = original()
+        if len(made) == 1:
+            ctl.gone = {"b"}  # "b" is not listed yet: its volume (and unmute) stay owed
+        return ctl
+
+    store._factory = factory
+    store.restore_persisted()
+    assert _persisted(tmp_path)[0]["volumes"] == {"b": 20}
+    t["now"] = 5.0
+    store.tick()
+    assert ("volume", "a", 35) not in made[1].calls and ("volume", "b", 20) in made[1].calls

@@ -4499,6 +4499,11 @@ export interface components {
          */
         SyncSessionOut: {
             /**
+             * Clicker Left S
+             * @description Seconds of the click track left while it plays (from its last start); null otherwise.
+             */
+            clicker_left_s: number | null;
+            /**
              * Clicker Playing
              * @description The group plays this session's click track (as last read).
              */
@@ -4570,6 +4575,13 @@ export interface components {
              */
             volumes: {
                 [key: string]: number | null;
+            };
+            /**
+             * Volumes Before
+             * @description Members whose volume this session changed, with the volume from before; put back at the end.
+             */
+            volumes_before: {
+                [key: string]: number;
             };
         };
         /** TokenList */

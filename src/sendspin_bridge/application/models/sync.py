@@ -126,6 +126,12 @@ class SyncSessionOut(ResponseModel):
         description="Clicker starts in this session; recordings from two playbacks are never mixed."
     )
     volumes: dict[str, int | None] = Field(description="Each member's volume as last read or set.")
+    volumes_before: dict[str, int] = Field(
+        description="Members whose volume this session changed, with the volume from before; put back at the end."
+    )
+    clicker_left_s: float | None = Field(
+        description="Seconds of the click track left while it plays (from its last start); null otherwise."
+    )
     muted: list[str] = Field(description="Members this session muted; they are unmuted when it ends.")
     soloed: str | None
     reference: str | None

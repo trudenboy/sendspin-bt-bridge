@@ -26,6 +26,7 @@ class FakeControl:
         self.gone: set[str] = set()  # players Music Assistant does not list (e.g. after a restart)
         self.late_mute: set[str] = set()  # their mute takes effect, but the answer times out
         self.fail_clicker = False  # play_media starts the clicker, but the answer times out
+        self.fail_volume = 0  # this many volume calls fail with ma_unavailable
         self.member_list = [
             Member("a", "A", True, "bridge", delay_ms=0),
             Member("b", "B", True, "sendspin", delay_ms=0),
@@ -78,6 +79,11 @@ class FakeControl:
             raise ControlError("ma_unavailable", "MA volume_mute timed out", member=member)
 
     def set_volume(self, member: str, level: int) -> None:
+        if member in self.gone:
+            raise ControlError("member_gone", f"{member} is not known", member=member)
+        if self.fail_volume:
+            self.fail_volume -= 1
+            raise ControlError("ma_unavailable")
         self.calls.append(("volume", member, level))
         self.volumes[member] = level
 

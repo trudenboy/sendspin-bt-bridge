@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Check } from 'lucide-vue-next'
 import { SbBadge, SbButton, SbSpinner } from '@/kit'
 import type { SessionPoint, SyncMeasurement, SyncMember } from '@/api/types'
 import { speakerName } from '@/sync/names'
+import { formatClock } from '@/sync/format'
 
 export type MemberPhase = 'soloing' | 'recording'
 
@@ -27,6 +28,8 @@ const props = defineProps<{
   complete: boolean
   /** The clicker plays on the group (recordings only then); when it stopped, it is offered again. */
   clickerPlaying?: boolean
+  /** Seconds of the click track left while it plays. */
+  clickerLeftS?: number | null
   /** Starting the clicker again is under way. */
   restarting?: boolean
 }>()
@@ -73,6 +76,9 @@ const label = (status: SyncMeasurement['status']) =>
   <div class="flex flex-col gap-4">
     <p class="text-sm text-text-secondary">{{ t('sync.wizard.members.help') }}</p>
     <p class="text-xs text-text-secondary">{{ t('sync.wizard.members.order') }}</p>
+    <p v-if="ready && clickerLeftS != null" data-clicks-left class="text-xs text-text-secondary">
+      {{ t('sync.prep.clicker.left', { time: formatClock(clickerLeftS) }) }}
+    </p>
     <div
       v-if="!ready"
       data-clicker-stopped

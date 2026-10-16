@@ -1,8 +1,9 @@
 """Sessions by id, one per group; restore with backoff; what a session did to the group survives a restart.
 
-A session's entry in the snapshot file names the members it muted and the click track it started,
-written whenever that changes: after a restart the members are unmuted and the group is stopped
-if it still plays that click track.
+A session's entry in the snapshot file names the members it muted, the volumes it changed (with the
+values from before) and the click track it started, written whenever that changes: after a restart
+the volumes are put back, the members unmuted and the group stopped if it still plays that click
+track.
 
 Threading: session methods block on Music Assistant I/O, so nothing here runs on the
 event loop. API worker threads call ``create``/``end``/``get``; a daemon thread calls
@@ -151,6 +152,7 @@ class SessionStore:
             for e in entries:
                 str(e["session_id"]), str(e["group_id"])
                 [str(m) for m in e.get("muted") or []]
+                {str(k): int(v) for k, v in dict(e.get("volumes") or {}).items()}
         except (OSError, ValueError, KeyError, TypeError):
             corrupt = path.with_name(path.name + ".corrupt")
             logger.warning("Unreadable %s; moved aside to %s", path, corrupt.name, exc_info=True)
@@ -191,7 +193,8 @@ class SessionStore:
         """``on_change`` of every session: persist what it did to the group and publish its state."""
         data = session.to_dict()
         clicker = session.clicker_url
-        if data["state"] in _ENDED or (not data["muted"] and clicker is None):
+        volumes = data["volumes_before"]
+        if data["state"] in _ENDED or (not data["muted"] and clicker is None and not volumes):
             self._put_entry(session.id, None)  # nothing to put back
         else:
             self._put_entry(
@@ -201,6 +204,7 @@ class SessionStore:
                     "group_id": session.group_id,
                     "muted": data["muted"],
                     "clicker_url": clicker,
+                    "volumes": volumes,
                 },
             )
         try:
@@ -355,8 +359,9 @@ class SessionStore:
             return bool(sids)
 
     def restore_persisted(self) -> None:
-        """On boot: unmute what a session left muted and stop its click track if the group still
-        plays it, then delete the entry; while Music Assistant is unreachable, retry with backoff."""
+        """On boot: put back the volumes a session changed, unmute what it left muted and stop its
+        click track if the group still plays it, then delete the entry; while Music Assistant is
+        unreachable, retry with backoff."""
         self.load_persisted()
         with self._tick_lock:
             for sid in list(self._pending):
@@ -372,16 +377,30 @@ class SessionStore:
         with self._lock:
             since = self._pending_since.setdefault(sid, self._clock())
         control: GroupControl | None = None
+
+        def owed(exc: ControlError) -> bool:
+            # a player not listed yet (its daemon registers again after the restart) stays owed,
+            # until RESTORE_GIVE_UP_S after the first attempt
+            return exc.code != "member_gone" or self._clock() - since < RESTORE_GIVE_UP_S
+
         try:
             control = self._factory()
+            volumes = {str(k): int(v) for k, v in dict(entry.get("volumes") or {}).items()}
+            for mid, level in sorted(volumes.items()):
+                try:
+                    control.set_volume(mid, level)
+                except ControlError as exc:
+                    if owed(exc):
+                        raise
+                    logger.warning("Giving up the volume of %s after a restart: Music Assistant does not list it", mid)
+                del volumes[mid]
+                entry["volumes"] = dict(volumes)  # keep what already succeeded
             muted = [str(m) for m in entry.get("muted") or []]
             for mid in list(muted):
                 try:
                     control.mute(mid, False)
                 except ControlError as exc:
-                    # a player not listed yet (its daemon registers again after the restart) stays owed,
-                    # until RESTORE_GIVE_UP_S after the first attempt
-                    if exc.code != "member_gone" or self._clock() - since < RESTORE_GIVE_UP_S:
+                    if owed(exc):
                         raise
                     logger.warning("Giving up unmuting %s after a restart: Music Assistant does not list it", mid)
                 muted.remove(mid)

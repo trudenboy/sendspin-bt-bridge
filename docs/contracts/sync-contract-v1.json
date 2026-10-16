@@ -709,6 +709,18 @@
     "SyncSessionOut": {
       "description": "The session resource; also the payload of ``sync`` events.",
       "properties": {
+        "clicker_left_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds of the click track left while it plays (from its last start); null otherwise.",
+          "title": "Clicker Left S"
+        },
         "clicker_playing": {
           "description": "The group plays this session's click track (as last read).",
           "title": "Clicker Playing",
@@ -878,6 +890,14 @@
           "description": "Each member's volume as last read or set.",
           "title": "Volumes",
           "type": "object"
+        },
+        "volumes_before": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Members whose volume this session changed, with the volume from before; put back at the end.",
+          "title": "Volumes Before",
+          "type": "object"
         }
       },
       "required": [
@@ -897,6 +917,8 @@
         "clicker_playing",
         "clicker_starts",
         "volumes",
+        "volumes_before",
+        "clicker_left_s",
         "muted",
         "soloed",
         "reference"

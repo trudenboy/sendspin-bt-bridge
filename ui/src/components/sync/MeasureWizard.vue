@@ -22,6 +22,7 @@ import { SbButton, SbSpinner } from '@/kit'
 import { confirmDialog } from '@/composables/useConfirm'
 import { formatMs } from '@/sync/format'
 import { speakerName } from '@/sync/names'
+import { useCountdown } from '@/sync/countdown'
 import StepPrepare from './StepPrepare.vue'
 import StepStopGroup from './StepStopGroup.vue'
 import StepClicker from './StepClicker.vue'
@@ -107,6 +108,8 @@ const notMeasured = computed(() => allMembers.value.filter((m) => !m.adjustable)
  */
 const clickerPlaying = computed(() => !!session.value?.clicker_playing)
 const clickerStarted = computed(() => (session.value?.clicker_starts ?? 0) > 0)
+/** The click track's time left, counted down here between the bridge's readings. */
+const leftS = useCountdown(() => session.value?.clicker_left_s ?? null)
 
 /** Members that left the group: as the bridge says, and as a refused call just told us. */
 const gone = ref<string[]>([])
@@ -1063,6 +1066,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
       v-else-if="step === 'clicker'"
       :clicker-playing="clickerPlaying"
       :started="clickerStarted"
+      :left-s="leftS"
       :note="autoNote"
       :busy="prepBusy"
       :error="prepError"
@@ -1096,6 +1100,7 @@ const volumes = computed(() => session.value?.volumes ?? {})
       :not-measured="notMeasured"
       :complete="complete"
       :clicker-playing="clickerPlaying"
+      :clicker-left-s="leftS"
       :restarting="restarting"
       @restart="restartClicker"
       @record="record"

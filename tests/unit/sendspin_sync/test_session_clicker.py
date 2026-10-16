@@ -343,3 +343,93 @@ def test_stop_clicker_stops_only_our_clicker():
     ctl.calls.clear()
     s.stop_clicker()
     assert ctl.calls == []
+
+
+# -- UX round: volumes go back to what they were; the clicks count down --------------------------
+
+
+def test_the_first_volume_change_of_a_member_remembers_its_volume_from_before():
+    s, _ctl, published = ready()
+    s.set_volume("a", 70)
+    s.set_volume("a", 80)  # a second change keeps the volume from before the first
+    s.set_volume("b", 10)
+    assert s.to_dict()["volumes_before"] == {"a": 40, "b": 40}
+    # persisted (published) before the volume is sent: a crash in between still restores it
+    first = next(d for d in published if d["volumes_before"])
+    assert first["volumes_before"] == {"a": 40} and first["volumes"]["a"] == 40
+
+
+def test_the_end_puts_the_volumes_back_while_our_clicks_still_play_then_stops_them():
+    s, ctl, _ = ready()
+    s.set_volume("a", 70)
+    s.set_volume("b", 0)
+    s.solo("a")
+    ctl.calls.clear()
+    s.finish()
+    assert s.restore_tick() is True and s.state == "done"
+    assert ctl.calls == [
+        ("volume", "a", 40),
+        ("volume", "b", 40),
+        ("mute", "b", False),
+        ("mute", "cast", False),
+        ("stop_group",),
+    ]
+    assert ctl.volumes == {"a": 40, "b": 40, "cast": 20} and s.to_dict()["volumes_before"] == {}
+
+
+def test_a_member_whose_volume_was_unknown_is_not_put_back():
+    s, ctl, _ = ready()
+    ctl.volumes["cast"] = None
+    s.tick()  # nothing new: the reading comes with the next poll
+    s._observe(ctl.playback("g"))
+    s.set_volume("cast", 50)
+    assert "cast" not in s.to_dict()["volumes_before"]
+
+
+def test_a_failed_volume_restore_is_retried_and_an_absent_player_given_up_after_a_while():
+    clock = Clock(100.0)
+    ctl = FakeControl()
+    s = SyncSession(
+        session_id="s1", group_id="g", mode="manual", point="device", control=ctl, host=FakeHost(), clock=clock
+    )
+    s.start()
+    s.stop_group()
+    s.start_clicker()
+    s.set_volume("a", 70)
+    s.set_volume("b", 70)
+    ctl.fail_volume = 1
+    s.cancel()
+    assert s.restore_tick() is False and s.restore_error == "ma_unavailable"
+    assert s.restore_tick() is True and ctl.volumes["a"] == 40 and ctl.volumes["b"] == 40
+    # an absent player
+    s2 = SyncSession(
+        session_id="s2", group_id="g", mode="manual", point="device", control=ctl, host=FakeHost(), clock=clock
+    )
+    s2.start()
+    s2.set_volume("b", 90)
+    ctl.gone = {"b"}
+    s2.cancel()
+    assert s2.restore_tick() is False and s2.restore_error == "member_gone"
+    clock.t += RESTORE_GIVE_UP_S + 1
+    assert s2.restore_tick() is True and s2.state == "cancelled"
+
+
+def test_the_clicks_count_down_while_they_play():
+    from sendspin_sync import click_track as ct
+
+    clock = Clock(10.0)
+    ctl = FakeControl()
+    s = SyncSession(
+        session_id="s1", group_id="g", mode="semi", point="device", control=ctl, host=FakeHost(), clock=clock
+    )
+    s.start()
+    assert s.to_dict()["clicker_left_s"] is None
+    s.stop_group()
+    s.start_clicker()
+    clock.t += 19.4
+    assert s.to_dict()["clicker_left_s"] == pytest.approx(ct.DURATION_S - 19.4)
+    clock.t += 10_000
+    assert s.to_dict()["clicker_left_s"] == 0
+    ctl.clicker_ends()
+    s._observe(ctl.playback("g"))
+    assert s.to_dict()["clicker_left_s"] is None

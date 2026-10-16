@@ -10,7 +10,7 @@ const base = { before: null, after: null, saved: null, saveError: '', listening:
 describe('StepDone', () => {
   it('says the speakers are being unmuted and the clicks stopped, with no music countdown', () => {
     const w = mount(StepDone, { global: { plugins: [i18n] }, props: { ...base, state: 'restoring' } })
-    expect(w.text()).toContain('Unmuting the speakers and stopping the clicks')
+    expect(w.text()).toContain('Putting the volumes back, unmuting the speakers and stopping the clicks')
     expect(w.find('[data-music-returns]').exists()).toBe(false)
     expect(w.text()).not.toContain('Music returns')
   })

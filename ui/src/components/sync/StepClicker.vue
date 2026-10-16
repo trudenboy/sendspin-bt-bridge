@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { Play } from 'lucide-vue-next'
 import { SbBadge, SbButton } from '@/kit'
+import { formatClock } from '@/sync/format'
 
 /**
  * Preparation, step 2: the click track plays on the whole group through Music Assistant. Starting it
@@ -16,6 +17,8 @@ defineProps<{
   error: string
   /** ``skip`` where Cancel only skips the preparation (the Manual tab) instead of ending the session. */
   cancelLabel?: 'cancel' | 'skip'
+  /** Seconds of the click track left while it plays (the bridge's count). */
+  leftS?: number | null
   /** A line about the step before (e.g. "The group is not playing — moving on."), already translated. */
   note?: string
 }>()
@@ -44,6 +47,9 @@ const { t } = useI18n()
           {{ clickerPlaying ? t('sync.prep.clicker.playing') : t('sync.prep.clicker.stopped') }}
         </SbBadge>
       </span>
+      <SbBadge v-if="clickerPlaying && leftS != null" data-clicks-left size="sm" tone="neutral">
+        {{ t('sync.prep.clicker.left', { time: formatClock(leftS) }) }}
+      </SbBadge>
     </div>
     <p v-if="error" role="alert" class="text-sm text-error">{{ error }}</p>
     <div class="flex justify-end gap-3">

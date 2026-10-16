@@ -7,6 +7,8 @@ import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
 import ListeningBar from './ListeningBar.vue'
 import { speakerName } from '@/sync/names'
+import { useCountdown } from '@/sync/countdown'
+import { formatClock } from '@/sync/format'
 import StepStopGroup from './StepStopGroup.vue'
 import StepClicker from './StepClicker.vue'
 import StepVolume from './StepVolume.vue'
@@ -231,6 +233,9 @@ watch(
 
 onBeforeUnmount(stopAb)
 
+/** The click track's time left, counted down between the bridge's readings. */
+const leftS = useCountdown(() => session.value?.clicker_left_s ?? null)
+
 /** The bridge sees the clicker playing: solo and A/B only then. */
 const soloReady = computed(() => !!session.value?.clicker_playing)
 
@@ -263,6 +268,7 @@ const listenStatus = computed(() => {
         v-else-if="prep === 'clicker'"
         :clicker-playing="!!session?.clicker_playing"
         :started="(session?.clicker_starts ?? 0) > 0"
+        :left-s="leftS"
         :note="autoNote"
         :busy="prepBusy"
         :error="prepError"
@@ -298,7 +304,7 @@ const listenStatus = computed(() => {
         @ab="onAb"
       />
       <p data-listen-status role="status" aria-live="polite" class="mt-3 text-sm text-text-secondary">
-        {{ listenStatus }}<template v-if="note"> {{ note }}</template>
+        {{ listenStatus }}<template v-if="signalRunning && leftS != null"> {{ t('sync.prep.clicker.left', { time: formatClock(leftS) }) }}</template><template v-if="note"> {{ note }}</template>
       </p>
       <p v-if="failure" data-listen-error role="alert" class="mt-2 text-sm text-error">{{ failure }}</p>
     </SbCard>

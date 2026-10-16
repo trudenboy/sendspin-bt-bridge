@@ -215,6 +215,8 @@ def test_member_volumes_are_set_through_the_session(api_client, sync_env):
     base = f"/api/v1/sync/sessions/{sid}"
     resp = api_client.put(f"{base}/volumes/b", json={"level": 70})
     assert resp.status_code == 200 and resp.json()["volumes"]["b"] == 70 and ctl.volumes["b"] == 70
+    assert resp.json()["volumes_before"] == {"b": 40}  # put back when the session ends
+    assert resp.json()["clicker_left_s"] == pytest.approx(180.0)
     assert api_client.put(f"{base}/volumes/b", json={"level": 101}).status_code == 422
     gone = api_client.put(f"{base}/volumes/zz", json={"level": 10})
     assert gone.status_code == 409 and gone.json()["code"] == "member_gone"
