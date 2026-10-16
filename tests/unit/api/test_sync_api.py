@@ -513,3 +513,29 @@ def test_a_non_finite_clock_is_refused_at_the_boundary(api_client, sync_env, mon
     )
     assert resp.status_code == 400 and resp.json()["code"] == "recording_invalid"
     assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["measurements"] == {}
+
+
+def test_a_group_shows_when_each_member_was_last_measured(api_client, sync_env):
+    from datetime import UTC, datetime
+
+    _, store, _, _ = sync_env
+    before = datetime.now(UTC).replace(microsecond=0)
+    sid = api_client.post("/api/v1/sync/sessions", json={"group_id": "g", "mode": "semi"}).json()["id"]
+    assert _upload(api_client, sid, "a", 0.0).json()["status"] == "ok"
+    silence = api_client.post(
+        f"/api/v1/sync/sessions/{sid}/recordings",
+        params={"member": "b", "start_time_s": 0.0, "sample_rate": 48000},
+        content=bytes(48000 * 2 * 8),
+        headers=OCTET,
+    )
+    assert silence.status_code == 200 and silence.json()["status"] != "ok"
+    during = {
+        m["ma_player_id"]: m["last_measured_at"] for m in api_client.get("/api/v1/sync/groups/g").json()["members"]
+    }
+    assert during["b"] is None and during["cast"] is None  # a failed measurement is not a measurement
+    assert datetime.fromisoformat(during["a"]) >= before
+    assert api_client.delete(f"/api/v1/sync/sessions/{sid}").status_code == 204
+    store.tick()
+    assert store.active_for("g") is None
+    listed = api_client.get("/api/v1/sync/groups").json()[0]["members"]
+    assert {m["ma_player_id"]: m["last_measured_at"] for m in listed}["a"] == during["a"]  # kept after the session

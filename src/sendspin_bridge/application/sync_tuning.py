@@ -137,6 +137,10 @@ def _group_out(row: Mapping[str, Any], control: GroupControl, *, tolerant: bool 
             if not tolerant:
                 raise
             error = exc.code
+    measured = store.measured_at(gid)
+    members = [
+        {**m, "last_measured_at": measured.get(str(m["ma_player_id"]), m.get("last_measured_at"))} for m in members
+    ]
     return SyncGroup(
         id=gid,
         name=str(row.get("name") or gid),
@@ -331,6 +335,8 @@ def upload_recording(sid: str, member: str, start_time_s: float, sample_rate: in
         _raise(exc)
     if m.reason == "invalid_recording":
         _invalid_recording(f"A recording lasts {estimator.MIN_DURATION_S:g}-{estimator.MAX_DURATION_S:g} s")
+    if m.status == "ok":
+        get_store().mark_measured(session.group_id, m.member, _now())
     return MeasurementOut.model_validate(to_dict(m))
 
 

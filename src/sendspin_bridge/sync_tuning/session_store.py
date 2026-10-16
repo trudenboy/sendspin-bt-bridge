@@ -83,6 +83,7 @@ class SessionStore:
         self._pending_next: dict[str, float] = {}
         self._pending_attempts: dict[str, int] = {}
         self._pending_errors: dict[str, str] = {}
+        self._measured_at: dict[tuple[str, str], str] = {}  # (group, member) -> last ok measurement; this run only
         self._load_lock = threading.Lock()  # taken before _lock, never while holding it
         self._loaded = False
         self._stop = threading.Event()
@@ -202,6 +203,17 @@ class SessionStore:
             self._publish(data)
         except Exception:
             logger.warning("Publishing a sync event failed", exc_info=True)
+
+    # -- last measurement per member ---------------------------------------------------
+    def mark_measured(self, group_id: str, member: str, at: str) -> None:
+        """Remember when *member* of *group_id* last gave a usable measurement (kept for this run)."""
+        with self._lock:
+            self._measured_at[(group_id, member)] = at
+
+    def measured_at(self, group_id: str) -> dict[str, str]:
+        """Member id -> time of its last usable measurement in *group_id*."""
+        with self._lock:
+            return {m: at for (g, m), at in self._measured_at.items() if g == group_id}
 
     # -- sessions -------------------------------------------------------------------
     def active_for(self, group_id: str) -> SyncSession | None:
