@@ -16,6 +16,7 @@ class FakeControl:
         self.calls: list[tuple[Any, ...]] = []
         self.delays_now: dict[str, int] = {"a": 0, "b": 0}
         self.fail_restore = 0
+        self.announcing = False  # what Music Assistant reports about an announcement under way
         self.member_list = [
             Member("a", "A", True, "bridge", delay_ms=0),
             Member("b", "B", True, "sendspin", delay_ms=0),
@@ -49,6 +50,9 @@ class FakeControl:
     def set_delay(self, member: Member, ms: int) -> None:
         self.delays_now[member.ma_player_id] = ms
         self.calls.append(("set", member.ma_player_id, ms))
+
+    def announcement_active(self, group_id: str) -> bool:
+        return self.announcing
 
     def restore(self, snapshot: Snapshot) -> None:
         if self.fail_restore:
@@ -84,6 +88,9 @@ class FakeMa:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.timeouts: dict[str, float] = {}  # last timeout asked for, per command
         self.forbid_write = False
+        # MA dev, idle: a volume set on a player reaches its Sendspin protocol player; E5 (2026-10-16):
+        # during an announcement it does not always, so a test can switch the propagation off
+        self.member_volume_reaches_protocol = True
         self.players: dict[str, dict[str, Any]] = {
             "spk-bridge": {
                 "player_id": "spk-bridge",
@@ -185,7 +192,7 @@ class FakeMa:
             player["volume_level"] = args["volume_level"]
             # as seen on MA dev: a volume set on a player reaches its Sendspin protocol player too
             # (MA's end-of-announcement restore then puts back only the player's own volume)
-            for proto in player.get("output_protocols") or []:
+            for proto in (player.get("output_protocols") or []) if self.member_volume_reaches_protocol else []:
                 if proto.get("protocol_domain") == "sendspin" and proto["output_protocol_id"] in self.players:
                     self.players[proto["output_protocol_id"]]["volume_level"] = args["volume_level"]
             return None

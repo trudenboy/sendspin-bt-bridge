@@ -85,9 +85,10 @@ with players synced to it) is not offered as a group.
   the renderer transcodes the URL with ffmpeg (44.1 kHz), which keeps the timing.
   `pre_announce` defaults to on when the URL contains `tts`, so the adapter passes
   `pre_announce: false` and keeps `tts` out of the path. There is no "stop
-  announcement" command: `players/cmd/stop` on the group makes it idle, which ends
-  the announcement and runs the restore. The default implementation reads
-  `players/cmd/play` and the queue as busy while `announcement_in_progress` is set.
+  announcement" command (stage 0: `players/cmd/stop` does **not** end it, it blocks
+  until the clip ends). The default implementation reads `players/cmd/play` and the
+  queue as busy while `announcement_in_progress` is set; that flag lives in the
+  player's `extra_data`, which is not on the API.
 - A mute set on a member **during** the announcement is not undone by Music
   Assistant's restore (it only re-mutes the members that were muted before), so the
   adapter's own restore must unmute what it muted. Whether such a mute is honoured
@@ -304,8 +305,10 @@ restoring → done`, plus `cancelled` and `failed` (both go through `restoring`)
   ("hold the phone 30–50 cm from Kitchen" or "stay where you are"), receive the
   recording, estimate. A step can be repeated or skipped; members can be reordered.
 - **proposed**: proposal computed (semi-automatic waits here for the operator).
-- **applying**: `set_delay` for each changed member; automatic mode keeps an undo for
-  30 s.
+- **applying**: `set_delay` for each changed member; automatic mode keeps an undo
+  until 30 s after the check round's clicks are audible (its clip may first wait for
+  the previous one to end; a check clip that fails to start is retried by the tick and
+  the undo window moves with it).
 - **verifying**: optional repeat round (automatic: always).
 - **restoring**: while the clip still plays, every member is kept at volume 0
   (`stop_signal`) and the restore waits for the clip's end — a wait, not a failed
@@ -315,7 +318,10 @@ restoring → done`, plus `cancelled` and `failed` (both go through `restoring`)
   persisted snapshot (which records the clip's end on the wall clock and whether
   it is silenced). Restore never touches the delays (applied delays are the point)
   or the mutes (the session never mutes), and leaves playback to Music
-  Assistant's resume.
+  Assistant's resume. A clip that ends while the session still runs gets the same
+  volume check on the next tick (best effort, retried each tick; the solo is
+  cleared), so a protocol player MA left at 0 is not silent for the music or the
+  next clip.
 
 Only one session per group. A second client sees "tuning in progress" and gets a
 read-only view. Manual mode is a session without measuring: it can start the signal
@@ -346,14 +352,28 @@ Assistant restores the pre-announcement volume at the clip's end. So:
   sent. "Play" while a silenced clip still runs un-silences it (no new announcement).
 - **Solo by volume, never mute.** `solo(member)` sets every other member to 0 and the
   member to its level from the session's snapshot; `solo(None)` puts every level back.
-  Only while the clicks are audible (`signal_starting` / `signal_stopped` otherwise),
-  so the session only changes volumes during an announcement, whose end Music
-  Assistant restores. Members without a volume are left alone.
+  Only while the clicks are audible (`signal_starting` / `signal_stopped` otherwise).
+  Members without a volume are left alone. Music Assistant's end-of-announcement
+  restore covers the members' own volumes only, never their Sendspin protocol
+  players' (E5), so the snapshot records both and the session restores both.
+- **Both levels (E5, 2026-10-16).** A Web Kiosk member's Sendspin protocol player keeps
+  a volume of its own: a volume set on the member during an announcement did not
+  always reach it, and a level set on the protocol player alone while idle did not
+  stick (the kiosk re-reports its own). Setting both during the announcement worked
+  on every member, so solo and stop set the member and its protocol player (0 for a
+  silenced member, the snapshot's levels for an audible one), and restore sets both.
 - **Restore order.** Never while the clip plays (members stay at 0 until its end, so
   our restore and Music Assistant's do not fight); after the end, the snapshot's
-  volumes are checked and fixed where they differ. A new session on the group while
-  the clip plays out is refused with `signal_playing`. Cost: up to ~3 min of silence
-  after a session ends; the page says when the music returns.
+  volumes (members, then protocol players) are checked and fixed where they differ,
+  and checked once more 5 s later. The clip's end is the bridge clock's estimate
+  (fire time + 180 s + 5 s); past it the clip still counts as playing while Music
+  Assistant reports an announcement under way (the `announcement_in_progress` flag
+  if a version exposes it, or `current_media` of type `announcement`), for at most
+  60 s more. A new session on the group while the clip plays out is refused with
+  `signal_playing`. Cost: up to ~3 min of silence after a session ends; the page
+  says when the music returns. A shutdown while a clip plays puts every level back
+  instead of silencing (nothing stays at 0 if the bridge never restarts); the next
+  boot silences the rest of the clip and restores after it.
 
 Candidates the spike evaluated on Music Assistant dev:
 
@@ -582,3 +602,8 @@ aiosendspin 10.0.2. Decisions in the table above are unchanged. Changes:
   a check round waits for the previous clip, a new session waits with
   `signal_playing`, and the UI says when the music returns ("Signal path and solo").
   The persisted snapshot carries the clip's wall-clock end so a restart waits too.
+- **Option A review (2026-10-16).** Solo, stop and restore set the Sendspin protocol
+  player's volume too (E5); a clip that ends mid-session gets the volume check at
+  once; the undo window survives a check clip that fails to start; the clip's end
+  waits for Music Assistant's announcement (bounded) and the volumes are checked
+  again 5 s after a restore; a shutdown mid-clip hands the levels back.

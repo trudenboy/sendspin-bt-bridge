@@ -339,14 +339,30 @@ def test_shutdown_restores_live_sessions_and_releases_everything(tmp_path):
     assert host.released == [s.id] and made[0].closed == 1 and not _file(tmp_path).exists()
 
 
-def test_shutdown_while_the_clip_plays_silences_it_and_leaves_the_restore_to_the_next_boot(tmp_path):
+def test_shutdown_while_the_clip_plays_hands_every_member_back_its_level_and_leaves_the_restore_to_the_next_boot(
+    tmp_path,
+):
+    # M-1: silencing at shutdown would leave the Sendspin protocol players at 0 (Music Assistant never restores
+    # them) until a next boot that may never come; at their levels the clicks play out and MA brings the music back
     store, made, _, _, host = make(tmp_path)
     s = store.create("g", "semi", "device")
     store.shutdown()
-    assert s.state == "restoring" and made[0].calls[-1] == ("stop",) and ("restore",) not in made[0].calls
+    assert s.state == "restoring" and made[0].calls[-1] == ("solo", None) and ("stop",) not in made[0].calls
+    assert ("restore",) not in made[0].calls
     [entry] = _persisted(tmp_path)
-    assert entry["silenced"] is True and entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END)
+    assert entry["silenced"] is False and entry["signal_ends_at"] == pytest.approx(WALL0 + CLIP_END)
     assert host.released == [s.id] and made[0].closed == 1
+
+
+def test_shutdown_during_a_silenced_clip_hands_the_levels_back_too(tmp_path):
+    store, made, _, t, _ = make(tmp_path)
+    s = store.create("g", "manual", "device")
+    s.start_signal()
+    t["now"] = 10.0
+    s.stop_signal()
+    store.shutdown()
+    assert made[0].calls[-1] == ("solo", None) and not s.silenced
+    assert _persisted(tmp_path)[0]["silenced"] is False
 
 
 def test_shutdown_keeps_the_snapshot_when_the_restore_fails(tmp_path):
@@ -670,3 +686,102 @@ def test_the_store_tick_starts_a_check_round_once_the_previous_clip_ended(tmp_pa
     t["now"] = CLIP_END
     store.tick()
     assert not s.signal_waiting and [c for c in made[0].calls if c[0] == "start"][1:]
+
+
+# -- I-3: the volumes are checked once more shortly after the restore at a clip's end --------------------
+
+
+def test_the_volumes_are_checked_once_more_after_a_restore_that_followed_a_clip(tmp_path):
+    from sendspin_sync.session import RESTORE_RECHECK_S
+
+    store, made, _, t, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    store.end(s.id)
+    store.tick()
+    t["now"] = CLIP_END
+    store.tick()
+    assert s.state == "cancelled" and made[0].calls[-1] == ("restore",)
+    t["now"] = CLIP_END + RESTORE_RECHECK_S - 0.5
+    store.tick()
+    assert len(made) == 1
+    t["now"] = CLIP_END + RESTORE_RECHECK_S
+    store.tick()
+    assert len(made) == 2 and made[1].calls == [("restore",)] and made[1].closed == 1
+    t["now"] = CLIP_END + 3 * RESTORE_RECHECK_S
+    store.tick()
+    assert len(made) == 2  # once
+
+
+def test_no_recheck_after_a_session_that_never_played_a_clip(tmp_path):
+    from sendspin_sync.session import RESTORE_RECHECK_S
+
+    store, made, _, t, _ = make(tmp_path)
+    s = store.create("g", "manual", "device")
+    store.end(s.id)
+    store.tick()
+    assert s.state == "cancelled"
+    t["now"] = 2 * RESTORE_RECHECK_S
+    store.tick()
+    assert len(made) == 1
+
+
+def test_the_recheck_never_overrides_a_new_session_on_the_group(tmp_path):
+    from sendspin_sync.session import RESTORE_RECHECK_S
+
+    store, made, _, t, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    store.end(s.id)
+    store.tick()
+    t["now"] = CLIP_END
+    store.tick()
+    store.create("g", "manual", "device")  # made[1]
+    t["now"] = CLIP_END + RESTORE_RECHECK_S
+    store.tick()
+    assert len(made) == 2 and ("restore",) not in made[1].calls
+
+
+def test_a_failed_recheck_is_dropped_quietly(tmp_path):
+    from sendspin_sync.session import RESTORE_RECHECK_S
+
+    store, made, _, t, _ = make(tmp_path)
+    s = store.create("g", "semi", "device")
+    store.end(s.id)
+    store.tick()
+    t["now"] = CLIP_END
+    store.tick()
+    real = store._factory
+
+    def failing():
+        ctl = real()
+        ctl.fail_restore = 1
+        return ctl
+
+    store._factory = failing
+    t["now"] = CLIP_END + RESTORE_RECHECK_S
+    store.tick()  # must not raise
+    assert made[1].closed == 1
+    t["now"] = CLIP_END + 3 * RESTORE_RECHECK_S
+    store.tick()
+    assert len(made) == 2
+
+
+# -- M-2: a start that fails after the announcement was fired --------------------------------------------
+
+
+def test_a_start_failing_after_the_clip_was_fired_keeps_the_session_to_restore_it(tmp_path):
+    store, made, _, t, host = make(tmp_path)
+    real = store.publish_change
+
+    def flaky(session):
+        real(session)
+        if session.state == "measuring":
+            raise OSError("disk full")
+
+    store.publish_change = flaky
+    with pytest.raises(OSError):
+        store.create("g", "semi", "device")  # within the settle time: the clicks are not audible yet
+    s = store.active_for("g") or next(iter(store._sessions.values()))
+    assert s.state == "restoring" and host.released == []  # the token stays: MA still fetches the clip
+    t["now"] = CLIP_END
+    store.tick()
+    assert s.state == "cancelled" and made[0].calls[-1] == ("restore",)

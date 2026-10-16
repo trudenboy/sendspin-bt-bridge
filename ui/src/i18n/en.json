@@ -1409,7 +1409,7 @@
       "auto": "Measure and apply",
       "manualHelp": "Play a test signal and adjust each speaker by ear.",
       "semiHelp": "Measure with this device's microphone, then review the proposed delays.",
-      "autoHelp": "Measure, apply and check in one go, with an undo for 30 s."
+      "autoHelp": "Measure, apply and check in one go. Undo stays available until 30 s after the check clicks start."
     },
     "measureMode": {
       "semi": "Mode: measure and suggest",

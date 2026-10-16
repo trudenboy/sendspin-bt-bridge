@@ -56,7 +56,7 @@ Where you measure:
 
 ### Measure and apply
 
-Choose **Measure and apply** to measure, apply and verify in one run. The result shows the spread before and after. **Undo** stays available for 30 s and puts the earlier delays back.
+Choose **Measure and apply** to measure, apply and verify in one run. The result shows the spread before and after. **Undo** puts the earlier delays back; it stays available until 30 s after the check round's clicks start (the check may first wait for the previous click track to end).
 
 ## What you hear during a measurement
 

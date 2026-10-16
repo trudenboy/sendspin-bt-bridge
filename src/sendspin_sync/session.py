@@ -48,6 +48,14 @@ MAX_DELAY_MS = planner.MAX_DELAY_MS
 SIGNAL_CLIP_S = float(click_track.DURATION_S)
 SIGNAL_TAIL_S = 5.0
 SIGNAL_SETTLE_S = 3.0
+# The clock is only an estimate of the clip's end (Music Assistant's start latency is not observed):
+# past it, the clip still counts as playing while Music Assistant reports an announcement under way,
+# polled every SIGNAL_POLL_S, for at most SIGNAL_OVERRUN_S more.
+SIGNAL_OVERRUN_S = 60.0
+SIGNAL_POLL_S = 2.0
+# After the volumes are put back at a clip's end, they are checked once more this much later: Music
+# Assistant's own restore (or a kiosk re-reporting its level) may land after ours.
+RESTORE_RECHECK_S = 5.0
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
 _ACTIVE: tuple[State, ...] = ("signal_starting", "measuring", "proposed", "applying", "verifying")
 
@@ -121,6 +129,8 @@ class SyncSession:
         self._clip_start: float | None = None
         self._clip_end: float | None = None
         self._published_running = False  # signal_running as the last change reported it
+        self._levels_at: float | None = None  # when the snapshot's volumes are due again (after a clip)
+        self._levels_recheck = False  # after that restore, check once more RESTORE_RECHECK_S later
         self.undo_until: float | None = None
         self.round = 1
         self.reference: str | None = None
@@ -220,16 +230,58 @@ class SyncSession:
         assert self._clip_end is not None
         return max(0.0, self._clip_end - self._clock())
 
+    def _clip_still_announced(self) -> None:
+        """The clock says the clip is over: keep it open while Music Assistant still reports an
+        announcement (it started late, or its own restore still runs), up to SIGNAL_OVERRUN_S past the
+        clock's end. Unreachable means unknown: the clock decides."""
+        if self._clip_end is None or self._clip_start is None or self.clip_playing:
+            return
+        now = self._clock()
+        cap = self._clip_start + SIGNAL_CLIP_S + SIGNAL_TAIL_S + SIGNAL_OVERRUN_S
+        if now >= cap:
+            return
+        try:
+            active = self._control.announcement_active(self.group_id)
+        except ControlError as exc:
+            logger.debug("Reading the announcement state of sync session %s failed: %s", self.id, exc)
+            return
+        if active:
+            self._clip_end = min(cap, now + SIGNAL_POLL_S)
+
     def _forget_ended_clip(self) -> bool:
         if self._clip_end is None or self.clip_playing:
             return False
         self._clip_start = self._clip_end = None
         self.silenced = False
+        # Music Assistant restored every member's own volume (never their Sendspin protocol players'):
+        # the solo is gone, and the snapshot's levels are put back by the next tick
+        self.soloed = None
+        self._levels_at, self._levels_recheck = self._clock(), True
+        return True
+
+    def _restore_levels(self) -> bool:
+        """Put the snapshot's volumes back after a clip ended mid-session (best effort: a failure is
+        retried on the next tick), then once more RESTORE_RECHECK_S later."""
+        if self._levels_at is None or self.snapshot is None or self.clip_playing or self._clock() < self._levels_at:
+            return False
+        try:
+            self._control.restore(self.snapshot)
+        except ControlError as exc:
+            logger.warning("Putting the volumes back in sync session %s failed (retrying): %s", self.id, exc)
+            return False
+        if self._levels_recheck:
+            self._levels_at, self._levels_recheck = self._clock() + RESTORE_RECHECK_S, False
+        else:
+            self._levels_at = None
         return True
 
     def _start_clip(self) -> None:
         self._forget_ended_clip()
+        if self._levels_at is not None and self._levels_recheck:
+            # the last clip's end was not handled yet: MA snapshots the volumes for the new one
+            self._restore_levels()
         self._control.start_signal(self.group_id, self._host.url_for(self.id))
+        self._levels_at, self._levels_recheck = None, False
         now = self._clock()
         self._clip_start, self._clip_end = now, now + SIGNAL_CLIP_S + SIGNAL_TAIL_S
         self.silenced = self.signal_waiting = False
@@ -297,13 +349,19 @@ class SyncSession:
         ended, and start the clip of a round that waited for the previous one."""
         if self.state in _ENDED or self.state == "restoring":
             return
+        self._clip_still_announced()
         changed = self._forget_ended_clip() or self.signal_running != self._published_running
+        self._restore_levels()
         if self.signal_waiting and not self.clip_playing:
             try:
                 self._start_clip()
                 changed = True
             except ControlError as exc:  # still waiting: the next tick tries again
                 logger.debug("Starting the next clip of sync session %s failed: %s", self.id, exc)
+            else:
+                if self.undo_until is not None and self._clip_start is not None:
+                    # the check round's clicks are audible only now: the undo window counts from then
+                    self.undo_until = max(self.undo_until, self._clip_start + SIGNAL_SETTLE_S + UNDO_WINDOW_S)
         if changed:
             self._changed()
 
@@ -453,6 +511,8 @@ class SyncSession:
         self.members = [dataclasses.replace(m, delay_ms=wanted.get(m.ma_player_id, m.delay_ms)) for m in self.members]
         self.touch()
         if self.mode == "auto" and self.round <= MAX_ROUNDS:
+            # provisional: undo must stay possible even if verify() does not get through
+            self.undo_until = self._clock() + SIGNAL_SETTLE_S + UNDO_WINDOW_S
             self.verify()
             # 30 s from when the check round's clicks are audible: its clip starts now, or when the
             # clip still playing ends (it cannot be stopped), so the operator can hear the result first
@@ -492,7 +552,11 @@ class SyncSession:
                 logger.warning("Silencing the clip of sync session %s failed: %s", self.id, exc)
             self.signal_waiting = True
         else:
-            self._start_clip()
+            try:
+                self._start_clip()
+            except ControlError as exc:  # the delays are written: wait, the tick retries the start
+                logger.warning("Starting the check clip of sync session %s failed (retrying): %s", self.id, exc)
+                self.signal_waiting = True
         self._set("verifying")
 
     @_locked
@@ -571,6 +635,7 @@ class SyncSession:
         Assistant restores music and volumes at the clip's end, then the volumes are checked."""
         self._require("restoring")
         try:
+            self._clip_still_announced()
             if self.clip_playing:
                 self.signal_waiting = False
                 silent = self.silenced
@@ -592,6 +657,19 @@ class SyncSession:
         self._host.release(self.id)
         self._set(self._final)
         return True
+
+    @_locked
+    def hand_back(self) -> None:
+        """At shutdown while a clip plays: every member (and its Sendspin protocol player) back at its
+        level from the snapshot instead of silent, so nothing stays at 0 if the bridge never restarts;
+        Music Assistant restores the music when the clip ends, a next boot still checks the volumes."""
+        self._require("restoring")
+        if not self.clip_playing:
+            return
+        self._control.solo(self.group_id, None)
+        self.silenced = False
+        self.soloed = None
+        self._changed()
 
     @_locked
     def to_dict(self) -> dict[str, Any]:

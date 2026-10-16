@@ -291,3 +291,168 @@ def test_without_a_wait_the_undo_window_still_counts_from_audible_clicks():
     s.apply()
     assert not s.signal_waiting
     assert s.undo_until == pytest.approx(CLIP_END + 10 + SIGNAL_SETTLE_S + UNDO_WINDOW_S)
+
+
+# -- I-1: a clip that ends while the session runs ------------------------------------------------------
+
+
+def test_a_clip_that_ends_mid_session_puts_the_volumes_back_and_clears_the_solo():
+    # MA restores the members' own volumes at the clip's end, not their Sendspin protocol players'
+    s, ctl, clock = make(mode="manual")
+    s.start()
+    s.start_signal()
+    clock.t = SIGNAL_SETTLE_S
+    s.solo("a")
+    clock.t = CLIP_END
+    s.tick()
+    assert ctl.calls[-1] == ("restore",) and s.soloed is None and s.state == "measuring"
+    assert s.to_dict()["soloed"] is None
+
+
+def test_a_failed_mid_session_restore_is_retried_on_the_next_tick():
+    s, ctl, clock = make(mode="manual")
+    s.start()
+    s.start_signal()
+    clock.t = CLIP_END
+    ctl.fail_restore = 1
+    s.tick()
+    assert ("restore",) not in ctl.calls and s.state == "measuring"
+    s.tick()
+    assert ctl.calls.count(("restore",)) == 1
+
+
+def test_the_volumes_are_checked_again_shortly_after_a_mid_session_restore():
+    from sendspin_sync.session import RESTORE_RECHECK_S
+
+    s, ctl, clock = make(mode="manual")
+    s.start()
+    s.start_signal()
+    clock.t = CLIP_END
+    s.tick()
+    s.tick()
+    assert ctl.calls.count(("restore",)) == 1
+    clock.t = CLIP_END + RESTORE_RECHECK_S
+    s.tick()
+    s.tick()
+    assert ctl.calls.count(("restore",)) == 2  # once more, then never again
+
+
+def test_a_new_clip_cancels_the_pending_recheck():
+    from sendspin_sync.session import RESTORE_RECHECK_S
+
+    s, ctl, clock = make(mode="manual")
+    s.start()
+    s.start_signal()
+    clock.t = CLIP_END
+    s.tick()
+    s.start_signal()  # a new announcement: the snapshot's levels must not override its solo later
+    clock.t = CLIP_END + RESTORE_RECHECK_S
+    s.tick()
+    assert ctl.calls.count(("restore",)) == 1
+
+
+# -- I-3: the bridge's clock alone does not end the clip -------------------------------------------------
+
+
+def test_the_clip_plays_on_while_music_assistant_still_announces():
+    s, ctl, clock = make()
+    s.start()
+    s.cancel()
+    assert s.restore_tick() is False
+    ctl.announcing = True  # MA started late: its announcement (and its own restore) is not over yet
+    clock.t = CLIP_END
+    assert s.restore_tick() is False and s.restore_error is None and s.clip_playing
+    assert ("restore",) not in ctl.calls
+    ctl.announcing = False
+    clock.t = CLIP_END + 2.0
+    assert s.restore_tick() is True and ctl.calls[-1] == ("restore",)
+
+
+def test_the_clock_bounds_how_long_an_announcement_flag_is_trusted():
+    from sendspin_sync.session import SIGNAL_OVERRUN_S
+
+    s, ctl, clock = make()
+    s.start()
+    s.cancel()
+    s.restore_tick()
+    ctl.announcing = True  # stuck
+    clock.t = CLIP_END + SIGNAL_OVERRUN_S
+    assert s.restore_tick() is True
+
+
+def test_a_mid_session_restore_waits_for_music_assistants_announcement_too():
+    s, ctl, clock = make(mode="manual")
+    s.start()
+    s.start_signal()
+    ctl.announcing = True
+    clock.t = CLIP_END
+    s.tick()
+    assert ("restore",) not in ctl.calls and s.clip_playing
+    ctl.announcing = False
+    clock.t = CLIP_END + 2.0
+    s.tick()
+    assert ("restore",) in ctl.calls
+
+
+def test_music_assistant_unreachable_leaves_the_end_to_the_clock():
+    s, ctl, clock = make()
+    s.start()
+    s.cancel()
+    s.restore_tick()
+
+    def down(group_id):
+        raise ControlError("ma_unavailable")
+
+    ctl.announcement_active = down
+    clock.t = CLIP_END
+    assert s.restore_tick() is True
+
+
+# -- I-2: an auto apply whose check clip cannot start --------------------------------------------------
+
+
+def test_an_auto_apply_whose_check_clip_cannot_start_waits_and_keeps_the_undo():
+    from sendspin_sync.session import UNDO_WINDOW_S
+
+    s, ctl, clock = make(mode="auto")
+    s.start()
+    clock.t = SIGNAL_SETTLE_S
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    clock.t = CLIP_END + 10  # the first clip ended: the check round's clip must start now
+
+    def down(group_id, url):
+        raise ControlError("ma_unavailable")
+
+    real = ctl.start_signal
+    ctl.start_signal = down
+    s.apply()
+    assert s.state == "verifying" and s.signal_waiting  # the tick retries the start
+    assert ctl.delays_now["b"] == 30
+    ctl.start_signal = real
+    clock.t = CLIP_END + 40
+    s.tick()  # the clip starts now: the undo window counts from its audible clicks
+    assert not s.signal_waiting
+    assert s.undo_until == pytest.approx(CLIP_END + 40 + SIGNAL_SETTLE_S + UNDO_WINDOW_S)
+    clock.t = CLIP_END + 40 + SIGNAL_SETTLE_S + UNDO_WINDOW_S - 1
+    s.undo()
+    assert ctl.delays_now["b"] == 0
+
+
+def test_undo_answers_right_after_a_failed_check_clip_start():
+    s, ctl, clock = make(mode="auto")
+    s.start()
+    clock.t = SIGNAL_SETTLE_S
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    clock.t = CLIP_END + 10
+
+    def down(group_id, url):
+        raise ControlError("ma_unavailable")
+
+    ctl.start_signal = down
+    s.apply()
+    s.undo()
+    assert ctl.delays_now["b"] == 0

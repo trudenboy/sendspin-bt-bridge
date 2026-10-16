@@ -7,6 +7,10 @@ and web kiosks refuse ``players/cmd/volume_mute``, while ``players/cmd/volume_se
 member mid-announcement. So solo and stop work by volume only: solo sets every other member to 0
 and the soloed one to its level from the session's snapshot, stop sets every member to 0, and
 restore puts the snapshot's volumes back once the clip has ended.
+
+E5 (2026-10-16): a member's Sendspin protocol player keeps a volume of its own. A volume set on a web
+kiosk member during an announcement did not always reach its protocol player, and Music Assistant's
+end-of-announcement restore never touches it, so solo, stop and restore set both levels.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ if TYPE_CHECKING:
     from sendspin_bridge.sync_tuning.ma_api import MaApi
 
 DELAY_KEY = "sendspin_static_delay"
+_ANNOUNCING = "announcement_in_progress"  # Music Assistant's ATTR_ANNOUNCEMENT_IN_PROGRESS
 SPLIT = "||protocol||"
 
 
@@ -198,40 +203,70 @@ class MaGroupControl:
         except MaApiError as exc:
             raise _wrap(exc) from exc
 
+    def _set_levels(self, members: Sequence[Member], targets: dict[str, int], protocol_levels: dict[str, int]) -> None:
+        """Set each member to its target, then (read back) its Sendspin protocol player: to 0 with a
+        silenced member, else to *protocol_levels*' level. Both, because during an announcement a
+        member's volume does not always reach its protocol player (E5)."""
+        self._set_volumes(targets)
+        protocols = _protocol_ids(members)
+        fix: dict[str, int] = {}
+        for mid, level in targets.items():
+            proto = protocols.get(mid)
+            if proto is None:
+                continue
+            if level == 0:
+                fix[proto] = 0
+            elif protocol_levels.get(proto) is not None:
+                fix[proto] = protocol_levels[proto]
+        if fix:
+            self._set_volumes(fix)
+
     def stop_signal(self, group_id: str) -> None:
-        """Silence every member (volume 0): the announcement plays on until its end, when Music
-        Assistant restores music and volumes. ``players/cmd/stop`` is never sent: it would block
-        until the clip ends anyway."""
+        """Silence every member and its Sendspin protocol player (volume 0): the announcement plays on
+        until its end, when Music Assistant restores music and the members' volumes.
+        ``players/cmd/stop`` is never sent: it would block until the clip ends anyway."""
         states = self._states()
         members = self._cached_members(group_id)
-        self._set_volumes({m.ma_player_id: 0 for m in members if _volume(states.get(m.ma_player_id, {})) is not None})
+        targets = {m.ma_player_id: 0 for m in members if _volume(states.get(m.ma_player_id, {})) is not None}
+        self._set_levels(members, targets, {})
 
     def solo(self, group_id: str, member: str | None) -> None:
-        """Only *member* audible: every other member at volume 0 and *member* at its level from the
-        snapshot; ``None`` puts every member back to its level. Members without a volume are left alone."""
+        """Only *member* audible: every other member (and its protocol player) at volume 0 and *member*
+        at its levels from the snapshot; ``None`` puts every member back to its levels. Members without
+        a volume are left alone."""
         members = self._cached_members(group_id)
         if member is not None and member not in {m.ma_player_id for m in members}:
             raise ControlError("member_gone", f"{member} is not in group {group_id}")
         if group_id not in self._levels:
             self.snapshot(group_id)
-        levels, protocol_levels = self._levels[group_id], self._protocol_levels.get(group_id, {})
+        levels = self._levels[group_id]
+        protocol_levels = {k: v for k, v in self._protocol_levels.get(group_id, {}).items() if v is not None}
         targets: dict[str, int] = {}
         for m in members:
             level = levels.get(m.ma_player_id)
             if level is not None:
                 targets[m.ma_player_id] = level if member is None or m.ma_player_id == member else 0
-        self._set_volumes(targets)
-        # Read both levels back: an audible member's Sendspin protocol player may have been left at 0
-        # (by an earlier announcement) and would keep it silent; a silenced member's is left alone.
-        protocols = _protocol_ids(members)
-        fix: dict[str, int] = {}
-        for mid, level in targets.items():
-            proto = protocols.get(mid)
-            proto_level = protocol_levels.get(proto) if proto else None
-            if level > 0 and proto is not None and proto_level is not None:
-                fix[proto] = proto_level
-        if fix:
-            self._set_volumes(fix)
+        self._set_levels(members, targets, protocol_levels)
+
+    def announcement_active(self, group_id: str) -> bool:
+        """Whether Music Assistant still plays an announcement on the group or one of its members.
+
+        Music Assistant dev marks it in the player's ``extra_data["announcement_in_progress"]``, which
+        is not on the API today; the flag is read wherever a version exposes it (top level or
+        ``extra_attributes``). Until then the evidence is ``current_media`` of type ``announcement``
+        (reported when no queue item masks it). Only positive evidence counts: ``False`` means
+        "not seen", so the session's clock still bounds the clip."""
+        states = self._states()
+        ids = [group_id, *(m.ma_player_id for m in self._cached_members(group_id))]
+        ids += list(_protocol_ids(self._cached_members(group_id)).values())
+        for pid in ids:
+            st = states.get(pid) or {}
+            extra_raw, media_raw = st.get("extra_attributes"), st.get("current_media")
+            extra: dict[str, Any] = extra_raw if isinstance(extra_raw, dict) else {}
+            media: dict[str, Any] = media_raw if isinstance(media_raw, dict) else {}
+            if st.get(_ANNOUNCING) or extra.get(_ANNOUNCING) or media.get("media_type") == "announcement":
+                return True
+        return False
 
     def restore(self, snapshot: Snapshot) -> None:
         """Put the snapshot's volumes back where they differ: the members' first, then (read back) their

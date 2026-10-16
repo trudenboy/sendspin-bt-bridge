@@ -22,12 +22,13 @@ from typing import TYPE_CHECKING, Any
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_sync.models import snapshot_from_dict, to_dict
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import SyncSession
+from sendspin_sync.session import RESTORE_RECHECK_S, SyncSession
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from sendspin_sync.models import Snapshot
     from sendspin_sync.ports import ClickTrackHost, GroupControl
     from sendspin_sync.session import Mode, Point
 
@@ -78,6 +79,8 @@ class SessionStore:
         self._closed: set[str] = set()
         self._next_restore: dict[str, float] = {}
         self._attempts: dict[str, int] = {}
+        # session id -> (when, group, snapshot): one more volume check after a restore that followed a clip
+        self._rechecks: dict[str, tuple[float, str, Snapshot]] = {}
         self._finished_at: dict[str, float] = {}
         self._hold_until: dict[str, float] = {}  # end of the undo window a finished session had
         self._entries: dict[str, dict[str, Any]] = {}  # what sync_snapshot.json holds, by session id
@@ -262,7 +265,7 @@ class SessionStore:
         try:
             session.start()
         except BaseException:
-            if session.signal_running:  # the click track plays: restore it like any other session
+            if session.clip_playing:  # the click track was fired (even still settling): restore it like any other
                 session.cancel()
                 raise
             with self._lock:
@@ -300,6 +303,28 @@ class SessionStore:
                 due = [sid for sid in self._pending if now >= self._pending_next.get(sid, 0.0)]
             for sid in due:
                 self._try_pending(sid)
+            self._run_rechecks(now)
+
+    def _run_rechecks(self, now: float) -> None:
+        """Check the volumes once more a few seconds after a session restored them at a clip's end:
+        Music Assistant's own end-of-announcement restore (or a kiosk re-reporting its level) may land
+        after ours. Best effort, once, over a fresh control; skipped when a new session runs on the group."""
+        with self._lock:
+            due = [(sid, r) for sid, r in self._rechecks.items() if now >= r[0]]
+            for sid, _r in due:
+                del self._rechecks[sid]
+        for sid, (_at, group, snapshot) in due:
+            if self.active_for(group) is not None:
+                continue
+            control: GroupControl | None = None
+            try:
+                control = self._factory()
+                control.restore(snapshot)
+            except Exception as exc:
+                logger.warning("Checking the volumes of group %s again after session %s failed: %s", group, sid, exc)
+            finally:
+                if control is not None:
+                    _close(control)
 
     def _tick_session(self, s: SyncSession, now: float) -> None:
         if s.state not in _ENDED and s.state != "restoring" and s.expired():
@@ -320,6 +345,8 @@ class SessionStore:
                 logger.warning("Restoring sync session %s failed", s.id, exc_info=True)
                 ok = False
             with self._lock:
+                if ok and s.signal_clip > 0 and s.snapshot is not None:
+                    self._rechecks[s.id] = (now + RESTORE_RECHECK_S, s.group_id, s.snapshot)
                 if ok or waiting:
                     self._next_restore.pop(s.id, None)
                     self._attempts.pop(s.id, None)
@@ -467,7 +494,11 @@ class SessionStore:
             for s in sessions if restore else ():
                 try:
                     s.cancel()
-                    if s.state == "restoring":
+                    if s.state == "restoring" and s.clip_playing:
+                        # never leave the members (and their protocol players, which MA does not restore) at
+                        # 0 if the bridge does not come back: their levels, the clicks play out, MA restores
+                        s.hand_back()
+                    elif s.state == "restoring":
                         s.restore_tick()
                 except Exception:
                     logger.warning("Restoring sync session %s at shutdown failed", s.id, exc_info=True)
