@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.5] - 2026-10-16
+
+### Added
+
+- Settings → Music Assistant can connect with a pasted token: choose "Use a
+  token instead" and paste a long-lived token created in Music Assistant →
+  Settings → Profile. The bridge checks the token with Music Assistant before
+  saving it.
+- Group sync tuning: align the Sendspin players of a Music Assistant sync
+  group from the bridge — manual tuning by ear with a click track, solo and
+  compare-two listening, or a measurement with a microphone after which the
+  measured delays are applied and fine-tuned by ear on the same screen; named
+  delay profiles (`SYNC_PROFILES`). The group is stopped for a session, the
+  click track ("Sendspin sync clicks") replaces the group's queue, solo mutes
+  the other members, and the volumes changed for the clicks go back at the
+  end. Speakers that cannot be muted, are
+  unavailable, silent or muted are flagged before anything is touched. New
+  `/api/v1/sync/*` endpoints and `sync` events.
+- Measure with a phone: a link and QR code open a capture page on the
+  bridge; press Start on the phone and the bridge plays each speaker alone in
+  turn while the phone records once. Over HTTPS (a separate port with a
+  self-signed certificate, `SYNC_CAPTURE_HTTPS_PORT`) the phone records in the
+  browser and stops by itself; over plain HTTP it uses the phone's recorder
+  with a countdown. The link only lets the phone follow the measurement,
+  start its sequence and send its recording, expires after 30 minutes and
+  stops working when the measurement ends.
+
+### Fixed
+
+- Signing in to Music Assistant with Home Assistant works again with current
+  Music Assistant, which secures that sign-in with PKCE. It used to fail after
+  the password or two-factor code with "Failed to exchange HA code for MA
+  token". Older Music Assistant keeps signing in as before.
+
+- A delay changed for a player in Music Assistant is now kept by the bridge:
+  the player shows it, saves it to its settings, and starts with it after a
+  restart, so Music Assistant and the bridge agree. This works for audio
+  outputs as well as Bluetooth speakers.
+
+- Changing a speaker's delay, in Music Assistant or on the bridge, takes
+  effect at once and exactly, even for a few milliseconds. Small changes used
+  to do nothing and large ones arrived late, as a jump. The speaker may go
+  silent for a moment when the delay changes.
+
 ## [3.1.0-beta.4] - 2026-10-15
 
 ### Added

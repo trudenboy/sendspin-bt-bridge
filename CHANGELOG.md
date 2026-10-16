@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0-beta.5] - 2026-10-16
+
 ### Added
 
 - Settings → Music Assistant can connect with a pasted token: choose "Use a
@@ -6385,7 +6387,12 @@ Stable rollup of the rc.1 → rc.5 series. Headline theme: **multi-adapter corre
 - mDNS auto-discovery for Music Assistant server (`SENDSPIN_SERVER=auto`)
 - Config persistence via `/config/config.json`
 
-[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.20...HEAD
+[Unreleased]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.4...HEAD
+[3.1.0-beta.4]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.3...v3.1.0-beta.4
+[3.1.0-beta.3]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.2...v3.1.0-beta.3
+[3.1.0-beta.2]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.1.0-beta.1...v3.1.0-beta.2
+[3.1.0-beta.1]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.21...v3.1.0-beta.1
+[3.0.0-beta.21]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.20...v3.0.0-beta.21
 [3.0.0-beta.20]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.19...v3.0.0-beta.20
 [3.0.0-beta.19]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.18...v3.0.0-beta.19
 [3.0.0-beta.18]: https://github.com/trudenboy/sendspin-bt-bridge/compare/v3.0.0-beta.17...v3.0.0-beta.18
