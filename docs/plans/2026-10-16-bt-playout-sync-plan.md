@@ -19,6 +19,7 @@ Copied from the spec; every task's requirements include them.
 * Pipeline in `measure`/`loop`: `appsrc ! audioconvert ! audioresample ! capsfilter(S16LE, 2 ch, sink rate or 48000) ! pulsesink sync=false slave-method=none provide-clock=true buffer-time=PULSE_LATENCY_MSEC`; pipeline clock forced with `use_clock(Gst.SystemClock.obtain())`. `LEAD_MS = 40`, `BLOCK_MS = 10`, feeder tick 5 ms, sensor/controller tick 0.1 s.
 * Loop constants: Hampel 9 samples, 3·1.4826·MAD, floor 0.5 ms, step confirmed after 5; EMA `τ_f = 1.0 s`; `B = 0.03 Hz`, `ζ = 0.707`, `Kp = 0.2666 s⁻¹`, `Ki = 0.03553 s⁻²`; dead band 0.1 ms on P only; `R_max = 1000 ppm` with anti-windup; ≤ 1 frame event per 10 ms block; crossfade 16 frames; placement jumps frame-exact at start/clear/delay/underrun/stall; steady jump when 5 consecutive raw `e_w` samples (before the gate) are beyond 10 ms (`loop`) / 20 ms (`measure`) with one sign, size = their median, ≤ 1 per 10 s; after a jump reset EMA and Hampel, keep I, P held off 1 s; saturation warning at |I| > 300 ppm for 60 s.
 * Placement of chunks: gap ≤ 2 ms between contiguous chunks is left to the loop; > 2 ms is a placement event. Delay changes (`resync`) always place exactly.
+* Decisions (user, 2026-10-16): the hold overrides `power_save` in a group only when `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE` (default false; per player `playout_hold_overrides_power_save`, null = global) is on, `auto_disconnect` always releases; no migration of tuned delays (re-tune, documented); ungrouped hold 300 s; per-player opt-out `playout_sync_enabled` (default true; false = effective mode `off`).
 * Warm stream: hold `PLAYOUT_WARM_HOLD_S` (300) after `stream/end`; unlimited while grouped (`group_id` ≠ own id) and `PLAYOUT_WARM_IN_GROUP`, capped by `PLAYOUT_WARM_GROUP_MAX_S` (3600, 0 = no cap); `PLAYOUT_WARMUP_S` (60); at `stream/end` drop queued program audio, mute the PA stream, feed silence, unmute when `x_port ≥ x_end + 20 ms`; `keep_alive` holds feed the `keep_alive_method` signal.
 * Start lead: declared `required_lead_time_ms` = `max(configured, PULSE_LATENCY_MSEC + LEAD_MS + 100)` in `measure`/`loop`.
 * 3.1.0-beta.5 delay semantics stay: 150 ms coalescing in the daemon, one `player.resync(shift_us)` per burst, "audio whose new time has already passed is dropped: the cost is a short silence, never misaligned audio". `resync` returns whether something was playing.
@@ -35,8 +36,9 @@ Copied from the spec; every task's requirements include them.
 1. **The sensor and its mapping** (`x_port = A − k`, fill, underrun and stall rules, `e_w` prediction) — a wrong sign or a double-counted in-flight correction makes the loop run away. Check the simulation tests drive the real `PlayoutEngine` (not a copy of its maths) and cover underrun, PA step and stall. (Tasks 1.5, 1.6, 1.11, 3.3, 3.4)
 2. **`stream/end` without teardown** — Pause in MA must silence the speaker within 100 ms and drop the queued audio (#464), with no flush event anywhere, and the tail mute must compose with the user's stream mute under `volume_controller=sendspin`. (Tasks 2.3, 2.5, 2.6)
 3. **Delay-change semantics** — the 3.1.0-beta.5 daemon tests stay unchanged and green; in `loop`, `resync` re-places frame-exactly, drops passed audio, never rebuilds the pipeline. (Tasks 1.10, 3.6)
-4. **Idle modes vs the hold** — power_save never suspends a sink under a running stream (release first), a grouped hold defers power_save but not auto_disconnect, keep-alive bursts do not double up, and `off` mode's idle behaviour is unchanged. (Task 2.7)
-5. **Offset provenance** — an offset is never stored from `off` mode or from a group without a reference-grade member; a manual or MA delay newer than the entry is never overwritten; PipeWire's Delay Report is never added twice. (Tasks 4.2, 4.3, 4.5)
+4. **Idle modes vs the hold** — power_save never suspends a sink under a running stream (release first), by default (`PLAYOUT_HOLD_OVERRIDES_POWER_SAVE=false`) power_save releases the hold and suspends as today, grouped or not; with the global or per-player override on, a group hold defers power_save, never auto_disconnect; keep-alive bursts do not double up; and `off` mode's idle behaviour is unchanged. (Tasks 2.1, 2.6)
+5. **Per-player opt-out and no migration** — `playout_sync_enabled=false` must give byte-for-byte today's behaviour for that player (spawn mode `off`, no offsets, legacy in sync tuning, no hold) while others run the engine; no code converts or rewrites a user's delay when the engine is turned on (the re-tune note is documentation only). (Tasks 1.13, 1.16, 3.7, 3.8, 5.4, 5.5)
+6. **Offset provenance** — an offset is never stored from `off` mode or from a group without a reference-grade member; a manual or MA delay newer than the entry is never overwritten; PipeWire's Delay Report is never added twice. (Tasks 4.2, 4.3, 4.5)
 
 ---
 
@@ -1003,7 +1005,7 @@ def test_a_sink_without_clock_reports_fallback():
 - `BridgeDaemon._effective_lead_ms() -> float` = configured, or `max(configured, pulse_latency_msec + 40 + 100)` when the mode is not `off`; passed to `_create_client` as `required_lead_time_ms` and reported as `effective_required_lead_time_ms`.
 - Fallback: when `metrics()["playout"]["state"] == "fallback"`, the telemetry watcher calls `daemon.fall_back_to_legacy(reason)` once: logs WARNING, replaces the player with `StreamPlayer` for the rest of the process.
 - Status: the watcher copies `metrics()["playout"]` into `status["playout"]` (1 s while playing, 5 s otherwise, in this mode only); in `measure`/`loop`, `playback_sync_error_ms` = `playout.error_ms`.
-- Parent: spawn param `"playout": {"mode": load_config()["PLAYOUT_SYNC"], ...}`.
+- Parent: spawn param `"playout": {"mode": load_config()["PLAYOUT_SYNC"], ...}` (Task 1.16 replaces the mode with `effective_playout_mode(player_cfg, cfg)`, which honours the per-player opt-out).
 
 - [ ] **Step 1: Failing tests**
 
@@ -1091,7 +1093,27 @@ export interface SyncBadge {
 - [ ] **Step 2–4:** Implement. `cd ui && npm test && npm run build` → PASS.
 - [ ] **Step 5: Commit** `feat(ui): playout sync indicator and timing details`.
 
-### Task 1.16: Logs, changelog, Stage 1 measurement run
+### Task 1.16: Per-player opt-out (`playout_sync_enabled`)
+
+**Files:**
+- Modify: `src/sendspin_bridge/config/players.py` (`playout_sync_enabled: bool | None = None`), `src/sendspin_bridge/config/schema.json` (player property, `default: true`), `src/sendspin_bridge/config/__init__.py` (`effective_playout_mode(player_cfg, cfg) -> str`), `src/sendspin_bridge/bridge/client.py` (spawn params use it), `src/sendspin_bridge/services/infrastructure/config_diff.py` (a change of the field is `WARM_RESTART` of that player's daemon), `src/sendspin_bridge/application/models/devices.py` (`Device.playout_sync_enabled: bool = True`, request field on the device update model), `src/sendspin_bridge/application/devices.py`, `src/sendspin_bridge/api/routers/devices.py` (`PATCH /api/v1/devices/{device_id}` accepts `playout_sync_enabled`), `scripts/translate_ha_config.py` (per-player key preserved), `ui/src/components/devices/` device settings (a "Playout sync" toggle with the one-line explanation "Turn off to run this speaker the way it worked before playout sync; it is then not held warm and gets no automatic offset." in en and ru), `ui/openapi.json` (export), `ui/src/i18n/{en,ru}.json`
+- Test: `tests/unit/config/test_player_playout_fields.py` (extend), `tests/unit/bridge/test_playout_spawn_params.py` (extend), `tests/unit/api/test_device_playout_optout.py`, `ui/tests/component/devices/DeviceSettings.test.ts` (extend or new)
+
+**Interfaces:**
+
+```python
+def effective_playout_mode(player_cfg: Mapping, cfg: Mapping) -> str:
+    """'off' when player_cfg.get('playout_sync_enabled') is False, else cfg['PLAYOUT_SYNC'].
+    None / missing / True follow the global mode."""
+```
+
+Effects while the effective mode is `off`: the daemon gets `playout.mode="off"` (legacy `StreamPlayer`, no warm stream, `DaemonArgs` default path), the status carries `playout.mode="off"`, no speaker offset is stored or applied for that player, group sync tuning treats it as a legacy member (no `warm_in_s`, no offset candidates), and Task 1.15's chip shows the legacy badge. Other players keep the engine.
+
+- [ ] **Step 1: Failing tests:** `effective_playout_mode({"playout_sync_enabled": False}, {"PLAYOUT_SYNC": "loop"}) == "off"`; `None`, missing and `True` give `"loop"`; a global `off` stays `off` for an enabled player; the spawn params JSON of an opted-out player has `playout.mode == "off"` while a second player in the same config has `"loop"`; the schema accepts true/false/null and rejects a string; `PATCH /api/v1/devices/{id}` with `{"playout_sync_enabled": false}` persists it, answers the updated `Device`, requires auth and CSRF, and schedules a warm restart of that player only (diff kind `WARM_RESTART`, other players untouched); the key survives an add-on restart (`translate_ha_config`); vitest: the toggle renders the saved state, sends the PATCH, and both i18n strings exist.
+- [ ] **Step 2: Run** the new tests → FAIL. **Step 3: Implement.** **Step 4:** `uv run python scripts/export_openapi.py && cd ui && npm run gen:api && npm test && npm run build`; the tests → PASS; existing config and device tests unchanged and green.
+- [ ] **Step 5: Commit** `feat(playout): per-player opt-out from playout sync`.
+
+### Task 1.17: Logs, changelog, Stage 1 measurement run
 
 **Files:**
 - Modify: `gst_output.py`/`engine.py` (log lines per the spec table; a `RateLimitedLog` helper in `stats.py` with a 600 s window per kind), `CHANGELOG.md`
@@ -1111,8 +1133,8 @@ Shippable: in `measure`, `stream/end` no longer tears the output down; idle mode
 
 ### Task 2.1: Warm config keys
 
-**Files:** as Task 1.2 (`PLAYOUT_WARM_HOLD_S` 0–3600 = 300, `PLAYOUT_WARM_IN_GROUP` = true, `PLAYOUT_WARM_GROUP_MAX_S` 0–86400 = 3600, `PLAYOUT_WARMUP_S` 10–300 = 60; all `_GLOBAL_RESTART_FIELDS`), `ui/src/settings/layout.ts` (advanced fields), i18n.
-**Test:** `tests/unit/config/test_playout_config.py` (extend: defaults, schema ranges, model rejects 3601/9, diff kind, HA preserve).
+**Files:** as Task 1.2 (`PLAYOUT_WARM_HOLD_S` 0–3600 = 300, `PLAYOUT_WARM_IN_GROUP` = true, `PLAYOUT_WARM_GROUP_MAX_S` 0–86400 = 3600, `PLAYOUT_WARMUP_S` 10–300 = 60; all `_GLOBAL_RESTART_FIELDS`), plus `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE` (bool, default `false`, hot: not in `_GLOBAL_RESTART_FIELDS`, classified `GLOBAL_BROADCAST`/ignored for restarts like `PLAYOUT_SPEAKER_OFFSETS`) and the per-player `playout_hold_overrides_power_save: bool | None = None` (`config/players.py`, `config/schema.json`, `config_diff.py` hot), `ui/src/settings/layout.ts` (advanced fields; the hold-overrides option as a toggle in the Audio section with the one-line explanation "Keep a speaker awake while its group is idle instead of letting it power-save; speakers with auto-disconnect still disconnect." and a per-player select "Follow the global setting / On / Off" in the device settings), `ui/src/i18n/{en,ru}.json` (label and explanation in both languages).
+**Test:** `tests/unit/config/test_playout_config.py` (extend: defaults including `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE is False` and the 300 s hold, schema ranges, model rejects 3601/9, diff kinds, HA preserve of the global and per-player keys), `tests/unit/config/test_player_playout_fields.py` (per-player `playout_hold_overrides_power_save` accepts true/false/null and rejects strings; the resolver `hold_overrides_power_save(player_cfg, cfg)` returns the per-player value when set, else the global one), `ui/tests/unit/settings/layout.test.ts` (extend: both keys rendered, en and ru strings exist).
 
 - [ ] Steps: failing tests → implement → PASS → parent passes them, plus the player's `keep_alive_method`, in the spawn `playout` dict (a new test in `tests/unit/bridge/test_playout_spawn_params.py` asserting the params JSON) → commit `feat(config): warm stream hold settings`.
 
@@ -1248,7 +1270,7 @@ Snapshot additions: `state` (`holding` while the hold runs), `hold_reason`, `hol
 **Interfaces:**
 - `PlaybackState` gains `playout_holding: bool` and `playout_hold_reason: str | None` (from `status["playout"]`).
 - `IdleMachine(..., playout_engine: bool = False)` (default keeps every existing caller and test as is): when True, sink events are ignored for timers (`on_sink_active/idle` return `[]`) and `on_playback_change` (daemon flags = program audio) drives them, as the existing fallback path does.
-- New action `ReleasePlayoutHold` before `power_save` suspends: `ArmPowerSaveTimer` firing in the client now runs `_enter_power_save()` which, if `status.playout.state == "holding"`: when `hold_reason == "group"` → log INFO "power save waits for the group" and re-arm when the hold ends (status transition `holding → idle` triggers `on_hold_ended` → `ArmPowerSaveTimer(0)`); else send `SetPlayoutHold(release=True)`, wait up to 2 s for `playout.state != "holding"`, then suspend.
+- New action `ReleasePlayoutHold` before `power_save` suspends: `ArmPowerSaveTimer` firing in the client now runs `_enter_power_save()` which, if `status.playout.state == "holding"`: when `hold_reason == "group"` **and** `hold_overrides_power_save(player_cfg, cfg)` is true (per-player value, else `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE`) → log INFO "power save waits for the group" and re-arm when the hold ends (status transition `holding → idle` triggers `on_hold_ended` → `ArmPowerSaveTimer(0)`); otherwise (default, also for a group hold) send `SetPlayoutHold(release=True)`, wait up to 2 s for `playout.state != "holding"`, then suspend. `auto_disconnect` never consults the override.
 - `_keepalive_loop` skips a burst while `status.playout.state == "holding"`.
 - `auto_disconnect` unchanged (standby closes the output).
 
@@ -1278,7 +1300,7 @@ def test_without_the_engine_nothing_changes():
     assert m.on_sink_idle(PlaybackState()) == [ArmPowerSaveTimer(delay_s=60)]
 ```
 
-Client-level tests (same file, `SendspinClient` built with the existing test helpers in `tests/unit/bridge/test_sendspin_client.py`): power-save fire with a grace hold sends `set_playout_hold release` before `asuspend_sink`; with a group hold it does not suspend and re-arms when status moves to `idle`; keep-alive burst skipped while holding; `PLAYOUT_SYNC=off` keeps the old order of calls (assert `asuspend_sink` without a release).
+Client-level tests (same file, `SendspinClient` built with the existing test helpers in `tests/unit/bridge/test_sendspin_client.py`): power-save fire with a grace hold sends `set_playout_hold release` before `asuspend_sink`; with a group hold and the default settings it also releases and suspends; with a group hold and `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE=true` it does not suspend and re-arms when status moves to `idle`; the per-player `playout_hold_overrides_power_save` true/false wins over a global false/true; `auto_disconnect` releases a group hold whatever the override; keep-alive burst skipped while holding; `PLAYOUT_SYNC=off` keeps the old order of calls (assert `asuspend_sink` without a release).
 - [ ] **Step 2–4:** Implement → PASS (`tests/unit/bridge/test_idle_machine.py` unchanged and green).
 - [ ] **Step 5: Commit** `feat(idle): idle modes follow program audio while the playout engine holds the sink`.
 
@@ -1305,7 +1327,7 @@ Client-level tests (same file, `SendspinClient` built with the existing test hel
 
 ## Stage 3 — Control loop
 
-Shippable: `loop` becomes available (still opt-in): fine corrections, 10 ms jumps, delay migration.
+Shippable: `loop` becomes available (still opt-in): fine corrections, 10 ms jumps. No delay migration (by decision): tuned delays are re-tuned.
 
 ### Task 3.1: `Corrector`
 
@@ -1503,32 +1525,32 @@ def test_saturating_rate_error_warns(caplog):
 - [ ] **Step 1: Tests:** engine-level: during program audio, `resync(+30_000)` makes the next program frame heard 30 ms later than it would have been, ± 1 frame, the frames already in flight are heard on their old time, nothing is rebuilt, `last_jump_reason == "delay"`; `resync(−200_000)` drops the audio whose new time has passed (heard frames never earlier than their new time); `resync` with nothing queued returns False. Daemon-level with a real `PlayoutPlayer` on a fake port: three changes inside 150 ms → one `resync` with the total shift (the existing coalescing), and the log line "Output delay changed 300→320 ms; player resynchronised".
 - [ ] **Step 2:** If any fails, fix the engine (not the tests). **Step 3: Commit** `test(playout): delay changes take effect exactly without a rebuild`.
 
-### Task 3.7: Delay migration when the engine is enabled
+### Task 3.7: Re-tune hint when the engine is enabled (no migration)
+
+By decision of 2026-10-16 no delay is converted, backed up or restored. This task only tells the user.
 
 **Files:**
-- Modify: `src/sendspin_bridge/bridge/client.py` (on spawn), `src/sendspin_bridge/config/__init__.py` (`save_player_delay_migration`), `config/schema.json` + `config/players.py` (`static_delay_pre_playout_ms: int | None`, `static_delay_playout_migrated: bool | None`)
-- Test: `tests/unit/bridge/test_playout_delay_migration.py`
+- Modify: `src/sendspin_bridge/bridge/client.py` (on spawn), `ui/src/i18n/{en,ru}.json`
+- Test: `tests/unit/bridge/test_playout_retune_hint.py`
 
 **Interfaces:**
 
 ```python
-def migrate_delay_for_playout(*, mode: str, delay_ms: float, source: str, legacy_latency_ms: float | None,
-                              pulse_latency_ms: int, backup_ms: int | None, migrated: bool
-                              ) -> tuple[float, int | None, bool] | None:
-    """(new_delay, backup, migrated) or None when nothing changes.
-    off→engine, user-tuned source, not yet migrated: new = max(0, delay − (legacy_latency or pulse_latency)), backup = delay.
-    engine→off, migrated: new = backup, backup = None, migrated = False."""
+def needs_retune_hint(*, effective_mode: str, source: str, has_speaker_offsets: bool) -> bool:
+    """True when the player starts in measure/loop, has no saved speaker offsets (it has not been
+    tuned with the engine yet) and its static_delay_source is user-tuned: manual, music_assistant, legacy, microphone_calibration,
+    manual_calibration. Never changes any value."""
 ```
 
-User-tuned sources: `manual`, `music_assistant`, `legacy`, `microphone_calibration`, `manual_calibration`. Applied through the normal hot-apply + persist path, so Music Assistant learns the new value; INFO log "[name] Output delay migrated for the playout engine: 812 → 12 ms (backup kept)".
+One INFO log per such daemon start: "[name] Playout sync is on: the output delay was tuned without it and may be off by about the old PulseAudio buffer; re-tune with group sync tuning." The player keeps its delay untouched.
 
-- [ ] **Step 1: Failing tests:** off→loop with `manual` 812 ms and legacy latency 800 → (12, 812, True); a second start does nothing; `default` source → None; loop→off restores 812; legacy latency missing → uses `PULSE_LATENCY_MSEC`; never negative.
-- [ ] **Step 2–4:** Implement (gated behind the user's decision on Open question 2; if they decline, the task ships only the INFO hint "re-tune after enabling the engine" and the function is not called). Run → PASS.
-- [ ] **Step 5: Commit** `feat(playout): migrate tuned delays once when the playout engine takes over`.
+- [ ] **Step 1: Failing tests:** loop with `manual` and no offsets → True; `music_assistant` → True; `default` source → False; mode `off` → False; a saved speaker offset → False; a client-level test asserts that after such a start `static_delay_ms` and its source are exactly unchanged and nothing is written to the config (spy on `update_config`).
+- [ ] **Step 2–4:** Implement → PASS.
+- [ ] **Step 5: Commit** `feat(playout): hint to re-tune delays when the playout engine is enabled`.
 
 ### Task 3.8: Changelog for Stage 3
 
-- [ ] `### Added`: "Experimental `PLAYOUT_SYNC=loop`: the bridge holds Bluetooth playout to the Sendspin clock within a millisecond, correcting one sample at a time; the PulseAudio buffer no longer shifts sync." `### Changed`: "Enabling the playout engine lowers previously tuned output delays once by the old PulseAudio buffer latency; switching back restores them." Lint, commit.
+- [ ] `### Added`: "Experimental `PLAYOUT_SYNC=loop`: the bridge holds Bluetooth playout to the Sendspin clock within a millisecond, correcting one sample at a time; the PulseAudio buffer no longer shifts sync." `### Changed`: "Output delays tuned before `PLAYOUT_SYNC` is enabled are not converted: the playout engine no longer needs them to absorb the PulseAudio buffer, so re-tune them with group sync tuning after enabling it." Lint, commit.
 
 ---
 
@@ -1694,18 +1716,18 @@ Shippable: the measured evidence, the user guides, and (after sign-off) `loop` a
 
 **Files:** `docs-site/src/content/docs/group-sync-tuning.md`, `bluetooth-speakers.md`, `configuration.md` and their `ru/` twins.
 
-- [ ] Write: what `PLAYOUT_SYNC` does and how to switch it; warm stream and its battery cost; idle-mode interplay; why the first measurement waits for a warm-up; saving and forgetting speaker offsets; reading the timing panel; troubleshooting (fallback, underruns, saturation warning → check NTP). `cd docs-site && npm run build` passes. Commit `docs: playout sync guides (en, ru)`.
+- [ ] Write: what `PLAYOUT_SYNC` does and how to switch it; warm stream and its battery cost; idle-mode interplay; why the first measurement waits for a warm-up; saving and forgetting speaker offsets; reading the timing panel; the per-player opt-out and when to use it; the hold-overrides-power-save setting (global and per player) and its default; that delays tuned before enabling playout sync must be re-tuned (no automatic migration); troubleshooting (fallback, underruns, saturation warning → check NTP). `cd docs-site && npm run build` passes. Commit `docs: playout sync guides (en, ru)`.
 
 ### Task 5.5: Beta default (after sign-off)
 
 **Files:** `config/__init__.py` (`PLAYOUT_SYNC` default `"loop"`), `config/schema.json` default, `tests/unit/config/test_playout_config.py` (the default assertion changes — the commit message explains why: the rollout decision), `CHANGELOG.md`.
 
-- [ ] Only with the user's go-ahead after Task 5.3. `### Changed`: "Bluetooth playout sync is on by default (`PLAYOUT_SYNC=loop`); set it to `off` to return to the previous behaviour." Migration note in the guide. Lint, gates, commit `feat(playout): enable the playout loop by default on beta`.
+- [ ] Only with the user's go-ahead after Task 5.3. `### Changed`: "Bluetooth playout sync is on by default (`PLAYOUT_SYNC=loop`); set it to `off` to return to the previous behaviour." Re-tune note (delays are not migrated) in the guide. Lint, gates, commit `feat(playout): enable the playout loop by default on beta`.
 
 ---
 
 ## Self-review checklist (run before handing the plan over)
 
 - Constants identical in spec, Global Constraints and Tasks 1.9/3.2 (B 0.03 Hz, ζ 0.707, Kp 0.2666, Ki 0.03553, dead band 0.1 ms, R_max 1000 ppm, jumps 10/20 ms, LEAD 40 ms, block 10 ms).
-- Key names identical everywhere (`PLAYOUT_SYNC`, `PLAYOUT_WARM_HOLD_S`, `PLAYOUT_WARM_IN_GROUP`, `PLAYOUT_WARM_GROUP_MAX_S`, `PLAYOUT_WARMUP_S`, `PLAYOUT_SPEAKER_OFFSETS`, `speaker_offsets`, `static_delay_pre_playout_ms`).
+- Key names identical everywhere (`PLAYOUT_SYNC`, `PLAYOUT_WARM_HOLD_S`, `PLAYOUT_WARM_IN_GROUP`, `PLAYOUT_WARM_GROUP_MAX_S`, `PLAYOUT_WARMUP_S`, `PLAYOUT_SPEAKER_OFFSETS`, `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE`, `playout_hold_overrides_power_save`, `playout_sync_enabled`, `speaker_offsets`). No migration keys exist (`static_delay_pre_playout_ms` and `static_delay_playout_migrated` are gone).
 - Every existing test referenced as "unchanged" is untouched; the only intended edit of an existing assertion is Task 5.5's default, explained in its commit.

@@ -53,6 +53,15 @@ Decisions taken while designing:
 | Where is the speaker offset kept? | Bridge config, per player: `speaker_offsets[]` keyed by codec × adapter. Music Assistant's `sendspin_static_delay` stays the live value (the bridge sets the output delay; MA follows through `client/state`, as today). |
 | Delay Report on PulseAudio (HAOS)? | Expected absent (PA does not register delay reporting and ignores `MediaTransport1.Delay`); verified in Stage 1 from the existing `bt_delay_reporting_supported` telemetry. If absent, the Delay Report source is PipeWire-only, where it is already inside the sink latency the loop compensates, so it is shown as the offset source and never added again. |
 
+Decisions taken by the user on 2026-10-16 (they close the former open questions):
+
+| Question | Decision |
+|---|---|
+| Does the warm-stream hold override `power_save` while the player is in an active group? | The user's choice, not a fixed rule. Global setting `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE` (default `false`: `power_save` keeps its current behaviour, i.e. the hold is released and the sink is suspended when the power-save timer fires, grouped or not) and a per-player override `playout_hold_overrides_power_save` (`null` = follow the global setting). `true` means: while grouped, `power_save` waits for the hold to end. `auto_disconnect` always releases the speaker. The web UI shows the setting with a one-line explanation (en, ru). |
+| Migrate already tuned delays when the engine is turned on? | No. The beta channel is practically private. Delays tuned before `PLAYOUT_SYNC` was enabled (they absorbed `L_host`) must be re-tuned; the changelog and the user guide say so. No automatic conversion, no backup key. |
+| Default hold for ungrouped players | 300 s (`PLAYOUT_WARM_HOLD_S`). |
+| Per-player opt-out of the playout engine | Yes: per-player `playout_sync_enabled` (default `true`). `false` runs that player exactly as today (`off`: legacy `StreamPlayer`, no warm stream, no offsets), whatever `PLAYOUT_SYNC` says. Config, API, UI and tests are part of Stage 1. |
+
 Out of scope (follow-ups, see the end): variable-ratio resampling (ASRC), upstream proposals
 (Sendspin telemetry, sub-ms output delay, aiosendspin playout corrector, MA continuous streams
 across announcements), lowering `PULSE_LATENCY_MSEC` defaults, LE Audio.
@@ -68,7 +77,7 @@ Goals:
 - A per-speaker offset that is measured once (warm) and stays valid across sessions, announcements
   and reconnects with the same codec and adapter.
 - Diagnosable: every term the bridge controls is visible in status, API, UI and logs.
-- `PLAYOUT_SYNC=off` is byte-for-byte today's behaviour (3.1.0-beta.5).
+- `PLAYOUT_SYNC=off` is byte-for-byte today's behaviour (3.1.0-beta.5), and so is a single player with `playout_sync_enabled=false`.
 
 Non-goals:
 
@@ -337,7 +346,7 @@ After program audio stops (`stream/end`), the player keeps feeding the sink:
 |---|---|
 | Player's current Sendspin group has other members (`group_id` ≠ its own id) and `PLAYOUT_WARM_IN_GROUP` | while grouped, capped by `PLAYOUT_WARM_GROUP_MAX_S` (default 3600 s; 0 = no cap) |
 | Otherwise | `PLAYOUT_WARM_HOLD_S` (default 300 s; 0 = stop at once, the 3.1.0-beta.5 behaviour) |
-| Idle mode `power_save`, timer fires | the parent asks the daemon to release the hold, then suspends the sink. While grouped (rule 1), power-save waits for the hold to end. |
+| Idle mode `power_save`, timer fires | Default (`PLAYOUT_HOLD_OVERRIDES_POWER_SAVE=false`, or the player's `playout_hold_overrides_power_save=false`): the parent asks the daemon to release the hold, then suspends the sink, grouped or not (today's behaviour). With the override on: a grace hold is released as above, but while the hold reason is `group` power-save waits for the hold to end (then arms again). The per-player value wins over the global one. |
 | Idle mode `auto_disconnect`, timer fires | standby as today (the hold ends with the output). |
 | Idle mode `keep_alive` | the hold feeds the keep-alive signal (`keep_alive_method`: infrasound / silence) instead of zeros; the parent's `paplay` bursts are skipped while the daemon holds. `none` → zeros. |
 | Standby, BT disconnect, sink retarget, daemon stop | hold ends with the output (cold next time). |
@@ -489,9 +498,18 @@ Global keys (registered in `DEFAULT_CONFIG`, `config/schema.json`, `BridgeConfig
 | `PLAYOUT_WARM_GROUP_MAX_S` | 0–86400 s (0 = no cap) | 3600 | warm restart | 2 |
 | `PLAYOUT_WARMUP_S` | 10–300 s | 60 | warm restart | 2 |
 | `PLAYOUT_SPEAKER_OFFSETS` | bool | true | hot (parent only) | 4 |
+| `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE` | bool | false | hot (parent only) | 2 |
 
-Per player: `speaker_offsets` (list, see Storage; written only by the bridge, read-only in the
-form), `static_delay_pre_playout_ms` (migration backup, see Rollout).
+Per player: `playout_sync_enabled` (bool, default `true`; `false` = this player runs as `off`;
+warm restart of that daemon; Stage 1), `playout_hold_overrides_power_save` (bool | null, `null` =
+follow the global setting; hot; Stage 2), `speaker_offsets` (list, see Storage; written only by
+the bridge, read-only in the form). There is no migration key: delays are not converted when the
+engine is enabled.
+
+The effective mode of a player is `off` when `playout_sync_enabled` is `false`, else `PLAYOUT_SYNC`
+(`effective_playout_mode()`); the parent passes it in the spawn parameters, the status and the API
+report it, offsets are neither stored nor applied while it is `off`, and sync tuning treats the
+player as a legacy member.
 
 Loop constants are module constants in `controller.py`, not settings. `SENDSPIN_PLAYOUT_DEBUG=1`
 in the daemon environment raises the summary log to every 1 s and logs every jump with its inputs.
@@ -504,7 +522,7 @@ in the daemon environment raises the summary log to every 1 s and logs every jum
   trim_us, keep_alive_method}`; `DaemonArgs` gains `playout_mode="off"` and `playout:
   PlayoutSettings | None = None`.
 - New commands (`services/ipc/commands.py`, typed, clamped): `set_playout_hold {release: bool}`
-  (the parent ends a hold before power_save), `set_playout_trim_us {trim_us: int}` (−500…500).
+  (the parent ends a hold before power_save; skipped while the override keeps a group hold), `set_playout_trim_us {trim_us: int}` (−500…500).
 - Status key `playout` (dict, below) and `effective_required_lead_time_ms`.
 
 ### Status (`DeviceStatus.playout`, API `DeviceTiming.playout`)
@@ -585,8 +603,11 @@ Assistant sensor) carries `error_ms`; in `off` it keeps today's meaning. `Device
   with `playout_mode="loop"`, `stream/end` calls `end_stream()` (not `stop()`), `resync` is still
   called once per coalesced burst with the total shift, status carries `playout`, the declared lead
   is raised.
-- **Parent tests**: idle machine with a holding daemon (power_save waits for the release; grouped
-  hold defers power_save; auto_disconnect still applies; keep-alive bursts suppressed); status and
+- **Parent tests**: idle machine with a holding daemon (power_save releases the hold and suspends by
+  default, grouped or not; with the global or the per-player override a group hold defers
+  power_save, and the per-player value wins; auto_disconnect always releases; keep-alive bursts
+  suppressed); per-player opt-out (`effective_playout_mode`, spawn params, status, API, no offsets,
+  sync tuning treats the player as legacy); status and
   API models; offset resolver (precedence, PipeWire rule, newer manual wins); config registration
   (schema, translate preserve, diff classification); sync API (`member_cold`, `force`,
   `offset_candidates`, save endpoint, `relative_only`).
@@ -616,17 +637,15 @@ Assistant sensor) carries `error_ms`; in `off` it keeps today's meaning. `Device
 - Stages 1–4 ship with `PLAYOUT_SYNC=off` by default on the beta channel; `measure` and `loop` are
   opt-in and documented as experimental. Telemetry in `off` mode ships with Stage 1.
 - **Recommendation:** after Stage 5 passes S1–S10 on the stand, flip the beta default to `loop`
-  (one beta release with a changelog entry and a migration note), keep `off` as the escape hatch
+  (one beta release with a changelog entry and a re-tune note), keep `off` as the escape hatch
   for at least two beta releases, then decide about removing `StreamPlayer`. Stable (2.x) is not
   affected.
-- **Delay migration** (needs the user's decision, see Open questions): switching a player from
-  `off` to `measure`/`loop` changes what `output_delay` means (it no longer has to absorb
-  `L_host`). Proposed: on the first start in `measure`/`loop`, a player whose
-  `static_delay_source` is user-tuned (`manual`, `music_assistant`, `legacy`, calibrations) is
-  migrated once: `new = max(0, old − L_legacy)`, where `L_legacy` is the legacy pipeline's last
-  reported latency (`backend_output_latency_ms`) or `PULSE_LATENCY_MSEC`; the old value is kept in
-  `static_delay_pre_playout_ms` and restored when switching back to `off`. Stage 1's measurements
-  (H4 test) confirm `L_legacy` before the migration is enabled in Stage 3.
+- **No delay migration.** Switching a player from `off` to `measure`/`loop` changes what
+  `output_delay` means (it no longer has to absorb `L_host`), but the user decided (2026-10-16)
+  that nothing is converted: the beta channel is practically private. Delays tuned before the
+  engine was enabled must be re-tuned (group sync tuning, then optionally saved as the speaker's
+  offset). The changelog entry for the release that enables the engine and the user guide say so;
+  the same holds when a player is opted out again.
 
 ## Risks
 
@@ -641,26 +660,31 @@ Assistant sensor) carries `error_ms`; in `off` it keeps today's meaning. `Device
   warm stream does not keep them warm. Mitigation: `keep_alive` feeds infrasound; V-fresh vs
   V-warm after a long hold shows it; per-speaker offsets still apply.
 - **Battery speakers** stay connected and streaming longer (hold, group). Mitigation: defaults
-  (300 s, 1 h cap), idle modes still win (power_save outside a group, auto_disconnect always).
+  (300 s, 1 h cap); `auto_disconnect` always releases the speaker, `power_save` releases it unless
+  the user turned on the hold-overrides-power-save option; a problem speaker can be opted out.
 - **Larger start lead** delays group starts by up to ~1 s on hosts with `PULSE_LATENCY_MSEC` 800.
   Mitigation: documented; lowering the buffer is the follow-up once the loop is proven.
 - **Insert/drop audible on tonal content** at high correction rates. Mitigation: crossfade, rate
   limit, ABX (S6); ASRC follow-up if needed.
-- **Existing tuned delays shift by `L_host`** when the mode changes. Mitigation: migration with
-  backup and restore, changelog.
+- **Existing tuned delays shift by `L_host`** when the mode changes. Mitigation: none in code (no
+  migration, by decision); the changelog and the guide say to re-tune.
 - **Python timing in the feeder** under GIL contention (FLAC decode). Mitigation: `LEAD_MS` +
   ring give ≥ 240 ms of slack; underrun detection; CPU check S10.
 
-## Open questions (need the user's decision)
+## Decisions (formerly open questions)
 
-1. **Group hold vs idle modes.** Proposed: in an active group the hold has no limit except
-   `PLAYOUT_WARM_GROUP_MAX_S` (1 h) and power_save waits; auto_disconnect still releases the speaker
-   after its own delay. Alternative: idle modes always win.
-2. **Delay migration** when enabling the engine: automatic once with backup (proposed), or leave
-   the values and tell the user to re-tune.
-3. **Default hold** for ungrouped players: 300 s (proposed) vs 0 (only grouped players stay warm).
-4. **Per-player opt-out** of `PLAYOUT_SYNC` (e.g. a problematic speaker): not in this design;
-   add if Stage 5 finds a speaker that needs it.
+Taken by the user on 2026-10-16; the design above and the plan implement them.
+
+1. **Group hold vs `power_save`:** the user's choice. `PLAYOUT_HOLD_OVERRIDES_POWER_SAVE`
+   (global, default `false`: `power_save` behaves as today) plus the per-player
+   `playout_hold_overrides_power_save` (`null` = global). With the override on, a group hold
+   (capped by `PLAYOUT_WARM_GROUP_MAX_S`) makes `power_save` wait. `auto_disconnect` always
+   releases the speaker. Web UI: a setting with a one-line explanation (en, ru).
+2. **Delay migration:** none. Delays tuned before enabling the engine are re-tuned; the changelog
+   and the user guide say so.
+3. **Default hold for ungrouped players:** 300 s.
+4. **Per-player opt-out:** yes, `playout_sync_enabled` (default `true`); `false` = today's
+   behaviour for that player. Config, API, UI and tests in Stage 1.
 
 ## Follow-ups (out of scope)
 
