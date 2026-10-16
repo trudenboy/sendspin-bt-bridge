@@ -29,7 +29,7 @@ const sync = useSyncStore()
 const nameOf = (m: SyncMember) => speakerName(m.name, m.ma_player_id)
 
 /* -- the link ------------------------------------------------------------------------- */
-const link = ref<{ url: string; expires_in_s: number } | null>(null)
+const link = ref<{ url: string; http_url: string; secure: boolean; expires_in_s: number } | null>(null)
 const linkError = ref('')
 const linking = ref(false)
 async function makeLink() {
@@ -37,7 +37,7 @@ async function makeLink() {
   linkError.value = ''
   try {
     const out = await captureLink(props.session.id, locale.value === 'ru' ? 'ru' : 'en')
-    link.value = { url: out.url, expires_in_s: out.expires_in_s }
+    link.value = { url: out.url, http_url: out.http_url, secure: out.secure, expires_in_s: out.expires_in_s }
   } catch (e) {
     linkError.value = t('sync.phone.linkFailed', { code: errorCode(e) })
   } finally {
@@ -68,17 +68,14 @@ watch(
   { immediate: true },
 )
 const status = (id: string) => props.session.measurements?.[id]?.status ?? null
-const toPlay = computed(() =>
-  props.members.filter((m) => !skipped.value.includes(m.ma_player_id) && status(m.ma_player_id) !== 'ok'),
-)
+/** Every speaker not skipped plays in each sequence: phases from two recordings never mix (one clock). */
+const toPlay = computed(() => props.members.filter((m) => !skipped.value.includes(m.ma_player_id)))
 const sequence = computed(() => props.session.sequence ?? null)
 const running = computed(() => !!sequence.value && ['starting', 'lead', 'solo', 'gap'].includes(sequence.value.phase))
 const playing = ref(false)
 const playError = ref('')
-async function play(again = false) {
-  const members = again
-    ? props.members.filter((m) => !skipped.value.includes(m.ma_player_id)).map((m) => m.ma_player_id)
-    : toPlay.value.map((m) => m.ma_player_id)
+async function play() {
+  const members = toPlay.value.map((m) => m.ma_player_id)
   if (!members.length) return
   playing.value = true
   playError.value = ''
@@ -151,6 +148,11 @@ const label = (s: string | null) =>
           <Smartphone class="size-4" aria-hidden="true" />{{ t('sync.phone.scan') }}
         </p>
         <p v-if="link" data-link class="break-all font-mono text-xs text-text-secondary">{{ link.url }}</p>
+        <p v-if="link?.secure" data-cert-note class="text-xs text-text-secondary">{{ t('sync.phone.certificate') }}</p>
+        <p v-if="link?.secure" class="text-xs text-text-secondary">
+          {{ t('sync.phone.httpFallback') }}
+          <span data-http-link class="break-all font-mono">{{ link.http_url }}</span>
+        </p>
         <div class="flex flex-wrap items-center gap-2">
           <SbButton v-if="link" type="button" size="sm" variant="outline" data-copy-link @click="copyLink">
             <template #icon-left><Copy aria-hidden="true" /></template>
@@ -203,20 +205,10 @@ const label = (s: string | null) =>
           :loading="playing"
           :disabled="running || !session.clicker_playing || toPlay.length === 0"
           :aria-describedby="!session.clicker_playing ? 'sync-phone-why' : undefined"
-          @click="play(false)"
+          @click="play()"
         >
           <template #icon-left><Play aria-hidden="true" /></template>
           {{ t('sync.phone.play', { n: toPlay.length }) }}
-        </SbButton>
-        <SbButton
-          v-if="sequence && !running && toPlay.length === 0"
-          type="button"
-          variant="outline"
-          data-play-again
-          :disabled="!session.clicker_playing"
-          @click="play(true)"
-        >
-          {{ t('sync.phone.again') }}
         </SbButton>
         <span v-if="clickerLeftS != null && session.clicker_playing" class="text-xs text-text-secondary">
           {{ t('sync.prep.clicker.left', { time: formatClock(clickerLeftS) }) }}

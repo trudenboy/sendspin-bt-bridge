@@ -101,18 +101,30 @@
           "title": "Expires In S",
           "type": "number"
         },
+        "http_url": {
+          "description": "The same page over plain HTTP (the phone's own recorder).",
+          "title": "Http Url",
+          "type": "string"
+        },
+        "secure": {
+          "description": "url is the HTTPS one.",
+          "title": "Secure",
+          "type": "boolean"
+        },
         "token": {
           "title": "Token",
           "type": "string"
         },
         "url": {
-          "description": "The phone capture page on the bridge's LAN address, with the token.",
+          "description": "The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP.",
           "title": "Url",
           "type": "string"
         }
       },
       "required": [
         "url",
+        "http_url",
+        "secure",
         "token",
         "expires_in_s"
       ],
@@ -121,10 +133,6 @@
     },
     "CaptureMemberOut": {
       "properties": {
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
         "name": {
           "title": "Name",
           "type": "string"
@@ -149,7 +157,6 @@
         }
       },
       "required": [
-        "id",
         "name",
         "status"
       ],
@@ -170,6 +177,24 @@
         "results"
       ],
       "title": "CaptureResultOut",
+      "type": "object"
+    },
+    "CaptureStartIn": {
+      "properties": {
+        "mode": {
+          "description": "live: the page records with the browser's microphone; recorder: the phone's own recorder, started by hand (a longer lead-in).",
+          "enum": [
+            "live",
+            "recorder"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "CaptureStartIn",
       "type": "object"
     },
     "CaptureStateOut": {
@@ -262,7 +287,8 @@
         "session_active",
         "session_expired",
         "session_state",
-        "sync_mute_unsupported"
+        "sync_mute_unsupported",
+        "upload_running"
       ],
       "title": "ErrorCode",
       "type": "string"

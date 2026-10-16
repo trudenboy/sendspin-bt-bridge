@@ -18,7 +18,7 @@ const members = [{ ma_player_id: 'a', name: 'Kitchen', origin: 'bridge', adjusta
 const group = { id: 'g', name: 'Downstairs', session_id: null, restore_pending: null, error: null, members }
 const session = (over: Record<string, unknown> = {}) =>
   ({ id: 's9', group_id: 'g', mode: 'semi', point: 'device', state: 'measuring', members, departed: [], measurements: {}, history: [],
-     clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: {}, muted: [], error: null, restore_error: null, proposal: null, reference: null, round: 1, soloed: null, undo_until_s: null, ...over }) as never
+     clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: {}, muted: [], error: null, restore_error: null, proposal: null, reference: null, soloed: null, ...over }) as never
 
 async function mountView() {
   const router = createRouter({

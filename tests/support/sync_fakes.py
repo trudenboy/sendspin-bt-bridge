@@ -27,8 +27,6 @@ class FakeControl:
         self.late_mute: set[str] = set()  # their mute takes effect, but the answer times out
         self.fail_clicker = False  # play_media starts the clicker, but the answer times out
         self.fail_volume = 0  # this many volume calls fail with ma_unavailable
-        self.fail_forget = False  # removing the click track from the queue fails
-        self.forgotten: list[tuple[str, int]] = []  # (url, how many calls had been made by then)
         self.member_list = [
             Member("a", "A", True, "bridge", delay_ms=0),
             Member("b", "B", True, "sendspin", delay_ms=0),
@@ -58,13 +56,6 @@ class FakeControl:
         self.group_state, self.media_uri = "playing", f"builtin://sound_effect/{url}"  # as live MA reports it
         if self.fail_clicker:
             raise ControlError("ma_unavailable", "MA play_media timed out")
-
-    def forget_clicker(self, group_id: str, url: str) -> None:
-        """Recorded apart from ``calls`` (the mute/stop order tests read those): the click track
-        URLs taken out of the queue, after the stop."""
-        self.forgotten.append((url, len(self.calls)))
-        if self.fail_forget:
-            raise ControlError("ma_unavailable")
 
     def clicker_ends(self) -> None:
         """The click track played to its end (or someone stopped it in Music Assistant)."""
@@ -128,7 +119,6 @@ class FakeMa:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.timeouts: dict[str, float] = {}  # last timeout asked for, per command
         self.forbid_write = False
-        self.fail_queue = False  # the queue commands fail (an older Music Assistant, or a refusal)
         # the group's queue: the user's music, positioned on its second item
         self.queue: list[dict[str, Any]] = [
             {"queue_item_id": f"q{i}", "name": f"Song {i}", "media_item": {"uri": f"library://track/{i}"}}
@@ -263,15 +253,5 @@ class FakeMa:
                 self.queue.insert(self.queue_index, item)
             group["playback_state"] = "playing"
             group["current_media"] = {"uri": uri, "media_type": "sound_effect"}
-            return None
-        if command == "player_queues/items":
-            if self.fail_queue:
-                raise MaApiError("ma_error", "unknown command")
-            offset, limit = int(args.get("offset", 0)), int(args.get("limit", 500))
-            return [dict(i) for i in self.queue[offset : offset + limit]]
-        if command == "player_queues/delete_item":
-            if self.fail_queue:
-                raise MaApiError("ma_error", "unknown command")
-            self.queue = [i for i in self.queue if i["queue_item_id"] != args["item_id_or_index"]]
             return None
         raise MaApiError("ma_error", f"unknown {command}")

@@ -133,9 +133,10 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
     assert s.state == "restoring" and _file(tmp_path).exists()
     store.tick()
     assert s.state == "restoring" and s.restore_error == "ma_unavailable"  # attempt 1 failed, next after 1 s
+    calls = len(ctl.calls)
     t["now"] = b + 0.5
     store.tick()
-    assert ("stop_group",) not in ctl.calls[-1:]
+    assert len(ctl.calls) == calls  # no attempt before the backoff ran out
     t["now"] = b + 1.1
     store.tick()  # attempt 2 fails, next after 2 s
     t["now"] = b + 2.9
@@ -144,7 +145,7 @@ def test_end_restores_with_backoff_and_removes_the_snapshot(tmp_path):
     t["now"] = b + 3.2
     store.tick()
     assert s.state == "cancelled" and not _file(tmp_path).exists()
-    assert ctl.muted_now == {"a": False, "b": False, "cast": False} and ctl.calls[-1] == ("stop_group",)
+    assert ctl.muted_now == {"a": False, "b": False, "cast": False} and ("stop_group",) in ctl.calls
     assert host.released == [s.id] and ctl.closed == 1
     t["now"] = b + 60.0
     store.tick()
@@ -169,7 +170,8 @@ def test_a_session_that_restores_by_itself_is_driven_by_the_store(tmp_path):
     assert s.state == "restoring"
     store.tick()
     assert s.state == "done" and host.released == [s.id] and not _file(tmp_path).exists()
-    assert made[0].calls[-1] == ("stop_group",) and not any(made[0].muted_now.values())
+    assert made[0].calls[-3:] == [("stop_group",), ("mute", "a", False), ("mute", "cast", False)]
+    assert not any(made[0].muted_now.values())
 
 
 def test_any_exception_from_a_restore_is_a_failed_attempt(tmp_path):
@@ -199,7 +201,7 @@ def test_inactivity_ends_the_session(tmp_path):
     t["now"] = 901.0
     store.tick()
     store.tick()
-    assert s.state == "cancelled" and made[0].calls[-1] == ("stop_group",)
+    assert s.state == "cancelled" and made[0].calls[-3] == ("stop_group",)
 
 
 def test_a_failed_start_frees_the_group_releases_the_token_and_removes_the_snapshot(tmp_path):
@@ -246,13 +248,13 @@ def test_ending_one_group_keeps_the_other_persisted(tmp_path):
     assert [e["group_id"] for e in _persisted(tmp_path)] == ["g2"]
 
 
-def test_restore_persisted_unmutes_and_stops_the_clicker_still_playing(tmp_path):
+def test_restore_persisted_stops_the_clicker_still_playing_then_unmutes(tmp_path):
     _file(tmp_path).write_text(json.dumps(_old_entry()))
     store, made, _, _, _ = make(tmp_path)
     original = store._factory
     store._factory = lambda: _playing_old_clicker(original())
     store.restore_persisted()
-    assert made[0].calls == [("mute", "b", False), ("stop_group",)] and not _file(tmp_path).exists()
+    assert made[0].calls == [("stop_group",), ("mute", "b", False)] and not _file(tmp_path).exists()
     assert made[0].closed == 1
     with pytest.raises(ControlError):
         store.get("old")
@@ -294,7 +296,7 @@ def test_restore_persisted_keeps_the_file_when_ma_is_down(tmp_path):
     assert attempts["n"] == 1
     t["now"] = 2.0
     store.tick()
-    assert not _file(tmp_path).exists() and made[0].calls == [("mute", "b", False), ("stop_group",)]
+    assert not _file(tmp_path).exists() and made[0].calls == [("stop_group",), ("mute", "b", False)]
 
 
 def test_a_persisted_unmute_that_succeeded_is_not_repeated_after_a_later_failure(tmp_path):
@@ -304,16 +306,25 @@ def test_a_persisted_unmute_that_succeeded_is_not_repeated_after_a_later_failure
 
     def factory():
         ctl = _playing_old_clicker(original())
+        ctl.muted_now["cast"] = True
         if len(made) == 1:
-            ctl.playback = lambda group_id: (_ for _ in ()).throw(ControlError("ma_unavailable"))
+            real = ctl.mute
+
+            def flaky(member, muted):
+                if member == "cast":
+                    raise ControlError("ma_unavailable")
+                real(member, muted)
+
+            ctl.mute = flaky
         return ctl
 
     store._factory = factory
     store.restore_persisted()
-    assert _persisted(tmp_path)[0]["muted"] == []  # both unmuted; the clicker check failed
+    assert _persisted(tmp_path)[0]["muted"] == ["cast"]  # "b" unmuted; "cast" failed
     t["now"] = 2.0
     store.tick()
-    assert made[1].calls == [("stop_group",)] and not _file(tmp_path).exists()
+    assert ("mute", "b", False) not in made[1].calls and ("mute", "cast", False) in made[1].calls
+    assert not _file(tmp_path).exists()
 
 
 def test_a_persisted_group_that_is_gone_still_gets_its_members_unmuted(tmp_path):
@@ -364,7 +375,7 @@ def test_shutdown_restores_live_sessions_and_releases_everything(tmp_path):
     store, made, _, _, host = make(tmp_path)
     s = soloed(store, mode="manual")
     store.shutdown()
-    assert s.state == "cancelled" and made[0].calls[-1] == ("stop_group",) and not any(made[0].muted_now.values())
+    assert s.state == "cancelled" and made[0].calls[-3] == ("stop_group",) and not any(made[0].muted_now.values())
     assert host.released == [s.id] and made[0].closed == 1 and not _file(tmp_path).exists()
 
 
@@ -668,14 +679,13 @@ def test_the_entry_names_the_volumes_to_put_back(tmp_path):
     assert entry["volumes"] == {"a": 40} and entry["muted"] == [] and entry["clicker_url"] is None
 
 
-def test_restore_persisted_puts_the_volumes_back_then_unmutes_then_stops_the_clicker(tmp_path):
+def test_restore_persisted_puts_the_volumes_back_stops_the_clicker_then_unmutes(tmp_path):
     _file(tmp_path).write_text(json.dumps(_old_entry(volumes={"a": 35})))
     store, made, _, _, _ = make(tmp_path, left_muted=("b",))
     original = store._factory
     store._factory = lambda: _playing_old_clicker(original())
     store.restore_persisted()
-    assert made[0].calls == [("volume", "a", 35), ("mute", "b", False), ("stop_group",)]
-    assert made[0].forgotten == [(URL, 3)]  # taken out of the queue after the stop
+    assert made[0].calls == [("volume", "a", 35), ("stop_group",), ("mute", "b", False)]
     assert not _file(tmp_path).exists()
 
 
@@ -696,18 +706,3 @@ def test_a_persisted_volume_that_was_put_back_is_not_sent_again_after_a_later_fa
     t["now"] = 5.0
     store.tick()
     assert ("volume", "a", 35) not in made[1].calls and ("volume", "b", 20) in made[1].calls
-
-
-def test_a_refused_queue_cleanup_after_a_restart_never_blocks_the_restore(tmp_path):
-    _file(tmp_path).write_text(json.dumps(_old_entry()))
-    store, made, _, _, _ = make(tmp_path)
-    original = store._factory
-
-    def factory():
-        ctl = _playing_old_clicker(original())
-        ctl.fail_forget = True
-        return ctl
-
-    store._factory = factory
-    store.restore_persisted()
-    assert not _file(tmp_path).exists() and made[0].forgotten == [(URL, 2)]

@@ -60,6 +60,8 @@ export const useSyncStore = defineStore('sync', () => {
    */
   const startingGroup = ref<string | null>(null)
   const starting = computed(() => startingGroup.value !== null)
+  /** Sessions adopted (and owned) while a start was in flight: kept only if one is the started one. */
+  let adoptedDuringStart = new Set<string>()
   /** Sessions that are never the page's session (a quick listen): their events are dropped. */
   const ignored = new Set<string>()
   /** While > 0, no other session is adopted (a quick listen is being created, its id not known yet). */
@@ -192,8 +194,18 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   function adopt(next: SyncSession) {
-    if (startingGroup.value === next.group_id) owned.value = new Set([...owned.value, next.id])
+    if (startingGroup.value === next.group_id && !owned.value.has(next.id)) {
+      owned.value = new Set([...owned.value, next.id])
+      adoptedDuringStart.add(next.id)
+    }
     session.value = next
+  }
+
+  /** The start is answered: give up every session adopted meanwhile except the one created (I1). */
+  function settleAdopted(createdId: string | null) {
+    const drop = [...adoptedDuringStart].filter((id) => id !== createdId)
+    adoptedDuringStart = new Set()
+    if (drop.length) owned.value = new Set([...owned.value].filter((id) => !drop.includes(id)))
   }
 
   /** Catch up after the event stream was down: ``sync`` events are not replayed. */
@@ -239,13 +251,17 @@ export const useSyncStore = defineStore('sync', () => {
 
   async function start(groupId: string, mode: SessionMode, point: SessionPoint = 'device') {
     startingGroup.value = groupId
+    adoptedDuringStart = new Set()
+    let createdId: string | null = null
     try {
       const created = await track(() => api.createSession({ group_id: groupId, mode, point }))
+      createdId = created.id
       owned.value = new Set([...owned.value, created.id])
       session.value = created
       return created
     } finally {
       if (startingGroup.value === groupId) startingGroup.value = null
+      settleAdopted(createdId)
     }
   }
 

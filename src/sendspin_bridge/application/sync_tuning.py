@@ -11,7 +11,9 @@ become the problem's ``code``.
 from __future__ import annotations
 
 import contextlib
+import logging
 import math
+import threading
 import time
 import uuid
 from datetime import UTC, datetime
@@ -69,6 +71,7 @@ _STATUS = {
     "sync_mute_unsupported": 409,
     "no_sequence": 409,
     "sequence_running": 409,
+    "upload_running": 409,
     "not_found": 404,
 }
 
@@ -79,6 +82,13 @@ MAX_CAPTURE_BYTES = 20_000_000
 
 #: The phone capture's sequence waits with this (tests swap it for a clock that does not wait).
 _sequence_sleep = time.sleep
+
+logger = logging.getLogger(__name__)
+#: One phone upload per session at a time, and one decode in the whole bridge (each costs tens of
+#: MB and seconds of CPU; a forwarded link must not take the bridge down). Busy: 409 upload_running.
+_upload_locks: dict[str, threading.Lock] = {}
+_upload_locks_lock = threading.Lock()
+_decode_gate = threading.BoundedSemaphore(1)
 
 
 def _raise(exc: ControlError | MaApiError, *, extra: dict[str, Any] | None = None) -> NoReturn:
@@ -321,6 +331,11 @@ def apply(sid: str, rows: Mapping[str, int] | None) -> SyncSessionOut:
     return _act(sid, lambda s: s.apply(rows))
 
 
+def reset(sid: str) -> SyncSessionOut:
+    """Put back every delay this session wrote (applied or edited) to the value it had at the start."""
+    return _act(sid, lambda s: s.reset())
+
+
 def finish(sid: str) -> SyncSessionOut:
     """The operator is done: the delays stay, the group is restored and the session ends "done"."""
     return _act(sid, lambda s: s.finish())
@@ -385,10 +400,25 @@ def capture_link(sid: str, lang: str | None) -> CaptureLinkOut:
         raise UseCaseError(409, "session_state", "A capture link is only for a running measurement")
     tokens = capture_tokens.current()
     token = tokens.issue(session.id)
-    url = f"{_capture_base_url().rstrip('/')}/sync/capture/{token}"
-    if lang in ("en", "ru"):
-        url += f"?lang={lang}"
-    return CaptureLinkOut(url=url, token=token, expires_in_s=tokens.expires_in(session.id) or 0.0)
+    query = f"?lang={lang}" if lang in ("en", "ru") else ""
+    base = _capture_base_url().rstrip("/")
+    http_url = f"{base}/sync/capture/{token}{query}"
+    https = capture_https_base()
+    url = f"{https}/sync/capture/{token}{query}" if https else http_url
+    return CaptureLinkOut(
+        url=url, http_url=http_url, secure=bool(https), token=token, expires_in_s=tokens.expires_in(session.id) or 0.0
+    )
+
+
+def capture_https_base() -> str | None:
+    """https://<the bridge's LAN address>:<capture port> while the HTTPS capture server runs."""
+    from sendspin_bridge.sync_tuning.capture_https import active_port
+
+    port = active_port()
+    if port is None:
+        return None
+    host = _capture_base_url().split("//", 1)[-1].rsplit(":", 1)[0]
+    return f"https://{host}:{port}"
 
 
 def start_sequence(sid: str, members: list[str]) -> SyncSessionOut:
@@ -450,7 +480,6 @@ def capture_state(token: str) -> CaptureStateOut:
         clicks_playing=bool(data["clicker_playing"]),
         members=[
             CaptureMemberOut(
-                id=m["ma_player_id"],
                 name=names[m["ma_player_id"]],
                 status=(data["measurements"].get(m["ma_player_id"]) or {}).get("status"),
             )
@@ -468,23 +497,82 @@ def _group_name(group_id: str) -> str:
     return group_id
 
 
-def capture_upload(token: str, body: bytes) -> CaptureResultOut:
-    """Decode the phone's recording of the last sequence (any container FFmpeg reads) and measure
-    every member of it."""
-    from sendspin_bridge.sync_tuning.audio_decode import decode_to_mono
+def _refuse(status: int, code: str, detail: str) -> NoReturn:
+    """A refused phone request: logged at INFO with its reason (never the token), then the problem."""
+    logger.info("Sync capture request refused (%s): %s", code, detail)
+    raise UseCaseError(status, code, detail)
 
+
+def _measuring(session: SyncSession) -> None:
+    if session.state not in ("measuring", "proposed"):
+        _refuse(409, "session_state", "The measurement is not taking recordings now")
+
+
+def check_capture_token(token: str) -> None:
+    """404 unless *token* stands for a live session (the router calls it before reading a body)."""
+    _capture_session(token)
+
+
+def capture_start(token: str, mode: str) -> CaptureStateOut:
+    """The phone starts the sequence itself (its only write besides the upload): every adjustable
+    member still in the group and not skipped plays alone in turn; a longer lead-in when the phone's
+    own recorder is started by hand. Needs a measuring session whose clicks play."""
     session = _capture_session(token)
+    _measuring(session)
+    data = session.to_dict()
+    skipped = {mid for mid, m in data["measurements"].items() if m.get("status") == "skipped"}
+    members = [m["ma_player_id"] for m in data["members"] if m["adjustable"] and m["ma_player_id"] not in skipped]
+    lead = seq.RECORDER_LEAD_S if mode == "recorder" else seq.LEAD_S
+    try:
+        session.start_sequence(members, lead_s=lead)
+    except ControlError as exc:
+        logger.info("Sync capture start refused (%s): %s", exc.code, exc.detail)
+        _raise(exc)
+    run_in_background(lambda: session.run_sequence(sleep=_sequence_sleep), name=f"sync-sequence-{session.id[:8]}")
+    return capture_state(token)
+
+
+def capture_upload(token: str, body: bytes) -> CaptureResultOut:
+    """Decode the phone's recording of the last sequence (an audio file in a known container) and
+    measure every member of it. One upload per session and one decode in the bridge at a time."""
+    session = _capture_session(token)
+    _measuring(session)
+    with _upload_locks_lock:
+        lock = _upload_locks.setdefault(session.id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        _refuse(409, "upload_running", "A recording is being measured; wait a moment")
+    try:
+        if not _decode_gate.acquire(blocking=False):
+            _refuse(409, "upload_running", "Another recording is being measured; try again in a moment")
+        try:
+            return _capture_upload(session, body)
+        finally:
+            _decode_gate.release()
+    finally:
+        lock.release()
+
+
+def _capture_upload(session: SyncSession, body: bytes) -> CaptureResultOut:
+    from sendspin_bridge.sync_tuning import audio_decode
+
     if not body or len(body) > MAX_CAPTURE_BYTES:
-        _invalid_recording(f"A recording is a non-empty audio file of at most {MAX_CAPTURE_BYTES // 1_000_000} MB")
+        _refuse(
+            400,
+            "recording_invalid",
+            f"A recording is a non-empty audio file of at most {MAX_CAPTURE_BYTES // 1_000_000} MB",
+        )
     current = session.sequence
     if current is None:
-        raise UseCaseError(409, "no_sequence", "Play the sequence on the bridge page first")
+        _refuse(409, "no_sequence", "No sequence has played yet: press Start on the phone (or Play the sequence)")
     if current["phase"] != "done":
-        raise UseCaseError(409, "sequence_running", "Wait until the sequence has finished")
+        _refuse(409, "sequence_running", "Wait until the sequence has finished")
     try:
-        pcm, rate = decode_to_mono(body, max_seconds=seq.max_duration_s(len(current["members"]), session.point))
+        pcm, rate = audio_decode.decode_to_mono(
+            body, max_seconds=seq.max_duration_s(len(current["members"]), session.point)
+        )
         results = session.record_sequence(pcm, rate)
     except (ControlError, MaApiError) as exc:
+        logger.info("Sync capture upload refused (%s): %s", exc.code, exc.detail)
         _raise(exc)
     for m in results.values():
         if m.status == "ok":

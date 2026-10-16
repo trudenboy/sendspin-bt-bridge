@@ -77,6 +77,22 @@ def test_click_detection_keeps_a_plausible_number_of_events_in_a_burst_storm():
     assert time.perf_counter() - t0 < 10.0
 
 
-def test_a_sequence_has_a_hard_member_limit():
-    assert seq.MAX_MEMBERS <= 16
-    assert seq.max_duration_s(seq.MAX_MEMBERS, "position") < 400
+def test_click_detection_stays_small_in_memory_for_the_longest_recording_allowed():
+    """Review I3: the worst case (16 members from the listening position, about 303 s at 16 kHz) must
+    not build per-sample float lists (+376 MB measured before)."""
+    import random
+    import struct
+    import tracemalloc
+
+    rate = 16000
+    seconds = seq.max_duration_s(seq.MAX_MEMBERS, "position")
+    n = int(seconds * rate)
+    rnd = random.Random(2)
+    pcm = struct.pack(f"<{n}h", *(rnd.randint(-300, 300) for _ in range(n)))
+    tracemalloc.start()
+    try:
+        seq.click_times(pcm, rate)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 64 * 1024 * 1024, f"peak {peak / 1e6:.1f} MB"

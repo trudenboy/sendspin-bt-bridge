@@ -67,8 +67,8 @@ def test_semi_session_runs_measure_propose_apply_restore():
     s.finish()
     assert s.state == "restoring"
     assert s.restore_tick() is True and s.state == "done"
-    # every member muted for the solo is unmuted, then the clicker is stopped
-    assert ctl.calls[-3:] == [("mute", "a", False), ("mute", "cast", False), ("stop_group",)]
+    # the clicker is stopped, then every member muted for the solo is unmuted (no clicks at full volume)
+    assert ctl.calls[-3:] == [("stop_group",), ("mute", "a", False), ("mute", "cast", False)]
     assert ctl.muted_now == {"a": False, "b": False, "cast": False}
 
 
@@ -80,7 +80,7 @@ def test_restore_retries_until_it_succeeds_and_cancel_goes_through_restoring():
     assert s.state == "restoring"
     assert s.restore_tick() is False and s.restore_tick() is False and s.restore_tick() is True
     assert s.state == "cancelled" and ctl.muted_now == {"a": False, "b": False, "cast": False}
-    assert ctl.calls[-1] == ("stop_group",)
+    assert ctl.calls.index(("stop_group",), 1) < ctl.calls.index(("mute", "b", False))
 
 
 def test_manual_mode_writes_live_and_resets():

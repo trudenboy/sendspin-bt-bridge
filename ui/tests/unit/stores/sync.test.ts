@@ -334,16 +334,32 @@ describe('sync store live writes', () => {
     expect(store.owns('s1')).toBe(true)
   })
 
-  it('does not own a session of another group adopted while a start is in flight', async () => {
+  it('drops a session it adopted during a start that then failed (another tab owns it: I1)', async () => {
     const store = useSyncStore()
     vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
     await store.fetchGroup('g')
-    vi.mocked(api.createSession).mockRejectedValue(new ApiError({ status: 409, code: 'session_active' }))
-    const started = store.start('g', 'semi', 'device').catch(() => {})
-    store.applyEvent({ id: 'x', group_id: 'other', state: 'measuring' } as never)
+    let reject!: (e: unknown) => void
+    vi.mocked(api.createSession).mockReturnValue(new Promise((_r, j) => { reject = j }) as never)
+    const started = store.start('g', 'manual', 'device').catch(() => {})
+    store.applyEvent({ id: 'x', group_id: 'g', mode: 'manual', state: 'tuning' } as never)  // tab 1's session
+    reject(new ApiError({ status: 409, code: 'session_active' }))
     await started
     expect(store.owns('x')).toBe(false)
-    expect(store.starting).toBe(false)
+    expect(store.session?.id).toBe('x')  // still shown, read-only
+  })
+
+  it('keeps only its own session when a start succeeds after adopting another id', async () => {
+    const store = useSyncStore()
+    vi.mocked(api.getSyncGroup).mockResolvedValue(structuredClone(group) as never)
+    await store.fetchGroup('g')
+    let answer!: (s: unknown) => void
+    vi.mocked(api.createSession).mockReturnValue(new Promise((r) => { answer = r }) as never)
+    const started = store.start('g', 'semi', 'device')
+    store.applyEvent({ id: 'x', group_id: 'g', mode: 'manual', state: 'tuning' } as never)
+    answer({ id: 's1', group_id: 'g', mode: 'semi', state: 'measuring' })
+    await started
+    expect(store.owns('x')).toBe(false)
+    expect(store.owns('s1')).toBe(true)
   })
 
   it('shares the ended states and the error-code helper', () => {

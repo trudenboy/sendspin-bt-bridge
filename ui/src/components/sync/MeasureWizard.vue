@@ -10,6 +10,7 @@ import {
   endSessionOnPageHide,
   finishSession,
   getSession,
+  resetSession,
   sessionSignal,
   sessionSolo,
   uploadRecording,
@@ -791,17 +792,22 @@ async function finish(profileName: string | null) {
   }
 }
 
-/** Cancel from the editor: put back the delays from before the measurement, then end. */
-async function putBackDelays() {
-  const s = session.value
-  const p = proposal.value
-  if (!s || !p || !applied.value) return
-  for (const r of p.rows) {
-    if (departed.value.includes(r.member)) continue
-    const now = s.members.find((m) => m.ma_player_id === r.member)?.delay_ms
-    if (now !== r.before_ms) sync.setDelay(r.member, r.before_ms)
-  }
+/**
+ * Cancel from the editor: every delay this session wrote (the measured ones and any edit, also of
+ * members not heard or skipped) goes back to its value at the start. False when that failed: the
+ * session is then kept, so nothing is left half put back.
+ */
+async function putBackDelays(): Promise<boolean> {
+  const sid = sessionId.value
+  if (!sid || !applied.value) return true
   await sync.flushDelays()
+  try {
+    sync.applyEvent(await resetSession(sid))
+    return true
+  } catch (e) {
+    finishError.value = t('sync.cancel.resetFailed', { code: errorCode(e) })
+    return false
+  }
 }
 
 /** Stage 4. The microphone goes now: nothing is recorded any more. */
@@ -946,11 +952,13 @@ async function cancel() {
   }
   if (applied.value) {
     finishing.value = true
+    let ok = false
     try {
-      await putBackDelays()
+      ok = await putBackDelays()
     } finally {
       finishing.value = false
     }
+    if (!ok) return
   }
   sessionId.value = null
   closeRecorder()

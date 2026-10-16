@@ -23,6 +23,7 @@ from sendspin_bridge.application.models.sync import (
     CaptureLinkIn,
     CaptureLinkOut,
     CaptureResultOut,
+    CaptureStartIn,
     CaptureStateOut,
     DelaysIn,
     MeasurementOut,
@@ -49,6 +50,8 @@ from sendspin_bridge.sync_tuning import click_track_host as host
 public = APIRouter(tags=["sync"])
 #: The phone capture page, outside /api/v1 (registered before the SPA's catch-all).
 page = APIRouter(include_in_schema=False)
+#: The capture token's endpoints (under /api/v1): served by the main app and by the HTTPS capture server.
+capture = APIRouter(tags=["sync"])
 
 
 @public.get("/sync/signal/{token}.wav", response_class=Response, summary="Click track for a running session (public)")
@@ -64,8 +67,10 @@ def signal(token: str) -> Response:
     )
 
 
-async def _capture_body(request: Request) -> bytes:
-    """The raw upload, refused once it passes the cap instead of being read in full."""
+async def _capture_body(request: Request, token: str) -> bytes:
+    """The raw upload: the token is checked before a byte is read (404), and the body is refused once
+    it passes the cap instead of being read in full."""
+    uc.check_capture_token(token)
     limit = uc.MAX_CAPTURE_BYTES
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > limit:
@@ -89,23 +94,40 @@ _CAPTURE_BODY = {
 }
 
 
-@public.get(
+@capture.get(
     "/sync/capture/{token}",
     response_model=CaptureStateOut,
     summary="Capture state for the phone page (capture token, no sign-in)",
     responses={404: {"description": "Unknown, expired or revoked token"}},
 )
-def capture_state(token: str) -> CaptureStateOut:
+def capture_state(token: str, response: Response) -> CaptureStateOut:
+    response.headers["Cache-Control"] = "no-store"
     return uc.capture_state(token)
 
 
-@public.post(
+@capture.post(
+    "/sync/capture/{token}/start",
+    response_model=CaptureStateOut,
+    status_code=202,
+    summary="The phone starts the sequence (capture token, no sign-in)",
+    description=(
+        "The capture token's only write besides the upload: every adjustable member not skipped plays "
+        "alone in turn. Needs a measuring session whose clicks play (409 clicker_stopped otherwise)."
+    ),
+)
+def capture_start(token: str, body: CaptureStartIn, response: Response) -> CaptureStateOut:
+    response.headers["Cache-Control"] = "no-store"
+    return uc.capture_start(token, body.mode)
+
+
+@capture.post(
     "/sync/capture/{token}/recording",
     response_model=CaptureResultOut,
     summary="Upload the phone's recording of the sequence (capture token, no sign-in)",
     openapi_extra=_CAPTURE_BODY,
 )
-def capture_upload(token: str, body: Annotated[bytes, Depends(_capture_body)]) -> CaptureResultOut:
+def capture_upload(token: str, body: Annotated[bytes, Depends(_capture_body)], response: Response) -> CaptureResultOut:
+    response.headers["Cache-Control"] = "no-store"
     return uc.capture_upload(token, body)
 
 
@@ -119,7 +141,12 @@ def capture_page_html(request: Request, token: str, lang: str | None = None) -> 
         return HTMLResponse(capture_page.render_gone(chosen), status_code=404, headers=headers)
     nonce = secrets.token_urlsafe(16)
     headers["Content-Security-Policy"] = capture_page.content_security_policy(nonce)
-    return HTMLResponse(capture_page.render(token, chosen, nonce), headers=headers)
+    https_url = None
+    if request.url.scheme == "http":
+        base = uc.capture_https_base()
+        if base:
+            https_url = f"{base}/sync/capture/{token}?lang={chosen}"
+    return HTMLResponse(capture_page.render(token, chosen, nonce, https_url), headers=headers)
 
 
 router = APIRouter(
@@ -319,6 +346,15 @@ def compute_proposal(session_id: str) -> ProposalOut:
 )
 def apply(session_id: str, body: ApplyIn) -> SyncSessionOut:
     return uc.apply(session_id, body.rows)
+
+
+@router.post(
+    "/sessions/{session_id}/reset",
+    response_model=SyncSessionOut,
+    summary="Put back every delay this session wrote",
+)
+def reset(session_id: str) -> SyncSessionOut:
+    return uc.reset(session_id)
 
 
 @router.post(

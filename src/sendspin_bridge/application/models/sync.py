@@ -36,6 +36,7 @@ ErrorCode = Literal[
     # the phone capture's sequence
     "no_sequence",
     "sequence_running",
+    "upload_running",
 ]
 
 
@@ -195,18 +196,29 @@ class SequenceIn(BaseModel):
     members: list[str] = Field(min_length=1, max_length=16, description="The members to play alone, in order.")
 
 
+class CaptureStartIn(BaseModel):
+    mode: Literal["live", "recorder"] = Field(
+        description="live: the page records with the browser's microphone; recorder: the phone's own recorder, "
+        "started by hand (a longer lead-in)."
+    )
+
+
 class CaptureLinkIn(BaseModel):
     lang: Literal["en", "ru"] | None = Field(default=None, description="The page's language (the UI's).")
 
 
 class CaptureLinkOut(ResponseModel):
-    url: str = Field(description="The phone capture page on the bridge's LAN address, with the token.")
+    url: str = Field(
+        description="The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) "
+        "when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP."
+    )
+    http_url: str = Field(description="The same page over plain HTTP (the phone's own recorder).")
+    secure: bool = Field(description="url is the HTTPS one.")
     token: str
     expires_in_s: float
 
 
 class CaptureMemberOut(ResponseModel):
-    id: str
     name: str
     status: Literal["ok", "not_heard", "unstable", "skipped"] | None = Field(
         description="This member's last measurement, if any."
@@ -293,6 +305,7 @@ CONTRACT_MODELS: dict[str, type[BaseModel]] = {
         SequenceOut,
         SequenceIn,
         CaptureLinkIn,
+        CaptureStartIn,
         CaptureLinkOut,
         CaptureMemberOut,
         CaptureStateOut,

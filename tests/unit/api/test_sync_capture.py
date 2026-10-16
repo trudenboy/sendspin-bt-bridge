@@ -23,6 +23,7 @@ def capture(monkeypatch, sync_env):  # noqa: F811
     tokens = capture_tokens.CaptureTokens(clock=clock)
     monkeypatch.setattr(capture_tokens, "tokens", tokens)
     monkeypatch.setattr(uc, "_capture_base_url", lambda: "http://192.168.1.5:8080")
+    monkeypatch.setattr(uc, "capture_https_base", lambda: None)
 
     def sleep(dt):  # the sequence runs on the test's clock, without waiting
         clock.now += dt
@@ -177,3 +178,171 @@ def test_the_capture_page_wins_over_the_spa_catch_all(tmp_path, capture, sync_en
     token = _link(client, sid)["token"]
     page = client.get(f"/sync/capture/{token}")
     assert page.status_code == 200 and "SPA" not in page.text and "Measure with this phone" in page.text
+
+
+# -- review fix round + live test feedback -------------------------------------------------------------
+
+
+def test_the_phone_starts_the_sequence_itself_for_the_speakers_still_to_measure(api_client, capture):
+    sid = _ready(api_client)
+    api_client.post(f"/api/v1/sync/sessions/{sid}/skip", json={"member": "b"})
+    token = _link(api_client, sid)["token"]
+    resp = api_client.post(f"/api/v1/sync/capture/{token}/start", json={"mode": "recorder"})
+    assert resp.status_code == 202, resp.text
+    assert resp.headers["cache-control"] == "no-store"
+    deadline = time.monotonic() + 5
+    while api_client.get(f"/api/v1/sync/capture/{token}").json()["sequence"]["phase"] not in ("done", "failed"):
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    seq_ = api_client.get(f"/api/v1/sync/sessions/{sid}").json()["sequence"]
+    assert seq_["members"] == ["a"] and seq_["lead_s"] == 10.0  # "b" was skipped; time to start the recorder
+    live = api_client.post(f"/api/v1/sync/capture/{token}/start", json={"mode": "live"})
+    assert live.status_code == 202
+    assert api_client.get(f"/api/v1/sync/sessions/{sid}").json()["sequence"]["lead_s"] == 3.0
+
+
+def test_the_phone_is_told_what_to_do_when_the_session_is_not_ready(api_client, capture, sync_env):  # noqa: F811
+    ctl = sync_env[0]
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    ctl.clicker_ends()
+    resp = api_client.post(f"/api/v1/sync/capture/{token}/start", json={"mode": "live"})
+    assert resp.status_code == 409 and resp.json()["code"] == "clicker_stopped"
+    assert resp.json()["detail"]  # a sentence the page can show
+
+
+def test_the_capture_token_still_cannot_do_anything_else(api_client, capture, sync_env):  # noqa: F811
+    from tests.support.api_client import make_client
+
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    other = api_client.post("/api/v1/sync/sessions", json={"group_id": "g2", "mode": "semi"}).json()["id"]
+    for path, body in (("finish", None), ("apply", {}), ("solo", {"member": "a"}), ("signal", {"action": "stop"})):
+        assert api_client.post(f"/api/v1/sync/capture/{token}/{path}", json=body).status_code in (404, 405)
+    assert api_client.post(f"/api/v1/sync/capture/{token}/start", json={"mode": "bogus"}).status_code == 422
+    # the token is bound to its session: the other session is untouched
+    api_client.post(f"/api/v1/sync/capture/{token}/start", json={"mode": "live"})
+    assert api_client.get(f"/api/v1/sync/sessions/{other}").json()["sequence"] is None
+    assert make_client().post(f"/api/v1/sync/capture/{'z' * 43}/start", json={"mode": "live"}).status_code == 404
+
+
+def test_a_second_upload_while_one_is_measured_is_refused(api_client, capture, monkeypatch):
+    import threading
+
+    from sendspin_bridge.sync_tuning import audio_decode
+
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    _play_sequence(api_client, sid)
+    entered, release = threading.Event(), threading.Event()
+    real = audio_decode.decode_to_mono
+
+    def slow(data, **kw):
+        entered.set()
+        assert release.wait(5)
+        return real(data, **kw)
+
+    monkeypatch.setattr(audio_decode, "decode_to_mono", slow)
+    pcm, _ = sequence_recording({"a": 0.0, "b": 0.03})
+    body = pcm_to_m4a(pcm, 16000)
+    first = {}
+    t = threading.Thread(
+        target=lambda: first.update(
+            r=api_client.post(f"/api/v1/sync/capture/{token}/recording", content=body, headers=OCTET)
+        )
+    )
+    t.start()
+    assert entered.wait(5)
+    second = api_client.post(f"/api/v1/sync/capture/{token}/recording", content=body, headers=OCTET)
+    assert second.status_code == 409 and second.json()["code"] == "upload_running"
+    release.set()
+    t.join(10)
+    assert first["r"].status_code == 200
+
+
+def test_only_one_recording_is_decoded_at_a_time_across_sessions(api_client, capture, monkeypatch):
+    from sendspin_bridge.application import sync_tuning
+
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    _play_sequence(api_client, sid)
+    assert sync_tuning._decode_gate.acquire(blocking=False)  # another session's upload is being decoded
+    try:
+        busy = api_client.post(f"/api/v1/sync/capture/{token}/recording", content=b"RIFF0000WAVE", headers=OCTET)
+        assert busy.status_code == 409 and busy.json()["code"] == "upload_running"
+    finally:
+        sync_tuning._decode_gate.release()
+
+
+def test_nothing_is_decoded_once_the_session_tunes_by_ear(api_client, capture, monkeypatch):
+    from sendspin_bridge.sync_tuning import audio_decode
+
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    _play_sequence(api_client, sid)
+    pcm, _ = sequence_recording({"a": 0.0, "b": 0.03})
+    api_client.post(f"/api/v1/sync/capture/{token}/recording", content=pcm_to_m4a(pcm, 16000), headers=OCTET)
+    api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
+    api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={})
+    monkeypatch.setattr(audio_decode, "decode_to_mono", lambda *a, **k: pytest.fail("decoded"))
+    late = api_client.post(f"/api/v1/sync/capture/{token}/recording", content=b"x" * 100, headers=OCTET)
+    assert late.status_code == 409 and late.json()["code"] == "session_state"
+
+
+def test_a_bad_token_is_refused_before_the_body_is_read(api_client, capture):
+    resp = api_client.post(
+        f"/api/v1/sync/capture/{'q' * 43}/recording",
+        content=b"\0" * 1000,
+        headers={**OCTET, "content-length": str(10**9)},
+    )
+    assert resp.status_code == 404
+
+
+def test_the_state_carries_no_player_ids_and_is_not_cached(api_client, capture):
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    resp = api_client.get(f"/api/v1/sync/capture/{token}")
+    assert resp.headers["cache-control"] == "no-store"
+    assert all(set(m) == {"name", "status"} for m in resp.json()["members"])
+
+
+def test_refused_uploads_are_logged_with_their_reason_but_never_the_token(api_client, capture, caplog):
+    import logging
+
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    with caplog.at_level(logging.INFO):
+        api_client.post(f"/api/v1/sync/capture/{token}/recording", content=b"\0" * 100, headers=OCTET)
+    # the bridge's own log (the test's HTTP client logs request URLs itself; uvicorn's access log is off)
+    text = "\n".join(r.getMessage() for r in caplog.records if r.name.startswith("sendspin"))
+    assert "no_sequence" in text and token not in text
+
+
+def test_an_unexpected_error_on_a_capture_route_never_logs_the_token(api_client, capture, monkeypatch, caplog):
+    import logging
+
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    monkeypatch.setattr(uc, "capture_state", lambda t: (_ for _ in ()).throw(RuntimeError("boom")))
+    with caplog.at_level(logging.ERROR):
+        assert api_client.get(f"/api/v1/sync/capture/{token}").status_code == 500
+    text = "\n".join(r.getMessage() for r in caplog.records if r.name.startswith("sendspin"))
+    assert "/sync/capture/<token>" in text and token not in text
+
+
+def test_the_link_prefers_https_when_the_capture_server_runs(api_client, capture, monkeypatch):
+    monkeypatch.setattr(uc, "capture_https_base", lambda: "https://192.168.1.5:8443")
+    sid = _ready(api_client)
+    link = _link(api_client, sid, "ru")
+    token = link["token"]
+    assert link["url"] == f"https://192.168.1.5:8443/sync/capture/{token}?lang=ru" and link["secure"] is True
+    assert link["http_url"] == f"http://192.168.1.5:8080/sync/capture/{token}?lang=ru"
+
+
+def test_the_http_page_offers_the_secure_page_when_there_is_one(api_client, capture, monkeypatch):
+    sid = _ready(api_client)
+    token = _link(api_client, sid)["token"]
+    assert 'id="https-link"' not in api_client.get(f"/sync/capture/{token}").text
+    monkeypatch.setattr(uc, "capture_https_base", lambda: "https://192.168.1.5:8443")
+    page = api_client.get(f"/sync/capture/{token}?lang=en").text
+    assert f'href="https://192.168.1.5:8443/sync/capture/{token}?lang=en"' in page

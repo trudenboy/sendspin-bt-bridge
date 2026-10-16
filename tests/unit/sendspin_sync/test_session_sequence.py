@@ -187,3 +187,36 @@ def test_a_sequence_of_too_many_members_is_refused():
     with pytest.raises(ControlError) as exc:
         s.start_sequence([m.ma_player_id for m in ctl.member_list])
     assert exc.value.code == "recording_invalid"
+
+
+# -- review fix round: a longer lead-in for the phone's recorder; one clock per round -----------------
+
+
+def test_the_lead_in_can_be_longer_for_a_recorder_started_by_hand_and_is_bounded():
+    s, _ctl, clock, _ = ready()
+    s.start_sequence(["a", "b"], lead_s=10.0)
+    assert s.to_dict()["sequence"]["lead_s"] == 10.0
+    t0 = clock.t
+    waits = []
+
+    def sleep(dt):
+        waits.append(dt)
+        clock.t += dt
+
+    s.run_sequence(sleep=sleep)
+    assert waits[0] == 10.0 and clock.t > t0
+    s2, _c2, _k2, _ = ready()
+    s2.start_sequence(["a"], lead_s=999)
+    assert s2.to_dict()["sequence"]["lead_s"] == seq.MAX_LEAD_S
+
+
+def test_a_sequence_recording_replaces_measurements_from_another_clock():
+    s, _ctl, clock, _ = ready()
+    from tests.support.sync_synth import synth
+
+    s.record(synth("b", lag_s=0.5))  # a microphone recording: another clock
+    s.start_sequence(["a"])
+    run(s, clock)
+    pcm, _ = sequence_recording({"a": 0.0})
+    s.record_sequence(pcm, 16000)
+    assert "b" not in s.measurements  # its phase was on the microphone's clock, not this file's

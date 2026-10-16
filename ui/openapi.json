@@ -1612,18 +1612,30 @@
             "title": "Expires In S",
             "type": "number"
           },
+          "http_url": {
+            "description": "The same page over plain HTTP (the phone's own recorder).",
+            "title": "Http Url",
+            "type": "string"
+          },
+          "secure": {
+            "description": "url is the HTTPS one.",
+            "title": "Secure",
+            "type": "boolean"
+          },
           "token": {
             "title": "Token",
             "type": "string"
           },
           "url": {
-            "description": "The phone capture page on the bridge's LAN address, with the token.",
+            "description": "The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP.",
             "title": "Url",
             "type": "string"
           }
         },
         "required": [
           "url",
+          "http_url",
+          "secure",
           "token",
           "expires_in_s"
         ],
@@ -1632,10 +1644,6 @@
       },
       "CaptureMemberOut": {
         "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1660,7 +1668,6 @@
           }
         },
         "required": [
-          "id",
           "name",
           "status"
         ],
@@ -1681,6 +1688,24 @@
           "results"
         ],
         "title": "CaptureResultOut",
+        "type": "object"
+      },
+      "CaptureStartIn": {
+        "properties": {
+          "mode": {
+            "description": "live: the page records with the browser's microphone; recorder: the phone's own recorder, started by hand (a longer lead-in).",
+            "enum": [
+              "live",
+              "recorder"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "CaptureStartIn",
         "type": "object"
       },
       "CaptureStateOut": {
@@ -12200,6 +12225,59 @@
         ]
       }
     },
+    "/api/v1/sync/capture/{token}/start": {
+      "post": {
+        "description": "The capture token's only write besides the upload: every adjustable member not skipped plays alone in turn. Needs a measuring session whose clicks play (409 clicker_stopped otherwise).",
+        "operationId": "capture_start_api_v1_sync_capture__token__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The phone starts the sequence (capture token, no sign-in)",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/api/v1/sync/groups": {
       "get": {
         "operationId": "list_groups_api_v1_sync_groups_get",
@@ -13538,6 +13616,60 @@
           }
         },
         "summary": "Pick the reference member",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/api/v1/sync/sessions/{session_id}/reset": {
+      "post": {
+        "operationId": "reset_api_v1_sync_sessions__session_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Put back every delay this session wrote",
         "tags": [
           "sync"
         ]

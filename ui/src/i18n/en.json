@@ -1469,7 +1469,7 @@
       "alternating": "Alternating {a} and {b}.",
       "failed": "That did not work ({code}).",
       "needsClicks": "Play the clicks to hear speakers alone or compare them.",
-      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Your queue is kept. Stop clicks stops only the click track."
+      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). It replaces the group’s queue. Stop clicks stops only the click track."
     },
     "manual": {
       "title": "Delays",
@@ -1536,7 +1536,7 @@
       "notice": {
         "title": "Nothing else plays while you measure.",
         "help": "You stop the group's music first; then the click track plays on the group. While a speaker is measured, the others are muted. When you finish, every speaker the bridge muted is unmuted, the volumes go back to what they were and the clicks stop.",
-        "queue": "Your queue is kept: the click track plays in between and is taken out of the queue at the end. If Music Assistant refuses that, it stays in the queue as “Sendspin sync clicks”."
+        "queue": "Calibration replaces the group’s queue with the click track; start your music again afterwards."
       },
       "point": {
         "legend": "Where will you measure?",
@@ -1633,7 +1633,8 @@
       "tuneMessage": "The delays go back to what they were before you measured. Speakers the bridge muted are unmuted, volumes go back and the clicks stop.",
       "confirm": "Stop",
       "keep": "Keep going",
-      "done": "Measurement cancelled. Speakers unmuted, volumes put back, clicks stopped."
+      "done": "Measurement cancelled. Speakers unmuted, volumes put back, clicks stopped.",
+      "resetFailed": "The delays could not be put back ({code}); the tuning stays open. Try again."
     },
     "reloaded": {
       "manual": "Manual tuning ended when the page was reloaded. The delays stay as they were.",
@@ -1673,7 +1674,7 @@
       "listening": "Clicks playing on the whole group…",
       "listenFailed": "Could not play the clicks ({code}).",
       "again": "Measure again",
-      "queue": "Your queue is as it was. If a “Sendspin sync clicks” item is still in it, remove it in Music Assistant."
+      "queue": "The group’s queue now holds only the click track: start your music again in Music Assistant."
     },
     "endForeign": "End that session",
     "endForeignTitle": "End the tuning on the other device?",
@@ -1742,11 +1743,10 @@
       "linkFailed": "Could not make a link ({code}).",
       "security": "The link only lets the phone see which speaker plays and send its recording for this measurement. It works for {min} minutes and stops when the measurement ends.",
       "sameNetwork": "The phone must be on the same network as the bridge.",
-      "step1": "On the phone, start recording (the page says how).",
-      "step2": "Press “Play the sequence” below and hold the phone as the page on it says.",
+      "step1": "On the phone, press Start: it records and the speakers play one by one.",
+      "step2": "Or press “Play the sequence” here while the phone records.",
       "step3": "When the sequence has finished, the phone sends the recording; the results appear here.",
       "play": "Play the sequence ({n})",
-      "again": "Play every speaker again",
       "measureIt": "Measure it",
       "notYet": "Not measured yet",
       "lead": "Starting: every speaker is quiet for a moment…",
@@ -1754,7 +1754,9 @@
       "pause": "Pause: move to the next speaker…",
       "measured": "The phone’s recording is measured.",
       "waitingUpload": "The sequence has finished: waiting for the phone’s recording…",
-      "failed": "The sequence stopped ({code})."
+      "failed": "The sequence stopped ({code}).",
+      "certificate": "Your phone will warn about the certificate once — accept it to record directly in the browser.",
+      "httpFallback": "Without the certificate, use the plain link (the phone’s recorder):"
     }
   }
 }

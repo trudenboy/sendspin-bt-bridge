@@ -124,3 +124,39 @@ def test_only_known_audio_containers_reach_the_decoder_and_never_with_network_pr
     for _kind, _fmt, options in seen:
         assert options["protocol_whitelist"] == "none"
         assert "hls" not in options["format_whitelist"] and "concat" not in options["format_whitelist"]
+
+
+def test_the_whitelists_really_stop_a_playlist_inside_ffmpeg(listener):
+    """Behaviour, not just the options passed (review t2): even a forced playlist demuxer with the
+    module's options cannot open the URL inside it."""
+    import io
+
+    import av
+
+    from sendspin_bridge.sync_tuning import audio_decode
+
+    port, hits = listener
+    hls = f"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nhttp://127.0.0.1:{port}/x.ts\n#EXT-X-ENDLIST\n".encode()
+    options = {"protocol_whitelist": "none", "format_whitelist": audio_decode._FORMAT_WHITELIST}
+    with pytest.raises(av.error.FFmpegError), av.open(io.BytesIO(hls), format="hls", options=options) as c:
+        for _ in c.decode(audio=0):
+            pass
+    assert hits == []
+
+
+def test_a_3gp_recording_with_aac_decodes():
+    data = _encode("3gp", "aac", seconds=1.0, rate=16000)
+    pcm, rate = decode_to_mono(data, max_seconds=30)
+    assert abs(len(pcm) // 2 - rate) < rate * 0.1
+
+
+def test_an_amr_nb_recording_is_refused_naming_its_format():
+    import math as _m
+
+    from tests.support.audio_files import encode_audio
+
+    tone = [0.3 * _m.sin(2 * _m.pi * 1000 * i / 8000) for i in range(8000)]
+    data = encode_audio(tone, fmt="amr", codec="libopencore_amrnb", rate=8000)
+    with pytest.raises(ControlError) as exc:
+        decode_to_mono(data, max_seconds=30)
+    assert exc.value.code == "recording_invalid" and "AMR" in exc.value.detail

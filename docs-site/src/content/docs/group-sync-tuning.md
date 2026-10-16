@@ -78,21 +78,26 @@ Where you measure:
 
 ### Measuring with a phone
 
-Choose **A phone (scan a QR code)** on the first step. The speaker-by-speaker stage then shows a QR code and a link to a page on the bridge, made for phones. The phone does not need to sign in to the bridge.
+Choose **A phone (scan a QR code)** on the first step. The speaker-by-speaker stage then shows a QR code and a link to a page on the bridge, made for phones. The phone does not need to sign in to the bridge; it must be on the same network as the bridge.
 
-1. Scan the code (or open the link) on the phone; it must be on the same network as the bridge. Start recording on the phone, as its page says.
-2. Press **Play the sequence**. The bridge mutes every speaker for 3 s, then plays each speaker alone (7 s at the speakers, 13 s from the listening position) with everyone muted in between (5 s to walk to the next speaker, 2 s from the listening position). The phone's page shows which speaker plays now and which is next.
-3. When the sequence has finished, the phone sends the recording and the results appear on both screens. Skip a speaker or **Play every speaker again** as needed, then **Apply the measured delays and listen**.
+1. Scan the code on the phone and press **Start** there (or press **Play the sequence** on the computer while the phone records).
+2. The bridge mutes every speaker for a moment, then plays each speaker alone (7 s at the speakers, 13 s from the listening position) with everyone muted in between (5 s to walk to the next speaker, 2 s from the listening position). The phone's page shows which speaker plays now and which is next.
+3. When the sequence has finished, the phone sends the recording and the results appear on both screens. Skip a speaker or play the sequence again as needed (every speaker not skipped plays each time), then **Apply the measured delays and listen**.
 
-On HTTPS (or `localhost`) the phone page records with the browser's microphone and sends the recording by itself. On a plain `http://` address the browser cannot use the microphone, so the page asks you to record with the phone's own recorder (**Record with the phone**, or **Or choose a recording** for a file from a voice recorder app) and sends that file. The bridge reads m4a/AAC, WAV, WebM and other common formats.
+How the phone records depends on the link:
 
-The link carries a random token that only lets the phone see which speaker plays and send its recording for this measurement. It works for 30 minutes, a **New link** replaces it, and it stops working when the measurement ends.
+- **The secure link (HTTPS)**, which the QR code uses when the bridge can serve it: the page records with the browser's microphone, and the recording stops and is sent by itself. The bridge serves only this page on its own port (the web port + 363, 8443 by default; set `SYNC_CAPTURE_HTTPS_PORT`, or `0` to turn it off) with a self-signed certificate kept in the config folder. Your phone will warn about the certificate once — accept it to record directly in the browser.
+- **The plain link (`http://`)**: the browser cannot use the microphone, so **Start and open the recorder** opens the phone's own recorder. Press record in it at once; the bridge waits 10 s before the first speaker. A big countdown on the page says when to stop (the expected length is shown). The recording is sent when the recorder hands it back; **Send a recording from the phone** sends a file from a voice recorder app instead. The bridge reads m4a/AAC, 3GP, WAV, WebM/Opus, OGG, MP3, FLAC and AMR-WB; AMR-NB (phone-call quality) cuts off the clicks and is refused with a message saying so.
+
+If the phone cannot do something (the clicks are not playing, the measurement is over, a recording cannot be read), it says what to do in words; the error code is only in small print.
+
+The link carries a random token that only lets the phone see which speaker plays, start the sequence for this measurement and send its recording. It works for 30 minutes, a **New link** replaces it, and it stops working when the measurement ends.
 
 ## What you hear during a measurement
 
-No music plays during a session. You stop the group first; then the click track plays on every speaker of the group. It is played in between your queue's items, so the queue is kept, and it is taken out of the queue again at the end. If Music Assistant refuses that, it stays in the queue as **Sendspin sync clicks**: remove it in Music Assistant. While one speaker is measured, the others are muted.
+No music plays during a session. You stop the group first; then the click track replaces the group's queue and plays on every speaker of the group (it shows as **Sendspin sync clicks**). When it ends the queue ends and the group stops, so no music comes back by itself. Calibration replaces the group's queue; start your music again afterwards. While one speaker is measured, the others are muted.
 
-When the session ends (finished, cancelled, failed or timed out) the bridge puts the volumes it changed back to what they were (while the clicks still play), unmutes every speaker it muted and stops the click track. Your music does not come back by itself: start it again in Music Assistant. The bridge never touches a speaker you muted yourself; a speaker you unmute yourself during the session is muted again by the next solo. Keep the room quiet and hold the phone still while it records.
+When the session ends (finished, cancelled, failed or timed out) the bridge puts the volumes it changed back to what they were (while the clicks still play), stops the click track, then unmutes every speaker it muted. Your music does not come back by itself: start it again in Music Assistant. The bridge never touches a speaker you muted yourself; a speaker you unmute yourself during the session is muted again by the next solo. Keep the room quiet and hold the phone still while it records.
 
 ## Profiles
 
@@ -137,4 +142,4 @@ If the bridge restarts during a session, it puts the volumes back, unmutes the s
 | **Unstable** | Noise during the recording; repeat it in a quiet room. |
 | This device cannot record | The page is not on HTTPS or `localhost`; measure with a phone, or see Microphone requirements. |
 | The phone page says the link does not work | The link expired (30 min), a new link replaced it, or the measurement ended; open a **New link**. |
-| A **Sendspin sync clicks** item stays in the queue | Music Assistant refused to remove it; delete it in Music Assistant. |
+| The phone's recording does not stop by itself | The page was opened over plain `http://` and uses the phone's recorder: stop it when the countdown reaches 0, or open the secure link. |

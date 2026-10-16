@@ -464,6 +464,13 @@ class BridgeOrchestrator:
         self.lifecycle_state.publish_clients(clients)
         server = await serve_api(factory(), port)
         self._api_server = server
+        if app_factory is None:  # the real bridge (not a test app): the phone capture page over HTTPS too
+            try:
+                from sendspin_bridge.sync_tuning.capture_https import serve_capture_https
+
+                await serve_capture_https()
+            except Exception:
+                logger.warning("Sync capture HTTPS server could not start", exc_info=True)
         return server
 
     async def graceful_shutdown(
@@ -527,6 +534,10 @@ class BridgeOrchestrator:
         if hci_monitor is not None:
             await hci_monitor.stop()
 
+        with contextlib.suppress(Exception):
+            from sendspin_bridge.sync_tuning.capture_https import stop_capture_https
+
+            await stop_capture_https()
         api_server = getattr(self, "_api_server", None)
         if api_server is not None:
             api_server.should_exit = True

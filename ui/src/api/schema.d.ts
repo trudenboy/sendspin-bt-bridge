@@ -1690,6 +1690,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/capture/{token}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The phone starts the sequence (capture token, no sign-in)
+         * @description The capture token's only write besides the upload: every adjustable member not skipped plays alone in turn. Needs a measuring session whose clicks play (409 clicker_stopped otherwise).
+         */
+        post: operations["capture_start_api_v1_sync_capture__token__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/groups": {
         parameters: {
             query?: never;
@@ -2014,6 +2034,23 @@ export interface paths {
         put?: never;
         /** Pick the reference member */
         post: operations["set_reference_api_v1_sync_sessions__session_id__reference_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/sessions/{session_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put back every delay this session wrote */
+        post: operations["reset_api_v1_sync_sessions__session_id__reset_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2901,18 +2938,26 @@ export interface components {
         CaptureLinkOut: {
             /** Expires In S */
             expires_in_s: number;
+            /**
+             * Http Url
+             * @description The same page over plain HTTP (the phone's own recorder).
+             */
+            http_url: string;
+            /**
+             * Secure
+             * @description url is the HTTPS one.
+             */
+            secure: boolean;
             /** Token */
             token: string;
             /**
              * Url
-             * @description The phone capture page on the bridge's LAN address, with the token.
+             * @description The phone capture page with the token: over HTTPS (the bridge's self-signed certificate) when the capture HTTPS server runs, so the phone can record in the browser; else plain HTTP.
              */
             url: string;
         };
         /** CaptureMemberOut */
         CaptureMemberOut: {
-            /** Id */
-            id: string;
             /** Name */
             name: string;
             /**
@@ -2925,6 +2970,15 @@ export interface components {
         CaptureResultOut: {
             /** Results */
             results: components["schemas"]["MeasurementOut"][];
+        };
+        /** CaptureStartIn */
+        CaptureStartIn: {
+            /**
+             * Mode
+             * @description live: the page records with the browser's microphone; recorder: the phone's own recorder, started by hand (a longer lead-in).
+             * @enum {string}
+             */
+            mode: "live" | "recorder";
         };
         /**
          * CaptureStateOut
@@ -9359,6 +9413,41 @@ export interface operations {
             };
         };
     };
+    capture_start_api_v1_sync_capture__token__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureStartIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_groups_api_v1_sync_groups_get: {
         parameters: {
             query?: never;
@@ -10334,6 +10423,48 @@ export interface operations {
                 "application/json": components["schemas"]["ReferenceIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncSessionOut"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    reset_api_v1_sync_sessions__session_id__reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

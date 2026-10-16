@@ -210,13 +210,12 @@ def test_the_member_list_marks_who_the_session_muted_before_the_mute_is_sent():
 # -- the end -----------------------------------------------------------------------------------
 
 
-def test_the_end_unmutes_then_stops_our_clicker_and_takes_it_out_of_the_queue():
+def test_the_end_stops_our_clicker_then_unmutes():
     s, ctl, _ = ready()
     s.solo("a")
     s.cancel()
     assert s.restore_tick() is True and s.state == "cancelled"
-    assert ctl.calls[-3:] == [("mute", "b", False), ("mute", "cast", False), ("stop_group",)]
-    assert ctl.forgotten == [(URL, len(ctl.calls))]  # after the stop
+    assert ctl.calls[-3:] == [("stop_group",), ("mute", "b", False), ("mute", "cast", False)]
 
 
 def test_the_end_never_stops_music_the_operator_started_meanwhile():
@@ -360,7 +359,7 @@ def test_the_first_volume_change_of_a_member_remembers_its_volume_from_before():
     assert first["volumes_before"] == {"a": 40} and first["volumes"]["a"] == 40
 
 
-def test_the_end_puts_the_volumes_back_while_our_clicks_still_play_then_stops_them():
+def test_the_end_puts_the_volumes_back_while_our_clicks_still_play_stops_them_then_unmutes():
     s, ctl, _ = ready()
     s.set_volume("a", 70)
     s.set_volume("b", 0)
@@ -371,9 +370,9 @@ def test_the_end_puts_the_volumes_back_while_our_clicks_still_play_then_stops_th
     assert ctl.calls == [
         ("volume", "a", 40),
         ("volume", "b", 40),
+        ("stop_group",),
         ("mute", "b", False),
         ("mute", "cast", False),
-        ("stop_group",),
     ]
     assert ctl.volumes == {"a": 40, "b": 40, "cast": 20} and s.to_dict()["volumes_before"] == {}
 
@@ -436,16 +435,30 @@ def test_the_clicks_count_down_while_they_play():
     assert s.to_dict()["clicker_left_s"] is None
 
 
-def test_a_click_track_that_ended_by_itself_is_still_taken_out_of_the_queue():
+# -- review fix round ---------------------------------------------------------------------------------
+
+
+def test_solo_is_refused_while_a_sequence_plays():
+    s, _ctl, _ = ready()
+    s.start_sequence(["a", "b"])
+    for call in (lambda: s.solo("a"), lambda: s.ab("a", "b")):
+        with pytest.raises(ControlError) as exc:
+            call()
+        assert exc.value.code == "sequence_running"
+
+
+def test_a_member_music_assistant_reports_unavailable_is_never_sent_a_mute():
+    from dataclasses import replace
+
+    s, ctl, _ = ready()
+    s.members = [replace(m, available=False) if m.ma_player_id == "cast" else m for m in s.members]
+    s.solo("a")
+    assert ("mute", "cast", True) not in ctl.calls and ("mute", "b", True) in ctl.calls
+
+
+def test_when_the_click_track_ends_the_group_is_left_stopped():
+    """User decision after the live test: the clicks replace the queue, so nothing plays after them."""
     s, ctl, _ = ready()
     ctl.clicker_ends()
-    s.finish()
-    assert s.restore_tick() is True
-    assert ("stop_group",) not in ctl.calls and [u for u, _ in ctl.forgotten] == [URL]
-
-
-def test_taking_the_click_track_out_of_the_queue_is_best_effort():
-    s, ctl, _ = ready()
-    ctl.fail_forget = True
-    s.cancel()
-    assert s.restore_tick() is True and s.state == "cancelled" and s.restore_error is None
+    s._observe(ctl.playback("g"))
+    assert s.group_state == "idle" and not s.clicker_playing

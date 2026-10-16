@@ -397,16 +397,6 @@ class SessionStore:
                     logger.warning("Giving up the volume of %s after a restart: Music Assistant does not list it", mid)
                 del volumes[mid]
                 entry["volumes"] = dict(volumes)  # keep what already succeeded
-            muted = [str(m) for m in entry.get("muted") or []]
-            for mid in list(muted):
-                try:
-                    control.mute(mid, False)
-                except ControlError as exc:
-                    if owed(exc):
-                        raise
-                    logger.warning("Giving up unmuting %s after a restart: Music Assistant does not list it", mid)
-                muted.remove(mid)
-                entry["muted"] = list(muted)  # keep what already succeeded
             url = entry.get("clicker_url")
             if isinstance(url, str) and url:
                 try:
@@ -417,10 +407,17 @@ class SessionStore:
                     playing = False
                 if playing:
                     control.stop_group(group)
+            # unmuted after our clicks stopped: never a burst of clicks at the restored volume
+            muted = [str(m) for m in entry.get("muted") or []]
+            for mid in list(muted):
                 try:
-                    control.forget_clicker(group, url)  # best effort: the user's queue without it
+                    control.mute(mid, False)
                 except ControlError as exc:
-                    logger.info("Could not take the click track out of the queue after a restart: %s", exc)
+                    if owed(exc):
+                        raise
+                    logger.warning("Giving up unmuting %s after a restart: Music Assistant does not list it", mid)
+                muted.remove(mid)
+                entry["muted"] = list(muted)  # keep what already succeeded
         except Exception as exc:
             with self._lock:
                 n = self._pending_attempts.get(sid, 0)

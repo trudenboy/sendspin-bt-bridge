@@ -47,6 +47,7 @@ PLAYBACK_POLL_S = 2.0
 # A member Music Assistant does not list (its player has not registered again after a restart) keeps
 # its unmute owed this long after the restore began; then the restore gives it up and finishes.
 RESTORE_GIVE_UP_S = 600.0
+_SEQUENCE_RUNNING = ("starting", "lead", "solo", "gap")
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
 _ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "tuning")
 # Recordings, skips and proposals: while measuring, and after a proposal (a member measured again
@@ -335,13 +336,18 @@ class SyncSession:
             self.muted.discard(mid)
             self._live_muted[mid] = False  # our own unmute: never mistaken for someone else's mute
 
+    def _refuse_during_sequence(self) -> None:
+        if self.sequence is not None and self.sequence["phase"] in _SEQUENCE_RUNNING:
+            raise ControlError("sequence_running", "the sequence for the phone is playing")
+
     @_locked
     def solo(self, member: str | None) -> None:
         """Only *member* audible: every other member muted (a member muted before the session is left
         as it is). ``None`` unmutes every member the session muted. A member whose player cannot be
         muted fails the solo with ``sync_mute_unsupported`` naming it; the mutes this call sent are
-        taken back first."""
+        taken back first. Refused while the phone's sequence plays."""
         self._require_active()
+        self._refuse_during_sequence()
         if member is None:
             self._unmute(sorted(self.muted))
             self.soloed = None
@@ -361,7 +367,10 @@ class SyncSession:
         wanted = [
             m.ma_player_id
             for m in self.members
-            if m.ma_player_id != keep and m.ma_player_id not in self.muted and not self._user_muted(m.ma_player_id)
+            if m.ma_player_id != keep
+            and m.ma_player_id not in self.muted
+            and not self._user_muted(m.ma_player_id)
+            and m.available is not False  # Music Assistant reports it off: nothing to mute, and it would refuse
         ]
         self.muted.update(wanted)
         self._changed()  # persisted before any mute is sent
@@ -392,11 +401,12 @@ class SyncSession:
 
     # -- one recording for every member (the phone capture page) ---------------------------------
     @_locked
-    def start_sequence(self, members: list[str]) -> None:
+    def start_sequence(self, members: list[str], lead_s: float = seq.LEAD_S) -> None:
         """Get a sequence ready: *members* will play alone in turn (``run_sequence`` plays it) while a
-        phone records once. Needs the clicks; refused while another sequence runs."""
+        phone records once, after *lead_s* of silence (longer when the phone's recorder is started by
+        hand; bounded). Needs the clicks; refused while another sequence runs."""
         self._require(*_MEASURING)
-        if self.sequence is not None and self.sequence["phase"] in ("starting", "lead", "solo", "gap"):
+        if self.sequence is not None and self.sequence["phase"] in _SEQUENCE_RUNNING:
             raise ControlError("sequence_running", "a sequence is playing")
         if not members:
             raise ControlError("member_gone", "no member to measure")
@@ -418,7 +428,7 @@ class SyncSession:
             "error_member": None,
             "solo_s": seq.solo_seconds(self.point),
             "gap_s": seq.gap_seconds(self.point),
-            "lead_s": seq.LEAD_S,
+            "lead_s": max(seq.LEAD_S, min(seq.MAX_LEAD_S, float(lead_s))),
             "uploaded": False,
         }
         self.touch()
@@ -454,7 +464,7 @@ class SyncSession:
             current["phase"] = "lead"
             self.touch()
             self._changed()
-        sleep(seq.LEAD_S)
+        sleep(current["lead_s"])
         for i, mid in enumerate(current["members"]):
             with self._lock:
                 if not self._sequence_alive(current):
@@ -533,6 +543,11 @@ class SyncSession:
                 raise ControlError("session_state", "the measurement changed while estimating")
             present = {m.ma_player_id for m in self.members}
             results = {mid: m for mid, m in results.items() if mid in present}
+            # one clock per round: a phase measured on another recording (the microphone, an earlier
+            # sequence) cannot be compared with these, so only skips are kept beside them
+            self.measurements = {
+                mid: m for mid, m in self.measurements.items() if m.status == "skipped" and mid not in results
+            }
             self.measurements.update(results)
             current["uploaded"] = True
             self.touch()
@@ -560,6 +575,7 @@ class SyncSession:
     @_locked
     def ab(self, a: str, b: str) -> None:
         self._require_active()
+        self._refuse_during_sequence()
         self._member(a)
         self._member(b)
         self.solo(a)
@@ -757,25 +773,16 @@ class SyncSession:
             return
         self._begin_restore("failed")
 
-    def _forget_clicker(self) -> None:
-        """Best effort: the click track does not stay in the group's queue (the user's items are kept)."""
-        assert self.clicker_url is not None
-        try:
-            self._control.forget_clicker(self.group_id, self.clicker_url)
-        except ControlError as exc:
-            logger.info("Sync session %s could not take the click track out of the queue: %s", self.id, exc)
-
     @_locked
     def restore_tick(self) -> bool:
-        """One restore attempt; True once the group is restored: the volumes this session changed are
-        put back (while our clicks still play), every member it muted is unmuted, then the group is
-        stopped if this session's clicker is what it plays (music someone started meanwhile plays on).
-        A failure keeps what is left for the next attempt."""
+        """One restore attempt; True once the group is restored. Order: the volumes this session changed
+        go back (while our clicks may still play: some players keep a volume set while playing), the
+        group is stopped if this session's clicker is what it plays (music someone started meanwhile
+        plays on), then every member it muted is unmuted (after the stop: no clicks at the restored
+        volume). A failure keeps what is left for the next attempt."""
         self._require("restoring")
         try:
             self._put_volumes_back()
-            self._unmute(sorted(self.muted), give_up_absent=True)
-            self.soloed = None
             if self.clicker_url is not None:
                 try:
                     playing = self._control.playback(self.group_id).plays(self.clicker_url)
@@ -786,7 +793,9 @@ class SyncSession:
                 if playing:
                     self._control.stop_group(self.group_id)
                 self.clicker_playing = False
-                self._forget_clicker()
+            # unmuted once our clicks are stopped: never a burst of clicks at the restored volume
+            self._unmute(sorted(self.muted), give_up_absent=True)
+            self.soloed = None
         except ControlError as exc:
             self.restore_error = exc.code
             self._changed()

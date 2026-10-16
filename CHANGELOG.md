@@ -14,16 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compare-two listening, or a measurement with a microphone after which the
   measured delays are applied and fine-tuned by ear on the same screen; named
   delay profiles (`SYNC_PROFILES`). The group is stopped for a session, the
-  click track ("Sendspin sync clicks") plays between the queue's items and is
-  removed afterwards, solo mutes the other members, and the volumes changed
-  for the clicks go back at the end. Speakers that cannot be muted, are
+  click track ("Sendspin sync clicks") replaces the group's queue, solo mutes
+  the other members, and the volumes changed for the clicks go back at the
+  end. Speakers that cannot be muted, are
   unavailable, silent or muted are flagged before anything is touched. New
   `/api/v1/sync/*` endpoints and `sync` events.
 - Measure with a phone: a link and QR code open a capture page on the
-  bridge; the bridge plays each speaker alone in turn while the phone records
-  once, also over plain HTTP using the phone's recorder. The link only lets
-  the phone read the measurement's progress and send its recording, expires
-  after 30 minutes and stops working when the measurement ends.
+  bridge; press Start on the phone and the bridge plays each speaker alone in
+  turn while the phone records once. Over HTTPS (a separate port with a
+  self-signed certificate, `SYNC_CAPTURE_HTTPS_PORT`) the phone records in the
+  browser and stops by itself; over plain HTTP it uses the phone's recorder
+  with a countdown. The link only lets the phone follow the measurement,
+  start its sequence and send its recording, expires after 30 minutes and
+  stops working when the measurement ends.
 
 ## [3.1.0-beta.4] - 2026-10-15
 

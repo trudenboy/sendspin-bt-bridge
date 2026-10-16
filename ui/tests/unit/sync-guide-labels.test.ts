@@ -11,11 +11,13 @@ import ru from '@/i18n/ru.json'
  */
 const NOT_UI: Record<'en' | 'ru', string[]> = {
   en: ['Home Assistant ingress', 'Sendspin sync clicks', 'Music Assistant tab', 'Done.', 'Device card or row',
-    'Or choose a recording', 'Record with the phone', 'A larger delay makes a speaker play earlier.', 'Prepare',
-    'Measure: Speaker by speaker.', 'Tune: Listen and adjust.', 'Sync', 'Play the sequence'],
+    'A larger delay makes a speaker play earlier.', 'Prepare',
+    'Measure: Speaker by speaker.', 'Tune: Listen and adjust.', 'Sync', 'Play the sequence',
+    'The secure link (HTTPS)', 'The plain link (`http://`)', 'Start and open the recorder', 'Send a recording from the phone'],
   ru: ['Ingress Home Assistant', 'Sendspin sync clicks', 'Вкладка Music Assistant', 'Готово.', 'Карточка или строка устройства',
-    'Или выберите запись', 'Записать телефоном', 'Проиграть последовательность', 'Чем больше задержка, тем раньше звучит колонка.',
-    'Подготовка', 'Измерение: Колонка за колонкой.', 'Настройка: Послушайте и подправьте.'],
+    'Проиграть последовательность', 'Чем больше задержка, тем раньше звучит колонка.',
+    'Подготовка', 'Измерение: Колонка за колонкой.', 'Настройка: Послушайте и подправьте.',
+    'Защищённая ссылка (HTTPS)', 'Обычная ссылка (`http://`)'],
 }
 
 function texts(o: unknown): string[] {

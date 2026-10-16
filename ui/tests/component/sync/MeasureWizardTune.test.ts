@@ -11,7 +11,7 @@ import en from '@/i18n/en.json'
 vi.mock('@/api/sync', () => ({
   createSession: vi.fn(), getSession: vi.fn(), sessionSignal: vi.fn(), sessionSolo: vi.fn(), uploadRecording: vi.fn(),
   sessionSkip: vi.fn(), sessionReference: vi.fn(), getProposal: vi.fn(), computeProposal: vi.fn(), applyProposal: vi.fn(),
-  finishSession: vi.fn(), endSession: vi.fn(), captureProfile: vi.fn(), endSessionOnPageHide: vi.fn(),
+  finishSession: vi.fn(), resetSession: vi.fn(), endSession: vi.fn(), captureProfile: vi.fn(), endSessionOnPageHide: vi.fn(),
   sessionDelay: vi.fn(), sessionAb: vi.fn(), sessionVolume: vi.fn(), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(),
 }))
 import * as api from '@/api/sync'
@@ -119,18 +119,28 @@ describe('MeasureWizard: the measured delays in the manual editor, finish, done'
     expect(w.get('[data-saved]').text()).toContain('Evening')
   })
 
-  it('cancel in the editor asks, puts back the delays from before the measurement, then ends', async () => {
+  it('cancel in the editor asks, puts back every delay the session wrote (reset), then ends', async () => {
+    vi.mocked(api.resetSession).mockResolvedValue(tuned({ members }))
     const w = mountWizard()
     await toTune(w)
-    useSyncStore().applyEvent(tuned())
     await w.get('[data-tune] [data-cancel]').trigger('click'); await flushPromises()
     expect(confirmState.options?.title).toBe('Stop and put the delays back?')
     settleConfirm(true); await flushPromises()
-    await vi.advanceTimersByTimeAsync(300); await flushPromises()
-    expect(api.sessionDelay).toHaveBeenCalledWith('s1', 'b', 100)
-    expect(api.sessionDelay).not.toHaveBeenCalledWith('s1', 'a', expect.anything())   // unchanged
+    expect(api.resetSession).toHaveBeenCalledWith('s1')  // also members edited but not measured (review m4)
     expect(api.endSession).toHaveBeenCalledWith('s1')
+    expect(vi.mocked(api.resetSession).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.endSession).mock.invocationCallOrder[0]!)
     expect(w.get('[data-notice]').text()).toContain('Measurement cancelled')
+  })
+
+  it('keeps the tuning open when the delays cannot be put back', async () => {
+    vi.mocked(api.resetSession).mockRejectedValue(new ApiError({ status: 503, code: 'ma_unavailable' }))
+    const w = mountWizard()
+    await toTune(w)
+    await w.get('[data-tune] [data-cancel]').trigger('click'); await flushPromises()
+    settleConfirm(true); await flushPromises()
+    expect(api.endSession).not.toHaveBeenCalled()
+    expect(w.find('[data-tune]').exists()).toBe(true)
+    expect(w.get('[data-tune-error]').text()).toContain('could not be put back (ma_unavailable)')
   })
 
   it('cancel with recordings asks first; "Keep going" keeps everything', async () => {

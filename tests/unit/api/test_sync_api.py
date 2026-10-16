@@ -196,7 +196,8 @@ def test_session_flow_over_http(api_client, sync_env):
     assert api_client.delete(base).status_code == 204
     store.tick()
     assert api_client.get(base).json()["state"] == "done"  # DELETE kept the outcome
-    assert not any(ctl.muted_now.values()) and ctl.calls[-1] == ("stop_group",)
+    assert not any(ctl.muted_now.values())
+    assert ctl.calls[-3:] == [("stop_group",), ("mute", "a", False), ("mute", "cast", False)]  # stop, then unmute
 
 
 def test_side_controls_and_manual_live_write(api_client, sync_env):
@@ -644,3 +645,15 @@ def test_stop_clicker_never_stops_music_someone_started(api_client, sync_env):
     ctl.calls.clear()
     api_client.post(f"/api/v1/sync/sessions/{sid}/signal", json={"action": "stop_clicker"})
     assert ctl.calls == [("stop_group",)]
+
+
+def test_reset_puts_back_every_delay_this_session_wrote(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = _measured_session(api_client)
+    base = f"/api/v1/sync/sessions/{sid}"
+    api_client.post(f"{base}/proposal")
+    api_client.post(f"{base}/apply", json={})
+    api_client.put(f"{base}/delays/a", json={"ms": 15})  # an edit of a member the apply did not move
+    resp = api_client.post(f"{base}/reset")
+    assert resp.status_code == 200 and resp.json()["state"] == "tuning"
+    assert ctl.delays_now == {"a": 0, "b": 0}

@@ -62,10 +62,15 @@ manual editor with the measured delays applied (one editing surface).
   field `volumes_before`, persisted in the snapshot entry as `volumes`); restore puts
   them back first, then unmutes, then stops our clicker. Failures retry; a player MA
   no longer lists is given up after `RESTORE_GIVE_UP_S`.
-- **Queue.** The clicker starts with `option: play` (queue kept) and its items are
-  deleted from the group's queue at the end (best effort). The WAV carries a
-  LIST/INFO title "Sendspin sync clicks" (a title without artist/album keeps it a
-  sound effect in MA).
+- **Queue (revised after the live test, user decision 2026-10-16 15:08).** The clicker
+  starts with `option: replace` again: the group's queue is not preserved. When the click
+  track ends, the queue ends and the group stops, so no music comes back by itself during
+  calibration (review I2; an earlier `option: play` let MA play on into the user's queue).
+  The UI says "Calibration replaces the group's queue; start your music again
+  afterwards." The WAV carries a LIST/INFO title "Sendspin sync clicks" (a title without
+  artist/album keeps it a sound effect in MA).
+- **End order.** Volumes back (while our clicks may still play) → stop our clicker →
+  unmute (review m5: no burst of clicks at the restored volume). Same after a restart.
 - **Readiness.** Members carry `can_mute`, `available`, `volume`, `muted`; the Group
   tab and step 1 warn before the music is stopped.
 - **Countdown.** `clicker_left_s` (3-minute track) is shown on the clicks step, the
@@ -74,8 +79,19 @@ manual editor with the measured delays applied (one editing surface).
 
 ### Phone capture
 
-A phone opens `http://<bridge LAN address>:<port>/sync/capture/<token>?lang=xx` (the
-same base URL Music Assistant fetches the clicks from). Separate recordings share no
+A phone opens `https://<bridge LAN address>:<capture port>/sync/capture/<token>?lang=xx`
+when the HTTPS capture server runs (port = web port + 363, 8443 by default,
+`SYNC_CAPTURE_HTTPS_PORT`, `0` = off; a self-signed EC certificate for the LAN address
+kept in CONFIG_DIR; that server serves only the page and the capture token's endpoints),
+else `http://<bridge LAN address>:<web port>/...` (the same base URL Music Assistant fetches
+the clicks from). The page picks its way to record once: in a secure context with
+getUserMedia + MediaRecorder it records live and stops/sends by itself; otherwise it opens
+the phone's recorder (`<input type=file capture>`), asks for a 10 s lead-in and shows a big
+countdown to the end of the sequence. The phone starts the sequence itself
+(`POST /api/v1/sync/capture/{token}/start {mode: live|recorder}`): every adjustable member
+not skipped, in a measuring session whose clicks play; anything else is refused with a
+sentence the page shows (code in small print). Every sequence plays all members not
+skipped, and a sequence recording replaces measurements from any other clock. Separate recordings share no
 clock, so the phone records once while the bridge plays a **sequence**: everyone
 muted for 3 s, each member alone (7 s at the speakers / 13 s from the listening
 position) with everyone muted in between (5 s to walk / 2 s). The upload (any audio
@@ -89,8 +105,12 @@ offset as the start time. At most 16 members per sequence.
 
 Security: the token is `secrets.token_urlsafe(32)`, one per session (a new link
 revokes the old), valid 30 minutes, refused as soon as the session restores or ends
-and dropped from the table when it finishes; it is accepted only by the two
-`/api/v1/sync/capture/{token}` endpoints and the page; the rest of the API ignores it
+and dropped from the table when it finishes; it is accepted only by the three
+`/api/v1/sync/capture/{token}` endpoints (state, start, recording) and the page (the
+token is checked before an upload body is read; it is redacted from error logs;
+refusals are logged at INFO with their reason, never the token); one upload per
+session and one decode in the bridge at a time (409 `upload_running`); uploads are
+refused once the session tunes by ear; the rest of the API ignores it
 (not a bearer token, no cookie). The state it reads has short names, statuses and
 the sequence progress — no delays, no session id. The page is standalone HTML with a
 per-response CSP nonce, `no-store`, `no-referrer`, `noindex`. In a secure context it
@@ -412,9 +432,8 @@ calibration, and the announcement path was too complex. So:
   (`players/cmd/stop` on the group, "Stop group" in the UI); the session refuses to
   start the clicker (`group_playing`) while the group plays anything else.
 - **The clicker.** `player_queues/play_media` (`queue_id` = the group, `media` = the
-  click-track URL, `option` = `play` since the UX round, was `replace`; the item is
-  inserted after the current one and played, the queue kept, and deleted from the
-  queue at the end): Music Assistant plays it as a normal item
+  click-track URL, `option` = `replace`; the UX round briefly used `play`, reverted after
+  the live test): Music Assistant plays it as a normal item
   on every member. "Playing" means the group's `playback_state` is `playing` and its
   `current_media.uri` contains the click-track URL or its token. Starting it again
   (while it plays, or after it ended) starts it over; in a measuring round that

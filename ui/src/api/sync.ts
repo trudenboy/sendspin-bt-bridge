@@ -145,6 +145,11 @@ export function applyProposal(id: string, rows?: Record<string, number>): Promis
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/apply', { ...sessionPath(id), body }))
 }
 
+/** Put back every delay this session wrote (applied or edited) to the value it had at its start. */
+export function resetSession(id: string): Promise<SyncSession> {
+  return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/reset', sessionPath(id)))
+}
+
 /** Finish: the delays stay as they are, the group is restored and the session ends as ``done``. */
 export function finishSession(id: string): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/finish', sessionPath(id)))
@@ -154,7 +159,10 @@ export function finishSession(id: string): Promise<SyncSession> {
  * A link to the phone capture page of this measurement (its token allows only reading the capture
  * state and uploading a recording; a new link revokes the previous one).
  */
-export function captureLink(id: string, lang?: 'en' | 'ru'): Promise<{ url: string; token: string; expires_in_s: number }> {
+export function captureLink(
+  id: string,
+  lang?: 'en' | 'ru',
+): Promise<{ url: string; http_url: string; secure: boolean; token: string; expires_in_s: number }> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/capture-link', { ...sessionPath(id), body: lang ? { lang } : {} }))
 }
 

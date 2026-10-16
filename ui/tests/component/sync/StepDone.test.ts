@@ -18,6 +18,6 @@ describe('StepDone', () => {
   it('once restored, says the music does not come back by itself', () => {
     const w = mount(StepDone, { global: { plugins: [i18n] }, props: { ...base, state: 'done' } })
     expect(w.text()).toContain('start your music again in Music Assistant')
-    expect(w.get('[data-queue-note]').text()).toContain('Your queue is as it was')
+    expect(w.get('[data-queue-note]').text()).toContain('start your music again in Music Assistant')
   })
 })
