@@ -195,6 +195,7 @@ def main() -> None:
         "MA_API_URL": opts.get("ma_api_url") or "",
         "MA_API_TOKEN": opts.get("ma_api_token") or "",
         "MA_AUTO_SILENT_AUTH": bool(opts.get("ma_auto_silent_auth", True)),
+        "MA_ADDON_SLUG": str(opts.get("ma_addon_slug") or "").strip(),
         "DUPLICATE_DEVICE_CHECK": bool(opts.get("duplicate_device_check", True)),
         "UPDATE_CHANNEL": get_self_delivery_channel(),
         # v2.65.0 — HA integration namespace.  The addon flattens the

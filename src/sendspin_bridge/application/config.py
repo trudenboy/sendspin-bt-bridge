@@ -52,6 +52,7 @@ from sendspin_bridge.services.ha.ha_addon import (
     detect_delivery_channel_from_slug,
     get_self_addon_info,
     get_self_delivery_channel,
+    reset_ma_addon_cache,
 )
 from sendspin_bridge.services.ha.ha_core_api import HaCoreApiError, fetch_ha_area_catalog
 from sendspin_bridge.services.infrastructure.config_diff import diff_configs
@@ -668,6 +669,7 @@ def _sync_ha_options(config: dict) -> None:
             "bt_max_reconnect_fails": int(config.get("BT_MAX_RECONNECT_FAILS") or 0),
             "auth_enabled": bool(config.get("AUTH_ENABLED", False)),
             "ma_auto_silent_auth": bool(config.get("MA_AUTO_SILENT_AUTH", True)),
+            "ma_addon_slug": str(config.get("MA_ADDON_SLUG") or ""),
             "bluetooth_adapters": sup_adapters,
         }
         if config.get("BASE_LISTEN_PORT") is not None:
@@ -1201,7 +1203,15 @@ def save_config(config: dict) -> dict:
 
         # Compute reconfig actions from the on-disk "before" snapshot to the
         # just-persisted "after" snapshot while the lock is still held.
-        reconfig_actions = diff_configs(effective_before or existing, ConfigStore(CONFIG_FILE).load())
+        saved_after = ConfigStore(CONFIG_FILE).load()
+        reconfig_actions = diff_configs(effective_before or existing, saved_after)
+        before = effective_before or existing or {}
+        if any(
+            str(before.get(key) or "").strip().rstrip("/") != str(saved_after.get(key) or "").strip().rstrip("/")
+            for key in ("MA_ADDON_SLUG", "MA_API_URL")
+        ):
+            # Which Music Assistant add-on is trusted depends on both.
+            reset_ma_addon_cache()
 
         # The save stands; now let the orphaned speakers go.
         for mac, adapter_mac in macs_to_unpair:

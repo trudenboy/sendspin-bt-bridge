@@ -312,6 +312,10 @@ class BridgeConfig(BaseModel):
     """
     Automatically attempt silent MA re-authentication.
     """
+    MA_ADDON_SLUG: str | None = ""
+    """
+    HA add-on mode: slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need no entry).
+    """
     MA_WEBSOCKET_MONITOR: bool | None = True
     """
     Enable persistent WebSocket connection to MA for real-time updates.

@@ -262,6 +262,11 @@
       "default": true,
       "description": "Automatically attempt silent MA re-authentication."
     },
+    "MA_ADDON_SLUG": {
+      "type": "string",
+      "default": "",
+      "description": "HA add-on mode: slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need no entry)."
+    },
     "MA_WEBSOCKET_MONITOR": {
       "type": "boolean",
       "default": true,

@@ -708,5 +708,5 @@ def test_silent_auth_goes_through_home_assistant_when_ma_refuses_the_direct_ingr
         json={"ha_token": "tok", "ma_url": "http://localhost:8095"},
     )
     assert resp.status_code == 200
-    _proxy.assert_called_once_with("http://homeassistant:8123", "tok")
+    _proxy.assert_called_once_with("http://homeassistant:8123", "tok", "http://localhost:8095")
     _save.assert_called_once_with("http://localhost:8095", "proxy_token", "admin", auth_provider="ha")

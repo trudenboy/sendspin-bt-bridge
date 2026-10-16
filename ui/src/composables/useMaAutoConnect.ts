@@ -1,27 +1,33 @@
-import { ref, watch } from 'vue'
+import { watch } from 'vue'
 import { useMaStore } from '@/stores/ma'
 import { useBridgeStore } from '@/stores/bridge'
 import { useIngress } from '@/composables/useIngress'
+import { ApiError } from '@/api/client'
+
+/** Tries no more often than this, so an unreachable Music Assistant isn't hammered. */
+const MIN_ATTEMPT_INTERVAL_MS = 30_000
+/** Each sign-in that worked but was lost again doubles the wait, up to this. */
+const MAX_ATTEMPT_INTERVAL_MS = 15 * 60_000
 
 /**
- * Attempts silent MA auto-connect when running as an HA addon.
+ * Signs the bridge in to Music Assistant by itself in the Home Assistant add-on.
  *
- * Flow:
- * 1. Wait for bridge snapshot to load
- * 2. If already connected → skip
- * 3. Detect HA addon mode (ingress path present)
- * 4. Extract HA access token from parent frame's hass object
- * 5. POST /api/ma/ha-silent-auth with token + MA URL
- * 6. On success → ma store marks connected, groups are fetched
- * 7. On failure → silently fall through to manual login
+ * The bridge can't do this alone: Music Assistant trusts the ingress user
+ * headers only from the Supervisor, and the Supervisor opens an ingress session
+ * only for Home Assistant Core — never for an add-on's own token. The HA user's
+ * token the frontend holds can, so the page lends it to the bridge
+ * (``POST /api/v1/music-assistant/session/ha-silent``).
+ *
+ * Mounted once for the whole app, it runs when any page loads without a Music
+ * Assistant connection, and again whenever the bridge loses it — e.g. the
+ * monitor finds the stored token invalid. Outside ingress it does nothing and
+ * the manual sign-in stays. Progress and failure live in the ``ma`` store.
  */
 export function useMaAutoConnect() {
   const ma = useMaStore()
   const bridge = useBridgeStore()
-
-  const autoConnecting = ref(false)
-  const autoConnectFailed = ref(false)
-  const attempted = ref(false)
+  let lastAttempt = 0
+  let interval = MIN_ATTEMPT_INTERVAL_MS
 
   function isIngressMode(): boolean {
     const { basePath } = useIngress()
@@ -41,50 +47,59 @@ export function useMaAutoConnect() {
   }
 
   async function attempt() {
-    if (attempted.value) return
-    attempted.value = true
-
-    // Already connected — nothing to do
-    if (ma.connected || bridge.maConnected) return
-
-    // Only attempt in HA addon ingress mode
+    if (ma.autoConnecting || bridge.maConnected) return
     if (!isIngressMode()) return
+    const now = Date.now()
+    if (lastAttempt && now - lastAttempt < interval) return
 
     const haToken = extractHaToken()
     if (!haToken) return
 
-    autoConnecting.value = true
+    lastAttempt = now
+    ma.autoConnecting = true
+    ma.autoConnectFailed = false
     try {
       await ma.fetchConnection()
+      // The configured server, else only the Music Assistant add-on the
+      // Supervisor reports — never a server merely seen on the network, as the
+      // new token is checked against this address.
       let maUrl = String(ma.connection?.configured_url ?? '')
-      if (!maUrl) maUrl = (await ma.discover())[0]?.url ?? ''
       if (!maUrl) {
-        autoConnectFailed.value = true
+        const addon = (await ma.discover()).find((s) => s.discovery_source === 'ha_addon_hostname')
+        maUrl = addon?.url ?? ''
+      }
+      if (!maUrl) {
+        ma.autoConnectFailed = true
         return
       }
       await ma.silentAuth(haToken, maUrl)
+      // A sign-in that has to be repeated soon backs off (each one mints a token).
+      interval = Math.min(interval * 2, MAX_ATTEMPT_INTERVAL_MS)
       await ma.fetchGroups()
-    } catch {
-      autoConnectFailed.value = true
+    } catch (e) {
+      // Turned off by the admin (MA_AUTO_SILENT_AUTH): not a failure, stop trying.
+      if (e instanceof ApiError && e.code === 'silent_auth_disabled') {
+        interval = Number.POSITIVE_INFINITY
+        return
+      }
+      ma.autoConnectFailed = true
     } finally {
-      autoConnecting.value = false
+      ma.autoConnecting = false
     }
   }
 
-  // Wait for the bridge snapshot to load before attempting. Not an immediate
-  // watcher: its callback would run before ``stop`` exists.
-  if (bridge.snapshot) {
-    void attempt()
-  } else {
-    const stop = watch(
-      () => bridge.snapshot,
-      (snap) => {
-        if (!snap) return
-        stop()
-        void attempt()
-      },
-    )
-  }
+  // Not immediate: the first status snapshot may still be loading.
+  watch(
+    () => [bridge.snapshot !== null, bridge.maConnected] as const,
+    ([loaded, connected], previous) => {
+      if (!loaded || connected || !isIngressMode()) return
+      const wasConnected = previous?.[1] === true
+      // The bridge lost Music Assistant: what this page signed in with is gone too.
+      if (wasConnected) ma.connected = false
+      if (!ma.connected) void attempt()
+    },
+  )
+  if (bridge.snapshot && !bridge.maConnected && !ma.connected) void attempt()
 
-  return { autoConnecting, autoConnectFailed }
+  return { attempt }
 }

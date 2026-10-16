@@ -112,6 +112,7 @@ export const SECTIONS: readonly SectionDef[] = [
       { key: 'MUTE_VIA_MA', kind: 'toggle' },
       { key: 'MA_WEBSOCKET_MONITOR', kind: 'toggle', advanced: true },
       { key: 'MA_AUTO_SILENT_AUTH', kind: 'toggle', advanced: true },
+      { key: 'MA_ADDON_SLUG', kind: 'text', advanced: true },
       { key: 'DUPLICATE_DEVICE_CHECK', kind: 'toggle', advanced: true },
     ],
     after: ['sendspinTest'],

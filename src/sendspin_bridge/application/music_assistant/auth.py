@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import json
 import logging
 import os
@@ -23,7 +24,13 @@ from sendspin_bridge.application.music_assistant.common import (
 )
 from sendspin_bridge.config import load_config, update_config
 from sendspin_bridge.security.redaction import redact
-from sendspin_bridge.services.ha.ha_addon import KNOWN_MA_ADDON_SLUGS, get_ma_addon_internal_ingress_url
+from sendspin_bridge.services.ha.ha_addon import (
+    KNOWN_MA_ADDON_SLUGS,
+    describe_addons,
+    get_ma_addon_internal_ingress_url,
+    is_ma_addon,
+    resolve_ma_addon,
+)
 from sendspin_bridge.services.infrastructure.url_safety import (
     SafeHTTPConnection,
     SafeHTTPSConnection,
@@ -726,25 +733,31 @@ def _get_ha_user_via_ws(ha_token: str, ha_url: str | None = None):
         return None
 
 
-def _get_ha_supervisor_addon_info_via_ws(ha_token: str, slug: str, ha_url: str | None = None):
-    """Fetch HA Supervisor addon info over the HA WebSocket API."""
+def _ha_ws_url(ha_url: str | None) -> str:
+    if ha_url:
+        parsed = _up.urlparse(ha_url.rstrip("/"))
+        if parsed.scheme == "https":
+            return f"wss://{parsed.netloc}/api/websocket"
+        return f"ws://{parsed.netloc}/api/websocket"
+    return "ws://homeassistant:8123/api/websocket"
+
+
+def _ha_ws_supervisor_get(ha_token: str, endpoint: str, ha_url: str | None = None) -> object | None:
+    """GET a Supervisor API *endpoint* through Home Assistant's ``supervisor/api``
+    WebSocket command, as the user *ha_token* belongs to.
+
+    Home Assistant lets any user read ``/addons/<slug>/info`` (ingress needs it)
+    and an admin anything else, ``/supervisor/info`` with its add-on list
+    included.  Returns the result's ``data``, or None on any failure.
+    """
     try:
         from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
     except ImportError:
         logger.warning("websockets.sync.client not available")
         return None
 
-    if ha_url:
-        parsed = _up.urlparse(ha_url.rstrip("/"))
-        if parsed.scheme == "https":
-            ha_ws_url = f"wss://{parsed.netloc}/api/websocket"
-        else:
-            ha_ws_url = f"ws://{parsed.netloc}/api/websocket"
-    else:
-        ha_ws_url = "ws://homeassistant:8123/api/websocket"
-
     try:
-        with _ws_connect(ha_ws_url, close_timeout=5) as ws:
+        with _ws_connect(_ha_ws_url(ha_url), close_timeout=5) as ws:
             hello = json.loads(ws.recv(timeout=5))
             if hello.get("type") != "auth_required":
                 logger.warning("HA WS unexpected hello: %s", hello.get("type"))
@@ -756,31 +769,37 @@ def _get_ha_supervisor_addon_info_via_ws(ha_token: str, slug: str, ha_url: str |
                 logger.warning("HA WS auth failed: %s", auth_resp.get("message", ""))
                 return None
 
-            ws.send(
-                json.dumps(
-                    {
-                        "id": 1,
-                        "type": "supervisor/api",
-                        "endpoint": f"/addons/{slug}/info",
-                        "method": "get",
-                    }
-                )
-            )
-            addon_resp = json.loads(ws.recv(timeout=10))
-            if addon_resp.get("type") != "result":
-                logger.debug("HA supervisor/api for %s returned unexpected packet: %r", slug, addon_resp)
+            ws.send(json.dumps({"id": 1, "type": "supervisor/api", "endpoint": endpoint, "method": "get"}))
+            resp = json.loads(ws.recv(timeout=10))
+            if resp.get("type") != "result":
+                logger.debug("HA supervisor/api %s returned unexpected packet: %r", endpoint, resp)
                 return None
-            if addon_resp.get("success") is False:
-                logger.debug("HA supervisor/api lookup failed for %s: %r", slug, addon_resp.get("error"))
+            if resp.get("success") is False:
+                logger.debug("HA supervisor/api %s failed: %r", endpoint, resp.get("error"))
                 return None
-            result = addon_resp.get("result")
-            if isinstance(result, dict) and result.get("slug"):
-                return result
-            logger.debug("HA supervisor/api for %s returned non-addon result: %r", slug, result)
-            return None
+            return resp.get("result")
     except Exception as exc:
-        logger.debug("HA supervisor/api lookup failed for %s over WS: %s", slug, exc)
+        logger.debug("HA supervisor/api %s failed over WS: %s", endpoint, exc)
         return None
+
+
+def _get_ha_supervisor_addon_info_via_ws(ha_token: str, slug: str, ha_url: str | None = None):
+    """Fetch HA Supervisor addon info over the HA WebSocket API."""
+    result = _ha_ws_supervisor_get(ha_token, f"/addons/{slug}/info", ha_url=ha_url)
+    if isinstance(result, dict) and result.get("slug"):
+        return result
+    if result is not None:
+        logger.debug("HA supervisor/api for %s returned non-addon result: %r", slug, result)
+    return None
+
+
+def _list_ha_addons_via_ws(ha_token: str, ha_url: str | None = None) -> list[dict]:
+    """The installed add-ons Home Assistant reports to an admin user (empty otherwise)."""
+    result = _ha_ws_supervisor_get(ha_token, "/supervisor/info", ha_url=ha_url)
+    rows = result.get("addons") if isinstance(result, dict) else None
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict) and row.get("slug")]
 
 
 def _create_ha_ingress_session_via_ws(ha_token: str, ha_url: str | None = None) -> str | None:
@@ -791,17 +810,8 @@ def _create_ha_ingress_session_via_ws(ha_token: str, ha_url: str | None = None) 
         logger.warning("websockets.sync.client not available")
         return None
 
-    if ha_url:
-        parsed = _up.urlparse(ha_url.rstrip("/"))
-        if parsed.scheme == "https":
-            ha_ws_url = f"wss://{parsed.netloc}/api/websocket"
-        else:
-            ha_ws_url = f"ws://{parsed.netloc}/api/websocket"
-    else:
-        ha_ws_url = "ws://homeassistant:8123/api/websocket"
-
     try:
-        with _ws_connect(ha_ws_url, close_timeout=5) as ws:
+        with _ws_connect(_ha_ws_url(ha_url), close_timeout=5) as ws:
             hello = json.loads(ws.recv(timeout=5))
             if hello.get("type") != "auth_required":
                 logger.warning("HA WS unexpected hello: %s", hello.get("type"))
@@ -842,9 +852,50 @@ def _create_ha_ingress_session_via_ws(ha_token: str, ha_url: str | None = None) 
         return None
 
 
-def _find_ma_ingress_url():
-    """Discover the MA addon's internal Ingress base URL."""
-    return get_ma_addon_internal_ingress_url()
+def _ma_api_call(ma_url: str, token: str, command: str, args: dict | None = None) -> object:
+    """One Music Assistant API command over HTTP as *token*'s user; raises on failure."""
+    body = json.dumps({"command": command, "args": args or {}, "message_id": "1"}).encode()
+    req = _ur.Request(
+        f"{ma_url.rstrip('/')}/api",
+        data=body,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        method="POST",
+    )
+    with safe_urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode() or "null")
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(str(data.get("error")))
+    if isinstance(data, dict) and "result" in data:
+        return data["result"]
+    return data
+
+
+def _retire_older_bridge_tokens(ma_url: str, new_token: str) -> None:
+    """Revoke this bridge's earlier tokens in Music Assistant, keeping the newest.
+
+    Every automatic sign-in mints a long-lived token named after this bridge
+    (``_ma_token_name``); without this, each reconnect would leave one more
+    behind.  Only tokens of the same user with exactly this bridge's name are
+    touched, and failures are ignored (an older MA may lack the commands).
+    """
+    name = _ma_token_name()
+    try:
+        tokens = _ma_api_call(ma_url, new_token, "auth/tokens")
+        if not isinstance(tokens, list):
+            return
+        ours = [t for t in tokens if isinstance(t, dict) and t.get("name") == name and t.get("token_id")]
+        ours.sort(key=lambda t: str(t.get("created_at") or ""), reverse=True)
+        for old in ours[1:]:
+            _ma_api_call(ma_url, new_token, "auth/token/revoke", {"token_id": old["token_id"]})
+        if len(ours) > 1:
+            logger.info("Revoked %d older Music Assistant token(s) of this bridge", len(ours) - 1)
+    except Exception as exc:
+        logger.debug("Could not retire older bridge tokens in Music Assistant: %s", exc)
+
+
+def _find_ma_ingress_url(ma_url: str = "") -> str:
+    """The trusted MA add-on's internal Ingress base URL for *ma_url* ("" when none)."""
+    return get_ma_addon_internal_ingress_url(ma_url)
 
 
 def _latin1_safe(value: str) -> str:
@@ -861,7 +912,7 @@ def _latin1_safe(value: str) -> str:
         return _up.quote(value, safe="")
 
 
-def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = ""):
+def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_name: str = "", ma_url: str = ""):
     """Create a long-lived MA token via MA's Ingress JSONRPC endpoint.
 
     MA's Ingress server auto-authenticates requests that carry
@@ -871,7 +922,9 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
     Returns the MA token string on success, or None on failure.
     """
 
-    base_url = _find_ma_ingress_url()
+    base_url = _find_ma_ingress_url(ma_url)
+    if not base_url:
+        return None
     url = f"{base_url}/api"
     headers = {
         "Content-Type": "application/json",
@@ -919,49 +972,127 @@ def _create_ma_token_via_ingress(ha_user_id: str, ha_username: str, ha_display_n
         return None
 
 
-def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str) -> str:
-    """Resolve the MA add-on ingress URL via Home Assistant's hassio proxy."""
-    headers = {"Authorization": f"Bearer {ha_token}"}
+def _ingress_url_from_addon_info(ha_url: str, data: dict, *, official: bool) -> str:
+    """The add-on's ingress base URL under *ha_url*.
+
+    Only an add-on from the official repository may fall back to its ``webui`` or
+    an absolute URL; any other must offer a real ingress path, so the ingress
+    session cookie never leaves Home Assistant.
+    """
+    if not official:
+        path = str(data.get("ingress_url") or data.get("ingress_entry") or "").rstrip("/")
+        if not data.get("ingress") or not path.startswith("/api/hassio_ingress/"):
+            return ""
+        return f"{ha_url.rstrip('/')}{path}"
+    ingress_path = str(data.get("ingress_url") or data.get("ingress_entry") or data.get("webui") or "").rstrip("/")
+    if not ingress_path:
+        return ""
+    if ingress_path.startswith("http://") or ingress_path.startswith("https://"):
+        return ingress_path
+    return f"{ha_url.rstrip('/')}{ingress_path}"
+
+
+def _addon_info_via_ha(ha_url: str, ha_token: str, slug: str) -> dict | None:
+    data = _get_ha_supervisor_addon_info_via_ws(ha_token, slug, ha_url=ha_url)
+    if isinstance(data, dict):
+        return data
+    if slug not in KNOWN_MA_ADDON_SLUGS:
+        return None
+    # Older Home Assistant releases also served add-on info over REST.
+    try:
+        headers = {"Authorization": f"Bearer {ha_token}"}
+        req = _ur.Request(f"{ha_url.rstrip('/')}/api/hassio/addons/{slug}/info", headers=headers, method="GET")
+        with safe_urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read())
+    except Exception as exc:
+        logger.debug("HA hassio addon lookup failed for %s: %s", slug, exc)
+        return None
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict) and isinstance(payload, dict) and payload.get("slug"):
+        data = payload
+    if not isinstance(data, dict):
+        logger.debug("HA hassio addon lookup for %s returned non-addon payload: %r", slug, payload)
+        return None
+    return data
+
+
+def _resolve_ma_ingress_url_via_ha(ha_url: str, ha_token: str, ma_url: str = "") -> tuple[str, str]:
+    """``(ingress base URL, "")`` of the Music Assistant add-on, or ``("", why not)``.
+
+    In the add-on, the bridge's own Supervisor lookup names the add-on: an
+    official one, or another one only once it proved to be the server at
+    *ma_url* (see ``resolve_ma_addon``).  Outside Home Assistant only the
+    official repository's slugs are used; another Music Assistant add-on is
+    reported, not used, as the bridge can't confirm what it is.
+    """
+    if os.environ.get("SUPERVISOR_TOKEN", "").strip():
+        lookup = resolve_ma_addon(ma_url)
+        if lookup.info is None:
+            return "", lookup.reason
+        slug = str(lookup.info["slug"])
+        official = slug in KNOWN_MA_ADDON_SLUGS
+        data = _addon_info_via_ha(ha_url, ha_token, slug) or lookup.info
+        if data.get("state") == "started" and (url := _ingress_url_from_addon_info(ha_url, data, official=official)):
+            return url, ""
+        why = f"Music Assistant add-on {slug} has no Home Assistant ingress"
+        logger.warning("%s", why)
+        return "", why
+
+    seen: list[dict] = []
     for slug in KNOWN_MA_ADDON_SLUGS:
-        data = _get_ha_supervisor_addon_info_via_ws(ha_token, slug, ha_url=ha_url)
-        try:
-            if not isinstance(data, dict):
-                req = _ur.Request(f"{ha_url.rstrip('/')}/api/hassio/addons/{slug}/info", headers=headers, method="GET")
-                with safe_urlopen(req, timeout=10) as resp:
-                    payload = json.loads(resp.read())
-                data = payload.get("data") if isinstance(payload, dict) else None
-                if not isinstance(data, dict) and isinstance(payload, dict) and payload.get("slug"):
-                    data = payload
-                if not isinstance(data, dict):
-                    logger.debug("HA hassio addon lookup for %s returned non-addon payload: %r", slug, payload)
-                    continue
-            if data.get("state") != "started":
-                continue
-            ingress_path = str(data.get("ingress_url") or data.get("ingress_entry") or data.get("webui") or "").rstrip(
-                "/"
-            )
-            if ingress_path:
-                if ingress_path.startswith("http://") or ingress_path.startswith("https://"):
-                    return ingress_path
-                return f"{ha_url.rstrip('/')}{ingress_path}"
-        except Exception as exc:
-            logger.debug("HA hassio addon lookup failed for %s: %s", slug, exc)
-    return ""
+        addon = _addon_info_via_ha(ha_url, ha_token, slug)
+        if addon is None:
+            continue
+        seen.append({"slug": slug, "name": addon.get("name"), "state": addon.get("state")})
+        if addon.get("state") == "started" and (url := _ingress_url_from_addon_info(ha_url, addon, official=True)):
+            return url, ""
+
+    listed = _list_ha_addons_via_ws(ha_token, ha_url=ha_url)
+    others = [row for row in listed if is_ma_addon(row) and str(row["slug"]) not in KNOWN_MA_ADDON_SLUGS]
+    if others:
+        why = (
+            f"Music Assistant add-on {describe_addons(others, with_state=False)} is not from the official "
+            "repository, and a bridge outside Home Assistant can't confirm it is the server it uses"
+        )
+    elif seen:
+        why = f"No running Music Assistant add-on found in Home Assistant (found: {describe_addons(seen)})"
+    elif listed:
+        why = f"No Music Assistant add-on found in Home Assistant ({len(listed)} add-ons installed)"
+    else:
+        why = "Music Assistant add-on not found through Home Assistant"
+    logger.warning("%s", why)
+    return "", why
+
+
+def _find_ma_ingress_url_via_ha(ha_url: str, ha_token: str, ma_url: str = "") -> str:
+    """Resolve the MA add-on ingress URL via Home Assistant's hassio proxy."""
+    return _resolve_ma_ingress_url_via_ha(ha_url, ha_token, ma_url)[0]
+
+
+# Why the last ``_create_ma_token_via_ha_proxy`` call in this context made no
+# token, for the user-facing error.
+_ha_proxy_failure: contextvars.ContextVar[str] = contextvars.ContextVar("_ha_proxy_failure", default="")
 
 
 # Home Assistant Core as add-ons reach it on the Supervisor network.
 _HA_CORE_URL = "http://homeassistant:8123"
 
 
-def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
-    """Create a long-lived MA token through the HA ingress proxy."""
-    base_url = _find_ma_ingress_url_via_ha(ha_url, ha_token)
+def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str, ma_url: str = "") -> str | None:
+    """Create a long-lived MA token through the HA ingress proxy.
+
+    On failure returns None and leaves the reason in ``_ha_proxy_failure``.
+    """
+    _ha_proxy_failure.set("Music Assistant did not create a token through Home Assistant ingress")
+    base_url, why = _resolve_ma_ingress_url_via_ha(ha_url, ha_token, ma_url)
     if not base_url:
         logger.warning("MA ingress URL unavailable via Home Assistant proxy")
+        _ha_proxy_failure.set(why)
         return None
     ingress_session = _create_ha_ingress_session_via_ws(ha_token, ha_url=ha_url)
     if not ingress_session:
         logger.warning("HA ingress session unavailable for MA token creation")
+        _ha_proxy_failure.set("Home Assistant did not open an ingress session for Music Assistant")
         return None
 
     payload = json.dumps(
@@ -989,6 +1120,7 @@ def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
         return None
 
     if isinstance(data, str):
+        _ha_proxy_failure.set("")
         return data
     if isinstance(data, dict):
         if data.get("error"):
@@ -996,6 +1128,7 @@ def _create_ma_token_via_ha_proxy(ha_url: str, ha_token: str) -> str | None:
             return None
         token = data.get("result")
         if isinstance(token, str) and token:
+            _ha_proxy_failure.set("")
             return token
     _log_unexpected_result("MA ingress proxy token/create", data)
     return None
@@ -1009,12 +1142,14 @@ def _complete_ma_login_via_ha_token(
     if not ha_user:
         return None, "Could not verify Home Assistant user"
 
-    ma_token = _create_ma_token_via_ha_proxy(ha_url, ha_token)
+    ma_token = _create_ma_token_via_ha_proxy(ha_url, ha_token, ma_url)
     if not ma_token:
-        return None, "Could not create Music Assistant token via Home Assistant ingress"
+        reason = _ha_proxy_failure.get() or "Could not create Music Assistant token via Home Assistant ingress"
+        return None, f"{reason}. Paste a Music Assistant token instead (Music Assistant → Settings → Profile)."
 
     if not _validate_ma_token(ma_url, ma_token):
         return None, "Music Assistant token created but validation failed"
+    _retire_older_bridge_tokens(ma_url, ma_token)
 
     result = dict(ha_user)
     result["ma_token"] = ma_token
@@ -1380,6 +1515,8 @@ def ha_silent_auth(ha_token: str, ma_url: str) -> dict:
     if not ha_token or not ma_url:
         raise UseCaseError(400, "missing_fields", "Missing ha_token or ma_url")
     _require_safe_url(ma_url)
+    if load_config().get("MA_AUTO_SILENT_AUTH") is False:
+        raise UseCaseError(403, "silent_auth_disabled", "Automatic Music Assistant sign-in is turned off")
 
     existing_url, existing_token = get_ma_api_credentials()
     if existing_token and existing_url and existing_url.rstrip("/") == ma_url:
@@ -1400,19 +1537,19 @@ def ha_silent_auth(ha_token: str, ma_url: str) -> dict:
     ha_user = _get_ha_user_via_ws(ha_token)
     if not ha_user:
         raise UseCaseError(401, "ha_token_invalid", "Could not verify HA user — token may be expired")
-    ma_token = _create_ma_token_via_ingress(ha_user["id"], ha_user["name"], ha_user.get("name", ""))
+    ma_token = _create_ma_token_via_ingress(ha_user["id"], ha_user["name"], ha_user.get("name", ""), ma_url=ma_url)
     if not ma_token:
         # Music Assistant (server #6772) trusts the ingress user headers only
         # from the Supervisor, so the direct call above is refused there. Home
         # Assistant's ingress proxy makes the same request as this user, from
         # the Supervisor.
-        ma_token = _create_ma_token_via_ha_proxy(_HA_CORE_URL, ha_token)
+        ma_token = _create_ma_token_via_ha_proxy(_HA_CORE_URL, ha_token, ma_url)
     if not ma_token:
-        raise UseCaseError(
-            502, "ma_ingress_failed", "Could not create MA token via Ingress — is Music Assistant running?"
-        )
+        reason = _ha_proxy_failure.get() or "Could not create MA token via Ingress — is Music Assistant running?"
+        raise UseCaseError(502, "ma_ingress_failed", reason)
     if not _validate_ma_token(ma_url, ma_token):
         raise UseCaseError(500, "ma_token_invalid", "MA token created but validation failed")
+    _retire_older_bridge_tokens(ma_url, ma_token)
     _save_ma_token_and_rediscover(ma_url, ma_token, ha_user.get("name", ""), auth_provider="ha")
     return _connected(ma_url, ha_user.get("name", ""), "Connected to Music Assistant via Home Assistant.")
 
@@ -1433,6 +1570,18 @@ def _mfa_challenge(result: dict, context: dict) -> dict:
         "mfa_module_name": placeholders.get("mfa_module_name", "Authenticator app"),
         "_context": context,
     }
+
+
+def _with_sign_in_alternatives(message: str) -> str:
+    """Append what the user can do instead of a Home Assistant password sign-in."""
+    token = "paste a Music Assistant token (Music Assistant → Settings → Profile → Long-lived tokens)"
+    if os.environ.get("SUPERVISOR_TOKEN", "").strip():
+        hint = (
+            f"Open the bridge from the Home Assistant sidebar and it signs in to Music Assistant by itself, or {token}."
+        )
+    else:
+        hint = f"Or {token}."
+    return f"{message.rstrip()} {hint}".strip()
 
 
 def ha_login_start(ma_url: str, username: str, password: str) -> dict:
@@ -1490,6 +1639,7 @@ def ha_login_start(ma_url: str, username: str, password: str) -> dict:
             return _mfa_challenge(result, context)
         raise _flow_error(result)
 
+    oauth_error = _with_sign_in_alternatives(oauth_error)
     if not _ma_reports_homeassistant_addon(ma_url):
         raise UseCaseError(400, "oauth_unavailable", oauth_error)
     ha_urls = _derive_ha_urls_from_ma(ma_url)

@@ -15,9 +15,12 @@ import ShortcutsDialog from '@/components/ShortcutsDialog.vue'
 import { SbToastContainer } from '@/kit'
 import { useTheme } from '@/composables/useTheme'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
+import { useMaAutoConnect } from '@/composables/useMaAutoConnect'
 
 useTheme()
 useKeyboardShortcuts()
+// In the Home Assistant add-on: sign in to Music Assistant on any page, and again when the bridge loses it.
+useMaAutoConnect()
 
 const route = useRoute()
 const { t, locale } = useI18n()

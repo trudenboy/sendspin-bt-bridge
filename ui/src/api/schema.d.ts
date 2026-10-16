@@ -2767,6 +2767,12 @@ export interface components {
              */
             MA_ACCESS_TOKEN?: string | null;
             /**
+             * Ma Addon Slug
+             * @description HA add-on mode: slug of a Music Assistant add-on from a custom repository the bridge may sign in through (official and local add-ons need no entry).
+             * @default
+             */
+            MA_ADDON_SLUG?: string | null;
+            /**
              * Ma Api Token
              * @description Music Assistant API token.
              * @default

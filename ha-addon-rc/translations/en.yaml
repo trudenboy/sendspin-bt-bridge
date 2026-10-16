@@ -99,6 +99,13 @@ configuration:
       When enabled, the ingress web UI will try to create a long-lived Music
       Assistant token automatically using the current Home Assistant session
       as soon as the page opens. Applies to Home Assistant addon ingress mode only.
+  ma_addon_slug:
+    name: "Music Assistant add-on from a custom repository"
+    description: >-
+      Leave empty for the official Music Assistant add-on or one in the local
+      add-on folder. For a Music Assistant add-on from another repository,
+      enter its slug (shown in its add-on page URL) so the bridge may sign in
+      to Music Assistant through it.
   volume_via_ma:
     name: "Volume via Music Assistant"
     description: >-
