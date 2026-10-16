@@ -27,9 +27,11 @@ def synth(
     drop: AbstractSet[int] = frozenset(),
     agc: bool = False,
     seed: int = 1,
+    masked: float = 0.0,
 ) -> Recording:
     """A recording that starts at capture time ``start_time_s`` of a track whose epoch is 0 and which this
-    speaker plays ``lag_s`` late (positive = later). ``echo`` is (delay_s, amplitude)."""
+    speaker plays ``lag_s`` late (positive = later). ``echo`` is (delay_s, amplitude). ``masked`` rides white
+    noise on each chirp (standard deviation ``masked / 2`` of its amplitude), roughening its shape."""
     rnd = random.Random(seed)
     n = round(duration_s * sample_rate)
     x = [rnd.gauss(0.0, noise) for _ in range(n)]
@@ -47,7 +49,7 @@ def synth(
                 if -len(template) < start < n:
                     for i, v in enumerate(template):
                         if 0 <= start + i < n:
-                            x[start + i] += a * v
+                            x[start + i] += a * v + (rnd.gauss(0.0, masked * a * 0.5) if masked else 0.0)
     if agc:  # crude: boost quiet parts, squash loud ones
         x = [math.tanh(3 * v) for v in x]
     pcm = struct.pack(f"<{n}h", *(int(max(-32767, min(32767, v * 32767))) for v in x))
@@ -91,5 +93,32 @@ def bursty_noise(
             break
         for j in range(i, i + length):
             x[j] = rnd.gauss(0.0, level)
+        i += length
+    return _to_recording(member, x, sample_rate, 20.0)
+
+
+def band_chatter(
+    member: str,
+    *,
+    duration_s: float = 6.0,
+    sample_rate: int = 48000,
+    rate_hz: float = 25.0,
+    level: float = 0.02,
+    seed: int = 7,
+) -> Recording:
+    """Silence broken by very short (2–6 ms) tone blips inside the chirp band — the band-envelope texture of a real
+    phone recording (AAC artefacts, desk and room noise): many weak events, each a few dB over the floor."""
+    rnd = random.Random(seed)
+    n = round(duration_s * sample_rate)
+    x = [0.0] * n
+    i = 0
+    while True:
+        i += int(rnd.expovariate(rate_hz) * sample_rate)
+        length = int(rnd.uniform(0.002, 0.006) * sample_rate)
+        if i + length >= n:
+            break
+        f, ph = rnd.uniform(2500.0, 5500.0), rnd.uniform(0.0, 2 * math.pi)
+        for j in range(length):
+            x[i + j] = level * math.sin(2 * math.pi * f * j / sample_rate + ph) * math.sin(math.pi * j / length)
         i += length
     return _to_recording(member, x, sample_rate, 20.0)

@@ -20,13 +20,14 @@ MAX_DURATION_S = 20.0
 _CANDIDATE_RATIO = 3.0  # band energy over the median floor that opens a candidate event (4.8 dB)
 _ABS_FLOOR_LSB = 4.0  # floor never drops below the band energy of ±4 LSB white noise (digital silence, dither)
 _REFINE_MS = 3.0  # matched-filter search around an event's centre
-_MIN_NCC = 0.5  # normalised correlation an event needs to count as a chirp
+_MIN_NCC = 0.4  # normalised correlation an event needs to count as a chirp; pair + sequence reject the rest
 _EARLIER_RATIO = 0.7  # an earlier peak this strong is the direct sound, the later one an overlapping reflection
 _PAIR_DB = 10.0  # both chirps of a pair are played equally loud; allows a reflection landing on one of them
 _GAP_TOL_MS = 5.0
 _CLUSTER_S = 0.4  # one click (pair + reflections) fits in this window; clicks are PERIOD_S apart
 _EVENTS_PER_PERIOD = 6  # 2 chirps x direct + 2 reflections; more than this is kept-strongest
-_BAIL_FACTOR = 4  # event density beyond _BAIL_FACTOR x plausible means the room is too noisy to try
+_MAX_RATIO = 10 ** (MIN_SNR_DB / 10)  # a crowded envelope raises the threshold up to the SNR a click needs anyway
+_RATIO_STEP = 1.5
 
 
 def pcm_to_floats(pcm: bytes) -> list[float]:
@@ -195,15 +196,21 @@ def estimate(recording: Recording, *, epoch_s: float = 0.0) -> Measurement:
     env = band_envelope(x, sr)
     abs_floor = 2.0 * (_ABS_FLOOR_LSB / 32768.0) ** 2 * frame
     floor = max(sorted(env)[len(env) // 2], abs_floor)
-    events = _events(env, _CANDIDATE_RATIO * floor)
+    # A phone's band envelope crackles (AAC artefacts, desk and room noise): far more weak events than a click
+    # track can make. Raise the threshold until the count is plausible — never above the SNR a click needs to be
+    # accepted, so no measurable click is lost — then keep the strongest. One matched-filter pass either way.
     plausible = _EVENTS_PER_PERIOD * (math.ceil(n / sr / ct.PERIOD_S) + 1)
-    if len(events) > _BAIL_FACTOR * plausible:
-        return Measurement(member=member, status="not_heard", reason="low_snr")
+    ratio = _CANDIDATE_RATIO
+    events = _events(env, ratio * floor)
+    while len(events) > plausible and ratio < _MAX_RATIO:
+        ratio = min(ratio * _RATIO_STEP, _MAX_RATIO)
+        events = _events(env, ratio * floor)
+    crowded = ratio > _CANDIDATE_RATIO
     if len(events) > plausible:
         events = sorted(sorted(events, key=lambda e: e[1], reverse=True)[:plausible])
     pairs = _click_sequence(_clusters(_chirps(x, sr, events, frame), sr), sr)
-    if not pairs:
-        return Measurement(member=member, status="not_heard", reason="no_clicks")
+    if not pairs:  # in a crowded room "no clicks" means they did not stand out of the noise
+        return Measurement(member=member, status="not_heard", reason="low_snr" if crowded else "no_clicks")
     if len(pairs) < MIN_CLICKS:
         return Measurement(member=member, status="not_heard", reason="too_few_clicks", clicks=len(pairs))
     cycle_ms = ct.CYCLE_S * 1000.0

@@ -1,11 +1,13 @@
+import math
 import struct
 import time
 
 import pytest
 
+from sendspin_sync import click_track as ct
 from sendspin_sync import estimator as est
 from sendspin_sync.models import Recording
-from tests.support.sync_synth import bursty_noise, sparse_lsb_noise, synth
+from tests.support.sync_synth import band_chatter, bursty_noise, sparse_lsb_noise, synth
 
 
 def _phase(m):
@@ -140,6 +142,31 @@ def test_clicks_survive_moderate_clatter():
     m = est.estimate(_mix(clicks, clatter))
     assert m.clicks == 6
     assert abs(_phase(m) - 200.0) <= 1.0
+
+
+def test_loud_clicks_are_found_among_dense_weak_band_chatter():
+    # a real phone recording (AAC, desk, 1-2 m away): the band envelope crackles with >100 weak events per 6 s at
+    # 3x the floor, while the chirps stand 20+ dB above it; the crackle must not hide the clicks
+    clicks = synth("a", lag_s=0.2, noise=0.003, gain=0.1, sample_rate=48000)
+    rec = _mix(clicks, band_chatter("a", sample_rate=48000))
+    m = est.estimate(rec)
+    x = est.pcm_to_floats(rec.pcm)
+    env = est.band_envelope(x, 48000)
+    floor = sorted(env)[len(env) // 2]
+    plausible = est._EVENTS_PER_PERIOD * (math.ceil(len(x) / 48000 / ct.PERIOD_S) + 1)
+    assert len(est._events(env, 3.0 * floor)) > 4 * plausible  # the density that used to bail out
+    assert 10 * math.log10(max(env) / floor) >= 20.0
+    assert m.clicks == 3
+    assert abs(_phase(m) - 200.0) <= 1.0
+
+
+def test_a_chirp_the_speaker_or_codec_roughened_still_counts():
+    # E5 run3, a web kiosk: clearly audible clicks (28 dB band peak) whose per-chirp correlation with the template
+    # is only ~0.5 (AAC, the kiosk's own processing); here in-band noise riding on each chirp gives ~0.45. The pair
+    # gap and the click sequence reject garbage, the per-chirp gate only has to drop what is plainly no chirp.
+    m = est.estimate(synth("a", lag_s=0.1, masked=1.7, sample_rate=48000, noise=0.003))
+    assert m.clicks == 3
+    assert abs(_phase(m) - 100.0) <= 1.0
 
 
 def test_a_room_full_of_clatter_is_too_noisy_to_try():
