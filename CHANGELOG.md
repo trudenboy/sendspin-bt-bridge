@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Signing in to Music Assistant with Home Assistant works again with current
+  Music Assistant, which secures that sign-in with PKCE. It used to fail after
+  the password or two-factor code with "Failed to exchange HA code for MA
+  token". Older Music Assistant keeps signing in as before.
+
 ## [3.1.0-beta.4] - 2026-10-15
 
 ### Added

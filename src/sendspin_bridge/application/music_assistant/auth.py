@@ -12,6 +12,7 @@ import socket
 import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
+from typing import NamedTuple
 
 from sendspin_bridge.application.errors import UseCaseError, config_write_error
 from sendspin_bridge.application.music_assistant.common import (
@@ -289,7 +290,25 @@ def _save_ma_token_and_rediscover(ma_url: str, ma_token: str, username: str = ""
 # ── MA ↔ HA OAuth helpers (shared by ha-login and ha-silent-auth) ─────────
 
 
-def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | None, str]:
+class MaOAuthParams(NamedTuple):
+    """What Music Assistant's Home Assistant authorize URL asks Home Assistant for.
+
+    Current Music Assistant signs in to Home Assistant with PKCE: the URL
+    carries ``code_challenge`` and MA later redeems the code with the matching
+    verifier. Home Assistant binds the code to the challenge of the login flow
+    that issued it, so the flow the bridge starts must carry the same challenge.
+    Older Music Assistant sends none, and both fields stay empty.
+    """
+
+    ha_url: str
+    client_id: str
+    redirect_uri: str
+    state: str
+    code_challenge: str = ""
+    code_challenge_method: str = ""
+
+
+def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[MaOAuthParams | None, str]:
     """Resolve HA OAuth parameters from Music Assistant auth endpoints.
 
     Returns a ``(oauth_params, error_message)`` tuple so callers can surface a
@@ -297,7 +316,7 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
     message when the server exposes a reason.
     """
 
-    def _parse_auth_url(auth_url: str):
+    def _parse_auth_url(auth_url: str) -> MaOAuthParams:
         parsed = _up.urlparse(auth_url)
         params = _up.parse_qs(parsed.query)
         ha_base = f"{parsed.scheme}://{parsed.netloc}"
@@ -306,11 +325,18 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
         # the same SSRF check that user-supplied URLs go through.
         if not is_safe_external_url(ha_base):
             logger.warning("MA reported HA OAuth base that failed SSRF check: %s", ha_base)
-            return "", "", "", ""
+            return MaOAuthParams("", "", "", "")
         client_id = params.get("client_id", [""])[0]
         redirect_uri = params.get("redirect_uri", [""])[0]
         oauth_state = params.get("state", [""])[0]
-        return ha_base, client_id, redirect_uri, oauth_state
+        code_challenge = params.get("code_challenge", [""])[0]
+        code_challenge_method = params.get("code_challenge_method", [""])[0]
+        if code_challenge and not code_challenge_method:
+            # Music Assistant's challenge is always S256, and Home Assistant
+            # refuses a challenge without a method (RFC 7636 would read it as
+            # "plain").
+            code_challenge_method = "S256"
+        return MaOAuthParams(ha_base, client_id, redirect_uri, oauth_state, code_challenge, code_challenge_method)
 
     def _extract_auth_url(payload: object) -> str:
         if isinstance(payload, str):
@@ -340,12 +366,12 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
                 return _extract_error(result_payload)
         return str(fallback or "").strip()
 
-    def _parse_response_auth_url(location: str = "", payload: object = None) -> tuple[str, str, str, str] | None:
+    def _parse_response_auth_url(location: str = "", payload: object = None) -> MaOAuthParams | None:
         auth_url = _extract_auth_url(payload) or str(location or "").strip()
         if not auth_url:
             return None
         parsed = _parse_auth_url(auth_url)
-        if all(parsed):
+        if all((parsed.ha_url, parsed.client_id, parsed.redirect_uri, parsed.state)):
             return parsed
         return None
 
@@ -441,10 +467,12 @@ def _get_ma_oauth_bootstrap(ma_url: str) -> tuple[tuple[str, str, str, str] | No
     return None, error_message
 
 
-def _get_ma_oauth_params(ma_url: str):
-    """Backward-compatible wrapper returning only parsed OAuth parameters."""
+def _get_ma_oauth_params(ma_url: str) -> tuple[str, str, str, str] | None:
+    """Backward-compatible wrapper: ``(ha_url, client_id, redirect_uri, state)`` or None."""
     oauth_info, _error = _get_ma_oauth_bootstrap(ma_url)
-    return oauth_info
+    if oauth_info is None:
+        return None
+    return oauth_info.ha_url, oauth_info.client_id, oauth_info.redirect_uri, oauth_info.state
 
 
 def _get_ma_server_info(ma_url: str) -> dict[str, object]:
@@ -514,17 +542,29 @@ def _exchange_ha_auth_code(ha_url: str, code: str, client_id: str) -> dict[str, 
         return None
 
 
-def _ha_login_flow_start(ha_url: str, client_id: str, redirect_uri: str):
-    """Start HA login_flow for the MA OAuth flow."""
+def _ha_login_flow_start(
+    ha_url: str,
+    client_id: str,
+    redirect_uri: str,
+    code_challenge: str = "",
+    code_challenge_method: str = "",
+):
+    """Start HA login_flow for the MA OAuth flow.
+
+    With a PKCE challenge, Home Assistant binds the code this flow ends with to
+    it, so whoever redeems the code (Music Assistant) must hold the verifier.
+    """
 
     try:
-        body = json.dumps(
-            {
-                "client_id": client_id,
-                "handler": ["homeassistant", None],
-                "redirect_uri": redirect_uri,
-            }
-        ).encode()
+        start: dict[str, object] = {
+            "client_id": client_id,
+            "handler": ["homeassistant", None],
+            "redirect_uri": redirect_uri,
+        }
+        if code_challenge:
+            start["code_challenge"] = code_challenge
+            start["code_challenge_method"] = code_challenge_method or "S256"
+        body = json.dumps(start).encode()
         req = _ur.Request(
             f"{ha_url}/auth/login_flow",
             data=body,
@@ -1353,8 +1393,14 @@ def ha_login_start(ma_url: str, username: str, password: str) -> dict:
 
     oauth_info, oauth_error = _get_ma_oauth_bootstrap(ma_url)
     if oauth_info:
-        ha_url, client_id, redirect_uri, oauth_state = oauth_info
-        flow = _ha_login_flow_start(ha_url, client_id, redirect_uri)
+        ha_url, client_id, oauth_state = oauth_info.ha_url, oauth_info.client_id, oauth_info.state
+        flow = _ha_login_flow_start(
+            ha_url,
+            client_id,
+            oauth_info.redirect_uri,
+            oauth_info.code_challenge,
+            oauth_info.code_challenge_method,
+        )
         if not flow or not flow.get("flow_id"):
             raise UseCaseError(502, "ha_unavailable", "Could not start HA authentication")
         flow_id = flow["flow_id"]
@@ -1375,6 +1421,10 @@ def ha_login_start(ma_url: str, username: str, password: str) -> dict:
                 "ha_url": ha_url,
                 "client_id": client_id,
                 "state": oauth_state,
+                # Home Assistant already holds the challenge in this flow; kept
+                # so the step-2 context records which flow it continues.
+                "code_challenge": oauth_info.code_challenge,
+                "code_challenge_method": oauth_info.code_challenge_method,
                 "ma_url": ma_url,
                 "username": username,
             }
