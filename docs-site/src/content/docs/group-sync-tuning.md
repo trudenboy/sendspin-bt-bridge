@@ -33,7 +33,9 @@ The **Group** tab lists the members with their delay (*Delay (larger = earlier)*
 
 **Skip … when measuring** marks a speaker to be skipped as soon as a measurement starts.
 
-**Tuned before 3.1.0-beta.7? Tune again.** Since 3.1.0-beta.7 the bridge takes the audio buffer's latency out of the schedule (**Compensate the audio buffer latency**, Settings → Audio, on by default), so its speakers play earlier by that latency: about 110 ms at `PULSE_LATENCY_MSEC` 200, 310 ms at 600 (the default) and 410 ms at 800 on PulseAudio 17. Delays tuned before absorbed it. The `Stream start timing:` log line shows the exact amount as `sink min`.
+:::caution[Tuned before 3.1.0-beta.7? Tune again.]
+Since 3.1.0-beta.7 the bridge takes the audio buffer's latency out of the schedule (**Compensate the audio buffer latency**, Settings → Audio, on by default), so its speakers play earlier by that latency: about 110 ms at `PULSE_LATENCY_MSEC` 200, 310 ms at 600 (the default) and 410 ms at 800 on PulseAudio 17. Delays tuned before absorbed it. The `Stream start timing:` log line shows the exact amount as `sink min`.
+:::
 
 ## Two ways to tune
 
