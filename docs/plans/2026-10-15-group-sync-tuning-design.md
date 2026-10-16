@@ -70,8 +70,11 @@ with players synced to it) is not offered as a group.
   whether the delay entry exists). Scopes: `CONFIG_PLAYERS_READ` for reads,
   `CONFIG_PLAYERS_WRITE` for `config/players/save`, `PLAYERS_READ` for
   `players/all`, `PLAYERS_CONTROL` for `players/cmd/*` including
-  `play_announcement`, `volume_mute` and `stop`.
-- `players/cmd/play_announcement` `{player_id, url, pre_announce?, volume_level?}`
+  `volume_mute`, `volume_set` and `stop`; `player_queues/play_media` for the
+  clicker (option C).
+- *Historical (option A, superseded by option C — see "Signal path and solo"; the
+  bridge no longer sends announcements):* `players/cmd/play_announcement`
+  `{player_id, url, pre_announce?, volume_level?}`
   (`controllers/players/announcements.py`). Sendspin players announce natively only
   through a Home Assistant relay, so for a sync group Music Assistant uses its
   default implementation on the group player: it records power, volume, mute,
@@ -89,7 +92,7 @@ with players synced to it) is not offered as a group.
   until the clip ends). The default implementation reads `players/cmd/play` and the
   queue as busy while `announcement_in_progress` is set; that flag lives in the
   player's `extra_data`, which is not on the API.
-- A mute set on a member **during** the announcement is not undone by Music
+- *Historical (option A):* a mute set on a member **during** the announcement is not undone by Music
   Assistant's restore (it only re-mutes the members that were muted before), so the
   adapter's own restore must unmute what it muted. Whether such a mute is honoured
   by the group stream while it plays is confirmed in stage 0.
@@ -195,7 +198,7 @@ if it imports anything from `sendspin_bridge`.
 
 ### Future Music Assistant provider (approach B)
 
-Same core; adapters over `mass.players` (members, mute, announcements), `mass.config`
+Same core; adapters over `mass.players` (members, mute, playback), `mass.player_queues` (the clicker), `mass.config`
 (delay), `mass.streams`/webserver (click track) and provider storage (profiles). The
 wizard UI is served or embedded by the provider and talks the same contract. A
 separate spec covers it after the bridge version ships.
@@ -365,9 +368,29 @@ calibration, and the announcement path was too complex. So:
   naming it (problem field `member`); the mutes that solo already sent are taken
   back. There is no volume fallback: a group with a member that cannot be muted can
   only solo that member.
+- **Mutes and the operator's own changes.** The session tracks only the members it
+  muted. A member that is muted when a solo needs it silent (by the operator, before
+  or during the session) is never muted or unmuted by the session; an unmute is sent
+  only to a player that reports itself muted, so a member the operator unmuted
+  meanwhile gets no extra command. A mute that fails stays tracked (it may have taken
+  effect and answered late), unless the player cannot be muted at all. Soloing a
+  member the operator muted leaves it muted (it is then "not heard"); a member the
+  operator unmuted mid-session is muted again by the next solo.
+- **Stop.** "Stop group" in the preparation stops whatever the group plays (`signal`
+  `stop`); "Stop clicks" in the Manual tab and every end stop the group only while it
+  plays the session's click track (`signal` `stop_clicker`, the restore), so music
+  someone started meanwhile — or a quick listen refused with `group_playing` — plays
+  on.
+- **One URL per session.** The click-track URL (its token) stays the same for the
+  session and is recorded (and persisted) before `play_media` is sent, so a start that
+  times out but plays is still stopped at the end, and starting it again never
+  invalidates the URL Music Assistant is streaming.
 - **The end.** Finish, cancel, an error, the inactivity timeout and shutdown unmute
-  every member the session muted, then stop the group only if the session's clicker
-  is what it plays. The members the session muted (added before the mute is sent)
+  every member the session muted that is still muted, then stop the group only if the
+  session's clicker is what it plays. A player Music Assistant does not list (after a
+  restart, before its daemon registers again) keeps its unmute owed and is retried
+  with backoff; 10 minutes after the restore began it is given up and the restore
+  finishes. The members the session muted (added before the mute is sent)
   and its clicker URL are persisted, so a bridge restart unmutes them and stops the
   click track if the group still plays it.
 
@@ -409,8 +432,9 @@ bridge are generated to match it.
 - `PUT /api/v1/sync/groups/{group_id}/delays` — manual write `{ma_player_id: ms}`.
 - `POST /api/v1/sync/sessions` `{group_id, mode: manual|semi|auto, point:
   device|position}` → session; `GET`/`DELETE /api/v1/sync/sessions/{id}`.
-- `POST /api/v1/sync/sessions/{id}/signal` `{action: start|stop}` (start: the
-  clicker on the group; stop: stop whatever the group plays);
+- `POST /api/v1/sync/sessions/{id}/signal` `{action: start|stop|stop_clicker}`
+  (start: the clicker on the group; stop: stop whatever the group plays;
+  stop_clicker: stop it only while it plays the session's click track);
   `PUT .../volumes/{member}` `{level: 0–100}`; `POST .../solo` `{member | null}`;
   `POST .../ab` `{a, b}`.
 - `POST /api/v1/sync/sessions/{id}/recordings?member=…&start_time_s=…&sample_rate=…`
@@ -546,7 +570,7 @@ drawer's Timing tab. Route `/sync/:groupId`, designed for a phone in portrait.
 
 ## Risks
 
-- Music Assistant changes the announcement or config behaviour this relies on (dev
+- Music Assistant changes the queue, mute or config behaviour this relies on (dev
   branch). Mitigation: everything Music Assistant-specific sits in one adapter;
   stage 0 pins the behaviour with a test against the real server.
 - Bluetooth latency varies between connections and re-anchors; a measurement can be
@@ -629,3 +653,9 @@ aiosendspin 10.0.2. Decisions in the table above are unchanged. Changes:
   `music_returns_in_s`, the post-restore recheck, the restart restore that waited
   for the clip, `announcement_active` and `signal_playing`. The auto-mode undo
   window is a plain 30 s from the apply again.
+- **Option C review (2026-10-16).** A quick listen ends through the session only (no
+  unconditional stop); "Stop clicks" is `stop_clicker`; a failed mute stays tracked
+  unless the player has no mute; an unmute goes to any player reporting itself muted,
+  and an absent player is retried for up to 10 minutes; the clicker URL is one per
+  session and recorded before `play_media`; the live uri form
+  `builtin://sound_effect/<URL>` is matched; `MaApi.fire` is gone.

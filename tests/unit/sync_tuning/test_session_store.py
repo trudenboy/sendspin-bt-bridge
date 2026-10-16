@@ -20,8 +20,9 @@ class ClosableControl(FakeControl):
         self.closed += 1
 
 
-def make(tmp_path, *, controls=None):
-    """controls: list the factory appends each new control to (one per session)."""
+def make(tmp_path, *, controls=None, left_muted=()):
+    """controls: list the factory appends each new control to (one per session); left_muted: players
+    Music Assistant reports muted (what a session before a restart left behind)."""
     made = controls if controls is not None else []
     events = []
     t = {"now": 0.0}
@@ -29,6 +30,8 @@ def make(tmp_path, *, controls=None):
 
     def factory():
         made.append(ClosableControl())
+        for mid in left_muted:
+            made[-1].muted_now[mid] = True
         return made[-1]
 
     store = SessionStore(
@@ -287,7 +290,7 @@ def test_restore_persisted_unmutes_and_stops_the_clicker_still_playing(tmp_path)
 
 def test_restore_persisted_never_stops_music_that_replaced_the_clicker(tmp_path):
     _file(tmp_path).write_text(json.dumps(_old_entry()))
-    store, made, _, _, _ = make(tmp_path)  # the group plays the operator's music
+    store, made, _, _, _ = make(tmp_path, left_muted=["b"])  # the group plays the operator's music
     store.restore_persisted()
     assert made[0].calls == [("mute", "b", False)] and not _file(tmp_path).exists()
 
@@ -345,7 +348,7 @@ def test_a_persisted_unmute_that_succeeded_is_not_repeated_after_a_later_failure
 
 def test_a_persisted_group_that_is_gone_still_gets_its_members_unmuted(tmp_path):
     _file(tmp_path).write_text(json.dumps(_old_entry()))
-    store, made, _, _, _ = make(tmp_path)
+    store, made, _, _, _ = make(tmp_path, left_muted=["b"])
     original = store._factory
 
     def factory():
@@ -460,7 +463,7 @@ def test_the_api_attaches_its_event_hub_while_it_runs():
 def _pending_store(tmp_path, *, group_id="g"):
     """A store whose persisted restore of *group_id* failed once (MA down) and waits for its backoff."""
     _file(tmp_path).write_text(json.dumps(_old_entry(group_id=group_id)))
-    store, made, _events, t, _host = make(tmp_path)
+    store, made, _events, t, _host = make(tmp_path, left_muted=["b"])
     original = store._factory
     attempts = {"n": 0}
 
@@ -642,3 +645,43 @@ def test_a_start_whose_publish_fails_wrote_nothing_and_frees_the_group(tmp_path)
     with pytest.raises(OSError):
         store.create("g", "semi", "device")
     assert store.active_for("g") is None and made[0].calls == [] and host.released != []
+
+
+def test_an_owed_unmute_of_a_player_not_listed_yet_is_retried_then_given_up(tmp_path):
+    from sendspin_sync.session import RESTORE_GIVE_UP_S
+
+    _file(tmp_path).write_text(json.dumps(_old_entry(clicker_url=None)))
+    store, made, _, t, _ = make(tmp_path, left_muted=["b"])
+    original = store._factory
+    absent = {"on": True}
+
+    def factory():
+        ctl = original()
+        if absent["on"]:
+            ctl.gone = {"b"}  # its daemon has not registered again
+        return ctl
+
+    store._factory = factory
+    store.restore_persisted()
+    assert store.pending_for("g")["error"] == "member_gone" and _persisted(tmp_path)[0]["muted"] == ["b"]
+    t["now"] = 2.0
+    absent["on"] = False
+    store.tick()
+    assert made[-1].calls == [("mute", "b", False)] and not _file(tmp_path).exists()
+
+    _file(tmp_path).write_text(json.dumps(_old_entry(session_id="old2", clicker_url=None)))
+    store2, _made2, _, t2, _ = make(tmp_path, left_muted=["b"])
+    original2 = store2._factory
+
+    def factory2():
+        ctl = original2()
+        ctl.gone = {"b"}
+        return ctl
+
+    store2._factory = factory2
+    store2.restore_persisted()
+    assert _file(tmp_path).exists()
+    t2["now"] = RESTORE_GIVE_UP_S + 1
+    store2.retry_pending("g")
+    store2.tick()
+    assert not _file(tmp_path).exists() and store2.pending_for("g") is None  # given up: restore ends

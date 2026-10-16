@@ -97,7 +97,7 @@ describe('ManualTuning', () => {
     await running()
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     await w.find('[data-signal]').trigger('click'); await flushPromises()
-    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')
+    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop_clicker')  // only our clicker, never someone's music
     const calls = vi.mocked(api.sessionSolo).mock.calls.length
     vi.advanceTimersByTime(12000); await flushPromises()
     expect(vi.mocked(api.sessionSolo).mock.calls.length).toBe(calls)
@@ -247,7 +247,7 @@ describe('ManualTuning', () => {
   it('explains the clicker, and says when it stopped', async () => {
     const w = setup()
     await running()
-    expect(w.text()).toContain('Stop clicks stops the group')
+    expect(w.text()).toContain('Stop clicks stops the click track only')
     useSyncStore().session = { ...useSyncStore().session!, clicker_playing: false, group_state: 'idle' } as never
     await flushPromises()
     expect(w.get('[data-listen-status]').text()).toContain('Clicks stopped.')
@@ -276,7 +276,8 @@ describe('ManualTuning: getting the group ready', () => {
     expect(w.get('[data-manual-prep] [data-next]').attributes('disabled')).toBeDefined()
     vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, group_state: 'idle' } as never)
     await w.get('[data-stop-group]').trigger('click'); await flushPromises()
-    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')
+    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')  // "Stop group" stops the user's music on purpose
+    expect(w.get('[data-manual-prep] [data-cancel]').text()).toBe('Skip')
     await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
     vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, clicker_playing: true, clicker_starts: 1, group_state: 'playing' } as never)
     await w.get('[data-start-clicker]').trigger('click'); await flushPromises()

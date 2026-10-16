@@ -243,13 +243,30 @@ def test_an_unreachable_music_assistant_is_not_mistaken_for_a_missing_mute():
     assert exc.value.code == "ma_unavailable" and exc.value.member == "uni"
 
 
-def test_unmuting_a_player_that_left_music_assistant_is_a_no_op():
+def test_unmuting_a_player_that_left_music_assistant_is_retryable_not_dropped():
+    # after a restart a bridge player may be missing until its daemon registers again: the unmute stays owed
     ctl, ma = make()
     del ma.players["uni"]
-    ctl.mute("uni", False)
-    with pytest.raises(ControlError) as exc:
-        ctl.mute("uni", True)
-    assert exc.value.code == "member_gone"
+    for muted in (False, True):
+        with pytest.raises(ControlError) as exc:
+            ctl.mute("uni", muted)
+        assert exc.value.code == "member_gone" and exc.value.member == "uni"
+
+
+def test_an_unmute_goes_to_any_muted_player_and_to_no_other():
+    ctl, ma = make()
+    ma.players["spk-kiosk"]["volume_muted"] = True  # muted, though MA lists no mute feature right now
+    ctl.mute("spk-kiosk", False)  # tried; MA's refusal ends it (nothing more can unmute it)
+    ctl.mute("uni", False)  # not muted (the operator unmuted it already): nothing to send
+    assert [c for c in ma.calls if c[0] == "players/cmd/volume_mute"] == [
+        ("players/cmd/volume_mute", {"player_id": "spk-kiosk", "muted": False})
+    ]
+
+
+def test_playback_reads_each_members_mute():
+    ctl, ma = make()
+    ma.players["cast"]["volume_muted"] = True
+    assert ctl.playback("grp").muted == {"spk-bridge": False, "spk-kiosk": False, "uni": False, "cast": True}
 
 
 def test_set_volume_sets_the_members_volume():

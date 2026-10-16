@@ -288,10 +288,24 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     expect(useSyncStore().session?.state).toBe('done')
     expect(w.get('[data-listen]').attributes('disabled')).toBeDefined()
     await vi.advanceTimersByTimeAsync(10_000); await flushPromises()
-    expect(api.sessionSignal).toHaveBeenCalledWith('q1', 'stop')
+    // ended through the session, which stops only its own clicker: never someone's music
+    expect(api.sessionSignal).not.toHaveBeenCalledWith('q1', 'stop')
     expect(api.endSession).toHaveBeenCalledWith('q1')
     useSyncStore().applyEvent(session({ id: 'q1', mode: 'manual', state: 'cancelled' }))
     expect(useSyncStore().session?.state).toBe('done')
+  })
+
+  it('a quick listen refused because music plays again never stops that music', async () => {
+    vi.mocked(api.applyProposal).mockResolvedValue(session({ state: 'done' }))
+    const w = mountWizard()
+    await toProposal(w)
+    await w.get('[data-apply]').trigger('click'); await flushPromises()
+    vi.mocked(api.createSession).mockResolvedValue(session({ id: 'q1', mode: 'manual', clicker_playing: false }))
+    vi.mocked(api.sessionSignal).mockRejectedValue(new ApiError({ status: 409, code: 'group_playing' }))
+    await w.get('[data-listen]').trigger('click'); await flushPromises()
+    expect(api.sessionSignal).toHaveBeenCalledTimes(1)
+    expect(api.sessionSignal).toHaveBeenCalledWith('q1', 'start')
+    expect(api.endSession).toHaveBeenCalledWith('q1')
   })
 
   it('cancel on the proposal ends the session (the microphone is already closed)', async () => {

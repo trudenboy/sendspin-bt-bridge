@@ -175,7 +175,8 @@ watch(
 function onSignal(action: 'start' | 'stop') {
   if (action === 'stop') stopAb()
   signalWanted.value = action === 'start'
-  void run(sync.signal(action)).then((ok) => {
+  // "Stop clicks" stops our clicker only: music someone started meanwhile plays on
+  void run(sync.signal(action === 'start' ? 'start' : 'stop_clicker')).then((ok) => {
     if (!ok) signalWanted.value = null
   })
 }
@@ -236,6 +237,7 @@ const listenStatus = computed(() => {
         :error="prepError"
         @stop="prepCall(() => sync.signal('stop'))"
         @next="toPrep('clicker')"
+        cancel-label="skip"
         @cancel="toPrep('ready')"
       />
       <StepClicker
@@ -247,6 +249,7 @@ const listenStatus = computed(() => {
         @start="prepCall(() => sync.signal('start'))"
         @next="toPrep('volume')"
         @back="toPrep('stop')"
+        cancel-label="skip"
         @cancel="toPrep('ready')"
       />
       <StepVolume
@@ -257,6 +260,7 @@ const listenStatus = computed(() => {
         @volume="setVolume"
         @next="toPrep('ready')"
         @back="toPrep('clicker')"
+        cancel-label="skip"
         @cancel="toPrep('ready')"
       />
     </SbCard>

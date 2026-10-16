@@ -93,6 +93,7 @@ class GroupPlayback:
     state: str | None  # the group's playback_state ("playing", "idle", "paused"; None when unknown)
     media_uri: str | None  # uri of the group's current media
     volumes: dict[str, int | None] = field(default_factory=dict)  # member id -> volume
+    muted: dict[str, bool] = field(default_factory=dict)  # member id -> muted right now
 
     def plays(self, url: str | None) -> bool:
         """The group plays the click track served at *url* (matched on its unguessable token too, in

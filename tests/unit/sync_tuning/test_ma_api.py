@@ -175,31 +175,6 @@ def test_close_stops_the_listener(bridge_loop, server):
     assert not server.live.connected
 
 
-def test_fire_raises_a_fast_rejection(bridge_loop, server):
-    api = MaWsApi("http://ma:8095", "tok", fire_window=1.0)
-    server.errors["players/cmd/play_announcement"] = (InsufficientPermissions.error_code, "admin role required")
-    with pytest.raises(MaApiError) as exc:
-        api.fire("players/cmd/play_announcement", {"player_id": "grp", "url": "u", "pre_announce": False})
-    assert exc.value.code == "ma_forbidden"
-    server.errors["players/cmd/play_announcement"] = (11, "Could not resolve media u")  # PlayerCommandFailed
-    with pytest.raises(MaApiError) as exc:
-        api.fire("players/cmd/play_announcement", {"player_id": "grp", "url": "u", "pre_announce": False})
-    assert exc.value.code == "ma_error"
-    api.close()
-
-
-def test_fire_returns_once_the_clip_is_running_and_ignores_the_late_reply(bridge_loop, server):
-    api = MaWsApi("http://ma:8095", "tok", fire_window=0.2)
-    server.hold.add("players/cmd/play_announcement")
-    started = time.monotonic()
-    api.fire("players/cmd/play_announcement", {"player_id": "grp", "url": "u", "pre_announce": False})
-    assert 0.15 <= time.monotonic() - started < 2.0
-    held = server.held["players/cmd/play_announcement"]
-    server.push({"message_id": held["message_id"], "error_code": 11, "details": "clip ended badly"})
-    assert api.call("players/get", {"player_id": "a"})["player_id"] == "a"
-    api.close()
-
-
 def test_calling_from_the_bridge_loop_is_refused_at_once(bridge_loop, server):
     api = MaWsApi("http://ma:8095", "tok")
 
@@ -207,8 +182,6 @@ def test_calling_from_the_bridge_loop_is_refused_at_once(bridge_loop, server):
         started = time.monotonic()
         with pytest.raises(RuntimeError):
             api.call("players/get", {"player_id": "a"}, timeout=5)
-        with pytest.raises(RuntimeError):
-            api.fire("players/cmd/stop", {"player_id": "a"})
         return time.monotonic() - started
 
     elapsed = asyncio.run_coroutine_threadsafe(on_loop(), bridge_loop).result(timeout=10)
@@ -222,9 +195,6 @@ def test_call_without_bridge_loop_is_ma_unavailable(server, monkeypatch):
     api = MaWsApi("http://ma:8095", "tok")
     with pytest.raises(MaApiError) as exc:
         api.call("players/all", {})
-    assert exc.value.code == "ma_unavailable"
-    with pytest.raises(MaApiError) as exc:
-        api.fire("players/cmd/stop", {"player_id": "g"})
     assert exc.value.code == "ma_unavailable"
 
 

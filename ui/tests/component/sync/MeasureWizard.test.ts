@@ -392,6 +392,7 @@ describe('MeasureWizard rulings', () => {
     await flushPromises()
     expect(rec.closed).toBe(1)
     expect(w.text()).toContain('The measurement session ended')
+    expect(w.text()).toContain('unmuted')
     expect(w.find('[data-member-step]').exists()).toBe(false)
   })
 

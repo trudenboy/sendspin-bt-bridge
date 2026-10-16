@@ -526,9 +526,11 @@
     "SignalIn": {
       "properties": {
         "action": {
+          "description": "start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker.",
           "enum": [
             "start",
-            "stop"
+            "stop",
+            "stop_clicker"
           ],
           "title": "Action",
           "type": "string"

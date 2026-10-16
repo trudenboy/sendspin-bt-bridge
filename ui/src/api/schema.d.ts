@@ -1959,8 +1959,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start the clicker on the group, or stop the group's playback
-         * @description start: queue the click track on the group (409 group_playing while it plays anything else; again while it plays starts it over). stop: stop whatever the group plays.
+         * Start the clicker, stop the group, or stop only the clicker
+         * @description start: queue the click track on the group (409 group_playing while it plays anything else; again while it plays starts it over). stop: stop whatever the group plays. stop_clicker: stop the group only while it plays this session's click track.
          */
         post: operations["session_signal_api_v1_sync_sessions__session_id__signal_post"];
         delete?: never;
@@ -4414,9 +4414,10 @@ export interface components {
         SignalIn: {
             /**
              * Action
+             * @description start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker.
              * @enum {string}
              */
-            action: "start" | "stop";
+            action: "start" | "stop" | "stop_clicker";
         };
         /** SinkMatch */
         SinkMatch: {

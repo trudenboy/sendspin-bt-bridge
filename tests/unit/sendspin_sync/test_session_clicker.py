@@ -4,7 +4,7 @@ solo mutes the other members; the end unmutes what the session muted and stops t
 import pytest
 
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import PLAYBACK_POLL_S, SyncSession
+from sendspin_sync.session import PLAYBACK_POLL_S, RESTORE_GIVE_UP_S, SyncSession
 from tests.support.sync_fakes import FakeControl, FakeHost
 from tests.support.sync_synth import synth
 
@@ -260,3 +260,86 @@ def test_a_failed_unmute_is_retried_and_keeps_the_rest_for_later():
     assert s.restore_tick() is False and s.restore_error == "ma_unavailable"
     assert s.to_dict()["muted"] == ["b", "cast"]
     assert s.restore_tick() is True and s.to_dict()["muted"] == []
+
+
+# -- fix round: mutes that are not what they seem, a clicker start that times out ------------------
+
+
+def test_a_mute_that_took_effect_but_timed_out_is_still_undone():
+    s, ctl, _ = ready()
+    ctl.late_mute = {"b"}
+    err = code_of(s.solo, "a")
+    assert err.code == "ma_unavailable"
+    assert ctl.muted_now["b"] is False  # taken back with the rollback
+    ctl.late_mute = set()
+    ctl.fail_unmute = 0
+    ctl.muted_now["b"] = True  # and if the rollback had not reached it, the end does
+    s.muted.add("b")
+    s.cancel()
+    assert s.restore_tick() is True and ctl.muted_now["b"] is False
+
+
+def test_a_failing_mute_stays_tracked_unless_the_player_has_no_mute():
+    s, ctl, _ = ready()
+    ctl.late_mute = {"b"}
+    ctl.fail_unmute = 5  # the rollback cannot reach it either
+    code_of(s.solo, "a")
+    assert "b" in s.to_dict()["muted"]  # the end still owes the unmute
+    ctl.fail_unmute = 0
+    s.cancel()
+    assert s.restore_tick() is True and ctl.muted_now["b"] is False
+
+
+def test_a_member_the_user_muted_during_the_session_is_never_unmuted_by_it():
+    s, ctl, _ = ready()
+    ctl.muted_now["cast"] = True  # muted by hand in Music Assistant after the session started
+    s.solo("a")
+    assert ("mute", "cast", True) not in ctl.calls and s.to_dict()["muted"] == ["b"]
+    s.cancel()
+    assert s.restore_tick() is True and ctl.muted_now["cast"] is True
+
+
+def test_a_member_the_user_unmuted_during_the_session_gets_no_extra_unmute():
+    s, ctl, _ = ready()
+    s.solo("a")
+    ctl.muted_now["b"] = False  # unmuted by hand
+    s.cancel()
+    assert s.restore_tick() is True
+    assert ("mute", "b", False) not in ctl.calls and ctl.muted_now["b"] is False
+
+
+def test_an_absent_player_is_retried_then_given_up_after_a_while():
+    s, ctl, _ = ready()
+    s.solo("a")
+    ctl.gone = {"b"}  # its daemon has not registered again yet
+    s.cancel()
+    assert s.restore_tick() is False and s.restore_error == "member_gone" and "b" in s.muted
+    ctl.gone = set()
+    assert s.restore_tick() is True and ctl.muted_now["b"] is False
+    s2, ctl2, _ = ready()
+    s2.solo("a")
+    ctl2.gone = {"b"}
+    s2.cancel()
+    assert s2.restore_tick() is False
+    s2._clock.t += RESTORE_GIVE_UP_S
+    assert s2.restore_tick() is True and s2.state == "cancelled"  # restore terminates
+
+
+def test_a_clicker_start_that_times_out_is_still_stopped_at_the_end():
+    s, ctl, published = make()
+    s.stop_group()
+    ctl.fail_clicker = True
+    assert code_of(s.start_clicker).code == "ma_unavailable"
+    assert s.clicker_url == URL and published[-1]["state"] == "measuring"  # recorded before the call
+    s.cancel()
+    assert s.restore_tick() is True and ctl.calls[-1] == ("stop_group",)
+
+
+def test_stop_clicker_stops_only_our_clicker():
+    s, ctl, _ = ready(mode="manual")
+    s.stop_clicker()
+    assert ctl.calls == [("stop_group",)] and not s.clicker_playing
+    ctl.group_state, ctl.media_uri = "playing", "library://track/9"  # music started from MA
+    ctl.calls.clear()
+    s.stop_clicker()
+    assert ctl.calls == []

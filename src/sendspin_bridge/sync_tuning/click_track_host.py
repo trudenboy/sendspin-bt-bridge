@@ -109,6 +109,11 @@ class ClickTrackTokens:
             self._by_session[session_id] = token
         return token
 
+    def current(self, session_id: str) -> str | None:
+        """The session's live token, if it has one."""
+        with self._lock:
+            return self._by_session.get(session_id)
+
     def session_for(self, token: str) -> str | None:
         with self._lock:
             items = list(self._by_session.items())
@@ -175,10 +180,13 @@ class FastApiClickTrackHost:
         self._track = track
 
     def url_for(self, session_id: str) -> str:
-        """The URL Music Assistant fetches; returns only once the file is on disk, so the
-        signal is never started before its first byte can be served."""
+        """The URL Music Assistant fetches (the same for the whole session); returns only once the
+        file is on disk, so the clicker is never started before its first byte can be served."""
         (self._track or _current_track()).ensure()
-        return f"{self._base_url().rstrip('/')}/api/v1/sync/signal/{self._tokens.issue(session_id)}.wav"
+        # one URL per session: a clicker started again (or a start that timed out) never invalidates the
+        # URL Music Assistant may still be streaming
+        token = self._tokens.current(session_id) or self._tokens.issue(session_id)
+        return f"{self._base_url().rstrip('/')}/api/v1/sync/signal/{token}.wav"
 
     def release(self, session_id: str) -> None:
         self._tokens.release(session_id)  # the file stays on disk for the next session

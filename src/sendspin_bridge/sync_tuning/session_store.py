@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from sendspin_bridge.sync_tuning.ma_api import MaApiError
 from sendspin_sync.ports import ControlError
-from sendspin_sync.session import SyncSession
+from sendspin_sync.session import RESTORE_GIVE_UP_S, SyncSession
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -86,6 +86,7 @@ class SessionStore:
         self._pending_next: dict[str, float] = {}
         self._pending_attempts: dict[str, int] = {}
         self._pending_errors: dict[str, str] = {}
+        self._pending_since: dict[str, float] = {}  # first restore attempt after the restart
         self._measured_at: dict[tuple[str, str], str] = {}  # (group, member) -> last ok measurement; this run only
         self._load_lock = threading.Lock()  # taken before _lock, never while holding it
         self._loaded = False
@@ -371,12 +372,21 @@ class SessionStore:
         if entry is None:
             return
         group = str(entry["group_id"])
+        with self._lock:
+            since = self._pending_since.setdefault(sid, self._clock())
         control: GroupControl | None = None
         try:
             control = self._factory()
             muted = [str(m) for m in entry.get("muted") or []]
             for mid in list(muted):
-                control.mute(mid, False)
+                try:
+                    control.mute(mid, False)
+                except ControlError as exc:
+                    # a player not listed yet (its daemon registers again after the restart) stays owed,
+                    # until RESTORE_GIVE_UP_S after the first attempt
+                    if exc.code != "member_gone" or self._clock() - since < RESTORE_GIVE_UP_S:
+                        raise
+                    logger.warning("Giving up unmuting %s after a restart: Music Assistant does not list it", mid)
                 muted.remove(mid)
                 entry["muted"] = list(muted)  # keep what already succeeded
             url = entry.get("clicker_url")
@@ -409,6 +419,7 @@ class SessionStore:
             self._pending_next.pop(sid, None)
             self._pending_attempts.pop(sid, None)
             self._pending_errors.pop(sid, None)
+            self._pending_since.pop(sid, None)
         self._put_entry(sid, None)
         logger.info("Sync session %s: group %s restored after a restart", sid, group)
 

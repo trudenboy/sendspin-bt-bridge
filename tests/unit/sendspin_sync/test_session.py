@@ -470,7 +470,7 @@ def test_a_clicker_started_when_on_change_fails_is_still_stopped_by_the_restore(
     fail = {"on": False}
 
     def on_change(sess):
-        if fail["on"]:
+        if fail["on"] and sess.clicker_playing:  # the publish after play_media answered
             raise RuntimeError("listener broke")
 
     s = SyncSession(

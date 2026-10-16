@@ -348,6 +348,7 @@ def test_a_pending_restore_is_shown_and_can_be_retried(api_client, sync_env, tmp
     ctl, store, _, _ = sync_env
     entry = {"session_id": "old", "group_id": "g", "muted": ["b"], "clicker_url": None}
     (tmp_path / SNAPSHOT_FILE).write_text(json.dumps({"sessions": [entry]}))
+    ctl.muted_now["b"] = True  # what the session left behind
     ctl.fail_unmute = 1
     store.load_persisted()  # the orchestrator does this before the API serves
     store.tick()  # first attempt fails, then backs off
@@ -602,3 +603,17 @@ def test_session_less_requests_use_the_shared_music_assistant_connection(monkeyp
     sentinel = object()
     monkeypatch.setattr(ma_api, "shared_ma_api", lambda: sentinel)
     assert uc._control()._api is sentinel and uc._control()._api is sentinel
+
+
+def test_stop_clicker_never_stops_music_someone_started(api_client, sync_env):
+    ctl = sync_env[0]
+    sid = _ready(api_client, "manual")
+    ctl.group_state, ctl.media_uri = "playing", "library://track/9"  # music started from MA meanwhile
+    ctl.calls.clear()
+    resp = api_client.post(f"/api/v1/sync/sessions/{sid}/signal", json={"action": "stop_clicker"})
+    assert resp.status_code == 200 and ctl.calls == []
+    api_client.post(f"/api/v1/sync/sessions/{sid}/signal", json={"action": "stop"})
+    api_client.post(f"/api/v1/sync/sessions/{sid}/signal", json={"action": "start"})
+    ctl.calls.clear()
+    api_client.post(f"/api/v1/sync/sessions/{sid}/signal", json={"action": "stop_clicker"})
+    assert ctl.calls == [("stop_group",)]

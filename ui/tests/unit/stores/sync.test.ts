@@ -86,7 +86,7 @@ describe('sync store', () => {
 
   it('does not take a control response as the session unless it is that session', async () => {
     const store = useSyncStore()
-    vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', state: 'measuring', signal_running: false } as never)
+    vi.mocked(api.createSession).mockResolvedValue({ id: 's1', group_id: 'g', state: 'measuring', clicker_playing: false } as never)
     await store.start('g', 'manual')
     vi.mocked(api.sessionSignal).mockResolvedValue({} as never)
     vi.mocked(api.sessionSolo).mockResolvedValue({} as never)
@@ -97,10 +97,10 @@ describe('sync store', () => {
     expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'start')
     expect(api.sessionSolo).toHaveBeenCalledWith('s1', 'a')
     expect(api.sessionAb).toHaveBeenCalledWith('s1', 'a', 'b')
-    expect(store.session).toMatchObject({ id: 's1', state: 'measuring', signal_running: false })
-    vi.mocked(api.sessionSignal).mockResolvedValue({ id: 's1', group_id: 'g', state: 'measuring', signal_running: true } as never)
+    expect(store.session).toMatchObject({ id: 's1', state: 'measuring', clicker_playing: false })
+    vi.mocked(api.sessionSignal).mockResolvedValue({ id: 's1', group_id: 'g', state: 'measuring', clicker_playing: true } as never)
     await store.signal('start')
-    expect(store.session?.signal_running).toBe(true)
+    expect(store.session?.clicker_playing).toBe(true)
   })
 
   it('forwards the remaining session controls to the open session', async () => {

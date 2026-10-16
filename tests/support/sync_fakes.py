@@ -23,6 +23,9 @@ class FakeControl:
         self.volumes: dict[str, int | None] = {"a": 40, "b": 40, "cast": 20}
         self.muted_now: dict[str, bool] = {"a": False, "b": False, "cast": False}
         self.no_mute: set[str] = set()  # members whose player cannot be muted
+        self.gone: set[str] = set()  # players Music Assistant does not list (e.g. after a restart)
+        self.late_mute: set[str] = set()  # their mute takes effect, but the answer times out
+        self.fail_clicker = False  # play_media starts the clicker, but the answer times out
         self.member_list = [
             Member("a", "A", True, "bridge", delay_ms=0),
             Member("b", "B", True, "sendspin", delay_ms=0),
@@ -39,7 +42,9 @@ class FakeControl:
         return Snapshot(group_id=group_id, delays=dict(self.delays_now), muted=dict(self.muted_now))
 
     def playback(self, group_id: str) -> GroupPlayback:
-        return GroupPlayback(state=self.group_state, media_uri=self.media_uri, volumes=dict(self.volumes))
+        return GroupPlayback(
+            state=self.group_state, media_uri=self.media_uri, volumes=dict(self.volumes), muted=dict(self.muted_now)
+        )
 
     def stop_group(self, group_id: str) -> None:
         self.calls.append(("stop_group",))
@@ -47,20 +52,30 @@ class FakeControl:
 
     def start_clicker(self, group_id: str, url: str) -> None:
         self.calls.append(("clicker", url))
-        self.group_state, self.media_uri = "playing", url
+        self.group_state, self.media_uri = "playing", f"builtin://sound_effect/{url}"  # as live MA reports it
+        if self.fail_clicker:
+            raise ControlError("ma_unavailable", "MA play_media timed out")
 
     def clicker_ends(self) -> None:
         """The click track played to its end (or someone stopped it in Music Assistant)."""
         self.group_state, self.media_uri = "idle", None
 
     def mute(self, member: str, muted: bool) -> None:
+        """Like the adapter: an absent player is ``member_gone``; an unmute is sent only to a player that is
+        muted now."""
+        if member in self.gone:
+            raise ControlError("member_gone", f"{member} is not known", member=member)
         if muted and member in self.no_mute:
             raise ControlError("sync_mute_unsupported", f"{member} cannot be muted", member=member)
+        if not muted and not self.muted_now.get(member):
+            return
         if not muted and self.fail_unmute:
             self.fail_unmute -= 1
             raise ControlError("ma_unavailable")
         self.calls.append(("mute", member, muted))
         self.muted_now[member] = muted
+        if muted and member in self.late_mute:
+            raise ControlError("ma_unavailable", "MA volume_mute timed out", member=member)
 
     def set_volume(self, member: str, level: int) -> None:
         self.calls.append(("volume", member, level))
@@ -215,9 +230,6 @@ class FakeMa:
             # a URL plays as a sound_effect item on the group (stage 0, MA dev 2026-10-16)
             group = self.players[args["queue_id"]]
             group["playback_state"] = "playing"
-            group["current_media"] = {"uri": args["media"], "media_type": "sound_effect"}
+            group["current_media"] = {"uri": f"builtin://sound_effect/{args['media']}", "media_type": "sound_effect"}
             return None
         raise MaApiError("ma_error", f"unknown {command}")
-
-    def fire(self, command: str, args: dict[str, Any]) -> None:
-        self.calls.append((command, args))

@@ -118,3 +118,19 @@ def test_base_url_falls_back_to_the_default_route_without_a_music_assistant_url(
     monkeypatch.setattr(cth, "get_local_ip", lambda: "192.168.1.5")
     monkeypatch.setattr(cth, "get_ma_api_credentials", lambda: ("", ""))
     assert cth.default_base_url() == "http://192.168.1.5:8080"
+
+
+def test_a_session_keeps_one_url_so_a_clicker_started_again_never_cuts_off_the_one_playing():
+    from sendspin_bridge.sync_tuning import click_track_host as host_mod
+
+    tokens = host_mod.ClickTrackTokens()
+
+    class Ready:
+        def ensure(self):
+            return None
+
+    host = host_mod.FastApiClickTrackHost(tokens=tokens, base_url=lambda: "http://10.0.0.5:8080", track=Ready())
+    first = host.url_for("s1")
+    assert host.url_for("s1") == first and tokens.session_for(first.rsplit("/", 1)[-1][:-4]) == "s1"
+    host.release("s1")
+    assert host.url_for("s1") != first

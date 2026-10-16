@@ -79,9 +79,10 @@ export function endSessionOnPageHide(id: string): void {
 
 /**
  * ``start``: play the clicker on the group (409 ``group_playing`` while it plays anything else; again while
- * it plays starts it over). ``stop``: stop whatever the group plays.
+ * it plays starts it over). ``stop``: stop whatever the group plays (the preparation's "Stop group").
+ * ``stop_clicker``: stop the group only while it plays this session's click track.
  */
-export function sessionSignal(id: string, action: 'start' | 'stop'): Promise<SyncSession> {
+export function sessionSignal(id: string, action: 'start' | 'stop' | 'stop_clicker'): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/signal', { ...sessionPath(id), body: { action } }))
 }
 

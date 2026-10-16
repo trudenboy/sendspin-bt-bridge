@@ -171,6 +171,7 @@ class MaGroupControl:
             state=None if group.get("playback_state") is None else str(group["playback_state"]),
             media_uri=None if uri is None else str(uri),
             volumes={i: _volume(states.get(i, {})) for i in ids},
+            muted={i: states.get(i, {}).get("volume_muted") is True for i in ids},
         )
 
     def stop_group(self, group_id: str) -> None:
@@ -191,22 +192,28 @@ class MaGroupControl:
             raise _wrap(exc) from exc
 
     def mute(self, member: str, muted: bool) -> None:
-        """Mute or unmute one player. One that cannot be muted (or whose mute Music Assistant refuses)
-        raises ``sync_mute_unsupported`` naming it; unmuting a player that cannot be muted, or that
-        left Music Assistant, is a no-op (the session never muted it)."""
+        """Mute or unmute one player.
+
+        Mute: one that cannot be muted (or whose mute Music Assistant refuses) raises
+        ``sync_mute_unsupported`` naming it. Unmute: sent to a player that reports itself muted, whatever
+        its feature list says right now; a player that is not muted gets nothing (the operator may have
+        unmuted it). A player Music Assistant does not list raises ``member_gone`` either way, so an unmute
+        owed to a player that has not registered again yet is retried, not dropped."""
         state = self._states().get(member)
         if state is None:
-            if muted:
-                raise ControlError("member_gone", f"{member} is not known", member=member)
-            return
+            raise ControlError("member_gone", f"{member} is not known", member=member)
         name = str(state.get("name") or member)
-        if not _can_mute(state):
-            if muted:
-                raise ControlError("sync_mute_unsupported", f"{name} cannot be muted", member=member)
-            return
+        if not muted:
+            if state.get("volume_muted") is not True:
+                return
+        elif not _can_mute(state):
+            raise ControlError("sync_mute_unsupported", f"{name} cannot be muted", member=member)
         try:
             self._api.call("players/cmd/volume_mute", {"player_id": member, "muted": muted})
         except MaApiError as exc:
+            if exc.code == "ma_error" and not muted:
+                logger.warning("Music Assistant refused to unmute %s: %s", name, exc.detail)
+                return  # a refusal is final: nothing else can unmute it
             if exc.code == "ma_error" and muted:
                 raise ControlError(
                     "sync_mute_unsupported", f"{name} cannot be muted: {exc.detail}", member=member

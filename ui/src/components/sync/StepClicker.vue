@@ -14,6 +14,8 @@ defineProps<{
   busy: boolean
   /** Why the last start failed, already translated. */
   error: string
+  /** ``skip`` where Cancel only skips the preparation (the Manual tab) instead of ending the session. */
+  cancelLabel?: 'cancel' | 'skip'
 }>()
 const emit = defineEmits<{ start: []; next: []; back: []; cancel: [] }>()
 
@@ -42,7 +44,9 @@ const { t } = useI18n()
     </div>
     <p v-if="error" role="alert" class="text-sm text-error">{{ error }}</p>
     <div class="flex justify-end gap-3">
-      <SbButton type="button" variant="outline" data-cancel @click="emit('cancel')">{{ t('sync.wizard.cancel') }}</SbButton>
+      <SbButton type="button" variant="outline" data-cancel @click="emit('cancel')">
+        {{ cancelLabel === 'skip' ? t('sync.prep.skip') : t('sync.wizard.cancel') }}
+      </SbButton>
       <SbButton type="button" variant="outline" data-back @click="emit('back')">{{ t('sync.wizard.back') }}</SbButton>
       <SbButton type="button" data-next :disabled="!clickerPlaying || busy" @click="emit('next')">{{ t('sync.wizard.next') }}</SbButton>
     </div>

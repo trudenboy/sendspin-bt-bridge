@@ -834,11 +834,8 @@ let listenTimer: ReturnType<typeof setTimeout> | null = null
 async function stopListen(id: string) {
   if (listenTimer) clearTimeout(listenTimer)
   listenTimer = null
-  try {
-    await sessionSignal(id, 'stop')
-  } catch {
-    /* the end below stops the signal too */
-  }
+  // No explicit stop: ending the session stops the group only while it plays our clicker, so
+  // music someone started meanwhile (or that refused the quick listen) plays on.
   try {
     await endSession(id)
   } catch {

@@ -133,10 +133,11 @@ def end_session(session_id: str) -> Response:
 @router.post(
     "/sessions/{session_id}/signal",
     response_model=SyncSessionOut,
-    summary="Start the clicker on the group, or stop the group's playback",
+    summary="Start the clicker, stop the group, or stop only the clicker",
     description=(
         "start: queue the click track on the group (409 group_playing while it plays anything else; "
-        "again while it plays starts it over). stop: stop whatever the group plays."
+        "again while it plays starts it over). stop: stop whatever the group plays. stop_clicker: stop the "
+        "group only while it plays this session's click track."
     ),
 )
 def session_signal(session_id: str, body: SignalIn) -> SyncSessionOut:

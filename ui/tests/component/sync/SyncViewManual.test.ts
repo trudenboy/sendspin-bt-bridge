@@ -23,7 +23,7 @@ const members = [
   { ma_player_id: 'cast', name: 'TV', origin: 'other', adjustable: false, delay_ms: null },
 ]
 const group = { id: 'g', name: 'Downstairs', session_id: null, restore_pending: null, error: null, members }
-const session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members, departed: [], signal_running: false, soloed: null }
+const session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members, departed: [], clicker_playing: false, clicker_starts: 0, group_state: 'idle', volumes: {}, muted: [], soloed: null }
 
 async function mountView() {
   const router = createRouter({

@@ -271,8 +271,10 @@ def end_session(sid: str) -> None:
 
 def signal(sid: str, action: str) -> SyncSessionOut:
     """``start``: play the clicker on the group (refused while it plays anything else); ``stop``: stop
-    the group's playback (the music before the clicker, or the clicker)."""
-    return _act(sid, lambda s: s.start_clicker() if action == "start" else s.stop_group())
+    the group's playback (the preparation's "Stop group"); ``stop_clicker``: stop the group only while
+    it plays this session's click track."""
+    actions = {"start": lambda s: s.start_clicker(), "stop": lambda s: s.stop_group()}
+    return _act(sid, actions.get(action, lambda s: s.stop_clicker()))
 
 
 def session_volume(sid: str, member: str, level: int) -> SyncSessionOut:

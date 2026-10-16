@@ -1465,7 +1465,7 @@
       "alternating": "Alternating {a} and {b}.",
       "failed": "That did not work ({code}).",
       "needsClicks": "Play the clicks to solo or compare speakers.",
-      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Stop clicks stops the group."
+      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Stop clicks stops the click track only."
     },
     "manual": {
       "title": "Delays",
@@ -1570,7 +1570,7 @@
       "micLost": "The microphone stopped (unplugged, or access was withdrawn).",
       "reopen": "Open the microphone again",
       "failed": "That did not work ({code}).",
-      "ended": "The measurement session ended (it timed out, or was closed elsewhere). Playback has been restored.",
+      "ended": "The measurement session ended (it timed out, or was closed elsewhere). The speakers it muted are unmuted and its click track stopped.",
       "next": "Next",
       "back": "Back",
       "cancel": "Cancel",
@@ -1678,7 +1678,8 @@
         "help": "Clicks should be clearly audible where you measure.",
         "noVolume": "No volume control",
         "done": "Done"
-      }
+      },
+      "skip": "Skip"
     },
     "mute": {
       "unsupported": "{name} cannot be muted, so no other speaker can be heard alone. Take {name} out of the group in Music Assistant to measure the others."

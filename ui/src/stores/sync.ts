@@ -298,8 +298,8 @@ export const useSyncStore = defineStore('sync', () => {
     applyEvent(await track(() => call(current.id)))
   }
 
-  /** ``start``: the clicker on the group; ``stop``: stop whatever the group plays. */
-  const signal = (action: 'start' | 'stop') => control((id) => api.sessionSignal(id, action))
+  /** ``start``: the clicker; ``stop``: whatever the group plays; ``stop_clicker``: only our clicker. */
+  const signal = (action: 'start' | 'stop' | 'stop_clicker') => control((id) => api.sessionSignal(id, action))
   const volume = (member: string, level: number) => control((id) => api.sessionVolume(id, member, level))
   const solo = (member: string | null) => control((id) => api.sessionSolo(id, member))
   const ab = (a: string, b: string) => control((id) => api.sessionAb(id, a, b))

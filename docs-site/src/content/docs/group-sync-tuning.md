@@ -33,7 +33,7 @@ Before you listen, the tab walks the same three preparation steps as the wizard:
 
 To judge by ear, use the **Listen** controls:
 
-- **Play clicks** starts the 3-minute click track on the whole group again from the start. **Stop clicks** stops the group.
+- **Play clicks** starts the 3-minute click track on the whole group again from the start. **Stop clicks** stops the click track (music someone started meanwhile plays on).
 - **Solo** plays the clicks on one member only.
 - **A/B** alternates two members every two clicks.
 
@@ -64,7 +64,7 @@ Choose **Measure and apply** to measure, apply and verify in one run. The result
 
 ## What you hear during a measurement
 
-No music plays during a session. You stop the group first; then the click track replaces the group's queue in Music Assistant and plays on every speaker, and while one member is measured the others are muted. When the session ends (done, cancelled, failed or timed out) the bridge unmutes every speaker it muted and stops the click track. Your music does not come back by itself: start it again in Music Assistant. The bridge does not change the volumes you set during the session. Keep the room quiet and hold the phone still while it records.
+No music plays during a session. You stop the group first; then the click track replaces the group's queue in Music Assistant and plays on every speaker, and while one member is measured the others are muted. When the session ends (done, cancelled, failed or timed out) the bridge unmutes every speaker it muted and stops the click track. Your music does not come back by itself: start it again in Music Assistant. The bridge does not change the volumes you set during the session, and never touches a speaker you muted yourself; a speaker you unmute yourself during the session is muted again by the next solo. Keep the room quiet and hold the phone still while it records.
 
 Soloing needs every other member to be muted through Music Assistant. A player that cannot be muted (web kiosks today) is named on the page, for example *Kiosk cannot be muted*: the other speakers cannot be heard alone while it is in the group. Take it out of the group in Music Assistant to measure the others; it can still be measured itself.
 

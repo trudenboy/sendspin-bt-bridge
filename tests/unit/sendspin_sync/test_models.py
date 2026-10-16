@@ -28,6 +28,7 @@ URL = "http://10.0.0.5:8080/api/v1/sync/signal/" + "ab" * 32 + ".wav"
 
 def test_the_group_plays_the_clicker_only_while_playing_our_url():
     assert GroupPlayback("playing", URL).plays(URL)
+    assert GroupPlayback("playing", f"builtin://sound_effect/{URL}").plays(URL)  # what live MA reports
     # Music Assistant may report the item under its own uri: the token still matches
     assert GroupPlayback("playing", "builtin://track/" + "ab" * 32).plays(URL)
     assert not GroupPlayback("idle", URL).plays(URL)

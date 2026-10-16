@@ -141,7 +141,9 @@ class SessionCreate(BaseModel):
 
 
 class SignalIn(BaseModel):
-    action: Literal["start", "stop"]
+    action: Literal["start", "stop", "stop_clicker"] = Field(
+        description="start: the clicker; stop: whatever the group plays; stop_clicker: only this session's clicker."
+    )
 
 
 class SoloIn(BaseModel):

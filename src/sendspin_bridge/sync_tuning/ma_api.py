@@ -19,8 +19,6 @@ from sendspin_bridge.application.runtime import run_on_loop, submit_on_loop
 from sendspin_bridge.services.music_assistant.ma_runtime_state import get_ma_api_credentials
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from music_assistant_client import MusicAssistantClient
 
 logger = logging.getLogger(__name__)
@@ -31,7 +29,6 @@ _FORBIDDEN_ERRORS = frozenset(
 # whole words only: a hex player id such as "5f4013ab" must not read as HTTP 401
 _FORBIDDEN_WORDS = re.compile(r"\b(forbidden|permission|permissions|scope|unauthorized|401|403)\b")
 _UNAVAILABLE_ERRORS = frozenset({"TransportError", "NotConnected", "InvalidState"})
-_FIRE_WINDOW_S = 2.0  # a fired command that fails fails fast; after this the clip is playing
 _CONNECT_TIMEOUT_S = 10.0
 
 
@@ -47,13 +44,6 @@ class MaApiError(Exception):
 class MaApi(Protocol):
     def call(self, command: str, args: dict[str, Any], *, timeout: float = 10.0) -> Any:
         """Send *command* and wait up to *timeout* seconds for its reply."""
-        ...
-
-    def fire(self, command: str, args: dict[str, Any]) -> None:
-        """Send a command whose reply comes late (``play_announcement`` answers when the clip ends).
-
-        Raises only for a rejection that arrives within a short window; the eventual reply is dropped.
-        """
         ...
 
 
@@ -89,17 +79,6 @@ def _bridge_loop_or_raise() -> None:
         raise RuntimeError("MaWsApi blocks; call it from a worker thread, never from the bridge loop")
 
 
-def _log_late_reply(command: str) -> Callable[[asyncio.Future[Any]], None]:
-    def _done(fut: asyncio.Future[Any]) -> None:
-        if fut.cancelled():
-            return
-        exc = fut.exception()
-        if exc is not None:
-            logger.info("Music Assistant %s ended with an error: %s", command, exc)
-
-    return _done
-
-
 class MaWsApi:
     """One ``MusicAssistantClient`` per instance, connected lazily on the bridge loop.
 
@@ -110,12 +89,11 @@ class MaWsApi:
     the next call builds a fresh client.
     """
 
-    def __init__(self, url: str, token: str, *, fire_window: float = _FIRE_WINDOW_S) -> None:
+    def __init__(self, url: str, token: str) -> None:
         self.credentials = (url, token)  # as given, to tell whether the configured ones changed
         url = url.strip()
         self._url = url if "://" in url else f"http://{url}"
         self._token = token
-        self._fire_window = fire_window
         self._client: MusicAssistantClient | None = None
         self._listener: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()  # guards building the client, not the commands
@@ -173,27 +151,10 @@ class MaWsApi:
         client = await self._connected()
         return await client.send_command(command, **args)
 
-    async def _fire(self, command: str, args: dict[str, Any]) -> None:
-        client = await self._connected()
-        reply = asyncio.ensure_future(client.send_command(command, **args))
-        done, _ = await asyncio.wait({reply}, timeout=self._fire_window)
-        if reply in done:
-            reply.result()  # a fast rejection raises here
-            return
-        reply.add_done_callback(_log_late_reply(command))
-
     def call(self, command: str, args: dict[str, Any], *, timeout: float = 10.0) -> Any:
         _bridge_loop_or_raise()
         try:
             return run_on_loop(self._call(command, args), timeout=timeout, description=f"MA {command}")
-        except Exception as exc:
-            raise _classify(exc) from exc
-
-    def fire(self, command: str, args: dict[str, Any]) -> None:
-        _bridge_loop_or_raise()
-        timeout = self._fire_window + _CONNECT_TIMEOUT_S
-        try:
-            run_on_loop(self._fire(command, args), timeout=timeout, description=f"MA {command}")
         except Exception as exc:
             raise _classify(exc) from exc
 

@@ -45,6 +45,9 @@ MAX_DELAY_MS = planner.MAX_DELAY_MS
 # volumes; solo mutes the other members. The tick reads the group's playback this often, so the page
 # follows a group stopped or started from Music Assistant and a click track that played to its end.
 PLAYBACK_POLL_S = 2.0
+# A member Music Assistant does not list (its player has not registered again after a restart) keeps
+# its unmute owed this long after the restore began; then the restore gives it up and finishes.
+RESTORE_GIVE_UP_S = 600.0
 _ENDED: tuple[State, ...] = ("done", "cancelled", "failed")
 _ACTIVE: tuple[State, ...] = ("measuring", "proposed", "applying", "verifying")
 
@@ -86,10 +89,13 @@ class SyncSession:
     ``error`` is the detail given to ``fail()`` and is never overwritten; ``restore_error``
     is the code of the last failed restore attempt and is cleared when a restore succeeds.
 
-    ``muted`` holds the members this session muted (and only those: a member muted before the
-    session is never touched). A member is added before its mute is sent, so a crash in between
-    leaves at most a needless unmute; the end unmutes every one of them, then stops the group if
-    the session's clicker is what it plays.
+    ``muted`` holds the members this session muted (and only those: a member that is muted when a
+    solo needs it silent — by the operator, before or during the session — is never touched). A
+    member is added before its mute is sent and stays tracked when the mute fails (it may have taken
+    effect), unless its player cannot be muted at all. The end unmutes every one of them that is still
+    muted (one the operator unmuted meanwhile gets no extra command), then stops the group if the
+    session's clicker is what it plays. The clicker's URL is recorded before ``play_media`` is sent,
+    so a start that times out but plays is still stopped at the end.
     """
 
     def __init__(
@@ -123,6 +129,8 @@ class SyncSession:
         self.clicker_starts = 0  # clicker starts so far; measurements never mix two playbacks
         self.clicker_url: str | None = None
         self.volumes: dict[str, int | None] = {}
+        self._live_muted: dict[str, bool] = {}  # mutes as last read from Music Assistant
+        self._restore_since: float | None = None
         self._polled_at: float | None = None
         self.undo_until: float | None = None
         self.round = 1
@@ -202,6 +210,7 @@ class SyncSession:
         volumes = dict(playback.volumes)
         changed = (playback.state, playing, volumes) != (self.group_state, self.clicker_playing, self.volumes)
         self.group_state, self.clicker_playing, self.volumes = playback.state, playing, volumes
+        self._live_muted = dict(playback.muted)
         return changed
 
     def _require_clicker(self) -> None:
@@ -233,14 +242,28 @@ class SyncSession:
             self._changed()
             raise ControlError("group_playing", "stop the group's playback first")
         url = self._host.url_for(self.id)
+        if url != self.clicker_url:
+            self.clicker_url = url
+            self._changed()  # persisted before play_media: a start that times out may still play
         self._control.start_clicker(self.group_id, url)
-        self.clicker_url = url
         self.clicker_playing, self.group_state = True, "playing"
         self.clicker_starts += 1
         if self.mode != "manual" and self.state in ("measuring", "verifying") and self.measurements:
             # phases from two playbacks cannot be compared: the round starts again
             self.measurements = {}
             self._generation += 1
+        self.touch()
+        self._changed()
+
+    @_locked
+    def stop_clicker(self) -> None:
+        """Stop the group, but only while it plays this session's click track (never someone's music)."""
+        self._require_active()
+        if self._observe(self._control.playback(self.group_id)):
+            self._changed()
+        if self.clicker_playing:
+            self._control.stop_group(self.group_id)
+            self.group_state, self.clicker_playing = "idle", False
         self.touch()
         self._changed()
 
@@ -255,11 +278,25 @@ class SyncSession:
         self._changed()
 
     def _user_muted(self, mid: str) -> bool:
-        return bool(self.snapshot and self.snapshot.muted.get(mid))
+        """Muted by someone else: before the session (snapshot) or now (last reading), and not by us."""
+        if mid in self.muted:
+            return False
+        return bool((self.snapshot and self.snapshot.muted.get(mid)) or self._live_muted.get(mid))
 
-    def _unmute(self, mids: list[str]) -> None:
+    def _unmute(self, mids: list[str], *, give_up_absent: bool = False) -> None:
+        """Unmute each member (the adapter sends it only to a player that is muted now). With
+        *give_up_absent*, a player Music Assistant no longer lists is dropped once the restore ran for
+        RESTORE_GIVE_UP_S; before that, and otherwise, its error is raised and it stays owed."""
         for mid in mids:
-            self._control.mute(mid, False)
+            try:
+                self._control.mute(mid, False)
+            except ControlError as exc:
+                since = self._restore_since
+                if not (give_up_absent and exc.code == "member_gone" and since is not None):
+                    raise
+                if self._clock() - since < RESTORE_GIVE_UP_S:
+                    raise
+                logger.warning("Sync session %s gives up unmuting %s: Music Assistant does not list it", self.id, mid)
             self.muted.discard(mid)
 
     @_locked
@@ -289,12 +326,20 @@ class SyncSession:
             for mid in wanted:
                 self._control.mute(mid, True)
                 sent.append(mid)
-        except ControlError:
-            self.muted.difference_update(m for m in wanted if m not in sent)
+        except ControlError as exc:
+            # the failing member's mute may have taken effect (a late answer): it stays owed, unless its
+            # player cannot be muted at all
+            failed = wanted[len(sent)]
+            not_sent = wanted[len(sent) + 1 :]
+            if exc.code == "sync_mute_unsupported":
+                not_sent = [failed, *not_sent]
+            else:
+                sent.append(failed)
+            self.muted.difference_update(not_sent)
             try:
                 self._unmute(sent)
-            except ControlError as exc:  # left in ``muted``: the end unmutes them
-                logger.warning("Taking back the mutes of sync session %s failed: %s", self.id, exc)
+            except ControlError as undo_exc:  # left in ``muted``: the end unmutes them
+                logger.warning("Taking back the mutes of sync session %s failed: %s", self.id, undo_exc)
             self._changed()
             raise
         if member in self.muted:
@@ -544,6 +589,7 @@ class SyncSession:
     # -- ending --------------------------------------------------------------------
     def _begin_restore(self, final: State) -> None:
         self._final = final
+        self._restore_since = self._clock()
         self._set("restoring")
 
     @_locked
@@ -572,7 +618,7 @@ class SyncSession:
         started meanwhile plays on). A failure keeps what is left for the next attempt."""
         self._require("restoring")
         try:
-            self._unmute(sorted(self.muted))
+            self._unmute(sorted(self.muted), give_up_absent=True)
             self.soloed = None
             if self.clicker_url is not None:
                 try:
