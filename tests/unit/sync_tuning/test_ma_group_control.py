@@ -250,3 +250,59 @@ def test_a_fresh_control_restores_from_the_persisted_snapshot_alone():
     fresh, _ = make(ma)
     fresh.restore(snap)
     assert (ma.players["spk-bridge"]["volume_level"], ma.players["uni"]["volume_level"]) == (40, 50)
+
+
+# -- stage 0 E5: a member's Sendspin protocol player keeps its own volume --------------------------
+
+
+def test_the_snapshot_records_the_sendspin_protocol_players_volume_too():
+    ctl, _ = make()
+    snap = ctl.snapshot("grp")
+    assert snap.protocol_volumes == {"uni-sendspin": 50}  # only members with a separate protocol player
+
+
+def test_after_the_clip_the_restore_fixes_a_protocol_player_ma_left_at_zero():
+    ctl, ma = make()
+    snap = ctl.snapshot("grp")
+    ctl.solo("grp", "spk-bridge")  # uni (and through it uni-sendspin) to 0
+    assert ma.players["uni-sendspin"]["volume_level"] == 0
+    ma.announcement_restore({"uni": 50})  # MA restores the player, not its protocol player
+    before = len(ma.calls)
+    ctl.restore(snap)
+    assert volume_sets(ma, before) == {"spk-kiosk": 30, "cast": 20, "uni-sendspin": 50}  # the soloed one is at 40
+    assert ma.players["uni-sendspin"]["volume_level"] == 50
+
+
+def test_the_restore_puts_back_a_player_ma_left_louder_than_before():
+    # ENEBY Portable: 46 before the session, 100 after MA's restore
+    ma = FakeMa()
+    ma.players["uni"]["volume_level"] = 46
+    ma.players["uni-sendspin"]["volume_level"] = 46
+    ctl, _ = make(ma)
+    snap = ctl.snapshot("grp")
+    ma.players["uni"]["volume_level"] = 100
+    ma.players["uni-sendspin"]["volume_level"] = 100
+    ctl.restore(snap)
+    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (46, 46)
+
+
+def test_solo_reads_both_levels_back_and_corrects_a_protocol_player_left_at_zero():
+    ctl, ma = make()
+    ctl.snapshot("grp")
+    ma.players["uni-sendspin"]["volume_level"] = 0  # left at 0 by an earlier announcement
+    ctl.solo("grp", "uni")
+    assert (ma.players["uni"]["volume_level"], ma.players["uni-sendspin"]["volume_level"]) == (50, 50)
+    ctl.solo("grp", "spk-bridge")  # a silenced member's protocol player is not touched
+    assert ma.players["uni"]["volume_level"] == 0
+
+
+def test_a_fresh_control_restores_the_protocol_player_from_the_persisted_snapshot():
+    from sendspin_sync.models import snapshot_from_dict, to_dict
+
+    ctl, ma = make()
+    snap = snapshot_from_dict(to_dict(ctl.snapshot("grp")))
+    assert snap.protocol_volumes == {"uni-sendspin": 50}
+    ma.players["uni-sendspin"]["volume_level"] = 0
+    fresh, _ = make(ma)
+    fresh.restore(snap)
+    assert ma.players["uni-sendspin"]["volume_level"] == 50

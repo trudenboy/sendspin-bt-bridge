@@ -259,3 +259,35 @@ def test_the_tick_publishes_when_the_clicks_become_audible_and_when_the_clip_end
     clock.t = CLIP_END
     s.tick()
     assert events == [True, False]
+
+
+def test_the_auto_undo_window_runs_30_s_from_when_the_check_rounds_clicks_are_audible():
+    from sendspin_sync.session import UNDO_WINDOW_S
+
+    s, ctl, clock = make(mode="auto")
+    s.start()
+    _measure_auto = (s.record(synth("a", lag_s=0.0)), s.record(synth("b", lag_s=0.030)))
+    assert _measure_auto[0].status == "ok"
+    s.propose()
+    clock.t = 40.0
+    s.apply()  # the first clip still plays: the check round waits until CLIP_END
+    assert s.signal_waiting
+    assert s.undo_until == pytest.approx(CLIP_END + SIGNAL_SETTLE_S + UNDO_WINDOW_S)
+    clock.t = CLIP_END - 1  # minutes after the apply, still waiting: undo still possible
+    s.undo()
+    assert ctl.delays_now["b"] == 0
+
+
+def test_without_a_wait_the_undo_window_still_counts_from_audible_clicks():
+    from sendspin_sync.session import UNDO_WINDOW_S
+
+    s, _ctl, clock = make(mode="auto")
+    s.start()
+    clock.t = SIGNAL_SETTLE_S
+    s.record(synth("a", lag_s=0.0))
+    s.record(synth("b", lag_s=0.030))
+    s.propose()
+    clock.t = CLIP_END + 10  # the first clip ended: the check round starts its clip at once
+    s.apply()
+    assert not s.signal_waiting
+    assert s.undo_until == pytest.approx(CLIP_END + 10 + SIGNAL_SETTLE_S + UNDO_WINDOW_S)

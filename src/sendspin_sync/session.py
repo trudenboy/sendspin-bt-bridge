@@ -453,8 +453,11 @@ class SyncSession:
         self.members = [dataclasses.replace(m, delay_ms=wanted.get(m.ma_player_id, m.delay_ms)) for m in self.members]
         self.touch()
         if self.mode == "auto" and self.round <= MAX_ROUNDS:
-            self.undo_until = self._clock() + UNDO_WINDOW_S
             self.verify()
+            # 30 s from when the check round's clicks are audible: its clip starts now, or when the
+            # clip still playing ends (it cannot be stopped), so the operator can hear the result first
+            starts = self._clip_end if self.signal_waiting and self._clip_end is not None else self._clip_start
+            self.undo_until = (starts if starts is not None else self._clock()) + SIGNAL_SETTLE_S + UNDO_WINDOW_S
         elif verify:
             self.verify()
         else:

@@ -232,7 +232,10 @@ def test_auto_apply_keeps_an_undo(api_client, sync_env):
         _upload(api_client, sid, member, lag)
     api_client.post(f"/api/v1/sync/sessions/{sid}/proposal")
     applied = api_client.post(f"/api/v1/sync/sessions/{sid}/apply", json={}).json()
-    assert applied["state"] == "verifying" and applied["undo_until_s"] == pytest.approx(30.0)
+    # the first clip still plays: the window runs 30 s from when the check round's clicks are audible
+    assert applied["state"] == "verifying" and applied["undo_until_s"] == pytest.approx(
+        CLIP_END + SIGNAL_SETTLE_S + 30.0
+    )
     undone = api_client.post(f"/api/v1/sync/sessions/{sid}/undo")
     assert undone.status_code == 200 and undone.json()["undo_until_s"] is None and ctl.delays_now["b"] == 0
 

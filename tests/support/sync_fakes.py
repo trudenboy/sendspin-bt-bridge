@@ -122,6 +122,7 @@ class FakeMa:
                 "provider": "sendspin",
                 "type": "protocol",
                 "name": "Hall (Sendspin)",
+                "volume_level": 50,
             },
             "cast": {
                 "player_id": "cast",
@@ -180,7 +181,13 @@ class FakeMa:
             self.players[args["player_id"]]["volume_muted"] = args["muted"]
             return None
         if command == "players/cmd/volume_set":
-            self.players[args["player_id"]]["volume_level"] = args["volume_level"]
+            player = self.players[args["player_id"]]
+            player["volume_level"] = args["volume_level"]
+            # as seen on MA dev: a volume set on a player reaches its Sendspin protocol player too
+            # (MA's end-of-announcement restore then puts back only the player's own volume)
+            for proto in player.get("output_protocols") or []:
+                if proto.get("protocol_domain") == "sendspin" and proto["output_protocol_id"] in self.players:
+                    self.players[proto["output_protocol_id"]]["volume_level"] = args["volume_level"]
             return None
         if command == "players/cmd/stop":
             self.players[args["player_id"]]["playback_state"] = "idle"
@@ -189,3 +196,9 @@ class FakeMa:
 
     def fire(self, command: str, args: dict[str, Any]) -> None:
         self.calls.append((command, args))
+
+    def announcement_restore(self, volumes: dict[str, int]) -> None:
+        """MA's restore at the clip's end, as observed: the players' own volumes only, never their
+        Sendspin protocol players'."""
+        for pid, vol in volumes.items():
+            self.players[pid]["volume_level"] = vol

@@ -84,6 +84,9 @@ class Snapshot:
     muted: dict[str, bool]
     playing: bool
     restore_token: dict[str, Any] = field(default_factory=dict)
+    # volume of each member's separate Sendspin protocol player, by its player id: Music Assistant's
+    # end-of-announcement restore does not reach it (stage 0, E5)
+    protocol_volumes: dict[str, int | None] = field(default_factory=dict)
 
 
 def to_dict(obj: Any) -> dict[str, Any]:
@@ -112,4 +115,7 @@ def snapshot_from_dict(d: Mapping[str, Any]) -> Snapshot:
         muted={str(k): bool(v) for k, v in dict(d.get("muted") or {}).items()},
         playing=bool(d.get("playing")),
         restore_token=dict(d.get("restore_token") or {}),
+        protocol_volumes={
+            str(k): (None if v is None else int(v)) for k, v in dict(d.get("protocol_volumes") or {}).items()
+        },
     )

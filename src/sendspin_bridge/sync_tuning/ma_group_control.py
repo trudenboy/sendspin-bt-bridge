@@ -63,6 +63,12 @@ def _volume(state: dict[str, Any]) -> int | None:
     return None if value is None else int(value)
 
 
+def _protocol_ids(members: Sequence[Member]) -> dict[str, str]:
+    """Member id -> its separate Sendspin protocol player id (a member that is the Sendspin player
+    itself has none)."""
+    return {m.ma_player_id: m.client_id for m in members if m.client_id and m.client_id != m.ma_player_id}
+
+
 class MaGroupControl:
     def __init__(
         self,
@@ -80,6 +86,7 @@ class MaGroupControl:
         self._bridge_ids = bridge_player_ids
         self._members_cache: dict[str, list[Member]] = {}
         self._levels: dict[str, dict[str, int | None]] = {}  # group -> member volumes at the snapshot
+        self._protocol_levels: dict[str, dict[str, int | None]] = {}  # group -> protocol player volumes
 
     def _group(self, group_id: str) -> dict[str, Any]:
         for g in self._groups():
@@ -163,13 +170,16 @@ class MaGroupControl:
         members = self._cached_members(group_id)
         ids = [m.ma_player_id for m in members]
         volumes = {i: _volume(states.get(i, {})) for i in ids}
+        protocol_volumes = {pid: _volume(states.get(pid, {})) for pid in _protocol_ids(members).values()}
         self._levels[group_id] = dict(volumes)
+        self._protocol_levels[group_id] = dict(protocol_volumes)
         return Snapshot(
             group_id=group_id,
             delays={m.ma_player_id: m.delay_ms or 0 for m in members},
             volumes=volumes,
             muted={i: bool(states.get(i, {}).get("volume_muted")) for i in ids},
             playing=states.get(group_id, {}).get("playback_state") == "playing",
+            protocol_volumes=protocol_volumes,
         )
 
     def start_signal(self, group_id: str, url: str) -> None:
@@ -202,20 +212,33 @@ class MaGroupControl:
         members = self._cached_members(group_id)
         if member is not None and member not in {m.ma_player_id for m in members}:
             raise ControlError("member_gone", f"{member} is not in group {group_id}")
-        levels = self._levels.get(group_id)
-        if levels is None:
-            levels = self.snapshot(group_id).volumes
+        if group_id not in self._levels:
+            self.snapshot(group_id)
+        levels, protocol_levels = self._levels[group_id], self._protocol_levels.get(group_id, {})
         targets: dict[str, int] = {}
         for m in members:
             level = levels.get(m.ma_player_id)
             if level is not None:
                 targets[m.ma_player_id] = level if member is None or m.ma_player_id == member else 0
         self._set_volumes(targets)
+        # Read both levels back: an audible member's Sendspin protocol player may have been left at 0
+        # (by an earlier announcement) and would keep it silent; a silenced member's is left alone.
+        protocols = _protocol_ids(members)
+        fix: dict[str, int] = {}
+        for mid, level in targets.items():
+            proto = protocols.get(mid)
+            proto_level = protocol_levels.get(proto) if proto else None
+            if level > 0 and proto is not None and proto_level is not None:
+                fix[proto] = proto_level
+        if fix:
+            self._set_volumes(fix)
 
     def restore(self, snapshot: Snapshot) -> None:
-        """Put the snapshot's volumes back where they differ; delays and mutes are never touched
-        (the session never mutes). Runs after the clip ended, so Music Assistant's own restore is done."""
+        """Put the snapshot's volumes back where they differ: the members' first, then (read back) their
+        Sendspin protocol players', which Music Assistant's own restore does not reach. Delays and mutes
+        are never touched (the session never mutes). Runs after the clip ended."""
         self._set_volumes({mid: vol for mid, vol in snapshot.volumes.items() if vol is not None})
+        self._set_volumes({pid: vol for pid, vol in snapshot.protocol_volumes.items() if vol is not None})
 
     def close(self) -> None:
         """Release the Music Assistant connection this control owns (the session store calls it);

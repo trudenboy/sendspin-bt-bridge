@@ -76,7 +76,8 @@ def test_auto_session_verifies_and_keeps_undo():
     clip_over(s)  # the check round starts its own clip at once
     t0 = clock.t
     s.apply()
-    assert s.state == "verifying" and s.round == 2 and s.undo_until == t0 + 30.0
+    # 30 s from when the check round's clicks are audible
+    assert s.state == "verifying" and s.round == 2 and s.undo_until == t0 + SIGNAL_SETTLE_S + 30.0
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.0))  # now aligned
     s.propose()
@@ -339,13 +340,15 @@ def test_auto_refines_once_when_the_residual_is_above_5_ms_then_restores():
     clock = Clock(100.0)
     s, ctl, _ = _auto_applied(clock=clock)
     t0 = clock.t
-    assert s.round == 2 and s.undo_until == t0 + 30.0
+    assert s.round == 2 and s.undo_until == t0 + SIGNAL_SETTLE_S + 30.0
     clock.t = t0 + 10.0
     s.record(synth("a", lag_s=0.0))
     s.record(synth("b", lag_s=0.012))  # 12 ms residual
     s.propose()
     assert s.state == "verifying" and s.round == 3
-    assert s.undo_until == t0 + 40.0  # undo window restarts with the refinement
+    # the undo window restarts with the refinement, from when its check round's clicks are audible
+    # (after the clip that started at t0 ends)
+    assert s.undo_until == t0 + SIGNAL_CLIP_S + SIGNAL_TAIL_S + SIGNAL_SETTLE_S + 30.0
     assert s.history[0]["spread_after_ms"] == pytest.approx(12.0, abs=1.0)
     assert s.history[-1]["round"] == 2 and s.history[-1]["spread_before_ms"] == pytest.approx(12.0, abs=1.0)
     assert ctl.delays_now["b"] == pytest.approx(42, abs=1)
