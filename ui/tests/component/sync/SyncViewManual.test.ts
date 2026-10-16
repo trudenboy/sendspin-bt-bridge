@@ -203,14 +203,5 @@ describe('SyncView manual tuning', () => {
     expect(api.endSessionOnPageHide).not.toHaveBeenCalled()
     w.unmount()
   })
-
-  it('says the last test clip is still playing out when the group cannot be tuned yet', async () => {
-    vi.mocked(api.createSession).mockRejectedValueOnce(new ApiError({ status: 409, code: 'signal_playing' } as never))
-    vi.mocked(api.getSession).mockRejectedValue(new Error('not needed'))
-    const { w } = await mountView()
-    await openManual(w)
-    expect(w.text()).toContain('The last test clip is still playing out on this group')
-    w.unmount()
-  })
 })
 

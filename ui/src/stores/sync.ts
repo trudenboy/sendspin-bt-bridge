@@ -20,6 +20,12 @@ export function errorCode(e: unknown): string {
   return e instanceof ApiError ? e.code : 'error'
 }
 
+/** The member a problem is about (``sync_mute_unsupported`` names it), if any. */
+export function errorMember(e: unknown): string | null {
+  const member = e instanceof ApiError ? e.problem.member : null
+  return typeof member === 'string' ? member : null
+}
+
 /** The last live delay write that failed: which member, why. ``seq`` tells repeats apart. */
 export interface WriteFailure {
   member: string
@@ -292,7 +298,9 @@ export const useSyncStore = defineStore('sync', () => {
     applyEvent(await track(() => call(current.id)))
   }
 
+  /** ``start``: the clicker on the group; ``stop``: stop whatever the group plays. */
   const signal = (action: 'start' | 'stop') => control((id) => api.sessionSignal(id, action))
+  const volume = (member: string, level: number) => control((id) => api.sessionVolume(id, member, level))
   const solo = (member: string | null) => control((id) => api.sessionSolo(id, member))
   const ab = (a: string, b: string) => control((id) => api.sessionAb(id, a, b))
   const reference = (member: string) => control((id) => api.sessionReference(id, member))
@@ -434,6 +442,7 @@ export const useSyncStore = defineStore('sync', () => {
     start,
     end,
     signal,
+    volume,
     solo,
     ab,
     reference,

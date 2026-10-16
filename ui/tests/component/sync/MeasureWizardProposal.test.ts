@@ -32,7 +32,7 @@ class Recorder {
 
 const session = (over: Record<string, unknown> = {}) =>
   ({ id: 's1', group_id: 'g', mode: 'semi', point: 'device', state: 'measuring', members, departed: [], measurements: {}, history: [],
-     signal_running: true, error: null, restore_error: null, proposal: null, reference: null, round: 1, soloed: null, undo_until_s: null, ...over }) as never
+     clicker_playing: true, clicker_starts: 1, group_state: 'playing', volumes: { a: 40, b: 40 }, error: null, restore_error: null, proposal: null, reference: null, round: 1, soloed: null, undo_until_s: null, ...over }) as never
 const ok = (member: string) => ({ member, status: 'ok', confidence: 0.9, clicks: 3, phase_ms: 1, spread_ms: 0.3, reason: '' }) as never
 
 async function recordMember(w: ReturnType<typeof mount>, id: string, attr = 'data-record') {
@@ -58,8 +58,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     mount(MeasureWizard, { global: { plugins: [i18n] }, props: { groupId: 'g', mode, recorderFactory: () => rec as never } })
 
   async function toProposal(w: ReturnType<typeof mount>) {
-    await w.get('[data-next]').trigger('click'); await flushPromises()
-    await w.get('[data-next]').trigger('click'); await flushPromises()
+    for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     await recordMember(w, 'a'); await recordMember(w, 'b')
     await w.get('[data-to-proposal]').trigger('click'); await flushPromises()
   }
@@ -81,7 +80,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     expect(w.get('[data-done]').text()).toContain('Group restored')
     expect(w.text()).not.toContain('The measurement session ended')
     expect(w.get('[data-step-status]').text()).toContain('Group restored')
-    expect(w.get('h2').text()).toContain('Step 5 of 5')
+    expect(w.get('h2').text()).toContain('Step 7 of 7')
   })
 
   it('runs an optional check round in semi-automatic mode and shows the spread after it', async () => {
@@ -232,8 +231,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     })
     vi.mocked(api.getSession).mockResolvedValue(session())
     const w = mountWizard()
-    await w.get('[data-next]').trigger('click'); await flushPromises()
-    await w.get('[data-next]').trigger('click'); await flushPromises()
+    for (let i = 0; i < 4; i++) { await w.get('[data-next]').trigger('click'); await flushPromises() }
     await recordMember(w, 'a'); await recordMember(w, 'b')
     expect(w.get('[data-member-step="b"]').text()).toContain('left the group')
     expect(w.get('[data-to-proposal]').attributes('disabled')).toBeUndefined()
@@ -279,7 +277,7 @@ describe('MeasureWizard: proposal, apply, verification, done', () => {
     const w = mountWizard()
     await toProposal(w)
     await w.get('[data-apply]').trigger('click'); await flushPromises()
-    vi.mocked(api.createSession).mockResolvedValue(session({ id: 'q1', mode: 'manual', signal_running: false }))
+    vi.mocked(api.createSession).mockResolvedValue(session({ id: 'q1', mode: 'manual', clicker_playing: false }))
     vi.mocked(api.sessionSignal).mockResolvedValue(session({ id: 'q1', mode: 'manual' }))
     await w.get('[data-listen]').trigger('click'); await flushPromises()
     expect(api.createSession).toHaveBeenLastCalledWith({ group_id: 'g', mode: 'manual' })

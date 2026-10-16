@@ -11,24 +11,20 @@ const base = { members, point: 'device', results: {}, stale: [], departed: [], a
 const mountStep = (over: Record<string, unknown>) =>
   mount(StepMembers, { global: { plugins: [i18n] }, props: { ...base, ...over } as never })
 
-describe('StepMembers: the test clip', () => {
-  it('records only while the clicks are audible', () => {
-    expect(mountStep({ signal: 'ready', waitS: null }).get('[data-record="a"]').attributes('disabled')).toBeUndefined()
-    const starting = mountStep({ signal: 'starting', waitS: null })
-    expect(starting.get('[data-record="a"]').attributes('disabled')).toBeDefined()
-    expect(starting.get('[data-signal-state]').text()).toContain('Starting the clicks')
+describe('StepMembers: the clicker', () => {
+  it('records only while the clicker plays', () => {
+    const playing = mountStep({ clickerPlaying: true })
+    expect(playing.get('[data-record="a"]').attributes('disabled')).toBeUndefined()
+    expect(playing.find('[data-clicker-stopped]').exists()).toBe(false)
+    const stopped = mountStep({ clickerPlaying: false })
+    expect(stopped.get('[data-record="a"]').attributes('disabled')).toBeDefined()
+    expect(stopped.get('[data-clicker-stopped]').text()).toContain('The clicker is not playing.')
   })
 
-  it('says when a round that needs a fresh clip starts', () => {
-    const w = mountStep({ signal: 'waiting', waitS: 42 })
-    expect(w.get('[data-record="a"]').attributes('disabled')).toBeDefined()
-    expect(w.get('[data-signal-state]').text()).toContain('42 s')
-  })
-
-  it('offers to start the clicks again once the clip ended', async () => {
-    const w = mountStep({ signal: 'ended', waitS: null })
-    expect(w.get('[data-record="a"]').attributes('disabled')).toBeDefined()
-    await w.get('[data-restart-signal]').trigger('click')
+  it('offers to start the clicker again once it stopped', async () => {
+    const w = mountStep({ clickerPlaying: false })
+    expect(w.get('[data-restart-clicker]').text()).toContain('Start the clicker again')
+    await w.get('[data-restart-clicker]').trigger('click')
     expect(w.emitted('restart')).toHaveLength(1)
   })
 })

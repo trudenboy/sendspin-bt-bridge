@@ -8,7 +8,7 @@ import type { SyncMember } from '@/api/types'
 const props = defineProps<{
   members: SyncMember[]
   signalRunning: boolean
-  /** The bridge reports the clicks audible (the announcement has settled): solo and A/B only then. */
+  /** The bridge sees the clicker playing on the group: solo and A/B only then. */
   soloReady?: boolean
   soloed: string | null
   /** The pair taking turns, while A/B runs. */

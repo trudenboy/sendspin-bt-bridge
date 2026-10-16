@@ -16,19 +16,21 @@ import {
 } from '@/api/sync'
 import { ApiError } from '@/api/client'
 import type { SessionPoint, SyncMeasurement, SyncProposal, SyncSession } from '@/api/types'
-import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
+import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SOLO_SETTLE_MS, SyncCaptureError, SyncRecorder, type Capture } from '@/sync/capture'
 import { SbButton, SbSpinner } from '@/kit'
 import { formatMs } from '@/sync/format'
 import StepPrepare from './StepPrepare.vue'
-import StepLevel from './StepLevel.vue'
+import StepStopGroup from './StepStopGroup.vue'
+import StepClicker from './StepClicker.vue'
+import StepVolume from './StepVolume.vue'
 import StepMembers, { type MemberPhase } from './StepMembers.vue'
 import StepProposal from './StepProposal.vue'
 import StepDone from './StepDone.vue'
-import { useCountdown } from './useCountdown'
 
 /**
- * The measurement wizard: preparation, level check, speaker by speaker, the proposal
+ * The measurement wizard: preparation (where to measure, the microphone), stop the group's playback,
+ * start the clicker, set the volumes (with the microphone's level), speaker by speaker, the proposal
  * (applied by itself in automatic mode, with an undo), an optional check round, and done.
  *
  * The wizard owns the microphone: it is opened from the first "Next" (a user gesture) and
@@ -50,8 +52,10 @@ const emit = defineEmits<{
   done: []
 }>()
 
-type Step = 'prepare' | 'level' | 'members' | 'proposal' | 'done'
-const STEPS: Step[] = ['prepare', 'level', 'members', 'proposal', 'done']
+type Step = 'prepare' | 'stop' | 'clicker' | 'volume' | 'members' | 'proposal' | 'done'
+const STEPS: Step[] = ['prepare', 'stop', 'clicker', 'volume', 'members', 'proposal', 'done']
+/** The steps that get the group ready: no undo banner there. */
+const PREP: Step[] = ['prepare', 'stop', 'clicker', 'volume']
 const QUICK_LISTEN_MS = 10_000
 
 const { t } = useI18n()
@@ -83,19 +87,11 @@ const allMembers = computed(() => session.value?.members ?? sync.group?.members 
 const adjustable = computed(() => allMembers.value.filter((m) => m.adjustable))
 const notMeasured = computed(() => allMembers.value.filter((m) => !m.adjustable).map((m) => m.name))
 /*
- * The test clip (one Music Assistant announcement per round, ~3 min, cannot be stopped early):
- * recordings only while its clicks are audible; a round that needs a fresh clip waits for the
- * previous one to end; a clip that ended mid-round is started again on request.
+ * The clicker (the click track queued on the group): recordings only while it plays; when it stopped
+ * (the track ended, or someone stopped the group) it is offered again.
  */
-type SignalState = 'ready' | 'starting' | 'waiting' | 'ended'
-const signalState = computed<SignalState>(() => {
-  const s = session.value
-  if (!s) return 'ready'
-  if (s.signal_waiting) return 'waiting'
-  if (s.signal_running) return 'ready'
-  return s.music_returns_in_s != null ? 'starting' : 'ended'
-})
-const waitLeft = useCountdown(() => (session.value?.signal_waiting ? session.value.music_returns_in_s : null))
+const clickerPlaying = computed(() => !!session.value?.clicker_playing)
+const clickerStarted = computed(() => (session.value?.clicker_starts ?? 0) > 0)
 
 /** Members that left the group: as the bridge says, and as a refused call just told us. */
 const gone = ref<string[]>([])
@@ -322,8 +318,7 @@ async function begin() {
     try {
       id = (await sync.start(props.groupId, props.mode, point.value)).id
     } catch (e) {
-      const code = errorCode(e)
-      startError.value = code === 'signal_playing' ? t('sync.signal.playingError') : t('sync.wizard.startFailed', { code })
+      startError.value = t('sync.wizard.startFailed', { code: errorCode(e) })
       if (rec === recorder) closeRecorder()
       return
     }
@@ -335,7 +330,7 @@ async function begin() {
     trackedId.value = id
     attach(rec)
     resetMeasurements()
-    await goTo('level')
+    await goTo('stop')
     // iOS may leave a fresh context suspended until a tap: offer it right away.
     if (rec.needsResume) interrupt()
   } finally {
@@ -343,13 +338,53 @@ async function begin() {
   }
 }
 
-async function toMembers() {
-  await goTo('members')
+/* -- getting the group ready: stop it, start the clicker, set the volumes ---------------------- */
+
+const prepBusy = ref(false)
+const prepError = ref('')
+
+function prepText(e: unknown) {
+  const code = errorCode(e)
+  return code === 'group_playing' ? t('sync.prep.clicker.groupPlaying') : t('sync.prep.failed', { code })
 }
 
-async function backToLevel() {
-  await goTo('level')
-  // Every speaker plays again for the level check.
+async function prepCall(call: () => Promise<unknown>) {
+  if (prepBusy.value) return
+  prepBusy.value = true
+  prepError.value = ''
+  try {
+    await call()
+  } catch (e) {
+    if (!disposed) prepError.value = prepText(e)
+  } finally {
+    prepBusy.value = false
+  }
+}
+
+const stopGroup = () => prepCall(() => sync.signal('stop'))
+const startClicker = () => prepCall(() => sync.signal('start'))
+
+async function setVolume(member: string, level: number) {
+  prepError.value = ''
+  try {
+    await sync.volume(member, level)
+  } catch (e) {
+    if (!disposed) prepError.value = prepText(e)
+  }
+}
+
+async function toStep(next: Step) {
+  prepError.value = ''
+  await goTo(next)
+}
+
+async function toMembers() {
+  await toStep('members')
+}
+
+async function backToVolume() {
+  await toStep('volume')
+  // Every speaker plays again while the volumes are set.
   sync.solo(null).catch(() => {})
 }
 
@@ -381,7 +416,7 @@ function setResult(member: string, r: SyncMeasurement, epoch: number | undefined
 async function record(member: string) {
   const rec = recorder
   const sid = sessionId.value
-  if (active.value || !rec || !sid || signalState.value !== 'ready') return
+  if (active.value || !rec || !sid || !clickerPlaying.value) return
   errors[member] = ''
   if (rec.needsReopen) return lostMic()
   if (rec.epochInvalidated || rec.needsResume) return interrupt()
@@ -397,7 +432,7 @@ async function record(member: string) {
     } catch (e) {
       if (disposed || sid !== sessionId.value) return
       if (errorCode(e) === 'member_gone') return markGone(member, sid)
-      errors[member] = t('sync.wizard.failed', { code: errorCode(e) })
+      errors[member] = failureText(e, member)
       return
     }
     await new Promise<void>((resolve) => {
@@ -432,6 +467,10 @@ async function record(member: string) {
         return
       }
       if (e.code === 'member_gone') return markGone(member, sid)
+      if (e.code === 'clicker_stopped') {
+        errors[member] = failureText(e, member)
+        return
+      }
       r = measurement(member, 'not_heard', e.code)
     }
     if (disposed || sid !== sessionId.value) return
@@ -441,6 +480,14 @@ async function record(member: string) {
     active.value = null
     if (!disposed) void focusRow(member)
   }
+}
+
+/** A failed solo or upload, said for the operator: a member that cannot be muted is named. */
+function failureText(e: unknown, member: string) {
+  const code = errorCode(e)
+  if (code === 'sync_mute_unsupported') return t('sync.mute.unsupported', { name: nameOf(errorMember(e) ?? member) })
+  if (code === 'clicker_stopped') return t('sync.prep.clicker.stopped')
+  return t('sync.wizard.failed', { code })
 }
 
 /**
@@ -482,22 +529,26 @@ function markGone(member: string, sid: string | null) {
   if (sid) void refresh(sid)
 }
 
-/** The clip ended mid-round: start a new one (the bridge starts the round again with it). */
-async function restartSignal() {
+/** The clicker stopped mid-round: start it again (the bridge starts the round again with it). */
+const restarting = ref(false)
+async function restartClicker() {
   const sid = sessionId.value
-  if (!sid || active.value) return
+  if (!sid || active.value || restarting.value) return
+  restarting.value = true
   try {
     const answer = await sessionSignal(sid, 'start')
     if (disposed || sid !== sessionId.value) return
     sync.applyEvent(answer)
   } catch (e) {
-    if (!disposed) message.value = t('sync.wizard.failed', { code: errorCode(e) })
+    if (!disposed) message.value = prepText(e)
+  } finally {
+    restarting.value = false
   }
 }
 
-/* A new clip is a new playback: phases from the old one do not compare, so every member is redone. */
+/* A new clicker start is a new playback: phases from the old one do not compare, so every member is redone. */
 watch(
-  () => session.value?.signal_clip,
+  () => session.value?.clicker_starts,
   (clip, prev) => {
     if (clip == null || prev == null || clip <= prev || Object.keys(results).length === 0) return
     markAllStale()
@@ -837,6 +888,7 @@ function resetFlow() {
   undoError.value = ''
   savedName.value = null
   saveError.value = ''
+  prepError.value = ''
   gone.value = []
   undoDeadline.value = null
   undoLeft.value = 0
@@ -933,7 +985,7 @@ onBeforeUnmount(() => {
 })
 
 const readLevel = () => recorder?.level() ?? 0
-const signalStarting = computed(() => !session.value?.signal_running)
+const volumes = computed(() => session.value?.volumes ?? {})
 </script>
 
 <template>
@@ -944,7 +996,7 @@ const signalStarting = computed(() => !session.value?.signal_running)
     </p>
 
     <div
-      v-if="undoDeadline != null && !undone && step !== 'prepare' && step !== 'level'"
+      v-if="undoDeadline != null && !undone && !PREP.includes(step)"
       class="flex flex-wrap items-center gap-3 rounded-(--radius-card) border border-border bg-surface-secondary px-4 py-3 text-sm text-text-primary"
     >
       <span class="min-w-0 flex-1">{{ t('sync.wizard.undoHelp') }}</span>
@@ -997,12 +1049,37 @@ const signalStarting = computed(() => !session.value?.signal_running)
       :supported="supported"
       @next="begin"
     />
-    <StepLevel
-      v-else-if="step === 'level'"
+    <StepStopGroup
+      v-else-if="step === 'stop'"
+      :group-state="session?.group_state ?? null"
+      :clicker-playing="clickerPlaying"
+      :busy="prepBusy"
+      :error="prepError"
+      @stop="stopGroup"
+      @next="toStep('clicker')"
+      @cancel="cancel"
+    />
+    <StepClicker
+      v-else-if="step === 'clicker'"
+      :clicker-playing="clickerPlaying"
+      :started="clickerStarted"
+      :busy="prepBusy"
+      :error="prepError"
+      @start="startClicker"
+      @next="toStep('volume')"
+      @back="toStep('stop')"
+      @cancel="cancel"
+    />
+    <StepVolume
+      v-else-if="step === 'volume'"
+      :members="allMembers"
+      :volumes="volumes"
       :read="readLevel"
-      :starting="signalStarting"
       :disabled="micLost"
+      :error="prepError"
+      @volume="setVolume"
       @next="toMembers"
+      @back="toStep('clicker')"
       @cancel="cancel"
     />
     <StepMembers
@@ -1017,14 +1094,14 @@ const signalStarting = computed(() => !session.value?.signal_running)
       :errors="errors"
       :not-measured="notMeasured"
       :complete="complete"
-      :signal="signalState"
-      :wait-s="waitLeft"
-      @restart="restartSignal"
+      :clicker-playing="clickerPlaying"
+      :restarting="restarting"
+      @restart="restartClicker"
       @record="record"
       @skip="skip"
       @move="move"
       @next="toProposal"
-      @back="backToLevel"
+      @back="backToVolume"
       @cancel="cancel"
     />
     <template v-else-if="step === 'proposal'">
@@ -1065,7 +1142,6 @@ const signalStarting = computed(() => !session.value?.signal_running)
       :save-error="saveError"
       :listening="listening"
       :listen-error="listenError"
-      :music-returns-in="(session ?? lastSession)?.music_returns_in_s ?? null"
       @listen="quickListen"
       @again="again"
     />

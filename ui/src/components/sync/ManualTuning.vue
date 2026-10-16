@@ -2,11 +2,13 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RotateCcw } from 'lucide-vue-next'
-import { ENDED, errorCode, useSyncStore } from '@/stores/sync'
+import { ENDED, errorCode, errorMember, useSyncStore } from '@/stores/sync'
 import { SbBadge, SbButton, SbCard } from '@/kit'
 import DelayRow from './DelayRow.vue'
 import ListeningBar from './ListeningBar.vue'
-import { useCountdown } from './useCountdown'
+import StepStopGroup from './StepStopGroup.vue'
+import StepClicker from './StepClicker.vue'
+import StepVolume from './StepVolume.vue'
 
 const emit = defineEmits<{
   /** Whether any delay differs from where this session started (the view offers a profile on leaving). */
@@ -91,6 +93,49 @@ function reset() {
   note.value = t('sync.manual.resetDone')
 }
 
+/* -- getting the group ready: stop it, start the clicker, set the volumes ----------------- */
+
+type Prep = 'stop' | 'clicker' | 'volume' | 'ready'
+/** Where the preparation stands; a page opened on a session whose clicker plays goes straight to tuning. */
+const prep = ref<Prep>(session.value?.clicker_playing ? 'ready' : 'stop')
+const prepBusy = ref(false)
+const prepError = ref('')
+
+function failText(e: unknown) {
+  const code = errorCode(e)
+  if (code === 'group_playing') return t('sync.prep.clicker.groupPlaying')
+  if (code === 'clicker_stopped') return t('sync.prep.clicker.stopped')
+  if (code === 'sync_mute_unsupported') return t('sync.mute.unsupported', { name: nameOf(errorMember(e) ?? '') })
+  return t('sync.listen.failed', { code })
+}
+
+async function prepCall(call: () => Promise<unknown>) {
+  if (prepBusy.value) return
+  prepBusy.value = true
+  prepError.value = ''
+  try {
+    await call()
+  } catch (e) {
+    prepError.value = failText(e)
+  } finally {
+    prepBusy.value = false
+  }
+}
+
+function toPrep(next: Prep) {
+  prepError.value = ''
+  prep.value = next
+}
+
+async function setVolume(member: string, level: number) {
+  prepError.value = ''
+  try {
+    await sync.volume(member, level)
+  } catch (e) {
+    prepError.value = failText(e)
+  }
+}
+
 /* -- listening --------------------------------------------------------------------- */
 
 const failure = ref('')
@@ -109,19 +154,19 @@ async function run(call: Promise<unknown>) {
     failure.value = ''
     return true
   } catch (e) {
-    failure.value = t('sync.listen.failed', { code: errorCode(e) })
+    failure.value = failText(e)
     return false
   }
 }
 
 /**
- * The click track's state as this screen asked for it, until the session says otherwise:
- * solo and A/B are offered only while the clicks play, and must be there right after Play.
+ * The clicker's state as this screen asked for it, until the session says otherwise:
+ * solo and A/B are offered only while the clicker plays, and must be there right after Play.
  */
 const signalWanted = ref<boolean | null>(null)
-const signalRunning = computed(() => signalWanted.value ?? !!session.value?.signal_running)
+const signalRunning = computed(() => signalWanted.value ?? !!session.value?.clicker_playing)
 watch(
-  () => session.value?.signal_running,
+  () => session.value?.clicker_playing,
   () => {
     signalWanted.value = null
   },
@@ -168,25 +213,55 @@ watch(
 
 onBeforeUnmount(stopAb)
 
-/** The bridge says the clicks are audible: the announcement settled (solo and A/B wait for it). */
-const soloReady = computed(() => !!session.value?.signal_running)
-/** The clip plays once (~3 min) and cannot be stopped early: Stop silences it until it ends. */
-const clipLeft = useCountdown(() => session.value?.music_returns_in_s)
+/** The bridge sees the clicker playing: solo and A/B only then. */
+const soloReady = computed(() => !!session.value?.clicker_playing)
 
 const listenStatus = computed(() => {
   const s = session.value
-  const left = clipLeft.value
   if (abPair.value) return t('sync.listen.alternating', { a: nameOf(abPair.value[0]), b: nameOf(abPair.value[1]) })
-  if (signalRunning.value && !soloReady.value) return t('sync.listen.starting')
-  if (!signalRunning.value) return left ? t('sync.listen.silenced', { s: left }) : t('sync.listen.idle')
-  const playing = s?.soloed ? t('sync.listen.soloed', { name: nameOf(s.soloed) }) : t('sync.listen.playing')
-  return left ? `${playing} ${t('sync.listen.clipLeft', { s: left })}` : playing
+  if (!signalRunning.value) return t('sync.listen.idle')
+  return s?.soloed ? t('sync.listen.soloed', { name: nameOf(s.soloed) }) : t('sync.listen.playing')
 })
 </script>
 
 <template>
   <div class="mt-4 flex flex-col gap-4">
-    <SbCard>
+    <SbCard v-if="prep !== 'ready'" data-manual-prep>
+      <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t(`sync.wizard.steps.${prep}`) }}</h2>
+      <StepStopGroup
+        v-if="prep === 'stop'"
+        :group-state="session?.group_state ?? null"
+        :clicker-playing="!!session?.clicker_playing"
+        :busy="prepBusy"
+        :error="prepError"
+        @stop="prepCall(() => sync.signal('stop'))"
+        @next="toPrep('clicker')"
+        @cancel="toPrep('ready')"
+      />
+      <StepClicker
+        v-else-if="prep === 'clicker'"
+        :clicker-playing="!!session?.clicker_playing"
+        :started="(session?.clicker_starts ?? 0) > 0"
+        :busy="prepBusy"
+        :error="prepError"
+        @start="prepCall(() => sync.signal('start'))"
+        @next="toPrep('volume')"
+        @back="toPrep('stop')"
+        @cancel="toPrep('ready')"
+      />
+      <StepVolume
+        v-else
+        :members="present"
+        :volumes="session?.volumes ?? {}"
+        :error="prepError"
+        @volume="setVolume"
+        @next="toPrep('ready')"
+        @back="toPrep('clicker')"
+        @cancel="toPrep('ready')"
+      />
+    </SbCard>
+
+    <SbCard v-else>
       <h2 class="mb-3 text-sm font-medium text-text-secondary">{{ t('sync.listen.title') }}</h2>
       <ListeningBar
         :members="present"

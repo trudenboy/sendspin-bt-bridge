@@ -148,13 +148,5 @@ describe('SyncView: sessions of other clients and restores', () => {
     expect(useSyncStore().session?.state).toBe('done')
     expect(w.text()).not.toContain('Cancelled')
   })
-
-  it('says when the music returns while the last test clip plays out, without going read-only', async () => {
-    vi.mocked(api.getSyncGroup).mockResolvedValue({ ...group, session_id: 's9' } as never)
-    vi.mocked(api.getSession).mockResolvedValue(session({ state: 'restoring', music_returns_in_s: 75 }))
-    const w = await mountView()
-    expect(w.get('[data-clip-ending]').text()).toContain('Music returns in 75 s')
-    expect(w.find('[data-read-only]').exists()).toBe(false)
-  })
 })
 

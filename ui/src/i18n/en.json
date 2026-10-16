@@ -1384,7 +1384,6 @@
     "state": {
       "idle": "No tuning in progress",
       "created": "Starting",
-      "signal_starting": "Starting the test signal",
       "measuring": "Measuring",
       "proposed": "Proposal ready",
       "applying": "Applying the delays",
@@ -1466,10 +1465,7 @@
       "alternating": "Alternating {a} and {b}.",
       "failed": "That did not work ({code}).",
       "needsClicks": "Play the clicks to solo or compare speakers.",
-      "playHelp": "Plays the 3-minute test clip once. Stop clicks silences the speakers until the clip ends (Music Assistant cannot stop it early); then the music returns.",
-      "starting": "Starting the clicks…",
-      "silenced": "Clicks silenced. Music returns in {s} s.",
-      "clipLeft": "The clip ends in {s} s."
+      "playHelp": "Plays the click track on the group (3 minutes; play it again whenever it stops). Stop clicks stops the group."
     },
     "manual": {
       "title": "Delays",
@@ -1517,13 +1513,15 @@
       "stepOf": "Step {n} of {total}: {name}",
       "steps": {
         "prepare": "Preparation",
-        "level": "Level check",
+        "stop": "Stop playback",
+        "clicker": "Start the clicker",
+        "volume": "Set volume",
         "members": "Speaker by speaker",
         "proposal": "Proposal",
         "done": "Done"
       },
-      "interrupted": "Playback will be interrupted and restored afterwards.",
-      "interruptedHelp": "While measuring, the group plays a click track and the speakers are muted one by one. What was playing stops; the mutes and the test signal are put back when the measurement ends.",
+      "interrupted": "Nothing plays while you measure.",
+      "interruptedHelp": "You stop the group first; then a click track replaces the group's queue in Music Assistant and the speakers are muted one by one. When the measurement ends, every speaker the bridge muted is unmuted and the click track is stopped. Your music does not come back by itself.",
       "point": {
         "legend": "Where will you measure?",
         "device": "At each speaker",
@@ -1536,8 +1534,7 @@
       "micDenied": "Could not use the microphone.",
       "startFailed": "Could not start the measurement ({code}).",
       "level": {
-        "title": "Level check",
-        "help": "Clicks now play on every speaker. The meter should jump with each click.",
+        "help": "The meter should jump with each click.",
         "meter": "Microphone level",
         "tooQuiet": "Too quiet: turn the group up or move closer.",
         "tooLoud": "Too loud: turn the group down a little or move away.",
@@ -1635,15 +1632,15 @@
     },
     "done": {
       "restoring": "Restoring the group…",
-      "restoringHelp": "The test clip cannot be stopped early: the speakers stay silent until it ends, then Music Assistant brings the music back and the volumes are checked. The delays stay as applied.",
+      "restoringHelp": "Unmuting the speakers and stopping the click track. The delays stay as applied.",
       "restored": "Group restored",
-      "restoredHelp": "The music and the volumes are back. The new delays stay.",
+      "restoredHelp": "Every speaker is unmuted and the click track stopped. The new delays stay; start your music again in Music Assistant.",
       "spread": "Spread: {before} ms → {after} ms",
       "undone": "Undone: the delays are back to where they were before.",
       "saved": "Saved as profile “{name}”.",
       "saveFailed": "The delays are applied, but the profile could not be saved ({code}).",
       "listen": "Quick listen",
-      "listenHelp": "Clicks play on the whole group for 10 s; the speakers then stay silent until the 3-minute test clip ends.",
+      "listenHelp": "Clicks play on the whole group for 10 s, then stop.",
       "listening": "Clicks playing on the whole group…",
       "listenFailed": "Could not play the clicks ({code}).",
       "again": "Measure again",
@@ -1653,15 +1650,38 @@
     "endForeignTitle": "End the tuning on the other device?",
     "endForeignMessage": "Its test signal stops and the group is restored. Delays already written stay as they are.",
     "signal": {
-      "musicReturns": "Music returns in {s} s.",
-      "musicReturnsSoon": "Music returns in a moment.",
-      "clipEnding": "The last test clip is playing out with every speaker silent: Music Assistant cannot stop it early. Music returns in {s} s.",
-      "playingError": "The last test clip is still playing out on this group (Music Assistant cannot stop it early). Try again when the music is back.",
-      "starting": "Starting the clicks…",
-      "waiting": "This round needs a fresh test clip: it starts when the previous one ends, in {s} s.",
-      "ended": "The test clip has ended. Start it again to go on measuring.",
-      "restart": "Start the clicks again",
-      "restarted": "The clicks started again: measure every member once more."
+      "restarted": "The clicker started again: measure every member once more."
+    },
+    "prep": {
+      "failed": "That did not work ({code}).",
+      "group": {
+        "playing": "Playing",
+        "idle": "Stopped",
+        "paused": "Paused",
+        "unknown": "Unknown"
+      },
+      "stop": {
+        "help": "The group must be silent before the clicks start: nothing else may play while the speakers are measured.",
+        "state": "Group:",
+        "button": "Stop group",
+        "stillPlaying": "The group is still playing. Stop it to go on."
+      },
+      "clicker": {
+        "help": "The click track plays on every speaker of the group through Music Assistant for 3 minutes. If it stops, start it again.",
+        "start": "Start the clicker",
+        "again": "Start the clicker again",
+        "playing": "The clicker is playing.",
+        "stopped": "The clicker is not playing.",
+        "groupPlaying": "The group plays something else: stop it first."
+      },
+      "volume": {
+        "help": "Clicks should be clearly audible where you measure.",
+        "noVolume": "No volume control",
+        "done": "Done"
+      }
+    },
+    "mute": {
+      "unsupported": "{name} cannot be muted, so no other speaker can be heard alone. Take {name} out of the group in Music Assistant to measure the others."
     }
   }
 }

@@ -58,7 +58,7 @@ export async function endSession(id: string): Promise<void> {
 }
 
 /**
- * Best effort while the page goes away (``pagehide``): a keepalive DELETE, so the clicks and
+ * Best effort while the page goes away (``pagehide``): a keepalive DELETE, so the clicker and
  * the mutes stop promptly instead of at the inactivity timeout. Never throws.
  */
 export function endSessionOnPageHide(id: string): void {
@@ -77,11 +77,28 @@ export function endSessionOnPageHide(id: string): void {
   }
 }
 
+/**
+ * ``start``: play the clicker on the group (409 ``group_playing`` while it plays anything else; again while
+ * it plays starts it over). ``stop``: stop whatever the group plays.
+ */
 export function sessionSignal(id: string, action: 'start' | 'stop'): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/signal', { ...sessionPath(id), body: { action } }))
 }
 
-/** Hear one member alone; ``null`` unmutes everyone. */
+/** Set one member's volume (0–100). */
+export function sessionVolume(id: string, member: string, level: number): Promise<SyncSession> {
+  return unwrap(
+    api().PUT('/api/v1/sync/sessions/{session_id}/volumes/{member}', {
+      params: { path: { session_id: id, member } },
+      body: { level },
+    }),
+  )
+}
+
+/**
+ * Hear one member alone (every other member is muted); ``null`` unmutes everyone. 409 ``clicker_stopped``
+ * while the clicker does not play; 409 ``sync_mute_unsupported`` names in ``member`` a player that cannot be muted.
+ */
 export function sessionSolo(id: string, member: string | null): Promise<SyncSession> {
   return unwrap(api().POST('/api/v1/sync/sessions/{session_id}/solo', { ...sessionPath(id), body: { member } }))
 }

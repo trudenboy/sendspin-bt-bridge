@@ -118,7 +118,7 @@ describe('SyncView group tab', () => {
     await w.get('[data-action="auto"]').trigger('click')
     expect(w.findComponent(MeasureWizard).props('mode')).toBe('auto')
     expect(w.findComponent(MeasureWizard).props('groupId')).toBe('g')
-    expect(w.text()).toContain('Playback will be interrupted')
+    expect(w.text()).toContain('Nothing plays while you measure')
     await w.get('[role="tab"]').trigger('click')
     expect(w.findComponent(MeasureWizard).exists()).toBe(false)
     await w.get('[data-action="semi"]').trigger('click')

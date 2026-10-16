@@ -6,25 +6,30 @@ import ManualTuning from '@/components/sync/ManualTuning.vue'
 import { useSyncStore } from '@/stores/sync'
 import en from '@/i18n/en.json'
 
-vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
+vi.mock('@/api/sync', () => ({ sessionDelay: vi.fn().mockResolvedValue({}), sessionSignal: vi.fn().mockResolvedValue({}), sessionVolume: vi.fn().mockResolvedValue({}), sessionSolo: vi.fn().mockResolvedValue({}), sessionAb: vi.fn().mockResolvedValue({}), writeGroupDelays: vi.fn(), getSyncGroup: vi.fn(), listProfiles: vi.fn(), captureProfile: vi.fn(), createSession: vi.fn(), endSession: vi.fn() }))
 import * as api from '@/api/sync'
 import { ApiError } from '@/api/client'
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 const members = [{ ma_player_id: 'a', name: 'A', origin: 'bridge', adjustable: true, delay_ms: 100 }, { ma_player_id: 'b', name: 'B', origin: 'sendspin', adjustable: true, delay_ms: 0 }, { ma_player_id: 'cast', name: 'TV', origin: 'other', adjustable: false, delay_ms: null }]
 
-/** The click track is running: solo and A/B are only offered then. */
+/** The clicker plays on the group: solo and A/B are only offered then. */
 async function running() {
   const store = useSyncStore()
-  store.session = { ...store.session!, signal_running: true } as never
+  store.session = { ...store.session!, clicker_playing: true, clicker_starts: 1, group_state: 'playing' } as never
   await flushPromises()
 }
 
-function setup() {
+const IDLE = { clicker_playing: false, clicker_starts: 0, group_state: 'idle', volumes: { a: 40, b: 30, cast: null }, muted: [] }
+
+/** The manual tab with its preparation skipped (the tests of the preparation mount it as it opens). */
+function setup({ prepared = true } = {}) {
   setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks()
   const store = useSyncStore()
   store.group = { id: 'g', name: 'G', session_id: 's1', members } as never
-  store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members, signal_running: false, soloed: null } as never
-  return mount(ManualTuning, { global: { plugins: [i18n] } })
+  store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members, soloed: null, ...IDLE } as never
+  const w = mount(ManualTuning, { global: { plugins: [i18n] } })
+  if (prepared) void w.get('[data-manual-prep] [data-cancel]').trigger('click')
+  return w
 }
 
 describe('ManualTuning', () => {
@@ -43,8 +48,9 @@ describe('ManualTuning', () => {
 
   it('plays clicks, solos and alternates A/B every four seconds', async () => {
     const w = setup()
+    await flushPromises()
     await w.find('[data-signal]').trigger('click'); expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'start')
-    await running()  // the bridge reports the clicks audible once the announcement settled
+    await running()  // the bridge sees the clicker playing
     await w.find('[data-solo="a"]').trigger('click'); expect(api.sessionSolo).toHaveBeenCalledWith('s1', 'a')
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     expect(api.sessionAb).toHaveBeenCalledWith('s1', 'a', 'b')
@@ -88,8 +94,7 @@ describe('ManualTuning', () => {
 
   it('stops the A/B alternation when the clicks stop', async () => {
     const w = setup()
-    useSyncStore().session = { ...useSyncStore().session!, signal_running: true } as never
-    await flushPromises()
+    await running()
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     await w.find('[data-signal]').trigger('click'); await flushPromises()
     expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')
@@ -123,8 +128,8 @@ describe('ManualTuning', () => {
     setActivePinia(createPinia()); vi.useFakeTimers(); vi.clearAllMocks()
     const store = useSyncStore()
     store.group = { id: 'g', name: 'G', session_id: 's1', members: more } as never
-    store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members: more, signal_running: true, soloed: null } as never
-    const w = mount(ManualTuning, { global: { plugins: [i18n] } })
+    store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members: more, ...IDLE, clicker_playing: true, soloed: null } as never
+    const w = mount(ManualTuning, { global: { plugins: [i18n] } })  // the clicker plays: straight to tuning
     await w.find('[data-ab-b]').setValue('c')
     await w.find('[data-ab]').trigger('click'); await flushPromises()
     expect(api.sessionAb).toHaveBeenCalledWith('s1', 'a', 'c')
@@ -137,6 +142,7 @@ describe('ManualTuning', () => {
     const store = useSyncStore()
     store.session = { ...store.session!, departed: ['b'] } as never
     const w = mount(ManualTuning, { global: { plugins: [i18n] } })
+    await w.get('[data-manual-prep] [data-cancel]').trigger('click')
     await flushPromises()
     expect(w.findAll('[data-delay-row]')).toHaveLength(1)
     const gone = w.get('[data-departed="b"]')
@@ -148,7 +154,7 @@ describe('ManualTuning', () => {
 
   it('announces what is playing in a live region', async () => {
     const w = setup()
-    useSyncStore().session = { ...useSyncStore().session!, signal_running: true, soloed: 'a' } as never
+    useSyncStore().session = { ...useSyncStore().session!, clicker_playing: true, soloed: 'a' } as never
     await flushPromises()
     const live = w.get('[data-listen-status]')
     expect(live.attributes('aria-live')).toBe('polite')
@@ -157,6 +163,7 @@ describe('ManualTuning', () => {
 
   it('shows why a listening action failed', async () => {
     const w = setup()
+    await flushPromises()
     vi.mocked(api.sessionSignal).mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'ma_unavailable' }))
     await w.find('[data-signal]').trigger('click'); await flushPromises()
     expect(w.get('[role="alert"]').text()).toContain('That did not work')
@@ -204,16 +211,18 @@ describe('ManualTuning', () => {
 
   it('offers solo and A/B only while the clicks play', async () => {
     const w = setup()
+    await flushPromises()
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
     expect(w.get('[data-ab]').attributes('disabled')).toBeDefined()
     await w.find('[data-signal]').trigger('click')
-    await running()  // offered once the bridge reports the clicks audible (the announcement settled)
+    await running()  // offered once the bridge sees the clicker playing
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
     expect(w.get('[data-ab]').attributes('disabled')).toBeUndefined()
   })
 
   it('takes the solo controls away again when starting the clicks fails', async () => {
     const w = setup()
+    await flushPromises()
     vi.mocked(api.sessionSignal).mockRejectedValueOnce(new ApiError({ status: 502, code: 'ma_unavailable' }))
     await w.find('[data-signal]').trigger('click'); await flushPromises()
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
@@ -226,21 +235,69 @@ describe('ManualTuning', () => {
     expect(group.findAll('button')).toHaveLength(4)
   })
 
-  it('offers solo only once the bridge says the clicks are audible (the announcement settles first)', async () => {
+  it('offers solo only once the bridge sees the clicker playing', async () => {
     const w = setup()
+    await flushPromises()
     await w.find('[data-signal]').trigger('click'); await flushPromises()
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeDefined()
-    expect(w.get('[data-listen-status]').text()).toContain('Starting the clicks')
     await running()
     expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('explains the clip length, and after Stop says when the music returns', async () => {
+  it('explains the clicker, and says when it stopped', async () => {
     const w = setup()
-    expect(w.text()).toContain('3-minute test clip')
-    useSyncStore().session = { ...useSyncStore().session!, signal_running: false, music_returns_in_s: 90 } as never
+    await running()
+    expect(w.text()).toContain('Stop clicks stops the group')
+    useSyncStore().session = { ...useSyncStore().session!, clicker_playing: false, group_state: 'idle' } as never
     await flushPromises()
-    expect(w.get('[data-listen-status]').text()).toContain('Music returns in 90 s')
+    expect(w.get('[data-listen-status]').text()).toContain('Clicks stopped.')
+    expect(w.text()).not.toContain('Music returns')
+  })
+
+  it('names a member that cannot be muted when a solo is refused', async () => {
+    const w = setup()
+    await running()
+    vi.mocked(api.sessionSolo).mockRejectedValueOnce(new ApiError({ status: 409, code: 'sync_mute_unsupported', member: 'cast' }))
+    await w.find('[data-solo="a"]').trigger('click'); await flushPromises()
+    expect(w.get('[data-listen-error]').text()).toContain('TV cannot be muted')
   })
 })
 
+describe('ManualTuning: getting the group ready', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  it('stops the group, starts the clicker and sets the volumes before tuning', async () => {
+    const w = setup({ prepared: false })
+    const store = useSyncStore()
+    store.session = { ...store.session!, group_state: 'playing' } as never
+    await flushPromises()
+    expect(w.find('[data-signal]').exists()).toBe(false)  // no tuning controls yet
+    expect(w.get('[data-group-state]').text()).toContain('Playing')
+    expect(w.get('[data-manual-prep] [data-next]').attributes('disabled')).toBeDefined()
+    vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, group_state: 'idle' } as never)
+    await w.get('[data-stop-group]').trigger('click'); await flushPromises()
+    expect(api.sessionSignal).toHaveBeenCalledWith('s1', 'stop')
+    await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
+    vi.mocked(api.sessionSignal).mockResolvedValueOnce({ ...store.session!, clicker_playing: true, clicker_starts: 1, group_state: 'playing' } as never)
+    await w.get('[data-start-clicker]').trigger('click'); await flushPromises()
+    expect(api.sessionSignal).toHaveBeenLastCalledWith('s1', 'start')
+    await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
+    expect(w.text()).toContain('Clicks should be clearly audible where you measure.')
+    w.findComponent({ name: 'VolumeSlider' }).vm.$emit('update:volume', 70)
+    await flushPromises()
+    expect(api.sessionVolume).toHaveBeenCalledWith('s1', 'a', 70)
+    await w.get('[data-manual-prep] [data-next]').trigger('click'); await flushPromises()
+    expect(w.find('[data-manual-prep]').exists()).toBe(false)
+    expect(w.get('[data-solo="a"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('opens straight on tuning when the clicker already plays (a reload)', () => {
+    setActivePinia(createPinia()); vi.clearAllMocks()
+    const store = useSyncStore()
+    store.group = { id: 'g', name: 'G', session_id: 's1', members } as never
+    store.session = { id: 's1', group_id: 'g', mode: 'manual', state: 'measuring', members, soloed: null, ...IDLE, clicker_playing: true } as never
+    const w = mount(ManualTuning, { global: { plugins: [i18n] } })
+    expect(w.find('[data-manual-prep]').exists()).toBe(false)
+    expect(w.find('[data-signal]').exists()).toBe(true)
+  })
+})
