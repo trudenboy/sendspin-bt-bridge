@@ -935,6 +935,8 @@ async def test_read_subprocess_output_persists_static_delay_from_ma(monkeypatch)
                         "type": "status",
                         "protocol_version": IPC_PROTOCOL_VERSION,
                         "static_delay_ms": 750,
+                        # The daemon numbers each delay the server sets.
+                        "static_delay_server_seq": 1,
                     }
                 ).encode(),
             ]

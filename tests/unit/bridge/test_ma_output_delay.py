@@ -135,7 +135,7 @@ async def test_a_delay_from_music_assistant_is_shown_and_saved_for_a_local_outpu
     _write_config(tmp_config, [_pulse_player()])
     client = _parent(PLAYER_ID)
 
-    await _status(client, static_delay_ms=120)
+    await _status(client, static_delay_ms=120, static_delay_server_seq=1)
 
     assert client.static_delay_ms == 120.0
     assert client.status["static_delay_ms"] == 120
@@ -150,7 +150,7 @@ async def test_a_delay_from_music_assistant_is_saved_for_a_bluetooth_speaker(tmp
     _write_config(tmp_config, [_bt_player()])
     client = _parent("spk-1", mac=MAC)
 
-    await _status(client, static_delay_ms=120)
+    await _status(client, static_delay_ms=120, static_delay_server_seq=1)
 
     assert client.static_delay_ms == 120.0
     saved = _players(tmp_config)["spk-1"]
@@ -166,7 +166,7 @@ async def test_repeated_status_with_the_same_delay_is_saved_once(tmp_config):
     client._schedule_persist = lambda key, _fn, _ident, value: key == "static_delay" and writes.append(value)  # type: ignore[method-assign]
 
     for _ in range(5):
-        await _status(client, static_delay_ms=120, volume=50)
+        await _status(client, static_delay_ms=120, static_delay_server_seq=1, volume=50)
 
     assert writes == [120]
 
@@ -178,7 +178,6 @@ async def test_repeated_status_with_the_same_delay_is_saved_once(tmp_config):
 async def test_the_spawn_delay_reported_back_is_not_a_change(tmp_config):
     _write_config(tmp_config, [{**_pulse_player(), "static_delay_ms": 80, "static_delay_source": "manual"}])
     client = _parent(PLAYER_ID, static_delay_ms=80.0)
-    client._last_daemon_static_delay_ms = 80.0
 
     await _status(client, static_delay_ms=80)
 
@@ -192,7 +191,6 @@ async def test_the_spawn_delay_reported_back_is_not_a_change(tmp_config):
 async def test_a_delay_set_from_the_bridge_is_not_echoed_back_as_music_assistant(tmp_config, early_report):
     _write_config(tmp_config, [{**_pulse_player(), "static_delay_ms": 80, "static_delay_source": "manual"}])
     client = _parent(PLAYER_ID, static_delay_ms=80.0)
-    client._last_daemon_static_delay_ms = 80.0
     client._daemon_proc = SimpleNamespace(returncode=None, pid=1)  # type: ignore[assignment]
     sent: list[object] = []
 
@@ -225,7 +223,7 @@ async def test_after_a_restart_the_daemon_starts_with_and_reports_the_saved_dela
     from sendspin_bridge.services.bluetooth.device_activation import _client_kwargs
 
     _write_config(tmp_config, [_pulse_player()])
-    await _status(_parent(PLAYER_ID), static_delay_ms=120)
+    await _status(_parent(PLAYER_ID), static_delay_ms=120, static_delay_server_seq=1)
 
     player = _players(tmp_config)[PLAYER_ID]
     kwargs = _client_kwargs(
@@ -248,3 +246,97 @@ async def test_after_a_restart_the_daemon_starts_with_and_reports_the_saved_dela
     client = daemon._create_client(daemon._static_delay_ms)
     # client/state carries the connection's delay, seeded from the client.
     assert SendspinConnection(client).output_delay_ms == 120.0
+
+
+# ── the daemon says which delays came from the server ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_two_quick_bridge_changes_are_never_taken_for_music_assistant(tmp_config):
+    _write_config(tmp_config, [{**_pulse_player(), "static_delay_ms": 80, "static_delay_source": "manual"}])
+    client = _parent(PLAYER_ID, static_delay_ms=80.0)
+    client._daemon_proc = SimpleNamespace(returncode=None, pid=1)  # type: ignore[assignment]
+
+    async def send(_cmd):
+        return None
+
+    client._send_subprocess_command = send  # type: ignore[method-assign]
+    client.is_running = lambda: True  # type: ignore[method-assign]
+    await _status(client, static_delay_ms=80)
+
+    # Both bridge changes commit before the daemon echoes the first one.
+    await client.apply_hot_config({"static_delay_ms": 150})
+    await client.apply_hot_config({"static_delay_ms": 200})
+    await _status(client, static_delay_ms=150)
+    await _status(client, static_delay_ms=200)
+
+    assert client.static_delay_ms == 200.0
+    assert client.status["static_delay_source"] != "music_assistant"
+    assert _players(tmp_config)[PLAYER_ID]["static_delay_source"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_daemon_marks_a_server_set_delay_and_not_a_bridge_set_one(tmp_path: Path):
+    args = DaemonArgs(
+        client_id="x",
+        client_name="Speaker",
+        identity_path=str(tmp_path / "identity.key"),
+        pairing_store_path=str(tmp_path / "pairing.json"),
+    )
+    status: dict = {}
+    daemon = BridgeDaemon(args, status, None)
+    await daemon._load_identity_and_pairing_store()
+    client = daemon._create_client(0.0)
+    daemon._client = client
+    connection = SendspinConnection(client)
+    connection._reported_supported_commands = frozenset(client.state_supported_commands)
+    client._admitted_connection = connection
+
+    # A bridge-side change goes through the client directly, not a server command.
+    client.set_output_delay_ms(60)
+    assert status.get("static_delay_server_seq", 0) == 0
+
+    for value in (120, 130):
+        await connection._handle_server_command(
+            ServerCommandPayload(
+                player=PlayerCommandPayload(command=PlayerCommand.SET_OUTPUT_DELAY, output_delay_ms=value)
+            )
+        )
+    assert status["static_delay_ms"] == 130
+    assert status["static_delay_server_seq"] == 2
+
+
+@pytest.mark.asyncio
+async def test_a_music_assistant_delay_replaces_stale_calibration_details(tmp_config):
+    calibrated = {
+        "static_delay_ms": 80,
+        "static_delay_source": "microphone_calibration",
+        "static_delay_calibrated_at": "2026-01-01T00:00:00Z",
+        "static_delay_codec": "sbc",
+    }
+    _write_config(tmp_config, [{**_pulse_player(), **calibrated}])
+    client = _parent(PLAYER_ID, static_delay_ms=80.0)
+    client._update_status({k: v for k, v in calibrated.items() if k != "static_delay_ms"})
+
+    await _status(client, static_delay_ms=120, static_delay_server_seq=1)
+
+    assert client.status["static_delay_codec"] is None
+    assert client.status["static_delay_calibrated_at"] != "2026-01-01T00:00:00Z"
+    saved = _players(tmp_config)[PLAYER_ID]
+    assert "static_delay_codec" not in saved
+    assert saved["static_delay_calibrated_at"] == client.status["static_delay_calibrated_at"]
+
+
+@pytest.mark.asyncio
+async def test_stopping_within_the_debounce_still_saves_a_music_assistant_delay(tmp_config):
+    _write_config(tmp_config, [_pulse_player()])
+    client = SendspinClient("Desk DAC", "localhost", 9000)
+    client.player_id = client.config_id = PLAYER_ID
+    client.backend_type = "pulse_sink"
+    client.bt_manager = None  # type: ignore[assignment]
+    client._PERSIST_DEBOUNCE_SECS = 30.0
+
+    await _status(client, static_delay_ms=120, static_delay_server_seq=1)
+    await client.stop_sendspin()
+
+    assert _players(tmp_config)[PLAYER_ID]["static_delay_ms"] == 120

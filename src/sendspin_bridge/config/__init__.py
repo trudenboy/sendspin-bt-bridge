@@ -540,13 +540,15 @@ def save_player_static_delay(
     player_id: str | None,
     delay_ms: int,
     *,
-    source: str | None = None,
-    codec: str | None = None,
+    source: str,
+    set_at: str | None = None,
 ) -> None:
     """Persist a player's static_delay_ms by its config id, for any backend.
 
     Used when Music Assistant changes a player's delay: the next daemon is
     spawned with the saved value, so the bridge and MA agree after a restart.
+    The previous value's codec no longer applies and is dropped; *set_at*
+    (default: now) is recorded as ``static_delay_calibrated_at``.
     """
     if not player_id or not CONFIG_FILE.exists():
         return
@@ -561,7 +563,10 @@ def save_player_static_delay(
         if player is None:
             logger.warning("Skipping static_delay_ms save for unknown player %s", player_id)
             return
-        _set_player_static_delay(player, clamped, source, codec)
+        _set_player_static_delay(player, clamped, source, None)
+        if set_at:
+            player["static_delay_calibrated_at"] = set_at
+        player.pop("static_delay_codec", None)
 
     try:
         update_config(_set_delay)
