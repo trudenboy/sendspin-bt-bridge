@@ -12,7 +12,7 @@ import socket
 import urllib.error as _ue
 import urllib.parse as _up
 import urllib.request as _ur
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from sendspin_bridge.application.errors import UseCaseError, config_write_error
 from sendspin_bridge.application.music_assistant.common import (
@@ -105,22 +105,36 @@ def _ws_connect(url: str, **kwargs):
         return ws_connect(url, **kwargs)
 
 
-def _validate_ma_token(ma_url: str, token: str) -> bool:
-    """Quick WS auth check — returns True if the token authenticates with MA."""
+def _check_ma_token(ma_url: str, token: str) -> tuple[Literal["ok", "invalid", "unreachable"], str]:
+    """Authenticate *token* on MA's WebSocket: ``(outcome, username)``.
+
+    ``unreachable`` when no answer comes back (no server, timeout, no
+    websockets library), ``invalid`` when MA answers without authenticating.
+    """
     try:
         from websockets.sync.client import connect as ws_connect  # noqa: F401 — availability check
     except ImportError:
-        return False
+        return "unreachable", ""
     ws_url = ma_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
     try:
         with _ws_connect(ws_url, close_timeout=5) as ws:
             ws.recv(timeout=5)  # server_info
             ws.send(json.dumps({"command": "auth", "args": {"token": token}, "message_id": 1}))
             resp = json.loads(ws.recv(timeout=5))
-            return bool(resp.get("result", {}).get("authenticated"))
     except Exception as exc:
-        logger.debug("MA token validation failed: %s", exc)
-        return False
+        logger.debug("MA token validation failed: %s", type(exc).__name__)
+        return "unreachable", ""
+    result = resp.get("result") if isinstance(resp, dict) else None
+    if not isinstance(result, dict) or not result.get("authenticated"):
+        return "invalid", ""
+    user = result.get("user")
+    username = str(user.get("username") or "") if isinstance(user, dict) else ""
+    return "ok", username
+
+
+def _validate_ma_token(ma_url: str, token: str) -> bool:
+    """Quick WS auth check — returns True if the token authenticates with MA."""
+    return _check_ma_token(ma_url, token)[0] == "ok"
 
 
 def _exchange_for_long_lived_token(ma_url: str, session_token: str) -> str:
@@ -1294,6 +1308,40 @@ def sign_in_with_password(ma_url: str, username: str, password: str) -> dict:
     if not token:
         raise UseCaseError(500, "no_token", "Login succeeded but no token received")
     _save_ma_token_and_rediscover(ma_url, token, username, auth_provider="builtin")
+    return _connected(ma_url, username, "Connected to Music Assistant. Token saved.")
+
+
+def sign_in_with_token(ma_url: str, token: str) -> dict:
+    """Connect with a long-lived token made in Music Assistant (Settings → Profile).
+
+    The token is checked against the server before it is saved; it never
+    appears in a response or a log line. Without *ma_url* the server is found.
+    """
+    token = (token or "").strip()
+    if not token:
+        raise UseCaseError(400, "token_required", "Paste a Music Assistant token")
+    ma_url = (ma_url or "").strip()
+    if not ma_url:
+        loop = get_main_loop()
+        if not loop:
+            raise UseCaseError(503, "not_ready", "Event loop not available")
+        ma_url = _resolve_ma_url_for_login(loop)
+    if "://" not in ma_url:
+        ma_url = f"http://{ma_url}"
+    ma_url = ma_url.rstrip("/")
+    _require_safe_url(ma_url)
+
+    outcome, username = _check_ma_token(ma_url, token)
+    if outcome == "unreachable":
+        logger.warning("Music Assistant at %s did not answer the token check", ma_url)
+        raise UseCaseError(503, "ma_unreachable", "Music Assistant server is unreachable")
+    if outcome == "invalid":
+        logger.info("Music Assistant at %s refused the pasted token", ma_url)
+        # 400, not 401: the SPA reads any 401 as its own session expiring.
+        raise UseCaseError(
+            400, "ma_token_invalid", "Music Assistant did not accept this token. Create a new one in its profile."
+        )
+    _save_ma_token_and_rediscover(ma_url, token, username, auth_provider="token")
     return _connected(ma_url, username, "Connected to Music Assistant. Token saved.")
 
 

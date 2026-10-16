@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Settings → Music Assistant can connect with a pasted token: choose "Use a
+  token instead" and paste a long-lived token created in Music Assistant →
+  Settings → Profile. The bridge checks the token with Music Assistant before
+  saving it.
+
 ### Fixed
 
 - Signing in to Music Assistant with Home Assistant works again with current

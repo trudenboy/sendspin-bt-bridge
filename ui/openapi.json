@@ -5281,6 +5281,26 @@
         "title": "TokenRecord",
         "type": "object"
       },
+      "TokenSignIn": {
+        "properties": {
+          "token": {
+            "description": "A long-lived token made in Music Assistant → Settings → Profile.",
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "description": "Empty: find the server (saved URL, Sendspin peer, mDNS).",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "TokenSignIn",
+        "type": "object"
+      },
       "Track": {
         "properties": {
           "album": {
@@ -10777,6 +10797,60 @@
           }
         },
         "summary": "Add-on mode: sign in with the user's HA token",
+        "tags": [
+          "music-assistant"
+        ]
+      }
+    },
+    "/api/v1/music-assistant/session/token": {
+      "post": {
+        "description": "Checks the token against the server, then saves it. 400 `ma_token_invalid` when Music Assistant refuses it, 503 `ma_unreachable` when it does not answer.",
+        "operationId": "sign_in_token_api_v1_music_assistant_session_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenSignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Connect with a Music Assistant token",
         "tags": [
           "music-assistant"
         ]

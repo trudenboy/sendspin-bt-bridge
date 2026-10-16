@@ -375,7 +375,12 @@
       "username": "Username",
       "password": "Password",
       "withHa": "Sign in with Home Assistant",
-      "connected": "Connected to {url}"
+      "connected": "Connected to {url}",
+      "useToken": "Use a token instead",
+      "maToken": "Music Assistant token",
+      "maTokenHint": "Create a long-lived token in Music Assistant → Settings → Profile, then paste it here.",
+      "tokenSubmit": "Connect with token",
+      "tokenFailed": "Music Assistant did not accept the token."
     },
     "groups": {
       "members": "members",

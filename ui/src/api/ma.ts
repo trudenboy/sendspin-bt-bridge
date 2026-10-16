@@ -10,6 +10,11 @@ export function signInWithPassword(url: string, username: string, password: stri
   return unwrap(api().POST('/api/v1/music-assistant/session', { body: { url, username, password } }))
 }
 
+/** Connect with a long-lived token made in Music Assistant (empty *url*: the bridge finds the server). */
+export function signInWithToken(url: string, token: string) {
+  return unwrap(api().POST('/api/v1/music-assistant/session/token', { body: { url, token } }))
+}
+
 export function signInHa(body: { ma_url: string; step?: 'init' | 'mfa'; username?: string; password?: string; code?: string }) {
   return unwrap(api().POST('/api/v1/music-assistant/session/ha', { body }))
 }
