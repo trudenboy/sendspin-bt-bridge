@@ -148,6 +148,10 @@ A few action pairs look similar but mean different things:
 
 Group badges are interactive too: clicking a Music Assistant group badge opens the matching group settings page in the MA web UI.
 
+## Group sync tuning
+
+The **Sync** screen (`/sync/<group id>`) lines up the speakers of a Music Assistant sync group by ear or with the phone microphone, and keeps the results as profiles. Open it from the **Sync** button on a group in the Music Assistant tab, or from **Tune the whole group** in a device's timing section. Measuring needs HTTPS or `localhost` for the microphone. See [Group sync tuning](/sendspin-bt-bridge/group-sync-tuning/).
+
 ## Speaker hardware controls (MPRIS)
 
 The bridge registers a per-device MPRIS player on the system D-Bus and hands it to BlueZ via `Media1.RegisterPlayer`. That gives you a two-way connection between the speaker's physical buttons and Music Assistant:

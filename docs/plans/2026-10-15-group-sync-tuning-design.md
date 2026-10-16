@@ -275,7 +275,7 @@ separate spec covers it after the bridge version ships.
 
 ## Planning
 
-- Reference: the first member measured `ok` (the operator can change it).
+- Reference: the first member measured `ok`; the operator does not choose it (results do not depend on it).
 - Lag `e_i = φ_i − φ_ref`, unwrapped into (−5 s, +5 s].
 - Measurements are taken with the current delays `d_i` in effect. A later player needs
   more delay (more delay plays earlier), so align everyone to the earliest:
@@ -539,3 +539,4 @@ aiosendspin 10.0.2. Decisions in the table above are unchanged. Changes:
   not available locally) and is on the stage 0 list.
 - **Scope note.** v1 groups are Music Assistant's persistent sync groups, as the
   Groups page lists them.
+- **Reference speaker.** The wizard has no reference choice: the planner's result is independent of the reference, so the line "the operator can change it" was dropped.
