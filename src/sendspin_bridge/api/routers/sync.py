@@ -67,7 +67,10 @@ def _serve(token: str, kind: str) -> Response:
     try:
         path = host.current_track(cast("Track", kind)).ensure()  # the callers checked *kind*
     except ControlError as exc:
-        raise ApiError(507 if exc.code == "disk_full" else 503, exc.code, exc.detail) from exc
+        # public route: a fixed message; the path and the OS error stay in the log
+        if exc.code == "disk_full":
+            raise ApiError(507, exc.code, "The bridge has no disk space left for the click track") from exc
+        raise ApiError(503, exc.code, "The click track is not available right now") from exc
     return FileResponse(
         path,
         media_type="audio/wav",

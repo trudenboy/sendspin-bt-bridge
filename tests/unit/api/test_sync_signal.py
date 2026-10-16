@@ -88,3 +88,25 @@ def test_a_sound_file_that_cannot_be_written_is_a_problem_not_a_crash(monkeypatc
     token = tokens.issue("s1")
     resp = make_client().get(f"/api/v1/sync/signal/{token}/clicks.wav")
     assert resp.status_code == 507 and resp.json()["code"] == "disk_full"
+
+
+def test_a_track_that_cannot_be_written_answers_without_paths(monkeypatch):
+    """The signal route is public (token only): its errors name no file, directory or OS error."""
+    from sendspin_sync.ports import ControlError
+
+    tokens = host.ClickTrackTokens()
+    monkeypatch.setattr(host, "tokens", tokens)
+    token = tokens.issue("s1")
+
+    class Broken:
+        def __init__(self, code: str) -> None:
+            self.code = code
+
+        def ensure(self):
+            raise ControlError(self.code, "[Errno 28] No space left on device: '/var/tmp/sendspin-sync/x.wav.part'")
+
+    for code, status in (("disk_full", 507), ("track_unavailable", 503)):
+        monkeypatch.setattr(host, "current_track", lambda _kind, c=code: Broken(c))
+        resp = make_client().get(f"/api/v1/sync/signal/{token}.wav")
+        assert resp.status_code == status and resp.json()["code"] == code
+        assert "/var/tmp" not in resp.text and "Errno" not in resp.text
